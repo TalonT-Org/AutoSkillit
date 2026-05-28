@@ -25,23 +25,23 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'dirty_tree'"
-        assert cond0.route == "assess"
+        assert cond0.route == "check_merge_fix_loop"
 
         cond1 = step.on_result.conditions[1]
         assert cond1.when == "result.failed_step == 'test_gate'"
-        assert cond1.route == "assess"
+        assert cond1.route == "check_merge_fix_loop"
 
         cond2 = step.on_result.conditions[2]
         assert cond2.when == "result.failed_step == 'post_rebase_test_gate'"
-        assert cond2.route == "assess"
+        assert cond2.route == "check_merge_fix_loop"
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "rebase_conflict_fix"
+        assert cond3.route == "check_merge_rebase_loop"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.failed_step == 'dirty_main_repo'"
-        assert cond4.route == "check_merge_fix_loop"
+        assert cond4.route == "check_dirty_main_retry"
 
         cond5 = step.on_result.conditions[5]
         assert cond5.when == "result.error"
@@ -65,23 +65,23 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'dirty_tree'"
-        assert cond0.route == "fix"
+        assert cond0.route == "check_merge_fix_loop"
 
         cond1 = step.on_result.conditions[1]
         assert cond1.when == "result.failed_step == 'test_gate'"
-        assert cond1.route == "fix"
+        assert cond1.route == "check_merge_fix_loop"
 
         cond2 = step.on_result.conditions[2]
         assert cond2.when == "result.failed_step == 'post_rebase_test_gate'"
-        assert cond2.route == "fix"
+        assert cond2.route == "check_merge_fix_loop"
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "rebase_conflict_fix"
+        assert cond3.route == "check_merge_rebase_loop"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.failed_step == 'dirty_main_repo'"
-        assert cond4.route == "check_merge_fix_loop"
+        assert cond4.route == "check_dirty_main_retry"
 
         cond5 = step.on_result.conditions[5]
         assert cond5.when == "result.error"
@@ -119,3 +119,84 @@ class TestRecipeIntegrationPredicateRouting:
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )
+
+
+class TestLoopBudgetSeparation:
+    """Budget separation: merge-fix and audit-remediation use independent counters."""
+
+    RECIPE_NAMES = ["remediation", "implementation", "implementation-groups"]
+
+    @pytest.fixture(scope="class", autouse=True)
+    def _load_recipes(self, request) -> None:
+        request.cls.recipes = {
+            name: load_recipe(builtin_recipes_dir() / f"{name}.yaml")
+            for name in TestLoopBudgetSeparation.RECIPE_NAMES
+        }
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_test_step_bypasses_merge_fix_guard(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        assert recipe.steps["test"].on_success != "check_merge_fix_loop"
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_audit_remediation_loop_exists_and_wired(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        step = recipe.steps["check_audit_remediation_loop"]
+        assert step.tool == "run_python"
+        assert step.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration"
+        assert "audit_remediation_count" in step.capture
+        exceeded = [c for c in step.on_result.conditions if c.when and "max_exceeded" in c.when]
+        assert any(c.route == "release_issue_failure" for c in exceeded)
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_audit_impl_no_go_routes_to_audit_loop(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        audit_step = recipe.steps["audit_impl"]
+        fallthrough = [
+            c.route
+            for c in audit_step.on_result.conditions
+            if c.when is None or ("GO" not in c.when and "error" not in c.when)
+        ]
+        assert fallthrough == ["check_audit_remediation_loop"]
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_all_merge_failure_arms_guarded(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        merge_step = recipe.steps["merge"]
+        guard_steps = {
+            "check_merge_fix_loop",
+            "check_merge_rebase_loop",
+            "check_dirty_main_retry",
+        }
+        for cond in merge_step.on_result.conditions:
+            if cond.when and "failed_step" in cond.when:
+                assert cond.route in guard_steps, (
+                    f"{cond.when} routes to {cond.route}, expected a guard step"
+                )
+        for name in guard_steps:
+            step = recipe.steps[name]
+            assert step.with_args.get("current_iteration") == "${{ context.merge_fix_count }}"
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_loop_budget_ingredients_exist(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        assert "merge_fix_max_retries" in recipe.ingredients
+        assert recipe.ingredients["merge_fix_max_retries"].default == "3"
+        assert "audit_remediation_max_retries" in recipe.ingredients
+        assert recipe.ingredients["audit_remediation_max_retries"].default == "2"
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_guard_steps_use_ingredients(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        for name in (
+            "check_merge_fix_loop",
+            "check_merge_rebase_loop",
+            "check_dirty_main_retry",
+        ):
+            step = recipe.steps[name]
+            assert step.with_args["max_iterations"] == "${{ inputs.merge_fix_max_retries }}"
+        audit_guard = recipe.steps["check_audit_remediation_loop"]
+        assert (
+            audit_guard.with_args["max_iterations"]
+            == "${{ inputs.audit_remediation_max_retries }}"
+        )

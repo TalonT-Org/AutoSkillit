@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_MENU_TOOLS, get_logger, is_feature_enabled
 
@@ -159,3 +161,30 @@ def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     resolved["dispatch_id"] = os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     return resolved
+
+
+def apply_config_authoritative_overrides(
+    effective_ingredients: dict[str, str],
+    recipe_ingredients: Mapping[str, Any],
+    project_dir: Path,
+) -> dict[str, str]:
+    """Unconditionally set config-authoritative ingredient values.
+
+    For each recipe ingredient with authority="config", resolve the value
+    from project config and overwrite whatever the caller supplied.
+    Only injects values for ingredients the recipe actually declares.
+    """
+    config_keys = [
+        key
+        for key, ing in recipe_ingredients.items()
+        if getattr(ing, "authority", None) == "config"
+    ]
+    if not config_keys:
+        return effective_ingredients
+
+    resolved = resolve_ingredient_defaults(project_dir)
+    result = dict(effective_ingredients)
+    for key in config_keys:
+        if key in resolved:
+            result[key] = resolved[key]
+    return result

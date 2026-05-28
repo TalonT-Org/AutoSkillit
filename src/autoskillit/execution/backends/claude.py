@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import logging
 import os
+import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,9 +37,11 @@ from autoskillit.core import (
     SessionEvent,
     SkillSessionConfig,
     ValidatedAddDir,
+    YAMLError,
     build_agent_env,
     extract_skill_name,
     fast_loads,
+    load_yaml,
     pkg_root,
 )
 from autoskillit.execution.backends._claude_prompt import (
@@ -56,6 +61,8 @@ from autoskillit.execution.backends._claude_prompt import (
 )
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import parse_session_result
+
+log = logging.getLogger(__name__)  # noqa: TID251
 
 __all__ = [
     "ClaudeCodeBackend",
@@ -681,12 +688,62 @@ class ClaudeCodeBackend:
         return errors
 
     def validate_skill_content(self, content: str) -> list[str]:
-        raise NotImplementedError(
-            f"{self.__class__.__name__}.validate_skill_content not yet implemented"
-        )
+        if not content.startswith("---"):
+            return ["Invalid frontmatter: no opening --- delimiter found"]
+        parts = content.split("---", maxsplit=2)
+        if len(parts) < 3:
+            return ["Invalid frontmatter: no closing --- delimiter found"]
+        yaml_block = parts[1]
+        try:
+            data = load_yaml(yaml_block)
+        except YAMLError as exc:
+            return [f"Invalid frontmatter: YAML parse error: {exc}"]
+        if not isinstance(data, dict):
+            data = {}
+        return [
+            f"Missing required frontmatter field: '{f}'"
+            for f in self.capabilities.required_skill_fields
+            if f not in data
+        ]
 
     def version(self) -> str:
-        raise NotImplementedError(f"{self.__class__.__name__}.version not yet implemented")
+        exec_path = os.environ.get("CLAUDE_CODE_EXECPATH") or self.version_cmd()[0]
+        cmd = (exec_path,) + self.version_cmd()[1:]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return result.stdout.strip() or result.stderr.strip()
+        except subprocess.TimeoutExpired:
+            return ""
+        except Exception:
+            log.warning("version() failed", exc_info=True)
+            return ""
 
     def list_plugins(self) -> list[dict[str, Any]]:
-        raise NotImplementedError(f"{self.__class__.__name__}.list_plugins not yet implemented")
+        try:
+            path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+            if not path.exists():
+                return []
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return []
+            plugins = data.get("plugins", {})
+            if not isinstance(plugins, dict):
+                return []
+            result: list[dict[str, Any]] = []
+            for ref, installs in plugins.items():
+                if not isinstance(installs, list) or not installs:
+                    continue
+                first = installs[0] if isinstance(installs[0], dict) else {}
+                entry: dict[str, Any] = {"ref": ref}
+                if "version" in first:
+                    entry["version"] = first["version"]
+                result.append(entry)
+            return result
+        except Exception:
+            log.warning("list_plugins() failed", exc_info=True)
+            return []

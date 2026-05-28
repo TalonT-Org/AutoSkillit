@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -137,3 +139,210 @@ def test_build_headless_cmd_injects_hardening() -> None:
     env = dict(build_agent_env(base={}, extras=_HEADLESS_ENV_HARDENING))
     assert env["TERM"] == "dumb"
     assert env["NO_COLOR"] == "1"
+
+
+class TestClaudeCodeBackendVersion:
+    def test_happy_path_returns_stripped_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(cmd, *, capture_output, text, timeout):
+            result = subprocess.CompletedProcess(cmd, 0)
+            result.stdout = "  1.0.42\n"
+            result.stderr = ""
+            return result
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert ClaudeCodeBackend().version() == "1.0.42"
+
+    def test_execpath_env_overrides_binary(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured_cmd = None
+
+        def fake_run(cmd, *, capture_output, text, timeout):
+            nonlocal captured_cmd
+            captured_cmd = cmd
+            result = subprocess.CompletedProcess(cmd, 0)
+            result.stdout = "v1"
+            result.stderr = ""
+            return result
+
+        monkeypatch.setenv("CLAUDE_CODE_EXECPATH", "/custom/claude")
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ClaudeCodeBackend().version()
+        assert captured_cmd[0] == "/custom/claude"
+
+    def test_fallback_to_version_cmd_when_env_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured_cmd = None
+
+        def fake_run(cmd, *, capture_output, text, timeout):
+            nonlocal captured_cmd
+            captured_cmd = cmd
+            result = subprocess.CompletedProcess(cmd, 0)
+            result.stdout = "v1"
+            result.stderr = ""
+            return result
+
+        monkeypatch.delenv("CLAUDE_CODE_EXECPATH", raising=False)
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ClaudeCodeBackend().version()
+        assert captured_cmd[0] == "claude"
+
+    def test_timeout_returns_empty_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(cmd, *, capture_output, text, timeout):
+            raise subprocess.TimeoutExpired(cmd, timeout)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert ClaudeCodeBackend().version() == ""
+
+    def test_oserror_returns_empty_string(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(cmd, *, capture_output, text, timeout):
+            raise OSError("not found")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert ClaudeCodeBackend().version() == ""
+
+    def test_nonzero_exit_returns_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(cmd, *, capture_output, text, timeout):
+            result = subprocess.CompletedProcess(cmd, 1)
+            result.stdout = "version info"
+            result.stderr = "some error"
+            return result
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert ClaudeCodeBackend().version() == "version info"
+
+
+class TestClaudeCodeBackendListPlugins:
+    def _write_plugins_json(self, home: Path, data: dict) -> None:
+        plugins_dir = home / ".claude" / "plugins"
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        (plugins_dir / "installed_plugins.json").write_text(json.dumps(data), encoding="utf-8")
+
+    def test_happy_path_returns_plugin_list(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        self._write_plugins_json(
+            home,
+            {
+                "plugins": {
+                    "@anthropic/tool-use": [{"version": "1.2.3", "other": "x"}],
+                }
+            },
+        )
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+        result = ClaudeCodeBackend().list_plugins()
+        assert result == [{"ref": "@anthropic/tool-use", "version": "1.2.3"}]
+
+    def test_file_not_found_returns_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+        assert ClaudeCodeBackend().list_plugins() == []
+
+    def test_invalid_json_returns_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        plugins_dir = home / ".claude" / "plugins"
+        plugins_dir.mkdir(parents=True)
+        (plugins_dir / "installed_plugins.json").write_text("{bad json", encoding="utf-8")
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+        assert ClaudeCodeBackend().list_plugins() == []
+
+    def test_plugins_not_dict_returns_empty(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        self._write_plugins_json(home, {"plugins": ["not", "a", "dict"]})
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+        assert ClaudeCodeBackend().list_plugins() == []
+
+    def test_empty_installs_skipped(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        self._write_plugins_json(home, {"plugins": {"ref-a": []}})
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+        assert ClaudeCodeBackend().list_plugins() == []
+
+    def test_non_list_installs_skipped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        self._write_plugins_json(home, {"plugins": {"ref-a": "not-a-list"}})
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+        assert ClaudeCodeBackend().list_plugins() == []
+
+    def test_missing_version_key_returns_ref_only(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        self._write_plugins_json(home, {"plugins": {"ref-a": [{"other": "x"}]}})
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+        result = ClaudeCodeBackend().list_plugins()
+        assert result == [{"ref": "ref-a"}]
+
+
+class TestClaudeCodeBackendValidateSkillContent:
+    def _make_backend_with_fields(
+        self, monkeypatch: pytest.MonkeyPatch, fields: frozenset[str]
+    ) -> ClaudeCodeBackend:
+        from dataclasses import replace
+
+        import autoskillit.execution.backends.claude as _claude_mod
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+
+        custom = replace(CLAUDE_CODE_CAPABILITIES, required_skill_fields=fields)
+        monkeypatch.setattr(_claude_mod, "CLAUDE_CODE_CAPABILITIES", custom)
+        return ClaudeCodeBackend()
+
+    def test_empty_required_fields_returns_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        backend = self._make_backend_with_fields(monkeypatch, frozenset())
+        assert backend.validate_skill_content("---\nname: x\n---\n") == []
+
+    def test_all_required_fields_present_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        backend = self._make_backend_with_fields(monkeypatch, frozenset({"name", "description"}))
+        content = "---\nname: test\ndescription: a thing\n---\nbody"
+        assert backend.validate_skill_content(content) == []
+
+    def test_one_missing_field_returns_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        backend = self._make_backend_with_fields(monkeypatch, frozenset({"name", "description"}))
+        content = "---\nname: test\n---\nbody"
+        result = backend.validate_skill_content(content)
+        assert len(result) == 1
+        assert "Missing required frontmatter field: 'description'" in result[0]
+
+    def test_multiple_missing_fields_returns_per_field(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        backend = self._make_backend_with_fields(monkeypatch, frozenset({"name", "description"}))
+        content = "---\nother: x\n---\nbody"
+        result = backend.validate_skill_content(content)
+        assert len(result) == 2
+        assert any("name" in e for e in result)
+        assert any("description" in e for e in result)
+
+    def test_no_opening_delimiter_returns_sentinel(self) -> None:
+        result = ClaudeCodeBackend().validate_skill_content("no frontmatter here")
+        assert result == ["Invalid frontmatter: no opening --- delimiter found"]
+
+    def test_no_closing_delimiter_returns_sentinel(self) -> None:
+        result = ClaudeCodeBackend().validate_skill_content("---\nname: x\n")
+        assert result == ["Invalid frontmatter: no closing --- delimiter found"]
+
+    def test_malformed_yaml_returns_parse_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        backend = self._make_backend_with_fields(monkeypatch, frozenset({"name", "description"}))
+        content = "---\n: [invalid yaml\n---\nbody"
+        result = backend.validate_skill_content(content)
+        assert len(result) == 1
+        assert "YAML parse error" in result[0]

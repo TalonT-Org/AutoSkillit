@@ -449,6 +449,7 @@ async def open_kitchen(
                 tool_ctx.recipe_content_hash = result.get("content_hash", "")
                 tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
                 tool_ctx.recipe_version = result.get("recipe_version") or ""
+                recipe_info = None
                 try:
                     recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
                 except Exception:
@@ -469,6 +470,13 @@ async def open_kitchen(
                 result["version"] = __version__
                 if "ingredients_table" not in result or not result["ingredients_table"]:
                     result["ingredients_table"] = None
+                try:
+                    result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+                except Exception as exc:
+                    logger.warning(
+                        "open_kitchen_failure", stage="apply_triage_gate", exc_info=True
+                    )
+                    return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
                 return json.dumps(result)
             try:
                 result = tool_ctx.recipes.load_and_validate(

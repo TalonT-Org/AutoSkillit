@@ -10,6 +10,7 @@ _REQUIRED_INDEX_FIELDS = {
     "provider_used",
     "provider_fallback",
     "model_identifier",
+    "configured_model",
     "recipe_name",
     "recipe_content_hash",
     "recipe_composite_hash",

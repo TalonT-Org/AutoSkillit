@@ -512,6 +512,7 @@ def flush_session_log(
         "api_retry_count": api_retry_count,
         "api_retry_exhausted": api_retry_exhausted,
         "model_identifier": effective_model_id,
+        "configured_model": model_identifier,
         "schema_version": 2,
     }
     index_path = log_root / "sessions.jsonl"

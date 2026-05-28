@@ -887,3 +887,15 @@ def test_sessions_jsonl_includes_model_identifier(tmp_path):
     )
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
     assert entry["model_identifier"] == "claude-opus-4-6"
+
+
+def test_sessions_jsonl_includes_configured_model(tmp_path):
+    """sessions.jsonl index entry must include the configured_model field."""
+    _flush(
+        tmp_path,
+        session_id="jsonl-configured-model-001",
+        proc_snapshots=None,
+        model_identifier="claude-opus-4-6",
+    )
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
+    assert entry["configured_model"] == "claude-opus-4-6"

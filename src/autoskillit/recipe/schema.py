@@ -48,6 +48,10 @@ class RecipeIngredient:
         self.description = self.description.strip().replace("\n", " ")
         if self.default is not None:
             self.default = self.default.strip()
+        if self.authority is not None and self.authority != "config":
+            raise ValueError(
+                f"RecipeIngredient.authority must be None or 'config', got {self.authority!r}"
+            )
 
 
 @dataclass

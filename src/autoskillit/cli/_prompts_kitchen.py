@@ -49,8 +49,8 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
         "- If health_report is absent or null: no diagnostic report was "
         "generated. Skip this step.\n"
         "- If health_report.findings is empty or all findings have severity "
-        '"informational": report to the user "Pipeline diagnostics clean "'
-        '"— no anomalies detected."\n"'
+        '"informational": report to the user "Pipeline diagnostics clean '
+        '— no anomalies detected."\n'
         '- If findings include "confirmed_bug", "regression", or '
         '"anomaly": display each finding\'s severity, step_group, summary, '
         "and evidence to the user so they can act on them.\n\n"

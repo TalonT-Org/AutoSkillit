@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
@@ -635,7 +636,19 @@ class CodexBackend:
         )
 
     def version(self) -> str:
-        raise NotImplementedError(f"{self.__class__.__name__}.version not yet implemented")
+        try:
+            result = subprocess.run(
+                [*self.version_cmd()],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return result.stdout.strip() or result.stderr.strip()
+        except subprocess.TimeoutExpired:
+            return ""
+        except Exception:
+            logger.warning("Failed to run %s --version", self.binary_name(), exc_info=True)
+            return ""
 
     def list_plugins(self) -> list[dict[str, Any]]:
         raise NotImplementedError(f"{self.__class__.__name__}.list_plugins not yet implemented")

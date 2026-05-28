@@ -53,7 +53,7 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 |------|-----------------|
 | `rules_actions.py` | Action-type semantic rules: `stop-step-has-no-routing`, `recipe-has-terminal-step`, `route-step-requires-on-result` |
 | `rules_blocks.py` | Block-level budget rules: per-block `run_cmd` and `run_skill` call-count budgets |
-| `rules_bypass.py` | `skip_when_false` routes that have no fallthrough — a step that gets bypassed must also have a downstream consumer that handles the bypass |
+| `rules_bypass.py` | `skip_when_false` bypass routing contracts; `hidden-input-ref-in-template` detection — warns when a step template field references a hidden ingredient via `${{ inputs.X }}` (safe because load_and_validate resolves these server-side) |
 | `rules_campaign_capture.py` | Campaign capture validation: identifier keys, result refs, sentinel cross-checks |
 | `rules_campaign_deps.py` | Campaign dependency graph rules: valid refs, acyclic, sequential |
 | `rules_campaign_dispatch.py` | Campaign dispatch structure: kind, names, recipe refs, packs, task |

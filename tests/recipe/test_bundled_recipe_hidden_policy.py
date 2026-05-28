@@ -121,3 +121,37 @@ def test_bundled_recipe_content_has_no_residual_skip_signals(recipe_name: str) -
             f"Recipe '{recipe_name}': steps {residual_skip} retain "
             f"'skip_when_false: inputs.{ing_name}' after truthy resolution."
         )
+
+
+@pytest.mark.parametrize("recipe_name", BUNDLED_RECIPE_NAMES)
+def test_bundled_recipe_content_has_no_residual_hidden_input_templates(
+    recipe_name: str,
+) -> None:
+    """load_and_validate must not deliver unresolved ${{ inputs.X }} for hidden ingredients.
+
+    Regression guard: any bundled recipe that uses a hidden ingredient in a template field
+    must have that template resolved server-side before the content is delivered to the LLM.
+    Hidden ingredients are excluded from the ingredients table, so the LLM cannot resolve them.
+    """
+    import re
+
+    from autoskillit.recipe import load_and_validate
+
+    recipe_obj = load_recipe(pkg_root() / "recipes" / f"{recipe_name}.yaml")
+    hidden_ing_names = {name for name, ing in recipe_obj.ingredients.items() if ing.hidden}
+    if not hidden_ing_names:
+        return
+
+    result = load_and_validate(recipe_name)
+    recipe_content = result["content"]
+
+    unresolved = []
+    for name in hidden_ing_names:
+        pattern = re.compile(r"\$\{\{\s*inputs\." + re.escape(name) + r"\s*\}\}")
+        if pattern.search(recipe_content):
+            unresolved.append(f"${{{{ inputs.{name} }}}}")
+    assert unresolved == [], (
+        f"Recipe '{recipe_name}' content has unresolved hidden ingredient templates "
+        f"after load_and_validate: {unresolved}. "
+        f"Server-side hidden input interpolation may be broken."
+    )

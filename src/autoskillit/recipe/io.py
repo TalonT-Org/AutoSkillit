@@ -78,7 +78,12 @@ def substitute_scripts_placeholder(text: str) -> str:
     return text.replace(_SCRIPTS_PLACEHOLDER, str(builtin_scripts_dir()))
 
 
-def _assert_no_raw_placeholders(text: str, *, context: str = "") -> None:
+def _assert_no_raw_placeholders(
+    text: str,
+    *,
+    context: str = "",
+    hidden_ingredient_names: frozenset[str] | None = None,
+) -> None:
     # Content-delivery boundary guard: raises if placeholder substitution was skipped.
     for placeholder in (_TEMP_PLACEHOLDER, _SCRIPTS_PLACEHOLDER):
         if placeholder in text:
@@ -86,6 +91,17 @@ def _assert_no_raw_placeholders(text: str, *, context: str = "") -> None:
                 f"Unresolved {placeholder} in recipe content"
                 + (f" ({context})" if context else "")
             )
+    if hidden_ingredient_names:
+        import regex as _re  # noqa: PLC0415
+
+        _hidden_ref_re = _re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
+        for _m in _hidden_ref_re.finditer(text):
+            _name = _m.group(1)
+            if _name in hidden_ingredient_names:
+                raise ValueError(
+                    f"Unresolved hidden ingredient template ${{{{ inputs.{_name} }}}} "
+                    "in recipe content" + (f" ({context})" if context else "")
+                )
 
 
 def _load_recipe_dict(

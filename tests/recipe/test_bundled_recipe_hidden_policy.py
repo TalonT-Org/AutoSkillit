@@ -66,6 +66,7 @@ def test_bundled_recipe_content_has_no_unresolved_hidden_skip_guards(recipe_name
     import re
 
     from autoskillit.recipe import load_and_validate
+    from autoskillit.recipe._recipe_composition import _step_block_pattern
 
     result = load_and_validate(recipe_name)
     recipe_content = result["content"]
@@ -101,13 +102,14 @@ def test_bundled_recipe_content_has_no_unresolved_hidden_skip_guards(recipe_name
         truthy_content = truthy_result["content"]
         residual = []
         for step_name in guarded_steps:
-            escaped = re.escape(step_name)
             block_match = re.search(
-                rf"(?m)^  {escaped}:[ \t]*\n(?:(?:  [ \t][^\n]*|[ \t]*)(?:\n|$))*",
+                rf"(?m){_step_block_pattern(re.escape(step_name))}",
                 truthy_content,
             )
-            if block_match is None:
-                continue
+            assert block_match is not None, (
+                f"Recipe '{recipe_name}': step '{step_name}' not found in truthy content "
+                f"for ingredient '{ing_name}' — step was incorrectly removed on truthy resolution."
+            )
             step_block = block_match.group(0)
             if "optional: true" in step_block:
                 residual.append(step_name)

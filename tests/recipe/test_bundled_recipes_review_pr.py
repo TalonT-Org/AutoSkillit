@@ -215,6 +215,37 @@ def test_merge_prs_annotate_step_captures_diff_metrics_path() -> None:
     assert "diff_metrics_path" in step.capture
 
 
+def test_merge_prs_pre_review_rebase_integration_uses_run_python() -> None:
+    """merge-prs pre_review_rebase_integration must use run_python (not run_cmd)."""
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    step = recipe.steps["pre_review_rebase_integration"]
+    assert step.tool == "run_python", (
+        f"pre_review_rebase_integration must use run_python, got {step.tool!r}"
+    )
+
+
+def test_merge_prs_pre_review_rebase_integration_routes_to_conflict_resolution() -> None:
+    """merge-prs pre_review_rebase_integration on_result must route to conflict resolution."""
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    step = recipe.steps["pre_review_rebase_integration"]
+    assert step.on_result is not None
+    routes = [c.route for c in step.on_result.conditions]
+    assert "resolve_pre_review_integration_conflicts" in routes, (
+        f"pre_review_rebase_integration on_result must include "
+        f"resolve_pre_review_integration_conflicts, got {routes}"
+    )
+
+
+def test_merge_prs_resolve_pre_review_integration_conflicts_uses_merge_skill() -> None:
+    """merge-prs resolve_pre_review_integration_conflicts must invoke resolve-merge-conflicts."""
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    assert "resolve_pre_review_integration_conflicts" in recipe.steps
+    step = recipe.steps["resolve_pre_review_integration_conflicts"]
+    assert step.tool == "run_skill"
+    cmd = step.with_args.get("skill_command", "")
+    assert "resolve-merge-conflicts" in cmd
+
+
 # ---------------------------------------------------------------------------
 # T4.1–T4.7: local_review_rounds wiring tests
 # ---------------------------------------------------------------------------

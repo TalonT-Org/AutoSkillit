@@ -33,3 +33,19 @@ def test_all_callable_contracts_declare_inputs():
                 f"{dotted_path}: required parameter '{param}' not declared in "
                 f"callable_contracts inputs"
             )
+
+
+def test_review_path_rebase_contract_inputs_and_outputs():
+    """review_path_rebase callable contract must declare correct inputs and outputs."""
+    from autoskillit.recipe.contracts import get_callable_contract
+
+    contract = get_callable_contract("autoskillit.recipe._cmd_rpc.review_path_rebase")
+    assert contract is not None, "review_path_rebase must be declared in callable_contracts"
+    input_names = {inp.name for inp in contract.inputs}
+    assert "work_dir" in input_names
+    assert "base_branch" in input_names
+    for inp in contract.inputs:
+        if inp.name in ("work_dir", "base_branch"):
+            assert inp.required is True, f"{inp.name} must be required"
+    output_names = {out.name for out in contract.outputs}
+    assert "status" in output_names

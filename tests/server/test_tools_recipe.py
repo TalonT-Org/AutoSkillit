@@ -641,4 +641,4 @@ async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_ope
     call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
     overrides_passed = call_kwargs["ingredient_overrides"]
     assert overrides_passed["base_branch"] == "develop"
-    assert result.get("success") is True or "error" not in result
+    assert result.get("success") is True

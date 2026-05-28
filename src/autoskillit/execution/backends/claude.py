@@ -691,11 +691,13 @@ class ClaudeCodeBackend:
         if not content.startswith("---"):
             return ["Invalid frontmatter: no opening --- delimiter found"]
         parts = content.split("---", maxsplit=2)
+        if len(parts) < 3:
+            return ["Invalid frontmatter: no closing --- delimiter found"]
         yaml_block = parts[1]
         try:
             data = load_yaml(yaml_block)
-        except YAMLError:
-            data = {}
+        except YAMLError as exc:
+            return [f"Invalid frontmatter: YAML parse error: {exc}"]
         if not isinstance(data, dict):
             data = {}
         return [

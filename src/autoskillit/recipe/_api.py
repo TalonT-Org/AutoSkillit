@@ -41,6 +41,7 @@ from autoskillit.recipe._api_listing import (  # noqa: F401
     validate_from_path,
 )
 from autoskillit.recipe._recipe_composition import (
+    _assert_content_integrity,
     _build_active_recipe,
     _prune_skipped_steps,
     _resolve_skip_guards_in_content,
@@ -380,6 +381,7 @@ def load_and_validate(
             )
             if _skip_resolutions:
                 raw = _resolve_skip_guards_in_content(raw, _skip_resolutions, _pre_prune_steps)
+                _assert_content_integrity(raw, _skip_resolutions, _pre_prune_steps)
             # Post-prune: validate that no surviving step routes to a removed step.
             # Must run inside try so active_recipe and errors are both in scope.
             _dangling_errors = _validate_no_dangling_routes(active_recipe)

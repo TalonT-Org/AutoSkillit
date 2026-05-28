@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import regex as re
+import yaml
 
 from autoskillit.core import YAMLError
 from autoskillit.recipe.io import find_sub_recipe_by_name
@@ -408,3 +409,37 @@ def _resolve_skip_guards_in_content(
             raw,
         )
     return raw
+
+
+def _assert_content_integrity(
+    raw: str,
+    resolutions: dict[str, bool],
+    original_steps: dict[str, Any],
+) -> None:
+    """Verify no truthy-resolved step retains optional/skip_when_false signals in content.
+
+    Raises ValueError if optional: true or skip_when_false: inputs.* survive stripping.
+    """
+    if not resolutions:
+        return
+    try:
+        parsed = yaml.safe_load(raw) or {}
+    except yaml.YAMLError:
+        return  # malformed content is caught elsewhere
+    parsed_steps: dict[str, Any] = parsed.get("steps", {}) or {}
+    for step_name, is_truthy in resolutions.items():
+        if not is_truthy:
+            continue
+        step_data = parsed_steps.get(step_name, {}) or {}
+        if step_data.get("optional") is True:
+            raise ValueError(
+                f"Content integrity violation: step '{step_name}' retains "
+                f"'optional: true' after truthy resolution"
+            )
+        original = original_steps.get(step_name)
+        ref = getattr(original, "skip_when_false", None) if original is not None else None
+        if ref is not None and ref.startswith("inputs.") and "skip_when_false" in step_data:
+            raise ValueError(
+                f"Content integrity violation: step '{step_name}' retains "
+                f"'skip_when_false' after truthy resolution"
+            )

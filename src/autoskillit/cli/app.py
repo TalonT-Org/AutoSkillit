@@ -127,11 +127,8 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     try:
         backend_options = {"use_uvloop": sys.platform != "win32"}
 
-        from autoskillit.server._state import _get_ctx_or_none  # noqa: PLC0415
-
         def _check_dispatch_active() -> bool:
-            ctx = _get_ctx_or_none()
-            if ctx is None or ctx.fleet_lock is None:
+            if ctx.fleet_lock is None:
                 return False
             return ctx.fleet_lock.active_count > 0
 

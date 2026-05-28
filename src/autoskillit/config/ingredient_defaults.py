@@ -187,6 +187,12 @@ def apply_config_authoritative_overrides(
     for key in config_keys:
         if key in resolved:
             result[key] = resolved[key]
+        else:
+            logger.warning(
+                "config-authority key %r not found in resolved defaults — "
+                "caller-supplied value retained (config-authoritative contract not enforced)",
+                key,
+            )
     return result
 
 

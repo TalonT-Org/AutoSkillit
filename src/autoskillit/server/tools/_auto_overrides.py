@@ -15,5 +15,6 @@ def _build_auto_overrides(
         "diagnostics_log_dir": log_dir,
     }
     for key in SERVER_AUTHORITATIVE_INGREDIENTS:
-        overrides[key] = defaults.get(key, "")
+        if (v := defaults.get(key)) is not None:
+            overrides[key] = v
     return overrides

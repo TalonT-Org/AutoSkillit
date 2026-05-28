@@ -265,7 +265,6 @@ Before creating the diagram, verify:
 - [ ] Every CRITICAL (n_seeds == 1) figure is flagged
 - [ ] Every stat_overlay has both `measure` and `n_seeds` filled in
 
-
 ---
 
 ## Related Skills
@@ -275,3 +274,4 @@ Before creating the diagram, verify:
 - `/autoskillit:vis-lens-chart-select` - For data-type-driven chart type selection
 - `/autoskillit:vis-lens-antipattern` - For common visualization anti-pattern detection
 - `/autoskillit:vis-lens-temporal` - For time-series and training curve analysis
+- `/autoskillit:vis-lens-reproducibility` - For reproducibility and data provenance checks

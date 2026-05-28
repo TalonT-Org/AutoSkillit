@@ -246,7 +246,6 @@ Before creating the diagram, verify:
 - [ ] Every figure with ≥ 4 conditions has been assigned a small-multiples layout
 - [ ] Every `yaml:figure-spec` has the `facet` field filled (or explicitly empty for overlays)
 
-
 ---
 
 ## Related Skills
@@ -256,3 +255,4 @@ Before creating the diagram, verify:
 - `/autoskillit:vis-lens-temporal` - For time-series and training curve analysis
 - `/autoskillit:vis-lens-story-arc` - For narrative arc and color consistency
 - `/autoskillit:vis-lens-methodology-norms` - For field-specific methodology compliance
+- `/autoskillit:vis-lens-reproducibility` - For reproducibility and data provenance checks

@@ -220,6 +220,7 @@ skills:
     - process-issues
     - scope
     - select-directions
+    - select-vis-lenses
     - plan-experiment
     - implement-experiment
     - run-experiment

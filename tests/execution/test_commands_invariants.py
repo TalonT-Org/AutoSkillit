@@ -170,6 +170,11 @@ def test_session_deadline_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_SESSION_DEADLINE" in _HEADLESS_EXCLUSIVE_VARS
 
 
+def test_headless_exclusive_vars_contains_claude_code_subagent_model() -> None:
+    """CLAUDE_CODE_SUBAGENT_MODEL must be in _HEADLESS_EXCLUSIVE_VARS to block host-env leakage."""
+    assert "CLAUDE_CODE_SUBAGENT_MODEL" in _HEADLESS_EXCLUSIVE_VARS
+
+
 def test_session_deadline_not_in_l1_subprocess_env(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", "9999999999.0")
     spec = ClaudeCodeBackend().build_skill_session_cmd(

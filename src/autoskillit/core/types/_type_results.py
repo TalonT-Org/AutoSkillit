@@ -459,6 +459,7 @@ class TokenUsageFileEntry(TypedDict):
     loc_deletions: int
     provider_used: str
     model_identifier: str
+    configured_model: str
     dispatch_id: str
     campaign_id: str
     schema_version: int
@@ -508,6 +509,8 @@ class SessionIndexEntry(TypedDict):
     github_api_requests: int
     provider_used: str
     provider_fallback: bool
+    model_identifier: str
+    configured_model: str
     caller_session_id: str
     api_retry_count: int
     api_retry_exhausted: bool

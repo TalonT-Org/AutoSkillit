@@ -62,6 +62,7 @@ class TokenLog(Protocol):
         order_id: str = "",
         loc_insertions: int = 0,
         loc_deletions: int = 0,
+        model: str = "",
     ) -> None: ...
 
     def get_report(self, *, order_id: str = "") -> list[dict[str, Any]]: ...

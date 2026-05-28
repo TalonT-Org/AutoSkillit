@@ -166,3 +166,71 @@ def test_model_totals_mixed_providers() -> None:
     log.record("implement", _make_usage_with_model("MiniMax-M2.7-highspeed", input_tokens=500))
     totals = log.compute_model_totals()
     assert len(totals) == 2
+
+
+def test_record_uses_explicit_model_over_primary_model() -> None:
+    """When model= is passed to record(), it is used instead of _primary_model() argmax."""
+    log = DefaultTokenLog()
+    token_usage = {
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "model_breakdown": {
+            "claude-sonnet-4-6": {"input_tokens": 20000, "output_tokens": 8000},
+        },
+    }
+    log.record("step", token_usage, model="claude-opus-4-6")
+    report = log.get_report()
+    assert report[0]["model"] == "claude-opus-4-6"
+
+
+def test_load_from_log_dir_reads_configured_model(tmp_path: Path) -> None:
+    sessions_dir = tmp_path / "sessions" / "s1"
+    sessions_dir.mkdir(parents=True)
+    (sessions_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "plan",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "timing_seconds": 10.0,
+                "configured_model": "claude-opus-4-6",
+                "model_identifier": "claude-sonnet-4-6",
+            }
+        )
+    )
+    index_entry = {"session_id": "s1", "dir_name": "s1", "timestamp": "2026-01-01T00:00:00Z"}
+    (tmp_path / "sessions.jsonl").write_text(json.dumps(index_entry) + "\n")
+
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path)
+    report = log.get_report()
+    assert len(report) == 1
+    assert report[0]["model"] == "claude-opus-4-6"
+
+
+def test_load_from_log_dir_falls_back_to_model_identifier(tmp_path: Path) -> None:
+    sessions_dir = tmp_path / "sessions" / "s1"
+    sessions_dir.mkdir(parents=True)
+    (sessions_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "plan",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "timing_seconds": 10.0,
+                "model_identifier": "claude-opus-4-6",
+            }
+        )
+    )
+    index_entry = {"session_id": "s1", "dir_name": "s1", "timestamp": "2026-01-01T00:00:00Z"}
+    (tmp_path / "sessions.jsonl").write_text(json.dumps(index_entry) + "\n")
+
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path)
+    report = log.get_report()
+    assert len(report) == 1
+    assert report[0]["model"] == "claude-opus-4-6"

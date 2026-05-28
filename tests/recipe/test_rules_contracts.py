@@ -730,7 +730,6 @@ def test_write_skill_reaching_push_without_source_output_dir_fires_conditional()
         "write-skill-requires-source-output-dir must fire when no output_dir and push reachable"
     )
     assert hits[0].severity == Severity.ERROR
-    assert hits[0].severity == Severity.ERROR
     assert hits[0].step_name == "skill_step"
 
 

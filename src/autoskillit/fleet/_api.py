@@ -634,6 +634,24 @@ async def _run_dispatch(
 
         ended_at = time.time()
         _dispatch_completed_normally = True
+    except asyncio.CancelledError:
+        if _dispatched_pid:
+            try:
+                from autoskillit.fleet.state import mark_dispatch_interrupted  # noqa: PLC0415
+
+                with anyio.CancelScope(shield=True):
+                    mark_dispatch_interrupted(
+                        state_path,
+                        effective_name,
+                        reason="signal_induced_cancellation",
+                    )
+            except Exception:
+                logger.warning(
+                    "failed to record interrupted state on cancel",
+                    dispatch_name=effective_name,
+                    exc_info=True,
+                )
+        raise
     finally:
         if marker_path is not None:
             try:
@@ -645,7 +663,8 @@ async def _run_dispatch(
         if not _dispatch_completed_normally:
             from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
 
-            await cleanup_orphaned_labels(dispatch_sidecar_path, tool_ctx.github_client)
+            with anyio.CancelScope(shield=True):
+                await cleanup_orphaned_labels(dispatch_sidecar_path, tool_ctx.github_client)
 
     sidecar_file = Path(dispatch_sidecar_path)
     sidecar_entries: list[IssueSidecarEntry] = []

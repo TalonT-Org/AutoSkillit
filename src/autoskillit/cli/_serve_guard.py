@@ -14,6 +14,7 @@ teardown as a normal SIGTERM.
 from __future__ import annotations
 
 import signal
+from collections.abc import Callable
 from typing import Any
 
 import anyio
@@ -23,7 +24,12 @@ from autoskillit.core import get_logger
 logger = get_logger(__name__)
 
 
-async def serve_with_signal_guard(mcp_server: Any) -> None:
+async def serve_with_signal_guard(
+    mcp_server: Any,
+    *,
+    dispatch_activity_check: Callable[[], bool] | None = None,
+    deferral_timeout: float = 30.0,
+) -> None:
     """Run the MCP server with event-loop-routed SIGTERM/SIGINT handling.
 
     ``tg.start()`` blocks until ``task_status.started()`` fires inside the
@@ -40,6 +46,23 @@ async def serve_with_signal_guard(mcp_server: Any) -> None:
             task_status.started()  # signal receiver is now armed
             async for sig in signals:
                 logger.info("serve_with_signal_guard: received %s — initiating shutdown", sig.name)
+                if dispatch_activity_check is not None and dispatch_activity_check():
+                    logger.info(
+                        "serve_with_signal_guard: dispatch active — deferring up to %.0fs",
+                        deferral_timeout,
+                    )
+                    deadline = anyio.current_time() + deferral_timeout
+                    while anyio.current_time() < deadline:
+                        await anyio.sleep(1.0)
+                        if not dispatch_activity_check():
+                            logger.info(
+                                "serve_with_signal_guard: dispatch completed — shutting down"
+                            )
+                            break
+                    else:
+                        logger.warning(
+                            "serve_with_signal_guard: deferral timeout expired — forcing shutdown"
+                        )
                 scope.cancel()
                 return
 

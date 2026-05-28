@@ -126,9 +126,25 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
 
     try:
         backend_options = {"use_uvloop": sys.platform != "win32"}
-        anyio.run(serve_with_signal_guard, mcp, backend="asyncio", backend_options=backend_options)
+
+        from autoskillit.server._state import _get_ctx_or_none  # noqa: PLC0415
+
+        def _check_dispatch_active() -> bool:
+            ctx = _get_ctx_or_none()
+            if ctx is None or ctx.fleet_lock is None:
+                return False
+            return ctx.fleet_lock.active_count > 0
+
+        async def _guarded_serve() -> None:
+            await serve_with_signal_guard(mcp, dispatch_activity_check=_check_dispatch_active)
+
+        anyio.run(
+            _guarded_serve,
+            backend="asyncio",
+            backend_options=backend_options,
+        )
     except KeyboardInterrupt:
-        pass  # Ctrl+C before anyio loop starts — rare during heavy import phase
+        pass
 
 
 @app.command

@@ -498,6 +498,7 @@ class TestDispatchMarkerLifecycle:
         )
 
         captured_json: list[dict] = []
+
         original_dispatch = tool_ctx.executor.dispatch_food_truck
 
         async def _capture_marker(*args, **kwargs):
@@ -617,3 +618,47 @@ class TestResolveDispatchTimeout:
 
         result = resolve_dispatch_timeout(0, default_timeout_sec=3600)
         assert result == 0.0
+
+
+class TestCancelledErrorRecordsInterruptedState:
+    @pytest.mark.anyio
+    async def test_cancelled_error_records_interrupted_state(self, tool_ctx, monkeypatch) -> None:
+        from tests.fleet._helpers import _setup_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        _on_spawn_called = [False]
+
+        async def _spawn_then_cancel(**kwargs):
+            on_spawn = kwargs.get("on_spawn")
+            if on_spawn:
+                on_spawn(99999, 0)
+                _on_spawn_called[0] = True
+            raise asyncio.CancelledError
+
+        tool_ctx.executor.dispatch_food_truck = _spawn_then_cancel
+
+        with pytest.raises(asyncio.CancelledError):
+            from autoskillit.fleet import execute_dispatch
+
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="test-dispatch",
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert _on_spawn_called[0]
+
+        state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
+        assert len(state_files) == 1
+        state = json.loads(state_files[0].read_text())
+        d = state["dispatches"][0]
+        assert d["status"] == "interrupted"
+        assert d["reason"] == "signal_induced_cancellation"
+        assert tool_ctx.fleet_lock.active_count == 0

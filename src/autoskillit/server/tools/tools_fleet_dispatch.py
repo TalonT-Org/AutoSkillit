@@ -6,6 +6,7 @@ import functools
 import json
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -18,6 +19,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
+from autoskillit.server._misc import resolve_log_dir
 from autoskillit.server._notify import track_response_size
 
 logger = get_logger(__name__)
@@ -365,16 +367,11 @@ async def dispatch_food_truck(
                 has_dispatch_name=bool(dispatch_name),
             )
 
-        # --- Health report enrichment (standalone dispatch surfacing) ---
         if isinstance(outcome, DispatchCompleted) and outcome.dispatch_id:
-            from dataclasses import replace  # noqa: PLC0415
-
-            from autoskillit.server._misc import resolve_log_dir  # noqa: PLC0415
-
-            _diag_log_dir = resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)
-            _hr = _read_health_report(_diag_log_dir, outcome.dispatch_id)
-            if _hr is not None:
-                outcome = replace(outcome, health_report=_hr)
+            diag_log_dir = resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)
+            hr = _read_health_report(diag_log_dir, outcome.dispatch_id)
+            if hr is not None:
+                outcome = replace(outcome, health_report=hr)
 
         return outcome.to_envelope()
     except Exception as exc:

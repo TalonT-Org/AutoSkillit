@@ -515,7 +515,9 @@ async def test_release_issue_close_issue_with_non_default_branch_stages_issue(
     assert result["success"] is True
     assert result.get("staged") is True
     tool_ctx_kitchen_open.github_client.close_issue.assert_not_called()
-    _ = promotion_target  # confirms we are targeting a non-default branch
+    assert (
+        promotion_target != "develop"
+    )  # invariant: fixture must use a non-develop promotion target
 
 
 @pytest.mark.anyio

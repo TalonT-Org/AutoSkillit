@@ -53,11 +53,11 @@ Extract `source_dir`, `experiment_plan_path`, and `scope_report_path` from argum
 Read the experiment plan at `experiment_plan_path`.
 
 Extract the following fields (use sensible defaults if absent):
-- `experiment_type` — string (e.g., "benchmark", "ablation", "correlation")
+- `experiment_type` — string (e.g., "benchmark", "causal_inference", "exploratory")
 - `training_curves` — boolean (default: false)
 - `num_DVs` — integer count of dependent variables (default: 1)
-- `comparative` — boolean (true if multiple conditions compared head-to-head)
-- `DV_types` — list of DV type strings (e.g., ["accuracy", "temporal", "latency"])
+- `comparative` — boolean (true if multiple conditions compared head-to-head; default: false)
+- `DV_types` — list of DV type strings (e.g., ["accuracy", "temporal", "latency"]; default: [])
 - `num_conditions` — integer count of experimental conditions (default: 1)
 - `target_domain` — string (e.g., "nlp", "cv", "rl", "general")
 
@@ -115,7 +115,7 @@ methodology is identifiable from the 12 bundled methodology traditions.
 
 **Stage 2 — LLM arbitration (only when ≥ 2 candidates):**
 1. If any registered `UnionRuleDef` covers the candidate set, apply it:
-   select `resolved_tradition`, record rule name in `applied_union_rules`,
+   select `primary_tradition`, record rule name in `applied_union_rules`,
    set `precedence_trace = "stage2_tiebreak_by_rule_{rule_name}"`
 2. Otherwise, select among candidates by analyzing the plan's primary research
    question and methodology at temperature 0. Prefer the tradition whose
@@ -178,12 +178,12 @@ section to the template above:
 
 ```
 ## Methodology Tradition
-tradition_slug: {primary_tradition from Tier-C routing triple}
-routing_triple:
-  primary_tradition: {slug}
-  applied_union_rules: [{rules}]
-  precedence_trace: {trace}
-  candidate_set: [{candidates}]
+~~~yaml
+primary_tradition: {slug}
+applied_union_rules: [{rules}]
+precedence_trace: {trace}
+candidate_set: [{candidates}]
+~~~
 ```
 
 ### Step 3 — Emit Structured Tokens
@@ -193,7 +193,7 @@ Emit exactly five tokens as your final output:
 ```
 selected_lenses = {comma-separated list of vis-lens skill slugs}
 lens_context_paths = {comma-separated list of absolute paths to context files}
-disambiguation_rule_applied = {rule_name or null}
+disambiguation_rule_applied = {first rule_name from applied_union_rules if list is non-empty, else null}
 tier_c_lens = {vis-lens-methodology-norms or null}
 methodology_tradition = {primary_tradition slug or null}
 ```

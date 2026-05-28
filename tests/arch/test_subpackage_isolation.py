@@ -847,7 +847,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli": 21,
         "hooks": 11,
         "pipeline": 12,
-        "fleet": 20,  # REQ-CNST-003-E9: _dispatch_reaper.py added for boot-time orphan reaping
+        "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
         "recipe/rules": 46,
         "server/tools": 23,  # _auto_overrides.py added for shared _build_auto_overrides() factory
         "hooks/guards": 23,  # artifact_download_guard.py added for gh run/release download guard

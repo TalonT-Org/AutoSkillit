@@ -37,6 +37,7 @@ from autoskillit.fleet.state_types import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.fleet.sidecar import IssueSidecarEntry
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
@@ -647,6 +648,7 @@ async def _run_dispatch(
             await cleanup_orphaned_labels(dispatch_sidecar_path, tool_ctx.github_client)
 
     sidecar_file = Path(dispatch_sidecar_path)
+    sidecar_entries: list[IssueSidecarEntry] = []
     dispatch_checkpoint: SessionCheckpoint | None = None
     if sidecar_file.exists():
         from autoskillit.fleet._checkpoint_bridge import checkpoint_from_sidecar  # noqa: PLC0415
@@ -676,6 +678,18 @@ async def _run_dispatch(
             assistant_messages_path=jsonl_path,
             prior_dispatch_ids=prior_ids or None,
             additional_jsonl_paths=additional_jsonl_paths or None,
+        )
+
+    _issue_urls_raw = effective_ingredients.get("issue_urls", "") if effective_ingredients else ""
+    _dispatched_issue_list = [u.strip() for u in _issue_urls_raw.split(",") if u.strip()]
+    dispatched_issue_count = len(_dispatched_issue_list)
+    if parsed_result is not None and parsed_result.outcome == "no_sentinel" and sidecar_entries:
+        from autoskillit.fleet._sidecar_synthesis import synthesize_from_sidecar  # noqa: PLC0415
+
+        parsed_result = synthesize_from_sidecar(
+            parsed_result,
+            sidecar_entries,
+            dispatched_issue_count=dispatched_issue_count,
         )
 
     final_status, reason = classify_dispatch_outcome(
@@ -738,6 +752,7 @@ async def _run_dispatch(
         and capture
         and parsed_result is not None
         and parsed_result.payload
+        and parsed_result.source != "sidecar"
     ):
         extracted = _extract_captures(capture, parsed_result.payload)
 

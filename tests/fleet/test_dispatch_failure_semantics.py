@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import CliSubtype
+from autoskillit.recipe.schema import RecipeIngredient
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import (
     _make_completed_clean,
@@ -288,3 +289,178 @@ class TestCompletedCleanPath:
 
         record = _read_dispatch_record(tool_ctx)
         assert record["reason"] == "my-failure-reason"
+
+
+_SIDECAR_INGREDIENTS = {"issue_urls": RecipeIngredient(description="Issue URLs")}
+
+
+class TestSidecarBasedResultSynthesis:
+    @pytest.mark.anyio
+    async def test_no_sentinel_with_completed_sidecar_entries_is_not_failure(
+        self, tool_ctx, monkeypatch
+    ):
+        """no_sentinel + sidecar with all-completed entries + pr_url → SUCCESS."""
+        from autoskillit.core import DispatchIdentity
+        from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
+
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
+
+        fixed_dispatch_id = "aaaabbbb-1111-2222-3333-ffffffffffff"
+        _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
+
+        class _FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls) -> DispatchIdentity:
+                return _fixed_identity
+
+        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        issue_url = "https://github.com/org/repo/issues/1"
+        entry = IssueSidecarEntry(
+            issue_url=issue_url,
+            status="completed",
+            ts="2026-05-27T00:00:00Z",
+            pr_url="https://github.com/org/repo/pull/100",
+        )
+        append_sidecar_entry(fixed_dispatch_id, entry, tool_ctx.project_dir)
+
+        result = await _run(tool_ctx, ingredients={"issue_urls": issue_url})
+        assert result["dispatch_status"] == "success"
+
+    @pytest.mark.anyio
+    async def test_no_sentinel_with_failed_sidecar_entries_remains_failure(
+        self, tool_ctx, monkeypatch
+    ):
+        """no_sentinel + sidecar with failed entries → still FAILURE, no synthesis."""
+        from autoskillit.core import DispatchIdentity
+        from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
+
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
+
+        fixed_dispatch_id = "aaaabbbb-4444-5555-6666-ffffffffffff"
+        _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
+
+        class _FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls) -> DispatchIdentity:
+                return _fixed_identity
+
+        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        issue_url = "https://github.com/org/repo/issues/1"
+        entry = IssueSidecarEntry(
+            issue_url=issue_url,
+            status="failed",
+            ts="2026-05-27T00:00:00Z",
+            reason="compilation error",
+        )
+        append_sidecar_entry(fixed_dispatch_id, entry, tool_ctx.project_dir)
+
+        result = await _run(tool_ctx, ingredients={"issue_urls": issue_url})
+        assert result["success"] is False
+
+    @pytest.mark.anyio
+    async def test_sidecar_synthesis_requires_all_issues_completed(self, tool_ctx, monkeypatch):
+        """Synthesis requires len(completed sidecar entries) == len(dispatched issues)."""
+        from autoskillit.core import DispatchIdentity
+        from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
+
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
+
+        fixed_dispatch_id = "aaaabbbb-7777-8888-9999-ffffffffffff"
+        _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
+
+        class _FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls) -> DispatchIdentity:
+                return _fixed_identity
+
+        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        issue1 = "https://github.com/org/repo/issues/1"
+        issue2 = "https://github.com/org/repo/issues/2"
+        entry = IssueSidecarEntry(
+            issue_url=issue1,
+            status="completed",
+            ts="2026-05-27T00:00:00Z",
+            pr_url="https://github.com/org/repo/pull/100",
+        )
+        append_sidecar_entry(fixed_dispatch_id, entry, tool_ctx.project_dir)
+
+        result = await _run(tool_ctx, ingredients={"issue_urls": f"{issue1},{issue2}"})
+        assert result["dispatch_status"] != "success"
+
+    @pytest.mark.anyio
+    async def test_sidecar_synthesis_skips_capture_extraction(self, tool_ctx, monkeypatch):
+        """Sidecar-synthesized SUCCESS must not call _extract_captures."""
+        import json
+
+        from autoskillit.core import DispatchIdentity
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.sidecar import IssueSidecarEntry, append_sidecar_entry
+        from tests.fleet._helpers import (
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+            _simple_prompt_builder,
+        )
+
+        _setup_dispatch(tool_ctx, monkeypatch, ingredients=_SIDECAR_INGREDIENTS)
+
+        fixed_dispatch_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+        _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
+
+        class _FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls) -> DispatchIdentity:
+                return _fixed_identity
+
+        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        def _should_not_be_called(spec, payload):
+            raise AssertionError("_extract_captures called on sidecar-synthesized result")
+
+        monkeypatch.setattr("autoskillit.fleet._api._extract_captures", _should_not_be_called)
+
+        issue_url = "https://github.com/org/repo/issues/1"
+        entry = IssueSidecarEntry(
+            issue_url=issue_url,
+            status="completed",
+            ts="2026-05-27T00:00:00Z",
+            pr_url="https://github.com/org/repo/pull/100",
+        )
+        append_sidecar_entry(fixed_dispatch_id, entry, tool_ctx.project_dir)
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients={"issue_urls": issue_url},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            capture={"pr_url": "${{ result.pr_url }}"},
+        )
+        envelope = json.loads(result.outcome.to_envelope())
+        assert envelope["dispatch_status"] == "success"

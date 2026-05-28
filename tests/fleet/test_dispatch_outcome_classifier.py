@@ -230,3 +230,30 @@ class TestReasonAwareResumePolicy:
         status, reason = classify_dispatch_outcome(parsed, skill_result, sidecar_exists=True)
         assert status == DispatchStatus.FAILURE
         assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+
+class TestClassifyDispatchOutcomeSidecarSynthesis:
+    def test_sidecar_source_accepted_in_l3_parse_result(self):
+        """L3ParseResult with source='sidecar' must be constructible."""
+        result = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True, "reason": "sidecar_recovery"},
+            raw_body=None,
+            parse_error=None,
+            source="sidecar",
+        )
+        assert result.source == "sidecar"
+
+    def test_sidecar_synthesized_completed_clean_is_success(self):
+        """completed_clean from sidecar synthesis with success=True → SUCCESS."""
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True, "reason": "sidecar_recovery"},
+            raw_body=None,
+            parse_error=None,
+            source="sidecar",
+        )
+        skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
+        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        assert status == DispatchStatus.SUCCESS
+        assert reason == ""

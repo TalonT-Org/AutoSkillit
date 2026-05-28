@@ -25,7 +25,7 @@ class L3ParseResult:
     payload: dict | None
     raw_body: str | None
     parse_error: str | None
-    source: Literal["stdout", "assistant_messages_jsonl", "additional_jsonl"]
+    source: Literal["stdout", "assistant_messages_jsonl", "additional_jsonl", "sidecar"]
 
 
 def _extract_text_from_jsonl(path: Path) -> str:
@@ -96,7 +96,7 @@ def _parse_body(
     open_pos: int,
     close_pos: int,
     open_sentinel: str,
-    source: Literal["stdout", "assistant_messages_jsonl", "additional_jsonl"],
+    source: Literal["stdout", "assistant_messages_jsonl", "additional_jsonl", "sidecar"],
 ) -> L3ParseResult:
     """Extract body between sentinels and attempt JSON decode."""
     after_open = open_pos + len(open_sentinel)

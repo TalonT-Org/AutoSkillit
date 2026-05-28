@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from autoskillit.core.types._type_constants_registries import PACK_REGISTRY, TOOL_SUBSET_TAGS
 
@@ -70,6 +71,7 @@ def _setup_dispatch(
     recipe_name: str = "test-recipe",
     *,
     requires_packs: list[str] | None = None,
+    ingredients: dict[str, Any] | None = None,
 ):
     """Wire tool_ctx for dispatch tests."""
     from autoskillit.fleet import FleetSemaphore
@@ -86,7 +88,7 @@ def _setup_dispatch(
             name=recipe_name,
             description="test",
             kind=RecipeKind.STANDARD,
-            ingredients={},
+            ingredients=ingredients if ingredients is not None else {},
             requires_packs=requires_packs if requires_packs is not None else [],
         ),
     )

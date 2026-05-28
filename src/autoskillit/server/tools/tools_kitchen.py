@@ -449,6 +449,21 @@ async def open_kitchen(
                 tool_ctx.recipe_content_hash = result.get("content_hash", "")
                 tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
                 tool_ctx.recipe_version = result.get("recipe_version") or ""
+                try:
+                    recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+                except Exception:
+                    logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
+                    tool_ctx.active_recipe_steps = None
+                else:
+                    if recipe_info is not None:
+                        try:
+                            recipe_obj = tool_ctx.recipes.load(recipe_info.path)
+                            tool_ctx.active_recipe_steps = dict(recipe_obj.steps)
+                        except Exception:
+                            logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
+                            tool_ctx.active_recipe_steps = None
+                    else:
+                        tool_ctx.active_recipe_steps = None
                 result["success"] = True
                 result["kitchen"] = "open"
                 result["version"] = __version__

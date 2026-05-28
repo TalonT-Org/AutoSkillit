@@ -62,7 +62,9 @@ _INTERACTIVE_ENV_EXCLUSIONS: frozenset[str] = frozenset(_HEADLESS_ENV_HARDENING)
 # MAX_MCP_OUTPUT_TOKENS also overlap with IDE_ENV_DENYLIST in
 # core/_claude_env.py. AUTOSKILLIT_SESSION_TYPE, AUTOSKILLIT_CAMPAIGN_ID, and
 # AUTOSKILLIT_PROVIDER_PROFILE overlap with AUTOSKILLIT_PRIVATE_ENV_VARS
-# (scrubbed by build_agent_env).
+# (scrubbed by build_agent_env). CLAUDE_CODE_SUBAGENT_MODEL also overlaps with
+# IDE_ENV_PREFIX_DENYLIST via the CLAUDE_CODE_SUBAGENT_ prefix in _claude_env.py,
+# providing structural immunity against future CLAUDE_CODE_SUBAGENT_* variables.
 # All lists must be kept in sync when adding new exclusive variables.
 _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
     {

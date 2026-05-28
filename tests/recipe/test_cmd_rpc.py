@@ -938,3 +938,35 @@ def test_force_push_int_review_pr_number(mock_sleep, mock_run_git, mock_run_gh, 
     assert mock_run_gh.call_count >= 1
     call_cmd = mock_run_gh.call_args[0][0]
     assert "1958" in call_cmd
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# review_path_rebase
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestReviewPathRebase:
+    """Unit tests for the review_path_rebase callable."""
+
+    def test_delegates_to_queue_ejected_fix(self) -> None:
+        """review_path_rebase must delegate to queue_ejected_fix."""
+        from unittest.mock import patch
+
+        from autoskillit.recipe._cmd_rpc import review_path_rebase
+
+        with patch("autoskillit.recipe._cmd_rpc_merge.queue_ejected_fix") as mock:
+            mock.return_value = {"status": "clean"}
+            result = review_path_rebase(work_dir="/tmp/work", base_branch="main")
+            assert result == {"status": "clean"}
+            mock.assert_called_once_with(work_dir="/tmp/work", base_branch="main")
+
+    def test_returns_conflicts_on_conflict(self) -> None:
+        """review_path_rebase returns conflicts when delegate does."""
+        from unittest.mock import patch
+
+        from autoskillit.recipe._cmd_rpc import review_path_rebase
+
+        with patch("autoskillit.recipe._cmd_rpc_merge.queue_ejected_fix") as mock:
+            mock.return_value = {"status": "conflicts"}
+            result = review_path_rebase(work_dir="/tmp/work", base_branch="main")
+            assert result == {"status": "conflicts"}

@@ -1494,19 +1494,33 @@ steps:
 
       '
   pre_review_rebase_integration:
-    tool: run_cmd
+    tool: run_python
     with:
-      cmd: 'REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream 2>/dev/null
-        | grep -qv "^file://" && echo upstream || echo origin) &&
-
-        git -C ${{ context.work_dir }} fetch "$REMOTE" &&
-
-        git -C ${{ context.work_dir }} rebase "$REMOTE"/${{ inputs.base_branch }}
-
-        '
-      step_name: pre_review_rebase_integration
-    on_success: re_push_review_integration
+      callable: autoskillit.recipe._cmd_rpc.review_path_rebase
+      work_dir: ${{ context.work_dir }}
+      base_branch: ${{ inputs.base_branch }}
+    on_result:
+    - when: ${{ result.status }} == clean
+      route: re_push_review_integration
+    - route: resolve_pre_review_integration_conflicts
+    on_failure: resolve_pre_review_integration_conflicts
+  resolve_pre_review_integration_conflicts:
+    tool: run_skill
+    model: ''
+    with:
+      skill_command: /autoskillit:resolve-merge-conflicts '${{ context.work_dir }}' '${{ inputs.base_branch }}'
+      cwd: ${{ context.work_dir }}
+      output_dir: '.'
+      step_name: resolve_pre_review_integration_conflicts
+    capture:
+      conflict_escalation_required: ${{ result.escalation_required }}
+    on_result:
+    - when: ${{ result.escalation_required }} == true
+      route: register_clone_failure
+    - route: re_push_review_integration
     on_failure: register_clone_failure
+    retries: 0
+    on_exhausted: register_clone_failure
   re_push_review_integration:
     tool: push_to_remote
     with:

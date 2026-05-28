@@ -143,12 +143,15 @@ class TestReviewPrRecipeIntegration:
         )
 
     def test_pre_review_rebase_routes_to_re_push_review(self, recipe: object) -> None:
-        """T_RP7b: pre_review_rebase on_success must route to re_push_review."""
+        """T_RP7b: pre_review_rebase uses run_python and routes clean to re_push_review."""
         assert "pre_review_rebase" in recipe.steps  # type: ignore[operator]
         step = recipe.steps["pre_review_rebase"]  # type: ignore[attr-defined]
-        assert step.on_success == "re_push_review", (
-            "pre_review_rebase must route on_success to re_push_review"
-        )
+        assert step.tool == "run_python"
+        assert step.on_success is None, "routing is via on_result, not on_success"
+        assert step.on_result is not None
+        clean_routes = [c.route for c in step.on_result.conditions if c.when and "clean" in c.when]
+        assert "re_push_review" in clean_routes
+        assert step.on_failure == "resolve_pre_review_conflicts"
 
     def test_re_push_review_routes_to_check_review_loop(self, recipe: object) -> None:
         """T_RP8: re_push_review routes to check_review_loop (bounded retry gate)."""
@@ -372,3 +375,41 @@ class TestLocalReviewRoundsAndMaxRetriesAlignment:
             f"[{recipe.name}] local_review_rounds ({local_rounds}) >= review_max_retries "
             f"({max_retries}). Mode will never transition to github with default config."
         )
+
+
+class TestPreReviewRebaseConflictResolution:
+    """Verify pre_review_rebase uses run_python with conflict routing in all 4 recipes."""
+
+    @pytest.fixture(
+        scope="class",
+        params=[
+            "implementation.yaml",
+            "implementation-groups.yaml",
+            "remediation.yaml",
+        ],
+    )
+    def recipe(self, request: pytest.FixtureRequest) -> object:
+        return load_recipe(builtin_recipes_dir() / request.param)
+
+    def test_pre_review_rebase_uses_run_python(self, recipe: object) -> None:
+        step = recipe.steps["pre_review_rebase"]
+        assert step.tool == "run_python", (
+            f"{recipe.name}: pre_review_rebase must use run_python, got {step.tool!r}"
+        )
+
+    def test_pre_review_rebase_on_result_routes_to_conflict_resolution(
+        self, recipe: object
+    ) -> None:
+        step = recipe.steps["pre_review_rebase"]
+        assert step.on_result is not None
+        routes = [c.route for c in step.on_result.conditions]
+        assert "resolve_pre_review_conflicts" in routes, (
+            f"{recipe.name}: pre_review_rebase on_result must include resolve_pre_review_conflicts"
+        )
+
+    def test_resolve_pre_review_conflicts_uses_merge_conflicts_skill(self, recipe: object) -> None:
+        assert "resolve_pre_review_conflicts" in recipe.steps
+        step = recipe.steps["resolve_pre_review_conflicts"]
+        assert step.tool == "run_skill"
+        cmd = step.with_args.get("skill_command", "")
+        assert "resolve-merge-conflicts" in cmd

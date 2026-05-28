@@ -199,3 +199,86 @@ def _check_run_cmd_script_exists(ctx: ValidationContext) -> list[RuleFinding]:
                 )
             )
     return findings
+
+
+_BARE_REBASE_RE = re.compile(r"\bgit\b[^\n]*\brebase\b(?!\s+--abort)")
+
+_CONFLICT_SKILL = "resolve-merge-conflicts"
+
+
+def _has_conflict_routing(step, recipe) -> bool:
+    """Check if a step routes to conflict resolution via on_failure or on_result."""
+    from collections import deque
+
+    targets: list[str] = []
+    if step.on_failure:
+        targets.append(step.on_failure)
+    if step.on_result:
+        for cond in step.on_result.conditions or []:
+            if cond.route:
+                targets.append(cond.route)
+
+    for target_name in targets:
+        visited: set[str] = set()
+        queue: deque[tuple[str, int]] = deque([(target_name, 0)])
+        while queue:
+            name, hops = queue.popleft()
+            if name in visited or hops > 6:
+                continue
+            visited.add(name)
+            target_step = recipe.steps.get(name)
+            if target_step is None:
+                continue
+            if target_step.tool == "run_skill":
+                cmd = (target_step.with_args or {}).get("skill_command", "")
+                if _CONFLICT_SKILL in cmd:
+                    return True
+            if target_step.tool == "run_python":
+                callable_str = (target_step.with_args or {}).get("callable", "")
+                if "rebase" in callable_str:
+                    return True
+            if target_step.on_success:
+                queue.append((target_step.on_success, hops + 1))
+            if target_step.on_failure:
+                queue.append((target_step.on_failure, hops + 1))
+            if target_step.on_result:
+                for cond in target_step.on_result.conditions or []:
+                    if cond.route:
+                        queue.append((cond.route, hops + 1))
+    return False
+
+
+@semantic_rule(
+    name="run-cmd-bare-rebase-without-conflict-routing",
+    description=(
+        "run_cmd step performs git rebase but routes on_failure to a terminal "
+        "without conflict resolution. Use run_python with a rebase callable instead."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_run_cmd_bare_rebase(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = (step.with_args or {}).get("cmd", "")
+        if not isinstance(cmd, str):
+            continue
+        if not _BARE_REBASE_RE.search(cmd):
+            continue
+        if _has_conflict_routing(step, ctx.recipe):
+            continue
+        findings.append(
+            RuleFinding(
+                rule="run-cmd-bare-rebase-without-conflict-routing",
+                severity=Severity.ERROR,
+                step_name=name,
+                message=(
+                    f"Step '{name}' performs a bare git rebase via run_cmd but does not "
+                    "route failures to conflict resolution (resolve-merge-conflicts). "
+                    "Use run_python with a rebase callable that aborts on conflict and "
+                    "route the result to a resolve-merge-conflicts skill step."
+                ),
+            )
+        )
+    return findings

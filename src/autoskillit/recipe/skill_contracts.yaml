@@ -2610,6 +2610,17 @@ callable_contracts:
     outputs:
     - name: committed
       type: str
+  autoskillit.recipe._cmd_rpc.review_path_rebase:
+    inputs:
+    - name: work_dir
+      type: str
+      required: true
+    - name: base_branch
+      type: str
+      required: true
+    outputs:
+    - name: status
+      type: str
   autoskillit.recipe._cmd_rpc.queue_ejected_fix:
     inputs:
     - name: work_dir

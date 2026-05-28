@@ -233,10 +233,27 @@ def test_flake_suspected_routes_consistently_across_fix_and_resolve_ci(
 
 @pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
 def test_pre_resolve_rebase_step_exists(recipe_name: str) -> None:
-    """pre_resolve_rebase step must exist for already_green re-entry path."""
+    """pre_resolve_rebase must use run_python and route conflicts to resolution."""
     recipe_path = _RECIPES_DIR / recipe_name
     recipe = load_recipe(recipe_path)
     assert "pre_resolve_rebase" in recipe.steps, (
         f"{recipe_name}: missing 'pre_resolve_rebase' step. "
         "This step is required for the already_green verdict re-entry path."
+    )
+    step = recipe.steps["pre_resolve_rebase"]
+    assert step.tool == "run_python", (
+        f"{recipe_name}: pre_resolve_rebase must use run_python, got {step.tool!r}"
+    )
+    assert step.on_failure == "resolve_pre_resolve_conflicts", (
+        f"{recipe_name}: pre_resolve_rebase.on_failure must route to "
+        "resolve_pre_resolve_conflicts for conflict resolution"
+    )
+    assert step.on_result is not None
+    conflict_routes = [
+        c.route
+        for c in step.on_result.conditions
+        if c.when is None or (c.when and "clean" not in c.when)
+    ]
+    assert "resolve_pre_resolve_conflicts" in conflict_routes, (
+        f"{recipe_name}: pre_resolve_rebase must route conflicts to resolve_pre_resolve_conflicts"
     )

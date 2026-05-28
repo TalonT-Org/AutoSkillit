@@ -859,13 +859,48 @@
       ]
     },
     "pre_review_rebase": {
-      "tool": "run_cmd",
+      "tool": "run_python",
       "with": {
-        "cmd": "REMOTE=$((git -C ${{ context.work_dir }} remote get-url upstream | grep -qv \"^file://\") 2>/dev/null && echo upstream || echo origin) &&\ngit -C ${{ context.work_dir }} fetch \"$REMOTE\" &&\ngit -C ${{ context.work_dir }} rebase \"$REMOTE\"/${{ inputs.base_branch }}\n",
-        "step_name": "pre_review_rebase"
+        "callable": "autoskillit.recipe._cmd_rpc.review_path_rebase",
+        "work_dir": "${{ context.work_dir }}",
+        "base_branch": "${{ inputs.base_branch }}"
       },
-      "on_success": "re_push_review",
-      "on_failure": "release_issue_failure"
+      "on_result": [
+        {
+          "when": "${{ result.status }} == clean",
+          "route": "re_push_review"
+        },
+        {
+          "route": "resolve_pre_review_conflicts"
+        }
+      ],
+      "on_failure": "resolve_pre_review_conflicts"
+    },
+    "resolve_pre_review_conflicts": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
+        "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
+        "step_name": "resolve_pre_review_conflicts"
+      },
+      "capture": {
+        "conflict_escalation_required": "${{ result.escalation_required }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.escalation_required }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "re_push_review"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "on_context_limit": "release_issue_failure",
+      "retries": 1,
+      "on_exhausted": "release_issue_failure"
     },
     "re_push_review": {
       "tool": "push_to_remote",
@@ -1904,15 +1939,49 @@
       "note": "Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci structured output to avoid redundant CI failure re-investigation. Routes via on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses (sibling fix may have landed), flake_suspected retries via re_push (bounded by retries: 2 / on_exhausted: release_issue_failure), ci_only_failure escalates to human. Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.\n"
     },
     "pre_resolve_rebase": {
-      "tool": "run_cmd",
+      "tool": "run_python",
       "with": {
-        "cmd": "REMOTE=$((git -C ${{ context.work_dir }} remote get-url upstream | grep -qv \"^file://\") 2>/dev/null && echo upstream || echo origin) &&\ngit -C ${{ context.work_dir }} fetch \"$REMOTE\" &&\ngit -C ${{ context.work_dir }} rebase \"$REMOTE\"/${{ inputs.base_branch }}\n",
-        "step_name": "pre_resolve_rebase"
+        "callable": "autoskillit.recipe._cmd_rpc.review_path_rebase",
+        "work_dir": "${{ context.work_dir }}",
+        "base_branch": "${{ inputs.base_branch }}"
       },
-      "retries": 1,
-      "on_success": "check_ci_rebase_loop",
-      "on_failure": "release_issue_failure",
+      "on_result": [
+        {
+          "when": "${{ result.status }} == clean",
+          "route": "check_ci_rebase_loop"
+        },
+        {
+          "route": "resolve_pre_resolve_conflicts"
+        }
+      ],
+      "on_failure": "resolve_pre_resolve_conflicts",
       "note": "Rebases the feature branch against integration head when resolve_ci emits already_green — the worktree was already clean because a sibling pipeline's fix already landed on integration. Pulling it in before re-running diagnose_ci gives the pipeline a real chance at emitting real_fix and reaching re_push.\n"
+    },
+    "resolve_pre_resolve_conflicts": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
+        "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
+        "step_name": "resolve_pre_resolve_conflicts"
+      },
+      "capture": {
+        "conflict_escalation_required": "${{ result.escalation_required }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.escalation_required }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "check_ci_rebase_loop"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "on_context_limit": "release_issue_failure",
+      "retries": 1,
+      "on_exhausted": "release_issue_failure"
     },
     "check_ci_rebase_loop": {
       "tool": "run_python",

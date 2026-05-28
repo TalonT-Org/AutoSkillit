@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +16,9 @@ if TYPE_CHECKING:
     from autoskillit.recipe.schema import CampaignDispatch, Recipe
 
 logger = get_logger(__name__)
+
+# Maximum hops for BFS push-reachability checks.
+_MAX_HOPS = 6
 
 # Trigger regex: matches multiple sentinel-indicating phrases
 _SENTINEL_TRIGGER_RE = re.compile(
@@ -133,3 +137,30 @@ def _is_loop_guard_step(step_name: str, ctx: ValidationContext) -> bool:
         return False
     callable_str = step.with_args.get("callable", "")
     return callable_str == "autoskillit.smoke_utils.check_loop_iteration"
+
+
+def push_reachable(
+    graph: dict[str, set[str]],
+    start: str,
+    recipe: Recipe,
+    max_hops: int = _MAX_HOPS,
+) -> tuple[bool, str | None]:
+    """Return (reachable, push_step_name) if push_to_remote is reachable within max_hops.
+
+    Returns (False, None) if no push_to_remote step is reachable.
+    """
+    visited: set[str] = set()
+    queue: deque[tuple[str, int]] = deque([(start, 0)])
+    while queue:
+        name, hops = queue.popleft()
+        if name in visited:
+            continue
+        if hops > max_hops:
+            continue
+        visited.add(name)
+        step = recipe.steps.get(name)
+        if step is not None and step.tool == "push_to_remote":
+            return True, name
+        for succ in graph.get(name, set()):
+            queue.append((succ, hops + 1))
+    return False, None

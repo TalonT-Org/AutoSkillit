@@ -657,3 +657,152 @@ def test_bundled_recipes_pass_all_new_contract_rules() -> None:
         "New contract immunity rules fired on bundled recipes "
         "(ensure Part A contract fixes are applied):\n" + "\n".join(violations)
     )
+
+
+# ---------------------------------------------------------------------------
+# write-skill-requires-source-output-dir rule tests
+# ---------------------------------------------------------------------------
+
+
+def _make_write_push_recipe(
+    *,
+    output_dir: str | None = None,
+    routes_to_push: bool = True,
+) -> Recipe:
+    """Minimal recipe: run_skill → push_to_remote (or stop)."""
+    with_args: dict[str, str] = {
+        "skill_command": "/autoskillit:resolve-review branch base",
+        "cwd": "/tmp",
+    }
+    if output_dir is not None:
+        with_args["output_dir"] = output_dir
+
+    push_dest = "push_step" if routes_to_push else "done"
+    skill_step = RecipeStep(
+        tool="run_skill",
+        with_args=with_args,
+        on_success=push_dest,
+        on_failure="done",
+    )
+    steps: dict[str, RecipeStep] = {"skill_step": skill_step}
+    if routes_to_push:
+        steps["push_step"] = RecipeStep(
+            tool="push_to_remote",
+            with_args={"clone_path": "/tmp", "remote_url": "r", "branch": "b"},
+            on_success="done",
+            on_failure="done",
+        )
+    steps["done"] = RecipeStep(action="stop", message="done")
+    return Recipe(
+        name="test-recipe",
+        description="Test write-skill-requires-source-output-dir rule.",
+        version="0.2.0",
+        kitchen_rules="Use run_skill only.",
+        steps=steps,
+    )
+
+
+def _make_write_contract(
+    *,
+    write_behavior: str | None,
+    read_only: bool = False,
+) -> SkillContract:
+    return SkillContract(
+        inputs=[],
+        outputs=[],
+        write_behavior=write_behavior,
+        write_expected_when=["verdict\\s*=\\s*\\w+"] if write_behavior == "conditional" else [],
+        read_only=read_only,
+    )
+
+
+def test_write_skill_reaching_push_without_source_output_dir_fires_conditional() -> None:
+    """Rule fires ERROR when conditional write skill has no output_dir and reaches push."""
+    recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
+    contract = _make_write_contract(write_behavior="conditional")
+    with patch(
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        return_value=contract,
+    ):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
+    assert hits, (
+        "write-skill-requires-source-output-dir must fire when no output_dir and push reachable"
+    )
+    assert hits[0].severity == Severity.ERROR
+    assert hits[0].step_name == "skill_step"
+
+
+def test_write_skill_reaching_push_without_source_output_dir_fires_always() -> None:
+    """Rule fires ERROR when always-write skill has no output_dir and reaches push."""
+    recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
+    contract = _make_write_contract(write_behavior="always")
+    with patch(
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        return_value=contract,
+    ):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
+    assert hits, "write-skill-requires-source-output-dir must fire for write_behavior='always'"
+    assert hits[0].severity == Severity.ERROR
+
+
+def test_write_skill_reaching_push_with_output_dir_passes() -> None:
+    """Rule does NOT fire when output_dir is declared."""
+    recipe = _make_write_push_recipe(output_dir="${{ context.work_dir }}", routes_to_push=True)
+    contract = _make_write_contract(write_behavior="conditional")
+    with patch(
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        return_value=contract,
+    ):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
+    assert not hits, "write-skill-requires-source-output-dir must not fire when output_dir is set"
+
+
+def test_write_skill_not_reaching_push_without_output_dir_passes() -> None:
+    """Rule does NOT fire when the skill does not reach push_to_remote."""
+    recipe = _make_write_push_recipe(output_dir=None, routes_to_push=False)
+    contract = _make_write_contract(write_behavior="conditional")
+    with patch(
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        return_value=contract,
+    ):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
+    assert not hits, (
+        "write-skill-requires-source-output-dir must not fire when push is unreachable"
+    )
+
+
+def test_read_only_skill_without_output_dir_not_flagged() -> None:
+    """Rule does NOT fire when the skill is read_only, even with write_behavior='always'."""
+    recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
+    contract = _make_write_contract(write_behavior="always", read_only=True)
+    with patch(
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        return_value=contract,
+    ):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
+    assert not hits, "write-skill-requires-source-output-dir must not fire for read_only skills"
+
+
+def test_all_bundled_recipes_pass_write_skill_output_dir_rule() -> None:
+    """All bundled recipes must have zero write-skill-requires-source-output-dir findings."""
+    recipes_dir = pkg_root() / "recipes"
+    recipe_files = sorted(recipes_dir.glob("*.yaml"))
+    assert recipe_files, "No bundled recipes found"
+
+    violations: list[str] = []
+    for recipe_path in recipe_files:
+        recipe = load_recipe(recipe_path)
+        findings = run_semantic_rules(recipe)
+        for f in findings:
+            if f.rule == "write-skill-requires-source-output-dir":
+                violations.append(f"{recipe_path.name}:{f.step_name}: {f.message}")
+
+    assert not violations, (
+        "write-skill-requires-source-output-dir fired on bundled recipes:\n"
+        + "\n".join(violations)
+    )

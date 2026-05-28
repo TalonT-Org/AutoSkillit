@@ -126,8 +126,8 @@ class TestReviewPrRecipeIntegration:
         """T_RP6: resolve_review has retries=2 matching resolve_ci pattern."""
         assert recipe.steps["resolve_review"].retries == 2  # type: ignore[attr-defined]
 
-    def test_resolve_review_routes_to_re_push_review(self, recipe: object) -> None:
-        """T_RP7: resolve_review uses on_result: verdict dispatch routing to re_push_review."""
+    def test_resolve_review_routes_to_pre_review_rebase(self, recipe: object) -> None:
+        """T_RP7: resolve_review uses on_result: verdict dispatch routing to pre_review_rebase."""
         step = recipe.steps["resolve_review"]  # type: ignore[attr-defined]
         assert step.on_success is None, (
             "resolve_review must use on_result: verdict dispatch, not unconditional on_success"
@@ -138,8 +138,16 @@ class TestReviewPrRecipeIntegration:
         real_fix_routes = [
             c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when
         ]
-        assert any("re_push_review" in r for r in real_fix_routes), (
-            "resolve_review on_result must route verdict=real_fix to re_push_review"
+        assert any("pre_review_rebase" in r for r in real_fix_routes), (
+            "resolve_review on_result must route verdict=real_fix to pre_review_rebase"
+        )
+
+    def test_pre_review_rebase_routes_to_re_push_review(self, recipe: object) -> None:
+        """T_RP7b: pre_review_rebase on_success must route to re_push_review."""
+        assert "pre_review_rebase" in recipe.steps  # type: ignore[operator]
+        step = recipe.steps["pre_review_rebase"]  # type: ignore[attr-defined]
+        assert step.on_success == "re_push_review", (
+            "pre_review_rebase must route on_success to re_push_review"
         )
 
     def test_re_push_review_routes_to_check_review_loop(self, recipe: object) -> None:

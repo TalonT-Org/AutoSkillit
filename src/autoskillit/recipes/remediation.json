@@ -262,7 +262,8 @@
       "with": {
         "skill_command": "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "implement"
+        "step_name": "implement",
+        "output_dir": "."
       },
       "capture": {
         "implementation_ref": "${{ result.worktree_path }}",
@@ -477,7 +478,8 @@
         "task": "${{ inputs.task }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "make_plan",
-        "adversarial_review_level": "${{ inputs.adversarial_review_level }}"
+        "adversarial_review_level": "${{ inputs.adversarial_review_level }}",
+        "output_dir": "."
       },
       "capture": {
         "plan_path": "${{ result.plan_path }}"
@@ -614,6 +616,7 @@
       "with": {
         "skill_command": "/autoskillit:prepare-pr ${{ context.plan_path }} ${{ inputs.run_name }} ${{ inputs.base_branch }} ${{ context.issue_number }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "prepare_pr"
       },
       "capture": {
@@ -666,6 +669,7 @@
       "with": {
         "skill_command": "/autoskillit:compose-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.work_dir }} ${{ inputs.base_branch }} ${{ context.issue_number }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "compose_pr"
       },
       "capture": {
@@ -791,6 +795,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-review ${{ context.merge_target }} ${{ inputs.base_branch }} mode=${{ context.review_mode }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "resolve_review"
       },
       "capture": {
@@ -798,19 +803,19 @@
       },
       "retries": 2,
       "on_exhausted": "release_issue_failure",
-      "on_context_limit": "re_push_review",
+      "on_context_limit": "pre_review_rebase",
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
-          "route": "re_push_review"
+          "route": "pre_review_rebase"
         },
         {
           "when": "${{ result.verdict }} == 'already_green'",
-          "route": "re_push_review"
+          "route": "pre_review_rebase"
         },
         {
           "when": "${{ result.verdict }} == 'flake_suspected'",
-          "route": "re_push_review"
+          "route": "pre_review_rebase"
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
@@ -818,17 +823,27 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Runs when review_pr reports issues (verdict=changes_requested). The clone (context.work_dir) has the feature branch (context.merge_target) checked out. resolve-review fetches inline and summary review comments via the GitHub API, applies fixes for each actionable finding (critical + warning severity), and commits each fix. Routes via on_result: verdict dispatch — real_fix/already_green/ flake_suspected all route to re_push_review (retry bounded by retries: 2); ci_only_failure escalates to release_issue_failure.\n",
+      "note": "Runs when review_pr reports issues (verdict=changes_requested). The clone (context.work_dir) has the feature branch (context.merge_target) checked out. resolve-review fetches inline and summary review comments via the GitHub API, applies fixes for each actionable finding (critical + warning severity), and commits each fix. Routes via on_result: verdict dispatch — real_fix/already_green/ flake_suspected all route to pre_review_rebase (fetch+rebase before push); ci_only_failure escalates to release_issue_failure.\n",
       "optional_context_refs": [
         "review_mode"
       ]
+    },
+    "pre_review_rebase": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "REMOTE=$((git -C ${{ context.work_dir }} remote get-url upstream | grep -qv \"^file://\") 2>/dev/null && echo upstream || echo origin) &&\ngit -C ${{ context.work_dir }} fetch \"$REMOTE\" &&\ngit -C ${{ context.work_dir }} rebase \"$REMOTE\"/${{ inputs.base_branch }}\n",
+        "step_name": "pre_review_rebase"
+      },
+      "on_success": "re_push_review",
+      "on_failure": "release_issue_failure"
     },
     "re_push_review": {
       "tool": "push_to_remote",
       "with": {
         "clone_path": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "branch": "${{ context.merge_target }}"
+        "branch": "${{ context.merge_target }}",
+        "force": "true"
       },
       "on_success": "check_review_loop",
       "on_failure": "release_issue_failure",
@@ -1393,6 +1408,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "resolve_queue_merge_conflicts"
       },
       "capture": {
@@ -1639,6 +1655,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "resolve_direct_merge_conflicts"
       },
       "capture": {
@@ -1747,6 +1764,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "resolve_immediate_merge_conflicts"
       },
       "capture": {
@@ -1818,6 +1836,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-failures ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.ci_conclusion }} ${{ context.ci_failed_jobs }} ${{ context.diagnosis_path }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "resolve_ci"
       },
       "capture": {
@@ -1857,7 +1876,7 @@
     "pre_resolve_rebase": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream 2>/dev/null | grep -qv \"^file://\" && echo upstream || echo origin) &&\ngit -C ${{ context.work_dir }} fetch \"$REMOTE\" &&\ngit -C ${{ context.work_dir }} rebase \"$REMOTE\"/${{ inputs.base_branch }}\n",
+        "cmd": "REMOTE=$((git -C ${{ context.work_dir }} remote get-url upstream | grep -qv \"^file://\") 2>/dev/null && echo upstream || echo origin) &&\ngit -C ${{ context.work_dir }} fetch \"$REMOTE\" &&\ngit -C ${{ context.work_dir }} rebase \"$REMOTE\"/${{ inputs.base_branch }}\n",
         "step_name": "pre_resolve_rebase"
       },
       "retries": 1,
@@ -1921,6 +1940,7 @@
       "with": {
         "skill_command": "/autoskillit:resolve-merge-conflicts ${{ context.work_dir }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": ".",
         "step_name": "ci_conflict_fix"
       },
       "capture": {

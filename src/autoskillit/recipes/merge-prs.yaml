@@ -452,6 +452,7 @@ steps:
       skill_command: /autoskillit:resolve-merge-conflicts '${{ context.ejected_pr_branch
         }}' '${{ inputs.base_branch }}'
       cwd: ${{ context.work_dir }}
+      output_dir: '.'
       step_name: resolve_ejected_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -691,6 +692,7 @@ steps:
       skill_command: /autoskillit:resolve-merge-conflicts '${{ context.next_pr_branch
         }}' '${{ inputs.base_branch }}'
       cwd: ${{ context.work_dir }}
+      output_dir: '.'
       step_name: resolve_proactive_rebase_conflicts
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
@@ -847,6 +849,7 @@ steps:
       skill_command: /autoskillit:make-plan ${{ context.task }}
       cwd: ${{ context.work_dir }}
       step_name: plan
+      output_dir: '.'
     capture:
       pr_plan_path: ${{ result.plan_path }}
     capture_list:
@@ -889,6 +892,7 @@ steps:
         }}
       cwd: ${{ context.work_dir }}
       step_name: implement
+      output_dir: '.'
     capture:
       worktree_path: ${{ result.worktree_path }}
       worktree_branch_name: ${{ result.branch_name }}
@@ -1459,17 +1463,18 @@ steps:
       skill_command: /autoskillit:resolve-review ${{ context.batch_branch }} ${{ inputs.base_branch
         }}
       cwd: ${{ context.work_dir }}
+      output_dir: '.'
       step_name: resolve_review_integration
     capture:
       verdict: ${{ result.verdict }}
     retries: 2
     on_exhausted: register_clone_failure
-    on_context_limit: re_push_review_integration
+    on_context_limit: pre_review_rebase_integration
     on_result:
     - when: ${{ result.verdict }} == 'real_fix'
-      route: re_push_review_integration
+      route: pre_review_rebase_integration
     - when: ${{ result.verdict }} == 'already_green'
-      route: re_push_review_integration
+      route: pre_review_rebase_integration
     - when: ${{ result.verdict }} == 'flake_suspected'
       route: register_clone_failure
     - when: ${{ result.verdict }} == 'ci_only_failure'
@@ -1478,16 +1483,32 @@ steps:
     note: 'Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches
       inline and summary review comments from GitHub and applies fixes. Retries up
       to 2 times (3 total attempts) before escalating to register_clone_failure (REQ-REVIEW-005).
-      Routes via on_result: verdict dispatch — real_fix/already_green push fixes;
-      flake_suspected/ ci_only_failure escalate to register_clone_failure.
+      Routes via on_result: verdict dispatch — real_fix/already_green route through
+      pre_review_rebase_integration (fetch+rebase before push); flake_suspected/
+      ci_only_failure escalate to register_clone_failure.
 
       '
+  pre_review_rebase_integration:
+    tool: run_cmd
+    with:
+      cmd: 'REMOTE=$(git -C ${{ context.work_dir }} remote get-url upstream 2>/dev/null
+        | grep -qv "^file://" && echo upstream || echo origin) &&
+
+        git -C ${{ context.work_dir }} fetch "$REMOTE" &&
+
+        git -C ${{ context.work_dir }} rebase "$REMOTE"/${{ inputs.base_branch }}
+
+        '
+      step_name: pre_review_rebase_integration
+    on_success: re_push_review_integration
+    on_failure: register_clone_failure
   re_push_review_integration:
     tool: push_to_remote
     with:
       clone_path: ${{ context.work_dir }}
       remote_url: ${{ context.remote_url }}
       branch: ${{ context.batch_branch }}
+      force: 'true'
     on_success: derive_batch_ci_event
     on_failure: register_clone_failure
     note: 'Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003).

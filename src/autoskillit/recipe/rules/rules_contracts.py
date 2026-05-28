@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import regex as re
 
-from autoskillit.core import Severity, get_logger, pkg_root
+from autoskillit.core import SKILL_TOOLS, Severity, get_logger, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._rule_helpers import push_reachable
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
@@ -595,5 +596,62 @@ def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFin
                         ),
                     )
                 )
+
+    return findings
+
+
+@semantic_rule(
+    name="write-skill-requires-source-output-dir",
+    description=(
+        "run_skill steps with write_behavior != readonly that can reach push_to_remote "
+        "must declare output_dir. Without it, the write guard defaults to a temp-dir "
+        "prefix that blocks source-file edits."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_write_skill_requires_source_output_dir(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire when a write-behavior skill step can reach push_to_remote without output_dir."""
+    try:
+        manifest = load_bundled_manifest()
+    except Exception:
+        logger.warning(
+            "write-skill-requires-source-output-dir: failed to load manifest; skipping",
+            exc_info=True,
+        )
+        return []
+
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        skill_cmd = (step.with_args or {}).get("skill_command", "")
+        name = resolve_skill_name(skill_cmd)
+        if not name:
+            continue
+        contract = get_skill_contract(name, manifest)
+        if contract is None:
+            continue
+        if contract.write_behavior not in ("always", "conditional") or contract.read_only:
+            continue
+        reachable, push_step = push_reachable(ctx.step_graph, step_name, ctx.recipe)
+        if not reachable:
+            continue
+        if "output_dir" not in (step.with_args or {}):
+            findings.append(
+                RuleFinding(
+                    rule="write-skill-requires-source-output-dir",
+                    step_name=step_name,
+                    severity=Severity.ERROR,
+                    message=(
+                        f"Step '{step_name}' invokes skill '{name}' "
+                        f"(write_behavior={contract.write_behavior!r}) and can reach "
+                        f"push step '{push_step}', but declares no output_dir. "
+                        f"The write guard defaults to a temp-dir prefix that blocks "
+                        f"source-file edits. Add output_dir: ${{{{ context.work_dir }}}} "
+                        f"(or equivalent) to this step."
+                    ),
+                )
+            )
 
     return findings

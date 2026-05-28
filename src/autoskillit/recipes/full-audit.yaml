@@ -75,6 +75,7 @@ steps:
       skill_command: "/autoskillit:audit-tests"
       cwd: "${{ inputs.workspace }}"
       step_name: "run_audits"
+      output_dir: "{{AUTOSKILLIT_TEMP}}"
     note: >
       PREFER-COMPLETION AUDIT DISPATCH — Dispatch audits using prefer-completion
       scheduling capped at ${{ inputs.max_parallel }} concurrent slots:
@@ -168,6 +169,7 @@ steps:
       skill_command: "/autoskillit:file-audit-issues ${{ context.audit_run_dir }}"
       cwd: "${{ inputs.workspace }}"
       step_name: "create_issues"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/file-audit-issues"
     note: "Runs /autoskillit:file-audit-issues — discovers ticket_body_*.md in audit_run_dir, deduplicates, batch-creates GitHub issues via GraphQL, applies labels."
     capture:
       issue_urls: "${{ result.issue_urls }}"

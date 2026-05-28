@@ -1,23 +1,28 @@
-"""Contract-level tests for write_behavior + output_dir coherence in planner.yaml.
+"""Contract-level tests for write_behavior + output_dir coherence across bundled recipes.
 
-Enforces the invariant: every planner skill step that expects writes (write_behavior:
-always) must declare output_dir to set the allowed_write_prefix before session launch.
+Enforces two invariants for every run_skill step:
+- write_behavior=always: output_dir must be declared unconditionally.
+- write_behavior=conditional: output_dir must be declared when a push_to_remote step is
+  reachable within _MAX_HOPS (consistent with the write-skill-requires-source-output-dir
+  semantic rule).
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
 import yaml
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+from autoskillit.core import SKILL_TOOLS
+from autoskillit.recipe._analysis import _build_step_graph
+from autoskillit.recipe._rule_helpers import push_reachable
+from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _RECIPE_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
-_CONTRACTS_PATH = (
-    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipe" / "skill_contracts.yaml"
-)
 
 
 @pytest.fixture(scope="module")
@@ -25,49 +30,50 @@ def planner_yaml() -> dict:
     return yaml.safe_load((_RECIPE_DIR / "planner.yaml").read_text())
 
 
-@pytest.fixture(scope="module")
-def contracts() -> dict:
-    return yaml.safe_load(_CONTRACTS_PATH.read_text())
+_ALL_BUNDLED_RECIPE_PATHS = sorted(builtin_recipes_dir().glob("*.yaml"))
 
 
-def _skill_name_from_command(command: str) -> str | None:
-    """Extract bare skill name from a skill_command string."""
-    m = re.search(r"/(?:autoskillit:)?([a-z][a-z0-9-]+)", command)
-    return m.group(1) if m else None
+@pytest.mark.parametrize("recipe_yaml", _ALL_BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
+def test_write_skill_steps_have_output_dir(recipe_yaml: Path) -> None:
+    """Every run_skill step with write-capable behavior must declare output_dir.
 
-
-def test_planner_skills_with_write_behavior_always_have_output_dir(
-    planner_yaml: dict, contracts: dict
-) -> None:
-    """Every planner run_skill step whose skill has write_behavior: always must declare output_dir.
-
-    This prevents a skill that is expected to write (write_behavior: always) from running
-    without an allowed_write_prefix — which would cause zero-write detection failures and
-    leave write scope enforcement unenforced.
+    write_behavior=always: output_dir required unconditionally.
+    write_behavior=conditional: output_dir required when push_to_remote is reachable
+    within _MAX_HOPS hops from the step (BFS over the routing graph).
     """
-    skills = contracts.get("skills", {})
-    steps = planner_yaml.get("steps", {})
+    recipe = load_recipe(recipe_yaml)
+    manifest = load_bundled_manifest()
+    skills = manifest.get("skills", {})
+    step_graph = _build_step_graph(recipe)
 
     violations: list[str] = []
-    for step_name, step in steps.items():
-        if not isinstance(step, dict):
+    for step_name, step in recipe.steps.items():
+        if step.tool not in SKILL_TOOLS:
             continue
-        if step.get("tool") != "run_skill":
+        skill_cmd = str((step.with_args or {}).get("skill_command", ""))
+        skill = resolve_skill_name(skill_cmd)
+        if skill is None:
             continue
-        with_block = step.get("with", {}) or {}
-        skill_cmd = str(with_block.get("skill_command", ""))
-        skill_name = _skill_name_from_command(skill_cmd)
-        if skill_name is None:
-            continue
-        contract = skills.get(skill_name, {})
-        if contract.get("write_behavior") == "always":
-            if not with_block.get("output_dir"):
-                violations.append(f"{step_name} ({skill_name})")
+        skill_data = skills.get(skill, {})
+        write_behavior = skill_data.get("write_behavior")
+        output_dir = (step.with_args or {}).get("output_dir")
+
+        if write_behavior == "always":
+            if not output_dir:
+                violations.append(
+                    f"{step_name} ({skill}): write_behavior=always but no output_dir"
+                )
+        elif write_behavior == "conditional":
+            reachable, push_step = push_reachable(step_graph, step_name, recipe)
+            if reachable and not output_dir:
+                violations.append(
+                    f"{step_name} ({skill}): write_behavior=conditional, "
+                    f"push reachable via '{push_step}', but no output_dir"
+                )
 
     assert not violations, (
-        f"planner.yaml run_skill steps with write_behavior=always but no output_dir: "
-        f"{violations}. Add output_dir: '${{{{ context.planner_dir }}}}' (or subdirectory) "
-        "to each step's with: block."
+        f"{recipe_yaml.stem}: run_skill steps missing required output_dir:\n"
+        + "\n".join(f"  {v}" for v in violations)
     )
 
 

@@ -104,7 +104,8 @@
       "with": {
         "skill_command": "/autoskillit:prepare-research-pr ${{ context.report_path }} ${{ context.experiment_plan }} ${{ context.worktree_path }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "prepare_research_pr"
+        "step_name": "prepare_research_pr",
+        "output_dir": "."
       },
       "capture": {
         "prep_path": "${{ result.prep_path }}",
@@ -170,7 +171,8 @@
       "with": {
         "skill_command": "/autoskillit:compose-research-pr ${{ context.prep_path }} \"${{ context.all_diagram_paths }}\" ${{ context.worktree_path }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "compose_research_pr"
+        "step_name": "compose_research_pr",
+        "output_dir": "."
       },
       "capture": {
         "pr_url": "${{ result.pr_url }}"
@@ -343,7 +345,8 @@
       "with": {
         "skill_command": "/autoskillit:run-experiment ${{ context.worktree_path }} --adjust",
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "re_run_experiment"
+        "step_name": "re_run_experiment",
+        "output_dir": "."
       },
       "capture": {
         "experiment_results": "${{ result.results_path }}",

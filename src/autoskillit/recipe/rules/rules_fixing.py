@@ -13,19 +13,15 @@ Modelled on the rebase-then-push-requires-force rule in rules_tools.py.
 
 from __future__ import annotations
 
-from collections import deque
-
 import regex as re
 
 from autoskillit.core import SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._rule_helpers import push_reachable
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
-
-# Maximum hops to walk forward from a conditional-write step when looking for push.
-_MAX_HOPS = 6
 
 # Regex to find result.<field> references in a when: expression.
 _RESULT_REF_RE = re.compile(r"result\.([\w-]+)")
@@ -62,33 +58,6 @@ def _step_gated_on_declared_output(step, declared_outputs: frozenset[str]) -> bo
             if ref in declared_outputs:
                 return True
     return False
-
-
-def _push_reachable(
-    graph: dict[str, set[str]],
-    start: str,
-    recipe,
-    max_hops: int = _MAX_HOPS,
-) -> tuple[bool, str | None]:
-    """Return (reachable, push_step_name) if push_to_remote is reachable within max_hops.
-
-    Returns (False, None) if no push_to_remote step is reachable.
-    """
-    visited: set[str] = set()
-    queue: deque[tuple[str, int]] = deque([(start, 0)])
-    while queue:
-        name, hops = queue.popleft()
-        if name in visited:
-            continue
-        if hops > max_hops:
-            continue
-        visited.add(name)
-        step = recipe.steps.get(name)
-        if step is not None and step.tool == "push_to_remote":
-            return True, name
-        for succ in graph.get(name, set()):
-            queue.append((succ, hops + 1))
-    return False, None
 
 
 @semantic_rule(
@@ -131,8 +100,8 @@ def _check_conditional_skill_ungated_push(ctx: ValidationContext) -> list[RuleFi
         # Check that push_to_remote is reachable before firing any finding.
         # Steps that don't lead to push (e.g. worktree-fix → merge_worktree)
         # are not in scope for this rule.
-        push_reachable, push_step = _push_reachable(ctx.step_graph, step_name, ctx.recipe)
-        if not push_reachable:
+        reachable, push_step = push_reachable(ctx.step_graph, step_name, ctx.recipe)
+        if not reachable:
             continue
 
         declared = _declared_output_names(skill_data)

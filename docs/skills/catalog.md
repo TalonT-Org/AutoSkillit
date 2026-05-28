@@ -1,6 +1,6 @@
 # Skill catalog
 
-The complete list of bundled skills (136 total: 3 in `src/autoskillit/skills/`,
+The complete list of bundled skills (137 total: 3 in `src/autoskillit/skills/`,
 133 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 

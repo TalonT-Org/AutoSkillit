@@ -703,7 +703,6 @@ steps:
 
       synthesis_algorithm: null — arch-lens readings forwarded to compose_pr without
       aggregation. Dial (prepare_pr) -> Apply (run_arch_lenses) -> Output (compose_pr).
-      Explicit null-synthesis is a deliberate choice, not an omission.
   guard_pr_url:
     action: route
     on_result:

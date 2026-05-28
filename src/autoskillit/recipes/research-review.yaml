@@ -145,8 +145,7 @@ steps:
 
       synthesis_algorithm: null — exp-lens readings forwarded to stage_bundle without
       aggregation. Dial (prepare_research_pr) -> Apply (run_experiment_lenses) -> Output
-      (stage_bundle -> compose_research_pr). Explicit null-synthesis is a deliberate
-      choice, not an omission.
+      (stage_bundle -> compose_research_pr).
 
   route_pr_or_local:
     action: route

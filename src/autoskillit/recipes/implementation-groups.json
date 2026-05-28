@@ -59,6 +59,14 @@
       "default": "2",
       "authority": "config"
     },
+    "merge_fix_max_retries": {
+      "description": "Maximum number of merge-fix retry cycles before failing",
+      "default": "3"
+    },
+    "audit_remediation_max_retries": {
+      "description": "Maximum number of audit remediation cycles (audit NO GO recovery) before failing",
+      "default": "2"
+    },
     "adversarial_review_level": {
       "description": "Controls adversarial review depth in make-plan. \"auto\" estimates complexity and gates agents accordingly. \"full\" always runs all 3 agents. \"none\" skips adversarial review entirely.",
       "default": "auto",

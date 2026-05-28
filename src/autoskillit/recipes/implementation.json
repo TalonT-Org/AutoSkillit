@@ -647,7 +647,7 @@
           "route": "register_clone_failure"
         },
         {
-          "route": "remediate"
+          "route": "check_audit_remediation_loop"
         }
       ],
       "on_failure": "register_clone_failure",

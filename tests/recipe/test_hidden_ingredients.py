@@ -385,6 +385,7 @@ steps:
         ingredient_overrides={"post_run_diagnostics": "true"},
     )
     assert "inputs.post_run_diagnostics" not in result["content"]
+    assert "optional: true" not in result["content"]
 
     # When false: entire step block is stripped from content
     result2 = load_and_validate(
@@ -818,3 +819,96 @@ def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
                 f"Bundled recipe {yaml_file.name!r}: pruning step {step_name!r} "
                 f"produced dangling routes: {errors}"
             )
+
+
+def test_resolve_skip_guards_strips_optional_true_on_truthy() -> None:
+    """_resolve_skip_guards_in_content strips optional: true from truthy-resolved step."""
+    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
+
+    raw = """steps:
+  main_step:
+    tool: run_cmd
+    with:
+      cmd: echo hi
+    on_success: guarded
+  guarded:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.flag
+    with:
+      skill_command: /autoskillit:do_thing /tmp/x.md
+    on_success: done
+    on_failure: done
+    on_context_limit: done
+  done:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "guarded": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="inputs.flag",
+            on_success="done",
+            on_failure="done",
+            on_context_limit="done",
+            with_args={"skill_command": "/autoskillit:do_thing /tmp/x.md"},
+        )
+    }
+    resolutions = {"guarded": True}
+
+    result = _resolve_skip_guards_in_content(raw, resolutions, original_steps)
+    assert "optional: true" not in result
+    assert "optional: True" not in result
+    assert "tool: run_skill" in result
+    assert "on_success: done" in result
+
+
+def test_resolve_skip_guards_preserves_optional_on_unresolved_steps() -> None:
+    """_resolve_skip_guards_in_content preserves optional: true on steps not being resolved."""
+    from autoskillit.recipe._recipe_composition import _resolve_skip_guards_in_content
+
+    raw = """steps:
+  guarded:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.flag
+    with:
+      skill_command: /autoskillit:do_thing /tmp/x.md
+    on_success: other
+  other:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.other_flag
+    with:
+      skill_command: /autoskillit:other /tmp/y.md
+    on_success: done
+  done:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "guarded": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="inputs.flag",
+            on_success="other",
+            with_args={"skill_command": "/autoskillit:do_thing /tmp/x.md"},
+        ),
+        "other": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="inputs.other_flag",
+            on_success="done",
+            with_args={"skill_command": "/autoskillit:other /tmp/y.md"},
+        ),
+    }
+    resolutions = {"guarded": True}
+
+    result = _resolve_skip_guards_in_content(raw, resolutions, original_steps)
+    guarded_end = result.index("  other:\n")
+    guarded_block = result[result.index("  guarded:\n") : guarded_end]
+    assert "optional: true" not in guarded_block
+    other_end = result.index("  done:\n")
+    other_block = result[result.index("  other:\n") : other_end]
+    assert "optional: true" in other_block

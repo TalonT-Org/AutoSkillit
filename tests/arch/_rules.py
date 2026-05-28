@@ -144,6 +144,7 @@ _STRENUM_SRC_COMPARE_EXEMPT_PATHS: frozenset[str] = frozenset(
         "fleet/_api.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
         "fleet/_checkpoint_bridge.py",  # IssueSidecarEntry.status: Literal[...], not StrEnum
         "fleet/_outcome.py",  # classify_dispatch_outcome: Literal comparisons
+        "fleet/_sidecar_synthesis.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
     }
 )
 

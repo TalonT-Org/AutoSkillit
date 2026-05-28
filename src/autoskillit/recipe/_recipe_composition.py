@@ -7,9 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import regex as re
-import yaml
 
-from autoskillit.core import YAMLError
+from autoskillit.core import YAMLError, load_yaml
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import (
@@ -404,7 +403,7 @@ def _resolve_skip_guards_in_content(
             continue
         ingredient_name = re.escape(ref[len("inputs.") :])
         raw = re.sub(
-            rf"(?m)^([ \t]+)skip_when_false:[ \t]+inputs\.{ingredient_name}[ \t]*\n",
+            rf'(?m)^([ \t]+)skip_when_false:[ \t]+["\']?inputs\.{ingredient_name}["\']?[ \t]*\n',
             "",
             raw,
         )
@@ -423,8 +422,8 @@ def _assert_content_integrity(
     if not resolutions:
         return
     try:
-        parsed = yaml.safe_load(raw) or {}
-    except yaml.YAMLError:
+        parsed = load_yaml(raw) or {}
+    except YAMLError:
         return  # malformed content is caught elsewhere
     parsed_steps: dict[str, Any] = parsed.get("steps", {}) or {}
     for step_name, is_truthy in resolutions.items():

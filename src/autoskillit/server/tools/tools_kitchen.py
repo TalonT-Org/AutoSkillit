@@ -40,7 +40,6 @@ from autoskillit.server._misc import (
     resolve_provider,
 )
 from autoskillit.server._notify import track_response_size
-from autoskillit.server.tools._auto_overrides import _build_auto_overrides
 
 logger = get_logger(__name__)
 
@@ -407,12 +406,25 @@ async def open_kitchen(
                 )
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
-            _auto_overrides = _build_auto_overrides(
-                _defaults,
-                tool_ctx.kitchen_id,
-                str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
-            )
-            _merged_overrides = {**_auto_overrides, **(overrides or {})}
+            _session_overrides: dict[str, str] = {
+                "kitchen_id": tool_ctx.kitchen_id,
+                "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
+            }
+            _config_layer: dict[str, str] = {
+                k: v
+                for k, v in _defaults.items()
+                if k
+                in {
+                    "base_branch",
+                    "source_dir",
+                    "local_review_rounds",
+                    "adversarial_review_level",
+                    "post_run_diagnostics",
+                    "is_fleet_dispatch",
+                    "dispatch_id",
+                }
+            }
+            _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":
                 _om_value = (overrides or {}).get("output_mode")

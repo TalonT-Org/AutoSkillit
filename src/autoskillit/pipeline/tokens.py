@@ -126,6 +126,7 @@ class DefaultTokenLog:
         order_id: str = "",
         loc_insertions: int = 0,
         loc_deletions: int = 0,
+        model: str = "",
     ) -> None:
         """Accumulate token usage for a step.
 
@@ -139,7 +140,7 @@ class DefaultTokenLog:
         if key not in self._entries:
             self._entries[key] = TokenEntry(step_name=canonical)
         e = self._entries[key]
-        _model = _primary_model(token_usage)
+        _model = model or _primary_model(token_usage)
         if _model and not e.model:
             e.model = _model
         e.input_tokens += token_usage.get("input_tokens", 0)

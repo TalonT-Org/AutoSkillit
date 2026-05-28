@@ -118,6 +118,7 @@ def test_ide_env_denylist_contains_expected_names() -> None:
 def test_ide_env_prefix_denylist_covers_ide_and_sse() -> None:
     assert "CLAUDE_CODE_IDE_" in IDE_ENV_PREFIX_DENYLIST
     assert "CLAUDE_CODE_SSE" in IDE_ENV_PREFIX_DENYLIST
+    assert "CLAUDE_CODE_SUBAGENT_" in IDE_ENV_PREFIX_DENYLIST
 
 
 def test_ide_env_always_extras_includes_auto_connect_off() -> None:

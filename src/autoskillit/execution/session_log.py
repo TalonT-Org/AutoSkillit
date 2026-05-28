@@ -387,8 +387,8 @@ def flush_session_log(
         "api_retry_last_status": api_retry_last_status,
         "api_retry_exhausted": api_retry_exhausted,
     }
+    effective_model_id = model_identifier or _primary_model_identifier(token_usage)
     if versions is not None:
-        effective_model_id = model_identifier or _primary_model_identifier(token_usage)
         summary["versions"] = {
             **versions,
             "model_identifier": effective_model_id,
@@ -439,7 +439,8 @@ def flush_session_log(
             "peak_context": token_usage.get("peak_context", 0),
             "turn_count": token_usage.get("turn_count", 0),
             "provider_used": provider_outcome.provider_used,
-            "model_identifier": model_identifier or _primary_model_identifier(token_usage),
+            "model_identifier": effective_model_id,
+            "configured_model": model_identifier,
             "dispatch_id": dispatch_id,
             "campaign_id": campaign_id,
         }
@@ -510,6 +511,7 @@ def flush_session_log(
         "caller_session_id": caller_session_id,
         "api_retry_count": api_retry_count,
         "api_retry_exhausted": api_retry_exhausted,
+        "model_identifier": effective_model_id,
         "schema_version": 2,
     }
     index_path = log_root / "sessions.jsonl"

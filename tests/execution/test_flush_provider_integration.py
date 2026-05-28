@@ -253,3 +253,30 @@ class TestProviderFieldsReachFlush:
         assert len(cancelled_calls) == 1
         outcome = cancelled_calls[0]["provider_outcome"]
         assert outcome.provider_used == "openai"
+
+    @pytest.mark.anyio
+    async def test_model_identifier_reaches_flush_session_log(
+        self, minimal_ctx, tmp_path, monkeypatch
+    ):
+        """model_identifier must be forwarded to flush_session_log — not silently dropped."""
+        from autoskillit.execution.commands import ClaudeHeadlessCmd
+        from autoskillit.execution.headless import _execute_claude_headless
+
+        fake_runner, flush_calls = _patch_common(
+            monkeypatch, tmp_path, _SUCCESS_RESULT, minimal_ctx
+        )
+        minimal_ctx.runner = fake_runner  # type: ignore[assignment]
+        minimal_ctx.backend = _mock_backend()
+
+        await _execute_claude_headless(
+            ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
+            str(tmp_path),
+            minimal_ctx,
+            timeout=30.0,
+            stale_threshold=5.0,
+            step_name="implement",
+            model_identifier="claude-opus-4-6",
+        )
+
+        assert len(flush_calls) == 1
+        assert flush_calls[0].get("model_identifier") == "claude-opus-4-6"

@@ -227,6 +227,7 @@ async def run_headless_core(
             provider_fallback_name=provider_fallback_name,
             provider_extras=provider_extras,
             step_backend=step_backend,
+            model_identifier=resolved_model or "",
         )
 
 
@@ -435,4 +436,5 @@ class DefaultHeadlessExecutor:
             max_extension_seconds=effective_max_ext,
             marker_dir=effective_marker_dir,
             session_id=session_id,
+            model_identifier=resolved_model or "",
         )

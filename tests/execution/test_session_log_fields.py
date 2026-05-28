@@ -1016,3 +1016,43 @@ class TestCodexLogFields:
             recipe_identity=RecipeIdentity.empty(),
         )
         assert "claude_code_log_not_found" not in caplog.text
+
+
+def test_primary_model_identifier_subagent_dominance():
+    """When subagent model has more total tokens, _primary_model_identifier returns
+    the subagent model — documents the argmax behavior that the threading fix overrides."""
+    from autoskillit.execution.session_log import _primary_model_identifier
+
+    token_usage = {
+        "model_breakdown": {
+            "claude-opus-4-6": {"input_tokens": 5000, "output_tokens": 2000},
+            "claude-sonnet-4-6": {"input_tokens": 20000, "output_tokens": 8000},
+        }
+    }
+    result = _primary_model_identifier(token_usage)
+    assert result == "claude-sonnet-4-6"
+
+
+def test_flush_session_log_configured_model_overrides_argmax(tmp_path):
+    """When model_identifier is provided, token_usage.json uses it regardless of argmax."""
+    _flush(
+        tmp_path,
+        session_id="configured-model-001",
+        proc_snapshots=None,
+        model_identifier="claude-opus-4-6",
+        token_usage={
+            "input_tokens": 25000,
+            "output_tokens": 10000,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
+            "model_breakdown": {
+                "claude-sonnet-4-6": {"input_tokens": 20000, "output_tokens": 8000},
+                "claude-opus-4-6": {"input_tokens": 5000, "output_tokens": 2000},
+            },
+        },
+    )
+    tu_path = tmp_path / "sessions" / "configured-model-001" / "token_usage.json"
+    assert tu_path.exists()
+    data = json.loads(tu_path.read_text())
+    assert data["model_identifier"] == "claude-opus-4-6"
+    assert data["configured_model"] == "claude-opus-4-6"

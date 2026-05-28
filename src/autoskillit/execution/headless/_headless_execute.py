@@ -103,6 +103,7 @@ async def _execute_claude_headless(
     marker_dir: Path | None = None,
     session_id: str | None = None,
     step_backend: CodingAgentBackend | None = None,
+    model_identifier: str = "",
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -273,6 +274,7 @@ async def _execute_claude_headless(
                         version=recipe_version,
                     ),
                     max_sessions=ctx.config.linux_tracing.max_sessions,
+                    model_identifier=model_identifier,
                     telemetry=_build_error_path_telemetry(ctx.github_api_log),
                 )
             except Exception:
@@ -328,6 +330,7 @@ async def _execute_claude_headless(
                             version=recipe_version,
                         ),
                         max_sessions=ctx.config.linux_tracing.max_sessions,
+                        model_identifier=model_identifier,
                         telemetry=_build_error_path_telemetry(ctx.github_api_log),
                     )
             except Exception:
@@ -514,6 +517,7 @@ async def _execute_claude_headless(
                     version=recipe_version,
                 ),
                 max_sessions=ctx.config.linux_tracing.max_sessions,
+                model_identifier=model_identifier,
                 is_resume="--resume" in spec.cmd,
                 codex_log_path=_codex_log,
             )
@@ -541,6 +545,7 @@ async def _execute_claude_headless(
             order_id=order_id,
             loc_insertions=_metrics.loc_insertions,
             loc_deletions=_metrics.loc_deletions,
+            model=model_identifier,
         )
     except Exception:
         logger.debug("token_log_record_failed", exc_info=True)

@@ -55,6 +55,7 @@ IDE_ENV_DENYLIST: frozenset[str] = frozenset(
 IDE_ENV_PREFIX_DENYLIST: tuple[str, ...] = (
     "CLAUDE_CODE_IDE_",
     "CLAUDE_CODE_SSE",
+    "CLAUDE_CODE_SUBAGENT_",
 )
 
 # Variables injected into every built env regardless of caller. These close

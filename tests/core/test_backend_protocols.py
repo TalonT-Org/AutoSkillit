@@ -60,6 +60,7 @@ def test_stub_class_satisfies_stream_parser():
 def test_stub_class_satisfies_coding_agent_backend():
     from collections.abc import Sequence
     from pathlib import Path
+    from typing import Any
 
     from autoskillit.core import (
         BackendCapabilities,
@@ -139,6 +140,12 @@ def test_stub_class_satisfies_coding_agent_backend():
         ) -> CmdSpec: ...
 
         def validate_session_layout(self, session_dir: Path) -> list[str]: ...
+
+        def validate_skill_content(self, content: str) -> list[str]: ...
+
+        def version(self) -> str: ...
+
+        def list_plugins(self) -> list[dict[str, Any]]: ...
 
     assert isinstance(_Backend(), CodingAgentBackend)
 

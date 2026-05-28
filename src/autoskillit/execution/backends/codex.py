@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
+from typing import Any
 
 import zstandard
 
@@ -627,3 +628,14 @@ class CodexBackend:
             errors.append(f"sessions/ must be a symlink, not a regular directory: {sessions_path}")
 
         return errors
+
+    def validate_skill_content(self, content: str) -> list[str]:
+        raise NotImplementedError(
+            f"{self.__class__.__name__}.validate_skill_content not yet implemented"
+        )
+
+    def version(self) -> str:
+        raise NotImplementedError(f"{self.__class__.__name__}.version not yet implemented")
+
+    def list_plugins(self) -> list[dict[str, Any]]:
+        raise NotImplementedError(f"{self.__class__.__name__}.list_plugins not yet implemented")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from ._type_backend import (
     AgentSessionResult,
@@ -148,3 +148,9 @@ class CodingAgentBackend(Protocol):
     ) -> CmdSpec: ...
 
     def validate_session_layout(self, session_dir: Path) -> list[str]: ...
+
+    def validate_skill_content(self, content: str) -> list[str]: ...
+
+    def version(self) -> str: ...
+
+    def list_plugins(self) -> list[dict[str, Any]]: ...

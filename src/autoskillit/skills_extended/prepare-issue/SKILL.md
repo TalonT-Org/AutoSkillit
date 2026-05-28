@@ -284,7 +284,7 @@ Use the fetched data as the issue context.
 After creating or adopting the issue, detect whether the description originates from a completed investigation:
 
 **Detection criteria** (any match triggers injection):
-1. The `description` argument is a file path matching `**/investigate/investigation_*.md`
+1. The `description` argument is a file path under an `investigate` directory matching `investigation_*.md`
 2. OR the `description` text contains markers characteristic of an investigation report:
    `## Root Cause`, `## Affected Components`, `## Recommendations`, or `investigation_path =`
 

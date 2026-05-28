@@ -231,7 +231,7 @@ steps:
   bridge_investigation:
     tool: run_cmd
     with:
-      command: |
+      cmd: |
         if [ -n "${{ context.investigation_path }}" ] && [ -f "${{ context.investigation_path }}" ]; then
           echo "investigation_report=${{ context.investigation_path }}"
         else

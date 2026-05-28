@@ -890,12 +890,12 @@ class TestInvestigateFirstStructure:
         assert step.capture["investigation_path"] == "${{ result.investigation_path }}"
 
     def test_remediation_rectify_uses_context_investigation_path(self, recipe) -> None:
-        """1d: rectify step must pass ${{ context.investigation_path }} in skill_command."""
+        """1d: rectify step must pass an investigation path context variable in skill_command."""
         step = recipe.steps["rectify"]
         skill_cmd = step.with_args.get("skill_command", "")
-        assert "${{ context.investigation_path }}" in skill_cmd, (
-            "rectify step skill_command must include ${{ context.investigation_path }} "
-            "to pass the explicit path from the capture block"
+        assert "${{ context.effective_investigation_path }}" in skill_cmd, (
+            "rectify step skill_command must include ${{ context.effective_investigation_path }} "
+            "to pass the resolved path from the bridge_investigation step"
         )
 
     def test_if_resolve_review_uses_resolve_review_skill(self, recipe) -> None:

@@ -306,9 +306,9 @@ async def test_open_kitchen_injects_hidden_ingredient_overrides(tmp_path, monkey
 
 # 1b
 @pytest.mark.anyio
-async def test_auto_overrides_keys_match_server_authoritative_ingredients(tmp_path, monkeypatch):
-    """_auto_overrides in open_kitchen must contain exactly SERVER_AUTHORITATIVE_INGREDIENTS
-    plus server-only keys (kitchen_id, diagnostics_log_dir) — no more, no less."""
+async def test_config_layer_keys_match_server_authoritative_ingredients(tmp_path, monkeypatch):
+    """build_config_authoritative_layer in open_kitchen must inject exactly
+    SERVER_AUTHORITATIVE_INGREDIENTS plus server-only keys (kitchen_id, diagnostics_log_dir)."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()

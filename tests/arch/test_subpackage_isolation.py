@@ -849,7 +849,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
         "recipe/rules": 47,
-        "server/tools": 23,  # _auto_overrides.py added for shared _build_auto_overrides() factory
+        "server/tools": 22,
         "hooks/guards": 23,  # artifact_download_guard.py added for gh run/release download guard
     }
     violations: list[str] = []

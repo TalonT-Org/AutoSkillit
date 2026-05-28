@@ -25,23 +25,23 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'dirty_tree'"
-        assert cond0.route == "assess"
+        assert cond0.route == "check_merge_fix_loop"
 
         cond1 = step.on_result.conditions[1]
         assert cond1.when == "result.failed_step == 'test_gate'"
-        assert cond1.route == "assess"
+        assert cond1.route == "check_merge_fix_loop"
 
         cond2 = step.on_result.conditions[2]
         assert cond2.when == "result.failed_step == 'post_rebase_test_gate'"
-        assert cond2.route == "assess"
+        assert cond2.route == "check_merge_fix_loop"
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "rebase_conflict_fix"
+        assert cond3.route == "check_merge_rebase_loop"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.failed_step == 'dirty_main_repo'"
-        assert cond4.route == "check_merge_fix_loop"
+        assert cond4.route == "check_dirty_main_retry"
 
         cond5 = step.on_result.conditions[5]
         assert cond5.when == "result.error"
@@ -65,23 +65,23 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond0 = step.on_result.conditions[0]
         assert cond0.when == "result.failed_step == 'dirty_tree'"
-        assert cond0.route == "fix"
+        assert cond0.route == "check_merge_fix_loop"
 
         cond1 = step.on_result.conditions[1]
         assert cond1.when == "result.failed_step == 'test_gate'"
-        assert cond1.route == "fix"
+        assert cond1.route == "check_merge_fix_loop"
 
         cond2 = step.on_result.conditions[2]
         assert cond2.when == "result.failed_step == 'post_rebase_test_gate'"
-        assert cond2.route == "fix"
+        assert cond2.route == "check_merge_fix_loop"
 
         cond3 = step.on_result.conditions[3]
         assert cond3.when == "result.failed_step == 'rebase'"
-        assert cond3.route == "rebase_conflict_fix"
+        assert cond3.route == "check_merge_rebase_loop"
 
         cond4 = step.on_result.conditions[4]
         assert cond4.when == "result.failed_step == 'dirty_main_repo'"
-        assert cond4.route == "check_merge_fix_loop"
+        assert cond4.route == "check_dirty_main_retry"
 
         cond5 = step.on_result.conditions[5]
         assert cond5.when == "result.error"

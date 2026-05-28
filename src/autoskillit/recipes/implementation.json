@@ -63,6 +63,14 @@
       "default": "2",
       "authority": "config"
     },
+    "merge_fix_max_retries": {
+      "description": "Maximum number of merge-fix retry cycles before failing",
+      "default": "3"
+    },
+    "audit_remediation_max_retries": {
+      "description": "Maximum number of audit remediation cycles (audit NO GO recovery) before failing",
+      "default": "2"
+    },
     "adversarial_review_level": {
       "description": "Controls adversarial review depth in make-plan. \"auto\" estimates complexity and gates agents accordingly. \"full\" always runs all 3 agents. \"none\" skips adversarial review entirely.",
       "default": "auto",
@@ -334,7 +342,7 @@
       "with": {
         "worktree_path": "${{ context.worktree_path }}"
       },
-      "on_success": "check_merge_fix_loop",
+      "on_success": "commit_guard",
       "on_failure": "fix"
     },
     "check_merge_fix_loop": {
@@ -342,7 +350,57 @@
       "with": {
         "callable": "autoskillit.smoke_utils.check_loop_iteration",
         "current_iteration": "${{ context.merge_fix_count }}",
-        "max_iterations": "3"
+        "max_iterations": "${{ inputs.merge_fix_max_retries }}"
+      },
+      "capture": {
+        "merge_fix_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "fix"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "merge_fix_count"
+      ],
+      "note": "Merge-failure iteration guard (dirty_tree / test_gate / post_rebase_test_gate). Shares merge_fix_count with check_merge_rebase_loop and check_dirty_main_retry.\n"
+    },
+    "check_merge_rebase_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.merge_fix_count }}",
+        "max_iterations": "${{ inputs.merge_fix_max_retries }}"
+      },
+      "capture": {
+        "merge_fix_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "rebase_conflict_fix"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "merge_fix_count"
+      ],
+      "note": "Merge-failure iteration guard for rebase conflicts. Shares merge_fix_count with check_merge_fix_loop and check_dirty_main_retry.\n"
+    },
+    "check_dirty_main_retry": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.merge_fix_count }}",
+        "max_iterations": "${{ inputs.merge_fix_max_retries }}"
       },
       "capture": {
         "merge_fix_count": "${{ result.next_iteration }}"
@@ -360,7 +418,32 @@
       "optional_context_refs": [
         "merge_fix_count"
       ],
-      "note": "Iteration guard for the merge→fix→test cycle. Caps the loop at 3 iterations (enough for legitimate flake recovery but not enough to burn 30+ minutes on structurally unresolvable conflicts).\n"
+      "note": "Merge-failure iteration guard for dirty_main_repo retries. Shares merge_fix_count with check_merge_fix_loop and check_merge_rebase_loop.\n"
+    },
+    "check_audit_remediation_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.audit_remediation_count }}",
+        "max_iterations": "${{ inputs.audit_remediation_max_retries }}"
+      },
+      "capture": {
+        "audit_remediation_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "remediate"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "audit_remediation_count"
+      ],
+      "note": "Guards the audit_impl → remediate → plan → implement → test remediation cycle. Separate counter from merge_fix_count.\n"
     },
     "commit_guard": {
       "tool": "run_python",
@@ -395,23 +478,23 @@
       "on_result": [
         {
           "when": "result.failed_step == 'dirty_tree'",
-          "route": "fix"
+          "route": "check_merge_fix_loop"
         },
         {
           "when": "result.failed_step == 'test_gate'",
-          "route": "fix"
+          "route": "check_merge_fix_loop"
         },
         {
           "when": "result.failed_step == 'post_rebase_test_gate'",
-          "route": "fix"
+          "route": "check_merge_fix_loop"
         },
         {
           "when": "result.failed_step == 'rebase'",
-          "route": "rebase_conflict_fix"
+          "route": "check_merge_rebase_loop"
         },
         {
           "when": "result.failed_step == 'dirty_main_repo'",
-          "route": "check_merge_fix_loop"
+          "route": "check_dirty_main_retry"
         },
         {
           "when": "result.error",

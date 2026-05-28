@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from pathlib import Path
 from typing import Any
 
 import regex as re
 
-from autoskillit.core import YAMLError
+from autoskillit.core import YAMLError, load_yaml
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import (
@@ -403,8 +404,47 @@ def _resolve_skip_guards_in_content(
             continue
         ingredient_name = re.escape(ref[len("inputs.") :])
         raw = re.sub(
-            rf"(?m)^([ \t]+)skip_when_false:[ \t]+inputs\.{ingredient_name}[ \t]*\n",
+            rf'(?m)^([ \t]+)skip_when_false:[ \t]+["\']?inputs\.{ingredient_name}["\']?[ \t]*\n',
             "",
             raw,
         )
     return raw
+
+
+def _assert_content_integrity(
+    raw: str,
+    resolutions: dict[str, bool],
+    original_steps: dict[str, Any],
+) -> None:
+    """Verify no truthy-resolved step retains optional/skip_when_false signals in content.
+
+    Raises ValueError if optional: true or skip_when_false: inputs.* survive stripping.
+    """
+    if not resolutions:
+        return
+    try:
+        parsed = load_yaml(raw) or {}
+    except YAMLError as exc:
+        warnings.warn(
+            f"content integrity check skipped — YAMLError parsing resolved content: {exc}",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return
+    parsed_steps: dict[str, Any] = parsed.get("steps", {}) or {}
+    for step_name, is_truthy in resolutions.items():
+        if not is_truthy:
+            continue
+        step_data = parsed_steps.get(step_name, {}) or {}
+        if step_data.get("optional") is True:
+            raise ValueError(
+                f"Content integrity violation: step '{step_name}' retains "
+                f"'optional: true' after truthy resolution"
+            )
+        original = original_steps.get(step_name)
+        ref = getattr(original, "skip_when_false", None) if original is not None else None
+        if ref is not None and ref.startswith("inputs.") and "skip_when_false" in step_data:
+            raise ValueError(
+                f"Content integrity violation: step '{step_name}' retains "
+                f"'skip_when_false' after truthy resolution"
+            )

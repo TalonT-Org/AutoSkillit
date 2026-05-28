@@ -154,6 +154,9 @@ from autoskillit.recipe.rules import rules_remediation as _rules_remediation  # 
 from autoskillit.recipe.rules import rules_route_gate as _rules_route_gate  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_skill_content as _rules_skill_content  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_skills as _rules_skills  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_skip_inviting_notes as _rules_skip_inviting_notes,
+)
 from autoskillit.recipe.rules import rules_temp_path as _rules_temp_path  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_verdict as _rules_verdict  # noqa: E402 F401

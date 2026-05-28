@@ -976,7 +976,7 @@ steps:
     note: >
       Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes
       a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to resolve_ci on success
-      OR failure (best-effort: resolve-failures proceeds even without a diagnosis).
+      OR failure. If diagnosis fails, resolve_ci proceeds without diagnosis context.
       diagnosis_path is passed to resolve_ci for targeted remediation context.
 
   resolve_ci:
@@ -1713,8 +1713,8 @@ steps:
       integration HEAD. On clean rebase or goal-aware conflict resolution, routes to
       re_push to re-trigger CI on the rebased branch. On escalation (LOW confidence
       conflicts), tool failure, context limit, or retry exhaustion, routes to diagnose_ci
-      for CI log capture before release_issue_failure. diagnose_ci is best-effort
-      (optional: true) — resolve_ci proceeds even without diagnosis.
+      for CI log capture before release_issue_failure. diagnose_ci runs before resolve_ci.
+      If diagnosis fails, resolve_ci proceeds without diagnosis context.
       retries: 1 bounds the loop; after 2 total attempts, escalates.
 
   release_issue_success:
@@ -1731,7 +1731,7 @@ steps:
       Called on the success path after PR merge is confirmed.
       Passes target_branch so release_issue can determine whether to apply the
       staged label (non-default target) or just remove in-progress (default target).
-      optional=true ensures pipeline still reaches register_clone_success if this step errors.
+      Pipeline routes to register_clone_success on both success and failure.
 
   patch_token_summary:
     description: "Collect all pipeline token data and patch the PR body with complete summary"
@@ -1746,7 +1746,7 @@ steps:
     on_success: register_clone_success
     on_failure: register_clone_success
     note: >
-      Patches PR body with complete token summary; failure never blocks pipeline completion.
+      Patches PR body with complete token summary; failures are logged but do not alter pipeline routing.
 
   release_issue_failure:
     description: "Release the in-progress claim after pipeline failure"

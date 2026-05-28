@@ -916,3 +916,82 @@ def test_resolve_skip_guards_preserves_optional_on_unresolved_steps() -> None:
     other_end = result.index("  done:\n")
     other_block = result[result.index("  other:\n") : other_end]
     assert "optional: true" in other_block
+
+
+def test_assert_content_integrity_raises_on_optional_residual() -> None:
+    """_assert_content_integrity raises ValueError if optional: true survives truthy resolution."""
+    from autoskillit.recipe._recipe_composition import _assert_content_integrity
+    from autoskillit.recipe.schema import RecipeStep
+
+    raw = """steps:
+  guarded:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.flag
+    on_success: done
+  done:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "guarded": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="inputs.flag",
+            on_success="done",
+        )
+    }
+    resolutions = {"guarded": True}
+    with pytest.raises(ValueError, match="optional: true"):
+        _assert_content_integrity(raw, resolutions, original_steps)
+
+
+def test_assert_content_integrity_passes_on_clean_content() -> None:
+    """_assert_content_integrity does not raise when optional: true is absent after resolution."""
+    from autoskillit.recipe._recipe_composition import _assert_content_integrity
+    from autoskillit.recipe.schema import RecipeStep
+
+    raw = """steps:
+  guarded:
+    tool: run_skill
+    on_success: done
+  done:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "guarded": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="inputs.flag",
+            on_success="done",
+        )
+    }
+    resolutions = {"guarded": True}
+    _assert_content_integrity(raw, resolutions, original_steps)  # must not raise
+
+
+def test_assert_content_integrity_allows_literal_skip_when_false() -> None:
+    """_assert_content_integrity does not raise on literal skip_when_false (non-inputs.*)."""
+    from autoskillit.recipe._recipe_composition import _assert_content_integrity
+    from autoskillit.recipe.schema import RecipeStep
+
+    raw = """steps:
+  guarded:
+    tool: run_skill
+    skip_when_false: "true"
+    on_success: done
+  done:
+    action: stop
+    message: done
+"""
+    original_steps = {
+        "guarded": RecipeStep(
+            tool="run_skill",
+            optional=True,
+            skip_when_false="true",
+            on_success="done",
+        )
+    }
+    resolutions = {"guarded": True}
+    _assert_content_integrity(raw, resolutions, original_steps)  # must not raise

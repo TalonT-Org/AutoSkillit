@@ -1665,7 +1665,7 @@
       "on_success": "done",
       "on_failure": "done",
       "on_context_limit": "done",
-      "note": "Diagnostic failure never blocks pipeline completion. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
+      "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
     },
     "run_diagnostic_error": {
       "description": "Run post-pipeline diagnostic analysis on session logs (error path)",
@@ -1681,7 +1681,7 @@
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
-      "note": "Diagnostic failure never blocks pipeline completion.\n"
+      "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "done": {
       "action": "stop",

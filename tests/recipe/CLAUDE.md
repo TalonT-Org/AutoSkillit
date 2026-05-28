@@ -18,6 +18,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_bem_wrapper_structure.py` | Tests for BEM wrapper recipe structure |
 | `test_bundled_model_field.py` | Tests that all run_skill steps declare a model: field across bundled recipes |
 | `test_bundled_recipe_hidden_policy.py` | Tests for hidden policy in bundled recipes |
+| `test_content_integrity.py` | Tests that served recipe content has no residual optional: true or skip_when_false signals after truthy resolution |
 | `test_bundled_recipes_general.py` | General structural tests for all bundled recipes |
 | `test_bundled_recipes_dispatch_ready.py` | Universal dispatch-readiness gate for all bundled recipes and contract cards |
 | `test_bundled_recipes_no_inversions.py` | Guard: no inversion step order violations in bundled recipes |
@@ -168,6 +169,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_weak_constraint.py` | Tests for weak_constraint semantic validation rule |
 | `test_rules_worktree.py` | Tests for worktree semantic validation rule |
 | `test_schema.py` | Tests for Recipe, RecipeStep, and DataFlowWarning schema |
+| `test_skip_inviting_notes.py` | Tests that bundled recipe optional steps have no skip-inviting note phrases |
 | `test_skill_contract_completeness.py` | Tests for SKILL.md to skill_contracts.yaml output completeness |
 | `test_skill_emit_consistency.py` | Tests for skill emit consistency in recipe steps |
 | `test_skill_worktree_patterns.py` | Tests that SKILL.md files do not use fragile relative worktree path patterns |

@@ -169,7 +169,8 @@ async def load_recipe(
     OPTIONAL STEP SEMANTICS:
     - optional: true means the step is SKIPPED when its skip_when_false ingredient
       resolves to false. skip_when_false references are resolved server-side before
-      the recipe is served — the LLM sees literal "false" (skip) or no field (mandatory).
+      the recipe is served — falsy steps are removed entirely; truthy steps appear
+      without optional or skip_when_false fields (mandatory).
     - NEVER skip a step for any other reason (PR size, diff triviality, etc.).
     - A running optional step that returns success: false MUST follow on_failure.
 

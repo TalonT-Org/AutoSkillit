@@ -196,6 +196,7 @@ def test_server_authoritative_ingredients_covers_resolved_defaults(tmp_path):
     in SERVER_AUTHORITATIVE_INGREDIENTS."""
     from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS, resolve_ingredient_defaults
 
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
     defaults = resolve_ingredient_defaults(tmp_path)
     config_resolvable = {k for k in defaults if k != "source_dir"}
     missing = config_resolvable - SERVER_AUTHORITATIVE_INGREDIENTS

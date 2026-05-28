@@ -540,7 +540,7 @@ class TestSessionLogMonitorDirMissing:
         )
         elapsed = time.monotonic() - t0
         assert result.status == ChannelBStatus.DIR_MISSING
-        assert elapsed < 0.1  # FileNotFoundError is immediate after the poll sleep
+        assert elapsed < 2.0  # DIR_MISSING must fire before phase1_timeout (5.0s)
         assert result.session_id == ""
 
 

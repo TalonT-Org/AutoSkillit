@@ -8,7 +8,7 @@ def _build_auto_overrides(
     kitchen_id: str,
     log_dir: str,
 ) -> dict[str, str]:
-    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
+    from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS
 
     overrides: dict[str, str] = {
         "kitchen_id": kitchen_id,

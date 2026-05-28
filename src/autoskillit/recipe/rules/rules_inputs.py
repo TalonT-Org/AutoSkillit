@@ -577,7 +577,7 @@ def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> l
                     ),
                 )
             )
-        if getattr(ing, "required", False) and getattr(ing, "default", None) is None:
+        elif getattr(ing, "required", False) and getattr(ing, "default", None) is None:
             findings.append(
                 RuleFinding(
                     rule="config-authority-requires-resolve-source",

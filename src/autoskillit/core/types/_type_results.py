@@ -509,6 +509,7 @@ class SessionIndexEntry(TypedDict):
     github_api_requests: int
     provider_used: str
     provider_fallback: bool
+    model_identifier: str
     caller_session_id: str
     api_retry_count: int
     api_retry_exhausted: bool

@@ -9,6 +9,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 _REQUIRED_INDEX_FIELDS = {
     "provider_used",
     "provider_fallback",
+    "model_identifier",
     "recipe_name",
     "recipe_content_hash",
     "recipe_composite_hash",

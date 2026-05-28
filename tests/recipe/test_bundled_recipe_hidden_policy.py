@@ -60,9 +60,13 @@ def test_bundled_recipe_content_has_no_unresolved_hidden_skip_guards(recipe_name
 
     Regression guard: if server-side skip_when_false evaluation is accidentally
     removed or bypassed, this test will catch it by finding inputs.* references
-    in skip_when_false fields of the served content.
+    in skip_when_false fields of the served content. Also verifies that truthy-resolved
+    steps do not retain residual optional: true signals in the served content.
     """
+    import re
+
     from autoskillit.recipe import load_and_validate
+    from autoskillit.recipe._recipe_composition import _step_block_pattern
 
     result = load_and_validate(recipe_name)
     recipe_content = result["content"]
@@ -79,3 +83,37 @@ def test_bundled_recipe_content_has_no_unresolved_hidden_skip_guards(recipe_name
         f"in skip_when_false after load_and_validate: {unresolved}. "
         f"Server-side evaluation may be broken."
     )
+
+    # Truthy path: verify optional: true is stripped from steps resolved as mandatory.
+    # Tests each hidden ingredient independently so that other falsy-guarded steps
+    # (stripped from content entirely) do not interfere with the assertion scope.
+    for ing_name in hidden_ing_names:
+        guarded_steps = [
+            step_name
+            for step_name, step in recipe_obj.steps.items()
+            if step.skip_when_false == f"inputs.{ing_name}"
+        ]
+        if not guarded_steps:
+            continue
+        truthy_result = load_and_validate(
+            recipe_name,
+            ingredient_overrides={ing_name: "true"},
+        )
+        truthy_content = truthy_result["content"]
+        residual = []
+        for step_name in guarded_steps:
+            block_match = re.search(
+                rf"(?m){_step_block_pattern(re.escape(step_name))}",
+                truthy_content,
+            )
+            assert block_match is not None, (
+                f"Recipe '{recipe_name}': step '{step_name}' not found in truthy content "
+                f"for ingredient '{ing_name}' — step was incorrectly removed on truthy resolution."
+            )
+            step_block = block_match.group(0)
+            if "optional: true" in step_block:
+                residual.append(step_name)
+        assert residual == [], (
+            f"Recipe '{recipe_name}': steps {residual} have residual 'optional: true' "
+            f"in content after truthy resolution of ingredient '{ing_name}'."
+        )

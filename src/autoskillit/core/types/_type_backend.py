@@ -108,6 +108,7 @@ class SkillSessionConfig:
     scenario_step_name: str = ""
     temp_dir_relpath: str | None = None
     allowed_write_prefix: str = ""
+    allowed_write_prefixes: tuple[str, ...] = ()
     provider_extras: Mapping[str, str] | None = None
     profile_name: str = ""
     resume_session_id: str = ""

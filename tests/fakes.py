@@ -81,6 +81,7 @@ class ExecutorCall:
     recipe_composite_hash: str = ""
     recipe_version: str | None = None
     allowed_write_prefix: str = ""
+    allowed_write_prefixes: tuple[str, ...] = ()
     readonly_skill: bool = False
     write_watch_dirs: tuple[Any, ...] = ()
     provider_extras: Mapping[str, str] | None = None
@@ -115,6 +116,7 @@ class DispatchFoodTruckCall:
     requires_packs: Sequence[str] = ()
     on_spawn: Callable[[int, int], None] | None = None
     allowed_write_prefix: str = ""
+    allowed_write_prefixes: tuple[str, ...] = ()
     sentinel_contract: str = ""
     prior_completion_markers: Sequence[str] | None = None
     marker_dir: Path | None = None
@@ -174,6 +176,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         recipe_composite_hash: str = "",
         recipe_version: str | None = None,
         allowed_write_prefix: str = "",
+        allowed_write_prefixes: tuple[str, ...] = (),
         readonly_skill: bool = False,
         write_watch_dirs: Sequence[Any] = (),
         provider_extras: Mapping[str, str] | None = None,
@@ -203,6 +206,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 recipe_composite_hash=recipe_composite_hash,
                 recipe_version=recipe_version,
                 allowed_write_prefix=allowed_write_prefix,
+                allowed_write_prefixes=allowed_write_prefixes,
                 readonly_skill=readonly_skill,
                 write_watch_dirs=tuple(write_watch_dirs),
                 provider_extras=provider_extras,
@@ -242,6 +246,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         requires_packs: Sequence[str] = (),
         on_spawn: Callable[[int, int], None] | None = None,
         allowed_write_prefix: str = "",
+        allowed_write_prefixes: tuple[str, ...] = (),
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
@@ -273,6 +278,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 requires_packs=requires_packs,
                 on_spawn=on_spawn,
                 allowed_write_prefix=allowed_write_prefix,
+                allowed_write_prefixes=allowed_write_prefixes,
                 sentinel_contract=sentinel_contract,
                 prior_completion_markers=prior_completion_markers,
                 marker_dir=marker_dir,

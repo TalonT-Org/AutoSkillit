@@ -102,6 +102,7 @@ def test_private_env_vars_includes_execution_control_vars() -> None:
     expected = {
         "SCENARIO_STEP_NAME",
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
+        "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
         "MAX_MCP_OUTPUT_TOKENS",
     }
     assert expected <= AUTOSKILLIT_PRIVATE_ENV_VARS
@@ -429,6 +430,13 @@ def test_autoskillit_allowed_write_prefix_in_private_env_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 
     assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_autoskillit_allowed_write_prefixes_in_private_env_vars() -> None:
+    """AUTOSKILLIT_ALLOWED_WRITE_PREFIXES must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES" in AUTOSKILLIT_PRIVATE_ENV_VARS
 
 
 def test_max_mcp_output_tokens_in_private_env_vars() -> None:

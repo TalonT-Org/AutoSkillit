@@ -453,12 +453,23 @@ async def run_skill(
                 if _default_temp:
                     write_watch_dirs.append(_default_temp)
 
+            from autoskillit.execution.clone_guard import is_worktree_skill  # noqa: PLC0415
+
+            worktree_write_prefixes: list[str] = []
+            if write_watch_dirs and is_worktree_skill(skill_command):
+                worktree_parent = (Path(cwd).parent / "worktrees").resolve()
+                worktree_write_prefixes.append(str(worktree_parent) + "/")
+
             is_read_only = bool(
                 tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
             )
             allowed_write_prefix = ""
+            allowed_write_prefixes: tuple[str, ...] = ()
             if write_watch_dirs:
-                allowed_write_prefix = str(write_watch_dirs[0]) + "/"
+                base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
+                all_prefixes = base_prefixes + worktree_write_prefixes
+                allowed_write_prefixes = tuple(all_prefixes)
+                allowed_write_prefix = base_prefixes[0]
             elif is_read_only:
                 _skill_temp_name = target_name or ""
                 if _skill_temp_name:
@@ -575,6 +586,7 @@ async def run_skill(
                     recipe_composite_hash=tool_ctx.recipe_composite_hash,
                     recipe_version=tool_ctx.recipe_version,
                     allowed_write_prefix=allowed_write_prefix,
+                    allowed_write_prefixes=allowed_write_prefixes,
                     readonly_skill=is_read_only,
                     write_watch_dirs=write_watch_dirs,
                     provider_extras=provider_extras,

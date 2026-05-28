@@ -130,9 +130,18 @@ def main() -> None:
     if not os.environ.get("AUTOSKILLIT_HEADLESS"):
         sys.exit(0)
 
-    allowed_prefix = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
-    if not allowed_prefix:
+    prefixes_str = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
+    if prefixes_str:
+        raw_prefixes = [p for p in prefixes_str.split(":") if p]
+    else:
+        singular = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
+        raw_prefixes = [singular] if singular else []
+
+    if not raw_prefixes:
         sys.exit(0)
+
+    norm_prefixes = [os.path.realpath(p).rstrip("/") + "/" for p in raw_prefixes]
+    display_prefix = raw_prefixes[0]
 
     try:
         data = json.loads(sys.stdin.read())
@@ -148,17 +157,12 @@ def main() -> None:
 
     tool_input = data.get("tool_input", {})
 
-    real_prefix = os.path.realpath(allowed_prefix)
-    norm_prefix = real_prefix.rstrip("/") + "/"
-
-    def _within_prefix(path: str) -> bool:
+    def _within_any_prefix(path: str) -> bool:
         resolved = os.path.realpath(path)
-        return resolved.startswith(norm_prefix) or resolved == norm_prefix.rstrip("/")
+        return any(resolved.startswith(np) or resolved == np.rstrip("/") for np in norm_prefixes)
 
     if tool_name == "Bash" or "run_cmd" in tool_name:
         command = tool_input.get("command", "") or tool_input.get("cmd", "")
-        # Interpreter-mediated write detection: deny unconditionally.
-        # Path extraction is not attempted because interpreters construct paths dynamically.
         if has_interpreter_write(command):
             _deny(
                 f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
@@ -171,10 +175,10 @@ def main() -> None:
         if not targets:
             sys.exit(0)
         for target in targets:
-            if not _within_prefix(target):
+            if not _within_any_prefix(target):
                 _deny(
                     f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                    f"Only writes to {allowed_prefix} are permitted."
+                    f"Only writes to {display_prefix} are permitted."
                 )
                 return
         sys.exit(0)
@@ -189,10 +193,10 @@ def main() -> None:
             )
             return
         for p in paths:
-            if not _within_prefix(p):
+            if not _within_any_prefix(p):
                 _deny(
                     f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                    f"Only writes to {allowed_prefix} are permitted."
+                    f"Only writes to {display_prefix} are permitted."
                 )
                 return
         sys.exit(0)
@@ -203,12 +207,12 @@ def main() -> None:
         _deny(f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER} (no file_path).")
         return
 
-    if _within_prefix(file_path):
+    if _within_any_prefix(file_path):
         sys.exit(0)
 
     _deny(
         f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-        f"Only writes to {allowed_prefix} are permitted."
+        f"Only writes to {display_prefix} are permitted."
     )
 
 

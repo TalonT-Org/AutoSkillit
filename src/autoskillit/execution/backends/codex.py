@@ -346,6 +346,7 @@ class CodexBackend:
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
+        allowed_write_prefixes: tuple[str, ...] = (),
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
         resume_session_id: str = "",
@@ -363,6 +364,7 @@ class CodexBackend:
             scenario_step_name = config.scenario_step_name
             temp_dir_relpath = config.temp_dir_relpath
             allowed_write_prefix = config.allowed_write_prefix
+            allowed_write_prefixes = config.allowed_write_prefixes
             provider_extras = config.provider_extras
             profile_name = config.profile_name
             resume_session_id = config.resume_session_id
@@ -411,6 +413,8 @@ class CodexBackend:
             extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
         if allowed_write_prefix:
             extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
+        if allowed_write_prefixes:
+            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(allowed_write_prefixes)
         if cwd:
             extras["AUTOSKILLIT_CWD"] = cwd
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
@@ -467,6 +471,7 @@ class CodexBackend:
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
+        allowed_write_prefixes: tuple[str, ...] = (),
         sentinel_contract: str = "",
         resume_message: str | None = None,
     ) -> CmdSpec:
@@ -513,6 +518,8 @@ class CodexBackend:
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
         if allowed_write_prefix:
             extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
+        if allowed_write_prefixes:
+            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(allowed_write_prefixes)
         if cwd:
             extras["AUTOSKILLIT_CWD"] = cwd
         if env_extras:

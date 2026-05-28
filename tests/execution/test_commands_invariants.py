@@ -89,6 +89,10 @@ def test_allowed_write_prefix_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" in _HEADLESS_EXCLUSIVE_VARS
 
 
+def test_allowed_write_prefixes_in_headless_exclusive_vars() -> None:
+    assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES" in _HEADLESS_EXCLUSIVE_VARS
+
+
 def test_skill_name_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_SKILL_NAME" in _HEADLESS_EXCLUSIVE_VARS
 

@@ -228,7 +228,6 @@ Before creating the diagram, verify:
 - [ ] Every color inconsistency has been flagged
 - [ ] Every redundant figure pair has been identified
 
-
 ---
 
 ## Related Skills

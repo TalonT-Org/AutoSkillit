@@ -244,7 +244,6 @@ Before creating the diagram, verify:
 - [ ] Every axis missing units on a continuous quantity is flagged as WARNING
 - [ ] Every figure with undefined error bars is flagged as FAIL
 
-
 ---
 
 ## Related Skills

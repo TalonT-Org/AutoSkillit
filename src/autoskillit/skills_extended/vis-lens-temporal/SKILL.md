@@ -254,7 +254,6 @@ Before creating the diagram, verify:
 - [ ] Every smoothing call has its parameters disclosed in the figure spec
 - [ ] Early-stopping markers are noted for all curves with early stopping
 
-
 ---
 
 ## Related Skills

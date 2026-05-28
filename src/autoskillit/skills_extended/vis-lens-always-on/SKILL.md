@@ -271,7 +271,6 @@ Before creating the diagram, verify:
 - [ ] yaml:spec-index emitted (not yaml:figure-spec)
 - [ ] verdict is FAIL_N if critical_count > 0, WARN_N if warning_count > 0, PASS otherwise
 
-
 ---
 
 ## Related Skills

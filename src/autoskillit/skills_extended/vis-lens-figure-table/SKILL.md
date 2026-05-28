@@ -232,7 +232,6 @@ Before creating the diagram, verify:
 - [ ] Every BOTH verdict has a documented placement recommendation
 - [ ] No `yaml:figure-spec` emitted for TABLE-only result slots
 
-
 ---
 
 ## Related Skills

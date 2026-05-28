@@ -276,7 +276,6 @@ Before creating the diagram, verify:
 - [ ] Findings are sorted critical-first
 - [ ] Each yaml:figure-spec has `anti_patterns` field populated
 
-
 ---
 
 ## Related Skills

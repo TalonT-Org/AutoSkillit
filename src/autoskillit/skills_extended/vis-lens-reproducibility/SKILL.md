@@ -260,7 +260,6 @@ Before creating the diagram, verify:
 - [ ] Every histogram bin width and time-series smoothing window is audited
 - [ ] Every stochastic figure has its seeds documented or flagged
 
-
 ---
 
 ## Related Skills

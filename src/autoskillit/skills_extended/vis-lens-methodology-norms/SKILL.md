@@ -421,7 +421,6 @@ Before creating the diagram, verify:
 - [ ] All mandatory figures for the sub-area have been checked
 - [ ] Gap list is sorted absent-first, then partial
 
-
 ---
 
 ## Related Skills

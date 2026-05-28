@@ -237,7 +237,6 @@ Before creating the diagram, verify:
 - [ ] Every color-distinguished series has been checked for redundant encoding
 - [ ] Every font size below 8pt has been flagged as WARNING
 
-
 ---
 
 ## Related Skills

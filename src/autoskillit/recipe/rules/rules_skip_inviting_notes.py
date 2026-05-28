@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-
-if TYPE_CHECKING:
-    pass
 
 
 @semantic_rule(
@@ -72,6 +67,42 @@ def _check_skip_inviting_notes(ctx: ValidationContext) -> list[RuleFinding]:
                         f"Step '{step_name}' note contains literal "
                         "'optional: true' or 'optional=true'. "
                         "Remove this prose metadata — the field is stripped server-side."
+                    ),
+                )
+            )
+        elif re.search(r"can be skipped", note, re.IGNORECASE):
+            findings.append(
+                RuleFinding(
+                    rule="skip-inviting-note-text",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' note contains skip-inviting phrase 'can be skipped'. "
+                        "Rewrite to imperative language."
+                    ),
+                )
+            )
+        elif re.search(r"non[- ]critical", note, re.IGNORECASE):
+            findings.append(
+                RuleFinding(
+                    rule="skip-inviting-note-text",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' note contains skip-inviting phrase 'non-critical'. "
+                        "Rewrite to imperative language."
+                    ),
+                )
+            )
+        elif re.search(r"not required", note, re.IGNORECASE):
+            findings.append(
+                RuleFinding(
+                    rule="skip-inviting-note-text",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' note contains skip-inviting phrase 'not required'. "
+                        "Rewrite to imperative language."
                     ),
                 )
             )

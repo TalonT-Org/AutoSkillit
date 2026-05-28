@@ -216,7 +216,7 @@
     "bridge_investigation": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "if [ -n \"${{ context.investigation_path }}\" ] && [ -f \"${{ context.investigation_path }}\" ]; then\n  echo \"investigation_report=${{ context.investigation_path }}\"\nelse\n  mkdir -p \"{{AUTOSKILLIT_TEMP}}/investigate\"\n  gh issue view ${{ context.issue_number }} --json body -q .body \\\n    | tr -d '\\r' \\\n    | awk '/^## Investigation/{p=1;next} p && /^## /{p=0} p{print}' \\\n    > \"{{AUTOSKILLIT_TEMP}}/investigate/investigation_from_issue.md\"\n  echo \"investigation_report={{AUTOSKILLIT_TEMP}}/investigate/investigation_from_issue.md\"\nfi\n",
+        "cmd": "[ -n \"${{ context.investigation_path }}\" ] && [ -f \"${{ context.investigation_path }}\" ] && echo \"investigation_report=${{ context.investigation_path }}\" || { mkdir -p \"{{AUTOSKILLIT_TEMP}}/investigate\" && gh issue view ${{ context.issue_number }} --json body -q .body | tr -d '\\r' | awk '/^## Investigation/{p=1;next} p && /^## /{p=0} p{print}' > \"{{AUTOSKILLIT_TEMP}}/investigate/investigation_from_issue.md\" && echo \"investigation_report={{AUTOSKILLIT_TEMP}}/investigate/investigation_from_issue.md\"; }",
         "cwd": "${{ context.work_dir }}",
         "step_name": "bridge_investigation"
       },

@@ -317,7 +317,8 @@
       "with": {
         "skill_command": "/autoskillit:retry-worktree ${{ context.plan_path }} ${{ context.worktree_path }}",
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "retry_worktree"
+        "step_name": "retry_worktree",
+        "output_dir": "."
       },
       "capture": {
         "implementation_ref": "${{ result.worktree_path }}",

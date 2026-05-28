@@ -334,6 +334,7 @@ steps:
         }}
       cwd: ${{ context.worktree_path }}
       step_name: retry_worktree
+      output_dir: '.'
     capture:
       implementation_ref: ${{ result.worktree_path }}
       worktree_path: ${{ result.worktree_path }}

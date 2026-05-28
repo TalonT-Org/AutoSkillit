@@ -678,6 +678,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_pack_enforcement.py",
             "fleet/test_gate_state_persistence.py",
             "fleet/test_dispatch_identity_continuity.py",
+            "fleet/test_dispatch_envelope_fields.py",
         }
     ),
     "cli": frozenset(

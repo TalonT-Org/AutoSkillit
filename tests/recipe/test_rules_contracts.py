@@ -730,6 +730,7 @@ def test_write_skill_reaching_push_without_source_output_dir_fires_conditional()
         "write-skill-requires-source-output-dir must fire when no output_dir and push reachable"
     )
     assert hits[0].severity == Severity.ERROR
+    assert hits[0].severity == Severity.ERROR
     assert hits[0].step_name == "skill_step"
 
 
@@ -760,8 +761,8 @@ def test_write_skill_reaching_push_with_output_dir_passes() -> None:
     assert not hits, "write-skill-requires-source-output-dir must not fire when output_dir is set"
 
 
-def test_write_skill_not_reaching_push_without_output_dir_passes() -> None:
-    """Rule does NOT fire when the skill does not reach push_to_remote."""
+def test_write_skill_without_push_still_fires_when_no_output_dir() -> None:
+    """Rule fires even when push_to_remote is NOT reachable — push is irrelevant."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=False)
     contract = _make_write_contract(write_behavior="conditional")
     with patch(
@@ -770,9 +771,28 @@ def test_write_skill_not_reaching_push_without_output_dir_passes() -> None:
     ):
         findings = run_semantic_rules(recipe)
     hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
-    assert not hits, (
-        "write-skill-requires-source-output-dir must not fire when push is unreachable"
+    assert hits, (
+        "write-skill-requires-source-output-dir must fire for write-capable skills "
+        "regardless of push reachability"
     )
+    assert hits[0].severity == Severity.ERROR
+
+
+def test_write_skill_without_push_reachable_fires_when_no_output_dir() -> None:
+    """Rule fires for write-capable skill without output_dir, no push path at all."""
+    recipe = _make_write_push_recipe(output_dir=None, routes_to_push=False)
+    contract = _make_write_contract(write_behavior="conditional")
+    with patch(
+        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        return_value=contract,
+    ):
+        findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "write-skill-requires-source-output-dir"]
+    assert hits, (
+        "write-skill-requires-source-output-dir must fire for write-capable skills "
+        "regardless of push reachability"
+    )
+    assert hits[0].severity == Severity.ERROR
 
 
 def test_read_only_skill_without_output_dir_not_flagged() -> None:

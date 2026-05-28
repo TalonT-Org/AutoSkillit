@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from tests.server._helpers import _PATCHED_DEFAULTS, _SERVER_ONLY_KEYS
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -250,18 +251,6 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
     assert parsed["kitchen"] == "open"
     assert "version" in parsed
     assert "--- INGREDIENTS TABLE ---" in result_str
-
-
-_PATCHED_DEFAULTS = {
-    "base_branch": "develop",
-    "local_review_rounds": "7",
-    "adversarial_review_level": "aggressive",
-    "post_run_diagnostics": "true",
-    "is_fleet_dispatch": "true",
-    "dispatch_id": "test-dispatch-999",
-}
-
-_SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir"})
 
 
 # DIAG_C4

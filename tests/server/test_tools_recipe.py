@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.server.tools.tools_recipe import list_recipes as list_recipes_tool
 from autoskillit.server.tools.tools_recipe import validate_recipe
+from tests.server._helpers import _PATCHED_DEFAULTS, _SERVER_ONLY_KEYS
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -514,18 +515,6 @@ def test_tools_recipe_does_not_import_raw_ctx():
                 assert "_ctx" not in names, (
                     "tools_recipe.py must not import _ctx directly from server._state"
                 )
-
-
-_PATCHED_DEFAULTS = {
-    "base_branch": "develop",
-    "local_review_rounds": "7",
-    "adversarial_review_level": "aggressive",
-    "post_run_diagnostics": "true",
-    "is_fleet_dispatch": "true",
-    "dispatch_id": "test-dispatch-999",
-}
-
-_SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir"})
 
 
 # DIAG_C5

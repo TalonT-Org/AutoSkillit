@@ -270,3 +270,13 @@ Before creating the diagram, verify:
 - [ ] All three passes completed before computing verdict
 - [ ] yaml:spec-index emitted (not yaml:figure-spec)
 - [ ] verdict is FAIL_N if critical_count > 0, WARN_N if warning_count > 0, PASS otherwise
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-antipattern` - For common visualization anti-pattern detection
+- `/autoskillit:vis-lens-color-access` - For color and accessibility auditing
+- `/autoskillit:vis-lens-caption-annot` - For caption and annotation quality checks

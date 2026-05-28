@@ -245,3 +245,14 @@ Before creating the diagram, verify:
 - [ ] Diagram will include a color legend table
 - [ ] Every figure with ≥ 4 conditions has been assigned a small-multiples layout
 - [ ] Every `yaml:figure-spec` has the `facet` field filled (or explicitly empty for overlays)
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-temporal` - For time-series and training curve analysis
+- `/autoskillit:vis-lens-story-arc` - For narrative arc and color consistency
+- `/autoskillit:vis-lens-methodology-norms` - For field-specific methodology compliance
+- `/autoskillit:vis-lens-reproducibility` - For reproducibility and data provenance checks

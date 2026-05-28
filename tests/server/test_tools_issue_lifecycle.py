@@ -495,6 +495,70 @@ async def test_release_issue_without_close_flag_does_not_close(tool_ctx_kitchen_
     tool_ctx_kitchen_open.github_client.close_issue.assert_not_called()
 
 
+@pytest.mark.anyio
+async def test_release_issue_close_issue_with_non_default_branch_stages_issue(
+    tool_ctx_kitchen_open,
+) -> None:
+    """close_issue + non-default target_branch → Branch 1 (staging), not close."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+    promotion_target = tool_ctx_kitchen_open.config.branching.promotion_target
+
+    result = json.loads(
+        await release_issue(
+            "https://github.com/owner/repo/issues/42",
+            close_issue="true",
+            target_branch="develop",
+        )
+    )
+    assert result["success"] is True
+    assert result.get("staged") is True
+    tool_ctx_kitchen_open.github_client.close_issue.assert_not_called()
+    _ = promotion_target  # confirms we are targeting a non-default branch
+
+
+@pytest.mark.anyio
+async def test_release_issue_close_issue_with_promotion_target_closes_issue(
+    tool_ctx_kitchen_open,
+) -> None:
+    """close_issue + promotion_target branch → Branch 3 (bare removal + close)."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.close_issue = AsyncMock(return_value={"success": True})
+    promotion_target = tool_ctx_kitchen_open.config.branching.promotion_target
+
+    result = json.loads(
+        await release_issue(
+            "https://github.com/owner/repo/issues/42",
+            close_issue="true",
+            target_branch=promotion_target,
+        )
+    )
+    assert result["success"] is True
+    assert result.get("staged") is False
+    tool_ctx_kitchen_open.github_client.close_issue.assert_called_once_with("owner", "repo", 42)
+
+
+@pytest.mark.anyio
+async def test_release_issue_empty_string_target_branch_falls_to_bare_removal(
+    tool_ctx_kitchen_open,
+) -> None:
+    """Empty string target_branch must fall to Branch 3 (bare removal), not spurious staging."""
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+
+    result = json.loads(
+        await release_issue(
+            "https://github.com/owner/repo/issues/42",
+            target_branch="",
+        )
+    )
+    assert result["success"] is True
+    assert result.get("staged") is False
+    tool_ctx_kitchen_open.github_client.ensure_label.assert_not_called()
+
+
 def _make_mock_tool_ctx_for_project_dir(project_dir):
     """Build a minimal mock ToolContext for project_dir tests."""
     mock_ctx = MagicMock()

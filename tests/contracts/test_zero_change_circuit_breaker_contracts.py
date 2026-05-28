@@ -77,3 +77,33 @@ def test_remediation_recipe_has_same_circuit_breaker() -> None:
         f"remediation retry_worktree.on_context_limit must be 'check_changes', "
         f"got {retry_step.get('on_context_limit')!r}"
     )
+
+
+def test_close_issue_no_changes_passes_target_branch() -> None:
+    """close_issue_no_changes must pass target_branch to enable branch-aware staging."""
+    for name in ("implementation", "remediation"):
+        data = _load(name)
+        step = data["steps"]["close_issue_no_changes"]
+        with_args = step.get("with", {})
+        assert "target_branch" in with_args, (
+            f"{name}: close_issue_no_changes.with must include target_branch, got: {with_args}"
+        )
+        assert with_args["target_branch"] == "${{ inputs.base_branch }}", (
+            f"{name}: close_issue_no_changes.with.target_branch must be "
+            f"'${{{{ inputs.base_branch }}}}', got: {with_args['target_branch']!r}"
+        )
+
+
+def test_close_issue_no_changes_routes_to_register_clone_success() -> None:
+    """close_issue_no_changes must route to register_clone_success, not bare done."""
+    for name in ("implementation", "remediation"):
+        data = _load(name)
+        step = data["steps"]["close_issue_no_changes"]
+        assert step.get("on_success") == "register_clone_success", (
+            f"{name}: close_issue_no_changes.on_success must be 'register_clone_success', "
+            f"got {step.get('on_success')!r}"
+        )
+        assert step.get("on_failure") == "register_clone_success", (
+            f"{name}: close_issue_no_changes.on_failure must be 'register_clone_success', "
+            f"got {step.get('on_failure')!r}"
+        )

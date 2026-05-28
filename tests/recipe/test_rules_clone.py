@@ -410,3 +410,70 @@ def test_bundled_recipes_pass_new_rule(recipe_path: Path) -> None:
     findings = run_semantic_rules(recipe)
     matching = [f for f in findings if f.rule == _RULE]
     assert matching == [], f"{recipe_path}: {matching}"
+
+
+# ---------------------------------------------------------------------------
+# clone-terminal-requires-registration
+# ---------------------------------------------------------------------------
+
+
+def test_clone_terminal_requires_registration_rule_is_registered() -> None:
+    """T_CTR0: clone-terminal-requires-registration is registered in _RULE_REGISTRY."""
+    from autoskillit.recipe.validator import _RULE_REGISTRY
+
+    assert "clone-terminal-requires-registration" in {r.name for r in _RULE_REGISTRY}
+
+
+def test_clone_terminal_requires_registration_fires_on_unregistered_terminal() -> None:
+    """clone_repo step that reaches action:stop without register_clone_status fires ERROR."""
+    recipe = _make_recipe(
+        {
+            "clone": RecipeStep(
+                tool="bootstrap_clone",
+                with_args={"source_dir": "/repo", "base_branch": "main"},
+                on_success="process",
+                on_failure="done",
+            ),
+            "process": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo hello", "cwd": "/tmp"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Complete."),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "clone-terminal-requires-registration"]
+    assert len(rule_findings) == 1
+    assert rule_findings[0].severity == Severity.ERROR
+
+
+def test_clone_terminal_requires_registration_passes_with_registration() -> None:
+    """clone_repo step routed through register_clone_status before done passes the rule."""
+    recipe = _make_recipe(
+        {
+            "clone": RecipeStep(
+                tool="bootstrap_clone",
+                with_args={"source_dir": "/repo", "base_branch": "main"},
+                on_success="process",
+                on_failure="register",
+            ),
+            "process": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo hello", "cwd": "/tmp"},
+                on_success="register",
+                on_failure="register",
+            ),
+            "register": RecipeStep(
+                tool="register_clone_status",
+                with_args={"clone_path": "/repo", "status": "success"},
+                on_success="done",
+                on_failure="done",
+            ),
+            "done": RecipeStep(action="stop", message="Complete."),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    rule_findings = [f for f in findings if f.rule == "clone-terminal-requires-registration"]
+    assert rule_findings == []

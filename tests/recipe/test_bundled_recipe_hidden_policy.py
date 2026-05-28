@@ -55,13 +55,14 @@ def test_upfront_claimed_is_hidden_in_recipe(recipe_name: str) -> None:
 
 
 @pytest.mark.parametrize("recipe_name", BUNDLED_RECIPE_NAMES)
-def test_bundled_recipe_content_has_no_unresolved_hidden_skip_guards(recipe_name: str) -> None:
-    """load_and_validate must not deliver unresolved hidden ingredient refs to the LLM.
+def test_bundled_recipe_content_has_no_residual_skip_signals(recipe_name: str) -> None:
+    """load_and_validate must not deliver residual skip signals to the LLM for any ingredient.
 
     Regression guard: if server-side skip_when_false evaluation is accidentally
     removed or bypassed, this test will catch it by finding inputs.* references
     in skip_when_false fields of the served content. Also verifies that truthy-resolved
-    steps do not retain residual optional: true signals in the served content.
+    steps do not retain residual optional: true or skip_when_false signals in the
+    served content, for all ingredients (not just hidden ones).
     """
     import re
 
@@ -84,10 +85,11 @@ def test_bundled_recipe_content_has_no_unresolved_hidden_skip_guards(recipe_name
         f"Server-side evaluation may be broken."
     )
 
-    # Truthy path: verify optional: true is stripped from steps resolved as mandatory.
-    # Tests each hidden ingredient independently so that other falsy-guarded steps
-    # (stripped from content entirely) do not interfere with the assertion scope.
-    for ing_name in hidden_ing_names:
+    # Truthy path: verify optional: true and skip_when_false are stripped from steps
+    # resolved as mandatory. Tests ALL ingredients (not just hidden) independently so
+    # that other falsy-guarded steps (stripped from content entirely) do not interfere.
+    all_ing_names = set(recipe_obj.ingredients.keys())
+    for ing_name in all_ing_names:
         guarded_steps = [
             step_name
             for step_name, step in recipe_obj.steps.items()
@@ -100,20 +102,29 @@ def test_bundled_recipe_content_has_no_unresolved_hidden_skip_guards(recipe_name
             ingredient_overrides={ing_name: "true"},
         )
         truthy_content = truthy_result["content"]
-        residual = []
+        residual_optional = []
+        residual_skip = []
         for step_name in guarded_steps:
             block_match = re.search(
                 rf"(?m){_step_block_pattern(re.escape(step_name))}",
                 truthy_content,
             )
-            assert block_match is not None, (
-                f"Recipe '{recipe_name}': step '{step_name}' not found in truthy content "
-                f"for ingredient '{ing_name}' — step was incorrectly removed on truthy resolution."
-            )
+            if block_match is None:
+                continue  # step removed (falsy default) — skip
             step_block = block_match.group(0)
-            if "optional: true" in step_block:
-                residual.append(step_name)
-        assert residual == [], (
-            f"Recipe '{recipe_name}': steps {residual} have residual 'optional: true' "
+            if re.search(r"^\s+optional:\s+true\s*$", step_block, re.MULTILINE | re.IGNORECASE):
+                residual_optional.append(step_name)
+            if re.search(
+                rf"^\s+skip_when_false:\s+inputs\.{re.escape(ing_name)}\s*$",
+                step_block,
+                re.MULTILINE,
+            ):
+                residual_skip.append(step_name)
+        assert residual_optional == [], (
+            f"Recipe '{recipe_name}': steps {residual_optional} have residual 'optional: true' "
             f"in content after truthy resolution of ingredient '{ing_name}'."
+        )
+        assert residual_skip == [], (
+            f"Recipe '{recipe_name}': steps {residual_skip} retain "
+            f"'skip_when_false: inputs.{ing_name}' after truthy resolution."
         )

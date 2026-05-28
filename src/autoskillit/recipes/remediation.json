@@ -1143,7 +1143,7 @@
       "on_success": "escalate_stop_no_ci",
       "on_failure": "escalate_stop_no_ci",
       "on_context_limit": "escalate_stop_no_ci",
-      "note": "Diagnostic failure never blocks pipeline completion.\n"
+      "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "escalate_stop_no_ci": {
       "action": "stop",
@@ -1831,7 +1831,7 @@
       "on_context_limit": "resolve_ci",
       "optional": true,
       "skip_when_false": "inputs.open_pr",
-      "note": "Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to resolve_ci on success OR failure (best-effort: resolve-failures proceeds even without a diagnosis). diagnosis_path is passed to resolve_ci for targeted remediation context.\n"
+      "note": "Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and writes a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to resolve_ci on success OR failure. If diagnosis fails, resolve_ci proceeds without diagnosis context. diagnosis_path is passed to resolve_ci for targeted remediation context.\n"
     },
     "resolve_ci": {
       "tool": "run_skill",
@@ -1963,7 +1963,7 @@
       "retries": 1,
       "on_exhausted": "diagnose_ci",
       "skip_when_false": "inputs.open_pr",
-      "note": "Resolves a stale-base CI failure by rebasing the feature branch onto the latest integration HEAD. Mirrors queue_ejected_fix: on clean rebase or goal-aware conflict resolution, routes to re_push to re-trigger CI on the rebased branch. On escalation (LOW confidence conflicts), tool failure, context limit, or retry exhaustion, routes to diagnose_ci for CI log capture before release_issue_failure. diagnose_ci is best-effort (optional: true) — resolve_ci proceeds even without diagnosis. retries: 1 bounds the loop; after 2 total attempts, escalates.\n"
+      "note": "Resolves a stale-base CI failure by rebasing the feature branch onto the latest integration HEAD. Mirrors queue_ejected_fix: on clean rebase or goal-aware conflict resolution, routes to re_push to re-trigger CI on the rebased branch. On escalation (LOW confidence conflicts), tool failure, context limit, or retry exhaustion, routes to diagnose_ci for CI log capture before release_issue_failure. diagnose_ci runs before resolve_ci. If diagnosis fails, resolve_ci proceeds without diagnosis context. retries: 1 bounds the loop; after 2 total attempts, escalates.\n"
     },
     "register_clone_unconfirmed": {
       "description": "Register clone as preserved — merge unconfirmed, in-progress label retained",
@@ -1991,7 +1991,7 @@
       "on_success": "done_unconfirmed",
       "on_failure": "done_unconfirmed",
       "on_context_limit": "done_unconfirmed",
-      "note": "Diagnostic failure never blocks pipeline completion.\n"
+      "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "done_unconfirmed": {
       "action": "stop",
@@ -2008,7 +2008,7 @@
       },
       "on_success": "patch_token_summary",
       "on_failure": "patch_token_summary",
-      "note": "Applies staged label after successful PR merge; skipped when no issue_url. optional=true so registration proceeds even if this step errors.\n"
+      "note": "Applies staged label after successful PR merge; skipped when no issue_url. Pipeline routes to patch_token_summary on both success and failure.\n"
     },
     "patch_token_summary": {
       "description": "Collect all pipeline token data and patch the PR body with complete summary",
@@ -2023,7 +2023,7 @@
       },
       "on_success": "register_clone_success",
       "on_failure": "register_clone_success",
-      "note": "Patches PR body with complete token summary; failure never blocks pipeline completion.\n"
+      "note": "Patches PR body with complete token summary; failures are logged but do not alter pipeline routing.\n"
     },
     "release_issue_failure": {
       "description": "Release the in-progress claim after pipeline failure",
@@ -2073,7 +2073,7 @@
       "on_success": "done",
       "on_failure": "done",
       "on_context_limit": "done",
-      "note": "Diagnostic failure never blocks pipeline completion. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
+      "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing. Both on_failure and on_context_limit route to the same terminal as on_success.\n"
     },
     "run_diagnostic_error": {
       "description": "Run post-pipeline diagnostic analysis on session logs (error path)",
@@ -2089,7 +2089,7 @@
       "on_success": "escalate_stop",
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
-      "note": "Diagnostic failure never blocks pipeline completion.\n"
+      "note": "Execute this diagnostic step. Failures are logged but do not alter pipeline routing.\n"
     },
     "done": {
       "action": "stop",

@@ -1062,7 +1062,8 @@ steps:
     on_success: escalate_stop_no_ci
     on_failure: escalate_stop_no_ci
     on_context_limit: escalate_stop_no_ci
-    note: 'Diagnostic failure never blocks pipeline completion.
+    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
+      routing.
 
       '
   escalate_stop_no_ci:
@@ -1665,8 +1666,8 @@ steps:
     skip_when_false: inputs.open_pr
     note: 'Runs when ci_watch reports a CI failure. Fetches CI logs via gh API and
       writes a structured diagnosis to {{AUTOSKILLIT_TEMP}}/diagnose-ci/. Routes to
-      resolve_ci on success OR failure (best-effort: resolve-failures proceeds even
-      without a diagnosis). diagnosis_path is passed to resolve_ci for targeted remediation
+      resolve_ci on success OR failure. If diagnosis fails, resolve_ci proceeds without
+      diagnosis context. diagnosis_path is passed to resolve_ci for targeted remediation
       context.
 
       '
@@ -1810,8 +1811,8 @@ steps:
       conflict resolution, routes to re_push to re-trigger CI on the rebased branch.
       On escalation (LOW confidence conflicts), tool failure, context limit, or retry
       exhaustion, routes to diagnose_ci for CI log capture before release_issue_failure.
-      diagnose_ci is best-effort (optional: true) — resolve_ci proceeds even without
-      diagnosis. retries: 1 bounds the loop; after 2 total attempts, escalates.
+      diagnose_ci runs before resolve_ci. If diagnosis fails, resolve_ci proceeds without
+      diagnosis context. retries: 1 bounds the loop; after 2 total attempts, escalates.
 
       '
   register_clone_unconfirmed:
@@ -1846,7 +1847,8 @@ steps:
     on_success: done_unconfirmed
     on_failure: done_unconfirmed
     on_context_limit: done_unconfirmed
-    note: 'Diagnostic failure never blocks pipeline completion.
+    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
+      routing.
 
       '
   done_unconfirmed:
@@ -1869,7 +1871,7 @@ steps:
     on_success: patch_token_summary
     on_failure: patch_token_summary
     note: 'Applies staged label after successful PR merge; skipped when no issue_url.
-      optional=true so registration proceeds even if this step errors.
+      Pipeline routes to patch_token_summary on both success and failure.
 
       '
   patch_token_summary:
@@ -1885,8 +1887,8 @@ steps:
       cwd: ${{ context.work_dir }}
     on_success: register_clone_success
     on_failure: register_clone_success
-    note: 'Patches PR body with complete token summary; failure never blocks pipeline
-      completion.
+    note: 'Patches PR body with complete token summary; failures are logged but do
+      not alter pipeline routing.
 
       '
   release_issue_failure:
@@ -1932,8 +1934,8 @@ steps:
     on_success: done
     on_failure: done
     on_context_limit: done
-    note: 'Diagnostic failure never blocks pipeline completion. Both on_failure and
-      on_context_limit route to the same terminal as on_success.
+    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
+      routing. Both on_failure and on_context_limit route to the same terminal as on_success.
 
       '
   run_diagnostic_error:
@@ -1951,7 +1953,8 @@ steps:
     on_success: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
-    note: 'Diagnostic failure never blocks pipeline completion.
+    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
+      routing.
 
       '
   done:

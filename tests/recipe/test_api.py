@@ -299,10 +299,11 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         "project_dir": 2,
         "suppressed": 3,
         "ingredient_overrides": 4,
-        "_exp_types_hash": 5,
-        "_user_exp_hash": 6,
-        "_method_traditions_hash": 7,
-        "_user_method_traditions_hash": 8,
+        "defer_unresolved": 5,
+        "_exp_types_hash": 6,
+        "_user_exp_hash": 7,
+        "_method_traditions_hash": 8,
+        "_user_method_traditions_hash": 9,
     }
 
     missing_params: list[str] = []
@@ -329,7 +330,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
     assert cache_key[4] == (), (
         f"cache_key[4] expected empty ingredient_overrides tuple, got {cache_key[4]!r}"
     )
-    for idx in (5, 6, 7, 8):
+    for idx in (6, 7, 8, 9):
         assert isinstance(cache_key[idx], str), (
             f"cache_key[{idx}] expected str hash, got {type(cache_key[idx])!r}"
         )
@@ -418,6 +419,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         ingredient_overrides=None,
         temp_dir=None,
         temp_dir_relpath=None,
+        defer_unresolved=False,
     ):
         captured["recipe_info"] = recipe_info
         captured["recipe_list"] = recipe_list
@@ -431,6 +433,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             ingredient_overrides=ingredient_overrides,
             temp_dir=temp_dir,
             temp_dir_relpath=temp_dir_relpath,
+            defer_unresolved=defer_unresolved,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)

@@ -176,6 +176,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_silent_type_convention.py` | Tests for silent-type-convention.md documentation |
 | `test_skill_placeholder_parser.py` | Tests for SKILL.md V-rule block extraction utilities |
 | `test_silent_type_flows.py` | Integration tests for silent-type convention flows (vis-lens out-of-scope path) |
+| `test_skip_guard_deferral.py` | Tests for _prune_skipped_steps deferral mode and LoadRecipeResult.deferred_guards |
 | `test_staleness_cache.py` | Tests for recipe staleness cache |
 | `test_sub_recipe_loading.py` | Tests for sub-recipe loading and composition |
 | `test_sub_recipe_schema.py` | Tests for sub-recipe schema structure |

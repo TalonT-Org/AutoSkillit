@@ -360,27 +360,33 @@ async def open_kitchen(
 
         disabled_subsets = _get_ctx().config.subsets.disabled
 
-        handler_err = await _open_kitchen_handler()
-        if handler_err is not None:
-            return handler_err
+        _ctx_pre = _get_ctx()
+        _is_deferred_recall = (
+            name is not None and _ctx_pre.gate.enabled and _ctx_pre.recipe_name == name
+        )
 
-        try:
-            await ctx.enable_components(tags={"kitchen"})
-        except Exception as exc:
-            logger.warning("open_kitchen_failure", stage="enable_components", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="enable_components")
+        if not _is_deferred_recall:
+            handler_err = await _open_kitchen_handler()
+            if handler_err is not None:
+                return handler_err
 
-        try:
-            _kctx = _get_ctx()
-            await _redisable_subsets(
-                ctx,
-                disabled_subsets,
-                _kctx.config.features,
-                experimental_enabled=_kctx.config.experimental_enabled,
-            )
-        except Exception as exc:
-            logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
-            return _kitchen_failure_envelope(exc, stage="redisable_subsets")
+            try:
+                await ctx.enable_components(tags={"kitchen"})
+            except Exception as exc:
+                logger.warning("open_kitchen_failure", stage="enable_components", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="enable_components")
+
+            try:
+                _kctx = _get_ctx()
+                await _redisable_subsets(
+                    ctx,
+                    disabled_subsets,
+                    _kctx.config.features,
+                    experimental_enabled=_kctx.config.experimental_enabled,
+                )
+            except Exception as exc:
+                logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="redisable_subsets")
 
         _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
         _ctx = _get_ctx()
@@ -419,6 +425,36 @@ async def open_kitchen(
                             )
                         }
                     )
+            _user_overrides_present = overrides is not None and len(overrides) > 0
+            if _is_deferred_recall:
+                try:
+                    result = tool_ctx.recipes.load_and_validate(
+                        name,
+                        tool_ctx.project_dir,
+                        suppressed=suppressed,
+                        resolved_defaults=_defaults,
+                        ingredient_overrides=_merged_overrides,
+                        defer_unresolved=False,
+                    )
+                except ProcessStaleError as exc:
+                    logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
+                    return _kitchen_failure_envelope(exc, stage="process_stale")
+                except Exception as exc:
+                    logger.warning(
+                        "open_kitchen_failure", stage="load_and_validate", exc_info=True
+                    )
+                    return _kitchen_failure_envelope(exc, stage="load_and_validate")
+                tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
+                tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
+                tool_ctx.recipe_content_hash = result.get("content_hash", "")
+                tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
+                tool_ctx.recipe_version = result.get("recipe_version") or ""
+                result["success"] = True
+                result["kitchen"] = "open"
+                result["version"] = __version__
+                if "ingredients_table" not in result or not result["ingredients_table"]:
+                    result["ingredients_table"] = None
+                return json.dumps(result)
             try:
                 result = tool_ctx.recipes.load_and_validate(
                     name,
@@ -426,6 +462,7 @@ async def open_kitchen(
                     suppressed=suppressed,
                     resolved_defaults=_defaults,
                     ingredient_overrides=_merged_overrides,
+                    defer_unresolved=not _user_overrides_present,
                 )
             except ProcessStaleError as exc:
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)

@@ -262,18 +262,21 @@ def _build_active_recipe(
 def _prune_skipped_steps(
     recipe: Any,
     ingredient_overrides: dict[str, str] | None = None,
-) -> tuple[Any, dict[str, bool]]:
+    defer_unresolved: bool = False,
+) -> tuple[Any, dict[str, bool | None]]:
     """Evaluate skip_when_false guards and prune steps Python-side.
 
     Iterates all steps with a skip_when_false field. For each:
     - Truthy value: clears skip_when_false on the step (step becomes mandatory).
     - Falsy value: removes the step and repairs upstream routes.
+    - None (deferred): when defer_unresolved=True and the ingredient is absent from
+      overrides, the step is kept with skip_when_false cleared and resolution None.
 
     Returns a tuple of (pruned_recipe, resolutions) where resolutions maps
-    step_name -> bool (True = kept, False = pruned).
+    step_name -> bool | None (True = kept, False = pruned, None = deferred).
     """
     overrides = ingredient_overrides or {}
-    resolutions: dict[str, bool] = {}
+    resolutions: dict[str, bool | None] = {}
     working = recipe
 
     # Collect guarded steps from the original recipe (stable iteration order)
@@ -289,9 +292,15 @@ def _prune_skipped_steps(
 
         if ref.startswith("inputs."):
             ingredient_name = ref[len("inputs.") :]
-            # Resolve value: explicit override > recipe default > absent (falsy)
+            # Resolve value: explicit override > defer (if requested) > recipe default > absent
             if ingredient_name in overrides:
                 value = str(overrides[ingredient_name])
+            elif defer_unresolved:
+                resolutions[step_name] = None
+                new_steps = dict(working.steps)
+                new_steps[step_name] = dataclasses.replace(step, skip_when_false=None)
+                working = dataclasses.replace(working, steps=new_steps)
+                continue
             else:
                 ing = working.ingredients.get(ingredient_name)
                 value = (
@@ -374,7 +383,7 @@ def _prune_skipped_steps(
 
 def _resolve_skip_guards_in_content(
     raw: str,
-    resolutions: dict[str, bool],
+    resolutions: dict[str, bool | None],
     original_steps: dict[str, Any],
 ) -> str:
     """Apply skip_when_false resolution decisions to the raw YAML content string.
@@ -392,6 +401,15 @@ def _resolve_skip_guards_in_content(
         if step is None or not step.skip_when_false:
             continue
         ref = step.skip_when_false
+        if is_truthy is None:
+            if ref.startswith("inputs."):
+                ingredient_name = re.escape(ref[len("inputs.") :])
+                raw = re.sub(
+                    rf"(?m)^([ \t]+)skip_when_false:[ \t]+inputs\.{ingredient_name}[ \t]*\n",
+                    "",
+                    raw,
+                )
+            continue
         if not is_truthy:
             raw = _strip_step_block(raw, step_name)
             continue

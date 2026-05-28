@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
-pytestmark = [pytest.mark.layer("recipe")]
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
 def _make_recipe_with_skip_guard(step_name: str, ref: str, default: str | None) -> Recipe:

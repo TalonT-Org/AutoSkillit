@@ -48,6 +48,7 @@ def _get_ingredients_table(
             project_dir=cwd,
             recipe_info=recipe_info,
             resolved_defaults=resolve_ingredient_defaults(cwd),
+            defer_unresolved=True,
         ).get("ingredients_table")
     except Exception:
         logger.warning(
@@ -114,7 +115,10 @@ You are a pipeline orchestrator. Execute the recipe '{recipe_name}' step-by-step
    {_MCP_RETRY_INSTRUCTION.replace(chr(10), chr(10) + "   ")}
 2. {_display_step}
 3. Collect ingredient values conversationally from the user's response.
-4. Execute the pipeline steps.
+4. If the open_kitchen response includes deferred_guards, call
+   {mcp_prefix}open_kitchen(name='{recipe_name}', overrides={{collected_values}})
+   to resolve the deferred guards with user-supplied values.
+5. Execute the pipeline steps.
 
 During pipeline execution, only use AutoSkillit MCP tools:
 - Read, Grep, Glob (code investigation) — not used here because investigation

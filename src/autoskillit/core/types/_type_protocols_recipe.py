@@ -36,6 +36,7 @@ class RecipeRepository(Protocol):
         ingredient_overrides: dict[str, str] | None = None,
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
+        defer_unresolved: bool = False,
     ) -> dict[str, Any]:
         """Load and validate a recipe.
 

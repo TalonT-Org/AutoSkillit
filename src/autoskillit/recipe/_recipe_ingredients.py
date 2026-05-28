@@ -101,6 +101,12 @@ def format_ingredients_table(
     return _render_gfm_table(_GFM_INGREDIENT_COLUMNS, rows)
 
 
+class DeferredGuard(TypedDict):
+    step: str
+    ingredient: str
+    default: str | None
+
+
 class LoadRecipeResult(TypedDict, total=False):
     """Typed schema for the load_recipe handler → formatter boundary."""
 
@@ -118,6 +124,7 @@ class LoadRecipeResult(TypedDict, total=False):
     content_hash: str
     composite_hash: str
     recipe_version: str | None
+    deferred_guards: list[DeferredGuard]
 
 
 class OpenKitchenResult(TypedDict, total=False):
@@ -141,6 +148,7 @@ class OpenKitchenResult(TypedDict, total=False):
     content_hash: str
     composite_hash: str
     recipe_version: str | None
+    deferred_guards: list[DeferredGuard]
     # Post-return keys injected by open_kitchen handler (4 keys)
     success: bool
     kitchen: str

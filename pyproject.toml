@@ -355,6 +355,12 @@ ignore_imports = [
     # _dispatch_reaper calls kill_process_tree for orphan reaping; psutil is non-stdlib
     # so the reaper cannot live in core/. This mirrors the workspace path-utility exception.
     "autoskillit.fleet._dispatch_reaper -> autoskillit.execution",
+    # _run_dispatch enforces config-authoritative ingredient injection at dispatch time.
+    # apply_config_authoritative_overrides lives in config/ to share resolve_ingredient_defaults
+    # without duplication. The import is deferred (function-body) and deliberate — it is the
+    # narrowest place where both the recipe schema and config defaults are simultaneously
+    # available. Do not expand fleet's config access beyond this single call site.
+    "autoskillit.fleet._api -> autoskillit.config.ingredient_defaults",
 ]
 
 # IL-011 | _dag_ops: shared DAG primitives with no planner-internal imports

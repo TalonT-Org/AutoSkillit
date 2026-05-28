@@ -231,3 +231,14 @@ Before creating the diagram, verify:
 - [ ] Every result slot has been classified and assigned a verdict
 - [ ] Every BOTH verdict has a documented placement recommendation
 - [ ] No `yaml:figure-spec` emitted for TABLE-only result slots
+
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-chart-select` - For data-type-driven chart type selection
+- `/autoskillit:vis-lens-caption-annot` - For caption and annotation quality checks
+- `/autoskillit:vis-lens-story-arc` - For narrative arc and color consistency

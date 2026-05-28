@@ -236,3 +236,14 @@ Before creating the diagram, verify:
 - [ ] Every failing colormap (jet, rainbow) is explicitly flagged as FAIL
 - [ ] Every color-distinguished series has been checked for redundant encoding
 - [ ] Every font size below 8pt has been flagged as WARNING
+
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-always-on` - For persistent display rule enforcement
+- `/autoskillit:vis-lens-antipattern` - For common visualization anti-pattern detection
+- `/autoskillit:vis-lens-caption-annot` - For caption and annotation quality checks

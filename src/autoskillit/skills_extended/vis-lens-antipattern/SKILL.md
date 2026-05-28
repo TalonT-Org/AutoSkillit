@@ -275,3 +275,14 @@ Before creating the diagram, verify:
 - [ ] All 16 anti-patterns were checked for each figure
 - [ ] Findings are sorted critical-first
 - [ ] Each yaml:figure-spec has `anti_patterns` field populated
+
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-always-on` - For persistent display rule enforcement
+- `/autoskillit:vis-lens-chart-select` - For data-type-driven chart type selection
+- `/autoskillit:vis-lens-uncertainty` - For statistical uncertainty visualization

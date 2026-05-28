@@ -227,3 +227,14 @@ Before creating the diagram, verify:
 - [ ] Global color map table is complete before creating the diagram
 - [ ] Every color inconsistency has been flagged
 - [ ] Every redundant figure pair has been identified
+
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-figure-table` - For figure versus table placement decisions
+- `/autoskillit:vis-lens-temporal` - For time-series and training curve analysis
+- `/autoskillit:vis-lens-multi-compare` - For multi-condition comparison layouts

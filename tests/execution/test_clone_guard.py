@@ -117,9 +117,23 @@ class TestIsWorktreeSkillNegative:
 async def test_snapshot_clone_state_captures_sha(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="abc123\n"))
+    porcelain = f"worktree {tmp_path}\nHEAD abc123\nbranch refs/heads/main\n"
+    runner.push(_git_result(stdout=porcelain))
     snapshot = await snapshot_clone_state(str(tmp_path), runner)
     assert snapshot is not None
     assert snapshot.head_sha == "abc123"
+    assert snapshot.worktree_set == frozenset()
+
+
+@pytest.mark.anyio
+async def test_snapshot_clone_state_worktree_list_failure(tmp_path):
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="abc123\n"))
+    runner.push(_git_result(returncode=128))
+    snapshot = await snapshot_clone_state(str(tmp_path), runner)
+    assert snapshot is not None
+    assert snapshot.head_sha == "abc123"
+    assert snapshot.worktree_set is None
 
 
 # ---------------------------------------------------------------------------
@@ -881,3 +895,212 @@ class TestDeriveExcludePrefix:
 
     def test_uses_first_dir(self, tmp_path):
         assert derive_exclude_prefix([tmp_path / "a", tmp_path / "b"], tmp_path) == "a/"
+
+
+# ---------------------------------------------------------------------------
+# T22: guard fires when worktree_path is None despite real worktree created
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_guard_fires_when_worktree_path_none_despite_real_worktree(tmp_path):
+    runner = MockSubprocessRunner()
+    wt_dir = tmp_path / "worktrees" / "impl-fix"
+    wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
+
+    porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
+
+    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    skill_result = _make_skill_result(success=False, worktree_path=None)
+
+    runner.push(_git_result(stdout=porcelain_post))
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
+    )
+    assert not reverted
+    assert result.worktree_path == str(wt_dir)
+
+
+# ---------------------------------------------------------------------------
+# T23: snapshot captures worktree set
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_snapshot_captures_worktree_set(tmp_path):
+    runner = MockSubprocessRunner()
+    runner.push(_git_result(stdout="abc123\n"))
+    porcelain = (
+        f"worktree {tmp_path}\n"
+        "HEAD abc123\n"
+        "branch refs/heads/main\n"
+        "\n"
+        f"worktree {tmp_path}/worktrees/impl-a\n"
+        "HEAD def456\n"
+        "branch refs/heads/impl-a\n"
+    )
+    runner.push(_git_result(stdout=porcelain))
+
+    snapshot = await snapshot_clone_state(str(tmp_path), runner)
+    assert snapshot is not None
+    assert snapshot.head_sha == "abc123"
+    assert snapshot.worktree_set == frozenset({f"{tmp_path}/worktrees/impl-a"})
+
+
+# ---------------------------------------------------------------------------
+# T24: worktree recovery requires worktree skill
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_worktree_recovery_requires_worktree_skill(tmp_path):
+    runner = MockSubprocessRunner()
+    wt_dir = tmp_path / "worktrees" / "impl-fix"
+    wt_dir.mkdir(parents=True)
+
+    porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
+    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    skill_result = _make_skill_result(success=True, worktree_path=None)
+
+    runner.push(_git_result(stdout=porcelain_post))
+    runner.push(_git_result(stdout="abc123\n"))
+    runner.push(_git_result(stdout=""))
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:investigate foo",
+        policy=build_clone_guard_policy(
+            readonly_skill=True,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=False,
+        ),
+    )
+    assert result.worktree_path is None
+
+
+# ---------------------------------------------------------------------------
+# T25: recovered worktree path is validated
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_recovered_worktree_path_is_validated(tmp_path):
+    runner = MockSubprocessRunner()
+    wt_dir = tmp_path / "worktrees" / "impl-fix"
+    wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
+
+    porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
+    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    skill_result = _make_skill_result(success=False, worktree_path=None)
+
+    runner.push(_git_result(stdout=porcelain_post))
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
+    )
+    from autoskillit.core import validate_worktree_path
+
+    assert result.worktree_path is not None
+    assert result.worktree_path == str(wt_dir)
+    assert validate_worktree_path(result.worktree_path) is not None
+
+
+# ---------------------------------------------------------------------------
+# T26: recovery skipped when snapshot worktree_set is None
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_worktree_recovery_skipped_when_snapshot_worktree_set_none(tmp_path):
+    runner = MockSubprocessRunner()
+    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=None)
+    skill_result = _make_skill_result(success=False, worktree_path=None)
+
+    runner.push(_git_result(stdout="def456\n"))
+    runner.push(_git_result(stdout=" M file.py\n"))
+    runner.push(_git_result())
+    runner.push(_git_result())
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
+    )
+    assert reverted
+    assert result.worktree_path is None
+
+
+# ---------------------------------------------------------------------------
+# T27: worktree recovery on success path with missing token
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_worktree_recovery_on_success_path(tmp_path):
+    runner = MockSubprocessRunner()
+    wt_dir = tmp_path / "worktrees" / "impl-fix"
+    wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-fix\n")
+
+    porcelain_post = f"worktree {tmp_path}\n\nworktree {wt_dir}\n"
+    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    skill_result = _make_skill_result(success=True, worktree_path=None, exit_code=0)
+
+    runner.push(_git_result(stdout=porcelain_post))
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
+    )
+    assert not reverted
+    assert result.worktree_path == str(wt_dir)
+
+
+# ---------------------------------------------------------------------------
+# T28: validate_worktree_path accepts dir without verify_git, rejects with it
+# ---------------------------------------------------------------------------
+def test_validate_worktree_path_verify_git_rejects_non_worktree_dir(tmp_path):
+    from autoskillit.core import validate_worktree_path
+
+    regular_dir = tmp_path / "not-a-worktree"
+    regular_dir.mkdir()
+
+    assert validate_worktree_path(regular_dir) is not None
+    assert validate_worktree_path(regular_dir, verify_git=True) is None

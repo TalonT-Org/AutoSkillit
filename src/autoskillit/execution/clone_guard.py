@@ -27,6 +27,7 @@ from autoskillit.core import (
     RetryReason,
     SkillResult,
     get_logger,
+    validate_worktree_path,
 )
 
 if TYPE_CHECKING:
@@ -96,6 +97,7 @@ class CloneSnapshot:
     """Pre-session state of the clone directory."""
 
     head_sha: str
+    worktree_set: frozenset[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,8 +159,48 @@ def is_clone_commit_skill(skill_command: str) -> bool:
     return any(name in skill_command for name in CLONE_COMMIT_SKILLS)
 
 
+def _parse_worktree_list(stdout: str) -> list[str]:
+    """Parse ``git worktree list --porcelain`` output into linked worktree paths.
+
+    Skips the first entry (main worktree) — only returns linked worktrees.
+    """
+    paths: list[str] = []
+    first = True
+    for line in stdout.splitlines():
+        if line.startswith("worktree "):
+            if first:
+                first = False
+                continue
+            paths.append(line.split(" ", 1)[1].strip())
+    return paths
+
+
+async def _detect_new_worktrees(
+    pre_worktree_set: frozenset[str],
+    cwd: str,
+    runner: SubprocessRunner,
+) -> list[str]:
+    result = await runner(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
+    if result.returncode != 0:
+        return []
+    current = _parse_worktree_list(result.stdout)
+    return [p for p in current if p not in pre_worktree_set]
+
+
+def _recover_worktree_path(new_worktrees: list[str]) -> str | None:
+    for path in new_worktrees:
+        validated = validate_worktree_path(path, verify_git=True)
+        if validated is not None:
+            return validated.path
+    return None
+
+
 async def snapshot_clone_state(cwd: str, runner: SubprocessRunner) -> CloneSnapshot | None:
-    """Capture the clone's HEAD SHA before a worktree-skill session.
+    """Capture the clone's HEAD SHA and worktree set before a session.
 
     Returns None on failure (graceful degradation — guard simply won't activate).
     """
@@ -174,8 +216,22 @@ async def snapshot_clone_state(cwd: str, runner: SubprocessRunner) -> CloneSnaps
     if not head_sha:
         logger.debug("snapshot_clone_state_empty_sha")
         return None
-    logger.debug("snapshot_clone_state_captured", head_sha=head_sha)
-    return CloneSnapshot(head_sha=head_sha)
+
+    wt_result = await runner(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
+    wt_set: frozenset[str] | None = None
+    if wt_result.returncode == 0:
+        wt_set = frozenset(_parse_worktree_list(wt_result.stdout))
+
+    logger.debug(
+        "snapshot_clone_state_captured",
+        head_sha=head_sha,
+        worktree_count=len(wt_set) if wt_set is not None else -1,
+    )
+    return CloneSnapshot(head_sha=head_sha, worktree_set=wt_set)
 
 
 def _status_path_under_prefix(status_line: str, prefix: str) -> bool:
@@ -341,6 +397,23 @@ async def check_and_revert_clone_contamination(
     """
     if snapshot is None:
         return skill_result, False
+
+    if (
+        skill_result.worktree_path is None
+        and is_worktree_skill(skill_command)
+        and snapshot.worktree_set is not None
+    ):
+        new_worktrees = await _detect_new_worktrees(snapshot.worktree_set, cwd, runner)
+        if new_worktrees:
+            recovered = _recover_worktree_path(new_worktrees)
+            if recovered:
+                logger.info(
+                    "worktree_path_recovered_from_git",
+                    recovered_path=recovered,
+                    extraction_status="failed",
+                )
+                skill_result = dataclasses.replace(skill_result, worktree_path=recovered)
+
     if not policy.should_fire(skill_result.success):
         return skill_result, False
     if skill_result.worktree_path is not None:

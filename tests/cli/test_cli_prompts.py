@@ -820,4 +820,5 @@ def test_build_open_kitchen_prompt_includes_post_dispatch_diagnostics():
     prompt = _build_open_kitchen_prompt(DIRECT_PREFIX)
     assert "health_report" in prompt
     assert "POST-DISPATCH DIAGNOSTICS" in prompt
-    assert "confirmed_bug" in prompt or "anomaly" in prompt
+    assert "confirmed_bug" in prompt
+    assert "anomaly" in prompt

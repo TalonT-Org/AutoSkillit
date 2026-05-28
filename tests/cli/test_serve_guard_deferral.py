@@ -46,6 +46,7 @@ class TestServeGuardDeferral:
 
         elapsed = anyio.current_time() - started_at
         assert elapsed >= 1.5
+        assert not _active[0], "dispatch_activity_check should report inactive after deferral"
 
     @pytest.mark.anyio
     async def test_cancels_immediately_when_no_dispatch(self) -> None:
@@ -89,4 +90,4 @@ class TestServeGuardDeferral:
             )
 
         elapsed = anyio.current_time() - started_at
-        assert 2.0 <= elapsed < 4.0
+        assert 2.0 <= elapsed < 3.0

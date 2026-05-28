@@ -931,7 +931,7 @@ class TestCodexBackendVersion:
             result.stderr = ""
             return result
 
-        monkeypatch.setattr("autoskillit.execution.backends.codex.subprocess", "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         assert CodexBackend().version() == "1.2.3"
 
     def test_version_stderr_fallback_when_stdout_empty(
@@ -943,21 +943,21 @@ class TestCodexBackendVersion:
             result.stderr = "1.2.3-stderr\n"
             return result
 
-        monkeypatch.setattr("autoskillit.execution.backends.codex.subprocess", "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         assert CodexBackend().version() == "1.2.3-stderr"
 
     def test_version_returns_empty_on_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def fake_run(cmd, *, capture_output, text, timeout):
             raise subprocess.TimeoutExpired(cmd, timeout)
 
-        monkeypatch.setattr("autoskillit.execution.backends.codex.subprocess", "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         assert CodexBackend().version() == ""
 
     def test_version_returns_empty_on_oserror(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def fake_run(cmd, *, capture_output, text, timeout):
             raise OSError("not found")
 
-        monkeypatch.setattr("autoskillit.execution.backends.codex.subprocess", "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         assert CodexBackend().version() == ""
 
     def test_version_delegates_to_version_cmd(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -971,7 +971,7 @@ class TestCodexBackendVersion:
             result.stderr = ""
             return result
 
-        monkeypatch.setattr("autoskillit.execution.backends.codex.subprocess", "run", fake_run)
+        monkeypatch.setattr(subprocess, "run", fake_run)
         result = CodexBackend().version()
         assert captured_cmd == ["codex", "--version"]
         assert result == "v1"

@@ -161,3 +161,187 @@ class TestMissingRequiredIngredient:
         )
 
         assert "task" not in captured["ingredients"]
+
+
+class TestConfigAuthoritativeIngredientInjection:
+    @pytest.mark.anyio
+    async def test_config_authoritative_base_branch_injected_at_dispatch(
+        self, tool_ctx, monkeypatch
+    ):
+        """base_branch with authority='config' is injected from config even when not supplied."""
+        from unittest.mock import patch
+
+        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+        from tests.fleet._helpers import (
+            _make_recipe_info,
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+        )
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "base_branch": RecipeIngredient(
+                        description="Merge target", default="", authority="config"
+                    )
+                },
+            ),
+        )
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+        captured = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={"base_branch": "develop"},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert captured["ingredients"]["base_branch"] == "develop"
+
+    @pytest.mark.anyio
+    async def test_config_authoritative_base_branch_overrides_llm_value(
+        self, tool_ctx, monkeypatch
+    ):
+        """base_branch with authority='config' overrides LLM-supplied value."""
+        from unittest.mock import patch
+
+        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+        from tests.fleet._helpers import (
+            _make_recipe_info,
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+        )
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "base_branch": RecipeIngredient(
+                        description="Merge target", default="", authority="config"
+                    )
+                },
+            ),
+        )
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+        captured = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={"base_branch": "develop"},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={"base_branch": "main"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert captured["ingredients"]["base_branch"] == "develop"
+
+    @pytest.mark.anyio
+    async def test_config_authoritative_injection_skips_undeclared_ingredients(self, tool_ctx):
+        """Config injection only applies to ingredients the recipe declares."""
+        from unittest.mock import patch
+
+        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+        from tests.fleet._helpers import (
+            _make_recipe_info,
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+        )
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info("test-recipe")
+        repo.add_recipe("test-recipe", recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "other_key": RecipeIngredient(description="other", default="x"),
+                },
+            ),
+        )
+        tool_ctx.recipes = repo
+        tool_ctx.executor = InMemoryHeadlessExecutor()
+
+        captured = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={"base_branch": "develop"},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert "base_branch" not in captured["ingredients"]

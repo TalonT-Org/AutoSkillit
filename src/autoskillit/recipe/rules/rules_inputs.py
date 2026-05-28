@@ -534,3 +534,60 @@ def _check_ingredient_condition_value_domain(
                         )
                     )
     return findings
+
+
+_KNOWN_CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
+    {
+        "source_dir",
+        "base_branch",
+        "local_review_rounds",
+        "adversarial_review_level",
+        "post_run_diagnostics",
+        "is_fleet_dispatch",
+        "dispatch_id",
+    }
+)
+
+
+@semantic_rule(
+    name="config-authority-requires-resolve-source",
+    description=(
+        "Ingredients with authority='config' must use a key resolvable"
+        " by resolve_ingredient_defaults"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, ing in ctx.recipe.ingredients.items():
+        if getattr(ing, "authority", None) != "config":
+            continue
+        if name not in _KNOWN_CONFIG_AUTHORITY_KEYS:
+            findings.append(
+                RuleFinding(
+                    rule="config-authority-requires-resolve-source",
+                    severity=Severity.ERROR,
+                    step_name="(top-level)",
+                    message=(
+                        f"Ingredient {name!r} declares authority='config' but is not a key "
+                        f"returned by resolve_ingredient_defaults(). "
+                        f"Known config-authoritative keys: "
+                        f"{sorted(_KNOWN_CONFIG_AUTHORITY_KEYS)}. "
+                        "Remove the authority field or use a supported key."
+                    ),
+                )
+            )
+        if getattr(ing, "required", False) and getattr(ing, "default", None) is None:
+            findings.append(
+                RuleFinding(
+                    rule="config-authority-requires-resolve-source",
+                    severity=Severity.WARNING,
+                    step_name="(top-level)",
+                    message=(
+                        f"Ingredient {name!r} declares authority='config' and required=True "
+                        "with no default — config always supplies the value, so required=True "
+                        "is redundant."
+                    ),
+                )
+            )
+    return findings

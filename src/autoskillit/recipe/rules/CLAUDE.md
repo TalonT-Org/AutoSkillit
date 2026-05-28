@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (46 rule files).
+Semantic validation rule modules for recipe analysis (48 rule files).
 
 ## Files
 
@@ -48,6 +48,7 @@ Semantic validation rule modules for recipe analysis (46 rule files).
 | `rules_loop_progress.py` | Loop progress tracking: run_skill steps in cycles must capture declared outputs |
 | `rules_skill_content.py` | Undefined bash placeholder detection in SKILL.md |
 | `rules_skills.py` | `skill_command` resolvability rules |
+| `rules_step_naming.py` | Step-key vs invoked-skill collision detection |
 | `rules_skip_inviting_notes.py` | Flags note: fields with skip-inviting phrases ('never blocks', 'best-effort', 'optional: true') on optional steps |
 | `rules_temp_path.py` | Rejects bare `{{AUTOSKILLIT_TEMP}}/` without scope prefix |
 | `rules_tools.py` | MCP tool name validity (must be in known tool sets) |
@@ -56,4 +57,4 @@ Semantic validation rule modules for recipe analysis (46 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 46 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 47 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

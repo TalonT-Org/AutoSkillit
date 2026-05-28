@@ -848,8 +848,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 11,
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
-        "recipe/rules": 47,
-        "server/tools": 22,
+        "recipe/rules": 48,
+        "server/tools": 23,  # _auto_overrides.py added for shared _build_auto_overrides() factory
         "hooks/guards": 23,  # artifact_download_guard.py added for gh run/release download guard
     }
     violations: list[str] = []
@@ -1264,7 +1264,7 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
     not SkillLister. That is checked separately below.
     """
     lister_targets = {
-        "src/autoskillit/recipe/rules/rules_skills.py",
+        "src/autoskillit/recipe/_skill_helpers.py",
         "src/autoskillit/recipe/_api.py",
     }
     src_root = Path(__file__).resolve().parents[2]

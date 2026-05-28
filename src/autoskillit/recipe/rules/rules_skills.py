@@ -4,20 +4,11 @@ from __future__ import annotations
 
 import regex as re
 
-from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_TOOLS, Severity, SkillLister
+from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._skill_helpers import _get_skill_category_map
+from autoskillit.recipe._skill_helpers import _get_bundled_skill_names, _get_skill_category_map
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-
-
-def _get_bundled_skill_names(lister: SkillLister | None = None) -> frozenset[str]:
-    if lister is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
-
-        lister = DefaultSkillResolver()
-    return frozenset(s.name for s in lister.list_all())
-
 
 _SKILL_TOKEN_RE = re.compile(r"/autoskillit:(\S+)")
 

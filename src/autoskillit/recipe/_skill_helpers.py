@@ -12,3 +12,12 @@ def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, froz
 
         lister = DefaultSkillResolver()
     return {s.name: s.categories for s in lister.list_all()}
+
+
+def _get_bundled_skill_names(lister: SkillLister | None = None) -> frozenset[str]:
+    """Return the set of all bundled skill names."""
+    if lister is None:
+        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+        lister = DefaultSkillResolver()
+    return frozenset(s.name for s in lister.list_all())

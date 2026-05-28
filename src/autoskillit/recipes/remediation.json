@@ -243,17 +243,17 @@
         "plan_parts": "${{ result.plan_parts }}"
       },
       "retries": 0,
-      "on_success": "review",
+      "on_success": "review_approach",
       "on_failure": "release_issue_failure",
       "note": "Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically into plan_parts[].\n"
     },
-    "review": {
+    "review_approach": {
       "tool": "run_skill",
       "model": "",
       "with": {
         "skill_command": "/autoskillit:review-approach ${{ context.plan_path }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "review",
+        "step_name": "review_approach",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-approach"
       },
       "capture": {

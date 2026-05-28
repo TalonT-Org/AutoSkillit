@@ -157,6 +157,7 @@ from autoskillit.recipe.rules import rules_skills as _rules_skills  # noqa: E402
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_skip_inviting_notes as _rules_skip_inviting_notes,
 )
+from autoskillit.recipe.rules import rules_step_naming as _rules_step_naming  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_temp_path as _rules_temp_path  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_verdict as _rules_verdict  # noqa: E402 F401

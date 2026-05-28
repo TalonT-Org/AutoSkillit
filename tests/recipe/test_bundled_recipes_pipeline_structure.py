@@ -92,10 +92,10 @@ def _assert_ci_steps(recipe) -> None:
     )
 
 
-# Maps recipe name → expected on_context_limit value for the review step.
-# review step routes to verify in the implementation variants (can skip to next step)
-# but to dry_walkthrough in remediation (review is optional before dry run).
-_REVIEW_STEP_OCL = {
+# Maps recipe name → expected on_context_limit value for the review_approach step.
+# review_approach step routes to verify in the implementation variants (can skip to next step)
+# but to dry_walkthrough in remediation (review_approach is optional before dry run).
+_REVIEW_APPROACH_STEP_OCL = {
     "implementation": "verify",
     "implementation-groups": "verify",
     "remediation": "dry_walkthrough",
@@ -226,18 +226,18 @@ class TestPipelineVariantInvariants:
         step = recipe.steps["ci_conflict_fix"]
         assert step.skip_when_false == "inputs.open_pr"
 
-    def test_review_step_has_skip_when_false(self, recipe) -> None:
-        step = recipe.steps["review"]
+    def test_review_approach_step_has_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["review_approach"]
         assert step.skip_when_false == "inputs.review_approach"
 
-    def test_review_step_has_retries(self, recipe) -> None:
-        step = recipe.steps["review"]
+    def test_review_approach_step_has_retries(self, recipe) -> None:
+        step = recipe.steps["review_approach"]
         assert step.retries >= 1
 
-    def test_review_step_has_on_context_limit(self, recipe) -> None:
-        """review step on_context_limit differs per variant (verify vs dry_walkthrough)."""
-        step = recipe.steps["review"]
-        expected = _REVIEW_STEP_OCL[recipe.name]
+    def test_review_approach_step_has_on_context_limit(self, recipe) -> None:
+        """review_approach step on_context_limit differs per recipe variant."""
+        step = recipe.steps["review_approach"]
+        expected = _REVIEW_APPROACH_STEP_OCL[recipe.name]
         assert step.on_context_limit == expected
 
     def test_audit_impl_has_on_context_limit(self, recipe) -> None:
@@ -272,9 +272,9 @@ class TestImplementationPipelineStructure:
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "implementation.yaml")
 
-    def test_ip2_review_step_captures_review_path(self, recipe) -> None:
-        """T_IP2: review step has capture containing key review_path."""
-        assert "review_path" in recipe.steps["review"].capture
+    def test_ip2_review_approach_step_captures_review_path(self, recipe) -> None:
+        """T_IP2: review_approach step has capture containing key review_path."""
+        assert "review_path" in recipe.steps["review_approach"].capture
 
     def test_ip3_audit_impl_has_verdict_and_remediation_capture_and_on_result(
         self,

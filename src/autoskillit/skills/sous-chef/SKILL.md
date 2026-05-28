@@ -205,18 +205,23 @@ When the user provides **more than one issue or task** in a single request:
       emitted path.
 
    b. **Read the execution map.** Parse the JSON to extract `groups`, `merge_order`,
-      and per-issue `review_approach_recommended` fields. Build a set
-      `review_approach_issues` containing the issue numbers where
-      `review_approach_recommended` is true.
+      and per-issue `review_approach_recommended` and `investigation_complete` fields.
+      Build a set `review_approach_issues` containing the issue numbers where
+      `review_approach_recommended` is true. Build a set `investigation_complete_issues`
+      containing the issue numbers where `investigation_complete` is true.
 
    c. **Dispatch groups in order.** For each group in ascending `group` number:
       - If `parallel: true` → launch all issues in the group as independent pipeline
         sessions simultaneously, using the wavefront scheduling rule (defined in the section below).
         When dispatching, include `review_approach: "true"` in ingredients for issues
-        whose issue number appears in `review_approach_issues`.
+        whose issue number appears in `review_approach_issues` and `investigate: "false"`
+        in ingredients for issues whose issue number appears in `investigation_complete_issues`
+        and the user has not explicitly overridden the `investigate` ingredient.
       - If `parallel: false` → run the group's issues one at a time in sequence.
         When dispatching, include `review_approach: "true"` in ingredients for issues
-        whose issue number appears in `review_approach_issues`.
+        whose issue number appears in `review_approach_issues` and `investigate: "false"`
+        in ingredients for issues whose issue number appears in `investigation_complete_issues`
+        and the user has not explicitly overridden the `investigate` ingredient.
 
    d. **Merge-wait between groups.** Group N+1 must NOT begin cloning until ALL of
       Group N's PRs have merged to the base branch. This ensures every group's clones

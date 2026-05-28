@@ -44,7 +44,7 @@ class TestCoreSubpackages:
         assert actual == expected
 
     def test_type_constants_split_completeness(self):
-        """Verify __all__ union across all _type_constants*.py modules equals 70 symbols."""
+        """Verify __all__ union across all _type_constants*.py modules equals 71 symbols."""
         from autoskillit.core.types._type_constants import __all__ as remaining
         from autoskillit.core.types._type_constants_env import __all__ as env
         from autoskillit.core.types._type_constants_features import __all__ as features
@@ -54,7 +54,7 @@ class TestCoreSubpackages:
         assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
             "Duplicate symbols across split modules"
         )
-        assert len(combined) == 70, f"Expected 70 symbols total, got {len(combined)}"
+        assert len(combined) == 71, f"Expected 71 symbols total, got {len(combined)}"
 
     def test_core_runtime_is_package(self):
         assert (SRC / "core" / "runtime" / "__init__.py").exists()

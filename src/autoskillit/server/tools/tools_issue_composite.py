@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from autoskillit.core import (
+    INVESTIGATION_COMPLETE_MARKER,
     REVIEW_APPROACH_MARKER,
     _parse_issue_ref,
     get_logger,
@@ -40,10 +41,10 @@ async def claim_and_resolve_issue(
     Combines get_issue_title + claim_issue into a single orchestrator call.
 
     Returns JSON with: success, claimed (bool), issue_number, issue_title,
-    issue_slug, timings. When claimed=false, issue_number/title/slug are still
-    returned so the orchestrator can use them in logging or abort paths.
-    When allow_reentry=True and the label is already present, returns
-    claimed=True with reentry=True.
+    issue_slug, review_approach_recommended, investigation_complete, timings.
+    When claimed=false, issue_number/title/slug are still returned so the
+    orchestrator can use them in logging or abort paths. When allow_reentry=True
+    and the label is already present, returns claimed=True with reentry=True.
 
     Args:
         issue_url: Full GitHub issue URL or shorthand (owner/repo#42).
@@ -109,6 +110,7 @@ async def claim_and_resolve_issue(
 
             issue_body = fetch_result.get("body") or ""
             review_approach_recommended = REVIEW_APPROACH_MARKER in issue_body
+            investigation_complete = INVESTIGATION_COMPLETE_MARKER in issue_body
 
             issue_state = fetch_result.get("state", "open").lower()
             if issue_state == "closed":
@@ -122,6 +124,7 @@ async def claim_and_resolve_issue(
                         "issue_title": issue_title,
                         "issue_slug": issue_slug,
                         "review_approach_recommended": review_approach_recommended,
+                        "investigation_complete": investigation_complete,
                         "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                     }
                 )
@@ -147,6 +150,7 @@ async def claim_and_resolve_issue(
                         "issue_title": issue_title,
                         "issue_slug": issue_slug,
                         "review_approach_recommended": review_approach_recommended,
+                        "investigation_complete": investigation_complete,
                         "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                     }
                 )
@@ -162,6 +166,7 @@ async def claim_and_resolve_issue(
                         "issue_slug": issue_slug,
                         "label": effective_label,
                         "review_approach_recommended": review_approach_recommended,
+                        "investigation_complete": investigation_complete,
                         "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                     }
                 )
@@ -195,6 +200,8 @@ async def claim_and_resolve_issue(
                         "issue_number": issue_number,
                         "issue_title": issue_title,
                         "issue_slug": issue_slug,
+                        "review_approach_recommended": review_approach_recommended,
+                        "investigation_complete": investigation_complete,
                         "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                     }
                 )
@@ -208,6 +215,7 @@ async def claim_and_resolve_issue(
                     "issue_slug": issue_slug,
                     "label": effective_label,
                     "review_approach_recommended": review_approach_recommended,
+                    "investigation_complete": investigation_complete,
                     "timings": {"fetch_title_ms": fetch_title_ms, "claim_ms": claim_ms},
                 }
             )

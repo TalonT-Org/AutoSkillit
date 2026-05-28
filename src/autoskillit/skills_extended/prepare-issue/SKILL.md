@@ -279,6 +279,40 @@ gh issue view N --json number,title,body,labels,url
 
 Use the fetched data as the issue context.
 
+### Step 5a: Inject Investigation-Complete Marker (conditional)
+
+After creating or adopting the issue, detect whether the description originates from a completed investigation:
+
+**Detection criteria** (any match triggers injection):
+1. The `description` argument is a file path under an `investigate` directory matching `investigation_*.md`
+2. OR the `description` text contains markers characteristic of an investigation report:
+   `## Root Cause`, `## Affected Components`, `## Recommendations`, or `investigation_path =`
+
+When detected:
+1. Fetch the current issue body:
+   ```bash
+   ts=$(date +%Y-%m-%d_%H%M%S)
+   EDIT_BODY_FILE="{{AUTOSKILLIT_TEMP}}/prepare-issue/edit_body_${ts}.md"
+   mkdir -p "{{AUTOSKILLIT_TEMP}}/prepare-issue"
+   gh issue view {issue_number} --json body -q .body > "${EDIT_BODY_FILE}"
+   ```
+2. Append an `## Investigation` section containing the marker and the investigation context:
+   ```bash
+   printf '\n\n## Investigation\n\n<!-- investigation_complete: true -->\n' >> "${EDIT_BODY_FILE}"
+   printf '> Prior investigation completed interactively. See below for root cause analysis.\n\n' >> "${EDIT_BODY_FILE}"
+   ```
+3. If the description is a file path, append the file contents (the investigation report):
+   ```bash
+   cat "${description}" >> "${EDIT_BODY_FILE}"
+   ```
+4. Update the issue body:
+   ```bash
+   gh issue edit {issue_number} --body-file "${EDIT_BODY_FILE}"
+   sleep 1  # Rate-limit discipline
+   ```
+
+If detection criteria are not met, skip this step entirely.
+
 ### Step 6: LLM Classification
 
 **Shortcut — Validated audit report:** When `is_validated_report = true` (set in Step 1b),

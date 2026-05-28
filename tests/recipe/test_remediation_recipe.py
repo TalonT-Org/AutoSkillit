@@ -217,3 +217,31 @@ def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
         "register_clone_unconfirmed.on_failure must route toward done_unconfirmed, "
         f"got {step.on_failure!r}"
     )
+
+
+# T7: investigate step has optional: true and skip_when_false
+def test_remediation_investigate_step_is_skippable(recipe) -> None:
+    """investigate step must have optional: true and skip_when_false: inputs.investigate."""
+    step = recipe.steps["investigate"]
+    assert step.optional is True
+    assert step.skip_when_false == "inputs.investigate"
+
+
+# T8: investigate ingredient exists with auto default
+def test_remediation_has_investigate_ingredient(recipe) -> None:
+    """remediation recipe must have an investigate ingredient with default 'auto'."""
+    ing = recipe.ingredients["investigate"]
+    assert ing.default == "auto"
+
+
+# T9: bridge_investigation step exists and routes to rectify
+def test_remediation_has_bridge_investigation_step(recipe) -> None:
+    """remediation recipe must have a bridge_investigation step that routes to rectify."""
+    step = recipe.steps["bridge_investigation"]
+    assert step.on_success == "rectify"
+
+
+def test_remediation_investigate_routes_to_bridge(recipe) -> None:
+    """investigate step on_success must route to bridge_investigation."""
+    step = recipe.steps["investigate"]
+    assert step.on_success == "bridge_investigation"

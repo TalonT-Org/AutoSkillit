@@ -45,6 +45,10 @@
       "description": "Research approaches first",
       "default": "false"
     },
+    "investigate": {
+      "description": "Run the investigate step. \"auto\" (default) skips when the issue body contains an investigation-complete marker; \"true\" always runs; \"false\" always skips. When no issue_url is provided, \"auto\" resolves to \"true\" (always run) since there is no issue body to check.",
+      "default": "auto"
+    },
     "open_pr": {
       "description": "PR instead of direct merge",
       "default": "true"
@@ -191,6 +195,8 @@
     },
     "investigate": {
       "tool": "run_skill",
+      "optional": true,
+      "skip_when_false": "inputs.investigate",
       "model": "${{ 'opus[1m]' if inputs.depth == 'deep' else 'sonnet' }}",
       "with": {
         "skill_command": "/autoskillit:investigate ${{ '--depth deep ' if inputs.depth == 'deep' else '' }}${{ inputs.task }}",
@@ -202,16 +208,30 @@
       "capture": {
         "investigation_path": "${{ result.investigation_path }}"
       },
-      "on_success": "rectify",
+      "on_success": "bridge_investigation",
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
       "note": "ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the skill_command so the investigate skill can detect and fetch the issue itself: \"/autoskillit:investigate {task}\\n\\nGitHub Issue: {inputs.issue_url}\" The skill detects the URL pattern and calls fetch_github_issue internally. DEPTH: When inputs.depth == 'deep', passes --depth deep flag and sets model to opus[1m] for the main skill session. Subagents within the skill always use model: sonnet regardless of depth setting.\n"
+    },
+    "bridge_investigation": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "[ -n \"${{ context.investigation_path }}\" ] && [ -f \"${{ context.investigation_path }}\" ] && echo \"investigation_report=${{ context.investigation_path }}\" || { mkdir -p \"{{AUTOSKILLIT_TEMP}}/investigate\" && gh issue view ${{ context.issue_number }} --json body -q .body | tr -d '\\r' | awk '/^## Investigation/{p=1;next} p && /^## /{p=0} p{print}' > \"{{AUTOSKILLIT_TEMP}}/investigate/investigation_from_issue.md\" && echo \"investigation_report={{AUTOSKILLIT_TEMP}}/investigate/investigation_from_issue.md\"; }",
+        "cwd": "${{ context.work_dir }}",
+        "step_name": "bridge_investigation"
+      },
+      "capture": {
+        "effective_investigation_path": "${{ result.investigation_report }}"
+      },
+      "on_success": "rectify",
+      "on_failure": "rectify",
+      "note": "Resolves the effective investigation path for rectify. When investigate ran, context.investigation_path contains the report path — pass it through. When investigate was skipped (pruned by skip_when_false), investigation_path is empty — extract the ## Investigation section from the issue body instead. The effective_investigation_path context variable replaces investigation_path for consumption by rectify."
     },
     "rectify": {
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:rectify ${{ context.investigation_path }}",
+        "skill_command": "/autoskillit:rectify ${{ context.effective_investigation_path }}",
         "cwd": "${{ context.work_dir }}",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/rectify",
         "step_name": "rectify"

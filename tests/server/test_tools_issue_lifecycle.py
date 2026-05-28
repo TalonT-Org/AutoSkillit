@@ -653,3 +653,142 @@ async def test_enrich_issues_uses_project_dir_as_subprocess_cwd(tmp_path, monkey
         f"expected cwd={str(different_dir)!r}. "
         "The subprocess must run in project_dir, not cwd."
     )
+
+
+# ---------------------------------------------------------------------------
+# T4: claim_issue returns investigation_complete in all 5 paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_claim_issue_returns_investigation_complete_closed_path(
+    tool_ctx_kitchen_open,
+) -> None:
+    """investigation_complete: true in closed-issue path when marker present."""
+    issue_data = {
+        "success": True,
+        "state": "closed",
+        "labels": [],
+        "body": (
+            "## Investigation\n\n<!-- investigation_complete: true -->\n> Prior investigation."
+        ),
+    }
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+
+    result = json.loads(await claim_issue("https://github.com/owner/repo/issues/42"))
+    assert result["investigation_complete"] is True
+    assert "review_approach_recommended" in result
+
+
+@pytest.mark.anyio
+async def test_claim_issue_returns_investigation_complete_not_claimed(
+    tool_ctx_kitchen_open,
+) -> None:
+    """investigation_complete present in not-claimed path."""
+    issue_data = {
+        "success": True,
+        "state": "open",
+        "labels": [{"name": "autoskillit:in-progress"}],
+        "body": (
+            "## Investigation\n\n<!-- investigation_complete: true -->\n> Prior investigation."
+        ),
+    }
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+
+    result = json.loads(
+        await claim_issue(
+            "https://github.com/owner/repo/issues/42",
+            label="autoskillit:in-progress",
+            allow_reentry=False,
+        )
+    )
+    assert "investigation_complete" in result
+    assert "review_approach_recommended" in result
+
+
+@pytest.mark.anyio
+async def test_claim_issue_returns_investigation_complete_reentry(
+    tool_ctx_kitchen_open,
+) -> None:
+    """investigation_complete present in reentry path."""
+    issue_data = {
+        "success": True,
+        "state": "open",
+        "labels": [{"name": "autoskillit:in-progress"}],
+        "body": (
+            "## Investigation\n\n<!-- investigation_complete: true -->\n> Prior investigation."
+        ),
+    }
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+
+    result = json.loads(
+        await claim_issue(
+            "https://github.com/owner/repo/issues/42",
+            label="autoskillit:in-progress",
+            allow_reentry=True,
+        )
+    )
+    assert "investigation_complete" in result
+    assert result["investigation_complete"] is True
+
+
+@pytest.mark.anyio
+async def test_claim_issue_returns_investigation_complete_swap_failure(
+    tool_ctx_kitchen_open,
+) -> None:
+    """investigation_complete present in swap-failure path."""
+    issue_data = {
+        "success": True,
+        "state": "open",
+        "labels": [],
+        "body": (
+            "## Investigation\n\n<!-- investigation_complete: true -->\n> Prior investigation."
+        ),
+    }
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+    tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(
+        return_value={"success": False, "error": "label swap failed"}
+    )
+
+    result = json.loads(
+        await claim_issue(
+            "https://github.com/owner/repo/issues/42",
+            label="autoskillit:in-progress",
+        )
+    )
+    assert "investigation_complete" in result
+    assert result["investigation_complete"] is True
+    assert "review_approach_recommended" in result
+
+
+@pytest.mark.anyio
+async def test_claim_issue_returns_investigation_complete_success(
+    tool_ctx_kitchen_open,
+) -> None:
+    """investigation_complete present in success path."""
+    issue_data = {
+        "success": True,
+        "state": "open",
+        "labels": [],
+        "body": (
+            "## Investigation\n\n<!-- investigation_complete: true -->\n> Prior investigation."
+        ),
+    }
+    tool_ctx_kitchen_open.github_client = AsyncMock()
+    tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(return_value=issue_data)
+    tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(return_value={"success": True})
+    tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+
+    result = json.loads(
+        await claim_issue(
+            "https://github.com/owner/repo/issues/42",
+            label="autoskillit:in-progress",
+        )
+    )
+    assert "investigation_complete" in result
+    assert result["investigation_complete"] is True

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .paths import is_git_worktree
 from .types import AGENT_BACKEND_CODEX, CodingAgentBackend, ValidatedAddDir, ValidatedWorktreePath
 
 
@@ -74,9 +75,15 @@ def validate_project_local_skill_dir(
         return None
 
 
-def validate_worktree_path(path: Path | str) -> ValidatedWorktreePath | None:
+def validate_worktree_path(
+    path: Path | str,
+    *,
+    verify_git: bool = False,
+) -> ValidatedWorktreePath | None:
     """Validate a worktree path is absolute and exists. Returns None on failure."""
     p = Path(path) if isinstance(path, str) else path
     if not p.is_absolute() or not p.is_dir():
+        return None
+    if verify_git and not is_git_worktree(p):
         return None
     return ValidatedWorktreePath(path=str(p))

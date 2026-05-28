@@ -1087,3 +1087,15 @@ async def test_worktree_recovery_on_success_path(tmp_path):
     )
     assert not reverted
     assert result.worktree_path == str(wt_dir)
+
+
+# ---------------------------------------------------------------------------
+# T28: validate_worktree_path rejects non-worktree dir with verify_git
+# ---------------------------------------------------------------------------
+def test_validate_worktree_path_rejects_non_worktree_dir(tmp_path):
+    regular_dir = tmp_path / "not-a-worktree"
+    regular_dir.mkdir()
+    from autoskillit.core import validate_worktree_path
+
+    assert validate_worktree_path(regular_dir) is not None
+    assert validate_worktree_path(regular_dir, verify_git=True) is None

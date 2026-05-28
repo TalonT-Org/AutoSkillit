@@ -43,17 +43,17 @@ def _collect_all_route_targets(step: RecipeStep) -> set[str]:
     return targets
 
 
+def _step_block_pattern(escaped_name: str) -> str:
+    """Return the regex body matching a 2-space-indented YAML step block (no flags prefix)."""
+    return rf"^  {escaped_name}:[ \t]*\n(?:(?:  [ \t][^\n]*|[ \t]*)(?:\n|$))*"
+
+
 def _strip_step_block(raw: str, step_name: str) -> str:
     """Remove the entire YAML block for step_name from raw YAML content.
 
     Matches the step header line (2-space indent) and all deeper-indented child lines.
     """
-    escaped = re.escape(step_name)
-    return re.sub(
-        rf"(?m)^  {escaped}:[ \t]*\n(?:(?:  [ \t][^\n]*|[ \t]*)(?:\n|$))*",
-        "",
-        raw,
-    )
+    return re.sub(rf"(?m){_step_block_pattern(re.escape(step_name))}", "", raw)
 
 
 def _validate_no_dangling_routes(recipe: Recipe) -> list[str]:
@@ -394,9 +394,8 @@ def _resolve_skip_guards_in_content(
         if not is_truthy:
             raw = _strip_step_block(raw, step_name)
             continue
-        escaped = re.escape(step_name)
         raw = re.sub(
-            rf"(?m)^(  {escaped}:[ \t]*\n(?:(?:  [ \t][^\n]*|[ \t]*)(?:\n|$))*)",
+            rf"(?m)({_step_block_pattern(re.escape(step_name))})",
             lambda m: re.sub(r"(?m)^[ \t]+optional:[ \t]+(?:true|True)[ \t]*\n", "", m.group(0)),
             raw,
         )

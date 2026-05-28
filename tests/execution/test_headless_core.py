@@ -1457,6 +1457,19 @@ class TestExtractWorktreePath:
         )
         assert result == "/abs/worktrees/impl-first"
 
+    @pytest.mark.parametrize(
+        "token",
+        [
+            "**worktree_path:** /path/to/wt",
+            "worktree_path: /path/to/wt",
+            "WORKTREE_PATH = /path/to/wt",
+            "`worktree_path` = /path/to/wt",
+        ],
+        ids=["markdown-bold", "colon-separator", "uppercase", "backtick-wrapped"],
+    )
+    def test_extract_worktree_path_format_variants_return_none(self, token: str):
+        assert _extract_worktree_path([token]) is None
+
 
 class TestBuildSkillResultWorktreePath:
     """_build_skill_result extracts worktree_path on context exhaustion."""

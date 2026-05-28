@@ -26,7 +26,8 @@
     },
     "source_dir": {
       "description": "Absolute path to the repository root to analyze.",
-      "required": true
+      "required": true,
+      "authority": "config"
     },
     "planner_assess_review_approach": {
       "description": "When true, run planner-assess-review-approach after reconcile_deps to annotate WPs that would benefit from a review-approach research pass before implementation.\n",

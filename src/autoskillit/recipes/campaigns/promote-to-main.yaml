@@ -20,12 +20,14 @@ ingredients:
   source_dir:
     description: "Source repository path"
     required: true
+    authority: config
   batch_branch:
     description: "Integration branch to promote"
     default: "develop"
   base_branch:
     description: "Target branch for promotion PR"
     default: "main"
+    authority: config
   max_issues_per_l2:
     description: "Max issues per L2 food truck"
     default: "6"
@@ -38,6 +40,7 @@ ingredients:
     description: Run diagnostic analysis after pipeline completion
     default: "false"
     hidden: true
+    authority: config
   kitchen_id:
     description: Kitchen session identifier (auto-injected)
     default: ""

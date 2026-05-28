@@ -18,7 +18,8 @@
     },
     "base_branch": {
       "description": "Base branch for dependency analysis",
-      "default": "develop"
+      "default": "develop",
+      "authority": "config"
     }
   },
   "steps": {

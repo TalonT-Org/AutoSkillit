@@ -12,12 +12,14 @@ ingredients:
     description: Source repository
     required: false
     default: ""
+    authority: config
   run_name:
     description: Run name prefix
     default: "impl"
   base_branch:
     description: Merge target
     default: ""
+    authority: config
   review_approach:
     description: Research approaches first
     default: "false"
@@ -44,6 +46,7 @@ ingredients:
       GitHub-backed review. 0 disables local mode entirely.
     type: integer
     default: "2"
+    authority: config
   adversarial_review_level:
     description: >-
       Controls adversarial review depth in make-plan. "auto" estimates complexity
@@ -51,6 +54,7 @@ ingredients:
       adversarial review entirely.
     default: "auto"
     hidden: true
+    authority: config
   issue_url:
     description: GitHub issue to close on merge
     required: false

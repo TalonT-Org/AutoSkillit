@@ -20,6 +20,7 @@ ingredients:
     description: Source repository path
     required: false
     default: ""
+    authority: config
 
 dispatches:
   - name: phase-1-implement

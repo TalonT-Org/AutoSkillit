@@ -24,7 +24,8 @@
     "source_dir": {
       "description": "Path to the project root",
       "required": true,
-      "type": "absolute_path"
+      "type": "absolute_path",
+      "authority": "config"
     },
     "issue_url": {
       "description": "Optional URL to an existing GitHub issue describing the research goal. Provided as context to scope and plan_experiment.",
@@ -32,7 +33,8 @@
     },
     "base_branch": {
       "description": "Branch to target for the research PR",
-      "default": "main"
+      "default": "main",
+      "authority": "config"
     },
     "review_design": {
       "description": "When 'true' (the default), run the review-design skill after plan_experiment to validate the experiment plan before execution. When 'false', skip directly to create_worktree.",

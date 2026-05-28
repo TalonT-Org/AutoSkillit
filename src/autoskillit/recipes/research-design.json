@@ -19,11 +19,13 @@
     },
     "source_dir": {
       "description": "Path to the project root",
-      "required": true
+      "required": true,
+      "authority": "config"
     },
     "base_branch": {
       "description": "Branch to target for the research PR",
-      "default": "main"
+      "default": "main",
+      "authority": "config"
     },
     "review_design": {
       "description": "When 'true' (the default), run the review-design skill after plan_experiment to validate the experiment plan before execution. Emits a verdict: GO proceeds, REVISE loops back to plan_experiment with revision guidance (bounded by check_design_review_loop at 3 iterations), STOP triggers resolve_design_review for triage — addressable findings loop back, structural findings halt the pipeline. When 'false', skip directly to plan_visualization.\n",

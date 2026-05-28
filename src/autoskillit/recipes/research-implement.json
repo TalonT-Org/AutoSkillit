@@ -18,11 +18,13 @@
     },
     "source_dir": {
       "description": "Path to the project root",
-      "required": true
+      "required": true,
+      "authority": "config"
     },
     "base_branch": {
       "description": "Branch to target for the research PR",
-      "default": "main"
+      "default": "main",
+      "authority": "config"
     },
     "output_mode": {
       "description": "Where research outputs land. 'local' (default) produces a self-contained bundle. 'pr' opens a GitHub PR alongside the bundle.\n",

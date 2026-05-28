@@ -18,6 +18,7 @@ ingredients:
     description: Source repository
     required: false
     default: ''
+    authority: config
   run_name:
     description: Run name prefix
     default: pr-merge
@@ -25,6 +26,7 @@ ingredients:
     description: Branch that PRs target
     required: false
     default: ''
+    authority: config
   audit:
     description: Post-merge quality gate
     default: 'false'
@@ -35,6 +37,7 @@ ingredients:
     description: Run diagnostic analysis after pipeline completion
     default: 'false'
     hidden: true
+    authority: config
   kitchen_id:
     description: Kitchen session identifier (auto-injected)
     default: ''
@@ -43,10 +46,12 @@ ingredients:
     description: Whether running as an L2 food truck dispatch (auto-injected)
     default: 'false'
     hidden: true
+    authority: config
   dispatch_id:
     description: Fleet dispatch identifier (auto-injected, empty in non-fleet sessions)
     default: ''
     hidden: true
+    authority: config
   diagnostics_log_dir:
     description: Resolved diagnostics log directory path (auto-injected)
     default: ''

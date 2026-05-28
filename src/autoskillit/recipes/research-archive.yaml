@@ -34,6 +34,7 @@ ingredients:
   base_branch:
     description: Branch to target for the artifact PR
     default: "main"
+    authority: config
 
 kitchen_rules:
   - >

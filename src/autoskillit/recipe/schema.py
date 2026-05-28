@@ -42,6 +42,7 @@ class RecipeIngredient:
     default: str | None = None
     type: str | None = None
     hidden: bool = False  # When True, excluded from ingredients table shown to agent
+    authority: str | None = None  # "config" → value resolved from project config, not LLM
 
     def __post_init__(self) -> None:
         self.description = self.description.strip().replace("\n", " ")

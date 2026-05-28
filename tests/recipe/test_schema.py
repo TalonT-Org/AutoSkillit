@@ -649,3 +649,64 @@ def test_recipe_info_has_dispatch_only_field_defaulting_to_false() -> None:
 
     ri = RecipeInfo(name="x", description="y", source=RecipeSource.BUILTIN, path=Path("/x"))
     assert ri.dispatch_only is False
+
+
+# ---------------------------------------------------------------------------
+# RecipeIngredient.authority field tests
+# ---------------------------------------------------------------------------
+
+
+def test_recipe_ingredient_authority_field_exists() -> None:
+    """RecipeIngredient must have an authority field."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="test", authority="config")
+    assert ing.authority == "config"
+
+
+def test_recipe_ingredient_authority_default_none() -> None:
+    """RecipeIngredient.authority must default to None."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="test")
+    assert ing.authority is None
+
+
+def test_parse_recipe_preserves_authority_field(tmp_path) -> None:
+    """_parse_recipe must pass the authority field through from YAML."""
+
+    from autoskillit.recipe.io import _parse_recipe
+
+    data = {
+        "name": "auth-test",
+        "description": "d",
+        "steps": {"done": {"action": "stop", "message": "Done."}},
+        "ingredients": {
+            "base_branch": {
+                "description": "Merge target",
+                "default": "",
+                "authority": "config",
+            }
+        },
+    }
+    recipe = _parse_recipe(data)
+    assert recipe.ingredients["base_branch"].authority == "config"
+
+
+def test_parse_recipe_authority_none_when_absent(tmp_path) -> None:
+    """_parse_recipe must leave authority=None when not declared in YAML."""
+    from autoskillit.recipe.io import _parse_recipe
+
+    data = {
+        "name": "no-auth-test",
+        "description": "d",
+        "steps": {"done": {"action": "stop", "message": "Done."}},
+        "ingredients": {
+            "task": {
+                "description": "The task",
+                "required": True,
+            }
+        },
+    }
+    recipe = _parse_recipe(data)
+    assert recipe.ingredients["task"].authority is None

@@ -237,7 +237,15 @@ Processing X issues:
    Set `review_approach_detected = "true"` if `review_approach_recommended` is `true`, `"false"` otherwise.
    Do **not** call `fetch_github_issue` again — the issue body was already fetched by the step 3b-3 `claim_issue` call.
 
-6. **Load the recipe:**
+6. **Detect investigation-complete marker:**
+   Read `investigation_complete` from the `claim_issue` result returned in step 3b-3.
+   (`investigation_complete` is `true` when the issue body contains `<!-- investigation_complete: true -->`.)
+   Set `investigate_resolved`:
+   - If the user explicitly supplied `investigate` as `"true"` or `"false"` → use that value unchanged.
+   - If `investigate` is `"auto"` (the default) → set to `"false"` if `investigation_complete` is `true`, `"true"` otherwise.
+   Do **not** call `fetch_github_issue` again — the issue body was already fetched by the step 3b-3 `claim_issue` call.
+
+7. **Load the recipe:**
    ```
    load_recipe("{recipe_name}")
    ```
@@ -245,7 +253,7 @@ Processing X issues:
    follow each step in the recipe, calling the specified MCP tool with the
    specified `with:` arguments.
 
-7. **Execute the recipe** with these ingredient values:
+8. **Execute the recipe** with these ingredient values:
    - `task`: the issue title (the recipe's `make-plan` step detects `issue_url`
      and fetches full content internally)
    - `issue_url`: the constructed issue URL
@@ -254,13 +262,14 @@ Processing X issues:
    - `open_pr`: `"true"`
    - `audit`: `"true"`
    - `review_approach`: the value of `review_approach_detected` (set in step 5)
+   - `investigate`: the value of `investigate_resolved` (set in step 6)
    - `upfront_claimed`: `"true"`        ← always set for upfront-claimed issues
 
    The recipe's `claim_issue` step will receive `allow_reentry=true` (via the
    `upfront_claimed` ingredient) and recognize the pre-existing label as a
    valid reentry, returning `claimed=true` to proceed normally.
 
-8. **After recipe returns** (any outcome), append to completed_urls:
+9. **After recipe returns** (any outcome), append to completed_urls:
    ```
    completed_urls.append(issue_url)
    ```

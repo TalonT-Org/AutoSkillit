@@ -144,6 +144,27 @@ def test_review_approach_candidates_contract_registered() -> None:
     )
 
 
+def test_execution_map_investigation_complete_field() -> None:
+    """SKILL.md output schema must document investigation_complete boolean field."""
+    text = _skill_md_text()
+    assert "investigation_complete" in text, (
+        "Schema must document 'investigation_complete' boolean field"
+    )
+
+
+def test_investigation_complete_issues_contract_registered() -> None:
+    """skill_contracts.yaml must register investigation_complete_issues output."""
+    from autoskillit.recipe.contracts import get_skill_contract, load_bundled_manifest
+
+    manifest = load_bundled_manifest()
+    contract = get_skill_contract("build-execution-map", manifest)
+    assert contract is not None
+    output_names = [o.name for o in contract.outputs]
+    assert "investigation_complete_issues" in output_names, (
+        "build-execution-map contract must register investigation_complete_issues output"
+    )
+
+
 def test_skill_declares_max_parallel_argument() -> None:
     """REQ-MAP-001: SKILL.md must document --max-parallel as an accepted input."""
     skill_md = _skill_md_text()

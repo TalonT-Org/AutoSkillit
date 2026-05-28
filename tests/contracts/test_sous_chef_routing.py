@@ -446,6 +446,13 @@ def test_sous_chef_propagates_review_approach_from_execution_map() -> None:
     assert "review_approach" in text
 
 
+def test_sous_chef_propagates_investigation_complete_from_execution_map() -> None:
+    """sous-chef must propagate investigation_complete from execution map to food truck."""
+    text = _sous_chef_text()
+    assert "investigation_complete" in text
+    assert "investigate" in text
+
+
 def test_sous_chef_passes_assess_review_approach_flag() -> None:
     """sous-chef must pass --assess-review-approach to build-execution-map."""
     text = _sous_chef_text()

@@ -173,6 +173,17 @@ For each pair that requires assessment, produce:
 
 When the in-progress context is empty, omit Step 2b entirely — `cross_assessments` is `[]`.
 
+#### Investigation-Complete Detection (unconditional)
+
+For each issue, check whether the issue body contains the `<!-- investigation_complete: true -->`
+HTML comment marker. Set `investigation_complete: true` or `false` per issue. This is a simple
+substring check — no LLM assessment required.
+
+Emit a terminal token when at least one issue has the marker:
+```
+investigation_complete_issues = 1155,1160
+```
+
 #### Review-Approach Benefit Assessment (conditional)
 
 When `--assess-review-approach` is active, perform an additional assessment for each issue

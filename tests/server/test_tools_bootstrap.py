@@ -344,6 +344,56 @@ class TestClaimAndResolveIssue:
         assert set(call_kwargs["remove_labels"]) >= {"queued", "fail"}
         assert call_kwargs["add_labels"] == ["in-progress"]
 
+    @pytest.mark.anyio
+    async def test_claim_and_resolve_returns_investigation_complete(self, tool_ctx_kitchen_open):
+        """claim_and_resolve_issue returns investigation_complete: true when marker present."""
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+            return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+        )
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+            return_value={
+                "success": True,
+                "state": "open",
+                "labels": [],
+                "body": (
+                    "## Investigation\n\n"
+                    "<!-- investigation_complete: true -->\n"
+                    "> Prior investigation."
+                ),
+            }
+        )
+        tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
+            return_value={"success": True}
+        )
+        tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+        result = json.loads(await claim_and_resolve_issue("owner/repo#42"))
+        assert result["investigation_complete"] is True
+
+    @pytest.mark.anyio
+    async def test_claim_and_resolve_returns_false_investigation_complete(
+        self, tool_ctx_kitchen_open
+    ):
+        """claim_and_resolve_issue returns investigation_complete: false when no marker."""
+        tool_ctx_kitchen_open.github_client = AsyncMock()
+        tool_ctx_kitchen_open.github_client.fetch_title = AsyncMock(
+            return_value={"success": True, "number": 42, "title": "Fix bug", "slug": "fix-bug"}
+        )
+        tool_ctx_kitchen_open.github_client.fetch_issue = AsyncMock(
+            return_value={
+                "success": True,
+                "state": "open",
+                "labels": [],
+                "body": "Just a regular issue body without the marker.",
+            }
+        )
+        tool_ctx_kitchen_open.github_client.ensure_label = AsyncMock(
+            return_value={"success": True}
+        )
+        tool_ctx_kitchen_open.github_client.swap_labels = AsyncMock(return_value={"success": True})
+        result = json.loads(await claim_and_resolve_issue("owner/repo#42"))
+        assert result["investigation_complete"] is False
+
 
 class TestCreateAndPublishBranch:
     @pytest.mark.anyio

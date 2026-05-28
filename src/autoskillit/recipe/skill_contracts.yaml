@@ -1913,6 +1913,8 @@ skills:
       type: string
     - name: review_approach_candidates
       type: string
+    - name: investigation_complete_issues
+      type: string
     expected_output_patterns:
     - "execution_map[ \\t]*=[ \\t]*/.+"
     pattern_examples:

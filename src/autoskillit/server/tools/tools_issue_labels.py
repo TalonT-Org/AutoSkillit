@@ -214,12 +214,13 @@ async def release_issue(
 
             # Determine if staging is needed
             promotion_target = tool_ctx.config.branching.promotion_target
-            should_stage = target_branch is not None and target_branch != promotion_target
+            should_stage = bool(target_branch) and target_branch != promotion_target
 
             staged = False
             config_fail_label = tool_ctx.config.github.fail_label
             effective_staged_label = staged_label or tool_ctx.config.github.staged_label
 
+            # close_issue is intentionally not checked here — staging takes precedence over closing
             if should_stage:
                 if err := tool_ctx.config.github.check_label_allowed(effective_staged_label):
                     return json.dumps(

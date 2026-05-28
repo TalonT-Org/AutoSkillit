@@ -104,12 +104,13 @@ steps:
     on_result:
     - when: "${{ result.claimed }} == true"
       route: create_and_publish
-    - route: escalate_stop
-    on_failure: escalate_stop
+    - route: register_clone_failure
+    on_failure: register_clone_failure
     note: >
       Fetches issue title/slug and claims the issue in one turn.
       Returns issue_number, issue_title, issue_slug, and claimed boolean.
-      When claimed=false (another session owns it), routes to escalate_stop.
+      When claimed=false (another session owns it), routes to register_clone_failure
+      before escalate_stop so the clone directory is registered for cleanup.
       issue_slug and issue_number are passed to create_and_publish for branch naming.
 
   create_and_publish:
@@ -433,10 +434,10 @@ steps:
     - when: "${{ result.verdict }} == GO"
       route: push
     - when: "result.error"
-      route: escalate_stop
+      route: register_clone_failure
     - route: remediate
-    on_failure: escalate_stop
-    on_context_limit: escalate_stop
+    on_failure: register_clone_failure
+    on_context_limit: register_clone_failure
     optional: true
     skip_when_false: "inputs.audit"
     note: >

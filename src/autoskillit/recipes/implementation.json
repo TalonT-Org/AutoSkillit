@@ -158,11 +158,11 @@
           "route": "create_and_publish"
         },
         {
-          "route": "escalate_stop"
+          "route": "register_clone_failure"
         }
       ],
-      "on_failure": "escalate_stop",
-      "note": "Fetches issue title/slug and claims the issue in one turn. Returns issue_number, issue_title, issue_slug, and claimed boolean. When claimed=false (another session owns it), routes to escalate_stop. issue_slug and issue_number are passed to create_and_publish for branch naming.\n"
+      "on_failure": "register_clone_failure",
+      "note": "Fetches issue title/slug and claims the issue in one turn. Returns issue_number, issue_title, issue_slug, and claimed boolean. When claimed=false (another session owns it), routes to register_clone_failure before escalate_stop so the clone directory is registered for cleanup. issue_slug and issue_number are passed to create_and_publish for branch naming.\n"
     },
     "create_and_publish": {
       "tool": "create_and_publish_branch",
@@ -309,15 +309,18 @@
       "on_failure": "release_issue_failure"
     },
     "close_issue_no_changes": {
+      "description": "Release issue after zero-change detection — stages on non-default branch, closes on promotion target",
       "tool": "release_issue",
       "optional": true,
       "skip_when_false": "inputs.issue_url",
       "with": {
         "issue_url": "${{ inputs.issue_url }}",
+        "target_branch": "${{ inputs.base_branch }}",
         "close_issue": "true"
       },
-      "on_success": "done",
-      "on_failure": "done"
+      "on_success": "register_clone_success",
+      "on_failure": "register_clone_success",
+      "note": "Zero changes detected post-implement. Passes target_branch so release_issue stages on non-default branches (base_branch != promotion_target) or closes on the promotion target branch. close_issue is silently ignored by release_issue when staging applies (Branch 1 takes precedence over Branch 3). Routes to register_clone_success for clone cleanup and diagnostics."
     },
     "test": {
       "tool": "test_check",
@@ -551,14 +554,14 @@
         },
         {
           "when": "result.error",
-          "route": "escalate_stop"
+          "route": "register_clone_failure"
         },
         {
           "route": "remediate"
         }
       ],
-      "on_failure": "escalate_stop",
-      "on_context_limit": "escalate_stop",
+      "on_failure": "register_clone_failure",
+      "on_context_limit": "register_clone_failure",
       "optional": true,
       "skip_when_false": "inputs.audit",
       "note": "Only execute if inputs.audit is 'true'. If false, skip directly to check_has_commits. Captures verdict and remediation_path. Routes GO → push, NO GO → remediate which re-enters the plan step with the remediation file. All parts have been merged at this point — no worktree exists. Uses context.base_sha (a stable commit SHA captured before any merge began) as implementation_ref. A SHA names a git object and survives git branch -D unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the left) covers the full implementation.\n"

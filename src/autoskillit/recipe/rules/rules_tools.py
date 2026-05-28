@@ -394,7 +394,10 @@ def _check_rebase_then_push_requires_force(ctx: ValidationContext) -> list[RuleF
 
 @semantic_rule(
     name="release-issue-requires-disposition",
-    description="release_issue must have fail_label or target_branch to avoid bare removal",
+    description=(
+        "release_issue must have fail_label or target_branch — close_issue alone is not a "
+        "valid disposition because it bypasses staging logic on non-default branches"
+    ),
     severity=Severity.ERROR,
 )
 def _check_release_issue_requires_disposition(ctx: ValidationContext) -> list[RuleFinding]:
@@ -404,8 +407,7 @@ def _check_release_issue_requires_disposition(ctx: ValidationContext) -> list[Ru
             continue
         has_fail_label = bool(step.with_args.get("fail_label"))
         has_target_branch = bool(step.with_args.get("target_branch"))
-        has_close_issue = bool(step.with_args.get("close_issue"))
-        if not has_fail_label and not has_target_branch and not has_close_issue:
+        if not has_fail_label and not has_target_branch:
             findings.append(
                 RuleFinding(
                     rule="release-issue-requires-disposition",
@@ -413,9 +415,10 @@ def _check_release_issue_requires_disposition(ctx: ValidationContext) -> list[Ru
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' calls release_issue without fail_label or "
-                        f"target_branch — this performs bare label removal with no "
-                        f"replacement. Add fail_label for failure paths or target_branch "
-                        f"for success/staging paths."
+                        f"target_branch. close_issue alone is not a valid disposition — "
+                        f"without target_branch, the tool cannot determine whether to stage "
+                        f"(non-default branch) or close (promotion target). Add target_branch "
+                        f"for success/staging paths or fail_label for failure paths."
                     ),
                 )
             )

@@ -409,15 +409,16 @@ class TestClaimReleaseGates:
                 f"{name}: upfront_claimed.default must be 'false'"
             )
 
-    def test_claim_issue_routes_escalate_stop_when_not_claimed(self):
-        """claim_and_resolve fallthrough routes to escalate_stop."""
+    def test_claim_issue_routes_register_clone_failure_when_not_claimed(self):
+        """claim_and_resolve fallthrough routes through register_clone_failure."""
         for name in self.RECIPES:
             data = yaml.safe_load(_recipe_path(name).read_text())
             on_result = data["steps"]["claim_and_resolve"].get("on_result", [])
-            # The fallthrough route (no 'when' key) must route to escalate_stop
+            # The fallthrough route (no 'when' key) must route through register_clone_failure
+            # so the clone is registered before escalation (clone-terminal-requires-registration)
             fallthrough_routes = [r["route"] for r in on_result if "when" not in r]
-            assert "escalate_stop" in fallthrough_routes, (
-                f"{name}: claim_and_resolve must have escalate_stop as fallthrough on_result route"
+            assert "register_clone_failure" in fallthrough_routes, (
+                f"{name}: claim_and_resolve fallthrough must be register_clone_failure"
             )
 
 

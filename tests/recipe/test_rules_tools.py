@@ -476,6 +476,34 @@ def test_release_issue_requires_disposition_passes_with_target_branch() -> None:
     assert not hits
 
 
+def test_release_issue_requires_disposition_fires_on_close_issue_only() -> None:
+    """Rule fires when release_issue has close_issue but no target_branch or fail_label."""
+    recipe = _make_recipe_with_args(
+        "release_issue",
+        {"issue_url": "https://github.com/o/r/issues/1", "close_issue": "true"},
+    )
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+    assert hits
+    assert hits[0].severity == Severity.ERROR
+    assert "target_branch" in hits[0].message
+
+
+def test_release_issue_requires_disposition_passes_with_close_issue_and_target_branch() -> None:
+    """Rule does NOT fire when both close_issue and target_branch are present."""
+    recipe = _make_recipe_with_args(
+        "release_issue",
+        {
+            "issue_url": "https://github.com/o/r/issues/1",
+            "target_branch": "${{ inputs.base_branch }}",
+            "close_issue": "true",
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    hits = [f for f in findings if f.rule == "release-issue-requires-disposition"]
+    assert not hits
+
+
 # ---------------------------------------------------------------------------
 # push-after-edit-requires-force rule tests
 # ---------------------------------------------------------------------------

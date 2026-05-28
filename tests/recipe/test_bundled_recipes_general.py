@@ -138,11 +138,11 @@ def test_all_tool_steps_have_on_failure() -> None:
 
 
 def test_audit_impl_on_failure_routes_to_escalation() -> None:
-    """audit_impl.on_failure must route to an escalation step in each recipe."""
+    """audit_impl.on_failure must route through registration before escalating."""
     impl = load_recipe(builtin_recipes_dir() / "implementation.yaml")
     rem = load_recipe(builtin_recipes_dir() / "remediation.yaml")
-    assert impl.steps["audit_impl"].on_failure == "escalate_stop"
-    assert rem.steps["audit_impl"].on_failure == "escalate_stop"
+    assert impl.steps["audit_impl"].on_failure == "register_clone_failure"
+    assert rem.steps["audit_impl"].on_failure == "register_clone_failure"
 
 
 @pytest.mark.parametrize(

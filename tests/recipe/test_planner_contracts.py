@@ -2,9 +2,7 @@
 
 Enforces two invariants for every run_skill step:
 - write_behavior=always: output_dir must be declared unconditionally.
-- write_behavior=conditional: output_dir must be declared when a push_to_remote step is
-  reachable within _MAX_HOPS (consistent with the write-skill-requires-source-output-dir
-  semantic rule).
+- write_behavior=conditional: output_dir must be declared unconditionally (same as always).
 """
 
 from __future__ import annotations
@@ -15,8 +13,6 @@ import pytest
 import yaml
 
 from autoskillit.core import SKILL_TOOLS
-from autoskillit.recipe._analysis import _build_step_graph
-from autoskillit.recipe._rule_helpers import push_reachable
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
@@ -38,13 +34,11 @@ def test_write_skill_steps_have_output_dir(recipe_yaml: Path) -> None:
     """Every run_skill step with write-capable behavior must declare output_dir.
 
     write_behavior=always: output_dir required unconditionally.
-    write_behavior=conditional: output_dir required when push_to_remote is reachable
-    within _MAX_HOPS hops from the step (BFS over the routing graph).
+    write_behavior=conditional: output_dir required unconditionally.
     """
     recipe = load_recipe(recipe_yaml)
     manifest = load_bundled_manifest()
     skills = manifest.get("skills", {})
-    step_graph = _build_step_graph(recipe)
 
     violations: list[str] = []
     for step_name, step in recipe.steps.items():
@@ -64,11 +58,9 @@ def test_write_skill_steps_have_output_dir(recipe_yaml: Path) -> None:
                     f"{step_name} ({skill}): write_behavior=always but no output_dir"
                 )
         elif write_behavior == "conditional":
-            reachable, push_step = push_reachable(step_graph, step_name, recipe)
-            if reachable and not output_dir:
+            if not output_dir:
                 violations.append(
-                    f"{step_name} ({skill}): write_behavior=conditional, "
-                    f"push reachable via '{push_step}', but no output_dir"
+                    f"{step_name} ({skill}): write_behavior=conditional but no output_dir"
                 )
 
     assert not violations, (

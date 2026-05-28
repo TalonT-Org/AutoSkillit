@@ -97,9 +97,7 @@ def _check_conditional_skill_ungated_push(ctx: ValidationContext) -> list[RuleFi
         if skill_data.get("write_behavior") != "conditional":
             continue
 
-        # Check that push_to_remote is reachable before firing any finding.
-        # Steps that don't lead to push (e.g. worktree-fix → merge_worktree)
-        # are not in scope for this rule.
+        # push_reachable only recognizes push_to_remote tool steps.
         reachable, push_step = push_reachable(ctx.step_graph, step_name, ctx.recipe)
         if not reachable:
             continue

@@ -196,6 +196,7 @@ steps:
       callable: autoskillit.recipe._cmd_rpc.create_persistent_integration
       work_dir: ${{ context.work_dir }}
       base_branch: ${{ inputs.base_branch }}
+      output_dir: '.'
     on_success: fetch_merge_queue_data
     on_failure: register_clone_failure
     note: 'Creates base_branch from the repository''s default branch (auto-detected
@@ -209,6 +210,7 @@ steps:
     with:
       callable: autoskillit.smoke_utils.fetch_merge_queue_data
       base_branch: ${{ inputs.base_branch }}
+      output_dir: '.'
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/merge-prs'
     capture:
@@ -439,6 +441,7 @@ steps:
       work_dir: ${{ context.work_dir }}
       ejected_pr_branch: ${{ context.ejected_pr_branch }}
       base_branch: ${{ inputs.base_branch }}
+      output_dir: '.'
     on_result:
     - when: ${{ result.status }} == clean
       route: push_ejected_fix
@@ -678,6 +681,7 @@ steps:
       work_dir: ${{ context.work_dir }}
       next_pr_branch: ${{ context.next_pr_branch }}
       base_branch: ${{ inputs.base_branch }}
+      output_dir: '.'
     on_result:
     - when: ${{ result.status }} == clean
       route: push_rebased_next_pr
@@ -981,6 +985,7 @@ steps:
       remote_url: ${{ context.remote_url }}
       step_name: derive_conflict_ci_event
       base_branch: ${{ inputs.base_branch }}
+      output_dir: '.'
     capture:
       conflict_ci_event: ${{ result.ci_event }}
       conflict_ci_applicable: ${{ result.ci_applicable }}
@@ -1080,6 +1085,7 @@ steps:
       remote_url: ${{ context.remote_url }}
       step_name: handle_conflict_no_runs
       base_branch: ${{ inputs.base_branch }}
+      output_dir: '.'
     capture:
       conflict_ci_event: ${{ result.ci_event }}
       conflict_ci_applicable: ${{ result.ci_applicable }}
@@ -1120,6 +1126,7 @@ steps:
       cwd: ${{ context.worktree_path }}
       step_name: fix
       base_branch: ${{ inputs.base_branch }}
+      output_dir: '.'
     capture:
       verdict: ${{ result.verdict }}
       fixes_applied: ${{ result.fixes_applied }}
@@ -1284,6 +1291,7 @@ steps:
       callable: autoskillit.smoke_utils.compute_domain_partitions
       batch_branch: ${{ context.batch_branch }}
       base_branch: ${{ inputs.base_branch }}
+      output_dir: '.'
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/open-integration-pr'
     capture:
@@ -1354,6 +1362,7 @@ steps:
         }} ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       step_name: resolve_integration_conflicts
+      output_dir: '.'
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
       conflict_escalation_reason: ${{ result.escalation_reason }}

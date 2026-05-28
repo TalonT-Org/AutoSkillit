@@ -464,7 +464,8 @@
       "with": {
         "skill_command": "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "fix"
+        "step_name": "fix",
+        "output_dir": "."
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
@@ -505,7 +506,8 @@
       "with": {
         "skill_command": "/autoskillit:resolve-merge-conflicts ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "rebase_conflict_fix"
+        "step_name": "rebase_conflict_fix",
+        "output_dir": "."
       },
       "capture": {
         "conflict_escalation_required": "${{ result.escalation_required }}"

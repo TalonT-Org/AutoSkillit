@@ -459,6 +459,7 @@ class TokenUsageFileEntry(TypedDict):
     loc_deletions: int
     provider_used: str
     model_identifier: str
+    configured_model: str
     dispatch_id: str
     campaign_id: str
     schema_version: int

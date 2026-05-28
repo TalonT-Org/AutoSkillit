@@ -12,6 +12,14 @@ from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import RuleFinding
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
+BUNDLED_RECIPE_NAMES: list[str] = [
+    "implementation",
+    "remediation",
+    "implementation-groups",
+    "merge-prs",
+    "full-audit",
+]
+
 
 def assert_no_rule_errors(
     findings: list[RuleFinding],

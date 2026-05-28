@@ -5,16 +5,9 @@ import pytest
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
+from tests.recipe.conftest import BUNDLED_RECIPE_NAMES
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-BUNDLED_RECIPE_NAMES = [
-    "implementation",
-    "remediation",
-    "implementation-groups",
-    "merge-prs",
-    "full-audit",
-]
 
 
 @pytest.mark.parametrize("recipe_name", BUNDLED_RECIPE_NAMES)

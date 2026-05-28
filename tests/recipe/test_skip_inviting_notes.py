@@ -8,16 +8,9 @@ import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.recipe.io import load_recipe
+from tests.recipe.conftest import BUNDLED_RECIPE_NAMES
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-BUNDLED_RECIPE_NAMES = [
-    "implementation",
-    "remediation",
-    "implementation-groups",
-    "merge-prs",
-    "full-audit",
-]
 
 _SKIP_INVITING_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("never blocks", re.compile(r"never\s+blocks?", re.IGNORECASE)),

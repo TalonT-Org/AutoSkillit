@@ -10,16 +10,9 @@ from autoskillit.core import pkg_root
 from autoskillit.recipe import load_and_validate
 from autoskillit.recipe._recipe_composition import _step_block_pattern
 from autoskillit.recipe.io import load_recipe
+from tests.recipe.conftest import BUNDLED_RECIPE_NAMES
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
-
-BUNDLED_RECIPE_NAMES = [
-    "implementation",
-    "remediation",
-    "implementation-groups",
-    "merge-prs",
-    "full-audit",
-]
 
 
 def _guarded_ingredients(recipe_name: str) -> list[tuple[str, list[str]]]:
@@ -42,6 +35,10 @@ def _make_params() -> list[tuple[str, str, list[str]]]:
     for recipe_name in BUNDLED_RECIPE_NAMES:
         for ing_name, guarded_steps in _guarded_ingredients(recipe_name):
             params.append((recipe_name, ing_name, guarded_steps))
+    assert params, (
+        "No parametrized cases found — bundled recipes have no skip_when_false guards. "
+        "Either recipe files are missing or the guard detection logic is broken."
+    )
     return params
 
 

@@ -732,6 +732,7 @@ async def test_claim_issue_returns_investigation_complete_reentry(
         )
     )
     assert "investigation_complete" in result
+    assert result["investigation_complete"] is True
 
 
 @pytest.mark.anyio
@@ -761,6 +762,7 @@ async def test_claim_issue_returns_investigation_complete_swap_failure(
         )
     )
     assert "investigation_complete" in result
+    assert result["investigation_complete"] is True
     assert "review_approach_recommended" in result
 
 
@@ -789,3 +791,4 @@ async def test_claim_issue_returns_investigation_complete_success(
         )
     )
     assert "investigation_complete" in result
+    assert result["investigation_complete"] is True

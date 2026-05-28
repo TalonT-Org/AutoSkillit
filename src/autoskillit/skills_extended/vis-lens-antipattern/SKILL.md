@@ -275,3 +275,13 @@ Before creating the diagram, verify:
 - [ ] All 16 anti-patterns were checked for each figure
 - [ ] Findings are sorted critical-first
 - [ ] Each yaml:figure-spec has `anti_patterns` field populated
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-always-on` - Composite triage with PASS/WARN/FAIL verdict
+- `/autoskillit:vis-lens-chart-select` - Chart type selection via Cleveland-McGill hierarchy
+- `/autoskillit:vis-lens-uncertainty` - Error bar semantics and multi-seed variance

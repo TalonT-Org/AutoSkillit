@@ -420,3 +420,13 @@ Before creating the diagram, verify:
 - [ ] ML sub-area has been identified from context or experiment plan
 - [ ] All mandatory figures for the sub-area have been checked
 - [ ] Gap list is sorted absent-first, then partial
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-multi-compare` - Small-multiples, faceting, and panel layout
+- `/autoskillit:vis-lens-reproducibility` - Figure reproducibility and seed documentation
+- `/autoskillit:vis-lens-chart-select` - Chart type selection via Cleveland-McGill hierarchy

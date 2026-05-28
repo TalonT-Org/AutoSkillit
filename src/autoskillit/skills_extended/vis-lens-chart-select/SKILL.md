@@ -168,7 +168,7 @@ For each figure slot identified:
 | Matrix / Grid | Relationship | heatmap, matrix |
 | High-dimensional | Relationship | scatter-matrix, parallel-coordinates |
 
-### Step 3d: Perceptual Rank
+### Step 3: Perceptual Rank
 
 For each figure slot, rank the candidate chart types by Cleveland-McGill position:
 
@@ -315,3 +315,13 @@ Before creating the diagram, verify:
 - [ ] Diagram will include a color legend table
 - [ ] All chart types are from the controlled vocabulary (no radar, no pie)
 - [ ] Each figure spec has `perceptual_justification` filled in
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-antipattern` - Severity-tiered anti-pattern detection
+- `/autoskillit:vis-lens-figure-table` - Figure-vs-table selection heuristics
+- `/autoskillit:vis-lens-uncertainty` - Error bar semantics and multi-seed variance

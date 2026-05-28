@@ -259,3 +259,13 @@ Before creating the diagram, verify:
 - [ ] Every restricted/embargoed dataset is flagged as FAIL or WARNING
 - [ ] Every histogram bin width and time-series smoothing window is audited
 - [ ] Every stochastic figure has its seeds documented or flagged
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-methodology-norms` - Domain-specific mandatory figure norms
+- `/autoskillit:vis-lens-multi-compare` - Small-multiples, faceting, and panel layout
+- `/autoskillit:vis-lens-uncertainty` - Error bar semantics and multi-seed variance

@@ -253,3 +253,13 @@ Before creating the diagram, verify:
 - [ ] Every CRITICAL (n_seeds == 1) training curve is flagged
 - [ ] Every smoothing call has its parameters disclosed in the figure spec
 - [ ] Early-stopping markers are noted for all curves with early stopping
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-uncertainty` - Error bar semantics and multi-seed variance
+- `/autoskillit:vis-lens-story-arc` - Narrative consistency and figure progression
+- `/autoskillit:vis-lens-multi-compare` - Small-multiples, faceting, and panel layout

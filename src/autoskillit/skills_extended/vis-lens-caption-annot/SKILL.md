@@ -243,3 +243,13 @@ Before creating the diagram, verify:
 - [ ] Every figure with a non-declarative title is flagged as FAIL
 - [ ] Every axis missing units on a continuous quantity is flagged as WARNING
 - [ ] Every figure with undefined error bars is flagged as FAIL
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-always-on` - Composite triage with PASS/WARN/FAIL verdict
+- `/autoskillit:vis-lens-color-access` - Colorblind safety and perceptual uniformity
+- `/autoskillit:vis-lens-figure-table` - Figure-vs-table selection heuristics

@@ -264,3 +264,13 @@ Before creating the diagram, verify:
 - [ ] Diagram will include a color legend table
 - [ ] Every CRITICAL (n_seeds == 1) figure is flagged
 - [ ] Every stat_overlay has both `measure` and `n_seeds` filled in
+
+---
+
+## Related Skills
+
+- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
+- `/autoskillit:vis-lens-chart-select` - Chart type selection via Cleveland-McGill hierarchy
+- `/autoskillit:vis-lens-antipattern` - Severity-tiered anti-pattern detection
+- `/autoskillit:vis-lens-temporal` - Training dynamics and axis scaling

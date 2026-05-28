@@ -295,14 +295,11 @@ class TestClaudeCodeBackendValidateSkillContent:
     ) -> ClaudeCodeBackend:
         from dataclasses import replace
 
+        import autoskillit.execution.backends.claude as _claude_mod
         from autoskillit.core import CLAUDE_CODE_CAPABILITIES
 
         custom = replace(CLAUDE_CODE_CAPABILITIES, required_skill_fields=fields)
-        monkeypatch.setattr(
-            type(ClaudeCodeBackend()),
-            "capabilities",
-            property(lambda self: custom),
-        )
+        monkeypatch.setattr(_claude_mod, "CLAUDE_CODE_CAPABILITIES", custom)
         return ClaudeCodeBackend()
 
     def test_empty_required_fields_returns_empty_list(
@@ -332,13 +329,20 @@ class TestClaudeCodeBackendValidateSkillContent:
         content = "---\nother: x\n---\nbody"
         result = backend.validate_skill_content(content)
         assert len(result) == 2
+        assert any("name" in e for e in result)
+        assert any("description" in e for e in result)
 
     def test_no_opening_delimiter_returns_sentinel(self) -> None:
         result = ClaudeCodeBackend().validate_skill_content("no frontmatter here")
         assert result == ["Invalid frontmatter: no opening --- delimiter found"]
 
-    def test_malformed_yaml_returns_all_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_closing_delimiter_returns_sentinel(self) -> None:
+        result = ClaudeCodeBackend().validate_skill_content("---\nname: x\n")
+        assert result == ["Invalid frontmatter: no closing --- delimiter found"]
+
+    def test_malformed_yaml_returns_parse_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         backend = self._make_backend_with_fields(monkeypatch, frozenset({"name", "description"}))
         content = "---\n: [invalid yaml\n---\nbody"
         result = backend.validate_skill_content(content)
-        assert len(result) == 2
+        assert len(result) == 1
+        assert "YAML parse error" in result[0]

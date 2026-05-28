@@ -425,12 +425,13 @@ class TestConfigAuthoritativeIngredientInjection:
 
     @pytest.mark.anyio
     async def test_config_authoritative_key_absent_from_defaults_retains_caller_value(
-        self, tool_ctx, caplog
+        self, tool_ctx
     ):
         """When a config-authority key is absent from resolved defaults, the caller-supplied
         value is retained and a warning is logged."""
-        import logging
         from unittest.mock import patch
+
+        import structlog.testing
 
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
@@ -455,11 +456,11 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-            return_value={},  # base_branch absent — simulates resolver not returning the key
-        ):
-            with caplog.at_level(logging.WARNING, logger="autoskillit.config.ingredient_defaults"):
+        with structlog.testing.capture_logs() as cap_logs:
+            with patch(
+                "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+                return_value={},  # base_branch absent — simulates resolver not returning the key
+            ):
                 await execute_dispatch(
                     tool_ctx=tool_ctx,
                     recipe="test-recipe",
@@ -473,4 +474,7 @@ class TestConfigAuthoritativeIngredientInjection:
                 )
 
         assert captured["ingredients"]["base_branch"] == "caller-supplied"
-        assert any("config-authority key" in r.message for r in caplog.records)
+        assert any(
+            e.get("log_level") == "warning" and "config-authority key" in e.get("event", "")
+            for e in cap_logs
+        )

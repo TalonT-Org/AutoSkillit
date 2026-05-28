@@ -549,7 +549,7 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(tool_ctx_kitchen_
     call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
     assert overrides["kitchen_id"] == "test-kitchen-xyz"
-    assert overrides["post_run_diagnostics"] == "false"
+    assert overrides["post_run_diagnostics"] == _PATCHED_DEFAULTS["post_run_diagnostics"]
 
 
 @pytest.mark.anyio

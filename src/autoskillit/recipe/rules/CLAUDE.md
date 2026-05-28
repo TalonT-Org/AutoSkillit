@@ -9,7 +9,7 @@ Semantic validation rule modules for recipe analysis (48 rule files).
 | `__init__.py` | Docstring-only — rules register via `@semantic_rule` decorator on import |
 | `rules_actions.py` | Semantic rules for `stop`/`route`/`confirm` action-type steps |
 | `rules_blocks.py` | Block-level budget rules; loads `block_budgets.yaml` at import |
-| `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts and `hidden-input-ref-in-template` detection (hidden ingredient `${{ inputs.X }}` in step template fields) |
+| `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts |
 | `rules_callable_scope.py` | Enforces scoped directory args for file-discovering callables (e.g. `batch_create_issues` → `audit_run_dir`) |
 | `rules_campaign_capture.py` | Campaign capture validation: identifier keys, result refs, sentinel cross-checks |
 | `rules_campaign_deps.py` | Campaign dependency graph rules: valid refs, acyclic, sequential |

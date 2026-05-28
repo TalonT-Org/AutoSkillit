@@ -24,7 +24,7 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | `_cmd_rpc_merge.py` | Rebase, PR polling, branch management |
 | `_cmd_rpc_issues.py` | Issue creation, bundles, audit run dirs |
 | `_recipe_ingredients.py` | `format_ingredients_table` + `LoadRecipeResult` TypedDicts |
-| `_recipe_composition.py` | Sub-recipe composition, `_prune_skipped_steps`, `_resolve_hidden_inputs_in_content`, `_is_ingredient_truthy` + `FALSY_STRINGS` truthiness evaluation |
+| `_recipe_composition.py` | Sub-recipe composition, `_prune_skipped_steps`, `_is_ingredient_truthy` + `FALSY_STRINGS` truthiness evaluation |
 | `_rule_helpers.py` | Shared helper utilities for recipe semantic rules |
 | `diagrams.py` | Flow diagram generation + staleness detection |
 | `_registry_utils.py` | `dir_mtime`, `parse_int_field` — shared helpers for registry loaders |

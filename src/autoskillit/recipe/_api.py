@@ -44,7 +44,6 @@ from autoskillit.recipe._recipe_composition import (
     _assert_content_integrity,
     _build_active_recipe,
     _prune_skipped_steps,
-    _resolve_hidden_inputs_in_content,
     _resolve_skip_guards_in_content,
     _validate_no_dangling_routes,
 )
@@ -396,10 +395,6 @@ def load_and_validate(
                 raw = ""
             t0 = _t("prune_skipped_steps", t0, name)
 
-            # Stage: hidden ingredient interpolation
-            raw = _resolve_hidden_inputs_in_content(raw, active_recipe, ingredient_overrides)
-            t0 = _t("resolve_hidden_inputs", t0, name)
-
             # Stage: contract card
             contract = load_recipe_card(name, recipes_dir)
             contract_findings: list[dict[str, Any]] = []
@@ -472,16 +467,7 @@ def load_and_validate(
         else None
     )
 
-    _hidden_names = (
-        frozenset(
-            n
-            for n, ing in (active_recipe.ingredients or {}).items()
-            if getattr(ing, "hidden", False)
-        )
-        if active_recipe is not None
-        else None
-    )
-    _assert_no_raw_placeholders(raw, context=name, hidden_ingredient_names=_hidden_names)
+    _assert_no_raw_placeholders(raw, context=name)
     result: LoadRecipeResult = {
         "content": raw,
         "diagram": diagram,

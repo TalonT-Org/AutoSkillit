@@ -191,39 +191,3 @@ def test_all_bundled_recipes_content_no_raw_placeholders(
         f"The following recipes have unsubstituted {{{{AUTOSKILLIT_TEMP}}}} in "
         f"result['content']: {offenders}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Tests for hidden ingredient residual check in _assert_no_raw_placeholders
-# ---------------------------------------------------------------------------
-
-
-def test_assert_no_raw_placeholders_rejects_hidden_input_template() -> None:
-    """_assert_no_raw_placeholders raises ValueError for residual hidden ${{ inputs.X }}."""
-    from autoskillit.recipe.io import _assert_no_raw_placeholders
-
-    with pytest.raises(ValueError, match="kitchen_id"):
-        _assert_no_raw_placeholders(
-            "skill_command: /autoskillit:diag ${{ inputs.kitchen_id }}",
-            hidden_ingredient_names=frozenset({"kitchen_id"}),
-        )
-
-
-def test_assert_no_raw_placeholders_allows_visible_ingredient_template() -> None:
-    """_assert_no_raw_placeholders does NOT raise for visible ingredient ${{ inputs.X }}."""
-    from autoskillit.recipe.io import _assert_no_raw_placeholders
-
-    _assert_no_raw_placeholders(
-        "skill_command: /autoskillit:implement ${{ inputs.task }}",
-        hidden_ingredient_names=frozenset({"kitchen_id"}),
-    )
-
-
-def test_assert_no_raw_placeholders_no_hidden_names_passes() -> None:
-    """_assert_no_raw_placeholders skips hidden check when hidden_ingredient_names is None."""
-    from autoskillit.recipe.io import _assert_no_raw_placeholders
-
-    _assert_no_raw_placeholders(
-        "skill_command: /autoskillit:diag ${{ inputs.kitchen_id }}",
-        hidden_ingredient_names=None,
-    )

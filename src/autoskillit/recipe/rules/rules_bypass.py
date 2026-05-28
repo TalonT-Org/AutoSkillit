@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe._recipe_composition import _is_ingredient_truthy
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
@@ -228,54 +227,4 @@ def _check_skip_guard_falsy_default(ctx: ValidationContext) -> list[RuleFinding]
                     ),
                 )
             )
-    return findings
-
-
-@semantic_rule(
-    name="hidden-input-ref-in-template",
-    description=(
-        "A step template field (${{ inputs.X }}) or kitchen_rules entry references a hidden "
-        "ingredient. Hidden ingredients are invisible to the LLM. This is safe because "
-        "load_and_validate resolves hidden input templates server-side."
-    ),
-    severity=Severity.WARNING,
-)
-def _check_hidden_input_ref_in_template(ctx: ValidationContext) -> list[RuleFinding]:
-    findings: list[RuleFinding] = []
-    recipe = ctx.recipe
-
-    def _check_text(text: str, location: str) -> None:
-        for m in INPUT_REF_RE.finditer(text):
-            name = m.group(1)
-            ing = recipe.ingredients.get(name)
-            if ing is not None and ing.hidden:
-                findings.append(
-                    RuleFinding(
-                        rule="hidden-input-ref-in-template",
-                        severity=Severity.WARNING,
-                        step_name=location,
-                        message=(
-                            f"{location}: template ${{{{ inputs.{name} }}}} references hidden "
-                            f"ingredient '{name}'. Hidden ingredients are invisible to the LLM. "
-                            "This is safe only because load_and_validate resolves hidden input "
-                            "templates server-side."
-                        ),
-                    )
-                )
-
-    for step_name, step in recipe.steps.items():
-        for val in (step.with_args or {}).values():
-            _check_text(str(val), f"Step '{step_name}'")
-        if step.model:
-            _check_text(step.model, f"Step '{step_name}'")
-        if step.note:
-            _check_text(step.note, f"Step '{step_name}'")
-        if step.on_result and step.on_result.conditions:
-            for cond in step.on_result.conditions:
-                if cond.when:
-                    _check_text(cond.when, f"Step '{step_name}'")
-
-    for rule_text in recipe.kitchen_rules or []:
-        _check_text(str(rule_text), "kitchen_rules")
-
     return findings

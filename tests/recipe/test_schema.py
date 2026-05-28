@@ -744,3 +744,11 @@ def test_parse_recipe_preserves_authority_field_roundtrip() -> None:
     }
     recipe2 = _parse_recipe(data2)
     assert recipe2.ingredients["base_branch"].authority == "config"
+
+
+def test_recipe_ingredient_authority_rejects_invalid_value() -> None:
+    """RecipeIngredient.__post_init__ raises ValueError for non-None, non-'config' authority."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    with pytest.raises(ValueError, match="authority must be None or 'config'"):
+        RecipeIngredient(description="test", authority="server")

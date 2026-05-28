@@ -163,27 +163,30 @@ class TestMissingRequiredIngredient:
         assert "task" not in captured["ingredients"]
 
 
+def _setup_config_authority_recipe(tool_ctx, recipe):
+    """Wire tool_ctx with the given Recipe for config-authority injection tests."""
+    from autoskillit.fleet import FleetSemaphore
+    from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+
+    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, recipe)
+    tool_ctx.recipes = repo
+    tool_ctx.executor = InMemoryHeadlessExecutor()
+
+
 class TestConfigAuthoritativeIngredientInjection:
     @pytest.mark.anyio
     async def test_config_authoritative_base_branch_injected_at_dispatch(self, tool_ctx):
         """base_branch with authority='config' is injected from config even when not supplied."""
         from unittest.mock import patch
 
-        from autoskillit.fleet import FleetSemaphore
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
-        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
-        from tests.fleet._helpers import (
-            _make_recipe_info,
-            _no_sleep_quota_checker,
-            _noop_quota_refresher,
-        )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
-        repo = InMemoryRecipeRepository()
-        recipe_info = _make_recipe_info("test-recipe")
-        repo.add_recipe("test-recipe", recipe_info)
-        repo.add_full_recipe(
-            recipe_info.path,
+        _setup_config_authority_recipe(
+            tool_ctx,
             Recipe(
                 name="test-recipe",
                 description="test",
@@ -195,9 +198,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 },
             ),
         )
-        tool_ctx.recipes = repo
-        tool_ctx.executor = InMemoryHeadlessExecutor()
-
         captured = {}
 
         def _capture_prompt_builder(**kwargs):
@@ -229,21 +229,10 @@ class TestConfigAuthoritativeIngredientInjection:
         """base_branch with authority='config' overrides LLM-supplied value."""
         from unittest.mock import patch
 
-        from autoskillit.fleet import FleetSemaphore
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
-        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
-        from tests.fleet._helpers import (
-            _make_recipe_info,
-            _no_sleep_quota_checker,
-            _noop_quota_refresher,
-        )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
-        repo = InMemoryRecipeRepository()
-        recipe_info = _make_recipe_info("test-recipe")
-        repo.add_recipe("test-recipe", recipe_info)
-        repo.add_full_recipe(
-            recipe_info.path,
+        _setup_config_authority_recipe(
+            tool_ctx,
             Recipe(
                 name="test-recipe",
                 description="test",
@@ -255,9 +244,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 },
             ),
         )
-        tool_ctx.recipes = repo
-        tool_ctx.executor = InMemoryHeadlessExecutor()
-
         captured = {}
 
         def _capture_prompt_builder(**kwargs):
@@ -289,21 +275,10 @@ class TestConfigAuthoritativeIngredientInjection:
         """Config injection only applies to ingredients the recipe declares."""
         from unittest.mock import patch
 
-        from autoskillit.fleet import FleetSemaphore
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
-        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
-        from tests.fleet._helpers import (
-            _make_recipe_info,
-            _no_sleep_quota_checker,
-            _noop_quota_refresher,
-        )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
-        repo = InMemoryRecipeRepository()
-        recipe_info = _make_recipe_info("test-recipe")
-        repo.add_recipe("test-recipe", recipe_info)
-        repo.add_full_recipe(
-            recipe_info.path,
+        _setup_config_authority_recipe(
+            tool_ctx,
             Recipe(
                 name="test-recipe",
                 description="test",
@@ -313,9 +288,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 },
             ),
         )
-        tool_ctx.recipes = repo
-        tool_ctx.executor = InMemoryHeadlessExecutor()
-
         captured = {}
 
         def _capture_prompt_builder(**kwargs):
@@ -348,21 +320,10 @@ class TestConfigAuthoritativeIngredientInjection:
         not just base_branch."""
         from unittest.mock import patch
 
-        from autoskillit.fleet import FleetSemaphore
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
-        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
-        from tests.fleet._helpers import (
-            _make_recipe_info,
-            _no_sleep_quota_checker,
-            _noop_quota_refresher,
-        )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
-        repo = InMemoryRecipeRepository()
-        recipe_info = _make_recipe_info("test-recipe")
-        repo.add_recipe("test-recipe", recipe_info)
-        repo.add_full_recipe(
-            recipe_info.path,
+        _setup_config_authority_recipe(
+            tool_ctx,
             Recipe(
                 name="test-recipe",
                 description="test",
@@ -380,9 +341,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 },
             ),
         )
-        tool_ctx.recipes = repo
-        tool_ctx.executor = InMemoryHeadlessExecutor()
-
         captured: dict = {}
 
         def _capture_prompt_builder(**kwargs):
@@ -421,21 +379,10 @@ class TestConfigAuthoritativeIngredientInjection:
         import json
         from unittest.mock import patch
 
-        from autoskillit.fleet import FleetSemaphore
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
-        from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
-        from tests.fleet._helpers import (
-            _make_recipe_info,
-            _no_sleep_quota_checker,
-            _noop_quota_refresher,
-        )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
-        repo = InMemoryRecipeRepository()
-        recipe_info = _make_recipe_info("test-recipe")
-        repo.add_recipe("test-recipe", recipe_info)
-        repo.add_full_recipe(
-            recipe_info.path,
+        _setup_config_authority_recipe(
+            tool_ctx,
             Recipe(
                 name="test-recipe",
                 description="test",
@@ -447,9 +394,6 @@ class TestConfigAuthoritativeIngredientInjection:
                 },
             ),
         )
-        tool_ctx.recipes = repo
-        tool_ctx.executor = InMemoryHeadlessExecutor()
-
         from autoskillit.fleet._api import execute_dispatch
 
         with patch(
@@ -478,3 +422,55 @@ class TestConfigAuthoritativeIngredientInjection:
             "State snapshot should record config value 'develop', got: "
             f"{effective.get('base_branch')!r}"
         )
+
+    @pytest.mark.anyio
+    async def test_config_authoritative_key_absent_from_defaults_retains_caller_value(
+        self, tool_ctx, caplog
+    ):
+        """When a config-authority key is absent from resolved defaults, the caller-supplied
+        value is retained and a warning is logged."""
+        import logging
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "base_branch": RecipeIngredient(
+                        description="Merge target", default="", authority="config"
+                    )
+                },
+            ),
+        )
+        captured: dict = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={},  # base_branch absent — simulates resolver not returning the key
+        ):
+            with caplog.at_level(logging.WARNING, logger="autoskillit.config.ingredient_defaults"):
+                await execute_dispatch(
+                    tool_ctx=tool_ctx,
+                    recipe="test-recipe",
+                    task="t",
+                    ingredients={"base_branch": "caller-supplied"},
+                    dispatch_name=None,
+                    timeout_sec=None,
+                    prompt_builder=_capture_prompt_builder,
+                    quota_checker=_no_sleep_quota_checker,
+                    quota_refresher=_noop_quota_refresher,
+                )
+
+        assert captured["ingredients"]["base_branch"] == "caller-supplied"
+        assert any("config-authority key" in r.message for r in caplog.records)

@@ -266,8 +266,16 @@ def _check_clone_terminal_requires_registration(ctx: ValidationContext) -> list[
     for barrier in barrier_steps:
         graph[barrier] = set()
 
-    # Find all steps reachable from the clone step (BFS with barriers suppressed).
-    reachable = bfs_reachable(graph, clone_step_name)
+    # Start BFS from the clone step's on_success target, not the clone step itself.
+    # If the clone fails (on_failure path), no clone was created so no registration
+    # is required on that path.
+    clone_step = recipe.steps[clone_step_name]
+    success_target = clone_step.on_success
+    if not success_target or success_target not in all_step_names:
+        return []
+
+    # Find all steps reachable after a successful clone (BFS with barriers suppressed).
+    reachable = bfs_reachable(graph, success_target)
 
     # Check if any reachable step is a terminal (action == "stop").
     findings: list[RuleFinding] = []

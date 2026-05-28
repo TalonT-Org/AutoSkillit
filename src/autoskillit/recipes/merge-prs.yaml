@@ -1508,7 +1508,8 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:resolve-merge-conflicts '${{ context.work_dir }}' '${{ inputs.base_branch }}'
+      skill_command: /autoskillit:resolve-merge-conflicts ${{ context.work_dir }}
+        ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: resolve_pre_review_integration_conflicts

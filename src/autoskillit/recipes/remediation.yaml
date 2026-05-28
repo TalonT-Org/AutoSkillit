@@ -1792,12 +1792,12 @@ steps:
       conflict_escalation_required: ${{ result.escalation_required }}
     on_result:
     - when: ${{ result.escalation_required }} == true
-      route: release_issue_failure
+      route: diagnose_ci
     - route: check_ci_rebase_loop
-    on_failure: release_issue_failure
-    on_context_limit: release_issue_failure
+    on_failure: diagnose_ci
+    on_context_limit: diagnose_ci
     retries: 1
-    on_exhausted: release_issue_failure
+    on_exhausted: diagnose_ci
   check_ci_rebase_loop:
     tool: run_python
     with:

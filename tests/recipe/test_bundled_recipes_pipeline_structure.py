@@ -242,9 +242,10 @@ class TestPipelineVariantInvariants:
 
     def test_audit_impl_has_on_context_limit(self, recipe) -> None:
         step = recipe.steps["audit_impl"]
-        assert step.on_context_limit == "escalate_stop", (
-            "audit_impl is a merge gate; a context-exhausted audit cannot provide "
-            "a valid verdict — aborting via escalate_stop is correct"
+        assert step.on_context_limit == "register_clone_failure", (
+            "audit_impl on context limit must register the clone before escalating — "
+            "clone-terminal-requires-registration requires all terminal paths go through "
+            "register_clone_status"
         )
 
     def test_compose_pr_has_on_context_limit(self, recipe) -> None:
@@ -308,9 +309,10 @@ class TestImplementationPipelineStructure:
         """
         step = recipe.steps["audit_impl"]
         assert step.on_success is None  # on_result is used; on_success remains absent
-        assert step.on_failure == "escalate_stop", (
-            "audit_impl must declare on_failure: escalate_stop. "
-            "Tool-level failures produce no result object — on_result conditions cannot fire."
+        assert step.on_failure == "register_clone_failure", (
+            "audit_impl must declare on_failure: register_clone_failure. "
+            "Tool-level failures produce no result object — on_result conditions cannot fire. "
+            "Clone must be registered before escalating via register_clone_failure."
         )
 
     def test_ip6_plan_step_note_contains_glob_pattern(self, recipe) -> None:

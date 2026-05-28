@@ -28,6 +28,7 @@ from autoskillit.core import (
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.schema import _TERMINAL_TARGETS
 
 logger = get_logger(__name__)
 
@@ -256,7 +257,14 @@ def _check_clone_terminal_requires_registration(ctx: ValidationContext) -> list[
             for route in step.on_result.routes.values():
                 if route in all_step_names:
                     targets.add(route)
-        if step.on_exhausted and step.on_exhausted in all_step_names:
+        # on_exhausted defaults to the sentinel "escalate" on every RecipeStep.
+        # Skip sentinel values to avoid false edges when a step happens to share
+        # a name with a sentinel (e.g. a step literally named "escalate").
+        if (
+            step.on_exhausted
+            and step.on_exhausted in all_step_names
+            and step.on_exhausted not in _TERMINAL_TARGETS
+        ):
             targets.add(step.on_exhausted)
         graph[sn] = targets
         if step.tool == "register_clone_status":

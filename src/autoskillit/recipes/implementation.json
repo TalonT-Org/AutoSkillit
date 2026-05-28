@@ -158,11 +158,11 @@
           "route": "create_and_publish"
         },
         {
-          "route": "escalate_stop"
+          "route": "register_clone_failure"
         }
       ],
-      "on_failure": "escalate_stop",
-      "note": "Fetches issue title/slug and claims the issue in one turn. Returns issue_number, issue_title, issue_slug, and claimed boolean. When claimed=false (another session owns it), routes to escalate_stop. issue_slug and issue_number are passed to create_and_publish for branch naming.\n"
+      "on_failure": "register_clone_failure",
+      "note": "Fetches issue title/slug and claims the issue in one turn. Returns issue_number, issue_title, issue_slug, and claimed boolean. When claimed=false (another session owns it), routes to register_clone_failure before escalate_stop so the clone directory is registered for cleanup. issue_slug and issue_number are passed to create_and_publish for branch naming.\n"
     },
     "create_and_publish": {
       "tool": "create_and_publish_branch",
@@ -554,14 +554,14 @@
         },
         {
           "when": "result.error",
-          "route": "escalate_stop"
+          "route": "register_clone_failure"
         },
         {
           "route": "remediate"
         }
       ],
-      "on_failure": "escalate_stop",
-      "on_context_limit": "escalate_stop",
+      "on_failure": "register_clone_failure",
+      "on_context_limit": "register_clone_failure",
       "optional": true,
       "skip_when_false": "inputs.audit",
       "note": "Only execute if inputs.audit is 'true'. If false, skip directly to check_has_commits. Captures verdict and remediation_path. Routes GO → push, NO GO → remediate which re-enters the plan step with the remediation file. All parts have been merged at this point — no worktree exists. Uses context.base_sha (a stable commit SHA captured before any merge began) as implementation_ref. A SHA names a git object and survives git branch -D unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the left) covers the full implementation.\n"

@@ -304,6 +304,7 @@ steps:
         }}
       cwd: ${{ context.worktree_path }}
       step_name: retry_worktree
+      output_dir: '.'
     capture:
       worktree_path: ${{ result.worktree_path }}
       phases_implemented: ${{ result.phases_implemented }}
@@ -537,6 +538,7 @@ steps:
         context.plan_path }} ${{ inputs.base_branch }}
       cwd: ${{ context.worktree_path }}
       step_name: fix
+      output_dir: '.'
     capture:
       verdict: ${{ result.verdict }}
       fixes_applied: ${{ result.fixes_applied }}
@@ -564,6 +566,7 @@ steps:
         }} ${{ context.plan_path }} ${{ inputs.base_branch }}
       cwd: ${{ context.worktree_path }}
       step_name: rebase_conflict_fix
+      output_dir: '.'
     capture:
       conflict_escalation_required: ${{ result.escalation_required }}
     on_result:

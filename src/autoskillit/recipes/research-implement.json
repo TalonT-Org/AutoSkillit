@@ -580,7 +580,8 @@
       "with": {
         "skill_command": "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ inputs.experiment_plan }} ${{ inputs.base_branch }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "fix"
+        "step_name": "fix",
+        "output_dir": "."
       },
       "capture": {
         "verdict": "${{ result.verdict }}",

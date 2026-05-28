@@ -941,7 +941,8 @@
       "with": {
         "skill_command": "/autoskillit:retry-worktree ${{ context.pr_plan_path }} ${{ context.worktree_path }}",
         "cwd": "${{ context.worktree_path }}",
-        "step_name": "retry_worktree"
+        "step_name": "retry_worktree",
+        "output_dir": "."
       },
       "capture": {
         "worktree_path": "${{ result.worktree_path }}",
@@ -1133,7 +1134,8 @@
         "skill_command": "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.pr_plan_path }} ${{ context.batch_branch }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "fix",
-        "base_branch": "${{ inputs.base_branch }}"
+        "base_branch": "${{ inputs.base_branch }}",
+        "output_dir": "."
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
@@ -1372,7 +1374,8 @@
       "with": {
         "skill_command": "/autoskillit:resolve-merge-conflicts ${{ context.batch_branch }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
-        "step_name": "resolve_integration_conflicts"
+        "step_name": "resolve_integration_conflicts",
+        "output_dir": "."
       },
       "capture": {
         "conflict_escalation_required": "${{ result.escalation_required }}",

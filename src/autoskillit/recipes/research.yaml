@@ -751,6 +751,7 @@ steps:
       skill_command: "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.experiment_plan }} ${{ inputs.base_branch }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: fix
+      output_dir: '.'
     capture:
       verdict: "${{ result.verdict }}"
       fixes_applied: "${{ result.fixes_applied }}"
@@ -938,6 +939,7 @@ steps:
       skill_command: "/autoskillit:resolve-research-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: resolve_research_review
+      output_dir: '.'
     capture:
       review_needs_rerun: "${{ result.needs_rerun }}"
     retries: 2
@@ -967,6 +969,7 @@ steps:
       skill_command: "/autoskillit:resolve-claims-review ${{ context.worktree_path }} ${{ inputs.base_branch }}"
       cwd: "${{ context.worktree_path }}"
       step_name: resolve_claims_review
+      output_dir: '.'
     capture:
       claims_needs_rerun: "${{ result.needs_rerun }}"
     retries: 2
@@ -1102,6 +1105,7 @@ steps:
       skill_command: "/autoskillit:bundle-local-report ${{ context.research_dir }} ${{ context.report_path_after_finalize }} ${{ context.all_diagram_paths }} ${{ context.visualization_plan_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: finalize_bundle_render
+      output_dir: '.'
     capture:
       html_path: "${{ result.html_path }}"
     on_success: route_archive_or_export

@@ -109,6 +109,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_resolve_ci_routing_invariant.py` | Tests for CI routing invariant in resolve steps |
 | `test_review_loop_routing_integration.py` | Integration tests for review loop routing |
 | `test_review_loop_routing_invariant.py` | Routing invariant tests: check_review_loop is mandatory waypoint between review_pr and check_repo_ci_event |
+| `test_rule_helpers.py` | Unit tests for push_reachable and other rule helper functions |
 | `test_rule_decomposition.py` | Tests for semantic rule decomposition structure |
 | `test_rules_actions.py` | Tests for actions semantic validation rule |
 | `test_rules_blocks.py` | Tests for blocks semantic validation rule |

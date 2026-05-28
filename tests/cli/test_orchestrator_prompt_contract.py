@@ -207,3 +207,21 @@ class TestFirstActionDirectOpenKitchen:
         first_action = prompt[fa_start:fa_end]
         assert "Bash" not in first_action
         assert "sleep" not in first_action.lower()
+
+
+def test_cook_prompt_skip_guard_parity_with_fleet():
+    """The cook prompt must handle skip_when_false resolution at least as correctly as the
+    fleet prompt — which passes overrides to open_kitchen."""
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    cook_prompt = _build_orchestrator_prompt("remediation", mcp_prefix="mcp__autoskillit__")
+    cook_has_resolution = (
+        "overrides=" in cook_prompt
+        or "deferred" in cook_prompt.lower()
+        or "resolve" in cook_prompt.lower()
+    )
+    assert cook_has_resolution, (
+        "Fleet prompt passes overrides to open_kitchen but cook prompt has no "
+        "skip-guard resolution mechanism. Steps with skip_when_false defaults of 'false' "
+        "are irreversibly pruned before the user is asked for their preferences."
+    )

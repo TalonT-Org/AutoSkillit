@@ -431,7 +431,7 @@ def _resolve_skip_guards_in_content(
 
 def _assert_content_integrity(
     raw: str,
-    resolutions: dict[str, bool],
+    resolutions: dict[str, bool | None],
     original_steps: dict[str, Any],
 ) -> None:
     """Verify no truthy-resolved step retains optional/skip_when_false signals in content.

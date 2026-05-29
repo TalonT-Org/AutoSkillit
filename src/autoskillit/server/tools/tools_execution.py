@@ -310,6 +310,10 @@ async def run_skill(
                 "error": f"run_skill: cwd does not exist: {cwd}",
             }
         )
+    from autoskillit.server import _get_ctx
+
+    _cleanup_session_id: str | None = None
+    tool_ctx = _get_ctx()
     try:
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
@@ -321,7 +325,7 @@ async def run_skill(
                 extra={"cwd": cwd, "model": model or "default"},
             )
 
-            from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import _get_config
 
             # Auto-enrich order_id from the fleet dispatcher's env variable when the
             # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
@@ -334,7 +338,6 @@ async def run_skill(
                 if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
                     return gate_error
 
-            tool_ctx = _get_ctx()
             if tool_ctx.executor is None:
                 return json.dumps({"success": False, "error": "Executor not configured"})
 
@@ -497,7 +500,6 @@ async def run_skill(
             invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
 
             skill_add_dirs: list[ValidatedAddDir] = []
-            _cleanup_session_id: str | None = None
             replay_snapshot_used = False
             _runner = tool_ctx.runner
             if (

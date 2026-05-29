@@ -77,7 +77,7 @@ def _apply_budget_guard(
 
 
 def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult:
-    raw = agent_result.raw
+    raw = agent_result.raw if isinstance(agent_result.raw, dict) else {}
 
     session_id = agent_result.session_id or ""
     is_error = raw.get("is_error", not agent_result.success)

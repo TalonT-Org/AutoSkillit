@@ -300,7 +300,6 @@ def test_wp_index_rebuilt_with_merged_ids(tmp_path: Path) -> None:
     index = json.loads((tmp_path / "work_packages" / "wp_index.json").read_text())
     assert len(index) == 2
     merged_entry = next(e for e in index if e["id"] == "P1-A1-WP1")
-    assert merged_entry["id"] == "P1-A1-WP1"
     assert "name" in merged_entry
 
 
@@ -503,7 +502,6 @@ def test_fallback_respects_dependency_ordering(tmp_path: Path) -> None:
     assert "P1-A1-WP2" not in output_ids
     assert "P1-A1-WP3" not in output_ids
     merged_a = next(wp for wp in consolidated["work_packages"] if wp["id"] == "P1-A1-WP1")
-    assert merged_a["id"] == "P1-A1-WP1"
     assert "P1-A1-WP2" not in merged_a["depends_on"]
     assert "P1-A1-WP3" not in merged_a["depends_on"]
 

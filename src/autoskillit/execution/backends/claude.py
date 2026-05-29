@@ -245,10 +245,16 @@ class ClaudeResultParser:
                 "write_artifacts": write_artifacts,
                 "tool_uses": result.tool_uses,
                 "assistant_messages": result.assistant_messages,
+                "errors": list(result.errors),
                 "jsonl_context_exhausted": result.jsonl_context_exhausted,
                 "stop_reasons": result.stop_reasons,
                 "has_thinking_only_turn": result.has_thinking_only_turn,
                 "seen_block_types": list(result.seen_block_types),
+                "api_error_status": result.api_error_status,
+                "api_retry_count": result.api_retry_count,
+                "api_retry_last_error": result.api_retry_last_error,
+                "api_retry_last_status": result.api_retry_last_status,
+                "api_retry_exhausted": result.api_retry_exhausted,
             },
         )
 

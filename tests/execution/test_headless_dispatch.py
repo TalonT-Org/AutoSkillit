@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types._type_plugin_source import DirectInstall, MarketplaceInstall
-from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeResultParser
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -213,6 +213,7 @@ class TestDispatchFoodTruck:
             cmd=("claude", "--print", "test-prompt"), env={}
         )
         backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        backend.result_parser.return_value = ClaudeResultParser()
         minimal_ctx.backend = backend
 
         runner = MockSubprocessRunner()

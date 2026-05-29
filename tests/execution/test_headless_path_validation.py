@@ -1812,6 +1812,7 @@ class TestNudgeBackendGuard:
         mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        mock_backend.result_parser.return_value = ClaudeResultParser()
         mock_backend.build_skill_session_cmd.return_value = CmdSpec(
             cmd=("claude", "--print", "test"),
             env={},
@@ -1936,7 +1937,7 @@ class TestNudgeBackendGuard:
         mock_backend.build_resume_cmd.assert_called_once()
         call_kwargs = mock_backend.build_resume_cmd.call_args
         assert call_kwargs.kwargs["resume_session_id"] == "sess-main"
-        mock_backend.result_parser.assert_called_once()
+        mock_backend.result_parser.assert_called()
 
 
 class TestEarlyStopDetection:

@@ -487,6 +487,12 @@ def _extract_sections(content: str) -> list[str]:
     return [p for p in parts if p.strip()]
 
 
+def _extract_subsections(content: str) -> list[str]:
+    """Split SKILL.md content into subsections at the ### level."""
+    parts = re.split(r"(?m)^(?=###\s)", content)
+    return [p for p in parts if p.strip()]
+
+
 @semantic_rule(
     name="transition-boundary-anti-confirmation",
     description=(
@@ -602,6 +608,62 @@ def _check_executable_field_content_validity(
                             f"V-rule {m.group(1)} in {skill_name} mentions an executable "
                             f"field but lacks content-validity criteria "
                             f"(placeholder/template rejection language)."
+                        ),
+                    )
+                )
+    return findings
+
+
+_REVIEWS_POST_RE: re.Pattern[str] = re.compile(
+    r"pulls/\{[^}]*\}/reviews[^\n]*--method\s+POST"
+    r"|--method\s+POST[^\n]*pulls/\{[^}]*\}/reviews"
+    r"|POST\s+/repos/\{[^}]*\}/\{[^}]*\}/pulls/\{[^}]*\}/reviews",
+    re.IGNORECASE,
+)
+
+
+@semantic_rule(
+    name="reviews-post-requires-input-flag",
+    severity=Severity.ERROR,
+    description=(
+        "A SKILL.md section mentions POST to the GitHub Reviews API with a comments[] "
+        "array but does not contain '--input -'. The --field approach serializes JSON "
+        "arrays as string literals, causing HTTP 422."
+    ),
+)
+def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire when a SKILL.md ### subsection has a reviews POST endpoint but no --input -."""
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for subsection in _extract_subsections(content):
+            collapsed = re.sub(r"\\\n\s*", " ", subsection)
+            if _REVIEWS_POST_RE.search(collapsed) and "--input -" not in collapsed:
+                findings.append(
+                    RuleFinding(
+                        rule="reviews-post-requires-input-flag",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Skill '{skill_name}' has a section that POSTs to the GitHub "
+                            f"Reviews endpoint but does not use '--input -'. The --field "
+                            f"approach serializes JSON arrays as string literals, causing "
+                            f"HTTP 422. Use: jq -n ... | gh api .../reviews "
+                            f"--method POST --input -"
                         ),
                     )
                 )

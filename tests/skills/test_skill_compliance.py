@@ -18,6 +18,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from autoskillit.recipe.rules.rules_skill_content import (
+    _REVIEWS_POST_RE,
+    _extract_subsections,
+)
 from autoskillit.workspace.skills import DefaultSkillResolver
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
@@ -436,3 +440,28 @@ def test_implement_skills_have_anti_blame_prohibition(skill_dir: Path) -> None:
         'Add: \'- Blame pre-commit or lint failures on "pre-existing issues" '
         "\u2014 ALL pre-commit checks must pass on the committed code'"
     )
+
+
+@pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda p: p.name)
+def test_reviews_post_requires_input_flag(skill_dir: Path) -> None:
+    """Any SKILL.md section that POSTs to the GitHub Reviews endpoint must use --input -.
+
+    The --field approach serializes JSON arrays as string literals, causing HTTP 422.
+    Catches any future skill that adds a POST /pulls/{N}/reviews endpoint without --input -,
+    regardless of which skill or which step.
+
+    To verify this test is effective: temporarily remove '--input -' from a reviews POST
+    section in any SKILL.md and confirm this test fails. Then restore it.
+    """
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        pytest.skip(f"{skill_dir.name} has no SKILL.md")
+    content = skill_md.read_text(encoding="utf-8")
+    for subsection in _extract_subsections(content):
+        if _REVIEWS_POST_RE.search(subsection):
+            assert "--input -" in subsection, (
+                f"{skill_dir.name}/SKILL.md: a section mentions POST to the GitHub Reviews "
+                f"endpoint but does not contain '--input -'. The --field approach serializes "
+                f"JSON arrays as string literals, causing HTTP 422. "
+                f"Use: jq -n ... | gh api .../reviews --method POST --input -"
+            )

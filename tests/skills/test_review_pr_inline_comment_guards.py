@@ -146,6 +146,29 @@ def test_step6_uses_input_flag_not_field_for_comments():
     )
 
 
+def test_step15_resolve_review_uses_input_flag_not_field_for_comments():
+    """resolve-review Step 1.5 must prescribe --input - for the batch reviews POST.
+
+    Step 1.5 posts accumulated deferred observations via POST /reviews. Using
+    --field for the comments[] array serializes it as a string literal, causing
+    HTTP 422. Guarded here to prevent silent regression of Issue #3244.
+
+    To verify this test is effective: temporarily remove '--input -' from
+    resolve-review/SKILL.md Step 1.5 and confirm this test fails. Then restore it.
+    """
+    text = RESOLVE_SKILL_TEXT
+    step15_start = text.find("### Step 1.5")
+    step2_start = text.find("### Step 2")
+    assert step15_start != -1, "resolve-review/SKILL.md must contain '### Step 1.5'"
+    assert step2_start != -1, "resolve-review/SKILL.md must contain '### Step 2'"
+    step15_section = text[step15_start:step2_start]
+    assert "--input -" in step15_section, (
+        "resolve-review/SKILL.md Step 1.5 must use '--input -' for the batch reviews "
+        "POST payload. The --field approach serializes JSON arrays as string literals, "
+        "causing HTTP 422. This flag must appear within Step 1.5 specifically."
+    )
+
+
 def test_step6_does_not_prescribe_deprecated_position_field():
     """Comments payload must not include a 'position' field.
 

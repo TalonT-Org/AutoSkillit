@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.execution.diff_annotator import (
     DiffMetrics,
     annotate_diff,
     compute_diff_metrics,
+    extract_valid_lines,
     filter_findings,
     parse_hunk_ranges,
     select_review_agents,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_MARKER_RE = re.compile(r"^\[L(\d+)\]")
 
 # --- parse_hunk_ranges ---
 
@@ -442,3 +447,93 @@ class TestExtractCodeRegion:
         from autoskillit.execution.diff_annotator import extract_code_region
 
         assert extract_code_region("", "src/app.py", 42) == ""
+
+
+# --- extract_valid_lines ---
+
+
+class TestExtractValidLines:
+    def test_matches_annotated_markers(self):
+        diff = (
+            "diff --git a/src/app.py b/src/app.py\n"
+            "--- a/src/app.py\n"
+            "+++ b/src/app.py\n"
+            "@@ -10,3 +10,5 @@ def main():\n"
+            " existing_line\n"
+            "+new_import\n"
+            "+another_import\n"
+            " more_existing\n"
+            "@@ -50,2 +52,3 @@ def helper():\n"
+            " context\n"
+            "+added_call\n"
+            "diff --git a/tests/test_app.py b/tests/test_app.py\n"
+            "--- a/tests/test_app.py\n"
+            "+++ b/tests/test_app.py\n"
+            "@@ -1,2 +1,4 @@\n"
+            " import pytest\n"
+            "+from app import main\n"
+            "+from app import helper\n"
+            " \n"
+        )
+        valid = extract_valid_lines(diff)
+        annotated = annotate_diff(diff)
+        marker_lines: dict[str, set[int]] = {}
+        current_file = None
+        for line in annotated.splitlines():
+            if line.startswith("+++ b/"):
+                current_file = line[len("+++ b/") :]
+            m = _MARKER_RE.match(line)
+            if m and current_file:
+                marker_lines.setdefault(current_file, set()).add(int(m.group(1)))
+        for filepath in valid:
+            assert set(valid[filepath]) == marker_lines.get(filepath, set())
+
+    def test_subset_of_hunk_spans(self):
+        diff = (
+            "diff --git a/f.py b/f.py\n"
+            "--- a/f.py\n"
+            "+++ b/f.py\n"
+            "@@ -10,5 +10,6 @@\n"
+            " line10\n"
+            "+added11\n"
+            "-removed\n"
+            " line12\n"
+            " line13\n"
+            " line14\n"
+        )
+        valid = extract_valid_lines(diff)
+        ranges = parse_hunk_ranges(diff)
+        for filepath, lines in valid.items():
+            for line_num in lines:
+                assert any(start <= line_num <= end for start, end in ranges.get(filepath, []))
+
+    def test_filter_findings_with_exact_lines_rejects_fabricated_line(self):
+        diff = (
+            "diff --git a/foo.py b/foo.py\n"
+            "--- a/foo.py\n"
+            "+++ b/foo.py\n"
+            "@@ -10,5 +10,4 @@\n"
+            " line10\n"
+            "+line11\n"
+            "-deleted_old_12\n"
+            " line12\n"
+            "+line13\n"
+        )
+        valid = extract_valid_lines(diff)
+        ranges = parse_hunk_ranges(diff)
+        assert ranges == {"foo.py": [(10, 13)]}
+        fabricated_line = 14
+        assert fabricated_line not in set(valid.get("foo.py", []))
+        finding_at_14 = [{"file": "foo.py", "line": fabricated_line, "message": "fabricated"}]
+        result_old = filter_findings(finding_at_14, ranges)
+        assert len(result_old.filtered) == 0
+        result_new = filter_findings(finding_at_14, {}, valid_lines=valid)
+        assert len(result_new.unpostable) == 1
+        assert result_new.unpostable[0]["line"] == fabricated_line
+
+    def test_filter_findings_valid_lines_not_bypassed_by_empty_ranges(self):
+        valid = {"foo.py": [10, 11]}
+        findings = [{"file": "foo.py", "line": 12, "message": "out of set"}]
+        result = filter_findings(findings, {}, valid_lines=valid)
+        assert len(result.unpostable) == 1
+        assert len(result.filtered) == 0

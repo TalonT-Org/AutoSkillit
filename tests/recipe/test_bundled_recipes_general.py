@@ -378,7 +378,11 @@ def test_review_pr_step_passes_annotated_diff_inputs(recipe_name: str) -> None:
     assert review_steps, f"No review-pr step found in {recipe_name}.yaml"
     for step_name, step in review_steps:
         cmd = step.with_args.get("skill_command", "")
-        has_inline = "annotated_diff_path=" in cmd and "hunk_ranges_path=" in cmd
+        has_inline = (
+            "annotated_diff_path=" in cmd
+            and "hunk_ranges_path=" in cmd
+            and "valid_lines_path=" in cmd
+        )
         has_predecessor = any(
             s.with_args.get("callable", "") == "autoskillit.smoke_utils.annotate_pr_diff"
             for s in recipe.steps.values()
@@ -416,6 +420,10 @@ def test_annotate_pr_diff_captures_both_paths(recipe_name: str) -> None:
         assert "hunk_ranges_path" in step.capture, (
             f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' must capture "
             f"hunk_ranges_path"
+        )
+        assert "valid_lines_path" in step.capture, (
+            f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' must capture "
+            f"valid_lines_path"
         )
 
 

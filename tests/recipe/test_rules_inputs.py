@@ -53,7 +53,8 @@ def test_missing_recommended_input_passes_when_input_provided():
     recipe = _make_recipe_with_skill_step(
         "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} "
         "annotated_diff_path=${{ context.annotated_diff_path }} "
-        "hunk_ranges_path=${{ context.hunk_ranges_path }}"
+        "hunk_ranges_path=${{ context.hunk_ranges_path }} "
+        "valid_lines_path=${{ context.valid_lines_path }}"
     )
     findings = run_semantic_rules(recipe)
     rec_findings = [f for f in findings if f.rule == "missing-recommended-input"]

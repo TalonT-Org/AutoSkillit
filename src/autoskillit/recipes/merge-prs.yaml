@@ -1421,6 +1421,7 @@ steps:
     capture:
       annotated_diff_path: ${{ result.annotated_diff_path }}
       hunk_ranges_path: ${{ result.hunk_ranges_path }}
+      valid_lines_path: ${{ result.valid_lines_path }}
       diff_metrics_path: ${{ result.diff_metrics_path }}
     on_success: review_pr_integration
     on_failure: review_pr_integration
@@ -1436,7 +1437,8 @@ steps:
     with:
       skill_command: /autoskillit:review-pr ${{ context.batch_branch }} ${{ inputs.base_branch
         }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{
-        context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path
+        context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }}
+        diff_metrics_path=${{ context.diff_metrics_path
         }}
       cwd: ${{ context.work_dir }}
       step_name: review_pr_integration

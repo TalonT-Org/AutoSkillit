@@ -156,19 +156,59 @@ def annotate_diff(diff_text: str) -> str:
     return "\n".join(output_lines)
 
 
+def extract_valid_lines(diff_text: str) -> dict[str, list[int]]:
+    """Extract the exact set of new-file line numbers present in the diff.
+
+    Returns {filepath: sorted_line_numbers} where each line number corresponds
+    to a + or context line in the diff body — the same lines annotate_diff
+    marks with [LNNN]. This is a strict subset of (or equal to) the hunk spans
+    returned by parse_hunk_ranges.
+    """
+    result: dict[str, list[int]] = {}
+    current_file: str | None = None
+    current_line = 0
+    in_hunk = False
+
+    for line in diff_text.splitlines():
+        file_match = _FILE_HEADER.match(line)
+        if file_match:
+            current_file = file_match.group(1)
+            in_hunk = False
+            continue
+
+        hunk_match = _HUNK_HEADER.match(line)
+        if hunk_match:
+            current_line = int(hunk_match.group(1))
+            in_hunk = True
+            continue
+
+        if not in_hunk or current_file is None:
+            continue
+
+        if line.startswith("-"):
+            pass
+        elif line.startswith("+") or line.startswith(" "):
+            result.setdefault(current_file, []).append(current_line)
+            current_line += 1
+
+    return {k: sorted(v) for k, v in result.items()}
+
+
 def filter_findings(
     findings: list[dict],
     valid_ranges: dict[str, list[tuple[int, int]]],
+    valid_lines: dict[str, list[int]] | None = None,
 ) -> FilterResult:
     """Partition findings into filtered (in-range) and unpostable (out-of-range).
 
-    When valid_ranges is empty, all findings pass through (no filtering possible).
+    When valid_lines is provided, uses exact set-membership for validation instead
+    of hunk-span interval checking. When both are absent, all findings pass through.
     Sets all_unpostable=True when total findings > 0 and filtered is empty.
     """
     if not findings:
         return FilterResult()
 
-    if not valid_ranges:
+    if not valid_ranges and valid_lines is None:
         return FilterResult(filtered=list(findings))
 
     filtered: list[dict] = []
@@ -177,12 +217,19 @@ def filter_findings(
     for finding in findings:
         file_path = finding.get("file", "")
         line_num = finding.get("line", 0)
-        file_ranges = valid_ranges.get(file_path, [])
 
-        if any(start <= line_num <= end for start, end in file_ranges):
-            filtered.append(finding)
+        if valid_lines is not None:
+            valid_set = set(valid_lines.get(file_path, []))
+            if line_num in valid_set:
+                filtered.append(finding)
+            else:
+                unpostable.append(finding)
         else:
-            unpostable.append(finding)
+            file_ranges = valid_ranges.get(file_path, [])
+            if any(start <= line_num <= end for start, end in file_ranges):
+                filtered.append(finding)
+            else:
+                unpostable.append(finding)
 
     return FilterResult(
         filtered=filtered,

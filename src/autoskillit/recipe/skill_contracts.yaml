@@ -580,6 +580,10 @@ skills:
       type: string
       required: false
       recommended: true
+    - name: valid_lines_path
+      type: string
+      required: false
+      recommended: true
     - name: diff_metrics_path
       type: string
       required: false
@@ -1575,6 +1579,14 @@ skills:
     - name: pr_url
       type: string
       required: true
+    - name: hunk_ranges_path
+      type: string
+      required: false
+      recommended: true
+    - name: valid_lines_path
+      type: string
+      required: false
+      recommended: true
     outputs:
     - name: verdict
       type: string
@@ -2339,6 +2351,8 @@ callable_contracts:
     - name: annotated_diff_path
       type: file_path
     - name: hunk_ranges_path
+      type: file_path
+    - name: valid_lines_path
       type: file_path
     - name: diff_metrics_path
       type: file_path

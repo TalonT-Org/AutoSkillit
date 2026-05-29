@@ -19,12 +19,13 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 
 ## Arguments
 
-`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [diff_metrics_path=<path>] [mode=<local|github>]`
+`/autoskillit:review-pr <feature-branch> <base-branch> [annotated_diff_path=<path>] [hunk_ranges_path=<path>] [valid_lines_path=<path>] [diff_metrics_path=<path>] [mode=<local|github>]`
 
 - **feature-branch** — The feature branch containing the changes to review
 - **base-branch** — The base branch the PR targets (e.g., "main")
 - **annotated_diff_path** (optional) — absolute path to a pre-computed annotated diff file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
 - **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided and present, read from file instead of running python3.
+- **valid_lines_path** (optional) — absolute path to a pre-computed valid lines JSON file (produced by `annotate_pr_diff` run_python step). Contains exact `{filepath: [line_numbers]}` set of new-file line numbers present in the diff. When provided, enables exact set-membership validation in Step 4 instead of hunk-span interval checking.
 - **diff_metrics_path** (optional) — absolute path to a pre-computed diff metrics JSON file (produced by `annotate_pr_diff` run_python step). Contains `dispatch_agents` list that determines which audit dimensions to spawn. When absent, all 6 standard agents are dispatched.
 - **mode** (optional, default: `github`) — Controls where findings are written:
   - `mode=github` (or absent/unrecognized): current behavior — post findings as GitHub inline review comments via the GitHub Reviews API.
@@ -196,17 +197,23 @@ Read pre-computed annotated diff and hunk ranges from disk when available:
 ```bash
 ANNOTATED_DIFF=""
 VALID_LINE_RANGES="{}"
+VALID_DIFF_LINES=""
 if [ -n "${annotated_diff_path:-}" ] && [ -f "$annotated_diff_path" ]; then
     ANNOTATED_DIFF="$(cat "$annotated_diff_path")"
 fi
 if [ -n "${hunk_ranges_path:-}" ] && [ -f "$hunk_ranges_path" ]; then
     VALID_LINE_RANGES="$(cat "$hunk_ranges_path")"
 fi
+if [ -n "${valid_lines_path:-}" ] && [ -f "$valid_lines_path" ]; then
+    VALID_DIFF_LINES="$(cat "$valid_lines_path")"
+fi
 ```
 
-`VALID_LINE_RANGES` is a JSON mapping file paths to valid hunk line ranges. Load it in Step 4
-for filtering. If `annotated_diff_path` or `hunk_ranges_path` are absent, leave
-`ANNOTATED_DIFF` and `VALID_LINE_RANGES` empty (no filtering).
+`VALID_DIFF_LINES` is a JSON mapping `{filepath: [line_numbers]}` containing the exact set of
+new-file line numbers present in the diff. When available, Step 4 uses set-membership for
+validation instead of hunk-span interval checking. `VALID_LINE_RANGES` is a JSON mapping file
+paths to valid hunk line ranges used as fallback. If all paths are absent, leave variables
+empty (no filtering).
 
 ### Step 2.5: Deletion Context Pre-Computation
 
@@ -438,16 +445,22 @@ Subagent prompt template (dimension 7 — deletion_regression, only when `deleti
    `"Suppressing finding at {file}:{line} — matches prior resolved thread"`.
    The remaining findings proceed through deduplication and verdict logic unchanged.
 3. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-4. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
-   - `FILTERED_FINDINGS`: findings whose `(file, line)` falls within any hunk range for
-     that file. These are in-hunk and safe to post as inline comments in Step 6.
-   - `UNPOSTABLE_FINDINGS`: findings whose `line` is not in any hunk range for their file.
+4. Partition findings using exact line validation when available:
+   - When `VALID_DIFF_LINES` is non-empty (loaded in Step 2.7), use **set-membership**:
+     a finding is postable if its `line` exists in `VALID_DIFF_LINES[file]`. This is
+     strictly more accurate than hunk-span interval checking.
+   - When `VALID_DIFF_LINES` is empty but `VALID_LINE_RANGES` is non-empty, fall back to
+     **hunk-span interval checking**: a finding is postable if its `(file, line)` falls
+     within any hunk range for that file.
+   - `FILTERED_FINDINGS`: findings that pass validation (either set-membership or interval).
+     These are safe to post as inline comments in Step 6.
+   - `UNPOSTABLE_FINDINGS`: findings that fail validation.
      Log a warning for each. These findings are surfaced via:
      - Step 6: Critical-severity unpostable findings are posted as file-level comments
        (subject_type: "file") on the individual comments endpoint.
      - Step 7: All unpostable findings appear in the "Outside Diff Range" section of the
        review body.
-   - If `VALID_LINE_RANGES` is empty, all findings are `FILTERED_FINDINGS`.
+   - If both `VALID_DIFF_LINES` and `VALID_LINE_RANGES` are empty, all findings are `FILTERED_FINDINGS`.
 5. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
    combined), so unpostable findings still contribute to the `changes_requested` verdict.
 6. Bucket by actionability (applied to combined findings):
@@ -640,7 +653,11 @@ sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Individual POSTs are not atomic — one failure does not block others.
-If at least one per-finding comment succeeds, proceed to Step 7.
+When an individual POST returns HTTP 422 (typically an invalid line number), retry that
+specific comment as a file-level comment using `subject_type: "file"` (no `line` field)
+on the `/repos/{owner}/{repo}/pulls/{pr_number}/comments` endpoint. If the file-level
+retry also fails, log the failure and continue to the next finding.
+If at least one per-finding comment succeeds (inline or file-level), proceed to Step 7.
 
 **Fallback Tier 2 — DEGRADED: Bullet-List Summary Dump (if all individual posts fail):**
 

@@ -92,3 +92,43 @@ def test_review_pr_skill_reads_diff_metrics_from_file() -> None:
     assert "diff_metrics_path" in skill_text, (
         "review-pr SKILL.md must read diff_metrics_path from disk"
     )
+
+
+def test_review_research_pr_hunk_ranges_in_contract() -> None:
+    """review-research-pr contract must declare hunk_ranges_path input."""
+    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    inputs = raw.get("skills", {}).get("review-research-pr", {}).get("inputs", [])
+    names = [inp["name"] for inp in inputs]
+    assert "hunk_ranges_path" in names, (
+        "review-research-pr contract must have a hunk_ranges_path input entry"
+    )
+
+
+def test_review_skills_valid_lines_in_contract() -> None:
+    """review-pr and review-research-pr contracts must declare valid_lines_path input."""
+    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    for skill_name in ("review-pr", "review-research-pr"):
+        inputs = raw.get("skills", {}).get(skill_name, {}).get("inputs", [])
+        names = [inp["name"] for inp in inputs]
+        assert "valid_lines_path" in names, (
+            f"{skill_name} contract must have a valid_lines_path input entry"
+        )
+    audit_inputs = raw.get("skills", {}).get("audit-claims", {}).get("inputs", [])
+    audit_names = [inp["name"] for inp in audit_inputs]
+    assert "valid_lines_path" not in audit_names, (
+        "audit-claims must NOT have valid_lines_path — it uses section-level line numbers"
+    )
+
+
+def test_annotate_pr_diff_callable_contract_has_valid_lines_path() -> None:
+    """annotate_pr_diff callable contract must declare valid_lines_path output."""
+    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    outputs = (
+        raw.get("callable_contracts", {})
+        .get("autoskillit.smoke_utils.annotate_pr_diff", {})
+        .get("outputs", [])
+    )
+    names = [o["name"] for o in outputs]
+    assert "valid_lines_path" in names, (
+        "annotate_pr_diff contract must have a valid_lines_path output entry"
+    )

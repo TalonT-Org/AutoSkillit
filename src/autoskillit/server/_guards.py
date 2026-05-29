@@ -188,7 +188,9 @@ def _check_input_contracts(
     try:
         specs = resolver(skill_command)
     except Exception:
-        logger.warning("input_contract_resolver_failed", skill_command=skill_command)
+        logger.warning(
+            "input_contract_resolver_failed", skill_command=skill_command, exc_info=True
+        )
         return None
     if not specs:
         return None
@@ -201,7 +203,7 @@ def _check_input_contracts(
             if spec.required:
                 return gate_error_result(
                     f"Missing required {spec.type} argument '{spec.name}' "
-                    f"for {extract_skill_name(skill_command)}"
+                    f"for {extract_skill_name(skill_command) or skill_command}"
                 )
             continue
 

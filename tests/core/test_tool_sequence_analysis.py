@@ -430,12 +430,14 @@ class TestIterMergedAssistantTurns:
         assert len(turns) == 2
         assert turns[0].tool_names == ("A",)
         assert turns[1].tool_names == ("B",)
+        assert turns[0].request_id == "turn-0"
+        assert turns[1].request_id == "turn-1"
 
     def test_records_without_request_id_included(self) -> None:
         line = self._make_record(tools=["Bash"])
         turns = self._parse(line)
         assert len(turns) == 1
-        assert turns[0].request_id == ""
+        assert turns[0].request_id == "turn-0"
         assert turns[0].tool_names == ("Bash",)
 
     def test_preserves_insertion_order(self) -> None:
@@ -452,7 +454,7 @@ class TestIterMergedAssistantTurns:
         turns = self._parse(l_a, l_no, l_b)
         assert len(turns) == 3
         assert turns[0].request_id == "r-A"
-        assert turns[1].request_id == ""
+        assert turns[1].request_id == "turn-0"
         assert turns[2].request_id == "r-B"
 
     def test_timestamp_from_first_record_preferred(self) -> None:

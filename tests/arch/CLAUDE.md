@@ -47,6 +47,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_make_context_env_boundary.py` | AST guard: _factory.py functions must not read AUTOSKILLIT_PRIVATE_ENV_VARS from os.environ |
 | `test_never_raises_contracts.py` | Structural enforcement of 'Never raises' docstring contracts in server/ |
 | `test_no_error_dict_return.py` | AST guard: load_and_validate must not return dicts with 'error' key — errors flow via exceptions |
+| `test_flush_no_rid_guard.py` | AST guard: no requestId truthiness guard in flush_session_log turn extraction loop |
 | `test_no_inline_jsonl_request_id_dedup.py` | AST guard: no inline requestId dedup in session_log.py or tool_sequence_analysis.py |
 | `test_protocol_names.py` | T5-T6: Protocol naming and DefaultSkillResolver export smoke tests |
 | `test_provider_profile_contract.py` | Tier 3 contract: _resolve_provider_profile must never return step_name as profile |

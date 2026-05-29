@@ -206,8 +206,6 @@ def flush_session_log(
         try:
             _text = cc_log.read_text(encoding="utf-8", errors="replace")
             for _turn in iter_merged_assistant_turns(_text):
-                if not _turn.request_id:
-                    continue
                 _cb_request_ids.append(_turn.request_id)
                 _cb_turn_timestamps.append(_turn.timestamp)
                 _cb_turn_tool_calls.append(_turn.tool_names)

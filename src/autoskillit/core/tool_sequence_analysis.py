@@ -105,7 +105,7 @@ def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Itera
         else:
             key = str(no_rid_counter)
             no_rid_counter += 1
-            no_rid_turns[key] = AssistantTurn("", ts, tuple(tools[:cap]))
+            no_rid_turns[key] = AssistantTurn(f"turn-{key}", ts, tuple(tools[:cap]))
             insertion_order.append(("no_rid", key))
 
     for kind, key in insertion_order:

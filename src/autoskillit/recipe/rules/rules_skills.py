@@ -10,7 +10,7 @@ from autoskillit.recipe._skill_helpers import _get_bundled_skill_names, _get_ski
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
-_SKILL_TOKEN_RE = re.compile(r"/autoskillit:(\S+)")
+_SKILL_TOKEN_RE = re.compile(r"/(?:autoskillit:)?(\S+)")
 
 
 def _has_dynamic_skill_name(skill_cmd: str) -> bool:

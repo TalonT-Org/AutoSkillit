@@ -28,6 +28,7 @@ Workspace cleanup, clone lifecycle, session skills, and worktree tests.
 | `test_skill_format.py` | Unit tests for skill frontmatter validation functions |
 | `test_session_skills_format_gate.py` | Format gate tests for init_session and activate_with_deps |
 | `test_skill_content_substitution.py` | Tests for SkillsDirectoryProvider.get_skill_content placeholder substitution |
+| `test_session_skills_namespace.py` | Phase 2 tests: session_skills module — namespace rewriting for ephemeral SKILL.md content |
 | `test_skills.py` | Tests for skill resolution hierarchy |
 | `test_worktree.py` | Worktree tests |
 

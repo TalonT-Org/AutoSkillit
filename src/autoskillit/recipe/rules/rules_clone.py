@@ -23,10 +23,12 @@ from autoskillit.core import (
     SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
     Severity,
+    extract_skill_name,
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable
+from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import _TERMINAL_TARGETS
 
@@ -40,14 +42,13 @@ logger = get_logger(__name__)
 )
 def _check_plan_parts_captured(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
-    _MULTIPART_SKILLS = {"/autoskillit:make-plan", "/autoskillit:rectify"}
     findings: list[RuleFinding] = []
 
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:
             continue
         skill_cmd = step.with_args.get("skill_command", "")
-        if not any(s in skill_cmd for s in _MULTIPART_SKILLS):
+        if extract_skill_name(skill_cmd) not in MULTIPART_SKILL_NAMES:
             continue
         if "plan_parts" not in step.capture_list:
             findings.append(
@@ -89,7 +90,7 @@ def _check_skill_command_prefix(ctx: ValidationContext) -> list[RuleFinding]:
                     step_name=step_name,
                     message=(
                         f"skill_command {skill_cmd!r} does not start with '/'. "
-                        "run_skill requires a slash-prefix (e.g. /autoskillit:investigate). "
+                        "run_skill requires a slash-prefix (e.g. /autoskillit:sous-chef). "
                         "Prose prompts bypass the skill contract and run with "
                         "--dangerously-skip-permissions."
                     ),

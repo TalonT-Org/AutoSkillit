@@ -136,6 +136,25 @@ def _strip_marker_from_body(content: str, marker: str = "%%ORDER_UP%%") -> str:
 
 _ACTIVATE_DEPS_PATTERN = re.compile(r"^activate_deps:\s*\[([^\]]*)\]", re.MULTILINE)
 
+_SKILL_NS_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
+
+
+def _rewrite_skill_namespace_refs(content: str, resolver: SkillResolver) -> str:
+    """Rewrite /autoskillit:<name> → /<name> for BUNDLED_EXTENDED targets.
+
+    BUNDLED_EXTENDED skills are delivered via --add-dir as bare /name; the
+    /autoskillit: prefix only works for BUNDLED skills delivered via --plugin-dir.
+    """
+
+    def _replace(m: re.Match) -> str:  # type: ignore[type-arg]
+        name = m.group(1)
+        info = resolver.resolve(name)
+        if info is not None and info.source == SkillSource.BUNDLED_EXTENDED:
+            return f"/{name}"
+        return m.group(0)
+
+    return _SKILL_NS_REF_RE.sub(_replace, content)
+
 
 def _parse_activate_deps(content: str) -> list[str]:
     """Extract activate_deps list from SKILL.md frontmatter.
@@ -597,6 +616,7 @@ class DefaultSessionSkillManager:
                     )
                 format_rejected.add(skill_info.name)
                 continue
+            content = _rewrite_skill_namespace_refs(content, self._provider.resolver)
             skill_dir = skills_base / skill_info.name
             skill_dir.mkdir(exist_ok=True)
             atomic_write(skill_dir / "SKILL.md", content)
@@ -671,6 +691,7 @@ class DefaultSessionSkillManager:
                     )
                 return False
             skill_dir.mkdir(parents=True, exist_ok=True)
+            fetched = _rewrite_skill_namespace_refs(fetched, self._provider.resolver)
             atomic_write(skill_md, fetched)
             logger.debug("activate_deps_materialise", skill=skill_name)
 

@@ -202,10 +202,11 @@ def _compute_write_prefixes(
     cwd: str,
     skill_command: str,
 ) -> tuple[str, tuple[str, ...]]:
-    from autoskillit.core import WORKTREE_SKILLS  # noqa: PLC0415
+    from autoskillit.core import WORKTREE_SKILLS, extract_skill_name  # noqa: PLC0415
 
     worktree_write_prefixes: list[str] = []
-    if write_watch_dirs and any(name in skill_command for name in WORKTREE_SKILLS):
+    extracted = extract_skill_name(skill_command)
+    if write_watch_dirs and extracted and extracted in WORKTREE_SKILLS:
         worktree_parent = (Path(cwd).parent / "worktrees").resolve()
         worktree_write_prefixes.append(str(worktree_parent) + "/")
 

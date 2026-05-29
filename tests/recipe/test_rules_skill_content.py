@@ -998,3 +998,139 @@ def test_executable_field_content_validity_checks_all_v_rules(tmp_path: Path) ->
         f"Expected 2 findings (V7 + V9), got {len(exec_findings)}: "
         + "; ".join(f.message for f in exec_findings)
     )
+
+
+# ---------------------------------------------------------------------------
+# reviews-post-requires-input-flag
+# ---------------------------------------------------------------------------
+
+_REVIEWS_RULE_ID = "reviews-post-requires-input-flag"
+
+
+def test_reviews_post_requires_input_flag_rule(tmp_path: Path) -> None:
+    """Rule fires when a SKILL.md section mentions reviews POST but lacks --input -."""
+    skill_dir = tmp_path / "test-reviews-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # test-reviews-skill
+
+            ### Step 1
+            Post the findings:
+            gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
+              --method POST \\
+              --field event=COMMENT
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("test-reviews-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    rule_ids = [f.rule for f in findings]
+    assert _REVIEWS_RULE_ID in rule_ids, (
+        f"Expected '{_REVIEWS_RULE_ID}' finding when reviews POST lacks --input -, got: {rule_ids}"
+    )
+    matching = [f for f in findings if f.rule == _REVIEWS_RULE_ID]
+    assert all(f.severity == Severity.ERROR for f in matching)
+
+
+def test_reviews_post_requires_input_flag_rule_passes_with_input_flag(
+    tmp_path: Path,
+) -> None:
+    """Rule does NOT fire when --input - is present in the same section as the reviews POST."""
+    skill_dir = tmp_path / "good-reviews-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # good-reviews-skill
+
+            ### Step 1
+            Post the findings via stdin:
+            jq -n --arg body "summary" --arg event COMMENT --argjson comments "$C" \\
+              '{body: $body, event: $event, comments: $comments}' | \\
+            gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
+              --method POST --input -
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("good-reviews-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    rule_ids = [f.rule for f in findings]
+    assert _REVIEWS_RULE_ID not in rule_ids, (
+        f"Rule must not fire when --input - is present alongside the reviews POST, got: {rule_ids}"
+    )
+
+
+def test_reviews_post_rule_subsection_granularity(tmp_path: Path) -> None:
+    """Rule uses ### granularity: --input - in a different ### step does not satisfy the guard.
+
+    If the implementation mistakenly used ## granularity (_extract_sections), --input - from
+    any step in the same ## Workflow section would suppress the finding. This test catches
+    that false-negative regression.
+    """
+    skill_dir = tmp_path / "granularity-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # granularity-skill
+
+            ## Workflow
+
+            ### Step A
+            Do something with --input - for an unrelated purpose.
+            gh api /repos/{owner}/{repo}/something --method POST --input -
+
+            ### Step B
+            Post the findings:
+            gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
+              --method POST \\
+              --field event=COMMENT
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("granularity-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    rule_ids = [f.rule for f in findings]
+    assert _REVIEWS_RULE_ID in rule_ids, (
+        f"Rule must fire when --input - is in a different ### step than the reviews POST "
+        f"(### granularity required, not ## granularity). Got findings: {rule_ids}"
+    )
+
+
+def test_reviews_post_regex_flag_before_path(tmp_path: Path) -> None:
+    """Rule fires when --method POST appears before the endpoint path (flag-before-path form)."""
+    skill_dir = tmp_path / "flag-before-path-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # flag-before-path-skill
+
+            ### Step 1
+            Post the review:
+            gh api --method POST repos/{owner}/{repo}/pulls/{pr_number}/reviews \\
+              --field event=COMMENT
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("flag-before-path-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    rule_ids = [f.rule for f in findings]
+    assert _REVIEWS_RULE_ID in rule_ids, (
+        f"Rule must fire for 'gh api --method POST URL' form (flag before path). "
+        f"Got findings: {rule_ids}"
+    )

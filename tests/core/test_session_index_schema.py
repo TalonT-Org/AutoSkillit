@@ -24,9 +24,11 @@ _REQUIRED_INDEX_FIELDS = {
     "api_retry_exhausted",
     "codex_version",
     "codex_log",
+    "skill_command",
 }
 
 
+@pytest.mark.small
 class TestSessionIndexEntryCompleteness:
     """SessionIndexEntry TypedDict must declare every field written to sessions.jsonl."""
 
@@ -66,6 +68,7 @@ class TestSessionIndexEntryCompleteness:
         assert "cache_read_input_tokens" not in declared
 
 
+@pytest.mark.small
 class TestTokenUsageFileEntrySchema:
     """TokenUsageFileEntry must use canonical cache fields and include schema_version."""
 

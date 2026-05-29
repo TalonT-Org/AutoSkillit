@@ -552,8 +552,8 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
         token_usage={
             "input_tokens": 100,
             "output_tokens": 50,
-            "cache_creation_input_tokens": 20,
-            "cache_read_input_tokens": 80,
+            "cache_write_tokens": 20,
+            "cache_read_tokens": 80,
         },
         proc_snapshots=None,
         success=False,
@@ -564,16 +564,16 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert entry["step_name"] == "implement"
     assert entry["input_tokens"] == 100
     assert entry["output_tokens"] == 50
-    assert entry["cache_creation_input_tokens"] == 20
-    assert entry["cache_read_input_tokens"] == 80
+    assert entry["cache_write_tokens"] == 20
+    assert entry["cache_read_tokens"] == 80
 
 
-def test_flush_index_includes_schema_version_2(tmp_path):
-    """sessions.jsonl entry must contain schema_version: 2."""
+def test_flush_index_includes_schema_version_3(tmp_path):
+    """sessions.jsonl entry must contain schema_version: 3."""
     _flush(tmp_path)
     index_path = tmp_path / "sessions.jsonl"
     entry = json.loads(index_path.read_text().strip().split("\n")[-1])
-    assert entry["schema_version"] == 2
+    assert entry["schema_version"] == 3
 
 
 def test_flush_index_token_fields_zero_when_no_step(tmp_path):
@@ -584,8 +584,8 @@ def test_flush_index_token_fields_zero_when_no_step(tmp_path):
     assert entry["step_name"] == ""
     assert entry["input_tokens"] == 0
     assert entry["output_tokens"] == 0
-    assert entry["cache_creation_input_tokens"] == 0
-    assert entry["cache_read_input_tokens"] == 0
+    assert entry["cache_write_tokens"] == 0
+    assert entry["cache_read_tokens"] == 0
 
 
 def test_token_usage_json_schema(tmp_path):

@@ -103,6 +103,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_session_content.py` | Tests for session content validation and token normalization (`_strip_markdown_from_tokens`) |
 | `test_session_debug_logging.py` | Tests for debug logging instrumentation in session.py |
 | `test_session_state_persistence.py` | Tests for persist_session_state, read_session_state, and clear_session_state |
+| `test_session_index_roundtrip.py` | Tests verifying sessions.jsonl keys match SessionIndexEntry annotations |
 | `test_session_log_fields.py` | Tests for flush_session_log field coverage: write warnings, kitchen/order IDs, crash exception, raw stdout, per-turn fields |
 | `test_session_log_flush.py` | Tests for flush_session_log: directory structure, proc-trace, summary/index, resolve_log_dir, temporal fields |
 | `test_session_log_integration.py` | Integration tests: full tracing pipeline (accumulation + flush) end-to-end |

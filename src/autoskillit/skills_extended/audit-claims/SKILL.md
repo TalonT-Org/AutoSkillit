@@ -286,8 +286,18 @@ if gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field body="[{finding.severity}] {finding.dimension}: {finding.message}"; then
   tier1_success=$((tier1_success + 1))
 else
-  tier1_failed=$((tier1_failed + 1))
-  echo "Warning: failed to post individual comment for {finding.file}:{finding.line}" >&2
+  # On HTTP 422 (invalid line number), retry as file-level comment
+  if gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
+    --method POST \
+    --field path="{finding.file}" \
+    --field subject_type="file" \
+    --field commit_id="$COMMIT_ID" \
+    --field body="[{finding.severity}] {finding.dimension}: {finding.message} (line {finding.line})"; then
+    tier1_success=$((tier1_success + 1))
+  else
+    tier1_failed=$((tier1_failed + 1))
+    echo "Warning: failed to post individual comment for {finding.file}:{finding.line}" >&2
+  fi
 fi
 
 echo "Fallback Tier 1: $tier1_success succeeded, $tier1_failed failed"

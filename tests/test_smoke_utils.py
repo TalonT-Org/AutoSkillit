@@ -1110,6 +1110,29 @@ def test_annotate_pr_diff_int_pr_number(mock_run, tmp_path: Path) -> None:
     assert "42" in cmd_list, f"Expected '42' in command, got {cmd_list}"
 
 
+@patch("subprocess.run")
+def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path) -> None:
+    """annotate_pr_diff must write valid_lines_{pr}.json alongside ranges_{pr}.json."""
+    import json
+
+    from autoskillit.execution.diff_annotator import extract_valid_lines
+
+    mock_run.return_value = subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, "")
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    result = annotate_pr_diff(
+        pr_number="99",
+        cwd=str(tmp_path),
+        output_dir=str(output_dir),
+    )
+    assert "valid_lines_path" in result
+    vl_path = Path(result["valid_lines_path"])
+    assert vl_path.exists()
+    content = json.loads(vl_path.read_text())
+    expected = extract_valid_lines(_DIFF_OUTPUT)
+    assert content == expected
+
+
 # ---------------------------------------------------------------------------
 # T_PEM1–T_PEM5: parse_eval_manifests tests
 # ---------------------------------------------------------------------------

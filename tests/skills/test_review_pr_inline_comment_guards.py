@@ -618,6 +618,85 @@ def test_tier1_fallback_includes_severity_filter():
     )
 
 
+AUDIT_CLAIMS_SKILL_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "audit-claims"
+    / "SKILL.md"
+)
+AUDIT_CLAIMS_SKILL_TEXT = AUDIT_CLAIMS_SKILL_PATH.read_text()
+
+
+def test_review_pr_tier1_has_422_recovery():
+    """Tier 1 fallback must handle HTTP 422 with file-level retry."""
+    tier1_idx = SKILL_TEXT.find("Fallback Tier 1")
+    assert tier1_idx >= 0
+    tier2_idx = SKILL_TEXT.find("Tier 2", tier1_idx)
+    tier1_section = SKILL_TEXT[tier1_idx:tier2_idx] if tier2_idx >= 0 else SKILL_TEXT[tier1_idx:]
+    assert "subject_type" in tier1_section
+    assert "file" in tier1_section
+
+
+def test_review_research_pr_tier1_has_422_recovery():
+    """review-research-pr Tier 1 fallback must handle HTTP 422 with file-level retry."""
+    tier1_idx = RESEARCH_SKILL_TEXT.find("Fallback Tier 1")
+    assert tier1_idx >= 0
+    tier2_idx = RESEARCH_SKILL_TEXT.find("Tier 2", tier1_idx)
+    tier1_section = (
+        RESEARCH_SKILL_TEXT[tier1_idx:tier2_idx]
+        if tier2_idx >= 0
+        else RESEARCH_SKILL_TEXT[tier1_idx:]
+    )
+    assert "subject_type" in tier1_section
+    assert "file" in tier1_section
+
+
+def test_audit_claims_tier1_has_422_recovery():
+    """audit-claims Tier 1 fallback must handle HTTP 422 with file-level retry."""
+    tier1_idx = AUDIT_CLAIMS_SKILL_TEXT.find("Fallback Tier 1")
+    assert tier1_idx >= 0
+    tier2_idx = AUDIT_CLAIMS_SKILL_TEXT.find("Tier 2", tier1_idx)
+    tier1_section = (
+        AUDIT_CLAIMS_SKILL_TEXT[tier1_idx:tier2_idx]
+        if tier2_idx >= 0
+        else AUDIT_CLAIMS_SKILL_TEXT[tier1_idx:]
+    )
+    assert "subject_type" in tier1_section
+    assert "file" in tier1_section
+
+
+def test_review_pr_valid_lines_loaded():
+    """review-pr Step 2.7 must reference valid_lines_path or VALID_DIFF_LINES."""
+    step27_start = SKILL_TEXT.find("### Step 2.7")
+    step25_start = SKILL_TEXT.find("### Step 2.5")
+    assert step27_start != -1
+    assert step25_start != -1
+    step27_section = SKILL_TEXT[step27_start:step25_start]
+    assert "valid_lines_path" in step27_section or "VALID_DIFF_LINES" in step27_section
+
+
+def test_review_pr_step4_uses_valid_diff_lines():
+    """review-pr Step 4 partition must reference VALID_DIFF_LINES."""
+    step4_start = SKILL_TEXT.find("### Step 4")
+    step45_start = SKILL_TEXT.find("### Step 4.5")
+    assert step4_start != -1
+    assert step45_start != -1
+    step4_section = SKILL_TEXT[step4_start:step45_start]
+    assert "VALID_DIFF_LINES" in step4_section
+
+
+def test_review_research_pr_step4_uses_valid_diff_lines():
+    """review-research-pr Step 4 partition must reference VALID_DIFF_LINES."""
+    step4_start = RESEARCH_SKILL_TEXT.find("### Step 4")
+    step45_start = RESEARCH_SKILL_TEXT.find("### Step 4.5")
+    assert step4_start != -1
+    assert step45_start != -1
+    step4_section = RESEARCH_SKILL_TEXT[step4_start:step45_start]
+    assert "VALID_DIFF_LINES" in step4_section
+
+
 def test_resolve_research_review_handles_null_line_file_level_threads():
     """resolve-research-review must handle null-line file-level comment threads gracefully."""
     text = RESOLVE_RESEARCH_SKILL_TEXT

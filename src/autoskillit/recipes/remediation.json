@@ -849,6 +849,7 @@
       "capture": {
         "annotated_diff_path": "${{ result.annotated_diff_path }}",
         "hunk_ranges_path": "${{ result.hunk_ranges_path }}",
+        "valid_lines_path": "${{ result.valid_lines_path }}",
         "diff_metrics_path": "${{ result.diff_metrics_path }}",
         "review_mode": "${{ result.review_mode }}"
       },
@@ -865,7 +866,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} diff_metrics_path=${{ context.diff_metrics_path }} mode=${{ context.review_mode }}",
+        "skill_command": "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }} diff_metrics_path=${{ context.diff_metrics_path }} mode=${{ context.review_mode }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "review_pr",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr"

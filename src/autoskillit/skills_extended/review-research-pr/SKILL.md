@@ -19,12 +19,14 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 
 ## Arguments
 
-`/autoskillit:review-research-pr <worktree-path-or-feature-branch> <base-branch>`
+`/autoskillit:review-research-pr <worktree-path-or-feature-branch> <base-branch> [hunk_ranges_path=<path>] [valid_lines_path=<path>]`
 
 - **worktree-path-or-feature-branch** — Either an absolute path to the research worktree
   (preferred; skill derives the feature branch from `git rev-parse --abbrev-ref HEAD`)
   or the feature branch name directly
 - **base-branch** — The base branch the PR targets (e.g., "main")
+- **hunk_ranges_path** (optional) — absolute path to a pre-computed hunk ranges JSON file (produced by `annotate_pr_diff` run_python step). When provided, loaded in Step 2.7 instead of parsing from the diff inline.
+- **valid_lines_path** (optional) — absolute path to a pre-computed valid lines JSON file (produced by `annotate_pr_diff` run_python step). Contains exact `{filepath: [line_numbers]}` set. When provided, enables exact set-membership validation in Step 4.
 
 ## When to Use
 
@@ -109,12 +111,20 @@ Parse hunk ranges from the diff saved in Step 2:
 
 ```bash
 VALID_LINE_RANGES="{}"
+VALID_DIFF_LINES=""
 # Parse @@ +start,count @@ headers from the diff to build a JSON map of
 # {filepath: [[start, end], ...]} ranges.
-# If hunk_ranges_path was provided as a contract input, load from there instead.
+if [ -n "${hunk_ranges_path:-}" ] && [ -f "$hunk_ranges_path" ]; then
+    VALID_LINE_RANGES="$(cat "$hunk_ranges_path")"
+fi
+if [ -n "${valid_lines_path:-}" ] && [ -f "$valid_lines_path" ]; then
+    VALID_DIFF_LINES="$(cat "$valid_lines_path")"
+fi
 ```
 
-`VALID_LINE_RANGES` is used in Step 4 to partition findings into postable and unpostable.
+`VALID_DIFF_LINES` is a JSON mapping `{filepath: [line_numbers]}` containing the exact set of
+new-file line numbers present in the diff. When available, Step 4 uses set-membership for
+validation. `VALID_LINE_RANGES` is used as fallback for interval checking.
 
 ### Step 3: Run Parallel Audit Subagents
 
@@ -216,12 +226,16 @@ Subagent prompt template (all 8 dimensions):
 
 1. Collect all subagent JSON responses
 2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Partition findings against `VALID_LINE_RANGES` (built in Step 2.7):
-   - `FILTERED_FINDINGS`: findings whose `(file, line)` falls within any hunk range.
-   - `UNPOSTABLE_FINDINGS`: findings whose `line` is not in any hunk range.
+3. Partition findings using exact line validation when available:
+   - When `VALID_DIFF_LINES` is non-empty (loaded in Step 2.7), use **set-membership**:
+     a finding is postable if its `line` exists in `VALID_DIFF_LINES[file]`.
+   - When `VALID_DIFF_LINES` is empty but `VALID_LINE_RANGES` is non-empty, fall back to
+     **hunk-span interval checking**.
+   - `FILTERED_FINDINGS`: findings that pass validation.
+   - `UNPOSTABLE_FINDINGS`: findings that fail validation.
      Log a warning for each. Critical-severity unpostable findings are posted as
      file-level comments in Step 6. All unpostable findings appear in the Step 7 body.
-   - If `VALID_LINE_RANGES` is empty, all findings are `FILTERED_FINDINGS`.
+   - If both `VALID_DIFF_LINES` and `VALID_LINE_RANGES` are empty, all findings are `FILTERED_FINDINGS`.
 4. Apply verdict logic (Step 5) to ALL findings (`FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS`
    combined), so unpostable findings still contribute to the verdict.
 5. Bucket by actionability (applied to combined findings):
@@ -316,7 +330,11 @@ sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Individual POSTs are not atomic — one failure does not block others.
-If at least one per-finding comment succeeds, proceed to Step 7.
+When an individual POST returns HTTP 422 (typically an invalid line number), retry that
+specific comment as a file-level comment using `subject_type: "file"` (no `line` field)
+on the `/repos/{owner}/{repo}/pulls/{pr_number}/comments` endpoint. If the file-level
+retry also fails, log the failure and continue to the next finding.
+If at least one per-finding comment succeeds (inline or file-level), proceed to Step 7.
 
 **File-Level Comments for Critical Unpostable Findings:**
 

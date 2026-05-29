@@ -27,7 +27,7 @@ def _runner() -> MockSubprocessRunner:
     return r
 
 
-def test_codex_backend_not_instantiated_when_disabled(monkeypatch):
+def test_codex_backend_not_instantiated_when_disabled(monkeypatch, tmp_path):
     """When codex_backend feature is disabled, CodexBackend is not the ctx.backend."""
     monkeypatch.setattr(
         "autoskillit.server._factory.is_feature_enabled",
@@ -37,11 +37,11 @@ def test_codex_backend_not_instantiated_when_disabled(monkeypatch):
     )
     from autoskillit.execution.backends.codex import CodexBackend
 
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert not isinstance(ctx.backend, CodexBackend)
 
 
-def test_codex_backend_instantiated_when_enabled(monkeypatch):
+def test_codex_backend_instantiated_when_enabled(monkeypatch, tmp_path):
     """When codex_backend is enabled and config backend is codex, ctx.backend is CodexBackend."""
     monkeypatch.setattr(
         "autoskillit.server._factory.is_feature_enabled",
@@ -54,5 +54,5 @@ def test_codex_backend_instantiated_when_enabled(monkeypatch):
 
     config = AutomationConfig()
     config.agent_backend = AgentBackendConfig(backend="codex")
-    ctx = make_context(config, runner=_runner())
+    ctx = make_context(config, runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx.backend, CodexBackend)

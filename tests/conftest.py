@@ -209,6 +209,18 @@ def _clear_headless_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _clear_provider_profile_env(monkeypatch):
+    """Prevent AUTOSKILLIT_PROVIDER_PROFILE leaking between tests."""
+    monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _clear_project_dir_env(monkeypatch):
+    """Prevent AUTOSKILLIT_PROJECT_DIR leaking between tests."""
+    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _clear_session_type_env(monkeypatch):
     """Prevent SESSION_TYPE leaking between tests."""
     monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
@@ -340,13 +352,11 @@ def tool_ctx(monkeypatch, tmp_path):
         AutomationConfig(features={"fleet": True}),
         runner=mock_runner,
         plugin_source=DirectInstall(plugin_dir=tmp_path),
+        project_dir=tmp_path,
     )
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
-    # Anchor temp_dir and project_dir to tmp_path so server tools use the
-    # per-test directory rather than the cwd or git-resolved project root.
     ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
-    ctx.project_dir = tmp_path
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx
@@ -370,6 +380,7 @@ def tool_ctx_marketplace(monkeypatch, tmp_path):
         AutomationConfig(features={"fleet": True}),
         runner=mock_runner,
         plugin_source=MarketplaceInstall(cache_path=fake_cache),
+        project_dir=tmp_path,
     )
     ctx.gate = DefaultGateState(enabled=False)
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")

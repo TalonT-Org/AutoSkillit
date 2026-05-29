@@ -28,42 +28,42 @@ def _runner() -> MockSubprocessRunner:
     return r
 
 
-def test_make_context_rejects_codex_backend_when_config_is_claude_code():
+def test_make_context_rejects_codex_backend_when_config_is_claude_code(tmp_path):
     """experimental_enabled=True must NOT swap backend when config says claude-code."""
     cfg = AutomationConfig(
         experimental_enabled=True,
         agent_backend=AgentBackendConfig(backend="claude-code"),
     )
-    ctx = make_context(cfg, runner=_runner())
+    ctx = make_context(cfg, runner=_runner(), project_dir=tmp_path)
     assert ctx.backend is not None
     assert ctx.backend.name == "claude-code"
     assert isinstance(ctx.backend, ClaudeCodeBackend)
 
 
-def test_make_context_allows_codex_backend_when_config_is_codex():
+def test_make_context_allows_codex_backend_when_config_is_codex(tmp_path):
     """Explicit codex config + codex_backend feature flag should activate CodexBackend."""
     cfg = AutomationConfig(
         features={"codex_backend": True},
         agent_backend=AgentBackendConfig(backend="codex"),
     )
-    ctx = make_context(cfg, runner=_runner())
+    ctx = make_context(cfg, runner=_runner(), project_dir=tmp_path)
     assert ctx.backend is not None
     assert ctx.backend.name == "codex"
     assert isinstance(ctx.backend, CodexBackend)
 
 
-def test_experimental_enabled_does_not_promote_codex_when_config_is_claude():
+def test_experimental_enabled_does_not_promote_codex_when_config_is_claude(tmp_path):
     """experimental_enabled=True with claude-code config must keep ClaudeCodeBackend."""
     cfg = AutomationConfig(
         experimental_enabled=True,
         agent_backend=AgentBackendConfig(backend="claude-code"),
     )
-    ctx = make_context(cfg, runner=_runner())
+    ctx = make_context(cfg, runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx.backend, ClaudeCodeBackend)
     assert ctx.backend.write_tool_names() == frozenset({"Write", "Edit"})
 
 
-def test_codex_flag_ignored_warning_when_config_mismatch():
+def test_codex_flag_ignored_warning_when_config_mismatch(tmp_path):
     """When codex_backend is explicitly enabled but config says claude-code, warn and skip."""
     import structlog.testing
 
@@ -72,7 +72,7 @@ def test_codex_flag_ignored_warning_when_config_mismatch():
             features={"codex_backend": True},
             agent_backend=AgentBackendConfig(backend="claude-code"),
         )
-        ctx = make_context(cfg, runner=_runner())
+        ctx = make_context(cfg, runner=_runner(), project_dir=tmp_path)
 
     assert isinstance(ctx.backend, ClaudeCodeBackend)
     warning_logs = [rec for rec in logs if rec.get("event") == "codex_backend_flag_ignored"]

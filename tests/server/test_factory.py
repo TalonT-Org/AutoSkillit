@@ -45,40 +45,40 @@ def _runner() -> MockSubprocessRunner:
     return r
 
 
-def test_make_context_returns_toolcontext():
-    ctx = make_context(AutomationConfig(), runner=_runner())
+def test_make_context_returns_toolcontext(tmp_path):
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx, ToolContext)
     assert ctx.gate is not None
     assert ctx.runner is not None
 
 
-def test_make_context_gate_starts_closed(monkeypatch):
+def test_make_context_gate_starts_closed(monkeypatch, tmp_path):
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert ctx.gate.enabled is False
 
 
-def test_make_context_gate_stays_closed_in_headless_session(monkeypatch):
+def test_make_context_gate_stays_closed_in_headless_session(monkeypatch, tmp_path):
     """Gate is NOT pre-enabled when AUTOSKILLIT_HEADLESS=1.
     Tag-based visibility (mcp.enable({'headless'})) handles tool reveal."""
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert ctx.gate.enabled is False
 
 
-def test_make_context_executor_is_default_headless():
-    ctx = make_context(AutomationConfig(), runner=_runner())
+def test_make_context_executor_is_default_headless(tmp_path):
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx.executor, DefaultHeadlessExecutor)
 
 
-def test_make_context_tester_is_default_test_runner():
-    ctx = make_context(AutomationConfig(), runner=_runner())
+def test_make_context_tester_is_default_test_runner(tmp_path):
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx.tester, DefaultTestRunner)
 
 
-def test_make_context_service_fields_are_typed_instances():
+def test_make_context_service_fields_are_typed_instances(tmp_path):
     """Core service fields are typed instances (skill_resolver, clone_mgr, repositories)."""
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx.skill_resolver, SkillResolver)
     assert isinstance(ctx.clone_mgr, DefaultCloneManager)
     assert isinstance(ctx.recipes, DefaultRecipeRepository)
@@ -87,70 +87,70 @@ def test_make_context_service_fields_are_typed_instances():
     assert isinstance(ctx.workspace_mgr, DefaultWorkspaceManager)
 
 
-def test_make_context_github_client_is_default_fetcher():
-    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
+def test_make_context_github_client_is_default_fetcher(tmp_path):
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".", project_dir=tmp_path)
     assert isinstance(ctx.github_client, DefaultGitHubFetcher)
 
 
-def test_make_context_github_client_uses_config_token(monkeypatch):
+def test_make_context_github_client_uses_config_token(monkeypatch, tmp_path):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     config = AutomationConfig()
     config.github.token = "config-token"
-    ctx = make_context(config, runner=None, plugin_dir=".")
+    ctx = make_context(config, runner=None, plugin_dir=".", project_dir=tmp_path)
     assert ctx.github_client.has_token is True
 
 
-def test_make_context_github_client_uses_env_token(monkeypatch):
+def test_make_context_github_client_uses_env_token(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_TOKEN", "env-token")
     config = AutomationConfig()
-    ctx = make_context(config, runner=None, plugin_dir=".")
+    ctx = make_context(config, runner=None, plugin_dir=".", project_dir=tmp_path)
     assert ctx.github_client.has_token is True
 
 
-def test_make_context_github_client_no_token(monkeypatch):
+def test_make_context_github_client_no_token(monkeypatch, tmp_path):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: None)
-    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".", project_dir=tmp_path)
     assert ctx.github_client.has_token is False
 
 
-def test_make_context_github_client_uses_gh_cli_fallback(monkeypatch):
+def test_make_context_github_client_uses_gh_cli_fallback(monkeypatch, tmp_path):
     """When no config token or GITHUB_TOKEN env var, fall back to gh auth token."""
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: "gh-cli-token")
     config = AutomationConfig()
-    ctx = make_context(config, runner=None, plugin_dir=".")
+    ctx = make_context(config, runner=None, plugin_dir=".", project_dir=tmp_path)
     assert ctx.github_client.has_token is True
 
 
-def test_make_context_github_client_config_token_takes_priority_over_gh_cli(monkeypatch):
+def test_make_context_github_client_config_token_takes_priority_over_gh_cli(monkeypatch, tmp_path):
     """Config token takes priority over gh CLI token."""
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: "gh-cli-token")
     config = AutomationConfig()
     config.github.token = "config-token"
-    ctx = make_context(config, runner=None, plugin_dir=".")
+    ctx = make_context(config, runner=None, plugin_dir=".", project_dir=tmp_path)
     assert ctx.github_client.has_token is True
     # After lazy resolution via has_token, verify the resolved value
     assert ctx.github_client._resolve_token() == "config-token"
 
 
-def test_make_context_github_client_token_snapshot_is_immutable(monkeypatch):
+def test_make_context_github_client_token_snapshot_is_immutable(monkeypatch, tmp_path):
     """Token is snapshotted at construction. Changing env after does not affect the fetcher."""
     monkeypatch.setenv("GITHUB_TOKEN", "startup-token")
-    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".")
+    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".", project_dir=tmp_path)
     assert ctx.github_client.has_token is True
     monkeypatch.delenv("GITHUB_TOKEN")
     assert ctx.github_client.has_token is True
 
 
-def test_make_context_tester_none_when_no_runner():
+def test_make_context_tester_none_when_no_runner(tmp_path):
     """When runner=None, DefaultTestRunner cannot be constructed; tester is None."""
-    ctx = make_context(AutomationConfig(), runner=None)
+    ctx = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
     assert ctx.tester is None
 
 
-def test_make_context_protocol_substitution():
+def test_make_context_protocol_substitution(tmp_path):
     """Any object satisfying HeadlessExecutor protocol can replace ctx.executor."""
     from autoskillit.core.types import HeadlessExecutor
 
@@ -201,7 +201,7 @@ def test_make_context_protocol_substitution():
                 token_usage=None,
             )
 
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     ctx.executor = FakeExecutor()
     assert isinstance(ctx.executor, HeadlessExecutor)
 
@@ -278,10 +278,10 @@ def test_output_patterns_nonempty_for_investigate() -> None:
     ],
 )
 def test_write_expected_resolver_mode(
-    invocation: str, expected_mode: str | None, required_tokens: list[str]
+    tmp_path, invocation: str, expected_mode: str | None, required_tokens: list[str]
 ) -> None:
     """write_expected_resolver returns the correct mode and token patterns per skill."""
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert ctx.write_expected_resolver is not None
     spec = ctx.write_expected_resolver(invocation)
     assert spec.mode == expected_mode
@@ -415,7 +415,7 @@ def test_token_factory_caches_none():
     assert call_count == 1, "TokenFactory resolved twice for None result"
 
 
-def test_gh_cli_token_not_called_during_make_context(monkeypatch):
+def test_gh_cli_token_not_called_during_make_context(monkeypatch, tmp_path):
     """make_context() must not call _gh_cli_token() — token resolves lazily."""
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
@@ -429,7 +429,7 @@ def test_gh_cli_token_not_called_during_make_context(monkeypatch):
     monkeypatch.setattr("autoskillit.server._factory.subprocess.run", tracking_run)
 
     config = AutomationConfig()
-    make_context(config, runner=None, plugin_dir=".")
+    make_context(config, runner=None, plugin_dir=".", project_dir=tmp_path)
 
     gh_calls = [c for c in calls if "gh" in str(c)]
     assert gh_calls == [], f"_gh_cli_token() called during make_context: {gh_calls}"
@@ -450,7 +450,7 @@ def test_make_context_marketplace_install_yields_marketplace_plugin_source(
         lambda: fake_cache,
     )
 
-    ctx = make_context(AutomationConfig(), runner=None)
+    ctx = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
     assert isinstance(ctx.plugin_source, MarketplaceInstall)
     assert ctx.plugin_source.cache_path == fake_cache
 
@@ -463,7 +463,9 @@ def test_make_context_direct_install_yields_direct_plugin_source(
 
     monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
 
-    ctx = make_context(AutomationConfig(), runner=None, plugin_dir=str(tmp_path))
+    ctx = make_context(
+        AutomationConfig(), runner=None, plugin_dir=str(tmp_path), project_dir=tmp_path
+    )
     assert isinstance(ctx.plugin_source, DirectInstall)
     assert ctx.plugin_source.plugin_dir == tmp_path
 
@@ -471,52 +473,57 @@ def test_make_context_direct_install_yields_direct_plugin_source(
 def test_make_context_sets_token_factory(tmp_path):
     """make_context() sets token_factory on the returned ToolContext."""
     cfg = AutomationConfig()
-    ctx = make_context(cfg, runner=None, plugin_dir=str(tmp_path))
+    ctx = make_context(cfg, runner=None, plugin_dir=str(tmp_path), project_dir=tmp_path)
     assert callable(ctx.token_factory)
 
 
-# --- Group P-2: project_dir env inheritance ---
+# --- Group P-2: project_dir ---
 
 
-def test_make_context_reads_project_dir_env(tmp_path, monkeypatch):
-    """make_context reads AUTOSKILLIT_PROJECT_DIR and stores it on ctx.project_dir."""
-    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
-    ctx = make_context(AutomationConfig(), runner=_runner())
+def test_make_context_uses_explicit_project_dir(tmp_path):
+    """make_context() uses project_dir when passed explicitly."""
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert ctx.project_dir == tmp_path
 
 
-def test_make_context_project_dir_git_root_fallback(monkeypatch):
-    """make_context resolves project_dir via git toplevel when env var is not set."""
-    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
-    ctx = make_context(AutomationConfig(), runner=_runner())
-    import subprocess as _sp
+def test_serve_passes_project_dir_env_to_make_context(monkeypatch, tmp_path):
+    """serve() reads AUTOSKILLIT_PROJECT_DIR and passes it as project_dir to make_context()."""
+    captured: dict = {}
 
-    expected = Path(
-        _sp.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    )
-    assert ctx.project_dir == expected
+    def fake_make_context(cfg, **kwargs):
+        captured.update(kwargs)
+        raise SystemExit(0)
+
+    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setattr("autoskillit.server.make_context", fake_make_context)
+
+    from autoskillit.cli.app import serve
+
+    with pytest.raises(SystemExit):
+        serve()
+
+    assert captured.get("project_dir") == tmp_path
+
+
+def test_make_context_project_dir_git_root_fallback(monkeypatch):
+    """make_context() without explicit project_dir falls back to git toplevel."""
+    import subprocess as _subprocess
+
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 0, stdout="/fake/git/root\n", stderr="")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
+    ctx = make_context(AutomationConfig(), runner=_runner())
+    assert ctx.project_dir == Path("/fake/git/root")
 
 
 # --- _resolve_project_dir unit tests ---
-
-
-def test_resolve_project_dir_env_var(tmp_path, monkeypatch):
-    from autoskillit.server._factory import _resolve_project_dir
-
-    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
-    assert _resolve_project_dir() == tmp_path
 
 
 def test_resolve_project_dir_git_root(monkeypatch):
     import subprocess as _subprocess
 
     from autoskillit.server._factory import _resolve_project_dir
-
-    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
 
     def fake_run(cmd, *, capture_output, text, timeout):
         return _subprocess.CompletedProcess(cmd, 0, stdout="/fake/git/root\n", stderr="")
@@ -530,8 +537,6 @@ def test_resolve_project_dir_cwd_fallback(monkeypatch):
 
     from autoskillit.server._factory import _resolve_project_dir
 
-    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
-
     def fake_run(cmd, *, capture_output, text, timeout):
         return _subprocess.CompletedProcess(cmd, 1, stdout="", stderr="not a git repo")
 
@@ -539,43 +544,23 @@ def test_resolve_project_dir_cwd_fallback(monkeypatch):
     assert _resolve_project_dir() == Path.cwd()
 
 
-def test_make_context_env_profile_overrides_default_provider(monkeypatch):
-    """AUTOSKILLIT_PROVIDER_PROFILE in env must set config.providers.default_provider."""
+def test_make_context_ignores_ambient_provider_profile(monkeypatch, tmp_path):
+    """Ambient AUTOSKILLIT_PROVIDER_PROFILE must not mutate default_provider."""
     monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
     config = AutomationConfig()
+    config.providers.profiles = {"minimax": {}}
     config.providers.default_provider = None
-    config.providers.profiles = {"minimax": {}}
-    ctx = make_context(config, runner=_runner())
-    assert ctx.config.providers.default_provider == "minimax"
+    ctx = make_context(config, runner=_runner(), project_dir=tmp_path)
+    assert ctx.config.providers.default_provider is None
 
 
-def test_make_context_env_profile_overrides_existing_default(monkeypatch):
-    """AUTOSKILLIT_PROVIDER_PROFILE overrides even a config-set default_provider."""
-    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
-    config = AutomationConfig()
-    config.providers.default_provider = "openai"
-    config.providers.profiles = {"minimax": {}}
-    ctx = make_context(config, runner=_runner())
-    assert ctx.config.providers.default_provider == "minimax"
-
-
-def test_make_context_unknown_env_profile_is_ignored(monkeypatch):
-    """AUTOSKILLIT_PROVIDER_PROFILE not in profiles is ignored — no mutation."""
-    monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "stale-unknown")
-    config = AutomationConfig()
-    config.providers.default_provider = "anthropic"
-    config.providers.profiles = {}
-    ctx = make_context(config, runner=_runner())
-    assert ctx.config.providers.default_provider == "anthropic"
-
-
-def test_make_context_no_env_profile_preserves_config_default(monkeypatch):
+def test_make_context_no_env_profile_preserves_config_default(monkeypatch, tmp_path):
     """Without AUTOSKILLIT_PROVIDER_PROFILE in env, default_provider is unchanged."""
     monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
     config = AutomationConfig()
     config.providers.default_provider = "openai"
     config.providers.profiles = {}
-    ctx = make_context(config, runner=_runner())
+    ctx = make_context(config, runner=_runner(), project_dir=tmp_path)
     assert ctx.config.providers.default_provider == "openai"
 
 
@@ -620,7 +605,7 @@ def test_make_context_skips_replay_runner_for_non_claude_backend(
     monkeypatch.setattr("autoskillit.server._factory.build_replay_runner", mock_build)
 
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
-    ctx = make_context(cfg, plugin_dir=str(tmp_path))
+    ctx = make_context(cfg, plugin_dir=str(tmp_path), project_dir=tmp_path)
 
     assert mock_build.call_count == 0
     assert isinstance(ctx.runner, DefaultSubprocessRunner)
@@ -634,40 +619,40 @@ def test_make_context_skips_record_runner_for_non_claude_backend(
     monkeypatch.delenv("REPLAY_SCENARIO", raising=False)
 
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
-    ctx = make_context(cfg, plugin_dir=str(tmp_path))
+    ctx = make_context(cfg, plugin_dir=str(tmp_path), project_dir=tmp_path)
 
     assert isinstance(ctx.runner, DefaultSubprocessRunner)
     assert not isinstance(ctx.runner, RecordingSubprocessRunner)
 
 
-def test_make_context_backend_is_coding_agent_backend() -> None:
+def test_make_context_backend_is_coding_agent_backend(tmp_path) -> None:
     """make_context() sets ctx.backend to a CodingAgentBackend instance."""
     from autoskillit.core import CodingAgentBackend
 
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx.backend, CodingAgentBackend)
 
 
-def test_make_context_default_backend_is_claude_code() -> None:
+def test_make_context_default_backend_is_claude_code(tmp_path) -> None:
     """Default config (agent_backend.backend='claude-code') produces ClaudeCodeBackend."""
     from autoskillit.execution.backends import ClaudeCodeBackend
 
-    ctx = make_context(AutomationConfig(), runner=_runner())
+    ctx = make_context(AutomationConfig(), runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx.backend, ClaudeCodeBackend)
 
 
-def test_make_context_unknown_backend_raises_value_error() -> None:
+def test_make_context_unknown_backend_raises_value_error(tmp_path) -> None:
     """Unknown agent_backend key raises ValueError with supported keys."""
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="nonexistent"))
     with pytest.raises(ValueError, match="nonexistent"):
-        make_context(cfg, runner=_runner())
+        make_context(cfg, runner=_runner(), project_dir=tmp_path)
 
 
-def test_make_context_codex_backend_not_none_plain_config() -> None:
+def test_make_context_codex_backend_not_none_plain_config(tmp_path) -> None:
     """AgentBackendConfig(backend='codex') with no feature flags produces CodexBackend."""
     from autoskillit.execution.backends.codex import CodexBackend
 
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="codex"))
-    ctx = make_context(cfg, runner=_runner())
+    ctx = make_context(cfg, runner=_runner(), project_dir=tmp_path)
     assert ctx.backend is not None
     assert isinstance(ctx.backend, CodexBackend)

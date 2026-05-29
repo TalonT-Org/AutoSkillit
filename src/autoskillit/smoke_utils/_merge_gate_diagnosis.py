@@ -6,8 +6,6 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core.io import atomic_write
-
 _FAILED_TEST_RE = re.compile(r"^FAILED\s+(\S+)", re.MULTILINE)
 _TIMEOUT_RE = re.compile(r"timeout|timed out|TimeoutError", re.IGNORECASE)
 _ENV_ERROR_RE = re.compile(
@@ -70,6 +68,8 @@ def diagnose_merge_gate(
         "## Structured Output\n"
         f"failure_subtype = {subtype}\n"
     )
+
+    from autoskillit.core import atomic_write  # noqa: PLC0415
 
     atomic_write(out_path, content)
     return {"diagnosis_path": str(out_path), "ci_conclusion": "failure"}

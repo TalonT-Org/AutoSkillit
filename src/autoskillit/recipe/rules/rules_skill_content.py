@@ -651,7 +651,8 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
         except OSError:
             continue
         for subsection in _extract_subsections(content):
-            if _REVIEWS_POST_RE.search(subsection) and "--input -" not in subsection:
+            collapsed = re.sub(r"\\\n\s*", " ", subsection)
+            if _REVIEWS_POST_RE.search(collapsed) and "--input -" not in subsection:
                 findings.append(
                     RuleFinding(
                         rule="reviews-post-requires-input-flag",

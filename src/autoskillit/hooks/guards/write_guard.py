@@ -69,6 +69,8 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
             tok = segment[idx]
             if tok in _GIT_FLAG_WITH_VALUE:
                 idx += 2
+                if idx >= len(segment):
+                    break
             elif tok.startswith("-") and "=" not in tok and tok not in ("--", "--hard"):
                 idx += 1
             else:

@@ -1067,6 +1067,19 @@ def test_flush_session_log_configured_model_overrides_argmax(tmp_path):
     assert data["model_identifier"] == "claude-opus-4-6"
     assert data["configured_model"] == "claude-opus-4-6"
 
+    # MODEL_DRIFT anomaly should fire: configured opus != observed sonnet (argmax winner)
+    anomalies_path = tmp_path / "sessions" / "configured-model-001" / "anomalies.jsonl"
+    assert anomalies_path.exists(), (
+        "anomalies.jsonl should be written when model drift is detected"
+    )
+    anomaly_lines = anomalies_path.read_text().strip().splitlines()
+    drift_entries = [
+        json.loads(line) for line in anomaly_lines if json.loads(line).get("kind") == "model_drift"
+    ]
+    assert len(drift_entries) == 1
+    assert drift_entries[0]["detail"]["configured_model"] == "claude-opus-4-6"
+    assert drift_entries[0]["detail"]["observed_model"] == "claude-sonnet-4-6"
+
 
 def test_flush_session_log_argmax_fallback_prefers_output_tokens(tmp_path):
     """When model_identifier is empty, flush_session_log uses output-token-weighted

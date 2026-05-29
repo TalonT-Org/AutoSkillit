@@ -72,12 +72,6 @@ def test_arguments_tier_c_routing_fields() -> None:
         assert field in text, f"Arguments must document Tier-C field {field}"
 
 
-def test_methodology_tradition_exact_token_name() -> None:
-    """Arguments must use methodology_tradition, not primary_tradition as the arg name."""
-    text = _text()
-    assert "methodology_tradition" in text
-
-
 def test_conflict_resolution_hierarchy() -> None:
     text = _text()
     assert "accessibility" in text

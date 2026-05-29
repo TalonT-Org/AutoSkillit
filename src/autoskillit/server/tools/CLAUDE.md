@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (16 tool modules).
+MCP `@mcp.tool()` handlers registered on import (18 tool modules).
 
 ## Files
 
@@ -24,7 +24,6 @@ MCP `@mcp.tool()` handlers registered on import (16 tool modules).
 | `tools_github.py` | `fetch_github_issue`, `get_issue_title`, `report_bug` |
 | `tools_issue_headless.py` | `prepare_issue`, `enrich_issues` (headless session tools) |
 | `tools_issue_labels.py` | `claim_issue`, `release_issue` (GitHub label management) |
-| `tools_issue_lifecycle.py` | `prepare_issue`, `enrich_issues`, `claim_issue`, `release_issue` (unified issue lifecycle) |
 | `tools_issue_composite.py` | `claim_and_resolve_issue` |
 | `tools_pr_ops.py` | `get_pr_reviews`, `bulk_close_issues` |
 | `tools_recipe.py` | `load_recipe`, `list_recipes`, `validate_recipe`, `migrate_recipe` |

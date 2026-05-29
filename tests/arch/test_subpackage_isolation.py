@@ -721,7 +721,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             non-terminal non-GO routes, bringing the rules/ count to 30.
             rules/rules_loop_progress.py adds the loop-body-uncaptured-output rule
             ensuring run_skill steps inside routing cycles capture declared outputs,
-            bringing the rules/ count to 31. Exempt at 48 files.
+            bringing the rules/ count to 31. rules/rules_phoropter_adjacency.py adds
+            phoropter step adjacency validation. Exempt at 49 files.
           execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
             focused single-concern modules (_process_io, _process_kill, _process_race,
             etc.) that cannot be merged without re-introducing the coupling they isolate.

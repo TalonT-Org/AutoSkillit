@@ -314,6 +314,7 @@ class ClaudeCodeBackend:
         system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
+        tools: Sequence[str] = (),
     ) -> CmdSpec:
         """Build a Claude interactive session command.
 
@@ -376,6 +377,8 @@ class ClaudeCodeBackend:
                 pass
         for d in add_dirs:
             cmd += [ClaudeFlags.ADD_DIR, str(d)]
+        for t in tools:
+            cmd += [ClaudeFlags.TOOLS, t]
         if initial_prompt is not None:
             cmd.append(initial_prompt)
         merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)

@@ -261,14 +261,13 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
     assert build_kwargs[0]["system_prompt"] == "test"
 
 
-def test_skill_injection_enabled_preserves_flags(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When skill_injection_capable=True, tools flag is present and system_prompt forwarded."""
+def test_skill_injection_enabled_passes_tools_to_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When skill_injection_capable=True, tools=('AskUserQuestion',) is passed to
+    build_interactive_cmd and system_prompt is forwarded."""
     backend, captured_kwargs = _make_capturing_backend()
-    captured = _capture_subprocess(monkeypatch)
+    _capture_subprocess(monkeypatch)
     _run_interactive_session(system_prompt="test", backend=backend)
-    assert ClaudeFlags.TOOLS in captured["cmd"]
-    idx = captured["cmd"].index(ClaudeFlags.TOOLS)
-    assert captured["cmd"][idx + 1] == "AskUserQuestion"
+    assert captured_kwargs[0]["tools"] == ("AskUserQuestion",)
     assert captured_kwargs[0]["system_prompt"] == "test"
 
 
@@ -482,3 +481,201 @@ def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
     monkeypatch.setattr(subprocess, "run", mock_run)
     _run_interactive_session(system_prompt="sentinel")
     assert build_kwargs[0]["system_prompt"] == "sentinel"
+
+
+# ---------------------------------------------------------------------------
+# T-1a: Injection mismatch — skill_injection_capable=True, binary_name="codex"
+# ---------------------------------------------------------------------------
+
+
+def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A backend with skill_injection_capable=True but binary_name='codex' must not receive
+    Claude-specific flags (--plugin-dir / --tools AskUserQuestion) in the subprocess command."""
+    from autoskillit.core import BackendCapabilities, CmdSpec
+
+    caps = BackendCapabilities(
+        channel_b_capable=False,
+        pty_required=True,
+        session_resume_capable=True,
+        skill_injection_capable=True,
+        supports_thinking_blocks=False,
+        supports_claude_format_stdout=False,
+        exit_code_is_terminal=True,
+        mcp_config_capable=False,
+        food_truck_capable=False,
+        completion_record_types=frozenset(),
+        session_record_types=frozenset(),
+    )
+
+    class _CodexLikeBackend:
+        def binary_name(self) -> str:
+            return "codex"
+
+        @property
+        def capabilities(self):
+            return caps
+
+        def build_interactive_cmd(self, **kwargs):
+            return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
+
+    captured: dict = {}
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/codex")
+
+    def mock_run(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    _run_interactive_session(system_prompt="test", backend=_CodexLikeBackend())
+    assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
+    assert ClaudeFlags.TOOLS not in captured["cmd"]
+    assert "AskUserQuestion" not in captured["cmd"]
+
+
+# ---------------------------------------------------------------------------
+# T-1b: Feature flag gate — codex backend without codex_backend feature enabled
+# ---------------------------------------------------------------------------
+
+
+def test_feature_flag_gate_blocks_codex_backend_without_feature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When config specifies backend='codex' but codex_backend feature is disabled,
+    _run_interactive_session falls back to claude-code backend."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import CmdSpec
+
+    backends_used: list[str] = []
+
+    class _ClaudeStub:
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+
+            return CLAUDE_CODE_CAPABILITIES
+
+        def build_interactive_cmd(self, **kwargs):
+            backends_used.append("claude-code")
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    class _CodexStub:
+        def binary_name(self) -> str:
+            return "codex"
+
+        @property
+        def capabilities(self):
+            from autoskillit.core import BackendCapabilities
+
+            return BackendCapabilities(
+                channel_b_capable=False,
+                pty_required=True,
+                session_resume_capable=True,
+                skill_injection_capable=True,
+                supports_thinking_blocks=False,
+                supports_claude_format_stdout=False,
+                exit_code_is_terminal=True,
+                mcp_config_capable=False,
+                food_truck_capable=False,
+                completion_record_types=frozenset(),
+                session_record_types=frozenset(),
+            )
+
+        def build_interactive_cmd(self, **kwargs):
+            backends_used.append("codex")
+            return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
+
+    mock_config = MagicMock()
+    mock_config.agent_backend.backend = "codex"
+    mock_config.features = {}
+    mock_config.experimental_enabled = False
+
+    def fake_get_backend(name: str):
+        if name == "claude-code":
+            return _ClaudeStub()
+        return _CodexStub()
+
+    monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
+    monkeypatch.setattr("autoskillit.execution.get_backend", fake_get_backend)
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
+    )
+    _run_interactive_session(system_prompt="test")
+    assert backends_used == ["claude-code"], (
+        f"Expected fallback to claude-code, got: {backends_used}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T-1c: _launch_cook_session accepts backend= parameter
+# ---------------------------------------------------------------------------
+
+
+def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_launch_cook_session must accept a backend= kwarg and forward it to
+    _run_interactive_session, which calls backend.build_interactive_cmd."""
+    from autoskillit.cli.session._session_launch import _launch_cook_session
+    from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
+
+    build_calls: list[dict] = []
+
+    class _CapturingBackend:
+        def binary_name(self) -> str:
+            return "claude"
+
+        @property
+        def capabilities(self):
+            return CLAUDE_CODE_CAPABILITIES
+
+        def build_interactive_cmd(self, **kwargs):
+            build_calls.append(kwargs)
+            return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
+    )
+    _stub_plugin_installed(monkeypatch, installed=True)
+    _launch_cook_session(system_prompt="test", backend=_CapturingBackend())
+    assert build_calls, "backend.build_interactive_cmd must be called via _launch_cook_session"
+
+
+# ---------------------------------------------------------------------------
+# T-1d: Multi-backend integration contract — no cross-backend flag contamination
+# ---------------------------------------------------------------------------
+
+
+def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each backend in BACKEND_REGISTRY must not produce flags from other backends."""
+    from autoskillit.core import ClaudeFlags
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    captured: dict = {}
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/fake-agent")
+
+    def mock_run(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    _stub_plugin_installed(monkeypatch, installed=False)
+
+    for backend_name, backend_cls in BACKEND_REGISTRY.items():
+        backend = backend_cls()
+        captured.clear()
+        _run_interactive_session(system_prompt="test", backend=backend)
+        cmd = captured.get("cmd", [])
+        assert cmd[0] == backend.binary_name(), (
+            f"{backend_name}: cmd must start with binary_name(), got {cmd[0]!r}"
+        )
+        if backend.binary_name() != "claude":
+            assert ClaudeFlags.PLUGIN_DIR not in cmd, (
+                f"{backend_name}: must not contain {ClaudeFlags.PLUGIN_DIR!r}"
+            )
+            assert ClaudeFlags.TOOLS not in cmd, (
+                f"{backend_name}: must not contain {ClaudeFlags.TOOLS!r}"
+            )

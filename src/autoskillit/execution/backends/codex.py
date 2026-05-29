@@ -561,6 +561,7 @@ class CodexBackend:
         system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
+        tools: Sequence[str] = (),
     ) -> CmdSpec:
         cmd: list[str] = []
         match resume_spec:

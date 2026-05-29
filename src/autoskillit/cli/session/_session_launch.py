@@ -44,7 +44,34 @@ def _run_interactive_session(
         from autoskillit.config import load_config
         from autoskillit.execution import get_backend
 
-        backend = get_backend(load_config().agent_backend.backend)
+        config = load_config()
+        backend = get_backend(config.agent_backend.backend)
+
+        from autoskillit.core import is_feature_enabled
+        from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+
+        for feat_name, feat_def in FEATURE_REGISTRY.items():
+            if (
+                feat_def.requires_backend_alignment
+                and config.agent_backend.backend != "claude-code"
+                and not is_feature_enabled(
+                    feat_name,
+                    config.features,
+                    experimental_enabled=config.experimental_enabled,
+                )
+            ):
+                from autoskillit.core import get_logger
+
+                get_logger(__name__).warning(
+                    "feature_gate_blocked",
+                    extra={
+                        "feature": feat_name,
+                        "backend": config.agent_backend.backend,
+                    },
+                )
+                backend = get_backend("claude-code")
+                break
+
     if shutil.which(backend.binary_name()) is None:
         print(
             f"ERROR: '{backend.binary_name()}' not found. "
@@ -55,35 +82,34 @@ def _run_interactive_session(
     from autoskillit.cli.ui._terminal import terminal_guard
     from autoskillit.core import (
         MARKETPLACE_PREFIX,
-        ClaudeFlags,
+        DirectInstall,
         InfraExitCategory,
-        NoResume,
         detect_autoskillit_mcp_prefix,
         pkg_root,
     )
 
     _project_dir = project_dir if project_dir is not None else Path.cwd()
+    if backend.capabilities.skill_injection_capable:
+        plugin_source = (
+            None
+            if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
+            else DirectInstall(plugin_dir=pkg_root())
+        )
+        tools_arg: tuple[str, ...] = ("AskUserQuestion",)
+    else:
+        plugin_source = None
+        tools_arg = ()
+
     spec = backend.build_interactive_cmd(
         initial_prompt=initial_message,
         resume_spec=resume_spec if resume_spec is not None else NoResume(),
         system_prompt=system_prompt,
         env_extras=extra_env,
         required_env=required_env,
+        plugin_source=plugin_source,
+        tools=tools_arg,
     )
-    if backend.capabilities.skill_injection_capable:
-        plugin_flags = (
-            []
-            if detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX
-            else [ClaudeFlags.PLUGIN_DIR, str(pkg_root())]
-        )
-        cmd = [
-            *spec.cmd,
-            *plugin_flags,
-            ClaudeFlags.TOOLS,
-            "AskUserQuestion",
-        ]
-    else:
-        cmd = [*spec.cmd]
+    cmd = [*spec.cmd]
     with terminal_guard():
         result = subprocess.run(cmd, env=spec.env)
     reload_session_id = consume_reload_sentinel(_project_dir)
@@ -130,6 +156,7 @@ def _launch_cook_session(
     resume_spec: ResumeSpec = NoResume(),
     project_dir: Path | None = None,
     required_env: frozenset[str] | None = None,
+    backend: CodingAgentBackend | None = None,
 ) -> None:
     """Launch an interactive Claude Code cook session with reload and infra-resume support."""
     _max_reloads = 10
@@ -146,6 +173,7 @@ def _launch_cook_session(
             resume_spec=current_resume_spec,
             project_dir=project_dir,
             required_env=required_env,
+            backend=backend,
         )
         if session_signal is None:
             break

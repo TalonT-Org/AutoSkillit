@@ -146,6 +146,7 @@ class CodingAgentBackend(Protocol):
         system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
+        tools: Sequence[str] = (),
     ) -> CmdSpec: ...
 
     def validate_session_layout(self, session_dir: Path) -> list[str]: ...

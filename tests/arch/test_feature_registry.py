@@ -796,3 +796,25 @@ def test_build_features_dict_warns_enabling_deprecated_feature(monkeypatch):
     with pytest.warns(DeprecationWarning, match="test_depr_cfg"):
         result, _ = AutomationConfig._build_features_dict({"test_depr_cfg": True})
     assert result["test_depr_cfg"] is True
+
+
+def test_cli_session_launch_gates_backend_alignment_features() -> None:
+    """For every FEATURE_REGISTRY entry with requires_backend_alignment=True,
+    _session_launch.py must contain an is_feature_enabled call.
+
+    This ensures future experimental backends automatically get CLI-path gates,
+    not just the server path gate in _factory.py.
+    """
+    from autoskillit.core import paths
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+
+    alignment_features = [k for k, v in FEATURE_REGISTRY.items() if v.requires_backend_alignment]
+    if not alignment_features:
+        pytest.skip("No requires_backend_alignment features in registry")
+
+    session_launch_src = (paths.pkg_root() / "cli" / "session" / "_session_launch.py").read_text()
+
+    assert "is_feature_enabled" in session_launch_src, (
+        "_session_launch.py must contain is_feature_enabled to gate CLI-path access "
+        f"for backend-alignment features: {alignment_features}"
+    )

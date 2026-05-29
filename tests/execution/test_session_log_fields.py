@@ -1019,18 +1019,28 @@ class TestCodexLogFields:
 
 
 def test_primary_model_identifier_subagent_dominance():
-    """When subagent model has more total tokens, _primary_model_identifier returns
-    the subagent model — documents the argmax behavior that the threading fix overrides."""
+    """_primary_model_identifier returns the model with the most output tokens,
+    resisting subagent input/cache volume dominance."""
     from autoskillit.execution.session_log import _primary_model_identifier
 
     token_usage = {
         "model_breakdown": {
-            "claude-opus-4-6": {"input_tokens": 5000, "output_tokens": 2000},
-            "claude-sonnet-4-6": {"input_tokens": 20000, "output_tokens": 8000},
+            "claude-opus-4-6": {
+                "input_tokens": 5000,
+                "output_tokens": 12000,
+                "cache_read_tokens": 1000,
+                "cache_write_tokens": 500,
+            },
+            "claude-sonnet-4-6": {
+                "input_tokens": 80000,
+                "output_tokens": 3000,
+                "cache_read_tokens": 60000,
+                "cache_write_tokens": 2000,
+            },
         }
     }
     result = _primary_model_identifier(token_usage)
-    assert result == "claude-sonnet-4-6"
+    assert result == "claude-opus-4-6"
 
 
 def test_flush_session_log_configured_model_overrides_argmax(tmp_path):
@@ -1056,3 +1066,51 @@ def test_flush_session_log_configured_model_overrides_argmax(tmp_path):
     data = json.loads(tu_path.read_text())
     assert data["model_identifier"] == "claude-opus-4-6"
     assert data["configured_model"] == "claude-opus-4-6"
+
+    # MODEL_DRIFT anomaly should fire: configured opus != observed sonnet (argmax winner)
+    anomalies_path = tmp_path / "sessions" / "configured-model-001" / "anomalies.jsonl"
+    assert anomalies_path.exists(), (
+        "anomalies.jsonl should be written when model drift is detected"
+    )
+    anomaly_lines = anomalies_path.read_text().strip().splitlines()
+    drift_entries = [
+        json.loads(line) for line in anomaly_lines if json.loads(line).get("kind") == "model_drift"
+    ]
+    assert len(drift_entries) == 1
+    assert drift_entries[0]["detail"]["configured_model"] == "claude-opus-4-6"
+    assert drift_entries[0]["detail"]["observed_model"] == "claude-sonnet-4-6"
+
+
+def test_flush_session_log_argmax_fallback_prefers_output_tokens(tmp_path):
+    """When model_identifier is empty, flush_session_log uses output-token-weighted
+    argmax, not total-token argmax."""
+    _flush(
+        tmp_path,
+        session_id="argmax-fallback-001",
+        proc_snapshots=None,
+        model_identifier="",
+        token_usage={
+            "input_tokens": 85000,
+            "output_tokens": 15000,
+            "cache_write_tokens": 2500,
+            "cache_read_tokens": 61000,
+            "model_breakdown": {
+                "claude-opus-4-6": {
+                    "input_tokens": 5000,
+                    "output_tokens": 12000,
+                    "cache_read_tokens": 1000,
+                    "cache_write_tokens": 500,
+                },
+                "claude-sonnet-4-6": {
+                    "input_tokens": 80000,
+                    "output_tokens": 3000,
+                    "cache_read_tokens": 60000,
+                    "cache_write_tokens": 2000,
+                },
+            },
+        },
+    )
+    tu_path = tmp_path / "sessions" / "argmax-fallback-001" / "token_usage.json"
+    assert tu_path.exists()
+    data = json.loads(tu_path.read_text())
+    assert data["model_identifier"] == "claude-opus-4-6"

@@ -31,6 +31,7 @@ from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,
+    detect_model_drift,
     detect_outcome_anomalies,
 )
 
@@ -40,7 +41,7 @@ _MAX_SESSIONS = 2000
 
 
 def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
-    """Return the model name with the most total tokens from model_breakdown.
+    """Return the model name with the most output tokens from model_breakdown.
 
     Returns "" when token_usage is absent or model_breakdown is empty.
     """
@@ -49,7 +50,7 @@ def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
     mb = token_usage.get("model_breakdown", {})
     if not isinstance(mb, dict) or not mb:
         return ""
-    return max(mb, key=lambda m: sum(mb[m].values()) if isinstance(mb[m], dict) else 0)
+    return max(mb, key=lambda m: mb[m].get("output_tokens", 0) if isinstance(mb[m], dict) else 0)
 
 
 _CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
@@ -306,6 +307,10 @@ def flush_session_log(
             }
         )
 
+    effective_model_id = model_identifier or _primary_model_identifier(token_usage)
+    _observed = _primary_model_identifier(token_usage) if token_usage else ""
+    anomalies.extend(detect_model_drift(model_identifier, _observed))
+
     # Write anomalies.jsonl (only if anomalies exist)
     if anomalies:
         anomalies_path = session_dir / "anomalies.jsonl"
@@ -387,7 +392,6 @@ def flush_session_log(
         "api_retry_last_status": api_retry_last_status,
         "api_retry_exhausted": api_retry_exhausted,
     }
-    effective_model_id = model_identifier or _primary_model_identifier(token_usage)
     if versions is not None:
         summary["versions"] = {
             **versions,

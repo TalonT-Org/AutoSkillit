@@ -46,7 +46,7 @@ def canonical_step_name(step_name: str) -> str:
 
 
 def _primary_model(token_usage: dict[str, Any]) -> str:
-    """Return the model name with the most total tokens from model_breakdown."""
+    """Return the model name with the most output tokens from model_breakdown."""
     mb = token_usage.get("model_breakdown", {})
     if not isinstance(mb, dict) or not mb:
         return ""
@@ -55,11 +55,7 @@ def _primary_model(token_usage: dict[str, Any]) -> str:
             logger.warning("Unexpected model_breakdown entry type for %r: %r", m, type(v).__name__)
     return max(
         mb,
-        key=lambda m: (
-            sum(v for v in mb[m].values() if isinstance(v, (int, float)))
-            if isinstance(mb[m], dict)
-            else 0
-        ),
+        key=lambda m: mb[m].get("output_tokens", 0) if isinstance(mb[m], dict) else 0,
     )
 
 

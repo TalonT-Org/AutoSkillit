@@ -101,7 +101,8 @@ async def test_gh_cli_records_exit_code_and_latency(build_ctx):
     usage = log.to_usage("sess-1")
     assert usage["total_requests"] == 1
     assert usage["total_latency_ms"] > 0
-    assert log._entries[0].status_code == 1
+    first_entry = next(iter(log._entries.values()))[0]
+    assert first_entry.status_code == 1
 
 
 async def test_flush_session_log_writes_github_api_usage(tmp_path):

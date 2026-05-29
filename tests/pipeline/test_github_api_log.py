@@ -244,6 +244,114 @@ async def test_drain_returns_usage_and_clears():
     assert usage["session_id"] == "sess-drain"
 
     # After drain the accumulator is empty — to_usage and drain both return None
-    assert len(log._entries) == 0
+    assert not log._entries
     assert log.to_usage("sess-drain") is None
     assert log.drain("sess-drain") is None
+
+
+async def test_entries_are_attributed_to_correct_step():
+    log = DefaultGitHubApiLog()
+    await log.record_httpx(
+        step_name="plan",
+        order_id="o1",
+        method="GET",
+        path="/repos/o/r/issues/1",
+        status_code=200,
+        latency_ms=10.0,
+        rate_limit_remaining=4999,
+        rate_limit_used=1,
+        rate_limit_reset=0,
+        timestamp="2026-04-27T10:00:00Z",
+    )
+    await log.record_gh_cli(
+        step_name="implement",
+        order_id="o1",
+        subcommand="gh pr create",
+        exit_code=0,
+        latency_ms=50.0,
+        timestamp="2026-04-27T10:00:01Z",
+    )
+
+    plan_usage = log.to_usage_for_step("s1", "plan", "o1")
+    impl_usage = log.to_usage_for_step("s1", "implement", "o1")
+
+    assert plan_usage is not None
+    assert plan_usage["total_requests"] == 1
+    assert plan_usage["by_source"]["httpx"] == 1
+    assert impl_usage is not None
+    assert impl_usage["total_requests"] == 1
+    assert impl_usage["by_source"]["gh_cli"] == 1
+
+
+async def test_drain_per_step_returns_only_that_steps_entries():
+    log = DefaultGitHubApiLog()
+    await log.record_httpx(
+        step_name="plan",
+        order_id="o1",
+        method="GET",
+        path="/repos/o/r/issues/1",
+        status_code=200,
+        latency_ms=10.0,
+        rate_limit_remaining=4999,
+        rate_limit_used=1,
+        rate_limit_reset=0,
+        timestamp="2026-04-27T10:00:00Z",
+    )
+    plan_usage = log.drain_step("s1", "plan", "o1")
+    await log.record_httpx(
+        step_name="implement",
+        order_id="o1",
+        method="GET",
+        path="/repos/o/r/pulls/2",
+        status_code=200,
+        latency_ms=15.0,
+        rate_limit_remaining=4998,
+        rate_limit_used=2,
+        rate_limit_reset=0,
+        timestamp="2026-04-27T10:00:01Z",
+    )
+    impl_usage = log.drain_step("s2", "implement", "o1")
+
+    assert plan_usage is not None
+    assert plan_usage["total_requests"] == 1
+    assert plan_usage["session_id"] == "s1"
+    assert impl_usage is not None
+    assert impl_usage["total_requests"] == 1
+    assert impl_usage["session_id"] == "s2"
+    assert not log._entries
+
+
+async def test_crash_during_step_b_does_not_sweep_step_a_entries():
+    log = DefaultGitHubApiLog()
+    await log.record_httpx(
+        step_name="plan",
+        order_id="o1",
+        method="GET",
+        path="/repos/o/r/issues/1",
+        status_code=200,
+        latency_ms=10.0,
+        rate_limit_remaining=4999,
+        rate_limit_used=1,
+        rate_limit_reset=0,
+        timestamp="2026-04-27T10:00:00Z",
+    )
+    await log.record_httpx(
+        step_name="implement",
+        order_id="o1",
+        method="POST",
+        path="/repos/o/r/pulls",
+        status_code=201,
+        latency_ms=20.0,
+        rate_limit_remaining=4998,
+        rate_limit_used=2,
+        rate_limit_reset=0,
+        timestamp="2026-04-27T10:00:01Z",
+    )
+
+    crash_usage = log.drain_step("crash", "implement", "o1")
+    assert crash_usage is not None
+    assert crash_usage["total_requests"] == 1
+
+    plan_usage = log.drain_step("s1", "plan", "o1")
+    assert plan_usage is not None
+    assert plan_usage["total_requests"] == 1

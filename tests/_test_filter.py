@@ -165,7 +165,7 @@ _CORE_UNIVERSAL_EXCLUSIONS: dict[str, frozenset[str]] = {
 
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"core", "recipe"}),
-    "_json": frozenset({"core", "execution", "pipeline", "recipe"}),
+    "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "feature_flags": frozenset(
         {"core", "cli", "config", "execution", "recipe", "server", "workspace"}
     ),

@@ -311,6 +311,7 @@ async def run_skill(
             }
         )
     try:
+        _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx
 
         _cleanup_session_id: str | None = None
@@ -579,6 +580,19 @@ async def run_skill(
             if _local_dir is not None:
                 skill_add_dirs.append(_local_dir)
 
+            from autoskillit.pipeline.context import (  # noqa: PLC0415
+                current_order_id as _current_order_id,
+            )
+            from autoskillit.pipeline.context import (
+                current_step_name as _current_step_name,
+            )
+            from autoskillit.pipeline.tokens import (  # noqa: PLC0415
+                canonical_step_name as _canonical_step_name,
+            )
+
+            _sn_token = _current_step_name.set(_canonical_step_name(step_name))
+            _oid_token = _current_order_id.set(effective_order_id)
+
             _start = time.monotonic()
             try:
                 skill_result = await tool_ctx.executor.run(
@@ -661,6 +675,10 @@ async def run_skill(
         logger.warning("run_skill cancelled", exc_info=True)
         raise
     finally:
+        if _sn_token is not None:
+            _current_step_name.reset(_sn_token)  # type: ignore[possibly-undefined]
+        if _oid_token is not None:
+            _current_order_id.reset(_oid_token)  # type: ignore[possibly-undefined]
         _sid: str | None = locals().get("_cleanup_session_id")  # type: ignore[assignment]
         if _sid is not None:
             _ssm = tool_ctx.session_skill_manager  # type: ignore[possibly-undefined]

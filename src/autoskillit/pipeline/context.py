@@ -11,6 +11,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from autoskillit.core import current_order_id, current_step_name
+
+__all__ = ["ToolContext", "current_step_name", "current_order_id"]
+
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     AuditLog,

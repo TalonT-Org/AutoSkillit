@@ -114,6 +114,28 @@ def test_default_timing_log_satisfies_timing_store_protocol():
     assert isinstance(DefaultTimingLog(), TimingLog)
 
 
+def test_default_github_api_log_satisfies_github_api_log():
+    from autoskillit.core import GitHubApiLog
+    from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
+
+    assert isinstance(DefaultGitHubApiLog(), GitHubApiLog)
+
+
+def test_github_api_log_protocol_includes_step_attribution_params():
+    import inspect
+
+    from autoskillit.core import GitHubApiLog
+
+    sig_httpx = inspect.signature(GitHubApiLog.record_httpx)
+    assert "step_name" in sig_httpx.parameters
+    assert "order_id" in sig_httpx.parameters
+    sig_cli = inspect.signature(GitHubApiLog.record_gh_cli)
+    assert "step_name" in sig_cli.parameters
+    assert "order_id" in sig_cli.parameters
+    assert "drain_step" in dir(GitHubApiLog)
+    assert "to_usage_for_step" in dir(GitHubApiLog)
+
+
 def test_default_token_log_satisfies_token_store_with_order_id():
     """F-1: DefaultTokenLog satisfies updated TokenLog Protocol (includes order_id params)."""
     from autoskillit.core import TokenLog

@@ -71,6 +71,8 @@ async def _run_subprocess(
     returncode, stdout, stderr = _process_runner_result(result, timeout)
 
     if is_gh:
+        from autoskillit.core import current_order_id, current_step_name
+
         latency_ms = (time.monotonic() - start) * 1000.0
         log = _get_ctx().github_api_log
         if log is not None:
@@ -79,6 +81,8 @@ async def _run_subprocess(
                 exit_code=returncode,
                 latency_ms=latency_ms,
                 timestamp=datetime.now(UTC).isoformat(),
+                step_name=current_step_name.get(""),
+                order_id=current_order_id.get(""),
             )
 
     return returncode, stdout, stderr

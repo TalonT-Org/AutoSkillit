@@ -160,10 +160,13 @@ def _build_session_telemetry(
     github_api_log: GitHubApiLog | None,
     loc_insertions: int,
     loc_deletions: int,
+    step_name: str = "",
+    order_id: str = "",
 ) -> SessionTelemetry:
-    _api_usage = (
-        github_api_log.drain(skill_result.session_id) if github_api_log is not None else None
-    )
+    if github_api_log is not None:
+        _api_usage = github_api_log.drain_step(skill_result.session_id, step_name, order_id)
+    else:
+        _api_usage = None
     return SessionTelemetry(
         token_usage=skill_result.token_usage,
         timing_seconds=timing_seconds,
@@ -178,9 +181,17 @@ def _build_session_telemetry(
 def _build_error_path_telemetry(
     github_api_log: GitHubApiLog | None,
     session_id: str = "",
+    step_name: str = "",
+    order_id: str = "",
 ) -> SessionTelemetry:
     """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
-    _api_usage = github_api_log.drain(session_id) if github_api_log is not None else None
+    if github_api_log is not None:
+        if step_name and order_id:
+            _api_usage = github_api_log.drain_step(session_id, step_name, order_id)
+        else:
+            _api_usage = github_api_log.drain(session_id)
+    else:
+        _api_usage = None
     return SessionTelemetry(
         token_usage=None,
         timing_seconds=None,

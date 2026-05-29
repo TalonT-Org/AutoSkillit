@@ -30,3 +30,10 @@ def test_require_fleet_doc_mentions_l3():
     assert "L3" in doc
     assert "L1" in doc
     assert "L2" in doc
+
+
+def test_check_input_contracts_has_docstring():
+    from autoskillit.server._guards import _check_input_contracts
+
+    doc = _check_input_contracts.__doc__ or ""
+    assert "contract" in doc.lower()

@@ -229,6 +229,8 @@ from .types import GitHubFetcher as GitHubFetcher
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
+from .types import InputContractResolver as InputContractResolver
+from .types import InputSpec as InputSpec
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
@@ -294,9 +296,11 @@ from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
+from .types import _looks_like_path as _looks_like_path
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import compute_remaining as compute_remaining
 from .types import extract_path_arg as extract_path_arg
+from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
 from .types import resolve_payload_field as resolve_payload_field

@@ -6,7 +6,16 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import SessionType, extract_path_arg, get_logger, session_type
+from autoskillit.core import (
+    InputContractResolver,
+    SessionType,
+    _looks_like_path,
+    extract_path_arg,
+    extract_positional_args,
+    extract_skill_name,
+    get_logger,
+    session_type,
+)
 from autoskillit.pipeline import gate_error_result, headless_error_result
 
 if TYPE_CHECKING:
@@ -160,6 +169,56 @@ def _check_dry_walkthrough(skill_command: str, cwd: str) -> str | None:
             f"The implement gate requires the plan at its make-plan/ or rectify/ origin — "
             f"copies in other directories are not accepted."
         )
+
+    return None
+
+
+def _check_input_contracts(
+    skill_command: str,
+    cwd: str,
+    resolver: InputContractResolver | None,
+) -> str | None:
+    """Validate skill_command arguments against input contracts.
+
+    Returns gate_error_result JSON string on validation failure, None if OK.
+    Fails open if resolver is None or skill has no contracts.
+    """
+    if resolver is None:
+        return None
+    specs = resolver(skill_command)
+    if not specs:
+        return None
+
+    args = extract_positional_args(skill_command)
+    path_args = [a for a in args if _looks_like_path(a)]
+
+    if not path_args:
+        return None
+
+    for spec in specs:
+        if spec.position >= len(path_args):
+            if spec.required:
+                return gate_error_result(
+                    f"Missing required {spec.type} argument '{spec.name}' "
+                    f"for {extract_skill_name(skill_command)}"
+                )
+            continue
+
+        value = path_args[spec.position]
+        resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
+
+        if spec.type == "file_path":
+            if not resolved.is_file():
+                return gate_error_result(
+                    f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                    f"expected a file, path does not exist or is a directory: {resolved}"
+                )
+        elif spec.type == "directory_path":
+            if not resolved.is_dir():
+                return gate_error_result(
+                    f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                    f"expected a directory, path does not exist or is a file: {resolved}"
+                )
 
     return None
 

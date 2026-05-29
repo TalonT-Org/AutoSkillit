@@ -20,6 +20,7 @@ T = TypeVar("T")
 
 __all__ = [
     "ContaminationOutcome",
+    "InputSpec",
     "LoadReport",
     "LoadResult",
     "TestResult",
@@ -144,6 +145,16 @@ class WriteBehaviorSpec:
 
     mode: str | None = None
     expected_when: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class InputSpec:
+    """Input contract specification for a single file_path or directory_path argument."""
+
+    name: str
+    type: Literal["file_path", "directory_path", "string"]
+    required: bool
+    position: int
 
 
 @dataclass

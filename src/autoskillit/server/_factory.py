@@ -20,6 +20,7 @@ from autoskillit.core import (
     MARKETPLACE_PREFIX,
     DirectInstall,
     FleetLock,
+    InputSpec,
     MarketplaceInstall,
     PluginSource,
     SubprocessRunner,
@@ -392,9 +393,32 @@ def make_context(
         contract = get_skill_contract(name, load_bundled_manifest())
         return contract.read_only if contract else False
 
+    def _resolve_input_contracts(skill_command: str) -> tuple[InputSpec, ...]:
+        name = resolve_skill_name(skill_command)
+        if not name:
+            return ()
+        contract = get_skill_contract(name, load_bundled_manifest())
+        if contract is None:
+            return ()
+        path_position = 0
+        specs: list[InputSpec] = []
+        for inp in contract.inputs:
+            if inp.type in ("file_path", "directory_path"):
+                specs.append(
+                    InputSpec(
+                        name=inp.name,
+                        type=inp.type,  # type: ignore[arg-type]
+                        required=inp.required,
+                        position=path_position,
+                    )
+                )
+                path_position += 1
+        return tuple(specs)
+
     ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.write_expected_resolver = _resolve_write_behavior
     ctx.read_only_resolver = _resolve_read_only
+    ctx.input_contract_resolver = _resolve_input_contracts
     ctx.token_factory = token_factory
     ctx.build_protected_campaign_ids = build_protected_campaign_ids
     ctx.executor = DefaultHeadlessExecutor(ctx)

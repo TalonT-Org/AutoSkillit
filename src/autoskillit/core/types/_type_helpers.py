@@ -19,7 +19,9 @@ from ._type_enums import SessionType, SkillSource
 from ._type_protocols_workspace import SkillResolver
 
 __all__ = [
+    "_looks_like_path",
     "extract_path_arg",
+    "extract_positional_args",
     "extract_skill_name",
     "fleet_error",
     "resolve_skill_name",
@@ -40,6 +42,21 @@ _PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
 
 def _looks_like_path(token: str) -> bool:
     return any(token.startswith(p) for p in _PATH_PREFIXES)
+
+
+def extract_positional_args(skill_command: str) -> list[str]:
+    """Extract all positional tokens from a skill_command string.
+
+    Returns tokens after the skill name, split on whitespace, with
+    enclosing quotes stripped. Path-like and non-path tokens are both
+    included, preserving positional order.
+    """
+    stripped = skill_command.strip()
+    m = _SKILL_CMD_RE.match(stripped)
+    if m is None:
+        return []
+    tokens = stripped[m.end() :].split()
+    return [t.strip('"').strip("'") for t in tokens]
 
 
 def extract_path_arg(skill_command: str) -> str | None:

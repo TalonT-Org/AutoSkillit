@@ -58,6 +58,7 @@ def _assert_ci_steps(recipe) -> None:
     assert resolve_ci.retries == 2
     assert resolve_ci.on_exhausted == "release_issue_failure"
     assert "context.work_dir" in skill_cmd
+    assert "context.plan_path" in skill_cmd
 
     # re_push step (T_CI6)
     assert "re_push" in recipe.steps

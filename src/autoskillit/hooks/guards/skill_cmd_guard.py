@@ -51,6 +51,14 @@ PATH_ARG_SKILLS: frozenset[str] = frozenset(
 # Token prefixes that unambiguously identify a filesystem path argument.
 _PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
 
+# Position of the plan file among path-like tokens for each skill.
+_PLAN_PATH_POSITION: dict[str, int] = {
+    "implement-worktree-no-merge": 0,
+    "implement-worktree": 0,
+    "retry-worktree": 0,
+    "resolve-failures": 1,
+}
+
 # Captures the skill short-name from a skill_command string such as:
 #   /implement-worktree-no-merge ...
 #   implement-worktree-no-merge ...
@@ -103,8 +111,22 @@ def main() -> None:
     tokens = args_str.split()
     first = tokens[0]
 
-    # Correct format: first token is a path → allow.
+    # Correct format: first token is a path.
     if _looks_like_path(first):
+        plan_pos = _PLAN_PATH_POSITION.get(skill_name)
+        if plan_pos is not None:
+            path_tokens = [t for t in tokens if _looks_like_path(t)]
+            if plan_pos < len(path_tokens):
+                plan_token = path_tokens[plan_pos]
+                basename = plan_token.rsplit("/", 1)[-1] if "/" in plan_token else plan_token
+                if basename and "." not in basename:
+                    _deny(
+                        f"{SKILL_CMD_DENY_TRIGGER} '{skill_name}': "
+                        f"plan path argument '{plan_token}' has no file extension. "
+                        f"This may indicate a mangled path (e.g. stripped .md extension). "
+                        f"Verify the path is correct and includes the file extension."
+                    )
+                    sys.exit(0)
         sys.exit(0)
 
     # First token is not a path. Check whether a path token appears later.

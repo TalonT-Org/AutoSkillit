@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
-from ._type_results import SkillResult, TestResult, ValidatedAddDir, WriteBehaviorSpec
+from ._type_results import InputSpec, SkillResult, TestResult, ValidatedAddDir, WriteBehaviorSpec
 
 __all__ = [
+    "InputContractResolver",
     "TestRunner",
     "HeadlessExecutor",
     "OutputPatternResolver",
@@ -116,3 +117,10 @@ class WriteExpectedResolver(Protocol):
     """Protocol for resolving write-expectation metadata from skill contracts."""
 
     def __call__(self, skill_command: str) -> WriteBehaviorSpec: ...
+
+
+@runtime_checkable
+class InputContractResolver(Protocol):
+    """Protocol for resolving input contract specs from skill contracts."""
+
+    def __call__(self, skill_command: str) -> Sequence[InputSpec]: ...

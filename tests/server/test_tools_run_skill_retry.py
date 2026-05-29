@@ -135,8 +135,10 @@ class TestRunSkillAgentResult:
     """run_skill result field contains actionable text."""
 
     @pytest.mark.anyio
-    async def test_context_limit_result_is_actionable(self, tool_ctx_kitchen_open):
+    async def test_context_limit_result_is_actionable(self, tool_ctx_kitchen_open, monkeypatch):
         """When context is exhausted, result text must NOT say 'Prompt is too long'."""
+        tool_ctx_kitchen_open.input_contract_resolver = None
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
         stdout = json.dumps(
             {
                 "type": "result",

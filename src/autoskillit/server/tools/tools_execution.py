@@ -28,6 +28,7 @@ from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
+    _check_input_contracts,
     _require_enabled,
     _require_orchestrator_or_higher,
     _validate_skill_command,
@@ -333,6 +334,14 @@ async def run_skill(
             # sub-sessions, ensuring token log entries carry the correct order_id without
             # requiring recipe authors to thread it through every run_skill call.
             effective_order_id = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+
+            if not resume_session_id:
+                if (
+                    input_error := _check_input_contracts(
+                        skill_command, cwd, tool_ctx.input_contract_resolver
+                    )
+                ) is not None:
+                    return input_error
 
             if _get_config().safety.require_dry_walkthrough:
                 if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:

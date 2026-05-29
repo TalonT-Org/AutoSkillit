@@ -71,11 +71,13 @@ class TestWriteGuardWorktreeIntegration:
         monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
         clone_dir = tmp_path / "clone"
         clone_dir.mkdir()
+        plan = clone_dir / "plan.md"
+        plan.write_text("content")
 
         from autoskillit.server.tools.tools_execution import run_skill
 
         await run_skill(
-            skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+            skill_command=f"/autoskillit:implement-worktree-no-merge {plan}",
             cwd=str(clone_dir),
             output_dir=".",
         )
@@ -98,11 +100,13 @@ class TestWriteGuardWorktreeIntegration:
         monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
         clone_dir = tmp_path / "clone"
         clone_dir.mkdir()
+        plan = clone_dir / "plan.md"
+        plan.write_text("content")
 
         from autoskillit.server.tools.tools_execution import run_skill
 
         await run_skill(
-            skill_command="/autoskillit:dry-walkthrough plan.md",
+            skill_command=f"/autoskillit:dry-walkthrough {plan}",
             cwd=str(clone_dir),
             output_dir=".",
         )

@@ -5,12 +5,10 @@ from __future__ import annotations
 import hashlib
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, Literal, cast
 
 from autoskillit.core import (
+    InputSpec,
     get_logger,
     load_yaml,
     pkg_root,
@@ -85,6 +83,31 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         read_only=read_only,
         result_fields=result_fields,
     )
+
+
+def resolve_input_specs(skill_command: str) -> tuple[InputSpec, ...]:
+    """Resolve InputSpec entries for file_path/directory_path inputs from a skill's contract."""
+    name = resolve_skill_name(skill_command)
+    if not name:
+        return ()
+    contract = get_skill_contract(name, load_bundled_manifest())
+    if contract is None:
+        return ()
+    path_position = 0
+    specs: list[InputSpec] = []
+    for inp in contract.inputs:
+        if inp.type in ("file_path", "directory_path"):
+            narrowed_type = cast(Literal["file_path", "directory_path"], inp.type)
+            specs.append(
+                InputSpec(
+                    name=inp.name,
+                    type=narrowed_type,
+                    required=inp.required,
+                    position=path_position,
+                )
+            )
+            path_position += 1
+    return tuple(specs)
 
 
 def get_callable_contract(

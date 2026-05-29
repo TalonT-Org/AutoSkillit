@@ -39,6 +39,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_session_type.py` | Tests for SessionType resolver and constants |
 | `test_skill_command_parsing.py` | Unit tests for extract_path_arg in core._type_helpers |
 | `test_tool_sequence_analysis.py` | Tool sequence analysis tests |
+| `test_type_helpers.py` | Tests for extract_positional_args helper |
 | `test_backend_capabilities.py` | Tests for BackendCapabilities frozen invariants and CLAUDE_CODE_CAPABILITIES field values |
 | `test_backend_event_kind.py` | Tests for BackendEventKind StrEnum — member exhaustiveness, values, importability |
 | `test_backend_dataclasses.py` | Tests for CmdSpec, SkillSessionConfig, ClaudeEventData, CodexEventData, SessionEvent, AgentSessionResult — frozen invariants, field types, defaults |

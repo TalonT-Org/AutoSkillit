@@ -59,6 +59,7 @@ from autoskillit.recipe import (
     DefaultRecipeRepository,
     get_skill_contract,
     load_bundled_manifest,
+    resolve_input_specs,
     resolve_skill_name,
 )
 from autoskillit.workspace import (
@@ -395,6 +396,7 @@ def make_context(
     ctx.output_pattern_resolver = _resolve_output_patterns
     ctx.write_expected_resolver = _resolve_write_behavior
     ctx.read_only_resolver = _resolve_read_only
+    ctx.input_contract_resolver = resolve_input_specs
     ctx.token_factory = token_factory
     ctx.build_protected_campaign_ids = build_protected_campaign_ids
     ctx.executor = DefaultHeadlessExecutor(ctx)

@@ -51,13 +51,21 @@ PATH_ARG_SKILLS: frozenset[str] = frozenset(
 # Token prefixes that unambiguously identify a filesystem path argument.
 _PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
 
+# Position of the plan file among path-like tokens for each skill.
+_PLAN_PATH_POSITION: dict[str, int] = {
+    "implement-worktree-no-merge": 0,
+    "implement-worktree": 0,
+    "retry-worktree": 0,
+    "resolve-failures": 1,
+}
+
 # Captures the skill short-name from a skill_command string such as:
 #   /implement-worktree-no-merge ...
 #   implement-worktree-no-merge ...
 _SKILL_RE = re.compile(r"^/?(?:autoskillit:)?(\S+)")
 
 
-def _looks_like_path(token: str) -> bool:
+def is_path_like_token(token: str) -> bool:
     """Return True if token begins with a recognised filesystem path prefix."""
     return any(token.startswith(p) for p in _PATH_PREFIXES)
 
@@ -103,12 +111,26 @@ def main() -> None:
     tokens = args_str.split()
     first = tokens[0]
 
-    # Correct format: first token is a path → allow.
-    if _looks_like_path(first):
+    # Correct format: first token is a path.
+    if is_path_like_token(first):
+        plan_pos = _PLAN_PATH_POSITION.get(skill_name)
+        if plan_pos is not None:
+            path_tokens = [t for t in tokens if is_path_like_token(t)]
+            if plan_pos < len(path_tokens):
+                plan_token = path_tokens[plan_pos]
+                basename = plan_token.rsplit("/", 1)[-1] if "/" in plan_token else plan_token
+                if basename and "." not in basename:
+                    _deny(
+                        f"{SKILL_CMD_DENY_TRIGGER} '{skill_name}': "
+                        f"plan path argument '{plan_token}' has no file extension. "
+                        f"This may indicate a mangled path (e.g. stripped .md extension). "
+                        f"Verify the path is correct and includes the file extension."
+                    )
+                    sys.exit(0)
         sys.exit(0)
 
     # First token is not a path. Check whether a path token appears later.
-    path_token = next((t for t in tokens[1:] if _looks_like_path(t)), None)
+    path_token = next((t for t in tokens[1:] if is_path_like_token(t)), None)
     if path_token is None:
         # No path-like token found at all — could be pasted plan content.
         # Allow; the skill's Step 0 will handle it.
@@ -118,8 +140,8 @@ def main() -> None:
     # Reconstruct corrected command: all path tokens first, then non-path tokens.
     # When args_str is multiline, separate prose from paths with a blank line.
     has_newlines = "\n" in args_str
-    path_tokens = [t for t in tokens if _looks_like_path(t)]
-    non_path_tokens = [t for t in tokens if not _looks_like_path(t)]
+    path_tokens = [t for t in tokens if is_path_like_token(t)]
+    non_path_tokens = [t for t in tokens if not is_path_like_token(t)]
     path_part = " ".join(path_tokens)
     if has_newlines and non_path_tokens:
         prose_block = " ".join(non_path_tokens)

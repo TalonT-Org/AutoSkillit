@@ -117,6 +117,7 @@ def test_toolcontext_new_optional_fields_default_none(tmp_path):
     assert ctx.clone_mgr is None
     assert ctx.github_client is None
     assert ctx.backend is None
+    assert ctx.input_contract_resolver is None
 
 
 def test_tool_context_has_backend_field() -> None:
@@ -394,3 +395,23 @@ def test_tool_context_has_quota_refresh_task_field():
     fields = {f.name: f for f in dataclasses.fields(ToolContext)}
     assert "quota_refresh_task" in fields
     assert fields["quota_refresh_task"].default is None
+
+
+def test_tool_context_has_input_contract_resolver_field() -> None:
+    """ToolContext dataclass exposes input_contract_resolver as an optional Protocol field."""
+    import typing
+
+    from autoskillit.core import InputContractResolver
+    from autoskillit.pipeline.context import ToolContext
+
+    fields = {f.name: f for f in dataclasses.fields(ToolContext)}
+    assert "input_contract_resolver" in fields
+    assert fields["input_contract_resolver"].default is None
+
+    hints = typing.get_type_hints(ToolContext)
+    assert "input_contract_resolver" in hints
+    args = typing.get_args(hints["input_contract_resolver"])
+    assert InputContractResolver in args, (
+        f"input_contract_resolver type hint {hints['input_contract_resolver']} "
+        f"does not include InputContractResolver Protocol"
+    )

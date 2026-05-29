@@ -22,6 +22,7 @@ from autoskillit.recipe._contracts_manifest import (  # noqa: F401
     get_skill_contract,
     get_tool_output_contract,
     load_bundled_manifest,
+    resolve_input_specs,
 )
 from autoskillit.recipe._contracts_staleness import (  # noqa: F401
     check_contract_staleness,

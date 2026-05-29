@@ -4,7 +4,7 @@ import json
 from io import StringIO
 from unittest.mock import patch
 
-from autoskillit.hooks.guards.skill_cmd_guard import _looks_like_path, main
+from autoskillit.hooks.guards.skill_cmd_guard import is_path_like_token, main
 
 
 def _run_hook(tool_input: dict) -> dict | None:
@@ -29,31 +29,31 @@ def _decision(result: dict | None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# _looks_like_path unit tests
+# is_path_like_token unit tests
 # ---------------------------------------------------------------------------
 
 
 class TestLooksLikePath:
     def test_slash_prefix(self):
-        assert _looks_like_path("/home/user/plan.md") is True
+        assert is_path_like_token("/home/user/plan.md") is True
 
     def test_dotslash_prefix(self):
-        assert _looks_like_path("./plan.md") is True
+        assert is_path_like_token("./plan.md") is True
 
     def test_temp_prefix_no_longer_valid(self):
-        assert _looks_like_path("temp/make-plan/plan.md") is False
+        assert is_path_like_token("temp/make-plan/plan.md") is False
 
     def test_autoskillit_prefix(self):
-        assert _looks_like_path(".autoskillit/temp/plan.md") is True
+        assert is_path_like_token(".autoskillit/temp/plan.md") is True
 
     def test_plain_word(self):
-        assert _looks_like_path("the") is False
+        assert is_path_like_token("the") is False
 
     def test_verified(self):
-        assert _looks_like_path("verified") is False
+        assert is_path_like_token("verified") is False
 
     def test_empty(self):
-        assert _looks_like_path("") is False
+        assert is_path_like_token("") is False
 
 
 # ---------------------------------------------------------------------------

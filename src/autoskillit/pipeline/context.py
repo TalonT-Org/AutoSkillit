@@ -26,6 +26,7 @@ from autoskillit.core import (
     GitHubApiLog,
     GitHubFetcher,
     HeadlessExecutor,
+    InputContractResolver,
     McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
@@ -132,6 +133,7 @@ class ToolContext:
     output_pattern_resolver: OutputPatternResolver | None = field(default=None)
     write_expected_resolver: WriteExpectedResolver | None = field(default=None)
     read_only_resolver: ReadOnlyResolver | None = field(default=None)
+    input_contract_resolver: InputContractResolver | None = field(default=None)
     backend: CodingAgentBackend | None = field(default=None)
     session_skill_manager: SessionSkillManager | None = field(default=None)
     skill_resolver: SkillResolver | None = field(default=None)

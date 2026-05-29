@@ -10,6 +10,7 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import YAMLError, load_yaml
+from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import (
@@ -444,7 +445,6 @@ def _resolve_hidden_inputs_in_content(
     Only hidden ingredients are resolved — visible ingredient refs remain as literals
     for the LLM to substitute using the ingredients table values.
     """
-    from autoskillit.recipe._contracts_types import INPUT_REF_RE  # noqa: PLC0415
 
     overrides = ingredient_overrides or {}
     hidden_ingredients = {

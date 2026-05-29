@@ -106,10 +106,7 @@ from autoskillit.server.tools import (  # noqa: E402, F401
     tools_issue_composite as _tools_issue_composite,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401
-    tools_issue_headless as _tools_issue_headless,
-)
-from autoskillit.server.tools import (  # noqa: E402, F401
-    tools_issue_labels as _tools_issue_labels,
+    tools_issue_lifecycle as _tools_issue_lifecycle,
 )
 from autoskillit.server.tools import (  # noqa: E402, F401
     tools_kitchen as _tools_kitchen,

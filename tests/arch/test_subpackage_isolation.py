@@ -566,12 +566,13 @@ def test_server_file_count_under_limit() -> None:
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
-    """tools_integrations.py deleted; four replacement modules exist."""
+    """tools_integrations.py deleted; five replacement modules exist."""
     server = SRC_ROOT / "server"
     assert not (server / "tools_integrations.py").exists()
     assert (server / "tools" / "tools_github.py").exists()
     assert (server / "tools" / "tools_issue_headless.py").exists()
     assert (server / "tools" / "tools_issue_labels.py").exists()
+    assert (server / "tools" / "tools_issue_lifecycle.py").exists()
     assert (server / "tools" / "tools_pr_ops.py").exists()
 
 

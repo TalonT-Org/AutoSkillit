@@ -1,4 +1,4 @@
-"""MCP tool handlers: prepare_issue, enrich_issues (headless session tools)."""
+"""Helper functions for prepare_issue, enrich_issues (headless session tools)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import RetryReason, get_logger
-from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
 from autoskillit.server._notify import _notify, track_response_size
@@ -147,7 +146,6 @@ def _parse_enrich_result(response_text: str) -> dict[str, Any]:
         return {"success": False, "error": "result block contained invalid JSON"}
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("prepare_issue")
 async def prepare_issue(
     title: str,
@@ -254,7 +252,6 @@ async def prepare_issue(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
-@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("enrich_issues")
 async def enrich_issues(
     issue_number: int | None = None,

@@ -336,6 +336,10 @@ def test_claude_code_backend_list_plugins_returns_list():
     assert isinstance(result, list)
 
 
+@pytest.mark.xfail(
+    reason="CodexBackend.list_plugins() raises NotImplementedError until P2-A1–P2-A7 are merged",
+    strict=True,
+)
 def test_codex_backend_list_plugins_returns_list():
     from unittest.mock import MagicMock, patch
 

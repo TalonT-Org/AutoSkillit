@@ -183,6 +183,9 @@ src/autoskillit/.mcp.json:
 src/autoskillit/recipes/scripts/*.sh:
   - recipe/
 
+scripts/recipe/*.sh:
+  - recipe/
+
 src/autoskillit/core/__init__.pyi:
   - core/
   - arch/

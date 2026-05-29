@@ -13,10 +13,15 @@ from __future__ import annotations
 import json
 import shlex
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _command_classification import _SHELL_OPS  # type: ignore[import-not-found]  # noqa: E402
 
 ARTIFACT_DOWNLOAD_DENY_TRIGGER: str = "gh artifact download without --dir is prohibited"
-# Shell-separator tokens that introduce a new subcommand.
-_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 
 _DOWNLOAD_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
     {("run", "download"), ("release", "download")}

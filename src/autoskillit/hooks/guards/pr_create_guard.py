@@ -20,15 +20,13 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    _SHELL_OPS,
     has_interpreter_wrapped_command,
     has_nested_shell,
 )
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
 PR_CREATE_DENY_TRIGGER: str = "PR creation via run_cmd is prohibited"
-
-# Shell-separator tokens that introduce a new subcommand.
-_SHELL_OPS = frozenset({"&&", "||", ";", "!", "|", "("})
 
 _DENY_REASON = (
     "PR creation via run_cmd is prohibited during recipe execution. "

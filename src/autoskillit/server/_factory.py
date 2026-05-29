@@ -13,7 +13,7 @@ import os
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
@@ -404,10 +404,11 @@ def make_context(
         specs: list[InputSpec] = []
         for inp in contract.inputs:
             if inp.type in ("file_path", "directory_path"):
+                narrowed_type = cast(Literal["file_path", "directory_path", "string"], inp.type)
                 specs.append(
                     InputSpec(
                         name=inp.name,
-                        type=inp.type,  # type: ignore[arg-type]
+                        type=narrowed_type,
                         required=inp.required,
                         position=path_position,
                     )

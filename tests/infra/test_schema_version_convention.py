@@ -228,7 +228,7 @@ class TestSchemaVersionConvention:
         """List-payload sites are included since the AST scanner can't distinguish return types."""
         # These sites write list payloads through function calls but are caught by the scanner
         list_sites = [
-            ("src/autoskillit/smoke_utils/_review.py", 78),
+            ("src/autoskillit/smoke_utils/_review.py", 80),
             ("src/autoskillit/smoke_utils/_git.py", 102),
         ]
         for site in list_sites:

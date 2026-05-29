@@ -60,7 +60,7 @@ class TestStepBackendPtyOverride:
     ) -> None:
         """_execute_claude_headless uses _step_backend.pty_required, not ctx.backend."""
         import json
-        from unittest.mock import patch
+        from unittest.mock import Mock, patch
 
         from autoskillit.core import CmdSpec
         from autoskillit.core.types import SubprocessResult, TerminationReason
@@ -90,6 +90,11 @@ class TestStepBackendPtyOverride:
 
         codex_step = _mock_backend(pty_required=False, channel_b_capable=False)
         codex_step.name = "codex"
+        _mock_parsed = Mock()
+        _mock_parsed.raw = {}
+        _mock_parser = Mock()
+        _mock_parser.parse_stdout.return_value = _mock_parsed
+        codex_step.result_parser.return_value = _mock_parser
 
         spec = CmdSpec(cmd=("codex", "--print", "do something"), env={})
         with patch("autoskillit.execution.headless._headless_execute.assert_headless_cmd"):

@@ -105,7 +105,7 @@ class TestBoundaryPtyDispatchPaths:
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
-            "You are an L3 orchestrator",
+            "You are a fleet orchestrator",
             str(tmp_path),
             completion_marker="%%FT_DONE%%",
         )

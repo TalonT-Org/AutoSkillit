@@ -234,3 +234,42 @@ def test_load_from_log_dir_falls_back_to_model_identifier(tmp_path: Path) -> Non
     report = log.get_report()
     assert len(report) == 1
     assert report[0]["model"] == "claude-opus-4-6"
+
+
+def test_primary_model_prefers_output_tokens() -> None:
+    """_primary_model selects the model with the most output_tokens."""
+    from autoskillit.pipeline.tokens import _primary_model
+
+    token_usage = {
+        "model_breakdown": {
+            "claude-opus-4-6": {
+                "input_tokens": 5000,
+                "output_tokens": 12000,
+                "cache_read_tokens": 1000,
+                "cache_write_tokens": 500,
+            },
+            "claude-sonnet-4-6": {
+                "input_tokens": 80000,
+                "output_tokens": 3000,
+                "cache_read_tokens": 60000,
+                "cache_write_tokens": 2000,
+            },
+        }
+    }
+    result = _primary_model(token_usage)
+    assert result == "claude-opus-4-6"
+
+
+def test_primary_model_warns_on_non_dict_breakdown(caplog: pytest.LogCaptureFixture) -> None:
+    """_primary_model logs warning for non-dict model_breakdown entries."""
+    from autoskillit.pipeline.tokens import _primary_model
+
+    token_usage = {
+        "model_breakdown": {
+            "claude-opus-4-6": {"input_tokens": 100, "output_tokens": 50},
+            "bad-entry": 12345,
+        }
+    }
+    result = _primary_model(token_usage)
+    assert result == "claude-opus-4-6"
+    assert "Unexpected model_breakdown entry type" in caplog.text

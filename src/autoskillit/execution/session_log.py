@@ -40,7 +40,7 @@ _MAX_SESSIONS = 2000
 
 
 def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
-    """Return the model name with the most total tokens from model_breakdown.
+    """Return the model name with the most output tokens from model_breakdown.
 
     Returns "" when token_usage is absent or model_breakdown is empty.
     """
@@ -49,7 +49,7 @@ def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
     mb = token_usage.get("model_breakdown", {})
     if not isinstance(mb, dict) or not mb:
         return ""
-    return max(mb, key=lambda m: sum(mb[m].values()) if isinstance(mb[m], dict) else 0)
+    return max(mb, key=lambda m: mb[m].get("output_tokens", 0) if isinstance(mb[m], dict) else 0)
 
 
 _CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"

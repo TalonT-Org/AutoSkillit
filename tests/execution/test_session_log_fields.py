@@ -1123,7 +1123,7 @@ class TestApiRetryFields:
         assert summary["api_retry_exhausted"] is True
 
     def test_api_retry_fields_in_index(self, tmp_path):
-        """sessions.jsonl includes api_retry_count and api_retry_exhausted."""
+        """sessions.jsonl includes api_retry_count, api_retry_exhausted, api_retry_last_error, and api_retry_last_status."""
         _flush(
             tmp_path,
             session_id="retry-index",
@@ -1136,6 +1136,8 @@ class TestApiRetryFields:
         entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip().split("\n")[-1])
         assert entry["api_retry_count"] == 3
         assert entry["api_retry_exhausted"] is True
+        assert entry["api_retry_last_error"] == "unknown"
+        assert entry["api_retry_last_status"] is None
 
     def test_api_retry_fields_default_zero_in_summary(self, tmp_path):
         """flush_session_log without api_retry params produces zero/false defaults."""
@@ -1331,3 +1333,95 @@ def test_flush_session_log_argmax_fallback_prefers_output_tokens(tmp_path):
     assert tu_path.exists()
     data = json.loads(tu_path.read_text())
     assert data["model_identifier"] == "claude-opus-4-6"
+
+
+class TestSkillCommandPersistenceFidelity:
+    """skill_command must be stored without truncation in both sessions.jsonl and summary.json."""
+
+    _LONG_COMMAND = "/autoskillit:implement " + "x" * 230
+
+    def test_long_skill_command_survives_in_index(self, tmp_path):
+        """A 250-char skill_command written to sessions.jsonl is stored intact."""
+        _flush(
+            tmp_path,
+            session_id="fidelity-index",
+            skill_command=self._LONG_COMMAND,
+            proc_snapshots=None,
+        )
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+        assert entry["skill_command"] == self._LONG_COMMAND
+
+    def test_long_skill_command_survives_in_summary(self, tmp_path):
+        """A 250-char skill_command written to summary.json is stored intact."""
+        _flush(
+            tmp_path,
+            session_id="fidelity-summary",
+            skill_command=self._LONG_COMMAND,
+            proc_snapshots=None,
+        )
+        summary = json.loads(
+            (tmp_path / "sessions" / "fidelity-summary" / "summary.json").read_text()
+        )
+        assert summary["skill_command"] == self._LONG_COMMAND
+
+    def test_index_and_summary_skill_command_are_identical(self, tmp_path):
+        """skill_command in sessions.jsonl and summary.json must be identical."""
+        _flush(
+            tmp_path,
+            session_id="fidelity-consist",
+            skill_command=self._LONG_COMMAND,
+            proc_snapshots=None,
+        )
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+        summary = json.loads(
+            (tmp_path / "sessions" / "fidelity-consist" / "summary.json").read_text()
+        )
+        assert entry["skill_command"] == summary["skill_command"]
+
+
+class TestSessionIndexSummaryConsistency:
+    """Overlapping fields in sessions.jsonl and summary.json must have identical values."""
+
+    _OVERLAP_FIELDS = {
+        "session_id",
+        "cwd",
+        "skill_command",
+        "success",
+        "subtype",
+        "exit_code",
+        "snapshot_count",
+        "anomaly_count",
+        "write_call_count",
+        "fs_writes_detected",
+        "git_writes_detected",
+        "file_changes_count",
+        "github_api_requests",
+        "api_retry_count",
+        "api_retry_exhausted",
+        "api_retry_last_error",
+        "api_retry_last_status",
+        "caller_session_id",
+    }
+
+    def test_overlapping_fields_are_consistent(self, tmp_path):
+        """All fields present in both index and summary must have identical values."""
+        _flush(
+            tmp_path,
+            session_id="consist-check",
+            skill_command="/autoskillit:implement " + "y" * 200,
+            api_retry_count=2,
+            api_retry_last_error="overloaded",
+            api_retry_last_status=529,
+            api_retry_exhausted=False,
+            write_call_count=7,
+            proc_snapshots=None,
+        )
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+        summary = json.loads(
+            (tmp_path / "sessions" / "consist-check" / "summary.json").read_text()
+        )
+        for field in self._OVERLAP_FIELDS:
+            if field in entry and field in summary:
+                assert entry[field] == summary[field], (
+                    f"Field '{field}' differs: index={entry[field]!r}, summary={summary[field]!r}"
+                )

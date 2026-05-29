@@ -15,8 +15,10 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
+    WORKTREE_SKILLS,
     SkillResult,
     ValidatedAddDir,
+    extract_skill_name,
     get_logger,
     truncate_text,
     validate_project_local_skill_dir,
@@ -202,7 +204,6 @@ def _compute_write_prefixes(
     cwd: str,
     skill_command: str,
 ) -> tuple[str, tuple[str, ...]]:
-    from autoskillit.core import WORKTREE_SKILLS, extract_skill_name  # noqa: PLC0415
 
     worktree_write_prefixes: list[str] = []
     extracted = extract_skill_name(skill_command)

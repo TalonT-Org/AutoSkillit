@@ -151,6 +151,33 @@ If the file exists and contains entries:
        <!-- REVIEW-FLAG: severity={severity} dimension={dimension} -->
        ```
 
+   Build the payload and post via stdin. The `--field` approach creates one array entry per flag (not one object per comment), so it must not be used for the `comments` array.
+
+   ```bash
+   # Build comments JSON array from deferred observations (exclude info severity)
+   COMMENTS_JSON=$(jq -n --argjson observations "$(cat "$DEFERRED_FILE")" '
+     $observations | map(select(.severity != "info")) | map({
+       path: .path,
+       line: (if .line then .line else null end),
+       side: "RIGHT",
+       body: ("**Observation from local review round \(.round):**\n\n\(.body)\n\n**Evidence:** \(.evidence)\n\n<!-- REVIEW-FLAG: severity=\(.severity) dimension=\(.dimension) -->")
+     }) | map(if .line == null then del(.line) + {position: 1} else . end)
+   ')
+
+   COMMIT_SHA=$(gh pr view ${PR_NUMBER} --json headRefOid -q .headRefOid)
+   ROUND_COUNT=$(jq -n --argjson obs "$(cat "$DEFERRED_FILE")" '$obs | map(.round) | unique | length')
+
+   # Build and post the full review payload via stdin
+   jq -n \
+     --arg body "Observations accumulated from ${ROUND_COUNT} local review rounds:" \
+     --arg event "COMMENT" \
+     --arg commit_id "$COMMIT_SHA" \
+     --argjson comments "$COMMENTS_JSON" \
+     '{body: $body, event: $event, commit_id: $commit_id, comments: $comments}' | \
+   gh api /repos/{owner}/{repo}/pulls/${PR_NUMBER}/reviews \
+     --method POST --input -
+   ```
+
 4. Use the batch review endpoint (never post individual comments unless the batch call fails)
 5. **Fallback:** If the batch POST returns HTTP 422 (e.g., stale line numbers), retry by posting each observation individually via `gh api repos/{owner}/{repo}/pulls/{pr_number}/comments --method POST` with 1s delay between calls
 6. After all deferred observations are posted successfully, rename the file to `deferred_observations_${PR_NUMBER}_posted.json` to prevent re-posting on retry

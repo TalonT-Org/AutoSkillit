@@ -1,4 +1,10 @@
-"""Semantic validation rules enforcing phoropter step adjacency (dial→apply→synthesize)."""
+"""Semantic validation rules enforcing phoropter step adjacency (dial→apply→synthesize).
+
+Naming constraint: phoropter-family steps must use the exact phase literals
+("dial", "apply", "synthesize") as their step keys.  The phase-order rule
+compares step_name directly against _PHOROPTER_PHASES, so a step keyed
+"vis-lens-dial" with phoropter_family set will always fail validation.
+"""
 
 from __future__ import annotations
 

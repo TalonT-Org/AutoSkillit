@@ -32,6 +32,7 @@ def annotate_pr_diff(
     from autoskillit.execution import (
         annotate_diff,
         compute_diff_metrics,
+        extract_valid_lines,
         parse_hunk_ranges,
         select_review_agents,
     )  # noqa: PLC0415
@@ -74,8 +75,10 @@ def annotate_pr_diff(
     out.mkdir(parents=True, exist_ok=True)
     annotated_path = out / f"annotated_diff_{pr_number}.txt"
     ranges_path = out / f"ranges_{pr_number}.json"
+    valid_lines_path = out / f"valid_lines_{pr_number}.json"
     atomic_write(annotated_path, annotate_diff(diff))
     atomic_write(ranges_path, json.dumps(parse_hunk_ranges(diff)))
+    atomic_write(valid_lines_path, json.dumps(extract_valid_lines(diff)))
     metrics = compute_diff_metrics(diff)
     loc_thresh = int(loc_threshold) if loc_threshold else 200
     file_thresh = int(file_threshold) if file_threshold else 5
@@ -97,6 +100,7 @@ def annotate_pr_diff(
         "review_mode": review_mode,
         "annotated_diff_path": str(annotated_path),
         "hunk_ranges_path": str(ranges_path),
+        "valid_lines_path": str(valid_lines_path),
         "diff_metrics_path": str(metrics_path),
     }
 

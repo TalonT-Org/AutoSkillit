@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.execution.diff_annotator import (
@@ -14,6 +16,8 @@ from autoskillit.execution.diff_annotator import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_MARKER_RE = re.compile(r"^\[L(\d+)\]")
 
 # --- parse_hunk_ranges ---
 

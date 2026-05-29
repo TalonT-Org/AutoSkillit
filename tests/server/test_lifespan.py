@@ -250,3 +250,37 @@ async def test_lifespan_skips_codex_registration_for_non_codex_backend():
             pass
 
     reg_mock.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_cleanup_stale_loop_calls_cleanup_periodically(monkeypatch):
+    """_cleanup_stale_loop calls cleanup_stale with explicit max_age after each sleep."""
+    from autoskillit.server._lifespan import _cleanup_stale_loop
+
+    calls: list[dict] = []
+    sleep_count = 0
+
+    async def fake_sleep(seconds):
+        nonlocal sleep_count
+        sleep_count += 1
+        if sleep_count >= 2:
+            raise asyncio.CancelledError
+
+    def fake_cleanup_stale(max_age_seconds=86400):
+        calls.append({"max_age_seconds": max_age_seconds})
+        return 1
+
+    mock_ssm = MagicMock()
+    mock_ssm.cleanup_stale = fake_cleanup_stale
+
+    monkeypatch.setattr("autoskillit.server._lifespan._asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(
+        "autoskillit.server._lifespan._get_ctx_or_none",
+        lambda: MagicMock(session_skill_manager=mock_ssm),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await _cleanup_stale_loop(interval=1800.0)
+
+    assert len(calls) == 1
+    assert calls[0]["max_age_seconds"] == 86400

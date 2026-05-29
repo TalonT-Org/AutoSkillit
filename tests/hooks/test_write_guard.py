@@ -483,13 +483,59 @@ class TestWriteGuardInterpreterBypass:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    def test_python3_write_to_allowed_prefix_also_denied(self, monkeypatch: pytest.MonkeyPatch):
-        """Interpreter writes are denied unconditionally.
-
-        Target path cannot be reliably extracted from interpreter commands.
-        """
+    def test_python3_write_to_allowed_prefix_with_literal_path_allowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Interpreter writes with extractable literal paths are allowed within the prefix."""
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
         event = _build_bash_event(f"python3 -c \"open('{self.PREFIX}out.txt','w').write('x')\"")
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_python3_write_to_allowed_prefix_with_literal_open_allowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            "python3 -c \"open('/clone/.autoskillit/temp/planner/out.json', 'w').write('x')\""
+        )
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_python3_write_to_allowed_prefix_with_literal_write_text_allowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            'python3 -c "from pathlib import Path; '
+            "Path('/clone/.autoskillit/temp/planner/out.json').write_text('x')\""
+        )
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_python3_write_to_allowed_prefix_with_literal_write_bytes_allowed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event(
+            'python3 -c "from pathlib import Path; '
+            "Path('/clone/.autoskillit/temp/planner/out.bin').write_bytes(b'x')\""
+        )
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_python3_write_outside_prefix_with_literal_path_denied(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("python3 -c \"open('/clone/src/foo.py', 'w').write('x')\"")
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_python3_write_with_dynamic_path_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        event = _build_bash_event("python3 -c \"open(sys.argv[1], 'w').write('x')\"")
         result = _run_hook(event)
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -567,3 +613,92 @@ class TestWriteGuardMultiPrefix:
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/a/")
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "/a/:/b/")
         assert _run_hook(_build_event("Edit", "/b/file.py")) == ""
+
+
+class TestWriteGuardGhCommands:
+    """gh CLI commands must never be blocked by the write guard."""
+
+    PREFIX = "/clone/.autoskillit/temp/compose-pr/"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+
+    def test_gh_api_post_reviews_allowed(self):
+        result = _run_hook(
+            _build_bash_event("gh api /repos/Owner/Repo/pulls/123/reviews --method POST --input -")
+        )
+        assert result == ""
+
+    def test_gh_api_method_patch_allowed(self):
+        result = _run_hook(
+            _build_bash_event("gh api --method patch /repos/Owner/Repo/pulls/123 --field body=foo")
+        )
+        assert result == ""
+
+    def test_gh_pr_view_allowed(self):
+        result = _run_hook(_build_bash_event("gh pr view 123 --json body"))
+        assert result == ""
+
+    def test_gh_issue_list_allowed(self):
+        result = _run_hook(_build_bash_event("gh issue list --state open"))
+        assert result == ""
+
+    def test_gh_api_url_not_extracted_as_filesystem_path(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("gh api --method patch /repos/Owner/Repo/pulls/123")
+        assert result is None or result == []
+
+
+class TestExtractBashWriteTargetsNewFamilies:
+    """Parameterized coverage for write-command families missing from original tests."""
+
+    @pytest.mark.parametrize(
+        "cmd,expected_targets",
+        [
+            ("mv /src/a.py /dst/b.py", ["/dst/b.py"]),
+            ("cp /src/a.py /dst/b.py", ["/dst/b.py"]),
+            ("patch /clone/src/main.py", ["/clone/src/main.py"]),
+            ("rm /clone/src/old.py", ["/clone/src/old.py"]),
+            ("unlink /clone/src/old.py", ["/clone/src/old.py"]),
+            ("rm -rf /clone/src/dir/", ["/clone/src/dir/"]),
+        ],
+    )
+    def test_mv_cp_rm_patch_write_cmd_family_extraction(
+        self, cmd: str, expected_targets: list[str]
+    ):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets(cmd)
+        assert result == expected_targets
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "gh api /repos/Owner/Repo/pulls/123/reviews --method POST --input -",
+            "gh api --method patch /repos/Owner/Repo/pulls/123 --field body=...",
+            "gh pr view 123 --json body",
+            "gh issue list --state open",
+            "gh api /repos/Owner/Repo/issues/42/comments --method POST -f body=test",
+        ],
+    )
+    def test_gh_commands_not_extracted(self, cmd: str):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets(cmd)
+        assert result is None or result == []
+
+    def test_git_checkout_dash_dash_extracted(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("git checkout -- /clone/src/main.py")
+        assert result is not None
+        assert "/clone/src/main.py" in result
+
+    def test_git_reset_hard_allowed_no_path(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("git reset --hard HEAD")
+        assert result is not None or result == []

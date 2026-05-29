@@ -157,36 +157,10 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
             found_any_write = True
             all_targets.extend(result)
 
-    # Redirect detection: per-segment on the raw command, skipping gh segments
-    # Reconstruct per-segment raw text isn't possible after shlex, so scan
-    # the full command but only for non-gh segments via raw regex on command.
-    # We check: if no gh command exists in any segment, apply redirect regex normally.
-    # If gh segments exist, we need to skip them. Since shlex parsing handles quoting,
-    # we apply the redirect regex to the full command but filter paths that come from
-    # gh segments. The simplest safe approach: only skip redirect detection if ALL
-    # segments are gh commands, otherwise apply it.
-    has_gh = any(is_gh_command(seg) for seg in segments)
+    # Apply redirect regex to full command; skip only when all segments are gh.
     has_non_gh = any(not is_gh_command(seg) for seg in segments)
 
     if not segments or has_non_gh:
-        for m in _REDIRECT_RE.finditer(command):
-            path = m.group(1)
-            if path not in _PSEUDO_DEVICE_PATHS:
-                found_any_write = True
-                all_targets.append(path)
-            else:
-                found_any_write = True
-
-    # Also check: if segments exist and all are gh, but we still had a redirect hit,
-    # treat it as no write (gh commands don't write to filesystem)
-    if has_gh and not has_non_gh:
-        # All commands are gh — no write detected via redirect
-        pass
-    elif not found_any_write and segments:
-        # No write-verb segments and no redirects found
-        return None
-    elif not found_any_write and not segments:
-        # shlex failed or empty — fallback: check redirect regex
         for m in _REDIRECT_RE.finditer(command):
             path = m.group(1)
             if path not in _PSEUDO_DEVICE_PATHS:

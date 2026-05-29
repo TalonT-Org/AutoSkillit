@@ -59,6 +59,8 @@ def _push_through_verify_merge(
     runner.push(_make_result(0, ""))  # git log --merges
     runner.push(_make_result(0, ""))  # rebase
     runner.push(_make_result(0, f"{base_branch}\n"))  # step 7.5: branch --show-current (main_repo)
+    runner.push(_make_result(0, "abc123def456\n"))  # step 7.5: rev-parse local SHA
+    runner.push(_make_result(0, "abc123def456\n"))  # step 7.5b: rev-parse remote SHA
 
 
 @pytest.mark.anyio
@@ -211,6 +213,8 @@ async def test_non_embedded_worktree_proceeds_past_spatial_check(tmp_path):
     runner.push(_make_result(0, ""))
     # step 7.5: branch --show-current (main_repo)
     runner.push(_make_result(0, "dev\n"))
+    runner.push(_make_result(0, "abc123def456\n"))  # step 7.5: rev-parse local SHA
+    runner.push(_make_result(0, "abc123def456\n"))  # step 7.5b: rev-parse remote SHA
     # step 7.6: dirty check (clean)
     runner.push(_make_result(0, ""))
     # merge

@@ -54,6 +54,12 @@ class TestMergeWorktreeCleanupReporting:
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5: rev-parse local SHA
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5b: rev-parse remote SHA
+        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "", "")
         )  # step 7.6: git status --porcelain (clean)
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
@@ -107,6 +113,12 @@ class TestMergeWorktreeCleanupReporting:
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5: rev-parse local SHA
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5b: rev-parse remote SHA
+        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "", "")
         )  # step 7.6: git status --porcelain (clean)
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
@@ -156,6 +168,12 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5: rev-parse local SHA
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5b: rev-parse remote SHA
         tool_ctx_kitchen_open.runner.push(
             _make_result(0, "", "")
         )  # step 7.6: git status --porcelain (clean)
@@ -212,6 +230,12 @@ class TestMergeWorktreeCleanupWarnings:
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
         tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5: rev-parse local SHA
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5b: rev-parse remote SHA
+        tool_ctx_kitchen_open.runner.push(
             _make_result(0, "", "")
         )  # step 7.6: git status --porcelain (clean)
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # merge
@@ -263,6 +287,12 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx_kitchen_open.runner.push(
             _make_result(0, "dev\n", "")
         )  # step 7.5: branch --show-current
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5: rev-parse local SHA
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "abc123def456\n", "")
+        )  # step 7.5b: rev-parse remote SHA
         tool_ctx_kitchen_open.runner.push(
             _make_result(0, "", "")
         )  # step 7.6: git status --porcelain (clean)

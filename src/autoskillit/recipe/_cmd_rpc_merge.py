@@ -26,7 +26,7 @@ def queue_ejected_fix(
     remote = _detect_remote(work_dir)
     fetch = run_git(["fetch", remote, base_branch], cwd=work_dir)
     if fetch.returncode != 0:
-        return {"status": "conflicts"}
+        return {"status": "fetch_error", "stderr": fetch.stderr}
     rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
     if rebase.returncode == 0:
         return {"status": "clean"}
@@ -92,6 +92,9 @@ def attempt_cheap_rebase(
     """Checkout ejected branch and attempt rebase."""
     remote = _detect_remote(work_dir)
     run_git(["fetch", remote, ejected_pr_branch], cwd=work_dir, check=True)
+    fetch = run_git(["fetch", remote, base_branch], cwd=work_dir)
+    if fetch.returncode != 0:
+        return {"status": "fetch_error", "stderr": fetch.stderr}
     run_git(["checkout", ejected_pr_branch], cwd=work_dir, check=True)
     rebase = run_git(["rebase", f"{remote}/{base_branch}"], cwd=work_dir)
     if rebase.returncode == 0:
@@ -221,6 +224,9 @@ def proactive_rebase_next_pr(
     """Fetch, checkout, and rebase next PR branch."""
     remote = _detect_remote(work_dir)
     run_git(["fetch", remote, next_pr_branch], cwd=work_dir, check=True)
+    fetch = run_git(["fetch", remote, base_branch], cwd=work_dir)
+    if fetch.returncode != 0:
+        return {"status": "fetch_error", "stderr": fetch.stderr}
     run_git(
         ["checkout", "-B", next_pr_branch, f"{remote}/{next_pr_branch}"], cwd=work_dir, check=True
     )

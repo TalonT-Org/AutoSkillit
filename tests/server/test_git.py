@@ -167,6 +167,12 @@ async def test_perform_merge_returns_success_on_green_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5: rev-parse local SHA
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5b: rev-parse remote SHA
     conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -247,6 +253,12 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5: rev-parse local SHA
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5b: rev-parse remote SHA
     conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -337,6 +349,12 @@ async def test_perform_merge_strips_tracked_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5: rev-parse local SHA
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5b: rev-parse remote SHA
     conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -390,6 +408,12 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges (5.6 — no merge commits)
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5: rev-parse local SHA
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5b: rev-parse remote SHA
     conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -461,6 +485,12 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5: rev-parse local SHA
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5b: rev-parse remote SHA
     conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -502,6 +532,12 @@ async def test_perform_merge_strips_generated_files_before_dirty_check(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git log --merges
     conftest_mock_runner.push(_make_result(0, "", ""))  # rebase
     conftest_mock_runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5: rev-parse local SHA
+    conftest_mock_runner.push(
+        _make_result(0, "abc123def456\n", "")
+    )  # step 7.5b: rev-parse remote SHA
     conftest_mock_runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
@@ -554,6 +590,8 @@ def _push_full_success_sequence(
     runner.push(_make_result(0, ""))  # git log --merges
     runner.push(_make_result(0, ""))  # git rebase
     runner.push(_make_result(0, f"{base_branch}\n"))  # step 7.5: branch --show-current (main_repo)
+    runner.push(_make_result(0, "abc123def456\n"))  # step 7.5: rev-parse local SHA
+    runner.push(_make_result(0, "abc123def456\n"))  # step 7.5b: rev-parse remote SHA
     runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (main_repo clean)
     runner.push(_make_result(0, ""))  # git merge --no-edit
 
@@ -730,6 +768,8 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, ""))  # git rebase
         # Step 7.5: git branch --show-current on main_repo returns 'dev'
         runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, "abc123def456\n"))  # step 7.5: rev-parse local SHA
+        runner.push(_make_result(0, "abc123def456\n"))  # step 7.5b: rev-parse remote SHA
         runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # git merge --no-edit
         # cleanup: remove_git_worktree + branch -D use runner defaults (rc=0)
@@ -768,6 +808,8 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, ""))  # git rebase
         # Step 7.5: branch verification
         runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, "abc123def456\n"))  # step 7.5: rev-parse local SHA
+        runner.push(_make_result(0, "abc123def456\n"))  # step 7.5b: rev-parse remote SHA
         runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # git merge --no-edit
 
@@ -811,6 +853,8 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, ""))  # git rebase
         # Step 7.5: verified branch
         runner.push(_make_result(0, "dev\n"))
+        runner.push(_make_result(0, "abc123def456\n"))  # step 7.5: rev-parse local SHA
+        runner.push(_make_result(0, "abc123def456\n"))  # step 7.5b: rev-parse remote SHA
         runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # merge
 
@@ -871,3 +915,90 @@ async def test_perform_merge_defaults_to_origin(tmp_path):
     assert result["failed_step"] == MergeFailedStep.FETCH
     fetch_cmds = [cmd for cmd, *_ in runner.call_args_list if cmd[:2] == ["git", "fetch"]]
     assert fetch_cmds == [["git", "fetch", "origin"]]
+
+
+@pytest.mark.anyio
+async def test_perform_merge_rejects_diverged_local_branch(tmp_path):
+    """Step 7.5b must reject when local base_branch SHA differs from remote tracking ref SHA."""
+    from autoskillit.config import SafetyConfig
+    from autoskillit.core.types import MergeFailedStep, MergeState
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse --git-dir
+    runner.push(_make_result(0, "feature-branch\n", ""))  # branch --show-current (worktree)
+    runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
+    runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
+    runner.push(_make_result(0, "", ""))  # git fetch
+    runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (remote ref exists)
+    runner.push(_make_result(0, "", ""))  # git log --merges (no merge commits)
+    runner.push(_make_result(0, "", ""))  # git rebase
+    runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current (main_repo)
+    runner.push(_make_result(0, "aaaaaaaaaaaa\n", ""))  # step 7.5: rev-parse local SHA
+    runner.push(
+        _make_result(0, "bbbbbbbbbbbb\n", "")
+    )  # step 7.5b: rev-parse remote SHA (different!)
+
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
+        result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
+
+    assert result["failed_step"] == MergeFailedStep.REF_COHERENCE
+    assert result["state"] == MergeState.WORKTREE_INTACT_REF_DIVERGED
+    assert "local_sha" in result
+    assert "remote_sha" in result
+    assert result["local_sha"] == "aaaaaaaaaaaa"
+    assert result["remote_sha"] == "bbbbbbbbbbbb"
+    assert "diverged" in result["error"]
+
+
+@pytest.mark.anyio
+async def test_perform_merge_succeeds_when_refs_match(tmp_path):
+    """Step 7.5b must pass when local base_branch SHA matches remote tracking ref SHA."""
+    from autoskillit.config import SafetyConfig
+    from autoskillit.server.git import perform_merge
+
+    fake_wt = str(tmp_path)
+    config = AutomationConfig(safety=SafetyConfig(test_gate_on_merge=False))
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))  # rev-parse --git-dir
+    runner.push(_make_result(0, "feature-branch\n", ""))  # branch --show-current (worktree)
+    runner.push(_make_result(0, "", ""))  # git ls-files (no tracked generated files)
+    runner.push(_make_result(0, "", ""))  # git status --porcelain (clean)
+    runner.push(_make_result(0, "", ""))  # git fetch
+    runner.push(_make_result(0, "abc123\n", ""))  # rev-parse --verify (remote ref exists)
+    runner.push(_make_result(0, "", ""))  # git log --merges (no merge commits)
+    runner.push(_make_result(0, "", ""))  # git rebase
+    runner.push(_make_result(0, "dev\n", ""))  # step 7.5: branch --show-current (main_repo)
+    runner.push(_make_result(0, "abc123def456\n", ""))  # step 7.5: rev-parse local SHA
+    runner.push(_make_result(0, "abc123def456\n", ""))  # step 7.5b: rev-parse remote SHA (same!)
+    runner.push(_make_result(0, "", ""))  # step 7.6: git status --porcelain (clean)
+    runner.push(_make_result(0, "", ""))  # git merge --no-edit
+    runner.push(_make_result(0, "", ""))  # wt remove
+    runner.push(_make_result(0, "", ""))  # branch -D
+
+    with patch(
+        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    ):
+        result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
+
+    assert result.get("merge_succeeded") is True
+
+
+@pytest.mark.anyio
+async def test_verify_merge_target_returns_sha():
+    """_verify_merge_target must return a GitMergeTarget that includes the local branch SHA."""
+    from autoskillit.server.git import GitMergeTarget, _verify_merge_target
+
+    runner = MockSubprocessRunner()
+    runner.push(_make_result(0, "dev\n", ""))  # branch --show-current
+    runner.push(_make_result(0, "abc123def456\n", ""))  # rev-parse local SHA
+
+    result = await _verify_merge_target("/some/repo", "dev", runner)
+
+    assert isinstance(result, GitMergeTarget)
+    assert result.branch == "dev"
+    assert result.sha == "abc123def456"

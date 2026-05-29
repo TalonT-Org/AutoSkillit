@@ -8,7 +8,7 @@ import pytest
 
 from tests.execution.conftest import _flush
 
-pytestmark = pytest.mark.layer("core")
+pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 _REQUIRED_INDEX_FIELDS = {
     "provider_used",

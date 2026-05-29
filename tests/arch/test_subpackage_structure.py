@@ -54,7 +54,7 @@ class TestCoreSubpackages:
         assert len(combined) == len(remaining) + len(env) + len(features) + len(registries), (
             "Duplicate symbols across split modules"
         )
-        assert len(combined) == 72, f"Expected 72 symbols total, got {len(combined)}"
+        assert len(combined) == 73, f"Expected 73 symbols total, got {len(combined)}"
 
     def test_core_runtime_is_package(self):
         assert (SRC / "core" / "runtime" / "__init__.py").exists()

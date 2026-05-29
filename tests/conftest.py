@@ -199,42 +199,18 @@ def _isolated_home(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def _clear_headless_env(monkeypatch):
-    """Ensure AUTOSKILLIT_HEADLESS is unset at the start of every test.
+def _clear_private_env(monkeypatch):
+    """Clear ALL autoskillit-private env vars before every test.
 
-    Tools check this env var to block calls from headless sessions.
-    MCP tag resets are handled by tests/server/conftest.py for server tests.
+    Iterates AUTOSKILLIT_PRIVATE_ENV_VARS ∪ _HEADLESS_EXCLUSIVE_VARS
+    programmatically, so new vars are automatically covered without
+    manual fixture additions.
     """
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    from autoskillit.core.types._type_constants_env import AUTOSKILLIT_PRIVATE_ENV_VARS
+    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
-
-@pytest.fixture(autouse=True)
-def _clear_provider_profile_env(monkeypatch):
-    """Prevent AUTOSKILLIT_PROVIDER_PROFILE leaking between tests."""
-    monkeypatch.delenv("AUTOSKILLIT_PROVIDER_PROFILE", raising=False)
-
-
-@pytest.fixture(autouse=True)
-def _clear_project_dir_env(monkeypatch):
-    """Prevent AUTOSKILLIT_PROJECT_DIR leaking between tests."""
-    monkeypatch.delenv("AUTOSKILLIT_PROJECT_DIR", raising=False)
-
-
-@pytest.fixture(autouse=True)
-def _clear_session_type_env(monkeypatch):
-    """Prevent SESSION_TYPE leaking between tests."""
-    monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
-
-
-@pytest.fixture(autouse=True)
-def _clear_skill_name_env(monkeypatch):
-    """Prevent AUTOSKILLIT_SKILL_NAME leaking between tests."""
-    monkeypatch.delenv("AUTOSKILLIT_SKILL_NAME", raising=False)
-
-
-@pytest.fixture(autouse=True)
-def _clear_skip_stale_check_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
+    for var in AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS:
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture(autouse=True)

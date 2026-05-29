@@ -156,6 +156,10 @@ class InputSpec:
     required: bool
     position: int
 
+    def __post_init__(self) -> None:
+        if self.position < 0:
+            raise ValueError(f"InputSpec.position must be >= 0, got {self.position}")
+
 
 @dataclass
 class FailureRecord:

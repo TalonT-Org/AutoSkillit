@@ -138,6 +138,20 @@ def is_git_main_checkout(path: Path) -> bool:
     return False
 
 
+def is_in_git_repo(path: Path) -> bool:
+    """Return True if path is inside any git repository (worktree or main checkout).
+
+    This is the union of is_git_worktree() and is_git_main_checkout().
+    Use this when the caller needs "any git context" without caring about
+    the worktree vs main checkout distinction.
+    """
+    for parent in [path, *path.parents]:
+        git_path = parent / ".git"
+        if git_path.is_file() or git_path.is_dir():
+            return True
+    return False
+
+
 def resolve_main_worktree(path: Path) -> Path | None:
     """Resolve ``path`` to the main git worktree root.
 

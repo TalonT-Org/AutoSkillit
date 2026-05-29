@@ -29,6 +29,7 @@ from autoskillit.core import (
     get_logger,
     is_feature_enabled,
     is_git_worktree,
+    is_in_git_repo,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.clone_guard import (
@@ -357,7 +358,7 @@ async def _execute_claude_headless(
                     break
 
         _git_writes_detected = False
-        if is_git_worktree(Path(cwd)):
+        if is_in_git_repo(Path(cwd)):
             _git_writes_detected = _detect_branch_divergence(cwd)
 
         audit_count_before = len(ctx.audit.get_report())

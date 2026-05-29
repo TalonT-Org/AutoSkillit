@@ -741,6 +741,213 @@ class TestTempDirSnapshot:
         assert post - pre == set()
 
 
+class TestGitWritesClonePath:
+    """Integration tests: clone-path git write detection reaches _detect_branch_divergence."""
+
+    def test_git_writes_detected_on_clone_path(self, tmp_path: Path) -> None:
+        """Clone path (main checkout) with commits ahead of origin returns True."""
+        import subprocess
+
+        from autoskillit.core.paths import is_git_worktree, is_in_git_repo
+        from autoskillit.execution.headless._headless_git import _detect_branch_divergence
+
+        repo = tmp_path / "repo"
+        bare = tmp_path / "bare.git"
+
+        subprocess.run(["git", "init", str(bare), "--bare"], check=True, capture_output=True)
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "remote", "add", "origin", str(bare)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "push", "origin", "HEAD:main"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "branch", "--set-upstream-to=origin/main"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "ahead"],
+            check=True,
+            capture_output=True,
+        )
+
+        assert is_in_git_repo(repo) is True
+        assert is_git_worktree(repo) is False
+        result = _detect_branch_divergence(str(repo))
+        assert result is True
+
+    def test_git_writes_guard_fires_for_clone_cwd(self, tmp_path: Path) -> None:
+        """Guard calls is_in_git_repo for clone paths and invokes _detect_branch_divergence."""
+        import subprocess
+        from unittest.mock import MagicMock, patch
+
+        repo = tmp_path / "repo"
+        bare = tmp_path / "bare.git"
+
+        subprocess.run(["git", "init", str(bare), "--bare"], check=True, capture_output=True)
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo), "remote", "add", "origin", str(bare)],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "push", "origin", "HEAD:main"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "branch", "--set-upstream-to=origin/main"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "ahead"],
+            check=True,
+            capture_output=True,
+        )
+
+        import autoskillit.execution.headless._headless_execute as _mod
+
+        is_in_git_spy = MagicMock(wraps=_mod.is_in_git_repo)
+        divergence_spy = MagicMock(return_value=True)
+
+        with (
+            patch.object(_mod, "is_in_git_repo", is_in_git_spy),
+            patch.object(_mod, "_detect_branch_divergence", divergence_spy),
+        ):
+            from pathlib import Path as _Path
+
+            _cwd = str(repo)
+            _git_writes_detected = False
+            if _mod.is_in_git_repo(_Path(_cwd)):
+                _git_writes_detected = _mod._detect_branch_divergence(_cwd)
+
+        is_in_git_spy.assert_called_once_with(_Path(str(repo)))
+        divergence_spy.assert_called_once_with(str(repo))
+        assert _git_writes_detected is True
+
+
+class TestGitWritesStateMatrix:
+    """Parametrized matrix: all three workspace states × branch divergence."""
+
+    @pytest.mark.parametrize(
+        "state,commits_ahead,expected",
+        [
+            ("clone", True, True),
+            ("clone", False, False),
+            ("worktree", True, True),
+            ("worktree", False, False),
+            ("non_git", False, False),
+        ],
+    )
+    def test_git_writes_state_matrix(
+        self, tmp_path: Path, state: str, commits_ahead: bool, expected: bool
+    ) -> None:
+        import subprocess
+
+        from autoskillit.core.paths import is_in_git_repo
+        from autoskillit.execution.headless._headless_git import _detect_branch_divergence
+
+        if state == "non_git":
+            non_git = tmp_path / "non_git"
+            non_git.mkdir()
+            assert is_in_git_repo(non_git) is False
+            return
+
+        bare = tmp_path / "bare.git"
+        main_repo = tmp_path / "main"
+        subprocess.run(["git", "init", str(bare), "--bare"], check=True, capture_output=True)
+        subprocess.run(["git", "init", str(main_repo)], check=True, capture_output=True)
+        for cmd in [
+            ["git", "-C", str(main_repo), "config", "user.email", "test@test.com"],
+            ["git", "-C", str(main_repo), "config", "user.name", "Test"],
+            ["git", "-C", str(main_repo), "remote", "add", "origin", str(bare)],
+            ["git", "-C", str(main_repo), "commit", "--allow-empty", "-m", "init"],
+            ["git", "-C", str(main_repo), "push", "origin", "HEAD:main"],
+            ["git", "-C", str(main_repo), "branch", "--set-upstream-to=origin/main"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+
+        if state == "clone":
+            cwd = main_repo
+        else:
+            wt = tmp_path / "wt"
+            subprocess.run(
+                ["git", "-C", str(main_repo), "worktree", "add", str(wt), "-b", "feature/test"],
+                check=True,
+                capture_output=True,
+            )
+            cwd = wt
+            subprocess.run(
+                ["git", "-C", str(cwd), "config", "user.email", "test@test.com"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(cwd), "config", "user.name", "Test"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(main_repo), "push", "origin", "feature/test"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(cwd), "branch", "--set-upstream-to=origin/feature/test"],
+                check=True,
+                capture_output=True,
+            )
+
+        if commits_ahead:
+            subprocess.run(
+                ["git", "-C", str(cwd), "commit", "--allow-empty", "-m", "ahead"],
+                check=True,
+                capture_output=True,
+            )
+
+        assert is_in_git_repo(cwd) is True
+        result = _detect_branch_divergence(str(cwd))
+        assert result is expected
+
+
 class TestGitWritesDetection:
     """Git-level write detection suppresses zero_writes false positives."""
 

@@ -310,11 +310,11 @@ async def run_skill(
                 "error": f"run_skill: cwd does not exist: {cwd}",
             }
         )
-    from autoskillit.server import _get_ctx
-
-    _cleanup_session_id: str | None = None
-    tool_ctx = _get_ctx()
     try:
+        from autoskillit.server import _get_ctx
+
+        _cleanup_session_id: str | None = None
+        tool_ctx = _get_ctx()
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
             await _notify(
@@ -664,18 +664,19 @@ async def run_skill(
         logger.warning("run_skill cancelled", exc_info=True)
         raise
     finally:
-        if _cleanup_session_id is not None:
-            _ssm = tool_ctx.session_skill_manager
+        _sid: str | None = locals().get("_cleanup_session_id")  # type: ignore[assignment]
+        if _sid is not None:
+            _ssm = tool_ctx.session_skill_manager  # type: ignore[possibly-undefined]
             if _ssm is not None:
                 try:
-                    _ssm.cleanup_session(_cleanup_session_id)
+                    _ssm.cleanup_session(_sid)
                 except Exception:
                     logger.warning(
                         "session_skill_cleanup_failed",
-                        session_id=_cleanup_session_id,
+                        session_id=_sid,
                         exc_info=True,
                     )
-            elif tool_ctx.ephemeral_root is not None:
-                _cleanup_dir = tool_ctx.ephemeral_root / _cleanup_session_id
+            elif tool_ctx.ephemeral_root is not None:  # type: ignore[possibly-undefined]
+                _cleanup_dir = tool_ctx.ephemeral_root / _sid  # type: ignore[possibly-undefined]
                 if _cleanup_dir.is_dir():
                     shutil.rmtree(_cleanup_dir, ignore_errors=True)

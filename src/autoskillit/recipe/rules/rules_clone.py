@@ -90,7 +90,7 @@ def _check_skill_command_prefix(ctx: ValidationContext) -> list[RuleFinding]:
                     step_name=step_name,
                     message=(
                         f"skill_command {skill_cmd!r} does not start with '/'. "
-                        "run_skill requires a slash-prefix (e.g. /autoskillit:investigate). "
+                        "run_skill requires a slash-prefix (e.g. /autoskillit:sous-chef). "
                         "Prose prompts bypass the skill contract and run with "
                         "--dangerously-skip-permissions."
                     ),

@@ -90,7 +90,8 @@ def test_variable_threading(contract: ThreadingContract) -> None:
         f"'{contract.must_appear_in_pattern}'"
     )
 
-    ref_present = any(contract.variable in c for c in matching_cmds)
+    placeholder = "{" + contract.variable + "}"
+    ref_present = any(placeholder in c for c in matching_cmds)
     assert ref_present, (
         f"{contract.skill} {contract.target_step} commands matching "
         f"'{contract.must_appear_in_pattern}' must reference '{{{contract.variable}}}'. "

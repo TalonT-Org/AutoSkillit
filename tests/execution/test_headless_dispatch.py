@@ -61,7 +61,7 @@ class TestDispatchFoodTruck:
         assert env["AUTOSKILLIT_HEADLESS"] == "1"
         assert env["TERM"] == "dumb"
         assert env["NO_COLOR"] == "1"
-        assert runner.last_pty_mode is True
+        assert runner.last_pty_mode is False
         assert "--tools" in cmd
         assert "AskUserQuestion" in cmd
 

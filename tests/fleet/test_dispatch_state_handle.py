@@ -432,3 +432,151 @@ class TestDispatchedSessionLogDirPopulated:
         assert len(state.dispatches) == 1
         disp = state.dispatches[0]
         assert disp.dispatched_session_log_dir != ""
+
+
+class TestProcessIdentityPreservation:
+    @pytest.mark.anyio
+    async def test_final_dispatch_record_carries_identity_from_on_spawn(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """Final DispatchRecord carries starttime_ticks/boot_id/create_time from _on_spawn."""
+        from collections.abc import Callable
+
+        from autoskillit.core import RetryReason, SkillResult
+        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.fleet._api import _run_dispatch
+        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.state_types import DispatchRejected
+        from autoskillit.recipe.schema import Recipe, RecipeKind
+        from tests.fleet._helpers import (
+            _make_recipe_info,
+            _no_sleep_quota_checker,
+            _noop_quota_refresher,
+        )
+
+        _KNOWN_TICKS = 42
+        _KNOWN_CREATE_TIME = 1716900000.0
+        _KNOWN_BOOT_ID = "abc123-test-boot"
+        _KNOWN_PID = 99999
+
+        class _SpawnCallingExecutor:
+            """Executor fake that calls on_spawn with known values."""
+
+            async def run(self, *a, **kw) -> SkillResult:
+                return SkillResult(
+                    success=True,
+                    result="ok",
+                    session_id="s1",
+                    subtype="success",
+                    is_error=False,
+                    exit_code=0,
+                    needs_retry=False,
+                    retry_reason=RetryReason.NONE,
+                    stderr="",
+                )
+
+            async def dispatch_food_truck(
+                self,
+                orchestrator_prompt: str,
+                cwd: str,
+                *,
+                completion_marker: str,
+                on_spawn: Callable[[int, int], None] | None = None,
+                **kwargs,
+            ) -> SkillResult:
+                if on_spawn is not None:
+                    on_spawn(_KNOWN_PID, _KNOWN_TICKS)
+                return SkillResult(
+                    success=True,
+                    result="ok",
+                    session_id="s1",
+                    subtype="success",
+                    is_error=False,
+                    exit_code=0,
+                    needs_retry=False,
+                    retry_reason=RetryReason.NONE,
+                    stderr="",
+                )
+
+        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        recipe_name = "id-test-recipe"
+        from tests.fakes import InMemoryRecipeRepository
+
+        repo = InMemoryRecipeRepository()
+        recipe_info = _make_recipe_info(recipe_name)
+        repo.add_recipe(recipe_name, recipe_info)
+        repo.add_full_recipe(
+            recipe_info.path,
+            Recipe(
+                name=recipe_name,
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={},
+                requires_packs=[],
+            ),
+        )
+        tool_ctx.recipes = repo
+        tool_ctx.executor = _SpawnCallingExecutor()
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+
+        from autoskillit.fleet.result_parser import L3ParseResult
+
+        def _fake_parse(*args, **kwargs):
+            return L3ParseResult(
+                outcome="completed_clean",
+                payload={"success": True},
+                raw_body=None,
+                parse_error=None,
+                source="stdout",
+            )
+
+        def _fake_classify(*args, **kwargs):
+            from autoskillit.fleet.state import DispatchStatus
+
+            return (DispatchStatus.SUCCESS, None)
+
+        monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _fake_parse)
+        monkeypatch.setattr("autoskillit.fleet.classify_dispatch_outcome", _fake_classify)
+
+        monkeypatch.setattr(
+            "psutil.Process",
+            lambda pid: type("P", (), {"create_time": lambda self: _KNOWN_CREATE_TIME})(),
+        )
+        monkeypatch.setattr(
+            "autoskillit.core.read_boot_id",
+            lambda: _KNOWN_BOOT_ID,
+        )
+
+        result = await _run_dispatch(
+            tool_ctx=tool_ctx,
+            recipe=recipe_name,
+            task="do something",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+        assert not isinstance(result.outcome, DispatchRejected), (
+            f"Expected successful dispatch, got: {result.outcome}"
+        )
+
+        state_files = list(dispatches_dir.glob("*.json"))
+        assert len(state_files) == 1
+        state = read_state(state_files[0])
+        assert state is not None
+        disp = state.dispatches[0]
+
+        assert disp.dispatched_starttime_ticks == _KNOWN_TICKS, (
+            f"Expected starttime_ticks={_KNOWN_TICKS}, got {disp.dispatched_starttime_ticks}"
+        )
+        assert disp.dispatched_boot_id == _KNOWN_BOOT_ID, (
+            f"Expected boot_id={_KNOWN_BOOT_ID!r}, got {disp.dispatched_boot_id!r}"
+        )
+        assert abs(disp.dispatched_create_time - _KNOWN_CREATE_TIME) < 1.0, (
+            f"Expected create_time≈{_KNOWN_CREATE_TIME}, got {disp.dispatched_create_time}"
+        )

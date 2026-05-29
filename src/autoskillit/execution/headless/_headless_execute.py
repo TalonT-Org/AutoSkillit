@@ -92,6 +92,7 @@ async def _execute_claude_headless(
     recipe_version: str = "",
     on_spawn: Callable[[int, int], None] | None = None,
     skip_clone_guard: bool = False,
+    pty_override: bool | None = None,
     readonly_skill: bool = False,
     write_watch_dirs: Sequence[Path] = (),
     provider_name: str = "",
@@ -218,7 +219,9 @@ async def _execute_claude_headless(
                 cwd=Path(cwd),
                 timeout=timeout,
                 env=spec.env,
-                pty_mode=_resolve_pty_mode(cast(CodingAgentBackend, ctx.backend)),
+                pty_mode=(
+                    pty_override if pty_override is not None else _resolve_pty_mode(_step_backend)
+                ),
                 session_log_dir=_resolve_session_log_dir(
                     cwd, cast(CodingAgentBackend, ctx.backend)
                 ),
@@ -394,6 +397,7 @@ async def _execute_claude_headless(
                 result_parser=_step_backend.result_parser(),
                 provider_extras=provider_extras,
                 retry_reason=skill_result.retry_reason,
+                pty_override=pty_override,
             )
             if nudge_success is not None:
                 skill_result = nudge_success

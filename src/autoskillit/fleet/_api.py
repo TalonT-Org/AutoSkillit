@@ -533,6 +533,9 @@ async def _run_dispatch(
 
     started_at = time.time()
     _dispatched_pid: list[int] = []
+    _dispatched_ticks: list[int] = []
+    _dispatched_create_time: list[float] = []
+    _dispatched_boot_id: list[str] = []
 
     # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
     prior_ids: list[str] = []
@@ -557,11 +560,17 @@ async def _run_dispatch(
     )
 
     def _on_spawn(pid: int, ticks: int) -> None:
+        from autoskillit.core import read_boot_id
+
         _dispatched_pid.append(pid)
         try:
             create_time = psutil.Process(pid).create_time()
         except psutil.NoSuchProcess:
             create_time = 0.0
+        boot_id = read_boot_id() or ""
+        _dispatched_ticks.append(ticks)
+        _dispatched_create_time.append(create_time)
+        _dispatched_boot_id.append(boot_id)
         _write_pid(
             state_path,
             effective_name,
@@ -762,6 +771,9 @@ async def _run_dispatch(
         session_chain=extended_chain,
         dispatched_session_log_dir=project_log_dir,
         dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,
+        dispatched_starttime_ticks=_dispatched_ticks[0] if _dispatched_ticks else 0,
+        dispatched_boot_id=_dispatched_boot_id[0] if _dispatched_boot_id else "",
+        dispatched_create_time=_dispatched_create_time[0] if _dispatched_create_time else 0.0,
         reason=reason,
         kill_reason=skill_result.retry_reason or "",
         infra_exit_category=skill_result.infra.exit_category or "",

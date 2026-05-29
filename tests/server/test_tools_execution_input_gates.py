@@ -440,7 +440,7 @@ class TestInputContractValidation:
         parsed = json.loads(result)
         assert parsed["success"] is False
 
-    def test_input_contracts_not_called_for_resume(self, tmp_path):
+    def test_guard_fires_when_called_directly(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         resolver = _make_input_contract_resolver()
@@ -494,32 +494,9 @@ class TestInputContractResolver:
 
 def _make_input_contract_resolver():
     """Create a concrete InputContractResolver using the bundled manifest."""
-    from autoskillit.core import InputSpec, resolve_skill_name
-    from autoskillit.recipe._contracts_manifest import get_skill_contract, load_bundled_manifest
+    from autoskillit.recipe._contracts_manifest import resolve_input_specs
 
-    def _resolve(skill_command: str):
-        name = resolve_skill_name(skill_command)
-        if not name:
-            return ()
-        contract = get_skill_contract(name, load_bundled_manifest())
-        if contract is None:
-            return ()
-        path_position = 0
-        specs: list[InputSpec] = []
-        for inp in contract.inputs:
-            if inp.type in ("file_path", "directory_path"):
-                specs.append(
-                    InputSpec(
-                        name=inp.name,
-                        type=inp.type,
-                        required=inp.required,
-                        position=path_position,
-                    )
-                )
-                path_position += 1
-        return tuple(specs)
-
-    return _resolve
+    return resolve_input_specs
 
 
 class TestRunSkillCwdValidation:

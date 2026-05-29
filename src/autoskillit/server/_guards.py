@@ -185,7 +185,11 @@ def _check_input_contracts(
     """
     if resolver is None:
         return None
-    specs = resolver(skill_command)
+    try:
+        specs = resolver(skill_command)
+    except Exception:
+        logger.warning("input_contract_resolver_failed", skill_command=skill_command)
+        return None
     if not specs:
         return None
 

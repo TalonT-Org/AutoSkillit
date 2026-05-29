@@ -26,7 +26,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_kitchen_state.py` | Tests for KitchenMarker hash field support |
 | `test_label_lifecycle.py` | Tests for IssueLabelState, LabelDef, LABEL_LIFECYCLE_REGISTRY, LABEL_TRANSITIONS, and validate_label_transition |
 | `test_logging.py` | Tests for autoskillit.core.logging — centralized structlog configuration |
-| `test_paths.py` | Tests for autoskillit.core.paths — is_git_worktree and pkg_root |
+| `test_paths.py` | Tests for autoskillit.core.paths — is_git_worktree, is_git_main_checkout, is_in_git_repo, and pkg_root |
 | `test_plugin_cache.py` | Tests for core/_plugin_cache.py — retiring cache, kitchen registry, and schema version validation |
 | `test_resolve_temp_dir.py` | Tests for autoskillit.core.io.resolve_temp_dir |
 | `test_resolve_main_worktree.py` | Tests for autoskillit.core.paths.resolve_main_worktree — resolves any git path to the main worktree root |

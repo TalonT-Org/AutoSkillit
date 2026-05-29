@@ -159,6 +159,94 @@ class TestPkgRoot:
         )
 
 
+class TestIsGitMainCheckout:
+    def test_plain_directory_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_git_main_checkout
+
+        assert is_git_main_checkout(tmp_path) is False
+
+    def test_git_directory_returns_true(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_git_main_checkout
+
+        (tmp_path / ".git").mkdir()
+        assert is_git_main_checkout(tmp_path) is True
+
+    def test_git_file_returns_false(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_git_main_checkout
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+        assert is_git_main_checkout(tmp_path) is False
+
+    def test_nested_directory_returns_true(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_git_main_checkout
+
+        (tmp_path / ".git").mkdir()
+        subdir = tmp_path / "src" / "pkg"
+        subdir.mkdir(parents=True)
+        assert is_git_main_checkout(subdir) is True
+
+
+class TestIsInGitRepo:
+    def test_returns_true_for_git_directory(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_in_git_repo
+
+        (tmp_path / ".git").mkdir()
+        assert is_in_git_repo(tmp_path) is True
+
+    def test_returns_true_for_git_file(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_in_git_repo
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+        assert is_in_git_repo(tmp_path) is True
+
+    def test_returns_false_for_no_git(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_in_git_repo
+
+        assert is_in_git_repo(tmp_path) is False
+
+    def test_returns_true_for_nested_main_checkout(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_in_git_repo
+
+        (tmp_path / ".git").mkdir()
+        subdir = tmp_path / "src" / "pkg"
+        subdir.mkdir(parents=True)
+        assert is_in_git_repo(subdir) is True
+
+    def test_returns_true_for_nested_worktree(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_in_git_repo
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+        subdir = tmp_path / "src" / "pkg"
+        subdir.mkdir(parents=True)
+        assert is_in_git_repo(subdir) is True
+
+    def test_is_in_git_repo_is_union_of_predicates(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_git_main_checkout, is_git_worktree, is_in_git_repo
+
+        states = [
+            tmp_path,
+            tmp_path / "subdir",
+        ]
+
+        for path in states:
+            path.mkdir(exist_ok=True)
+
+        # Test all three states: non-git, main checkout, linked worktree
+        bare = tmp_path / "bare"
+        bare.mkdir()
+
+        checkout = tmp_path / "checkout"
+        checkout.mkdir()
+        (checkout / ".git").mkdir()
+
+        worktree = tmp_path / "worktree"
+        worktree.mkdir()
+        (worktree / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+
+        for p in (bare, checkout, worktree):
+            assert is_in_git_repo(p) == (is_git_worktree(p) or is_git_main_checkout(p))
+
+
 class TestDefaultLogDir:
     def test_linux_no_xdg(self, monkeypatch):
         monkeypatch.setattr("autoskillit.core.paths.sys.platform", "linux")

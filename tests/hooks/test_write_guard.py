@@ -723,3 +723,16 @@ class TestExtractBashWriteTargetsNewFamilies:
 
         result = _extract_bash_write_targets("git reset --hard HEAD")
         assert result is None or result == []
+
+    def test_git_with_flag_prefix_checkout_detected(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("git -C /repo checkout -- /clone/src/main.py")
+        assert result is not None
+        assert "/clone/src/main.py" in result
+
+    def test_git_with_flag_prefix_reset_hard_detected(self):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets("git -C /repo reset --hard")
+        assert result is not None

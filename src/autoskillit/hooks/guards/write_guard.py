@@ -45,12 +45,7 @@ _WRITE_VERBS: frozenset[str] = frozenset(
     }
 )
 
-_GIT_WRITE_SUBCOMMANDS: frozenset[tuple[str, ...]] = frozenset(
-    {
-        ("checkout", "--"),
-        ("reset", "--hard"),
-    }
-)
+_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset({"-C", "--git-dir", "--work-tree", "-c"})
 
 _REDIRECT_RE = re.compile(r">+\s*(/[^\s;|&>]+)")
 
@@ -68,22 +63,29 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
     targets: list[str] = []
     found_write = False
 
-    if verb == "git" and len(segment) >= 3:
-        sub = tuple(segment[1:3])
-        if sub in _GIT_WRITE_SUBCOMMANDS:
-            found_write = True
-            double_dash = None
-            for i, t in enumerate(segment):
-                if t == "--":
-                    double_dash = i
-                    break
-            if double_dash is not None:
+    if verb == "git" and len(segment) >= 2:
+        idx = 1
+        while idx < len(segment):
+            tok = segment[idx]
+            if tok in _GIT_FLAG_WITH_VALUE:
+                idx += 2
+            elif tok.startswith("-") and "=" not in tok and tok not in ("--", "--hard"):
+                idx += 1
+            else:
+                break
+        if idx < len(segment):
+            subcmd = segment[idx]
+            if subcmd == "checkout" and "--" in segment[idx + 1 :]:
+                found_write = True
+                double_dash = segment.index("--", idx + 1)
                 for t in segment[double_dash + 1 :]:
                     if t.startswith("/"):
                         if t not in _PSEUDO_DEVICE_PATHS:
                             targets.append(t)
                     elif cwd:
                         targets.append(os.path.join(cwd, t))
+            elif subcmd == "reset" and "--hard" in segment[idx + 1 :]:
+                found_write = True
     elif verb in _WRITE_VERBS:
         found_write = True
         non_flag = [t for t in segment[1:] if not t.startswith("-")]

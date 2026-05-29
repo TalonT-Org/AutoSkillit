@@ -21,6 +21,24 @@ def test_analyze_pipeline_health_skill_exists():
     )
 
 
+# DIAG_C8: coordinator SKILL.md validates scanner completion and emits output delimiter
+def test_analyze_pipeline_health_coordinator_validates_scanners():
+    """analyze-pipeline-health SKILL.md must instruct scanner validation and emit a delimiter."""
+    from autoskillit.core import pkg_root
+
+    skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
+    content = skill_path.read_text()
+
+    assert "scan_result:" in content, (
+        "analyze-pipeline-health SKILL.md Step 4 must instruct validation of 'scan_result:' "
+        "completion token from each scanner"
+    )
+    assert "---pipeline-health-result---" in content, (
+        "analyze-pipeline-health SKILL.md Step 6 must instruct emitting "
+        "the '---pipeline-health-result---' delimiter"
+    )
+
+
 # DIAG_C9: run_diagnostic steps have required fields in implementation recipe
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "merge-prs"])
 def test_run_diagnostic_steps_have_required_fields(recipe_name):

@@ -58,12 +58,16 @@ Each scanner receives in its prompt:
 
 Issue ALL Agent calls in a single message for parallel execution.
 
-### Step 4: Consolidate findings
+### Step 4: Validate scanner completion and consolidate findings
 
-Collect results from all scanners. Produce a consolidated report:
+Collect results from all scanners. For each scanner result:
+1. Check that the result contains a `scan_result:` completion token.
+2. If a scanner result is empty or lacks the `scan_result:` token, record it as an anomaly finding with severity "anomaly" and summary "Scanner for step group '<name>' did not complete — results may be missing."
+3. Only report "Pipeline health check: no issues found" when ALL scanners emitted `status: "complete"` tokens with `findings_count: 0`.
+
+Produce a consolidated report:
 - Group findings by severity (confirmed bugs > regressions > anomalies > informational)
 - Include the scanner's evidence and adversarial validation status for each finding
-- If no scanners found issues, report "Pipeline health check: no issues found"
 
 ### Step 5: Write report file (fleet dispatches only)
 
@@ -87,4 +91,10 @@ If --dispatch-id was not provided or is empty, skip this step entirely.
 
 ### Step 6: Output
 
-Present the consolidated report as your final output text. The calling orchestrator session will receive this as the run_skill result.
+Present the consolidated report as your final output text. After the report body, emit the completion delimiter as the final line:
+
+```
+---pipeline-health-result---
+```
+
+The calling orchestrator session will receive this as the run_skill result.

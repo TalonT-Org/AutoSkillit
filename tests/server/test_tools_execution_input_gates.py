@@ -481,6 +481,26 @@ def _make_input_contract_resolver():
     return resolve_input_specs
 
 
+class TestInputContractIntegration:
+    """_check_input_contracts fires through run_skill when resolver is wired."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_rejects_nonexistent_path_via_input_contract(
+        self, tool_ctx_kitchen_open
+    ):
+        tool_ctx_kitchen_open.input_contract_resolver = _make_input_contract_resolver()
+        result = json.loads(
+            await run_skill(
+                "/resolve-failures /nonexistent/worktree /nonexistent/plan.md main",
+                "/tmp",
+            )
+        )
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+        assert "Missing required" in result["result"] or "does not exist" in result["result"]
+        assert tool_ctx_kitchen_open.runner.call_args_list == []
+
+
 class TestRunSkillCwdValidation:
     """run_skill rejects non-empty relative cwd at the boundary."""
 

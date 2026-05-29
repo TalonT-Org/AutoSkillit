@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-
-logger = get_logger(__name__)
 
 _PHOROPTER_PHASES: tuple[str, ...] = ("dial", "apply", "synthesize")
 

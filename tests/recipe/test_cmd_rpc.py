@@ -381,6 +381,44 @@ def test_main_repo_guard_post_clean_verify_on_stash_success(tmp_path):
     )
 
 
+@pytest.mark.medium
+def test_main_repo_guard_fallback_clears_staged_entries(tmp_path, monkeypatch):
+    """Stash-failure fallback path clears staged-only index entries via git reset HEAD."""
+    from autoskillit.core import run_git as real_run_git
+
+    _init_git_repo(tmp_path)
+    (tmp_path / "tracked.txt").write_text("original")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "add tracked"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    (tmp_path / "tracked.txt").write_text("staged modification")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True, capture_output=True)
+
+    def _stash_fails(args, **kwargs):
+        if args and args[0] == "stash":
+            return subprocess.CompletedProcess(
+                args=args, returncode=1, stdout="", stderr="stash failed"
+            )
+        return real_run_git(args, **kwargs)
+
+    monkeypatch.setattr("autoskillit.recipe._cmd_rpc_guards.run_git", _stash_fails)
+    result = main_repo_guard(clone_path=str(tmp_path))
+
+    assert result["cleaned"] == "force"
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert status.stdout.strip() == ""
+
+
 def test_export_local_bundle(tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()

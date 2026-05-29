@@ -7,6 +7,7 @@ prevent contamination from propagating to retry sessions.
 Public API:
     is_worktree_skill(skill_command) -> bool
     snapshot_clone_state(cwd, runner) -> CloneSnapshot | None
+    validate_pre_session_index(cwd, runner) -> bool
     check_and_revert_clone_contamination(
         snapshot, skill_result, cwd, runner, audit
     ) -> tuple[SkillResult, bool]
@@ -226,6 +227,83 @@ async def snapshot_clone_state(cwd: str, runner: SubprocessRunner) -> CloneSnaps
     return CloneSnapshot(head_sha=head_sha, worktree_set=wt_set)
 
 
+async def validate_pre_session_index(
+    cwd: str,
+    runner: SubprocessRunner,
+    *,
+    exclude_prefix: str = ".autoskillit/",
+    pre_session_sha: str = "",
+) -> bool:
+    """Reset dirty index state from prior sessions before a new session starts.
+
+    Returns True if dirty state was found and reset, False if index was clean.
+    Uses pre_session_sha for mixed reset when available; falls back to
+    ``git rm --cached -r .`` on repos with no HEAD.
+    """
+    status_result = await runner(
+        ["git", "status", "--porcelain"],
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
+    if status_result.returncode != 0:
+        return False
+    status_lines = [line for line in status_result.stdout.splitlines() if line.strip()]
+    if exclude_prefix:
+        status_lines = [
+            line for line in status_lines if not _status_path_under_prefix(line, exclude_prefix)
+        ]
+    if not status_lines:
+        return False
+
+    file_count = len(status_lines)
+    logger.warning(
+        "pre_session_dirty_index_detected",
+        file_count=file_count,
+        sample_files=status_lines[:5],
+    )
+
+    reset_sha = pre_session_sha
+    if not reset_sha:
+        head_result = await runner(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(cwd),
+            timeout=_GIT_TIMEOUT,
+        )
+        if head_result.returncode == 0 and head_result.stdout.strip():
+            reset_sha = head_result.stdout.strip()
+
+    if reset_sha:
+        await runner(
+            ["git", "reset", reset_sha],
+            cwd=Path(cwd),
+            timeout=_GIT_TIMEOUT,
+        )
+    else:
+        await runner(
+            ["git", "rm", "--cached", "-r", "."],
+            cwd=Path(cwd),
+            timeout=_GIT_TIMEOUT,
+        )
+
+    await runner(
+        ["git", "checkout", "--", "."],
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
+    await runner(
+        ["git", "clean", "-fd"],
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
+
+    logger.info(
+        "index_reset_pre_session",
+        file_count=file_count,
+        reset_strategy="sha" if reset_sha else "rm_cached",
+    )
+    return True
+
+
 def _status_path_under_prefix(status_line: str, prefix: str) -> bool:
     """Return True if the file path in a git status --porcelain line is under prefix."""
     path_part = status_line[3:]  # Skip "XY " status chars
@@ -325,6 +403,12 @@ async def revert_contamination(
             )
             if reset_result.returncode != 0:
                 return dataclasses.replace(report, reverted=False)
+        else:
+            await runner(
+                ["git", "reset", snapshot.head_sha],
+                cwd=Path(cwd),
+                timeout=_GIT_TIMEOUT,
+            )
         checkout_result = await runner(
             ["git", "checkout", "--", "."],
             cwd=Path(cwd),

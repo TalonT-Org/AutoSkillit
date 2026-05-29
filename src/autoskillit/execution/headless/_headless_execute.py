@@ -28,6 +28,7 @@ from autoskillit.core import (
     collect_version_snapshot,
     get_logger,
     is_feature_enabled,
+    is_git_main_checkout,
     is_git_worktree,
     is_in_git_repo,
 )
@@ -41,6 +42,7 @@ from autoskillit.execution.clone_guard import (
     is_path_under_exclude,
     is_worktree_skill,
     snapshot_clone_state,
+    validate_pre_session_index,
 )
 from autoskillit.execution.headless._headless_evidence import (
     _build_error_path_telemetry,
@@ -192,6 +194,18 @@ async def _execute_claude_headless(
         and _clone_guard_policy.should_snapshot
     ):
         _clone_snapshot = await snapshot_clone_state(cwd, runner)
+
+    if not skip_clone_guard and is_git_main_checkout(Path(cwd)):
+        _pre_sha = _clone_snapshot.head_sha if _clone_snapshot else ""
+        try:
+            await validate_pre_session_index(
+                cwd,
+                runner,
+                pre_session_sha=_pre_sha,
+                exclude_prefix=_derived_prefix or GUARD_EXCLUDE_PREFIX,
+            )
+        except Exception:
+            logger.debug("validate_pre_session_index_failed", exc_info=True)
 
     _watch_dirs: list[Path] = list(write_watch_dirs) if write_watch_dirs else []
     if not _watch_dirs:

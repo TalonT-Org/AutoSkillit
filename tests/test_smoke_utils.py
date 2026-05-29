@@ -1987,11 +1987,12 @@ def test_consolidate_health_reports_does_not_mutate_source_dicts(tmp_path):
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 19 public names."""
+    """smoke_utils.__all__ must list all 20 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
         "annotate_pr_diff",
+        "assert_has_net_changes",
         "build_agent_eval_context",
         "build_eval_context",
         "check_bug_report_non_empty",
@@ -2019,6 +2020,7 @@ def test_smoke_utils_all_exports_complete() -> None:
     "name",
     [
         "annotate_pr_diff",
+        "assert_has_net_changes",
         "build_agent_eval_context",
         "build_eval_context",
         "check_bug_report_non_empty",

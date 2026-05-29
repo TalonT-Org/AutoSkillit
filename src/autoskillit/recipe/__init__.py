@@ -29,6 +29,7 @@ from autoskillit.recipe.contracts import (  # noqa: E402
     get_skill_contract,
     load_bundled_manifest,
     load_recipe_card,
+    resolve_input_specs,
     resolve_skill_name,
     validate_recipe_cards,
 )
@@ -234,6 +235,7 @@ __all__ = [
     "get_skill_contract",
     "load_bundled_manifest",
     "load_recipe_card",
+    "resolve_input_specs",
     "resolve_skill_name",
     "validate_recipe_cards",
     "DefaultRecipeRepository",

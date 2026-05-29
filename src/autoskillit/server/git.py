@@ -113,8 +113,8 @@ async def _verify_merge_target(
     if sha_rc != 0:
         return {
             "error": (f"Failed to resolve SHA of '{expected_branch}' in '{main_repo}'."),
-            "failed_step": MergeFailedStep.MERGE,
-            "state": MergeState.WORKTREE_INTACT,
+            "failed_step": MergeFailedStep.REF_COHERENCE,
+            "state": MergeState.WORKTREE_INTACT_REF_DIVERGED,
             "worktree_path": "",  # filled in by caller
         }
     return GitMergeTarget(path=main_repo, branch=current_branch, sha=sha_out.strip())

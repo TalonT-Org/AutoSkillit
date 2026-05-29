@@ -100,6 +100,13 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             stash_result.returncode,
             stash_result.stderr.strip(),
         )
+        reset_result = run_git(["reset", "HEAD"], cwd=clone_path)
+        if reset_result.returncode != 0:
+            logger.warning(
+                "git reset HEAD failed (rc=%d): %s",
+                reset_result.returncode,
+                reset_result.stderr.strip(),
+            )
         co = run_git(["checkout", "--", "."], cwd=clone_path)
         if co.returncode != 0:
             logger.warning(
@@ -131,7 +138,91 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
     return {"cleaned": "true"}
 
 
-def commit_guard(worktree_path: str) -> dict[str, str]:
+def _count_numstat_net(numstat_output: str) -> int:
+    """Sum net line changes (insertions - deletions) from git diff --numstat output."""
+    total = 0
+    for line in numstat_output.splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) < 2:
+            continue
+        try:
+            total += int(parts[0]) - int(parts[1])
+        except ValueError:
+            continue  # binary files show "-"
+    return total
+
+
+def _parse_numstat_per_file(numstat_output: str) -> dict[str, int]:
+    """Parse per-file net line changes from git diff --numstat output."""
+    result: dict[str, int] = {}
+    for line in numstat_output.splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) < 3:
+            continue
+        try:
+            result[parts[2]] = int(parts[0]) - int(parts[1])
+        except ValueError:
+            continue
+    return result
+
+
+def _check_regression(
+    worktree_path: str,
+    files_to_add: list[str],
+    base_branch: str,
+) -> dict[str, str] | None:
+    """Detect if pending changes would revert implementation commits.
+
+    Returns a regression dict if the pending dirty files would net-revert
+    more than 10 implementation lines. Returns None to proceed normally.
+    """
+    mb = run_git(["merge-base", "HEAD", base_branch], cwd=worktree_path)
+    if mb.returncode != 0:
+        return None  # fresh repo, no merge-base
+    merge_base = mb.stdout.strip()
+
+    committed_diff = run_git(
+        ["diff", "--numstat", merge_base, "HEAD", "--"] + files_to_add,
+        cwd=worktree_path,
+    )
+    if committed_diff.returncode != 0:
+        return None
+    committed_net = _count_numstat_net(committed_diff.stdout)
+    if committed_net <= 0:
+        return None  # no implementation lines to protect
+
+    wt_diff = run_git(
+        ["diff", "--numstat", merge_base, "--"] + files_to_add,
+        cwd=worktree_path,
+    )
+    if wt_diff.returncode != 0:
+        return None
+    wt_net = _count_numstat_net(wt_diff.stdout)
+
+    regression_lines = committed_net - wt_net
+    if regression_lines <= 10:
+        return None  # within tolerance
+
+    committed_per_file = _parse_numstat_per_file(committed_diff.stdout)
+    wt_per_file = _parse_numstat_per_file(wt_diff.stdout)
+
+    reverted_files: list[str] = []
+    for f in files_to_add:
+        c_net = committed_per_file.get(f, 0)
+        w_net = wt_per_file.get(f, 0)
+        if c_net - w_net > 5:
+            reverted_files.append(f)
+
+    return {
+        "committed": "regression_detected",
+        "reverted_files": ", ".join(reverted_files),
+        "implementation_net": str(committed_net),
+        "working_tree_net": str(wt_net),
+        "regression_lines": str(regression_lines),
+    }
+
+
+def commit_guard(worktree_path: str, base_branch: str = "") -> dict[str, str]:
     """Auto-commit pending changes if worktree is dirty, excluding generated files."""
     result = subprocess.run(
         ["git", "status", "--porcelain=v1", "-z", "-uall"],
@@ -160,6 +251,11 @@ def commit_guard(worktree_path: str) -> dict[str, str]:
 
     if not files_to_add:
         return {"committed": "false"}
+
+    if base_branch:
+        regression = _check_regression(worktree_path, files_to_add, base_branch)
+        if regression is not None:
+            return regression
 
     run_git(["add", "--", *files_to_add], cwd=worktree_path, check=True)
     run_git(

@@ -200,6 +200,56 @@ def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
     return findings
 
 
+_BLIND_GIT_ADD_RE = re.compile(
+    r"(?:^|\s)git\s+(?:-C\s+\S+\s+)?add\s+(?:-A|--all|\.\s*(?:#|&&|;|$))",
+)
+
+
+@semantic_rule(
+    name="blind-git-add-in-skill",
+    description=(
+        "SKILL.md bash block uses 'git add -A', 'git add --all', or 'git add .' which "
+        "stages all files including contamination from prior sessions. Use "
+        "'git add -- <file>' or 'git add -u' instead."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_blind_git_add_in_skill(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        bash_blocks = extract_bash_blocks(content)
+        for block in bash_blocks:
+            for line in block.splitlines():
+                if _BLIND_GIT_ADD_RE.search(line):
+                    findings.append(
+                        RuleFinding(
+                            rule="blind-git-add-in-skill",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{skill_name}' SKILL.md contains blind "
+                                f"'git add' in bash block: {line.strip()!r}"
+                            ),
+                        )
+                    )
+    return findings
+
+
 _AUTOSKILLIT_IMPORT_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"^\s*from\s+autoskillit[\s.]", re.MULTILINE),
     re.compile(r"^\s*import\s+autoskillit[\s,.]", re.MULTILINE),

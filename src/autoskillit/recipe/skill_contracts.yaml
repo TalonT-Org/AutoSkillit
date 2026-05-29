@@ -2626,6 +2626,9 @@ callable_contracts:
     - name: worktree_path
       type: str
       required: true
+    - name: base_branch
+      type: str
+      required: false
     outputs:
     - name: committed
       type: str

@@ -15,6 +15,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_ci.py` | L1 unit tests for execution/ci.py — CIWatcher service |
 | `test_ci_params.py` | Tests for CIRunScope query param composition and workflow scoping |
 | `test_clone_guard.py` | Tests for clone contamination guard — detect and revert direct changes |
+| `test_clone_guard_pre_session.py` | Tests for pre-session index validation and selective-revert staged-entry fix |
 | `test_clone_guard_policy.py` | Tests for CloneGuardPolicy construction and decision logic |
 | `test_headless_clone_guard_integration.py` | Integration tests — policy-based clone guard replaces _effective_readonly |
 | `test_conftest_import_guard.py` | Structural guard: conftest.py must not import merge_queue at module level |

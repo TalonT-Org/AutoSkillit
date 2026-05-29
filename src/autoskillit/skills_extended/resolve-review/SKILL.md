@@ -67,7 +67,7 @@ normal commit protocol.
 
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {work_dir} status --porcelain`
-2. If any files are dirty: `git -C {work_dir} add -A && git -C {work_dir} commit -m "fix: commit pending review changes"`
+2. If any files are dirty: `git -C {work_dir} add -- <files you modified> && git -C {work_dir} commit -m "fix: commit pending review changes"`
 3. Only then proceed with the test or structured output
 
 This ensures that even if context exhaustion interrupts the fix loop, all applied

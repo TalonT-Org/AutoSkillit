@@ -1134,3 +1134,110 @@ def test_reviews_post_regex_flag_before_path(tmp_path: Path) -> None:
         f"Rule must fire for 'gh api --method POST URL' form (flag before path). "
         f"Got findings: {rule_ids}"
     )
+
+
+# ---------------------------------------------------------------------------
+# blind-git-add-in-skill tests (Test 2a–2d)
+# ---------------------------------------------------------------------------
+
+_BLIND_GIT_ADD_RULE_ID = "blind-git-add-in-skill"
+
+
+def test_blind_git_add_in_skill_flagged(tmp_path: Path) -> None:
+    """blind-git-add-in-skill must fire for git add -A in a bash block."""
+    skill_dir = tmp_path / "bad-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # bad-skill
+
+            ### Step 1
+            ```bash
+            git -C {worktree_path} add -A && git -C {worktree_path} commit -m "save"
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("bad-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    matching = [f for f in findings if f.rule == _BLIND_GIT_ADD_RULE_ID]
+    assert len(matching) >= 1, (
+        f"Expected blind-git-add-in-skill finding, got: {[f.rule for f in findings]}"
+    )
+    assert matching[0].severity == Severity.ERROR
+
+
+def test_scoped_git_add_in_skill_allowed(tmp_path: Path) -> None:
+    """blind-git-add-in-skill must NOT fire for scoped git add -- <file>."""
+    skill_dir = tmp_path / "good-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # good-skill
+
+            ### Step 1
+            ```bash
+            git add -- somefile.py
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("good-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _BLIND_GIT_ADD_RULE_ID not in [f.rule for f in findings]
+
+
+def test_git_add_u_in_skill_allowed(tmp_path: Path) -> None:
+    """blind-git-add-in-skill must NOT fire for git add -u (update-index is safe)."""
+    skill_dir = tmp_path / "update-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # update-skill
+
+            ### Step 1
+            ```bash
+            git add -u
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("update-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _BLIND_GIT_ADD_RULE_ID not in [f.rule for f in findings]
+
+
+def test_git_add_all_long_form_flagged(tmp_path: Path) -> None:
+    """blind-git-add-in-skill must fire for git add --all."""
+    skill_dir = tmp_path / "all-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # all-skill
+
+            ### Step 1
+            ```bash
+            git add --all
+            ```
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("all-skill", {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+    assert _BLIND_GIT_ADD_RULE_ID in [f.rule for f in findings]

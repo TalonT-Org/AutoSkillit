@@ -145,6 +145,8 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
     """
     segments = tokenize_command_segments(command)
     cwd = os.environ.get("AUTOSKILLIT_CWD", "")
+    if cwd and not os.path.isabs(cwd):
+        cwd = ""
 
     all_targets: list[str] = []
     found_any_write = False

@@ -44,7 +44,7 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     """
     try:
         tokens = shlex.split(command)
-    except ValueError:
+    except Exception:
         return []
     segments: list[list[str]] = []
     current: list[str] = []

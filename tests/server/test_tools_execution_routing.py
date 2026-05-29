@@ -494,6 +494,7 @@ async def test_run_skill_succeeds_when_cleanup_session_raises(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
     """cleanup_session failure is swallowed — run_skill still returns the result."""
+    import json
     from unittest.mock import MagicMock
 
     from autoskillit.core import ValidatedAddDir
@@ -508,6 +509,6 @@ async def test_run_skill_succeeds_when_cleanup_session_raises(
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
-    result = await run_skill("/autoskillit:test-skill", str(tmp_path))
+    result = json.loads(await run_skill("/autoskillit:test-skill", str(tmp_path)))
 
-    assert "success" in result or "exception" in result
+    assert result.get("success") is True

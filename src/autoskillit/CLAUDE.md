@@ -9,8 +9,9 @@ Package root — entry points, hook registry, and cross-cutting utilities.
 | `__init__.py` | Package exports |
 | `__main__.py` | `python -m autoskillit` entry point |
 | `_llm_triage.py` | Contract staleness triage (Haiku subprocess) |
-| `smoke_utils.py` | Callables for smoke-test pipeline `run_python` steps |
+| `smoke_utils/` | Callables for smoke-test pipeline `run_python` steps (package) |
 | `hook_registry.py` | `HookDef`, `HOOK_REGISTRY`, `generate_hooks_json` |
+| `smoke_utils.py` | Utility callables for smoke-test pipeline `run_python` steps |
 | `_test_filter.py` | Test filter manifest: glob-to-test-directory mapping |
 | `version.py` | Version health utilities (IL-0) |
 
@@ -18,4 +19,4 @@ Package root — entry points, hook registry, and cross-cutting utilities.
 
 `hook_registry.py` is stdlib-only (safe for hook subprocesses). `_test_filter.py` drives
 `task test-filtered` — it maps changed-file globs to test directory subsets. `_llm_triage.py`
-and `smoke_utils.py` are callable by headless recipe steps via `run_python`.
+and `smoke_utils/` are callable by headless recipe steps via `run_python`.

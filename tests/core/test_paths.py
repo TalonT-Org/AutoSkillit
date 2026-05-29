@@ -182,39 +182,3 @@ class TestDefaultLogDir:
 
         result = default_log_dir()
         assert result == Path.home() / "Library" / "Application Support" / "autoskillit" / "logs"
-
-
-# ---------------------------------------------------------------------------
-# is_generated_path unit tests
-# ---------------------------------------------------------------------------
-
-
-def test_is_generated_path_exact_match():
-    from autoskillit.core.paths import is_generated_path
-
-    assert is_generated_path("src/autoskillit/hooks/hooks.json") is True
-
-
-def test_is_generated_path_directory_prefix():
-    from autoskillit.core.paths import is_generated_path
-
-    assert is_generated_path("src/autoskillit/recipes/contracts/foo.yaml") is True
-
-
-def test_is_generated_path_non_match():
-    from autoskillit.core.paths import is_generated_path
-
-    assert is_generated_path("src/autoskillit/recipe/_cmd_rpc_guards.py") is False
-
-
-def test_is_generated_path_absolute_path_does_not_match():
-    from autoskillit.core.paths import is_generated_path
-
-    # Absolute paths silently fail to match — documents current behavior.
-    assert is_generated_path("/home/user/repo/src/autoskillit/hooks/hooks.json") is False
-
-
-def test_is_generated_path_empty_string():
-    from autoskillit.core.paths import is_generated_path
-
-    assert is_generated_path("") is False

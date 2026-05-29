@@ -96,7 +96,7 @@ preserving whatever was written.
 
 **Before emitting structured output tokens:**
 1. Run `git -C {worktree_path} status --porcelain`
-2. If any files are dirty: `git -C {worktree_path} add -- research/ && git -C {worktree_path} commit -m "chore: commit partial report before context limit"`
+2. If any files are dirty: `git -C {worktree_path} add -A && git -C {worktree_path} commit -m "chore: commit partial report before context limit"`
 3. Only then emit the structured output tokens
 
 This ensures the partial report is committed and the downstream test step can

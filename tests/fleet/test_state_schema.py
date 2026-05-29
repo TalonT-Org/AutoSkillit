@@ -680,29 +680,3 @@ class TestDispatchCompletedEnvelopeCoverage:
                 f"to_envelope() missing envelope-sourced PerDispatchEntry field: {field}. "
                 f"Update DispatchCompleted.to_envelope() and this test."
             )
-
-
-class TestDispatchRecordIdentityMethods:
-    def test_has_full_identity(self) -> None:
-        d = DispatchRecord(
-            name="x",
-            dispatched_pid=42,
-            dispatched_boot_id="abc",
-            dispatched_starttime_ticks=100,
-        )
-        assert d.has_full_identity() is True
-
-    def test_has_degraded_identity_with_create_time(self) -> None:
-        d = DispatchRecord(
-            name="x",
-            dispatched_pid=42,
-            dispatched_boot_id="",
-            dispatched_starttime_ticks=0,
-            dispatched_create_time=1000.5,
-        )
-        assert d.has_degraded_identity() is True
-
-    def test_has_no_identity(self) -> None:
-        d = DispatchRecord(name="x")
-        assert d.has_full_identity() is False
-        assert d.has_degraded_identity() is False

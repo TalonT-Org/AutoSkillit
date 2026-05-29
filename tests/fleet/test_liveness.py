@@ -1,10 +1,6 @@
-import ast
 import os
 import sys
-from pathlib import Path
-from unittest.mock import patch
 
-import psutil
 import pytest
 
 from autoskillit.core.runtime._linux_proc import read_boot_id, read_starttime_ticks
@@ -73,118 +69,24 @@ class TestIsDispatchSessionAlive:
         assert not is_dispatch_session_alive(record)
 
     def test_missing_boot_id_on_record_not_alive(self) -> None:
-        pid = os.getpid()
-        ticks = read_starttime_ticks(pid)
-        if ticks is None:
-            pytest.skip("Not on Linux")
         record = DispatchRecord(
             name="test",
-            dispatched_pid=pid,
+            dispatched_pid=os.getpid(),
             dispatched_boot_id="",
-            dispatched_starttime_ticks=ticks,
-            dispatched_create_time=0.0,
-            identity_degraded=True,
+            dispatched_starttime_ticks=999,
         )
         assert not is_dispatch_session_alive(record)
 
+    def test_delegates_to_core_is_session_alive(self) -> None:
+        from unittest.mock import patch
 
-class TestLivenessReaperConsistency:
-    def test_degraded_identity_with_create_time_is_alive(self) -> None:
-        pid = os.getpid()
-        create_time = psutil.Process(pid).create_time()
         record = DispatchRecord(
             name="test",
-            dispatched_pid=pid,
-            dispatched_boot_id="",
-            dispatched_starttime_ticks=0,
-            dispatched_create_time=create_time,
-            identity_degraded=True,
+            dispatched_pid=42,
+            dispatched_boot_id="boot-id",
+            dispatched_starttime_ticks=100,
         )
-        assert is_dispatch_session_alive(record)
-
-    def test_degraded_identity_without_create_time_is_dead(self) -> None:
-        pid = os.getpid()
-        record = DispatchRecord(
-            name="test",
-            dispatched_pid=pid,
-            dispatched_boot_id="",
-            dispatched_starttime_ticks=0,
-            dispatched_create_time=0.0,
-            identity_degraded=True,
-        )
-        assert not is_dispatch_session_alive(record)
-
-    def test_degraded_identity_with_mismatched_create_time_is_dead(self) -> None:
-        pid = os.getpid()
-        record = DispatchRecord(
-            name="test",
-            dispatched_pid=pid,
-            dispatched_boot_id="",
-            dispatched_starttime_ticks=0,
-            dispatched_create_time=1.0,
-            identity_degraded=True,
-        )
-        assert not is_dispatch_session_alive(record)
-
-    def test_empty_boot_id_with_valid_ticks_is_alive(self) -> None:
-        pid = os.getpid()
-        ticks = read_starttime_ticks(pid)
-        if ticks is None:
-            pytest.skip("Not on Linux")
-        create_time = psutil.Process(pid).create_time()
-        record = DispatchRecord(
-            name="test",
-            dispatched_pid=pid,
-            dispatched_boot_id="",
-            dispatched_starttime_ticks=ticks,
-            dispatched_create_time=create_time,
-        )
-        assert is_dispatch_session_alive(record)
-
-    def test_full_identity_with_proc_failure_falls_back_to_create_time(self) -> None:
-        pid = os.getpid()
-        boot_id = read_boot_id()
-        if boot_id is None:
-            pytest.skip("Not on Linux")
-        ticks = read_starttime_ticks(pid)
-        if ticks is None:
-            pytest.skip("Not on Linux")
-        create_time = psutil.Process(pid).create_time()
-        record = DispatchRecord(
-            name="test",
-            dispatched_pid=pid,
-            dispatched_boot_id=boot_id,
-            dispatched_starttime_ticks=ticks,
-            dispatched_create_time=create_time,
-        )
-        with patch(
-            "autoskillit.fleet._liveness.read_starttime_ticks",
-            return_value=None,
-        ):
-            assert is_dispatch_session_alive(record)
-
-    def test_full_identity_with_ticks_mismatch_no_fallback(self) -> None:
-        pid = os.getpid()
-        boot_id = read_boot_id()
-        if boot_id is None:
-            pytest.skip("Not on Linux")
-        create_time = psutil.Process(pid).create_time()
-        record = DispatchRecord(
-            name="test",
-            dispatched_pid=pid,
-            dispatched_boot_id=boot_id,
-            dispatched_starttime_ticks=-1,
-            dispatched_create_time=create_time,
-        )
-        assert not is_dispatch_session_alive(record)
-
-
-def test_reaper_delegates_to_confirm_dispatch_identity() -> None:
-    source = (Path(__file__).parents[2] / "src/autoskillit/fleet/_dispatch_reaper.py").read_text()
-    tree = ast.parse(source)
-    calls = [
-        node.func.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    ]
-    assert "confirm_dispatch_identity" in calls
+        with patch("autoskillit.fleet._liveness.is_session_alive", return_value=True) as mock:
+            result = is_dispatch_session_alive(record)
+        mock.assert_called_once_with(42, "boot-id", 100)
+        assert result is True

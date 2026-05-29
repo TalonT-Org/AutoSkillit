@@ -25,7 +25,8 @@ def check_bug_report_non_empty(workspace: str) -> dict[str, str]:
     try:
         data = json.loads(report.read_text())
         return {"non_empty": "true" if data else "false"}
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("check_bug_report_non_empty: failed to read bug_report.json", exc_info=exc)
         return {"non_empty": "false"}
 
 
@@ -87,10 +88,18 @@ def annotate_pr_diff(
     try:
         local_rounds = int(local_review_rounds.strip()) if local_review_rounds.strip() else 0
     except ValueError:
+        logger.warning(
+            "annotate_pr_diff: non-numeric local_review_rounds %r, defaulting to 0",
+            local_review_rounds,
+        )
         local_rounds = 0
     try:
         iteration = int(current_iteration.strip()) if current_iteration.strip() else 0
     except ValueError:
+        logger.warning(
+            "annotate_pr_diff: non-numeric current_iteration %r, defaulting to 0",
+            current_iteration,
+        )
         iteration = 0
     review_mode = "local" if local_rounds > 0 and iteration < local_rounds else "github"
 
@@ -125,8 +134,20 @@ def annotate_pr_diff(
     atomic_write(annotated_path, annotate_diff(diff))
     atomic_write(ranges_path, json.dumps(parse_hunk_ranges(diff)))
     metrics = compute_diff_metrics(diff)
-    loc_thresh = int(loc_threshold) if loc_threshold else 200
-    file_thresh = int(file_threshold) if file_threshold else 5
+    try:
+        loc_thresh = int(loc_threshold) if loc_threshold else 200
+    except ValueError:
+        logger.warning(
+            "annotate_pr_diff: non-numeric loc_threshold %r, defaulting to 200", loc_threshold
+        )
+        loc_thresh = 200
+    try:
+        file_thresh = int(file_threshold) if file_threshold else 5
+    except ValueError:
+        logger.warning(
+            "annotate_pr_diff: non-numeric file_threshold %r, defaulting to 5", file_threshold
+        )
+        file_thresh = 5
     dispatch = select_review_agents(
         metrics,
         loc_threshold=loc_thresh,
@@ -369,7 +390,10 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
     else:
         try:
             data = json.loads(graphql_result.stdout)
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError) as exc:
+            logger.warning(
+                "fetch_merge_queue_data: failed to parse GraphQL response", exc_info=exc
+            )
             entries = []
         else:
             entries = parse_merge_queue_response(data)

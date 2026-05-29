@@ -652,7 +652,7 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
             continue
         for subsection in _extract_subsections(content):
             collapsed = re.sub(r"\\\n\s*", " ", subsection)
-            if _REVIEWS_POST_RE.search(collapsed) and "--input -" not in subsection:
+            if _REVIEWS_POST_RE.search(collapsed) and "--input -" not in collapsed:
                 findings.append(
                     RuleFinding(
                         rule="reviews-post-requires-input-flag",

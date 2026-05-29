@@ -9,6 +9,7 @@ __all__ = [
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
     "SKILL_COMMAND_PREFIX",
+    "SKILL_COMMAND_DISPLAY_MAX",
     "AUTOSKILLIT_SKILL_PREFIX",
     "RETIRED_READINESS_TOKENS",
     "SKILL_FILE_ADVISORY_MAP",
@@ -78,6 +79,8 @@ WORKTREE_SKILLS: frozenset[str] = frozenset(
 # Canonical prefix required for all skill_command values passed to run_skill.
 # Enforced at the Claude Code hook boundary by skill_command_guard.py.
 SKILL_COMMAND_PREFIX: str = "/"
+
+SKILL_COMMAND_DISPLAY_MAX: int = 100
 
 # Canonical prefix for bundled autoskillit slash commands.
 AUTOSKILLIT_SKILL_PREFIX: str = "/autoskillit:"

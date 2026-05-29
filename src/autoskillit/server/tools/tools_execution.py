@@ -16,6 +16,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
+    SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     SkillResult,
     ValidatedAddDir,
@@ -504,7 +505,7 @@ async def run_skill(
                 else:
                     logger.warning(
                         "read_only_skill_no_target_name",
-                        skill_command=skill_command[:100],
+                        skill_command=skill_command[:SKILL_COMMAND_DISPLAY_MAX],
                     )
 
             invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"

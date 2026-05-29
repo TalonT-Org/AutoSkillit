@@ -475,7 +475,7 @@ def flush_session_log(
         "dispatch_id": dispatch_id,
         "claude_code_log": cc_log_str,
         "codex_log": str(codex_log_path) if codex_log_path else None,
-        "skill_command": skill_command[:100],
+        "skill_command": skill_command,
         "success": success,
         "subtype": subtype,
         "cli_subtype": cli_subtype,
@@ -487,12 +487,8 @@ def flush_session_log(
         "step_name": step_name,
         "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
         "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
-        "cache_creation_input_tokens": token_usage.get("cache_creation_input_tokens", 0)
-        if token_usage
-        else 0,
-        "cache_read_input_tokens": token_usage.get("cache_read_input_tokens", 0)
-        if token_usage
-        else 0,
+        "cache_write_tokens": token_usage.get("cache_write_tokens", 0) if token_usage else 0,
+        "cache_read_tokens": token_usage.get("cache_read_tokens", 0) if token_usage else 0,
         "write_call_count": write_call_count,
         "fs_writes_detected": fs_writes_detected,
         "git_writes_detected": git_writes_detected,
@@ -513,6 +509,8 @@ def flush_session_log(
         "caller_session_id": caller_session_id,
         "api_retry_count": api_retry_count,
         "api_retry_exhausted": api_retry_exhausted,
+        "api_retry_last_error": api_retry_last_error,
+        "api_retry_last_status": api_retry_last_status,
         "model_identifier": effective_model_id,
         "configured_model": model_identifier,
         "schema_version": 2,

@@ -18,6 +18,7 @@ import structlog
 
 from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+    SKILL_COMMAND_DISPLAY_MAX,
     CodingAgentBackend,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
@@ -146,7 +147,7 @@ async def run_headless_core(
         step_name = _derive_step_name_from_skill_command(skill_command)
 
     with structlog.contextvars.bound_contextvars(
-        skill_command=original_skill_command[:100],
+        skill_command=original_skill_command[:SKILL_COMMAND_DISPLAY_MAX],
         step_name=step_name or None,
     ):
         resolved_model = _resolve_model(

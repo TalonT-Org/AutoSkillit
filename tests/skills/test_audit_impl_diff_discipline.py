@@ -9,6 +9,7 @@ Validates:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -89,12 +90,12 @@ def test_step3_prohibits_filesystem_reads(step_sections: dict[str, str]) -> None
     assert "Step 3" in step_sections, "SKILL.md must contain a Step 3 section"
     step3_text = step_sections["Step 3"]
 
-    assert "Read" in step3_text and ("NOT" in step3_text or "not" in step3_text), (
+    assert re.search(r"\b(?:NOT|not|never|NEVER)\b.{0,40}\bRead\b", step3_text), (
         "Step 3 must explicitly prohibit using the Read tool to verify file content. "
         "Add: 'Do NOT call Read, Grep, or Glob to verify file existence or content'"
     )
-    assert "Grep" in step3_text or "Glob" in step3_text, (
-        "Step 3 must mention Grep and/or Glob in its prohibition"
+    assert "Grep" in step3_text and "Glob" in step3_text, (
+        "Step 3 must mention both Grep and Glob in its prohibition"
     )
     assert "git show" in step3_text, (
         "Step 3 must provide 'git show {implementation_ref}:{path}' as the escape hatch "

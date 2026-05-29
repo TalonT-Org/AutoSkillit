@@ -499,6 +499,12 @@ class TestCodexBuildSkillSessionCmd:
         assert spec.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "/work/src"
         spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" not in spec2.env
+        spec3 = CodexBackend().build_skill_session_cmd(
+            **{**self.BASE, "allowed_write_prefixes": ("/work/src/",)},
+        )
+        assert spec3.env["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] == "/work/src/"
+        spec4 = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES" not in spec4.env
 
     def test_codex_home_env_set(self) -> None:
         dirs = [ValidatedAddDir(path="/extra")]
@@ -609,6 +615,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             scenario_step_name="step1",
             temp_dir_relpath=".autoskillit/temp",
             allowed_write_prefix="/tmp/test",
+            allowed_write_prefixes=("/tmp/test/",),
             provider_extras={"KEY": "val"},
             profile_name="my-profile",
             resume_session_id="s1",
@@ -628,6 +635,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             scenario_step_name="step1",
             temp_dir_relpath=".autoskillit/temp",
             allowed_write_prefix="/tmp/test",
+            allowed_write_prefixes=("/tmp/test/",),
             provider_extras={"KEY": "val"},
             profile_name="my-profile",
             resume_session_id="s1",

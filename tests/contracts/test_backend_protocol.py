@@ -210,6 +210,7 @@ def test_build_skill_session_cmd_config_delegates_to_impl():
         scenario_step_name="step-verify",
         temp_dir_relpath=".autoskillit/temp",
         allowed_write_prefix="/tmp/verify",
+        allowed_write_prefixes=("/tmp/verify/",),
         provider_extras={"EXTRA": "val"},
         profile_name="verify-profile",
         resume_session_id="sess-1",
@@ -240,6 +241,7 @@ def test_build_skill_session_cmd_config_delegates_to_impl():
     assert kw["scenario_step_name"] == config.scenario_step_name
     assert kw["temp_dir_relpath"] == config.temp_dir_relpath
     assert kw["allowed_write_prefix"] == config.allowed_write_prefix
+    assert kw["allowed_write_prefixes"] == config.allowed_write_prefixes
     assert kw["provider_extras"] == config.provider_extras
     assert kw["profile_name"] == config.profile_name
     assert kw["resume_session_id"] == config.resume_session_id

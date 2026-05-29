@@ -25,6 +25,7 @@ async def test_allowed_write_prefix_set_from_output_dir_even_when_not_read_only(
 
     assert len(executor.calls) == 1
     assert executor.calls[0].allowed_write_prefix == output_dir + "/"
+    assert executor.calls[0].allowed_write_prefixes == (output_dir + "/",)
 
 
 @pytest.mark.anyio
@@ -43,3 +44,4 @@ async def test_allowed_write_prefix_uses_fallback_without_output_dir(
     assert len(executor.calls) == 1
     expected = str(tmp_path / ".autoskillit" / "temp" / "test") + "/"
     assert executor.calls[0].allowed_write_prefix == expected
+    assert executor.calls[0].allowed_write_prefixes == (expected,)

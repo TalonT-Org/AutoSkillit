@@ -110,4 +110,4 @@ def test_queue_ejected_fix_returns_fetch_error_on_network_failure():
         result = queue_ejected_fix("/work", "develop")
 
     assert result["status"] == "fetch_error", f"Expected fetch_error, got: {result}"
-    assert "stderr" in result
+    assert "Could not resolve host" in result.get("stderr", "")

@@ -235,7 +235,7 @@ def test_flake_suspected_not_in_merge_cycle_is_clean() -> None:
     "recipe_name",
     ["remediation.yaml", "implementation.yaml", "implementation-groups.yaml"],
 )
-def test_rule_fires_for_all_affected_recipes_before_fix(recipe_name: str) -> None:
+def test_rule_does_not_fire_for_fixed_recipes(recipe_name: str) -> None:
     """Post recipe fix: rule no longer fires for the three pipeline recipes."""
     from autoskillit.core import pkg_root
     from autoskillit.recipe.io import load_recipe

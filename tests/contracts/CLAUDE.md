@@ -24,6 +24,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_diagnose_ci_steps.py` | Contract tests for diagnose-ci SKILL.md step numbering and cross-reference integrity |
 | `test_docstring_skill_prefix.py` | Contract: source files must not use /autoskillit: prefix for skills_extended skills |
 | `test_environment_setup_design_contracts.py` | Contract tests verifying the environment-setup skill design doc completeness |
+| `test_ephemeral_skill_namespace.py` | Contract: ephemeral SKILL.md bodies use the correct namespace for the session delivery channel |
 | `test_enrich_issues_contracts.py` | Contract tests for the enrich-issues skill SKILL.md |
 | `test_execution_map_contracts.py` | Contract tests for the build-execution-map skill SKILL.md |
 | `test_exogenous_string_coupling.py` | Exogenous string coupling tests: orchestrator prompt triggers coupled to emitting module |

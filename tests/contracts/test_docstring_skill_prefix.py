@@ -16,6 +16,7 @@ _SCAN_DIRS_AND_GLOBS: list[tuple[str, list[str]]] = [
     ("server/tools", ["tools_*.py"]),
     ("server", ["_guards.py"]),
     ("hooks", ["*.py"]),
+    ("recipe/rules", ["rules_*.py"]),
 ]
 _PREFIX_RE = re.compile(r"/autoskillit:([a-z][\w-]*)")
 

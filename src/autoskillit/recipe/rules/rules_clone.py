@@ -23,6 +23,7 @@ from autoskillit.core import (
     SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
     Severity,
+    extract_skill_name,
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
@@ -40,14 +41,14 @@ logger = get_logger(__name__)
 )
 def _check_plan_parts_captured(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
-    _MULTIPART_SKILLS = {"/autoskillit:make-plan", "/autoskillit:rectify"}
+    _MULTIPART_SKILL_NAMES: frozenset[str] = frozenset({"make-plan", "rectify"})
     findings: list[RuleFinding] = []
 
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:
             continue
         skill_cmd = step.with_args.get("skill_command", "")
-        if not any(s in skill_cmd for s in _MULTIPART_SKILLS):
+        if extract_skill_name(skill_cmd) not in _MULTIPART_SKILL_NAMES:
             continue
         if "plan_parts" not in step.capture_list:
             findings.append(

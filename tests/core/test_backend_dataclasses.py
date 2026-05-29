@@ -240,6 +240,7 @@ def test_skill_session_config_fields_exhaustive():
         "scenario_step_name",
         "temp_dir_relpath",
         "allowed_write_prefix",
+        "allowed_write_prefixes",
         "provider_extras",
         "profile_name",
         "resume_session_id",
@@ -263,6 +264,7 @@ def test_skill_session_config_defaults():
     assert cfg.scenario_step_name == ""
     assert cfg.temp_dir_relpath is None
     assert cfg.allowed_write_prefix == ""
+    assert cfg.allowed_write_prefixes == ()
     assert cfg.provider_extras is None
     assert cfg.profile_name == ""
     assert cfg.resume_session_id == ""
@@ -294,6 +296,7 @@ def test_skill_session_config_field_types():
     assert hints["scenario_step_name"] is str
     assert hints["temp_dir_relpath"] == str | None
     assert hints["allowed_write_prefix"] is str
+    assert hints["allowed_write_prefixes"] == tuple[str, ...]
     assert hints["provider_extras"] == Mapping[str, str] | None
     assert hints["profile_name"] is str
     assert hints["resume_session_id"] is str

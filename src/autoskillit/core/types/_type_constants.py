@@ -26,6 +26,7 @@ __all__ = [
     "QUOTA_POST_WARNING_TRIGGER",
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
     "SCOPE_DIRECTION_SOURCE_TYPES",
+    "WORKTREE_SKILLS",
 ]
 
 RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
@@ -63,6 +64,15 @@ if any(n != n.lower() for n in RETIRED_AGENT_NAMES):
         "RETIRED_AGENT_NAMES entries must be lowercase. "
         f"Offending: {sorted(n for n in RETIRED_AGENT_NAMES if n != n.lower())}"
     )
+
+WORKTREE_SKILLS: frozenset[str] = frozenset(
+    {
+        "implement-worktree",
+        "implement-worktree-no-merge",
+        "implement-experiment",
+        "retry-worktree",
+    }
+)
 
 
 # Canonical prefix required for all skill_command values passed to run_skill.

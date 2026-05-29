@@ -533,3 +533,37 @@ class TestRelativePathResolution:
         result = _extract_bash_write_targets("sed -i 's/x/y/' tests/foo.py")
         assert result is not None
         assert result == []
+
+
+class TestWriteGuardMultiPrefix:
+    """Tests for multi-prefix (AUTOSKILLIT_ALLOWED_WRITE_PREFIXES) support."""
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+
+    def test_multi_prefix_allows_path_under_any_prefix(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "/a/:/b/")
+        monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
+        assert _run_hook(_build_event("Edit", "/a/file.py")) == ""
+        assert _run_hook(_build_event("Edit", "/b/file.py")) == ""
+
+    def test_multi_prefix_denies_path_outside_all_prefixes(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "/a/:/b/")
+        monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
+        result = _run_hook(_build_event("Edit", "/c/file.py"))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_single_prefix_still_works(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/allowed/")
+        monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", raising=False)
+        assert _run_hook(_build_event("Edit", "/allowed/file.py")) == ""
+        result = _run_hook(_build_event("Edit", "/other/file.py"))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_plural_takes_precedence_over_singular(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/a/")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "/a/:/b/")
+        assert _run_hook(_build_event("Edit", "/b/file.py")) == ""

@@ -15,8 +15,10 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
+    WORKTREE_SKILLS,
     SkillResult,
     ValidatedAddDir,
+    extract_skill_name,
     get_logger,
     truncate_text,
     validate_project_local_skill_dir,
@@ -195,6 +197,23 @@ def _clear_run_skill_state(project_dir: Path) -> None:
     from autoskillit.server._misc import clear_run_skill_state  # noqa: PLC0415
 
     clear_run_skill_state(project_dir)
+
+
+def _compute_write_prefixes(
+    write_watch_dirs: list[Path],
+    cwd: str,
+    skill_command: str,
+) -> tuple[str, tuple[str, ...]]:
+
+    worktree_write_prefixes: list[str] = []
+    extracted = extract_skill_name(skill_command)
+    if write_watch_dirs and extracted and extracted in WORKTREE_SKILLS:
+        worktree_parent = Path(cwd).resolve().parent / "worktrees"
+        worktree_write_prefixes.append(str(worktree_parent) + "/")
+
+    base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
+    all_prefixes = base_prefixes + worktree_write_prefixes
+    return base_prefixes[0] if base_prefixes else "", tuple(all_prefixes)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -457,8 +476,11 @@ async def run_skill(
                 tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
             )
             allowed_write_prefix = ""
+            allowed_write_prefixes: tuple[str, ...] = ()
             if write_watch_dirs:
-                allowed_write_prefix = str(write_watch_dirs[0]) + "/"
+                allowed_write_prefix, allowed_write_prefixes = _compute_write_prefixes(
+                    write_watch_dirs, cwd, skill_command
+                )
             elif is_read_only:
                 _skill_temp_name = target_name or ""
                 if _skill_temp_name:
@@ -575,6 +597,7 @@ async def run_skill(
                     recipe_composite_hash=tool_ctx.recipe_composite_hash,
                     recipe_version=tool_ctx.recipe_version,
                     allowed_write_prefix=allowed_write_prefix,
+                    allowed_write_prefixes=allowed_write_prefixes,
                     readonly_skill=is_read_only,
                     write_watch_dirs=write_watch_dirs,
                     provider_extras=provider_extras,

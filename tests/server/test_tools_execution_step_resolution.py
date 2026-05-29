@@ -33,6 +33,7 @@ async def test_run_skill_resolves_output_dir_from_recipe_step(
     assert len(executor.calls) == 1
     expected_prefix = str(tmp_path / ".autoskillit" / "temp") + "/"
     assert executor.calls[0].allowed_write_prefix == expected_prefix
+    assert executor.calls[0].allowed_write_prefixes == (expected_prefix,)
 
 
 @pytest.mark.anyio
@@ -106,6 +107,7 @@ async def test_run_skill_llm_provided_params_override_recipe_step(
     )
 
     assert executor.calls[0].allowed_write_prefix == override_dir + "/"
+    assert executor.calls[0].allowed_write_prefixes == (override_dir + "/",)
     assert executor.calls[0].stale_threshold == 3600.0
 
 
@@ -169,6 +171,7 @@ async def test_run_skill_skips_auto_fill_when_output_dir_has_template(
     )
     expected = str(tmp_path / ".autoskillit" / "temp" / "dry-walkthrough") + "/"
     assert executor.calls[0].allowed_write_prefix == expected
+    assert executor.calls[0].allowed_write_prefixes == (expected,)
 
 
 @pytest.mark.anyio
@@ -197,3 +200,4 @@ async def test_run_skill_auto_fills_relative_output_dir_from_recipe(
     )
     expected = str(tmp_path / ".autoskillit" / "temp") + "/"
     assert executor.calls[0].allowed_write_prefix == expected
+    assert executor.calls[0].allowed_write_prefixes == (expected,)

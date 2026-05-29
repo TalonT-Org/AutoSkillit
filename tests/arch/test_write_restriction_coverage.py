@@ -23,8 +23,6 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 # Adding a skill here requires explicit justification: why does it need unrestricted write?
 UNRESTRICTED_WRITE_SKILLS: frozenset[str] = frozenset(
     {
-        "implement-worktree-no-merge",  # writes to arbitrary worktree directories
-        "implement-worktree",  # writes to arbitrary worktree directories
         "sous-chef",  # orchestrator: delegates all writes to child skills
         "open-kitchen",  # server lifecycle only
         "close-kitchen",  # server lifecycle only

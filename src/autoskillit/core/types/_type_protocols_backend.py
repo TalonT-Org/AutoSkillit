@@ -130,6 +130,7 @@ class CodingAgentBackend(Protocol):
         scenario_step_name: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
+        allowed_write_prefixes: tuple[str, ...] = (),
         sentinel_contract: str = "",
         resume_message: str | None = None,
     ) -> CmdSpec: ...

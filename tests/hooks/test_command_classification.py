@@ -169,6 +169,6 @@ class TestExtractInterpreterWritePath:
         cmd = "python3 -c \"import shutil; shutil.copy('/tmp/a', '/clone/src/f.py')\""
         assert extract_interpreter_write_path(cmd) is None
 
-    def test_has_interpreter_write_returns_none_for_dynamic_path(self):
+    def test_dynamic_path_with_non_literal_var_returns_none(self):
         cmd = "python3 -c \"open(some_var, 'w').write('x')\""
         assert extract_interpreter_write_path(cmd) is None

@@ -199,7 +199,7 @@ def _isolated_home(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def _clear_private_env(monkeypatch):
+def _clear_private_env(monkeypatch) -> None:
     """Clear ALL autoskillit-private env vars before every test.
 
     Iterates AUTOSKILLIT_PRIVATE_ENV_VARS ∪ _HEADLESS_EXCLUSIVE_VARS

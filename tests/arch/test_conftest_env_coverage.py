@@ -35,6 +35,7 @@ def _find_fixture_func(tree: ast.AST) -> ast.FunctionDef | None:
 
 
 def _imported_names(func: ast.FunctionDef) -> set[str]:
+    """Return names imported by any ImportFrom node inside *func*'s body."""
     names: set[str] = set()
     for node in ast.walk(func):
         if isinstance(node, ast.ImportFrom):
@@ -104,8 +105,6 @@ def test_clear_private_env_for_loop_references_both_sets() -> None:
 
 
 def test_coverage_parity_private_env_vars() -> None:
-    """All vars in AUTOSKILLIT_PRIVATE_ENV_VARS are covered by the union the fixture iterates."""
-    # This test imports from the same sources the fixture iterates, verifying
-    # both constants are importable from their canonical paths.
-    union = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS
-    assert AUTOSKILLIT_PRIVATE_ENV_VARS <= union
+    """Both env-var sets are non-empty and importable from their canonical paths."""
+    assert AUTOSKILLIT_PRIVATE_ENV_VARS, "AUTOSKILLIT_PRIVATE_ENV_VARS is empty"
+    assert _HEADLESS_EXCLUSIVE_VARS, "_HEADLESS_EXCLUSIVE_VARS is empty"

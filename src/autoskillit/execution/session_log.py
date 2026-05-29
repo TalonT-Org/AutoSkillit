@@ -513,7 +513,7 @@ def flush_session_log(
         "api_retry_last_status": api_retry_last_status,
         "model_identifier": effective_model_id,
         "configured_model": model_identifier,
-        "schema_version": 2,
+        "schema_version": 3,
     }
     index_path = log_root / "sessions.jsonl"
     with index_path.open("a") as f:

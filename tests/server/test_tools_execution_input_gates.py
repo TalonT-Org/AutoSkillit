@@ -319,7 +319,7 @@ class TestDryWalkthroughGateWithPrefix:
 class TestInputContractValidation:
     """_check_input_contracts validates file_path and directory_path inputs."""
 
-    def test_file_path_input_rejects_nonexistent_path(self, tool_ctx, tmp_path):
+    def test_file_path_input_rejects_nonexistent_path(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         resolver = _make_input_contract_resolver()
@@ -333,7 +333,7 @@ class TestInputContractValidation:
         assert parsed["success"] is False
         assert parsed["subtype"] == "gate_error"
 
-    def test_file_path_input_rejects_directory_as_file(self, tool_ctx, tmp_path):
+    def test_file_path_input_rejects_directory_as_file(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         worktree = tmp_path / "worktree"
@@ -350,7 +350,7 @@ class TestInputContractValidation:
         parsed = json.loads(result)
         assert parsed["success"] is False
 
-    def test_file_path_input_rejects_missing_extension(self, tool_ctx, tmp_path):
+    def test_file_path_input_accepts_file_without_extension(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         worktree = tmp_path / "worktree"
@@ -366,7 +366,7 @@ class TestInputContractValidation:
         # plan_no_ext exists as a file so is_file() passes — this tests the file exists check
         assert result is None
 
-    def test_directory_path_input_rejects_file_as_directory(self, tool_ctx, tmp_path):
+    def test_directory_path_input_rejects_file_as_directory(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         file_as_worktree = tmp_path / "worktree"
@@ -381,7 +381,7 @@ class TestInputContractValidation:
         parsed = json.loads(result)
         assert parsed["success"] is False
 
-    def test_directory_path_input_accepts_valid_directory(self, tool_ctx, tmp_path):
+    def test_directory_path_input_accepts_valid_directory(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         worktree = tmp_path / "worktree"
@@ -396,7 +396,7 @@ class TestInputContractValidation:
         )
         assert result is None
 
-    def test_file_path_input_accepts_valid_file(self, tool_ctx, tmp_path):
+    def test_file_path_input_accepts_valid_file(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         worktree = tmp_path / "worktree"
@@ -411,7 +411,7 @@ class TestInputContractValidation:
         )
         assert result is None
 
-    def test_skill_without_contracts_passes(self, tool_ctx, tmp_path):
+    def test_skill_without_contracts_passes(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         resolver = _make_input_contract_resolver()
@@ -422,7 +422,7 @@ class TestInputContractValidation:
         )
         assert result is None
 
-    def test_mangled_plan_path_with_timestamp_suffix(self, tool_ctx, tmp_path):
+    def test_mangled_plan_path_with_timestamp_suffix(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         real_plan = tmp_path / "rectify_foo_2026-05-28_194500.md"
@@ -440,22 +440,18 @@ class TestInputContractValidation:
         parsed = json.loads(result)
         assert parsed["success"] is False
 
-    def test_input_contracts_not_called_for_resume(self, tool_ctx):
+    def test_input_contracts_not_called_for_resume(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         resolver = _make_input_contract_resolver()
-        # When called directly with a valid resolver and a bad command,
-        # the guard fires. But the run_skill wiring skips it for resume_session_id.
-        # This test verifies the guard itself always runs when called — the
-        # skip-on-resume logic is tested via run_skill integration.
         result = _check_input_contracts(
             "/resolve-failures /nonexistent/worktree /nonexistent/plan.md main",
-            "/tmp",
+            str(tmp_path),
             resolver,
         )
         assert result is not None
 
-    def test_resolver_returns_none_skips_validation(self, tool_ctx, tmp_path):
+    def test_resolver_returns_none_skips_validation(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
         result = _check_input_contracts(

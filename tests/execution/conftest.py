@@ -15,6 +15,7 @@ import pytest
 
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
 from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.execution.backends.claude import ClaudeResultParser
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
 from tests._helpers import make_tracing_config
@@ -56,7 +57,7 @@ def _mock_backend(
         env={},
     )
     backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
-    backend.result_parser.return_value = None
+    backend.result_parser.return_value = ClaudeResultParser()
     backend.version.return_value = ""
     backend.list_plugins.return_value = []
     backend.validate_skill_content.return_value = []

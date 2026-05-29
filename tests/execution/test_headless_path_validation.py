@@ -1812,6 +1812,7 @@ class TestNudgeBackendGuard:
         mock_backend.name = "claude-code"
         mock_backend.capabilities = caps
         mock_backend.write_tool_names.return_value = frozenset({"Write", "Edit"})
+        mock_backend.result_parser.return_value = ClaudeResultParser()
         mock_backend.build_skill_session_cmd.return_value = CmdSpec(
             cmd=("claude", "--print", "test"),
             env={},

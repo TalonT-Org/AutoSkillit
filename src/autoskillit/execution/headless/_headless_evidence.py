@@ -90,8 +90,8 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         CliSubtype.ERROR_MAX_TURNS,
         CliSubtype.UNKNOWN,
     }
-    jsonl_context_exhausted = subtype in error_subtypes and "context_length_exceeded" in (
-        agent_result.error or ""
+    jsonl_context_exhausted = bool(raw.get("jsonl_context_exhausted")) or (
+        subtype in error_subtypes and "context_length_exceeded" in (agent_result.error or "")
     )
 
     token_usage = raw.get("canonical_token_usage") or raw.get("token_usage")
@@ -113,11 +113,14 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
     else:
         assistant_messages = raw.get("agent_messages", [])
 
+    errors: list[str] = raw.get("errors", []) or []
+
     return ClaudeSessionResult(
         subtype=subtype,
         is_error=is_error,
         result=result_text,
         session_id=session_id,
+        errors=errors,
         token_usage=token_usage,
         assistant_messages=assistant_messages,
         tool_uses=tool_uses,
@@ -153,8 +156,12 @@ def _compute_write_evidence(
 
 
 def _extract_file_changes(stdout: str, backend: CodingAgentBackend) -> list[str]:
-    agent_result = backend.result_parser().parse_stdout(stdout)
-    return list(agent_result.raw.get("file_changes", []))
+    parser = backend.result_parser()
+    if parser is None:
+        return []
+    agent_result = parser.parse_stdout(stdout)
+    raw = agent_result.raw if isinstance(agent_result.raw, dict) else {}
+    return list(raw.get("file_changes", []))
 
 
 def _stdout_mentions_write_tools(stdout: str) -> bool:

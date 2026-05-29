@@ -80,7 +80,12 @@ def _resolve_skill_session_id(
 
 
 def _parse_stdout(stdout: str, backend: CodingAgentBackend) -> ClaudeSessionResult:
-    agent_result = backend.result_parser().parse_stdout(stdout)
+    parser = backend.result_parser()
+    if parser is None:
+        from autoskillit.execution.backends.claude import ClaudeResultParser
+
+        parser = ClaudeResultParser()
+    agent_result = parser.parse_stdout(stdout)
     return _adapt_agent_result(agent_result)
 
 

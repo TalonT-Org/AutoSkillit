@@ -12,6 +12,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `conftest.py` | Shared constants for contract tests — REFUSAL_SIGNALS |
 | `test_activate_deps_completeness.py` | Contracts: SKILL.md activate_deps must cover invoked Skill tool calls |
 | `test_advisory_coverage.py` | Contracts: SKILL_FILE_ADVISORY_MAP advisory hook coverage |
+| `test_analyze_pipeline_health_contracts.py` | Contract tests for the analyze-pipeline-health skill — output patterns and delimiter |
 | `test_api_surface_alignment.py` | REQ-C8-01 / C2-01: API surface alignment tests |
 | `test_backend_protocol.py` | Protocol conformance for CodingAgentBackend, StreamParser, ResultParser, and ClaudeCodeBackend |
 | `test_claim_issue_contracts.py` | Contract tests for claim_issue and release_issue MCP tools |

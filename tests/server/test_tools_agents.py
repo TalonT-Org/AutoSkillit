@@ -367,9 +367,97 @@ def test_wp_elaborator_is_packless():
 # DIAG_C6: pipeline-health-scanner agent exists
 def test_pipeline_health_scanner_agent_exists():
     """pipeline-health-scanner.md agent definition must exist with required frontmatter."""
+    import yaml
+
     from autoskillit.core import pkg_root
 
     agent_path = pkg_root() / "agents" / "pipeline-health-scanner.md"
     assert agent_path.is_file(), f"pipeline-health-scanner.md not found at {agent_path}"
     content = agent_path.read_text()
     assert "name: pipeline-health-scanner" in content
+
+    parts = content.split("---", 2)
+    assert len(parts) >= 3, "pipeline-health-scanner.md must have YAML frontmatter"
+    frontmatter = yaml.safe_load(parts[1])
+    tools = frontmatter.get("tools", [])
+    assert "Agent" in tools, (
+        "pipeline-health-scanner.md frontmatter tools must include 'Agent' "
+        "(body instructs spawning adversarial subagents)"
+    )
+
+    body = parts[2]
+    assert "scan_result:" in body, (
+        "pipeline-health-scanner.md body must contain a 'scan_result:' structured completion token"
+    )
+
+
+# DIAG_C10: all agent definitions have structured output contracts
+AGENTS_WITHOUT_STRUCTURED_OUTPUT: set[str] = set()
+
+
+def test_all_agents_have_structured_output():
+    """Every agent definition must have a structured output marker or be in the allowlist."""
+    from autoskillit.core import pkg_root
+
+    _STRUCTURED_MARKERS = ("Verdict:", "scan_result:", "```json")
+
+    agents_dir = pkg_root() / "agents"
+    failures: list[str] = []
+    for md_file in sorted(agents_dir.glob("*.md")):
+        if md_file.name == "CLAUDE.md":
+            continue
+        if md_file.stem in AGENTS_WITHOUT_STRUCTURED_OUTPUT:
+            continue
+        content = md_file.read_text()
+        parts = content.split("---", 2)
+        body = parts[2] if len(parts) >= 3 else content
+        if not any(marker in body for marker in _STRUCTURED_MARKERS):
+            failures.append(
+                f"  {md_file.name}: no structured output marker found "
+                f"(expected one of {_STRUCTURED_MARKERS}). "
+                f"Add a completion token/verdict/schema or list in "
+                f"AGENTS_WITHOUT_STRUCTURED_OUTPUT."
+            )
+    assert not failures, "Agent definitions must have structured output contracts:\n" + "\n".join(
+        failures
+    )
+
+
+# DIAG_C11: agent frontmatter tools must cover all tool references in body
+def test_agent_tool_list_covers_body_references():
+    """Agent frontmatter tools must include all tools referenced in the body."""
+    import re
+
+    import yaml
+
+    from autoskillit.core import pkg_root
+
+    _SPAWN_SUBAGENT_RE = re.compile(r"spawn\s+\w+\s+subagent", re.IGNORECASE)
+    _LSP_BODY_RE = re.compile(r"\bLSP\b")
+
+    agents_dir = pkg_root() / "agents"
+    failures: list[str] = []
+    for md_file in sorted(agents_dir.glob("*.md")):
+        if md_file.name == "CLAUDE.md":
+            continue
+        content = md_file.read_text()
+        parts = content.split("---", 2)
+        if len(parts) < 3:
+            continue
+        frontmatter = yaml.safe_load(parts[1])
+        tools: list[str] = frontmatter.get("tools", [])
+        body = parts[2]
+        if _SPAWN_SUBAGENT_RE.search(body) and "Agent" not in tools:
+            failures.append(
+                f"  {md_file.name}: body references spawning subagents but 'Agent' "
+                f"is not in frontmatter tools: {tools}"
+            )
+        if _LSP_BODY_RE.search(body) and "LSP" not in tools:
+            failures.append(
+                f"  {md_file.name}: body references 'LSP' but 'LSP' "
+                f"is not in frontmatter tools: {tools}"
+            )
+    assert not failures, (
+        "Agent frontmatter tools must cover all tool references in the body:\n"
+        + "\n".join(failures)
+    )

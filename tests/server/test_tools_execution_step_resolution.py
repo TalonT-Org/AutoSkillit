@@ -28,7 +28,9 @@ async def test_run_skill_resolves_output_dir_from_recipe_step(
     tool_ctx_kitchen_open.active_recipe_steps = {"verify": step}
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
-    await run_skill("/dry-walkthrough ...", str(tmp_path), step_name="verify")
+    plan = tmp_path / "plan.md"
+    plan.write_text("content")
+    await run_skill(f"/dry-walkthrough {plan}", str(tmp_path), step_name="verify")
 
     assert len(executor.calls) == 1
     expected_prefix = str(tmp_path / ".autoskillit" / "temp") + "/"
@@ -97,9 +99,11 @@ async def test_run_skill_llm_provided_params_override_recipe_step(
     tool_ctx_kitchen_open.active_recipe_steps = {"verify": step}
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
+    plan = tmp_path / "plan.md"
+    plan.write_text("content")
     override_dir = str(tmp_path / "explicit-override")
     await run_skill(
-        "/dry-walkthrough ...",
+        f"/dry-walkthrough {plan}",
         str(tmp_path),
         step_name="verify",
         output_dir=override_dir,
@@ -136,8 +140,10 @@ async def test_run_skill_logs_warning_when_output_dir_resolved_from_recipe(
     tool_ctx_kitchen_open.active_recipe_steps = {"verify": step}
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
+    plan = tmp_path / "plan.md"
+    plan.write_text("content")
     with structlog.testing.capture_logs() as cap:
-        await run_skill("/dry-walkthrough ...", str(tmp_path), step_name="verify")
+        await run_skill(f"/dry-walkthrough {plan}", str(tmp_path), step_name="verify")
 
     assert any(entry.get("event") == "output_dir_resolved_from_recipe" for entry in cap)
 
@@ -153,19 +159,21 @@ async def test_run_skill_skips_auto_fill_when_output_dir_has_template(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
+    plan = tmp_path / "plan.md"
+    plan.write_text("content")
     tool_ctx_kitchen_open.active_recipe_steps = {
         "verify": RecipeStep(
             name="verify",
             with_args={
                 "output_dir": "${{ context.work_dir }}/.autoskillit/temp",
-                "skill_command": "/autoskillit:dry-walkthrough path/to/plan.md",
+                "skill_command": f"/autoskillit:dry-walkthrough {plan}",
             },
         )
     }
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill(
-        skill_command="/autoskillit:dry-walkthrough path/to/plan.md",
+        skill_command=f"/autoskillit:dry-walkthrough {plan}",
         cwd=str(tmp_path),
         step_name="verify",
     )
@@ -185,6 +193,8 @@ async def test_run_skill_auto_fills_relative_output_dir_from_recipe(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
+    plan = tmp_path / "plan.md"
+    plan.write_text("content")
     tool_ctx_kitchen_open.active_recipe_steps = {
         "verify": RecipeStep(
             name="verify",
@@ -194,7 +204,7 @@ async def test_run_skill_auto_fills_relative_output_dir_from_recipe(
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill(
-        skill_command="/autoskillit:dry-walkthrough path/to/plan.md",
+        skill_command=f"/autoskillit:dry-walkthrough {plan}",
         cwd=str(tmp_path),
         step_name="verify",
     )

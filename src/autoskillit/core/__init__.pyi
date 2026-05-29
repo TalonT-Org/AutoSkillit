@@ -296,13 +296,13 @@ from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
-from .types import is_path_like_token as is_path_like_token
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import compute_remaining as compute_remaining
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
+from .types import is_path_like_token as is_path_like_token
 from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill

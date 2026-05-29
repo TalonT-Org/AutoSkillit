@@ -101,7 +101,6 @@ from autoskillit.recipe.rules import rules_bypass as _rules_bypass  # noqa: E402
 from autoskillit.recipe.rules import (  # noqa: E402
     rules_callable_scope as _rules_callable_scope,  # noqa: F401
 )
-from autoskillit.recipe.rules import rules_campaign as _rules_campaign  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402
     rules_campaign_capture as _rules_campaign_capture,  # noqa: E402 F401
 )

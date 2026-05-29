@@ -50,6 +50,14 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("promote-to-main", "pr_title"),
         ("promote-to-main", "pr_url"),
         ("promote-to-main", "timestamp"),
+        # ── resolve-review: runtime-derived pseudocode placeholders ───────────────
+        # These are filled in by the LLM from GitHub API responses, not skill args.
+        ("resolve-review", "comment_id"),
+        ("resolve-review", "file"),
+        ("resolve-review", "number"),
+        ("resolve-review", "owner"),
+        ("resolve-review", "repo"),
+        ("resolve-review", "test_command"),
     }
 )
 

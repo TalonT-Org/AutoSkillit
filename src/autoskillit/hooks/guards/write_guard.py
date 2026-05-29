@@ -277,7 +277,6 @@ def main() -> None:
                     f"Only writes to {display_prefix} are permitted."
                 )
                 return
-            sys.exit(0)
         elif has_interpreter_write(command):
             _deny(
                 f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "

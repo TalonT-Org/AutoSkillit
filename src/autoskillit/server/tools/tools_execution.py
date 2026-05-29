@@ -650,21 +650,7 @@ async def run_skill(
                             step_name, time.monotonic() - _start, order_id=effective_order_id
                         )
             finally:
-                if _cleanup_session_id is not None:
-                    _ssm = tool_ctx.session_skill_manager
-                    if _ssm is not None:
-                        try:
-                            _ssm.cleanup_session(_cleanup_session_id)
-                        except Exception:
-                            logger.warning(
-                                "session_skill_cleanup_failed",
-                                session_id=_cleanup_session_id,
-                                exc_info=True,
-                            )
-                    elif tool_ctx.ephemeral_root is not None:
-                        _cleanup_dir = tool_ctx.ephemeral_root / _cleanup_session_id
-                        if _cleanup_dir.is_dir():
-                            shutil.rmtree(_cleanup_dir, ignore_errors=True)
+                pass  # placeholder — cleanup lives at the outer try level
     except Exception as exc:
         logger.error("run_skill unhandled exception", exc_info=True)
         return SkillResult.crashed(
@@ -675,3 +661,19 @@ async def run_skill(
     except BaseException:
         logger.warning("run_skill cancelled", exc_info=True)
         raise
+    finally:
+        if _cleanup_session_id is not None:
+            _ssm = tool_ctx.session_skill_manager
+            if _ssm is not None:
+                try:
+                    _ssm.cleanup_session(_cleanup_session_id)
+                except Exception:
+                    logger.warning(
+                        "session_skill_cleanup_failed",
+                        session_id=_cleanup_session_id,
+                        exc_info=True,
+                    )
+            elif tool_ctx.ephemeral_root is not None:
+                _cleanup_dir = tool_ctx.ephemeral_root / _cleanup_session_id
+                if _cleanup_dir.is_dir():
+                    shutil.rmtree(_cleanup_dir, ignore_errors=True)

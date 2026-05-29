@@ -363,7 +363,7 @@ steps:
     on_result:
     - when: ${{ result.max_exceeded }} == true
       route: release_issue_failure
-    - route: fix
+    - route: diagnose_merge_gate
     on_failure: release_issue_failure
     optional_context_refs:
     - merge_fix_count
@@ -371,6 +371,28 @@ steps:
       Merge-failure iteration guard (dirty_tree / test_gate /
       post_rebase_test_gate). Shares merge_fix_count with
       check_merge_rebase_loop and check_dirty_main_retry.
+
+  diagnose_merge_gate:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.diagnose_merge_gate
+      test_stdout: ${{ context.merge_test_stdout }}
+      test_stderr: ${{ context.merge_test_stderr }}
+      output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate'
+    capture:
+      merge_gate_diagnosis_path: ${{ result.diagnosis_path }}
+      merge_gate_ci_conclusion: ${{ result.ci_conclusion }}
+    on_success: fix
+    on_failure: fix
+    optional_context_refs:
+    - merge_test_stdout
+    - merge_test_stderr
+    note: >
+      Writes a structured diagnosis file from merge gate test output,
+      mirroring diagnose-ci format. Routes to fix on both success and
+      failure — fix proceeds without context if diagnosis fails. Uses
+      distinct context keys (merge_gate_*) to avoid collision with
+      ci_watch/diagnose_ci context variables from the CI path.
 
   check_merge_rebase_loop:
     tool: run_python
@@ -466,6 +488,8 @@ steps:
     capture:
       cleanup_succeeded: ${{ result.cleanup_succeeded }}
       worktree_path: ${{ result.worktree_path }}
+      merge_test_stdout: ${{ result.test_stdout }}
+      merge_test_stderr: ${{ result.test_stderr }}
     on_result:
     - when: result.failed_step == 'dirty_tree'
       route: check_merge_fix_loop
@@ -536,7 +560,8 @@ steps:
     model: ''
     with:
       skill_command: /autoskillit:resolve-failures ${{ context.worktree_path }} ${{
-        context.plan_path }} ${{ inputs.base_branch }}
+        context.plan_path }} ${{ inputs.base_branch }} ${{ context.merge_gate_ci_conclusion
+        }} - ${{ context.merge_gate_diagnosis_path }}
       cwd: ${{ context.worktree_path }}
       step_name: fix
       output_dir: '.'
@@ -556,6 +581,9 @@ steps:
       route: release_issue_failure
     on_failure: release_issue_failure
     on_context_limit: test
+    optional_context_refs:
+    - merge_gate_ci_conclusion
+    - merge_gate_diagnosis_path
     note: Fixes test failures without merging. Routes back to test for re-validation
       before merge_worktree. on_context_limit routes needs_retry=True to test (worktree
       may already be green) instead of re-running fix blindly.

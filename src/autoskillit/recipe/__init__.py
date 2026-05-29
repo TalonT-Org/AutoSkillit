@@ -134,6 +134,7 @@ from autoskillit.recipe.rules import (  # noqa: E402
 )
 from autoskillit.recipe.rules import rules_features as _rules_features  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_fixing as _rules_fixing  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_flake_loop as _rules_flake_loop  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_food_truck as _rules_food_truck  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_graph as _rules_graph  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_graph_output as _rules_graph_output  # noqa: E402 F401
@@ -144,6 +145,9 @@ from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: E402
 from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_loop_progress as _rules_loop_progress  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_merge as _rules_merge  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_merge_context as _rules_merge_context,
+)
 from autoskillit.recipe.rules import rules_merge_queue as _rules_merge_queue  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402
     rules_optional_capture as _rules_optional_capture,  # noqa: F401

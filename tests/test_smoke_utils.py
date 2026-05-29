@@ -2005,12 +2005,93 @@ def test_consolidate_health_reports_does_not_mutate_source_dicts(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# T_DIAGNOSE_1–T_DIAGNOSE_4: diagnose_merge_gate callable tests
+# ---------------------------------------------------------------------------
+
+
+def test_diagnose_merge_gate_writes_diagnosis_file(tmp_path: object) -> None:
+    """callable with test_stdout/test_stderr writes diagnosis file with correct format."""
+    from pathlib import Path
+
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    output_dir = tmp_path  # type: ignore[union-attr]
+    result = diagnose_merge_gate(
+        test_stdout="FAILED tests/test_foo.py::test_bar - AssertionError\n1 failed in 0.5s",
+        test_stderr="",
+        output_dir=str(output_dir),
+    )
+    diag_path = Path(result["diagnosis_path"])
+    assert diag_path.exists()
+    content = diag_path.read_text()
+    assert "failure_subtype = " in content
+    assert "## Classification" in content
+    assert "## Failed Tests" in content
+    assert "## Structured Output" in content
+
+
+def test_diagnose_merge_gate_extracts_failure_subtype(tmp_path: object) -> None:
+    """Callable classifies failure_subtype from pytest output."""
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    output_dir = tmp_path  # type: ignore[union-attr]
+
+    result_det = diagnose_merge_gate(
+        test_stdout="FAILED tests/test_foo.py::test_bar - AssertionError",
+        test_stderr="",
+        output_dir=str(output_dir),
+    )
+    from pathlib import Path
+
+    content = Path(result_det["diagnosis_path"]).read_text()
+    assert "failure_subtype = deterministic" in content
+
+    result_timeout = diagnose_merge_gate(
+        test_stdout="TimeoutError: timed out waiting for 30s",
+        test_stderr="",
+        output_dir=str(output_dir),
+    )
+    content_t = Path(result_timeout["diagnosis_path"]).read_text()
+    assert "failure_subtype = timing_race" in content_t
+
+
+def test_diagnose_merge_gate_handles_empty_output(tmp_path: object) -> None:
+    """callable with empty/absent test output returns graceful fallback."""
+    from pathlib import Path
+
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    output_dir = tmp_path  # type: ignore[union-attr]
+    result = diagnose_merge_gate(test_stdout="", test_stderr="", output_dir=str(output_dir))
+    diag_path = Path(result["diagnosis_path"])
+    assert diag_path.exists()
+    content = diag_path.read_text()
+    assert "failure_subtype = unknown" in content
+
+
+def test_diagnose_merge_gate_returns_ci_conclusion_failure(tmp_path: object) -> None:
+    """Return dict has ci_conclusion='failure' and diagnosis_path pointing to existing file."""
+    from pathlib import Path
+
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    output_dir = tmp_path  # type: ignore[union-attr]
+    result = diagnose_merge_gate(
+        test_stdout="FAILED tests/test_x.py::test_y",
+        test_stderr="",
+        output_dir=str(output_dir),
+    )
+    assert result["ci_conclusion"] == "failure"
+    assert Path(result["diagnosis_path"]).exists()
+
+
+# ---------------------------------------------------------------------------
 # T_FACADE_1–T_FACADE_2: smoke_utils package facade verification
 # ---------------------------------------------------------------------------
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 19 public names."""
+    """smoke_utils.__all__ must list all 21 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2027,6 +2108,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "consolidate_health_reports",
         "compute_domain_partitions",
         "detect_zero_changes",
+        "diagnose_merge_gate",
         "enrich_diff_context",
         "fetch_merge_queue_data",
         "LOCAL_ROUND_EXEMPT_VERDICTS",
@@ -2054,6 +2136,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "consolidate_health_reports",
         "compute_domain_partitions",
         "detect_zero_changes",
+        "diagnose_merge_gate",
         "enrich_diff_context",
         "fetch_merge_queue_data",
         "parse_agent_eval_manifests",

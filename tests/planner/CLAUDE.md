@@ -9,6 +9,7 @@ Planner manifest, validation, compilation, and merge tests.
 | `__init__.py` | empty |
 | `conftest.py` | Planner test helpers: factories, JSON writer, output dir builder |
 | `test_compiler.py` | Tests for compile_plan callable |
+| `test_consolidation.py` | Tests for consolidate_wps: end-to-end consolidation behavior |
 | `test_consolidation_merge.py` | Consolidation core merge behavior and fallback heuristic |
 | `test_consolidation_writeback.py` | Consolidation write-back, pipeline integration, lifecycle registry |
 | `test_consolidation_cycles.py` | Consolidation cycle-breaking via greedy FAS |

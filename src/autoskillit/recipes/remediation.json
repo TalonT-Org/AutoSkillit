@@ -46,7 +46,7 @@
       "default": "false"
     },
     "investigate": {
-      "description": "Run the investigate step. \"auto\" (default) skips when the issue body contains an investigation-complete marker; \"true\" always runs; \"false\" always skips. When no issue_url is provided, \"auto\" resolves to \"true\" (always run) since there is no issue body to check.",
+      "description": "Run the investigate step. \"true\" (or \"auto\", the default) always runs; \"false\" always skips. In fleet/batch dispatch, external orchestrators resolve \"auto\" to \"false\" when the issue body contains an investigation-complete marker. In direct orders, \"auto\" behaves like \"true\".",
       "default": "auto"
     },
     "open_pr": {
@@ -168,7 +168,8 @@
         "issue_number": "${{ result.issue_number }}",
         "issue_title": "${{ result.issue_title }}",
         "issue_slug": "${{ result.issue_slug }}",
-        "claimed": "${{ result.claimed }}"
+        "claimed": "${{ result.claimed }}",
+        "investigation_complete": "${{ result.investigation_complete }}"
       },
       "on_result": [
         {

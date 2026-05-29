@@ -139,6 +139,7 @@ class TestInvestigateFirstIssueUrl:
         assert "issue_number" in step.get("capture", {})
         assert "issue_title" in step.get("capture", {})
         assert "issue_slug" in step.get("capture", {})
+        assert "investigation_complete" in step.get("capture", {})
 
     def test_get_issue_title_between_set_merge_target_and_create_branch(self):
         """clone step must route to claim_and_resolve (set_merge_target is now part of clone)."""
@@ -498,4 +499,25 @@ def test_bundled_recipes_fire_skip_when_false_non_boolean_warning_for_issue_url(
     assert len(hits) >= 1, (
         f"{recipe_name}: expected at least one skip-when-false-on-non-boolean WARNING "
         f"for issue_url but found none"
+    )
+
+
+def test_remediation_fires_sentinel_warning_for_investigate() -> None:
+    """remediation.yaml fires the sentinel sub-classification message for investigate: auto.
+
+    Documentation-of-known-state: the 'auto' sentinel is truthy and requires external
+    orchestrator resolution. The warning is expected and intentional.
+    """
+    recipe = load_recipe(_recipe_path("remediation"))
+    findings = run_semantic_rules(recipe)
+    hits = [
+        f
+        for f in findings
+        if f.rule == "skip-when-false-on-non-boolean"
+        and "investigate" in f.message
+        and "sentinel" in f.message
+    ]
+    assert len(hits) >= 1, (
+        "remediation: expected at least one skip-when-false-on-non-boolean WARNING "
+        "with sentinel sub-classification for investigate but found none"
     )

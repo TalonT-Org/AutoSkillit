@@ -58,10 +58,11 @@ ingredients:
     default: 'false'
   investigate:
     description: >-
-      Run the investigate step. "auto" (default) skips when the issue body
-      contains an investigation-complete marker; "true" always runs; "false"
-      always skips. When no issue_url is provided, "auto" resolves to "true"
-      (always run) since there is no issue body to check.
+      Run the investigate step. "true" (or "auto", the default) always runs;
+      "false" always skips. In fleet/batch dispatch, external orchestrators
+      resolve "auto" to "false" when the issue body contains an
+      investigation-complete marker. In direct orders, "auto" behaves like
+      "true".
     default: 'auto'
   open_pr:
     description: PR instead of direct merge
@@ -175,6 +176,7 @@ steps:
       issue_title: ${{ result.issue_title }}
       issue_slug: ${{ result.issue_slug }}
       claimed: ${{ result.claimed }}
+      investigation_complete: ${{ result.investigation_complete }}
     on_result:
     - when: ${{ result.claimed }} == true
       route: create_and_publish

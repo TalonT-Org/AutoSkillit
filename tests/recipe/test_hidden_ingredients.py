@@ -298,6 +298,11 @@ def test_prune_skipped_steps_empty_string_is_falsy() -> None:
         ("/path/to/file.md", True),
         ("some-branch-name", True),
         ("enabled", True),
+        pytest.param("auto", True, id="auto-sentinel-truthy"),
+        pytest.param("none", True, id="none-sentinel-truthy"),
+        pytest.param("default", True, id="default-sentinel-truthy"),
+        pytest.param("inherit", True, id="inherit-sentinel-truthy"),
+        pytest.param("AUTO", True, id="auto-upper-sentinel-truthy"),
         ("false", False),
         ("False", False),
         ("FALSE", False),
@@ -337,6 +342,41 @@ def test_prune_skipped_steps_truthiness_boundary(value: str, expected_truthy: bo
         assert pruned.steps["guarded"].skip_when_false is None
     else:
         assert "guarded" not in pruned.steps
+
+
+def test_prune_investigate_auto_default_evaluates_truthy() -> None:
+    """The 'auto' sentinel evaluates truthy — investigate step is kept when
+    no override is provided. Direct invocation with investigate='auto' always runs the step."""
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={
+            "investigate": RecipeIngredient(
+                description="Run the investigate step",
+                default="auto",
+            )
+        },
+        steps={
+            "investigate": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.investigate",
+                on_success="done",
+                on_failure="done",
+                on_context_limit="done",
+                with_args={"skill_command": "/autoskillit:investigate plan.md", "cwd": "/tmp"},
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        kitchen_rules=["test"],
+    )
+
+    pruned, resolutions = _prune_skipped_steps(recipe, ingredient_overrides={})
+    assert resolutions["investigate"] is True
+    assert "investigate" in pruned.steps
+    assert pruned.steps["investigate"].skip_when_false is None
 
 
 def test_load_and_validate_resolves_skip_guards_in_content(tmp_path: Path) -> None:

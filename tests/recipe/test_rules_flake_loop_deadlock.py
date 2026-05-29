@@ -245,4 +245,4 @@ def test_rule_fires_for_all_affected_recipes_before_fix(recipe_name: str) -> Non
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "flake-suspected-unwinnable-loop"]
     # After recipe fixes are applied, this should be zero.
-    assert isinstance(flagged, list)
+    assert len(flagged) >= 1

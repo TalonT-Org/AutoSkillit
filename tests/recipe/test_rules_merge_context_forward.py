@@ -355,5 +355,4 @@ def test_rule_fires_for_all_affected_recipes_before_fix(recipe_name: str) -> Non
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-test-gate-context-not-forwarded"]
     # After recipe fixes are applied, this should be zero. Before fixes: may be non-zero.
-    # The presence of the rule (not a KeyError/crash) is what we verify here.
-    assert isinstance(flagged, list)
+    assert len(flagged) >= 1

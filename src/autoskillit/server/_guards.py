@@ -192,9 +192,6 @@ def _check_input_contracts(
     args = extract_positional_args(skill_command)
     path_args = [a for a in args if _looks_like_path(a)]
 
-    if not path_args:
-        return None
-
     for spec in specs:
         if spec.position >= len(path_args):
             if spec.required:

@@ -140,7 +140,7 @@ def test_bundled_recipe_content_has_no_residual_hidden_input_templates(
     recipe_obj = load_recipe(pkg_root() / "recipes" / f"{recipe_name}.yaml")
     hidden_ing_names = {name for name, ing in recipe_obj.ingredients.items() if ing.hidden}
     if not hidden_ing_names:
-        return
+        pytest.skip(f"Recipe '{recipe_name}' has no hidden ingredients — not applicable")
 
     result = load_and_validate(recipe_name)
     recipe_content = result["content"]

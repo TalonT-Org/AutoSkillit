@@ -100,7 +100,10 @@ def main() -> None:
         sys.exit(0)
 
     applicable_guards_raw = os.environ.get("AUTOSKILLIT_APPLICABLE_GUARDS")
-    if applicable_guards_raw is not None and "skill_load_guard" not in applicable_guards_raw:
+    if (
+        applicable_guards_raw is not None
+        and "skill_load_guard" not in applicable_guards_raw.split()
+    ):
         sys.exit(0)
 
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()

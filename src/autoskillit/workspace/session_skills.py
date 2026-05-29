@@ -530,7 +530,9 @@ class DefaultSessionSkillManager:
             detect_project_local_overrides(project_dir) if project_dir is not None else frozenset()
         )
         self._skills_subdir = (
-            Path(backend.capabilities.skills_subdir) if backend is not None else _SKILLS_SUBDIR
+            Path(backend.capabilities.skills_subdir)
+            if backend is not None and backend.capabilities.skills_subdir
+            else _SKILLS_SUBDIR
         )
 
         session_skills_dir = self._root / session_id

@@ -1,6 +1,7 @@
 """Architectural invariant: BackendCapabilities must have class and field documentation."""
 
 import ast
+import re
 
 import pytest
 
@@ -19,8 +20,9 @@ def test_backend_capabilities_fields_documented():
     from autoskillit.core import paths
 
     src_path = paths.pkg_root() / "core" / "types" / "_type_backend.py"
-    lines = src_path.read_text().splitlines()
-    tree = ast.parse(src_path.read_text())
+    source = src_path.read_text()
+    lines = source.splitlines()
+    tree = ast.parse(source)
 
     for cls_node in ast.walk(tree):
         if isinstance(cls_node, ast.ClassDef) and cls_node.name == "BackendCapabilities":
@@ -28,7 +30,7 @@ def test_backend_capabilities_fields_documented():
                 if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
                     field_line = lines[node.lineno - 1]
                     prev_line = lines[node.lineno - 2] if node.lineno >= 2 else ""
-                    has_inline = "#" in field_line
+                    has_inline = bool(re.search(r"\s#\s", field_line))
                     has_preceding = prev_line.strip().startswith("#")
                     assert has_inline or has_preceding, (
                         f"Field {node.target.id!r} (line {node.lineno})"

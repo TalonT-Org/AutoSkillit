@@ -42,6 +42,8 @@ class _BackendNameComparisonVisitor(ast.NodeVisitor):
             return True
         if isinstance(node, ast.Name) and node.id in _BACKEND_NAME_CONSTANTS:
             return True
+        if isinstance(node, ast.Set):
+            return any(self._is_backend_ref(elt) for elt in node.elts)
         return False
 
     def visit_Compare(self, node: ast.Compare) -> None:

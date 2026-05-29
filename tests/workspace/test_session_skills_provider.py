@@ -6,11 +6,11 @@ import os
 import re
 import time
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
 
-from autoskillit.core import BackendCapabilities
 from autoskillit.workspace.session_skills import (
     _SKILLS_SUBDIR,
     CODEX_SKILLS_SUBDIR,
@@ -18,23 +18,7 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
-
-_CODEX_CAPABILITIES = BackendCapabilities(
-    channel_b_capable=False,
-    pty_required=False,
-    session_resume_capable=True,
-    skill_injection_capable=True,
-    supports_thinking_blocks=False,
-    supports_claude_format_stdout=False,
-    exit_code_is_terminal=True,
-    mcp_config_capable=True,
-    food_truck_capable=True,
-    completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
-    session_record_types=frozenset({"item.completed"}),
-    required_session_files=frozenset({"config.toml"}),
-    session_dir_symlinks=frozenset({"auth.json", "sessions"}),
-    skills_subdir="skills",
-)
+from tests.workspace.conftest import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -114,7 +98,6 @@ def test_session_skill_manager_creates_ephemeral_dir(
         codex_dir.mkdir(parents=True)
         (codex_dir / "config.toml").write_text("[codex]\n")
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
-        from unittest.mock import MagicMock
 
         backend = MagicMock()
         backend.name = "codex"
@@ -154,7 +137,6 @@ def test_session_manager_injects_disable_for_tier2(
         codex_dir.mkdir(parents=True)
         (codex_dir / "config.toml").write_text("[codex]\n")
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
-        from unittest.mock import MagicMock
 
         backend = MagicMock()
         backend.name = "codex"
@@ -362,7 +344,6 @@ def test_init_session_codex_backend_uses_codex_skills_subdir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When backend.name == 'codex', skills_base resolves to skills/ (not .claude/skills/)."""
-    from unittest.mock import MagicMock
 
     from autoskillit.workspace.session_skills import CODEX_SKILLS_SUBDIR
 

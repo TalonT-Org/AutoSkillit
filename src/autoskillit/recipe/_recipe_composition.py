@@ -10,6 +10,7 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import YAMLError, load_yaml
+from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import (
@@ -427,6 +428,61 @@ def _resolve_skip_guards_in_content(
             raw,
         )
     return raw
+
+
+_MODEL_COND_RE = re.compile(
+    r"""\$\{\{\s*'([^']+)'\s+if\s+inputs\.(\w+)\s*==\s*'([^']+)'\s+else\s+'([^']+)'\s*\}\}"""
+)
+
+
+def _resolve_hidden_inputs_in_content(
+    raw: str,
+    recipe: Any,
+    ingredient_overrides: dict[str, str] | None,
+) -> str:
+    """Substitute hidden ingredient ${{ inputs.<name> }} templates in raw YAML content.
+
+    Only hidden ingredients are resolved — visible ingredient refs remain as literals
+    for the LLM to substitute using the ingredients table values.
+    """
+
+    overrides = ingredient_overrides or {}
+    hidden_ingredients = {
+        name: ing
+        for name, ing in (recipe.ingredients or {}).items()
+        if getattr(ing, "hidden", False)
+    }
+    if not hidden_ingredients:
+        return raw
+
+    # First pass: resolve conditional expressions in model: fields
+    # Pattern: ${{ 'val_a' if inputs.name == 'cond' else 'val_b' }}
+    def _resolve_model_cond(m: re.Match[str]) -> str:
+        val_a, name, cond, val_b = m.group(1), m.group(2), m.group(3), m.group(4)
+        if name not in hidden_ingredients:
+            return m.group(0)
+        value = overrides.get(name)
+        if value is None:
+            ing = hidden_ingredients[name]
+            default = getattr(ing, "default", None)
+            value = str(default) if default is not None else ""
+        return val_a if value == cond else val_b
+
+    raw = _MODEL_COND_RE.sub(_resolve_model_cond, raw)
+
+    # Second pass: resolve simple ${{ inputs.name }} references for hidden ingredients
+    def _resolve_ref(m: re.Match[str]) -> str:
+        name = m.group(1)
+        if name not in hidden_ingredients:
+            return m.group(0)
+        value = overrides.get(name)
+        if value is None:
+            ing = hidden_ingredients[name]
+            default = getattr(ing, "default", None)
+            value = str(default) if default is not None else ""
+        return value
+
+    return INPUT_REF_RE.sub(_resolve_ref, raw)
 
 
 def _assert_content_integrity(

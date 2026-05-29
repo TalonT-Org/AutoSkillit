@@ -378,7 +378,7 @@ def test_pipeline_health_scanner_agent_exists():
 
     parts = content.split("---", 2)
     assert len(parts) >= 3, "pipeline-health-scanner.md must have YAML frontmatter"
-    frontmatter = yaml.safe_load(parts[1])
+    frontmatter = yaml.safe_load(parts[1]) or {}
     tools = frontmatter.get("tools", [])
     assert "Agent" in tools, (
         "pipeline-health-scanner.md frontmatter tools must include 'Agent' "
@@ -392,7 +392,7 @@ def test_pipeline_health_scanner_agent_exists():
 
 
 # DIAG_C10: all agent definitions have structured output contracts
-AGENTS_WITHOUT_STRUCTURED_OUTPUT: set[str] = set()
+AGENTS_WITHOUT_STRUCTURED_OUTPUT: frozenset[str] = frozenset()
 
 
 def test_all_agents_have_structured_output():
@@ -451,7 +451,7 @@ def test_agent_tool_list_covers_body_references():
         parts = content.split("---", 2)
         if len(parts) < 3:
             continue
-        frontmatter = yaml.safe_load(parts[1])
+        frontmatter = yaml.safe_load(parts[1]) or {}
         tools: list[str] = frontmatter.get("tools", [])
         body = parts[2]
         if _SPAWN_SUBAGENT_RE.search(body) and "Agent" not in tools:

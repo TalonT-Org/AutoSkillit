@@ -14,7 +14,8 @@ def _load_contract() -> dict:
     from autoskillit.core import pkg_root
 
     contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
-    raw = yaml.safe_load(contracts_path.read_text())
+    assert contracts_path.is_file(), f"skill_contracts.yaml not found at {contracts_path}"
+    raw = yaml.safe_load(contracts_path.read_text()) or {}
     return raw.get("skills", {}).get("analyze-pipeline-health", {})
 
 
@@ -31,6 +32,7 @@ def test_analyze_pipeline_health_has_expected_output_patterns():
 def test_analyze_pipeline_health_output_patterns_include_delimiter():
     """analyze-pipeline-health expected_output_patterns must include the result delimiter."""
     contract = _load_contract()
+    assert contract, "analyze-pipeline-health entry missing from skill_contracts.yaml"
     patterns = contract.get("expected_output_patterns", [])
     assert any(_OUTPUT_DELIMITER in p for p in patterns), (
         f"analyze-pipeline-health expected_output_patterns must include "
@@ -51,7 +53,9 @@ def test_analyze_pipeline_health_has_pattern_examples():
 def test_analyze_pipeline_health_pattern_examples_match_delimiter():
     """Each pattern_example must contain the output delimiter."""
     contract = _load_contract()
+    assert contract, "analyze-pipeline-health entry missing from skill_contracts.yaml"
     examples = contract.get("pattern_examples", [])
+    assert examples, "pattern_examples must be non-empty"
     for example in examples:
         assert _OUTPUT_DELIMITER in example, (
             f"pattern_example must contain '{_OUTPUT_DELIMITER}': {example!r}"

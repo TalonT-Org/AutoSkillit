@@ -566,13 +566,13 @@ def test_server_file_count_under_limit() -> None:
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
-    """tools_integrations.py deleted; four replacement modules exist."""
+    """tools_integrations.py deleted; five replacement modules exist."""
     server = SRC_ROOT / "server"
     assert not (server / "tools_integrations.py").exists()
-    assert not (server / "tools" / "tools_issue_lifecycle.py").exists()
     assert (server / "tools" / "tools_github.py").exists()
     assert (server / "tools" / "tools_issue_headless.py").exists()
     assert (server / "tools" / "tools_issue_labels.py").exists()
+    assert (server / "tools" / "tools_issue_lifecycle.py").exists()
     assert (server / "tools" / "tools_pr_ops.py").exists()
 
 
@@ -848,7 +848,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 11,
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
-        "recipe/rules": 48,
+        "recipe/rules": 49,
         "server/tools": 23,  # _auto_overrides.py added for shared _build_auto_overrides() factory
         "hooks/guards": 23,  # artifact_download_guard.py added for gh run/release download guard
     }

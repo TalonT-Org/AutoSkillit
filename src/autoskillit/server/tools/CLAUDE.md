@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (16 tool modules).
+MCP `@mcp.tool()` handlers registered on import (17 tool modules).
 
 ## Files
 
@@ -22,8 +22,9 @@ MCP `@mcp.tool()` handlers registered on import (16 tool modules).
 | `tools_fleet_dispatch.py` | `dispatch_food_truck`, `record_gate_dispatch` |
 | `tools_git.py` | `merge_worktree`, `classify_fix`, `create_unique_branch`, `create_and_publish_branch`, `check_pr_mergeable` |
 | `tools_github.py` | `fetch_github_issue`, `get_issue_title`, `report_bug` |
-| `tools_issue_headless.py` | `prepare_issue`, `enrich_issues` (headless session tools) |
-| `tools_issue_labels.py` | `claim_issue`, `release_issue` (GitHub label management) |
+| `tools_issue_lifecycle.py` | `prepare_issue`, `enrich_issues`, `claim_issue`, `release_issue` (consolidated issue lifecycle tools) |
+| `tools_issue_headless.py` | helper functions for `prepare_issue`/`enrich_issues` (no `@mcp.tool` registration — consumed by `tools_issue_lifecycle.py` callers and tests) |
+| `tools_issue_labels.py` | helper functions for `claim_issue`/`release_issue` (no `@mcp.tool` registration — consumed by `tools_issue_lifecycle.py` callers and tests) |
 | `tools_issue_composite.py` | `claim_and_resolve_issue` |
 | `tools_pr_ops.py` | `get_pr_reviews`, `bulk_close_issues` |
 | `tools_recipe.py` | `load_recipe`, `list_recipes`, `validate_recipe`, `migrate_recipe` |

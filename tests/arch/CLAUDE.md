@@ -16,7 +16,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_ast_rules.py` | Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-009) |
 | `test_backend_coherence.py` | Architectural tests for backend coherence enforcement |
 | `test_backend_command_path.py` | AST tests enforcing ctx.backend usage for command construction in headless path |
-| `test_backend_protocol_completeness.py` | Protocol completeness tests for CodingAgentBackend command builders |
+| `test_backend_protocol_completeness.py` | Protocol completeness tests for CodingAgentBackend command builders, validate_skill_content, version, and list_plugins |
 | `test_audit_feature_gates_skill.py` | Structural integrity tests for the audit-feature-gates skill |
 | `test_eval_agent_skill.py` | Structural integrity tests for the eval-agent skill |
 | `test_boot_step_symmetry.py` | AST guard: both boot functions (_fleet_auto_gate_boot, _food_truck_auto_gate_boot) must call sweep_stale_dispatch_labels |

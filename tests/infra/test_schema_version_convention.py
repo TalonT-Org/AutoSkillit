@@ -167,6 +167,12 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/planner/manifests.py", 293),
     # _cmd_rpc_issues.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
     ("src/autoskillit/recipe/_cmd_rpc_issues.py", 77),
+    # smoke_utils.py — top-level smoke-test pipeline run_python callables
+    ("src/autoskillit/smoke_utils.py", 58),
+    ("src/autoskillit/smoke_utils.py", 135),
+    ("src/autoskillit/smoke_utils.py", 164),
+    ("src/autoskillit/smoke_utils.py", 402),
+    ("src/autoskillit/smoke_utils.py", 450),
 }
 
 

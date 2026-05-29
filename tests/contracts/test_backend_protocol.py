@@ -285,3 +285,104 @@ def test_build_interactive_cmd_signature_shape():
         if name == "self":
             continue
         assert param.kind == inspect.Parameter.KEYWORD_ONLY, f"{name} must be KEYWORD_ONLY"
+
+
+# -- version() return type ---------------------------------------------------
+
+
+def test_claude_code_backend_version_returns_str():
+    from unittest.mock import MagicMock, patch
+
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    with patch(
+        "autoskillit.execution.backends.claude.subprocess.run",
+        return_value=MagicMock(stdout="1.2.3\n", stderr="", returncode=0),
+    ):
+        result = ClaudeCodeBackend().version()
+
+    assert isinstance(result, str)
+
+
+def test_codex_backend_version_returns_str():
+    from unittest.mock import MagicMock, patch
+
+    from autoskillit.execution.backends import CodexBackend
+
+    with patch(
+        "autoskillit.execution.backends.codex.subprocess.run",
+        return_value=MagicMock(stdout="0.1.0\n", stderr="", returncode=0),
+    ):
+        result = CodexBackend().version()
+
+    assert isinstance(result, str)
+
+
+# -- list_plugins() return type -----------------------------------------------
+
+
+def test_claude_code_backend_list_plugins_returns_list():
+    from unittest.mock import patch
+
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    fake_json = '{"version": 2, "plugins": {"pkg": [{"version": "1.0"}]}}'
+    with patch(
+        "autoskillit.execution.backends.claude.Path.read_text",
+        return_value=fake_json,
+    ):
+        result = ClaudeCodeBackend().list_plugins()
+
+    assert isinstance(result, list)
+
+
+@pytest.mark.xfail(
+    reason="CodexBackend.list_plugins() raises NotImplementedError until P2-A1–P2-A7 are merged",
+    strict=True,
+)
+def test_codex_backend_list_plugins_returns_list():
+    from unittest.mock import MagicMock, patch
+
+    from autoskillit.execution.backends import CodexBackend
+
+    with patch(
+        "autoskillit.execution.backends.codex.subprocess.run",
+        return_value=MagicMock(stdout='[{"name": "test"}]\n', stderr="", returncode=0),
+    ):
+        result = CodexBackend().list_plugins()
+
+    assert isinstance(result, list)
+
+
+# -- validate_skill_content() return type and behavior ------------------------
+
+
+def test_claude_code_backend_validate_skill_content_returns_list():
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    result = ClaudeCodeBackend().validate_skill_content("")
+    assert isinstance(result, list)
+
+
+def test_validate_skill_content_reports_missing_required_fields():
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    backend = ClaudeCodeBackend()
+    required = backend.capabilities.required_skill_fields
+    assert required, "capabilities.required_skill_fields must not be empty"
+
+    content = "---\nunrelated_key: value\n---\nBody text"
+    result = backend.validate_skill_content(content)
+    assert len(result) > 0, "should report errors for missing required fields"
+
+
+def test_validate_skill_content_passes_for_valid_content():
+    from autoskillit.execution.backends import ClaudeCodeBackend
+
+    backend = ClaudeCodeBackend()
+    required = backend.capabilities.required_skill_fields
+
+    frontmatter_lines = [f"{field}: test_value" for field in required]
+    content = "---\n" + "\n".join(frontmatter_lines) + "\n---\nBody text"
+    result = backend.validate_skill_content(content)
+    assert result == [], f"expected no errors for valid content, got {result}"

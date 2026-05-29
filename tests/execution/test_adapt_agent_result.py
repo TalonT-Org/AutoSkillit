@@ -338,6 +338,49 @@ def test_rate_limit_code_field_not_context_exhausted() -> None:
     assert result.jsonl_context_exhausted is False
 
 
+class TestClaudeCodeShapedKeys:
+    """Claude Code-shaped raw keys are read directly when present."""
+
+    def test_claude_shaped_tool_uses_read_directly(self) -> None:
+        raw = {"tool_uses": [{"name": "Write", "id": "t1"}], "subtype": "success"}
+        result = _adapt_agent_result(_make_agent_result(raw=raw))
+        assert result.tool_uses == [{"name": "Write", "id": "t1"}]
+
+    def test_claude_shaped_assistant_messages_read_directly(self) -> None:
+        raw = {
+            "assistant_messages": ["hello"],
+            "agent_messages": ["ignored"],
+            "subtype": "success",
+        }
+        result = _adapt_agent_result(_make_agent_result(raw=raw))
+        assert result.assistant_messages == ["hello"]
+
+    def test_claude_shaped_tool_uses_ignores_codex_keys(self) -> None:
+        raw = {
+            "tool_uses": [{"name": "Edit"}],
+            "command_executions": [{"name": "should_be_ignored"}],
+            "mcp_tool_calls": [{"name": "also_ignored"}],
+            "file_changes": ["ignored.py"],
+            "subtype": "success",
+        }
+        result = _adapt_agent_result(_make_agent_result(raw=raw))
+        assert result.tool_uses == [{"name": "Edit"}]
+
+
+class TestThinkingFieldPropagation:
+    """has_thinking_only_turn and seen_block_types propagated from raw."""
+
+    def test_has_thinking_only_turn_propagated_from_raw(self) -> None:
+        raw = {"has_thinking_only_turn": True, "subtype": "success"}
+        result = _adapt_agent_result(_make_agent_result(raw=raw))
+        assert result.has_thinking_only_turn is True
+
+    def test_seen_block_types_propagated_from_raw(self) -> None:
+        raw = {"seen_block_types": ["text", "tool_use"], "subtype": "success"}
+        result = _adapt_agent_result(_make_agent_result(raw=raw))
+        assert result.seen_block_types == frozenset({"text", "tool_use"})
+
+
 class TestAdaptAgentResultFilePathKey:
     """Verify file_change entries use 'file_path' key for synthesis compatibility."""
 

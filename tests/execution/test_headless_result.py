@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 import structlog.testing
 
-from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE
+from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, CLAUDE_CODE_CAPABILITIES
 from autoskillit.core.types import (
     AgentSessionResult,
     CliSubtype,
@@ -315,7 +315,9 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.result_parser.return_value = ClaudeResultParser()
         mock_backend.write_tool_names.return_value = frozenset({"CustomWrite"})
+        mock_backend.capabilities = CLAUDE_CODE_CAPABILITIES
         stdout = (
             _make_tool_use_line("CustomWrite", {"file_path": "/a/b.py", "content": "x"})
             + "\n"
@@ -387,6 +389,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.result_parser.return_value = ClaudeResultParser()
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         _build_skill_result(result, backend=mock_backend)
@@ -409,6 +412,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.result_parser.return_value = ClaudeResultParser()
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.STALE)
         _build_skill_result(result, backend=mock_backend)
@@ -431,6 +435,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.result_parser.return_value = ClaudeResultParser()
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.IDLE_STALL)
         _build_skill_result(result, backend=mock_backend)
@@ -453,6 +458,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.result_parser.return_value = ClaudeResultParser()
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.TIMED_OUT)
         _build_skill_result(result, backend=mock_backend)
@@ -630,21 +636,15 @@ class TestParseStdout:
 
     def test_parse_stdout_accepts_backend_kwarg(self):
         """_parse_stdout accepts an optional backend keyword argument."""
-
-        mock_backend = Mock()
-        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=mock_backend)
+        result = _parse_stdout(stdout, backend=ClaudeCodeBackend())
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "test result"
 
     def test_parse_stdout_with_backend_matches_fallback(self):
         """_parse_stdout with backend produces same result as without."""
-
-        mock_backend = Mock()
-        mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("test result")
-        with_backend = _parse_stdout(stdout, backend=mock_backend)
+        with_backend = _parse_stdout(stdout, backend=ClaudeCodeBackend())
         without_backend = _parse_stdout(stdout, ClaudeCodeBackend())
         assert with_backend.result == without_backend.result
         assert with_backend.session_id == without_backend.session_id

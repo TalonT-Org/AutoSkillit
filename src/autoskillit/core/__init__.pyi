@@ -296,7 +296,7 @@ from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
-from .types import _looks_like_path as _looks_like_path
+from .types import is_path_like_token as is_path_like_token
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import compute_remaining as compute_remaining
 from .types import extract_path_arg as extract_path_arg

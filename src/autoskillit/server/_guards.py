@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING
 from autoskillit.core import (
     InputContractResolver,
     SessionType,
-    _looks_like_path,
     extract_path_arg,
     extract_positional_args,
     extract_skill_name,
     get_logger,
+    is_path_like_token,
     session_type,
 )
 from autoskillit.pipeline import gate_error_result, headless_error_result
@@ -194,7 +194,7 @@ def _check_input_contracts(
         return None
 
     args = extract_positional_args(skill_command)
-    path_args = [a for a in args if _looks_like_path(a)]
+    path_args = [a for a in args if is_path_like_token(a)]
 
     for spec in specs:
         if spec.position >= len(path_args):

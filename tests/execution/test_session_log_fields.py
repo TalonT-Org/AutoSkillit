@@ -1421,7 +1421,8 @@ class TestSessionIndexSummaryConsistency:
             (tmp_path / "sessions" / "consist-check" / "summary.json").read_text()
         )
         for field in self._OVERLAP_FIELDS:
-            if field in entry and field in summary:
-                assert entry[field] == summary[field], (
-                    f"Field '{field}' differs: index={entry[field]!r}, summary={summary[field]!r}"
-                )
+            assert field in entry, f"Field '{field}' missing from sessions.jsonl index entry"
+            assert field in summary, f"Field '{field}' missing from summary.json"
+            assert entry[field] == summary[field], (
+                f"Field '{field}' differs: index={entry[field]!r}, summary={summary[field]!r}"
+            )

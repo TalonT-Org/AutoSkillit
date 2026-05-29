@@ -132,8 +132,12 @@ def test_github_api_log_protocol_includes_step_attribution_params():
     sig_cli = inspect.signature(GitHubApiLog.record_gh_cli)
     assert "step_name" in sig_cli.parameters
     assert "order_id" in sig_cli.parameters
-    assert "drain_step" in dir(GitHubApiLog)
-    assert "to_usage_for_step" in dir(GitHubApiLog)
+    sig_drain = inspect.signature(GitHubApiLog.drain_step)
+    assert "step_name" in sig_drain.parameters
+    assert "order_id" in sig_drain.parameters
+    sig_usage_step = inspect.signature(GitHubApiLog.to_usage_for_step)
+    assert "step_name" in sig_usage_step.parameters
+    assert "order_id" in sig_usage_step.parameters
 
 
 def test_default_token_log_satisfies_token_store_with_order_id():

@@ -851,7 +851,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 11,
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
-        "recipe/rules": 49,
+        "recipe/rules": 51,
         "server/tools": 22,  # _auto_overrides.py added for shared _build_auto_overrides() factory
         "hooks/guards": 23,  # artifact_download_guard.py added for gh run/release download guard
     }

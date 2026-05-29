@@ -132,6 +132,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_dataflow_nullable.py` | Tests for dataflow nullable semantic validation rule |
 | `test_rules_dedup.py` | Tests for dedup semantic validation rule |
 | `test_rules_features.py` | Tests for features semantic validation rule |
+| `test_rules_flake_loop_deadlock.py` | Tests for flake-suspected-unwinnable-loop semantic validation rule |
 | `test_rules_food_truck.py` | Tests for food_truck semantic validation rule |
 | `test_rules_graph.py` | Tests for graph semantic validation rule |
 | `test_rules_inline_script.py` | Tests for inline_script semantic validation rule |
@@ -143,6 +144,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_merge_queue_push.py` | Tests for merge_queue_push semantic validation rule |
 | `test_rules_merge_routing_incomplete.py` | Tests for merge_routing_incomplete semantic validation rule |
 | `test_rules_merge_failure_domain.py` | Tests for merge-failure-skill-domain-mismatch semantic validation rule |
+| `test_rules_merge_context_forward.py` | Tests for merge-test-gate-context-not-forwarded semantic validation rule |
 | `test_rules_multipart_iteration.py` | Tests for multipart_iteration semantic validation rule |
 | `test_rules_on_context_limit.py` | Tests for on_context_limit semantic validation rule |
 | `test_rules_on_result_failure_route.py` | Tests for on_result_failure_route semantic validation rule |

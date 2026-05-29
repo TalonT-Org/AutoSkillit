@@ -400,7 +400,7 @@
           "route": "release_issue_failure"
         },
         {
-          "route": "assess"
+          "route": "diagnose_merge_gate"
         }
       ],
       "on_failure": "release_issue_failure",
@@ -408,6 +408,26 @@
         "merge_fix_count"
       ],
       "note": "Merge-failure iteration guard (dirty_tree / test_gate / post_rebase_test_gate). Shares merge_fix_count with check_merge_rebase_loop and check_dirty_main_retry.\n"
+    },
+    "diagnose_merge_gate": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.diagnose_merge_gate",
+        "test_stdout": "${{ context.merge_test_stdout }}",
+        "test_stderr": "${{ context.merge_test_stderr }}",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate"
+      },
+      "capture": {
+        "merge_gate_diagnosis_path": "${{ result.diagnosis_path }}",
+        "merge_gate_ci_conclusion": "${{ result.ci_conclusion }}"
+      },
+      "on_success": "assess",
+      "on_failure": "assess",
+      "optional_context_refs": [
+        "merge_test_stdout",
+        "merge_test_stderr"
+      ],
+      "note": "Writes a structured diagnosis file from merge gate test output, mirroring diagnose-ci format. Routes to assess on both success and failure — assess proceeds without context if diagnosis fails. Uses distinct context keys (merge_gate_*) to avoid collision with ci_watch/diagnose_ci context variables from the CI path.\n"
     },
     "check_merge_rebase_loop": {
       "tool": "run_python",
@@ -488,7 +508,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }}",
+        "skill_command": "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.merge_gate_ci_conclusion }} - ${{ context.merge_gate_diagnosis_path }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "assess",
         "output_dir": "."
@@ -521,7 +541,11 @@
       ],
       "on_context_limit": "test",
       "on_failure": "release_issue_failure",
-      "on_exhausted": "release_issue_failure"
+      "on_exhausted": "release_issue_failure",
+      "optional_context_refs": [
+        "merge_gate_ci_conclusion",
+        "merge_gate_diagnosis_path"
+      ]
     },
     "rebase_conflict_fix": {
       "tool": "run_skill",
@@ -638,7 +662,9 @@
       },
       "capture": {
         "cleanup_succeeded": "${{ result.cleanup_succeeded }}",
-        "worktree_path": "${{ result.worktree_path }}"
+        "worktree_path": "${{ result.worktree_path }}",
+        "merge_test_stdout": "${{ result.test_stdout }}",
+        "merge_test_stderr": "${{ result.test_stderr }}"
       },
       "on_result": [
         {

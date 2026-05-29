@@ -19,6 +19,7 @@ from autoskillit.smoke_utils._git import (
     fetch_merge_queue_data,
 )
 from autoskillit.smoke_utils._helpers import try_load_json
+from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 from autoskillit.smoke_utils._review import (
     LOCAL_ROUND_EXEMPT_VERDICTS,
     annotate_pr_diff,
@@ -44,6 +45,7 @@ __all__ = [
     "compile_eval_scorecard",
     "compute_domain_partitions",
     "detect_zero_changes",
+    "diagnose_merge_gate",
     "enrich_diff_context",
     "fetch_merge_queue_data",
     "parse_agent_eval_manifests",

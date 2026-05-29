@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (48 rule files).
+Semantic validation rule modules for recipe analysis (50 rule files).
 
 ## Files
 
@@ -28,6 +28,7 @@ Semantic validation rule modules for recipe analysis (48 rule files).
 | `rules_dataflow_handoff.py` | Implicit handoff, uncaptured consumer, merge cleanup, stale ref |
 | `rules_dataflow_multipart.py` | Multi-part recipe iteration notes validation |
 | `rules_features.py` | Feature-gated tool/skill reference validation |
+| `rules_flake_loop.py` | Flake-suspected unwinnable loop detection for merge gate cycles |
 | `rules_food_truck.py` | Food-truck recipe validation: sentinel stop step requirement |
 | `rules_fixing.py` | Conditional-write skill must gate on declared verdict output |
 | `rules_graph.py` | Unbounded cycle detection (DFS) |
@@ -38,6 +39,7 @@ Semantic validation rule modules for recipe analysis (48 rule files).
 | `rules_inputs.py` | Input/ingredient validation; version compatibility checks; condition-value-domain checks |
 | `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |
 | `rules_merge.py` | `merge_worktree` routing completeness |
+| `rules_merge_context.py` | Merge gate test output context forwarding enforcement |
 | `rules_merge_queue.py` | Merge queue push routing: `queued_branch` error route enforcement |
 | `rules_optional_capture.py` | Optional capture guard enforcement: detect steps with optional output patterns routing to consumers without a truthiness guard |
 | `rules_packs.py` | Pack validation (names must exist in `PACK_REGISTRY`) |
@@ -58,4 +60,4 @@ Semantic validation rule modules for recipe analysis (48 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 48 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 50 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

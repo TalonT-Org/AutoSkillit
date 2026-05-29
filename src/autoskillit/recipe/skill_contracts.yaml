@@ -2890,6 +2890,22 @@ callable_contracts:
     outputs:
     - name: closed
       type: string
+  autoskillit.smoke_utils.diagnose_merge_gate:
+    inputs:
+    - name: test_stdout
+      type: string
+      required: false
+    - name: test_stderr
+      type: string
+      required: false
+    - name: output_dir
+      type: string
+      required: false
+    outputs:
+    - name: diagnosis_path
+      type: string
+    - name: ci_conclusion
+      type: string
 
 tool_output_contracts:
   wait_for_ci:

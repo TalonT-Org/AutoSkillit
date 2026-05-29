@@ -425,10 +425,7 @@ async def perform_merge(
         return target_or_err
     target = target_or_err
 
-    # 7.5b Ref-coherence gate: local base_branch SHA must match remote tracking ref SHA.
-    # Rebase (step 6) targeted {remote}/{base_branch}; merge (step 8) targets the local
-    # branch. If local has unpushed commits, the rebase is a no-op but the merge target
-    # has diverged, causing duplicate cherry-pick conflicts.
+    # 7.5b Ref-coherence gate: local vs remote base_branch SHA must match.
     remote_rc, remote_sha_out, _ = await _run_git(
         ["git", "rev-parse", f"{remote}/{base_branch}"],
         worktree_path,

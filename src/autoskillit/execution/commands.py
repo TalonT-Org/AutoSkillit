@@ -57,6 +57,7 @@ def build_interactive_cmd(
     system_prompt: str | None = None,
     env_extras: Mapping[str, str] | None = None,
     required_env: frozenset[str] | None = None,
+    tools: Sequence[str] = (),
 ) -> ClaudeInteractiveCmd:
     """Deprecated shim. Use ClaudeCodeBackend().build_interactive_cmd() directly."""
     spec = ClaudeCodeBackend().build_interactive_cmd(
@@ -68,6 +69,7 @@ def build_interactive_cmd(
         system_prompt=system_prompt,
         env_extras=env_extras,
         required_env=required_env,
+        tools=tools,
     )
     return ClaudeInteractiveCmd(cmd=list(spec.cmd), env=spec.env)
 

@@ -561,7 +561,13 @@ class CodexBackend:
         system_prompt: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         required_env: frozenset[str] | None = None,
+        tools: Sequence[str] = (),
     ) -> CmdSpec:
+        if tools:
+            logger.warning(
+                "codex_tools_ignored",
+                extra={"tools": list(tools)},
+            )
         cmd: list[str] = []
         match resume_spec:
             case NoResume():

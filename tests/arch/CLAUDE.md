@@ -14,6 +14,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_anyio_migration.py` | Regression guards for the asyncio→anyio migration (C-6) |
 | `test_arch_deselection.py` | Tests for diff-aware parametrized deselection — REQ-ARCH-004 |
 | `test_ast_rules.py` | Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-009) |
+| `test_backend_flag_isolation.py` | AST guard: ClaudeFlags must not appear in _session_launch.py — backend-specific flags belong inside each backend's build_interactive_cmd() |
 | `test_backend_coherence.py` | Architectural tests for backend coherence enforcement |
 | `test_backend_command_path.py` | AST tests enforcing ctx.backend usage for command construction in headless path |
 | `test_backend_protocol_completeness.py` | Protocol completeness tests for CodingAgentBackend command builders |

@@ -250,3 +250,10 @@ def test_remediation_investigate_routes_to_bridge(recipe) -> None:
     """investigate step on_success must route to bridge_investigation."""
     step = recipe.steps["investigate"]
     assert step.on_success == "bridge_investigation"
+
+
+def test_claim_and_resolve_captures_investigation_complete(recipe) -> None:
+    """claim_and_resolve must capture investigation_complete from the tool response."""
+    step = recipe.steps["claim_and_resolve"]
+    assert step.capture is not None
+    assert "investigation_complete" in step.capture

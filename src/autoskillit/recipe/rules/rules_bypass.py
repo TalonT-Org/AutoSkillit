@@ -155,6 +155,18 @@ def _check_skip_when_false_on_hidden(ctx: ValidationContext) -> list[RuleFinding
     return findings
 
 
+_KNOWN_BOOLEAN_DEFAULTS: frozenset[str] = frozenset(
+    {
+        "true",
+        "false",
+        "1",
+        "0",
+        "yes",
+        "no",
+    }
+)
+
+
 @semantic_rule(
     name="skip-when-false-on-non-boolean",
     description=(
@@ -178,21 +190,40 @@ def _check_skip_when_false_on_non_boolean(ctx: ValidationContext) -> list[RuleFi
         ing = ctx.recipe.ingredients.get(ingredient_name)
         if ing is None:
             continue
-        if ing.default in ("true", "false"):
+        if ing.default is not None and ing.default.lower() in _KNOWN_BOOLEAN_DEFAULTS:
             continue
         if ing.required and ing.default is None:
             continue
+
+        default_str = str(ing.default) if ing.default is not None else ""
+        is_sentinel = (
+            ing.default is not None
+            and default_str != ""
+            and default_str.lower() not in _KNOWN_BOOLEAN_DEFAULTS
+            and not default_str.startswith(("/", "http"))
+        )
+
+        if is_sentinel:
+            message = (
+                f"Step '{step_name}': skip_when_false references '{ingredient_name}' "
+                f"with sentinel default {ing.default!r}. Sentinel values evaluate as "
+                f"truthy — the step will always run unless an external orchestrator "
+                f"resolves the sentinel to 'true' or 'false' before recipe invocation. "
+                f"Verify the ingredient description documents this requirement."
+            )
+        else:
+            message = (
+                f"Step '{step_name}': skip_when_false references '{ingredient_name}' "
+                f"which is not a boolean ingredient (default: {ing.default!r}). "
+                "Truthiness evaluation treats any non-empty, non-falsy string as "
+                "truthy (presence check). Verify this is the intended behavior."
+            )
         findings.append(
             RuleFinding(
                 rule="skip-when-false-on-non-boolean",
                 severity=Severity.WARNING,
                 step_name=step_name,
-                message=(
-                    f"Step '{step_name}': skip_when_false references '{ingredient_name}' "
-                    f"which is not a boolean ingredient (default: {ing.default!r}). "
-                    "Truthiness evaluation treats any non-empty, non-falsy string as "
-                    "truthy (presence check). Verify this is the intended behavior."
-                ),
+                message=message,
             )
         )
     return findings

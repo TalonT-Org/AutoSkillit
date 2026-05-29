@@ -246,6 +246,92 @@ def test_skip_when_false_on_required_no_default_no_warning() -> None:
     assert findings == []
 
 
+def _make_non_boolean_recipe(default: str | None, required: bool = False) -> Recipe:
+    return Recipe(
+        name="test",
+        description="test",
+        steps={
+            "entry": RecipeStep(tool="run_cmd", on_success="guarded"),
+            "guarded": RecipeStep(
+                tool="run_skill",
+                optional=True,
+                skip_when_false="inputs.flag",
+                on_success="done",
+                on_failure="done",
+                with_args={"skill_command": "/autoskillit:foo /tmp/x.md", "cwd": "/tmp"},
+                on_context_limit="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+        ingredients={
+            "flag": RecipeIngredient(
+                description="Flag ingredient", required=required, default=default
+            )
+        },
+        kitchen_rules=["test"],
+    )
+
+
+def test_non_boolean_rule_sentinel_auto_fires_with_sentinel_message() -> None:
+    """skip-when-false-on-non-boolean fires sentinel-specific message for default='auto'."""
+    recipe = _make_non_boolean_recipe(default="auto")
+    findings = [
+        f for f in run_semantic_rules(recipe) if f.rule == "skip-when-false-on-non-boolean"
+    ]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.WARNING
+    assert "sentinel" in findings[0].message
+    assert "flag" in findings[0].message
+
+
+def test_non_boolean_rule_sentinel_inherit_fires_with_sentinel_message() -> None:
+    """skip-when-false-on-non-boolean fires sentinel-specific message for default='inherit'."""
+    recipe = _make_non_boolean_recipe(default="inherit")
+    findings = [
+        f for f in run_semantic_rules(recipe) if f.rule == "skip-when-false-on-non-boolean"
+    ]
+    assert len(findings) == 1
+    assert "sentinel" in findings[0].message
+
+
+def test_non_boolean_rule_url_fires_with_presence_check_message() -> None:
+    """skip-when-false-on-non-boolean fires presence-check message for URL default."""
+    recipe = _make_non_boolean_recipe(default="https://example.com")
+    findings = [
+        f for f in run_semantic_rules(recipe) if f.rule == "skip-when-false-on-non-boolean"
+    ]
+    assert len(findings) == 1
+    assert "sentinel" not in findings[0].message
+    assert "presence check" in findings[0].message
+
+
+def test_non_boolean_rule_boolean_1_no_warning() -> None:
+    """skip-when-false-on-non-boolean does NOT fire when default is '1' (recognized boolean)."""
+    recipe = _make_non_boolean_recipe(default="1")
+    findings = [
+        f for f in run_semantic_rules(recipe) if f.rule == "skip-when-false-on-non-boolean"
+    ]
+    assert findings == []
+
+
+def test_non_boolean_rule_boolean_yes_no_warning() -> None:
+    """skip-when-false-on-non-boolean does NOT fire when default is 'yes' (recognized boolean)."""
+    recipe = _make_non_boolean_recipe(default="yes")
+    findings = [
+        f for f in run_semantic_rules(recipe) if f.rule == "skip-when-false-on-non-boolean"
+    ]
+    assert findings == []
+
+
+def test_non_boolean_rule_boolean_true_no_warning() -> None:
+    """skip-when-false-on-non-boolean does NOT fire for default='true' (regression guard)."""
+    recipe = _make_non_boolean_recipe(default="true")
+    findings = [
+        f for f in run_semantic_rules(recipe) if f.rule == "skip-when-false-on-non-boolean"
+    ]
+    assert findings == []
+
+
 # ---------------------------------------------------------------------------
 # hidden-input-ref-in-template rule tests
 # ---------------------------------------------------------------------------

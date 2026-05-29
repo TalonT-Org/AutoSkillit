@@ -18,6 +18,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from autoskillit.recipe.rules.rules_skill_content import (
+    _REVIEWS_POST_RE,
+    _extract_subsections,
+)
 from autoskillit.workspace.skills import DefaultSkillResolver
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
@@ -438,20 +442,6 @@ def test_implement_skills_have_anti_blame_prohibition(skill_dir: Path) -> None:
     )
 
 
-_REVIEWS_POST_RE = re.compile(
-    r"pulls/\{[^}]*\}/reviews[^\n]*--method\s+POST"
-    r"|--method\s+POST[^\n]*pulls/\{[^}]*\}/reviews"
-    r"|POST\s+/repos/\{[^}]*\}/\{[^}]*\}/pulls/\{[^}]*\}/reviews",
-    re.IGNORECASE,
-)
-
-
-def _extract_skill_subsections(content: str) -> list[str]:
-    """Split SKILL.md content into subsections at the ### level."""
-    parts = re.split(r"(?m)^(?=###\s)", content)
-    return [p for p in parts if p.strip()]
-
-
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda p: p.name)
 def test_reviews_post_requires_input_flag(skill_dir: Path) -> None:
     """Any SKILL.md section that POSTs to the GitHub Reviews endpoint must use --input -.
@@ -465,9 +455,9 @@ def test_reviews_post_requires_input_flag(skill_dir: Path) -> None:
     """
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
-        return
+        pytest.skip(f"{skill_dir.name} has no SKILL.md")
     content = skill_md.read_text(encoding="utf-8")
-    for subsection in _extract_skill_subsections(content):
+    for subsection in _extract_subsections(content):
         if _REVIEWS_POST_RE.search(subsection):
             assert "--input -" in subsection, (
                 f"{skill_dir.name}/SKILL.md: a section mentions POST to the GitHub Reviews "

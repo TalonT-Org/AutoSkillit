@@ -797,72 +797,6 @@ class TestGitWritesClonePath:
         result = _detect_branch_divergence(str(repo))
         assert result is True
 
-    def test_git_writes_guard_fires_for_clone_cwd(self, tmp_path: Path) -> None:
-        """Guard calls is_in_git_repo for clone paths and invokes _detect_branch_divergence."""
-        import subprocess
-        from unittest.mock import MagicMock, patch
-
-        repo = tmp_path / "repo"
-        bare = tmp_path / "bare.git"
-
-        subprocess.run(["git", "init", str(bare), "--bare"], check=True, capture_output=True)
-        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
-        subprocess.run(
-            ["git", "-C", str(repo), "remote", "add", "origin", str(bare)],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.name", "Test"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "push", "origin", "HEAD:main"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "branch", "--set-upstream-to=origin/main"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "ahead"],
-            check=True,
-            capture_output=True,
-        )
-
-        import autoskillit.execution.headless._headless_execute as _mod
-
-        is_in_git_spy = MagicMock(wraps=_mod.is_in_git_repo)
-        divergence_spy = MagicMock(return_value=True)
-
-        with (
-            patch.object(_mod, "is_in_git_repo", is_in_git_spy),
-            patch.object(_mod, "_detect_branch_divergence", divergence_spy),
-        ):
-            from pathlib import Path as _Path
-
-            _cwd = str(repo)
-            _git_writes_detected = False
-            if _mod.is_in_git_repo(_Path(_cwd)):
-                _git_writes_detected = _mod._detect_branch_divergence(_cwd)
-
-        is_in_git_spy.assert_called_once_with(_Path(str(repo)))
-        divergence_spy.assert_called_once_with(str(repo))
-        assert _git_writes_detected is True
-
 
 class TestGitWritesStateMatrix:
     """Parametrized matrix: all three workspace states × branch divergence."""
@@ -888,7 +822,10 @@ class TestGitWritesStateMatrix:
         if state == "non_git":
             non_git = tmp_path / "non_git"
             non_git.mkdir()
-            assert is_in_git_repo(non_git) is False
+            in_git = is_in_git_repo(non_git)
+            assert in_git is False
+            result = _detect_branch_divergence(str(non_git)) if in_git else False
+            assert result is expected
             return
 
         bare = tmp_path / "bare.git"

@@ -65,6 +65,7 @@ def test_synthesize_before_apply_produces_error():
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
     assert len(findings) == 1
     assert findings[0].severity == Severity.ERROR
+    assert findings[0].step_name == "synthesize"
     assert "expected phase 'apply'" in findings[0].message
 
 

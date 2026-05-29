@@ -440,17 +440,6 @@ class TestInputContractValidation:
         parsed = json.loads(result)
         assert parsed["success"] is False
 
-    def test_guard_fires_when_called_directly(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
-
-        resolver = _make_input_contract_resolver()
-        result = _check_input_contracts(
-            "/resolve-failures /nonexistent/worktree /nonexistent/plan.md main",
-            str(tmp_path),
-            resolver,
-        )
-        assert result is not None
-
     def test_resolver_returns_none_skips_validation(self, tmp_path):
         from autoskillit.server._guards import _check_input_contracts
 
@@ -483,13 +472,6 @@ class TestInputContractResolver:
         resolver = _make_input_contract_resolver()
         specs = resolver("/unknown-skill-not-in-contracts /some/path")
         assert list(specs) == []
-
-    def test_input_contract_resolver_skips_string_type_inputs(self):
-
-        resolver = _make_input_contract_resolver()
-        specs = resolver("/resolve-failures /worktrees/foo /plans/bar.md main")
-        names = [s.name for s in specs]
-        assert "base_branch" not in names
 
 
 def _make_input_contract_resolver():

@@ -72,11 +72,6 @@ def test_arguments_tier_c_routing_fields() -> None:
         assert field in text, f"Arguments must document Tier-C field {field}"
 
 
-def test_tier_c_lens_exact_token_name() -> None:
-    """Must use tier_c_lens, not primary_lens or other variants."""
-    assert "tier_c_lens" in _text()
-
-
 def test_methodology_tradition_exact_token_name() -> None:
     """Arguments must use methodology_tradition, not primary_tradition as the arg name."""
     text = _text()

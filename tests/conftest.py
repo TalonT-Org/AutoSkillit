@@ -386,7 +386,6 @@ def tool_ctx_marketplace(monkeypatch, tmp_path):
     ctx.config.linux_tracing.log_dir = str(tmp_path / "session_logs")
     ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
     ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
-    ctx.project_dir = tmp_path
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)
     return ctx

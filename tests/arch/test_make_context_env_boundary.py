@@ -39,7 +39,6 @@ def _extract_private_env_reads(factory_path: Path) -> list[tuple[str, str, int]]
                 continue
             env_var_name: str | None = None
 
-            # os.environ.get("KEY") or os.environ.get("KEY", default)
             if (
                 isinstance(child.func, ast.Attribute)
                 and child.func.attr == "get"
@@ -53,7 +52,6 @@ def _extract_private_env_reads(factory_path: Path) -> list[tuple[str, str, int]]
             ):
                 env_var_name = child.args[0].value
 
-            # os.getenv("KEY") or os.getenv("KEY", default)
             elif (
                 isinstance(child.func, ast.Attribute)
                 and child.func.attr == "getenv"
@@ -66,9 +64,10 @@ def _extract_private_env_reads(factory_path: Path) -> list[tuple[str, str, int]]
                 env_var_name = child.args[0].value
 
             if env_var_name and env_var_name in AUTOSKILLIT_PRIVATE_ENV_VARS:
-                violations.append((fn_name, env_var_name, child.col_offset))
+                violations.append((fn_name, env_var_name, child.lineno))
 
-    # Also catch os.environ["KEY"] subscript access
+    # Subscript (os.environ["KEY"]) is a distinct AST node from Call — needs separate walk
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
@@ -85,7 +84,7 @@ def _extract_private_env_reads(factory_path: Path) -> list[tuple[str, str, int]]
                 and isinstance(child.slice.value, str)
                 and child.slice.value in AUTOSKILLIT_PRIVATE_ENV_VARS
             ):
-                violations.append((fn_name, child.slice.value, child.col_offset))
+                violations.append((fn_name, child.slice.value, child.lineno))
 
     return violations
 
@@ -104,6 +103,6 @@ def test_factory_functions_do_not_read_private_env_vars() -> None:
     violations = _extract_private_env_reads(_FACTORY_PY)
     assert violations == [], (
         "_factory.py reads AUTOSKILLIT_PRIVATE_ENV_VARS members from os.environ:\n"
-        + "\n".join(f"  {fn}(): reads {var!r} (col {col})" for fn, var, col in violations)
+        + "\n".join(f"  {fn}(): reads {var!r} (line {lineno})" for fn, var, lineno in violations)
         + "\n\nMove env reads to cli/app.py and pass values explicitly to make_context()."
     )

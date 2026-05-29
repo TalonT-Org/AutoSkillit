@@ -222,9 +222,7 @@ async def _execute_claude_headless(
                 pty_mode=(
                     pty_override if pty_override is not None else _resolve_pty_mode(_step_backend)
                 ),
-                session_log_dir=_resolve_session_log_dir(
-                    cwd, cast(CodingAgentBackend, ctx.backend)
-                ),
+                session_log_dir=_resolve_session_log_dir(cwd, _step_backend),
                 completion_marker=completion_marker,
                 stale_threshold=stale_threshold,
                 completion_drain_timeout=cfg.completion_drain_timeout,

@@ -2,22 +2,12 @@
 
 from __future__ import annotations
 
-import regex as re
-
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
+from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN, count_skill_args
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
-
-_SKILL_CMD_PATTERN = re.compile(r"/(?:autoskillit:)?([\w-]+)")
-_ARG_TOKEN_PATTERN = re.compile(r"\$\{\{[^}]+\}\}|[^\s]+")
-
-
-def _count_skill_args(skill_command: str) -> int:
-    """Count positional args in a skill_command after the skill name."""
-    tokens = _ARG_TOKEN_PATTERN.findall(skill_command)
-    return max(0, len(tokens) - 1)
 
 
 @semantic_rule(
@@ -65,7 +55,7 @@ def _check_flake_suspected_unwinnable_loop(ctx: ValidationContext) -> list[RuleF
         if not merge_in_cycle:
             continue
 
-        if _count_skill_args(cmd) <= 3:
+        if count_skill_args(cmd) <= 3:
             findings.append(
                 RuleFinding(
                     rule="flake-suspected-unwinnable-loop",
@@ -73,7 +63,7 @@ def _check_flake_suspected_unwinnable_loop(ctx: ValidationContext) -> list[RuleF
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' invokes resolve-failures with only "
-                        f"{_count_skill_args(cmd)} positional arg(s) and routes "
+                        f"{count_skill_args(cmd)} positional arg(s) and routes "
                         f"flake_suspected → '{flake_target}', which leads back through "
                         f"a merge_worktree step. Without failure context (ci_conclusion + "
                         f"diagnosis_path), resolve-failures cannot diagnose the specific "

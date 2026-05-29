@@ -17,6 +17,16 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_SKILL_CMD_PATTERN = re.compile(r"/(?:autoskillit:)?([\w-]+)")
+_ARG_TOKEN_PATTERN = re.compile(r"\$\{\{[^}]+\}\}|[^\s]+")
+
+
+def count_skill_args(skill_command: str) -> int:
+    """Count positional args in a skill_command after the skill name."""
+    tokens = _ARG_TOKEN_PATTERN.findall(skill_command)
+    return max(0, len(tokens) - 1)
+
+
 # Maximum hops for BFS push-reachability checks.
 _MAX_HOPS = 6
 

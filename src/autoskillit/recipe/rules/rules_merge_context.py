@@ -6,6 +6,7 @@ import regex as re
 
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN, count_skill_args
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
 
@@ -13,15 +14,6 @@ logger = get_logger(__name__)
 
 _FAILED_STEP_PATTERN = re.compile(r"result\.failed_step\s*==\s*['\"](\w+)['\"]")
 _TEST_GATE_FAILURES = frozenset({"test_gate", "post_rebase_test_gate"})
-_SKILL_CMD_PATTERN = re.compile(r"/(?:autoskillit:)?([\w-]+)")
-_ARG_TOKEN_PATTERN = re.compile(r"\$\{\{[^}]+\}\}|[^\s]+")
-
-
-def _count_skill_args(skill_command: str) -> int:
-    """Count positional args in a skill_command after the skill name."""
-    tokens = _ARG_TOKEN_PATTERN.findall(skill_command)
-    # First token is the skill name (e.g. /resolve-failures)
-    return max(0, len(tokens) - 1)
 
 
 def _find_resolve_failures_step(
@@ -113,7 +105,7 @@ def _check_merge_test_gate_context_not_forwarded(
                 )
 
             cmd = rf_step.with_args.get("skill_command", "")
-            if _count_skill_args(cmd) <= 3:
+            if count_skill_args(cmd) <= 3:
                 findings.append(
                     RuleFinding(
                         rule="merge-test-gate-context-not-forwarded",
@@ -121,7 +113,7 @@ def _check_merge_test_gate_context_not_forwarded(
                         step_name=rf_step_name,
                         message=(
                             f"Step '{rf_step_name}' invokes resolve-failures with only "
-                            f"{_count_skill_args(cmd)} positional arg(s) (worktree, plan, "
+                            f"{count_skill_args(cmd)} positional arg(s) (worktree, plan, "
                             f"branch), but is reachable from merge_worktree step "
                             f"'{step_name}' via test_gate/post_rebase_test_gate. "
                             f"Without failure context (ci_conclusion + diagnosis_path), "

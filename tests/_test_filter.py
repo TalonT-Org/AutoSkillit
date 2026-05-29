@@ -650,6 +650,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",
+            "skills/test_skill_compliance.py",
             "skills/test_skill_tool_syntax_contracts.py",
             "skills/test_vis_lens_methodology_norms.py",
             "skills/test_audit_impl_diff_discipline.py",

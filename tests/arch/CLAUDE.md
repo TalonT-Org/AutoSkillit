@@ -49,6 +49,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_no_inline_jsonl_request_id_dedup.py` | AST guard: no inline requestId dedup in session_log.py or tool_sequence_analysis.py |
 | `test_protocol_names.py` | T5-T6: Protocol naming and DefaultSkillResolver export smoke tests |
 | `test_provider_profile_contract.py` | Tier 3 contract: _resolve_provider_profile must never return step_name as profile |
+| `test_pty_coherence.py` | Dispatch-type-aware PTY allocation guards: AST enforcement that dispatch_food_truck passes pty_override=False and _attempt_contract_nudge accepts pty_override |
 | `test_python_no_hardcoded_temp.py` | Architectural invariant: no literal `.autoskillit/temp` outside the whitelist |
 | `test_recipe_rule_registration.py` | REQ-RECIPE-001: every recipe/rules_*.py file must be imported by recipe/__init__.py |
 | `test_regex_guards.py` | Arch guard: keyword regexes in cmd-scanning rules must use path-safe lookbehind guards |

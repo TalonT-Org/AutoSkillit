@@ -139,7 +139,7 @@ async def _triage_batch(
             cwd=Path.cwd(),
             timeout=30.0,
             env=_triage_env,
-            pty_mode=True,
+            pty_mode=False,
         )
         if result.termination == TerminationReason.TIMED_OUT:
             raise TimeoutError("triage_staleness batch timed out")

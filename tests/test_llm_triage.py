@@ -604,3 +604,57 @@ async def test_triage_command_uses_backend_binary_name(
     assert cmd[0] == expected_binary, (
         f"triage_cmd[0] must equal get_backend().binary_name(), got {cmd[0]!r}"
     )
+
+
+@pytest.mark.anyio
+async def test_triage_staleness_does_not_use_pty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """triage_staleness calls run_managed_async with pty_mode=False."""
+    from unittest.mock import AsyncMock
+
+    from autoskillit._llm_triage import triage_staleness
+    from autoskillit.core.types import SubprocessResult, TerminationReason
+    from autoskillit.recipe.contracts import StaleItem
+
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# test skill")
+    monkeypatch.setattr("autoskillit._llm_triage.bundled_skills_dir", lambda: tmp_path)
+
+    ndjson = (
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": json.dumps(
+                    [
+                        {
+                            "index": 1,
+                            "skill": "test-skill",
+                            "meaningful_change": False,
+                            "summary": "ok",
+                        }
+                    ]
+                ),
+                "session_id": "s1",
+            }
+        )
+        + "\n"
+    )
+    mock_run = AsyncMock(
+        return_value=SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
+    )
+    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+
+    item = StaleItem(
+        skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
+    )
+    await triage_staleness([item], agent_backend="claude-code")
+
+    assert mock_run.called
+    pty_mode = mock_run.call_args.kwargs.get("pty_mode")
+    assert pty_mode is False, (
+        f"triage_staleness must call run_managed_async with pty_mode=False, got {pty_mode!r}"
+    )

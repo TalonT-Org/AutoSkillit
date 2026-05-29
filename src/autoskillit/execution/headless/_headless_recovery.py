@@ -216,6 +216,7 @@ async def _attempt_contract_nudge(
     result_parser: ResultParser | None = None,
     provider_extras: Mapping[str, str] | None = None,
     retry_reason: RetryReason = RetryReason.CONTRACT_RECOVERY,
+    pty_override: bool | None = None,
 ) -> SkillResult | None:
     """Attempt a lightweight resume nudge to recover missing structured output tokens.
 
@@ -273,7 +274,7 @@ async def _attempt_contract_nudge(
             cwd=Path(cwd),
             timeout=_NUDGE_TIMEOUT,
             env=spec.env,
-            pty_mode=_resolve_pty_mode(backend),
+            pty_mode=(pty_override if pty_override is not None else _resolve_pty_mode(backend)),
         )
     except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)

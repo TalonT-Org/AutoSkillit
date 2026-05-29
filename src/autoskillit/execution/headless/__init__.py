@@ -435,6 +435,7 @@ class DefaultHeadlessExecutor:
             prior_completion_markers=prior_completion_markers,
             on_spawn=on_spawn,
             skip_clone_guard=True,
+            pty_override=False,
             provider_name=provider_name,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,

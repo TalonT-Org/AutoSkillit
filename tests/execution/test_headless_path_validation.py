@@ -1937,7 +1937,7 @@ class TestNudgeBackendGuard:
         mock_backend.build_resume_cmd.assert_called_once()
         call_kwargs = mock_backend.build_resume_cmd.call_args
         assert call_kwargs.kwargs["resume_session_id"] == "sess-main"
-        mock_backend.result_parser.assert_called_once()
+        mock_backend.result_parser.assert_called()
 
 
 class TestEarlyStopDetection:

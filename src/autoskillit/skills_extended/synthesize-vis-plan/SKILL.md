@@ -60,13 +60,13 @@ placement outline, and a Tier-C routing trace.
 - Omit any of the three required path tokens (`visualization_plan_path`,
   `report_plan_path`, `visualization_plan_trace_path`)
 - Skip a conflict resolution log row — every resolution must produce a row
-- Spawn subagents or run subagents in the background
+- Spawn sub-agents or run sub-agents in the background
 
 **ALWAYS:**
 - Log every conflict resolution decision as a row in the Conflict Resolution Log table
   with columns: Fig ID, Dimension, Lens A, Lens A Rec, Lens B, Lens B Rec, Winner, Reason
 - Emit all three structured path tokens as your final output
-- Use `{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan/` for all output paths
+- Use `{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan/` (relative to the current working directory) for all output paths
 - Write all three output files unconditionally — even when the figure list is empty,
   write files with empty tables and zero-row logs
 

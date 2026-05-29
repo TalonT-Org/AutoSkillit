@@ -19,7 +19,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 ### Plan and implementation
 `investigate`, `make-plan`, `dry-walkthrough`, `review-approach`,
 `implement-worktree`, `rectify`, `make-groups`, `mermaid`, `make-arch-diag`,
-`make-experiment-diag`, `build-execution-map`, `plan-visualization`, `select-vis-lenses`
+`make-experiment-diag`, `build-execution-map`, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan`
 
 ### Audit suite
 `audit-arch`, `audit-cohesion`, `audit-tests`, `audit-defense-standards`,

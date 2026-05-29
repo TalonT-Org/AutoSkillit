@@ -179,6 +179,8 @@ def _check_regression(
         capture_output=True,
         text=True,
     )
+    if wt.returncode != 0:
+        return None  # git diff failed (e.g., invalid merge-base) — skip regression check
     wt_net = _count_numstat_net(wt.stdout)
 
     if committed_net - wt_net <= 10:

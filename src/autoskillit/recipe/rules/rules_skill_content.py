@@ -50,6 +50,9 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("promote-to-main", "pr_title"),
         ("promote-to-main", "pr_url"),
         ("promote-to-main", "timestamp"),
+        # audit-impl: {implementation_ref} is an alias for the declared {branch_name}
+        # argument, used in the stale-branch-guard bash block.
+        ("audit-impl", "implementation_ref"),
     }
 )
 

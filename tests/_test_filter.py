@@ -413,6 +413,8 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "skills/test_make_campaign_compliance.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_skill_tool_syntax_contracts.py",
+            "skills/test_audit_impl_diff_discipline.py",
+            "skills/test_skill_variable_threading.py",
         }
     ),
     "_recipe_composition": frozenset({"recipe"}),

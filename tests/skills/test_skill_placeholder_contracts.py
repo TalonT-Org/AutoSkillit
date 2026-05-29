@@ -48,8 +48,10 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("implement-worktree", "plan_name"),
         ("implement-worktree-no-merge", "plan_name"),
         # ── NAMING INCONSISTENCIES ────────────────────────────────────────────────────
-        # audit-impl: bash blocks use {implementation_ref} as an alias for the declared
-        # {branch_name} argument; the skill prose clearly establishes the equivalence.
+        # audit-impl: {implementation_ref} is used in the stale-branch-guard bash block
+        # (SKILL.md lines 140-148) as an alias for the declared {branch_name} argument.
+        # Variable threading correctness is separately enforced by
+        # test_skill_variable_threading.py.
         ("audit-impl", "implementation_ref"),
         # ── GITHUB API PATH TEMPLATES ─────────────────────────────────────────────────
         # {owner}/{repo}/{number}/{pr_number} tokens appear in `gh api repos/{owner}/{repo}/...`

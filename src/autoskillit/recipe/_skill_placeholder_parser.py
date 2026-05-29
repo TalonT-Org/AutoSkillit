@@ -60,6 +60,45 @@ def shell_vars_assigned(bash_blocks: list[str]) -> set[str]:
     return assigned
 
 
+_STEP_RE = re.compile(r"###\s+(Step \d+(?:\.\d+)?)\b", re.MULTILINE)
+
+
+def extract_step_sections(content: str) -> dict[str, str]:
+    """Parse a SKILL.md into per-step sections keyed by bare step name.
+
+    Returns {'Step 0': '...', 'Step 1': '...', 'Step 2.5': '...', ...}.
+    Keys are the bare 'Step N' capture (suffix stripped), so callers can use
+    sections['Step 2'] regardless of the full heading text.
+    """
+    matches = list(_STEP_RE.finditer(content))
+    sections: dict[str, str] = {}
+    for i, m in enumerate(matches):
+        key = m.group(1)
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        sections[key] = content[start:end]
+    return sections
+
+
+def extract_git_commands(text: str) -> list[str]:
+    """Extract git command strings from markdown text.
+
+    Captures from both bash fenced blocks (line-by-line) and inline backtick
+    spans.  Inline backtick spans are the primary source for the offending
+    HEAD tokens in audit-impl SKILL.md, which appear as ``git diff ...`` spans
+    rather than inside fenced blocks.
+    """
+    commands: list[str] = []
+    for block in extract_bash_blocks(text):
+        for line in block.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("git "):
+                commands.append(stripped)
+    for m in re.finditer(r"`(git [^`\n]+)`", text):
+        commands.append(m.group(1))
+    return commands
+
+
 _VRULE_RE = re.compile(
     r"^(V\d+):\s*.+?(?=^V\d+:|\n---|\Z)",
     re.DOTALL | re.MULTILINE,

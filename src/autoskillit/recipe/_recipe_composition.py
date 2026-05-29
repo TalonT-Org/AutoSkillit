@@ -464,7 +464,8 @@ def _resolve_hidden_inputs_in_content(
         value = overrides.get(name)
         if value is None:
             ing = hidden_ingredients[name]
-            value = str(ing.default) if ing.default is not None else ""
+            default = getattr(ing, "default", None)
+            value = str(default) if default is not None else ""
         return val_a if value == cond else val_b
 
     raw = _MODEL_COND_RE.sub(_resolve_model_cond, raw)
@@ -477,7 +478,8 @@ def _resolve_hidden_inputs_in_content(
         value = overrides.get(name)
         if value is None:
             ing = hidden_ingredients[name]
-            value = str(ing.default) if ing.default is not None else ""
+            default = getattr(ing, "default", None)
+            value = str(default) if default is not None else ""
         return value
 
     return INPUT_REF_RE.sub(_resolve_ref, raw)

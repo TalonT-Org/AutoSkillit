@@ -1139,6 +1139,7 @@ def test_hidden_ingredient_uses_default_when_no_override(tmp_path: Path) -> None
 
     result = load_and_validate("test-hidden-interp", project_dir=tmp_path)
     assert "${{ inputs.kitchen_id }}" not in result["content"]
+    assert "skill_command: /autoskillit:run-diagnostic" in result["content"]
 
 
 def test_visible_ingredient_not_resolved_by_hidden_interpolation(tmp_path: Path) -> None:

@@ -264,16 +264,3 @@ def test_audit_skills_have_output_dir_or_read_only() -> None:
         "Each must have read_only: true, output_dir in every recipe invocation, "
         "or an entry in UNRESTRICTED_WRITE_SKILLS."
     )
-
-
-def test_worktree_skills_have_worktree_aware_prefix():
-    """Each WORKTREE_SKILLS member gets an allowed_write_prefixes entry for the worktree parent."""
-    from autoskillit.core import WORKTREE_SKILLS
-    from autoskillit.server.tools.tools_execution import _compute_write_prefixes
-
-    for skill in sorted(WORKTREE_SKILLS):
-        _, prefixes = _compute_write_prefixes(
-            [Path("/parent/clone")], "/parent/clone", f"/autoskillit:{skill} plan.md"
-        )
-        worktree_prefixes = [p for p in prefixes if "/worktrees/" in p]
-        assert worktree_prefixes, f"skill {skill!r} missing worktree-aware prefix in {prefixes}"

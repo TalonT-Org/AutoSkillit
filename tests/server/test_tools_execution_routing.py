@@ -511,4 +511,5 @@ async def test_run_skill_succeeds_when_cleanup_session_raises(
 
     result = json.loads(await run_skill("/autoskillit:test-skill", str(tmp_path)))
 
+    mock_ssm.cleanup_session.assert_called_once()
     assert result.get("success") is True

@@ -283,6 +283,8 @@ def _run_write_guard(
         # Explicitly set (or clear) the write prefix so ambient skill-session
         # env vars do not interfere with tests that expect an unrestricted env.
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIX": allowed_prefix,
+        "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES": "",
+        "AUTOSKILLIT_CWD": "",
     }
     if skill_name:
         env_patch["AUTOSKILLIT_SKILL_NAME"] = skill_name

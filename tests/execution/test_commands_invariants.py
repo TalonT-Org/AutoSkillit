@@ -179,6 +179,11 @@ def test_headless_exclusive_vars_contains_claude_code_subagent_model() -> None:
     assert "CLAUDE_CODE_SUBAGENT_MODEL" in _HEADLESS_EXCLUSIVE_VARS
 
 
+def test_cwd_in_headless_exclusive_vars() -> None:
+    """AUTOSKILLIT_CWD must be in _HEADLESS_EXCLUSIVE_VARS."""
+    assert "AUTOSKILLIT_CWD" in _HEADLESS_EXCLUSIVE_VARS
+
+
 def test_session_deadline_not_in_l1_subprocess_env(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", "9999999999.0")
     spec = ClaudeCodeBackend().build_skill_session_cmd(

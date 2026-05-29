@@ -51,13 +51,27 @@ class TestWriteGuardNoEnv:
     def test_no_env_var_allows_all_writes(self, monkeypatch: pytest.MonkeyPatch):
         _set_headless(monkeypatch, headless=True)
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", raising=False)
         result = _run_hook(_build_event("Write", "/src/foo.py"))
         assert result == ""
 
     def test_no_json_allows_when_no_prefix(self, monkeypatch: pytest.MonkeyPatch):
         _set_headless(monkeypatch, headless=True)
         monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", raising=False)
         result = _run_hook("not json at all")
+        assert result == ""
+
+
+class TestWriteGuardEnvIsolation:
+    """Regression: leaked AUTOSKILLIT_ALLOWED_WRITE_PREFIXES must not affect
+    tests that expect no write restriction."""
+
+    def test_plural_prefix_does_not_leak(self, monkeypatch: pytest.MonkeyPatch):
+        _set_headless(monkeypatch, headless=True)
+        monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", raising=False)
+        result = _run_hook(_build_event("Write", "/src/foo.py"))
         assert result == ""
 
 

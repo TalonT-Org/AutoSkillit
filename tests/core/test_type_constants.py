@@ -483,3 +483,15 @@ def test_investigation_complete_marker_in_all() -> None:
     from autoskillit.core.types import _type_constants
 
     assert "INVESTIGATION_COMPLETE_MARKER" in _type_constants.__all__
+
+
+# ---------------------------------------------------------------------------
+# AUTOSKILLIT_CWD membership in AUTOSKILLIT_PRIVATE_ENV_VARS (T1)
+# ---------------------------------------------------------------------------
+
+
+def test_autoskillit_cwd_in_private_env_vars() -> None:
+    """AUTOSKILLIT_CWD must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "AUTOSKILLIT_CWD" in AUTOSKILLIT_PRIVATE_ENV_VARS

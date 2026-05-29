@@ -195,7 +195,7 @@ def test_minimal_ctx_has_no_server_factory_dependency():
 
 
 def test_clear_headless_env_no_server_import():
-    """_clear_headless_env must not import from autoskillit.server."""
+    """_clear_private_env must not import from autoskillit.server."""
     import ast
     from pathlib import Path
 
@@ -204,15 +204,15 @@ def test_clear_headless_env_no_server_import():
 
     func = None
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "_clear_headless_env":
+        if isinstance(node, ast.FunctionDef) and node.name == "_clear_private_env":
             func = node
             break
-    assert func is not None, "_clear_headless_env fixture not found in conftest.py"
+    assert func is not None, "_clear_private_env fixture not found in conftest.py"
 
     for node in ast.walk(func):
         if isinstance(node, ast.ImportFrom) and node.module:
             assert not node.module.startswith("autoskillit.server"), (
-                f"_clear_headless_env imports from server module: {node.module}. "
+                f"_clear_private_env imports from server module: {node.module}. "
                 f"MCP tag resets belong in tests/server/conftest.py."
             )
 

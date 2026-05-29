@@ -5,10 +5,7 @@ from __future__ import annotations
 import hashlib
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, cast
-
-if TYPE_CHECKING:
-    pass
+from typing import Any, Literal, cast
 
 from autoskillit.core import (
     InputSpec,

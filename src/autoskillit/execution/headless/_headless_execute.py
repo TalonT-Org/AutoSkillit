@@ -277,7 +277,12 @@ async def _execute_claude_headless(
                     ),
                     max_sessions=ctx.config.linux_tracing.max_sessions,
                     model_identifier=model_identifier,
-                    telemetry=_build_error_path_telemetry(ctx.github_api_log),
+                    telemetry=_build_error_path_telemetry(
+                        ctx.github_api_log,
+                        session_id="",
+                        step_name=step_name,
+                        order_id=order_id,
+                    ),
                 )
             except Exception:
                 logger.debug("flush_session_log during crash failed", exc_info=True)
@@ -333,7 +338,12 @@ async def _execute_claude_headless(
                         ),
                         max_sessions=ctx.config.linux_tracing.max_sessions,
                         model_identifier=model_identifier,
-                        telemetry=_build_error_path_telemetry(ctx.github_api_log),
+                        telemetry=_build_error_path_telemetry(
+                            ctx.github_api_log,
+                            session_id="",
+                            step_name=step_name,
+                            order_id=order_id,
+                        ),
                     )
             except Exception:
                 logger.debug("flush_session_log during cancel failed", exc_info=True)
@@ -489,6 +499,8 @@ async def _execute_claude_headless(
                     github_api_log=ctx.github_api_log,
                     loc_insertions=_metrics.loc_insertions,
                     loc_deletions=_metrics.loc_deletions,
+                    step_name=step_name,
+                    order_id=order_id,
                 ),
                 api_retry_count=skill_result.api_retry.count,
                 api_retry_last_error=skill_result.api_retry.last_error,

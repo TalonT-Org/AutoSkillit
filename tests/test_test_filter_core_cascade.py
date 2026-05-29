@@ -173,7 +173,7 @@ class TestModuleCascadeCore:
 
     def test_json_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_json"] == frozenset(
-            {"core", "execution", "pipeline", "recipe"}
+            {"core", "execution", "pipeline", "recipe", "server"}
         )
 
 

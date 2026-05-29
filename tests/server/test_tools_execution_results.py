@@ -641,6 +641,7 @@ class TestRunHeadlessCoreFlushTelemetry:
             exit_code=0,
             latency_ms=50.0,
             timestamp="2026-05-02T10:00:00Z",
+            step_name="implement",
         )
         tool_ctx_kitchen_open.github_api_log = log
 

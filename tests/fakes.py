@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import re
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
@@ -674,6 +675,12 @@ class InMemoryDatabaseReader(DatabaseReader):
 # ---------------------------------------------------------------------------
 
 
+def _canonical_step_name(step_name: str) -> str:
+    if not step_name or ":" in step_name or step_name.startswith("("):
+        return step_name
+    return re.sub(r"-\d+$", "", step_name)
+
+
 class InMemoryGitHubApiLog:
     """In-memory fake for the GitHubApiLog protocol. Records calls for assertions."""
 
@@ -681,17 +688,59 @@ class InMemoryGitHubApiLog:
         self.httpx_calls: list[dict[str, Any]] = []
         self.gh_cli_calls: list[dict[str, Any]] = []
 
-    async def record_httpx(self, **kwargs: Any) -> None:
-        self.httpx_calls.append(kwargs)
+    async def record_httpx(
+        self, *, step_name: str = "", order_id: str = "", **kwargs: Any
+    ) -> None:
+        self.httpx_calls.append(
+            {"step_name": _canonical_step_name(step_name), "order_id": order_id, **kwargs}
+        )
 
-    async def record_gh_cli(self, **kwargs: Any) -> None:
-        self.gh_cli_calls.append(kwargs)
+    async def record_gh_cli(
+        self, *, step_name: str = "", order_id: str = "", **kwargs: Any
+    ) -> None:
+        self.gh_cli_calls.append(
+            {"step_name": _canonical_step_name(step_name), "order_id": order_id, **kwargs}
+        )
 
     def to_usage(self, session_id: str) -> dict[str, Any] | None:
         total = len(self.httpx_calls) + len(self.gh_cli_calls)
         if total == 0:
             return None
         return {"session_id": session_id, "total_requests": total}
+
+    def to_usage_for_step(
+        self, session_id: str, step_name: str, order_id: str
+    ) -> dict[str, Any] | None:
+        sn = _canonical_step_name(step_name)
+        total = sum(
+            1
+            for c in (*self.httpx_calls, *self.gh_cli_calls)
+            if c.get("step_name") == sn and c.get("order_id") == order_id
+        )
+        if total == 0:
+            return None
+        return {"session_id": session_id, "total_requests": total}
+
+    def drain(self, session_id: str) -> dict[str, Any] | None:
+        usage = self.to_usage(session_id)
+        self.httpx_calls.clear()
+        self.gh_cli_calls.clear()
+        return usage
+
+    def drain_step(self, session_id: str, step_name: str, order_id: str) -> dict[str, Any] | None:
+        sn = _canonical_step_name(step_name)
+        usage = self.to_usage_for_step(session_id, step_name, order_id)
+        self.httpx_calls = [
+            c
+            for c in self.httpx_calls
+            if not (c.get("step_name") == sn and c.get("order_id") == order_id)
+        ]
+        self.gh_cli_calls = [
+            c
+            for c in self.gh_cli_calls
+            if not (c.get("step_name") == sn and c.get("order_id") == order_id)
+        ]
+        return usage
 
     def clear(self) -> None:
         self.httpx_calls.clear()

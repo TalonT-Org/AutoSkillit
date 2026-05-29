@@ -96,6 +96,8 @@ class _TrackingTransport(httpx.AsyncBaseTransport):
         self._tracker = tracker
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        from autoskillit.core import current_order_id, current_step_name
+
         start = time.monotonic()
         response = await self._wrapped.handle_async_request(request)
         latency_ms = (time.monotonic() - start) * 1000.0
@@ -116,6 +118,8 @@ class _TrackingTransport(httpx.AsyncBaseTransport):
             rate_limit_used=_int("x-ratelimit-used"),
             rate_limit_reset=_int("x-ratelimit-reset"),
             timestamp=datetime.now(UTC).isoformat(),
+            step_name=current_step_name.get(""),
+            order_id=current_order_id.get(""),
         )
         return response
 

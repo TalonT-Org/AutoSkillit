@@ -145,6 +145,8 @@ class GitHubApiLog(Protocol):
         rate_limit_used: int,
         rate_limit_reset: int,
         timestamp: str,
+        step_name: str = "",
+        order_id: str = "",
     ) -> None: ...
 
     async def record_gh_cli(
@@ -154,11 +156,21 @@ class GitHubApiLog(Protocol):
         exit_code: int,
         latency_ms: float,
         timestamp: str,
+        step_name: str = "",
+        order_id: str = "",
     ) -> None: ...
 
     def to_usage(self, session_id: str) -> dict[str, Any] | None: ...
 
+    def to_usage_for_step(
+        self, session_id: str, step_name: str, order_id: str
+    ) -> dict[str, Any] | None: ...
+
     def drain(self, session_id: str) -> dict[str, Any] | None: ...
+
+    def drain_step(
+        self, session_id: str, step_name: str, order_id: str
+    ) -> dict[str, Any] | None: ...
 
     def clear(self) -> None: ...
 

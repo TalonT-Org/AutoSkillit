@@ -292,3 +292,52 @@ async def test_open_kitchen_generates_uuid_without_campaign_env(tmp_path, monkey
 
     kitchen_id = mock_ctx.kitchen_id
     assert len(kitchen_id) == 36 and kitchen_id.count("-") == 4
+
+
+# ---------------------------------------------------------------------------
+# Kitchen-close orphan drain
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_close_kitchen_drains_orphaned_github_api_entries(tmp_path, monkeypatch):
+    """Entries accumulated after last run_skill are flushed to disk at close."""
+    import json
+
+    from autoskillit.pipeline.github_api_log import DefaultGitHubApiLog
+
+    monkeypatch.chdir(tmp_path)
+    log = DefaultGitHubApiLog()
+    await log.record_httpx(
+        method="GET",
+        path="/repos/o/r/issues/1",
+        status_code=200,
+        latency_ms=10.0,
+        rate_limit_remaining=4999,
+        rate_limit_used=1,
+        rate_limit_reset=0,
+        timestamp="2026-04-27T10:00:00Z",
+    )
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.github_api_log = log
+    mock_ctx.kitchen_id = "test-kitchen-123"
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    mock_ctx.config.linux_tracing.log_dir = str(log_dir)
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen.resolve_log_dir", return_value=log_dir
+            ):
+                from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
+
+                _close_kitchen_handler()
+
+    orphan_path = log_dir / "github_api_usage_orchestrator.json"
+    assert orphan_path.exists()
+    data = json.loads(orphan_path.read_text())
+    assert data["total_requests"] == 1
+    assert not log._entries

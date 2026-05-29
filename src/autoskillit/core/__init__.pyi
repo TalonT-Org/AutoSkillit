@@ -26,6 +26,8 @@ from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
 from ._plugin_ids import _get_autoskillit_install_path as _get_autoskillit_install_path
 from ._plugin_ids import _installed_plugins_path as _installed_plugins_path
 from ._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
+from ._step_context import current_order_id as current_order_id
+from ._step_context import current_step_name as current_step_name
 from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table

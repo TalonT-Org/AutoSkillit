@@ -44,9 +44,13 @@ from autoskillit.core import (
     TokenLog,
     WorkspaceManager,
     WriteExpectedResolver,
+    current_order_id,
+    current_step_name,
 )
 from autoskillit.pipeline.background import DefaultBackgroundSupervisor
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
+
+__all__ = ["ToolContext", "current_step_name", "current_order_id"]
 
 # Must-supply-or-raise: fields defaulting to _MISSING are required by __post_init__.
 _MISSING: Any = object()

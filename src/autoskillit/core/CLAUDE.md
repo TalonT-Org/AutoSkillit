@@ -22,6 +22,7 @@ Sub-packages: types/ (see types/CLAUDE.md) and runtime/ (see runtime/CLAUDE.md).
 | `_plugin_cache.py` | Plugin cache lifecycle: retiring cache, install locking, kitchen registry |
 | `_plugin_ids.py` | `DIRECT_PREFIX`, `MARKETPLACE_PREFIX`, `detect_autoskillit_mcp_prefix` (stdlib-only) |
 | `_install_detect.py` | `is_dev_install()` — editable-install detection for config resolution |
+| `_step_context.py` | `current_step_name`, `current_order_id` ContextVars for pipeline step attribution |
 | `feature_flags.py` | `is_feature_enabled()` — IL-0 feature gate resolution primitive |
 | `tool_sequence_analysis.py` | Cross-session tool call sequence DFG analysis (stdlib-only) |
 

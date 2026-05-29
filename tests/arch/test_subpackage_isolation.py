@@ -90,6 +90,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_type_backend",  # core/types/_type_backend.py: CLAUDE_CODE_CAPABILITIES constant
         # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
         "_label_cleanup",  # fleet/_label_cleanup.py: _REMOVE_LABELS constant (see comment above)
+        "_step_context",  # core/_step_context.py: current_step_name, current_order_id ContextVars
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(

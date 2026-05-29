@@ -25,6 +25,7 @@ from autoskillit.core import (
     ProcessStaleError,
     _collect_disabled_feature_tags,
     atomic_write,
+    fast_dumps,
     find_latest_session_id,
     get_logger,
     pkg_root,
@@ -253,6 +254,15 @@ def _close_kitchen_handler() -> None:
     ctx.recipe_composite_hash = ""
     ctx.recipe_version = ""
     logger.info("close_kitchen", gate_state="closed")
+    if (log := ctx.github_api_log) is not None:
+        orphan_usage = log.drain(ctx.kitchen_id)
+        if orphan_usage is not None:
+            try:
+                log_dir = resolve_log_dir(ctx.config.linux_tracing.log_dir)
+                orphan_path = log_dir / "github_api_usage_orchestrator.json"
+                atomic_write(orphan_path, fast_dumps(orphan_usage))
+            except Exception:
+                logger.warning("close_kitchen_orphan_drain_failed", exc_info=True)
     hook_cfg_path = _hook_config_path(ctx.project_dir)
     try:
         hook_cfg_path.unlink(missing_ok=True)

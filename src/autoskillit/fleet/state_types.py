@@ -211,7 +211,9 @@ class DispatchRecord:
 
     def has_full_identity(self) -> bool:
         return bool(
-            self.dispatched_pid and self.dispatched_boot_id and self.dispatched_starttime_ticks
+            self.dispatched_pid
+            and self.dispatched_boot_id
+            and self.dispatched_starttime_ticks != 0
         )
 
     def has_degraded_identity(self) -> bool:

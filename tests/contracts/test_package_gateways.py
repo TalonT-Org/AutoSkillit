@@ -205,7 +205,7 @@ async def test_migration_check_and_migrate_up_to_date(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_factory_make_context_returns_toolcontext(monkeypatch):
+def test_factory_make_context_returns_toolcontext(monkeypatch, tmp_path):
     from autoskillit.config import AutomationConfig
     from autoskillit.core.paths import pkg_root
     from autoskillit.pipeline.audit import DefaultAuditLog
@@ -213,7 +213,7 @@ def test_factory_make_context_returns_toolcontext(monkeypatch):
     from autoskillit.server._factory import make_context
 
     monkeypatch.setattr("autoskillit.server._factory._check_plugin_installed", lambda: False)
-    ctx = make_context(AutomationConfig())
+    ctx = make_context(AutomationConfig(), project_dir=tmp_path)
     assert isinstance(ctx, ToolContext)
     assert ctx.gate.enabled is False  # starts closed
     assert isinstance(ctx.audit, DefaultAuditLog)
@@ -224,11 +224,11 @@ def test_factory_make_context_returns_toolcontext(monkeypatch):
     assert ctx.plugin_source.plugin_dir == pkg_root()
 
 
-def test_factory_make_context_accepts_runner():
+def test_factory_make_context_accepts_runner(tmp_path):
     from autoskillit.config import AutomationConfig
     from autoskillit.server._factory import make_context
 
-    ctx = make_context(AutomationConfig(), runner=None)
+    ctx = make_context(AutomationConfig(), runner=None, project_dir=tmp_path)
     assert ctx.runner is None
 
 
@@ -237,7 +237,7 @@ def test_factory_make_context_accepts_plugin_dir(tmp_path):
     from autoskillit.core.types._type_plugin_source import DirectInstall
     from autoskillit.server._factory import make_context
 
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
+    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path), project_dir=tmp_path)
     assert isinstance(ctx.plugin_source, DirectInstall)
     assert ctx.plugin_source.plugin_dir == tmp_path
 

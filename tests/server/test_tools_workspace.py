@@ -401,6 +401,7 @@ class TestTestCheckInfrastructure:
             config,
             runner=runner,
             plugin_source=DirectInstall(plugin_dir=tmp_path),
+            project_dir=tmp_path,
         )
         monkeypatch.setattr(_state, "_ctx", ctx)
         monkeypatch.setattr(_state, "_startup_ready", None)

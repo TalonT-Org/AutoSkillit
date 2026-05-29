@@ -22,6 +22,7 @@ async def test_kitchen_open_close_lifecycle(monkeypatch, tmp_path):
         AutomationConfig(),
         runner=None,
         plugin_source=DirectInstall(plugin_dir=tmp_path),
+        project_dir=tmp_path,
     )
     monkeypatch.setattr(_state, "_ctx", ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)

@@ -63,7 +63,9 @@ async def test_run_headless_core_auto_derives_step_name_when_recording(tmp_path)
     inner.set_default(_make_result())
     recording_runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
 
-    ctx = make_context(AutomationConfig(), runner=recording_runner, plugin_dir=str(tmp_path))
+    ctx = make_context(
+        AutomationConfig(), runner=recording_runner, plugin_dir=str(tmp_path), project_dir=tmp_path
+    )
     ctx.gate = DefaultGateState(enabled=True)
     ctx.config.linux_tracing.log_dir = str(tmp_path / "logs")
 
@@ -98,7 +100,7 @@ def test_make_context_wraps_runner_when_record_scenario(monkeypatch, tmp_path):
     from autoskillit.config import AutomationConfig
     from autoskillit.server._factory import make_context
 
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
+    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path), project_dir=tmp_path)
     assert isinstance(ctx.runner, RecordingSubprocessRunner)
     mock_atexit.assert_not_called()
 
@@ -114,7 +116,7 @@ def test_make_context_default_runner_without_record_scenario(monkeypatch, tmp_pa
     from autoskillit.execution.process import DefaultSubprocessRunner
     from autoskillit.server._factory import make_context
 
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
+    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path), project_dir=tmp_path)
     assert isinstance(ctx.runner, DefaultSubprocessRunner)
 
 
@@ -141,7 +143,7 @@ def test_make_context_wires_sequencing_runner_when_replay_scenario(monkeypatch, 
     from autoskillit.config import AutomationConfig
     from autoskillit.server._factory import make_context
 
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
+    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path), project_dir=tmp_path)
     assert isinstance(ctx.runner, ReplayingSubprocessRunner)
     mock_make_player.assert_called_once()
     call_kwargs = mock_make_player.call_args.kwargs
@@ -188,7 +190,7 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     from autoskillit.config import AutomationConfig
     from autoskillit.server._factory import make_context
 
-    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path))
+    ctx = make_context(AutomationConfig(), plugin_dir=str(tmp_path), project_dir=tmp_path)
     assert isinstance(ctx.runner, ReplayingSubprocessRunner)
     mock_make_recorder.assert_not_called()  # REPLAY takes precedence over RECORD
     mock_atexit.assert_not_called()

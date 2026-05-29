@@ -121,7 +121,9 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
             ",".join(cfg.safety.protected_branches),
         )
 
-    ctx = make_context(cfg)
+    _project_dir_env = os.environ.get("AUTOSKILLIT_PROJECT_DIR")
+    _explicit_project_dir = Path(_project_dir_env) if _project_dir_env else None
+    ctx = make_context(cfg, project_dir=_explicit_project_dir)
     _initialize(ctx)
 
     try:

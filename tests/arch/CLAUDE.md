@@ -44,6 +44,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_kitchen_id_assignment.py` | AST guard: ctx.kitchen_id assignment only via resolve_kitchen_id() |
 | `test_layer_enforcement.py` | MCP tool registry + import layer contracts + cross-package rules |
 | `test_layer_markers.py` | Enforce pytestmark layer markers on all in-scope test files |
+| `test_make_context_env_boundary.py` | AST guard: _factory.py functions must not read AUTOSKILLIT_PRIVATE_ENV_VARS from os.environ |
 | `test_never_raises_contracts.py` | Structural enforcement of 'Never raises' docstring contracts in server/ |
 | `test_no_error_dict_return.py` | AST guard: load_and_validate must not return dicts with 'error' key — errors flow via exceptions |
 | `test_no_inline_jsonl_request_id_dedup.py` | AST guard: no inline requestId dedup in session_log.py or tool_sequence_analysis.py |

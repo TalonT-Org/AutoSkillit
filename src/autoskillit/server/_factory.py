@@ -9,7 +9,6 @@ construction scattered across callers.
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import subprocess
 from collections.abc import Callable
@@ -142,10 +141,7 @@ def _check_plugin_installed() -> bool:
 
 
 def _resolve_project_dir() -> Path:
-    """Resolve the project root: AUTOSKILLIT_PROJECT_DIR env -> git toplevel -> cwd."""
-    env_project_dir = os.environ.get("AUTOSKILLIT_PROJECT_DIR", "")
-    if env_project_dir:
-        return Path(env_project_dir)
+    """Resolve the project root: git toplevel -> cwd."""
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -167,6 +163,7 @@ def make_context(
     plugin_dir: str | None = _UNSET,
     plugin_source: PluginSource = _UNSET,
     fleet_lock: FleetLock | None = None,
+    project_dir: Path | None = None,
 ) -> ToolContext:
     """Create a fully-wired ToolContext with all 23 service fields populated.
 
@@ -192,6 +189,9 @@ def make_context(
         fleet_lock: FleetLock implementation to inject. Defaults to
                         FleetSemaphore(max_concurrent_dispatches) when None. Pass a
                         custom implementation in tests to substitute without monkey-patching.
+        project_dir: Explicit project root path. When supplied, used directly.
+                     When None, _resolve_project_dir() is called (git toplevel → cwd).
+                     Pass tmp_path in tests to avoid subprocess calls and ensure isolation.
 
     Returns:
         ToolContext with gate starting closed (enabled=False) in all contexts.
@@ -201,16 +201,6 @@ def make_context(
         config.agent_backend via the BACKEND_REGISTRY). When runner=None is
         passed explicitly, tester is left as None.
     """
-    env_profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE")
-    if env_profile and env_profile in config.providers.profiles:
-        config = dataclasses.replace(
-            config, providers=dataclasses.replace(config.providers, default_provider=env_profile)
-        )
-    elif env_profile:
-        logger.warning(
-            "AUTOSKILLIT_PROVIDER_PROFILE %r not in known profiles — ignored", env_profile
-        )
-
     if runner is _UNSET:
         from autoskillit.execution import DefaultSubprocessRunner
 
@@ -304,7 +294,7 @@ def make_context(
     plugin_source = resolved_plugin_source
     gate = DefaultGateState(enabled=False)
 
-    project_dir = _resolve_project_dir()
+    project_dir = project_dir if project_dir is not None else _resolve_project_dir()
     temp_dir = resolve_temp_dir(project_dir, config.workspace.temp_dir)
     temp_dir_relpath = temp_dir_display_str(config.workspace.temp_dir)
 

@@ -10,6 +10,8 @@ __all__ = ["CanonicalTokenUsage"]
 
 @dataclass(frozen=True, slots=True)
 class CanonicalTokenUsage:
+    """Provider-normalized token usage snapshot for a single session turn."""
+
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int | None

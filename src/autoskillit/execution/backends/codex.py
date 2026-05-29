@@ -92,6 +92,8 @@ CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 
 @dataclass(frozen=True, slots=True)
 class CodexEnvPolicy:
+    denylist_prefixes: tuple[str, ...] = CODEX_ENV_PREFIX_DENYLIST
+
     def build_env(
         self,
         base_env: Mapping[str, str],
@@ -104,7 +106,7 @@ class CodexEnvPolicy:
             for k, v in base_env.items()
             if k not in CODEX_ENV_DENYLIST
             and k not in AUTOSKILLIT_PRIVATE_ENV_VARS
-            and not any(k.startswith(p) for p in CODEX_ENV_PREFIX_DENYLIST)
+            and not any(k.startswith(p) for p in self.denylist_prefixes)
         }
         if extras is not None:
             out.update(extras)
@@ -260,13 +262,7 @@ class CodexBackend:
             completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
             session_record_types=frozenset({"item.completed"}),
             triage_capable=False,
-            record_capable=False,
-            replay_capable=False,
-            plugin_install_capable=False,
-            anthropic_provider_capable=False,
-            session_log_compressed=False,
             supports_context_exhaustion_detection=False,
-            supports_api_retry_events=False,
             project_local_skills_capable=False,
             required_skill_fields=frozenset({"name", "description"}),
             required_session_files=frozenset({"config.toml"}),
@@ -290,7 +286,7 @@ class CodexBackend:
         return CodexResultParser()
 
     def env_policy(self) -> CodexEnvPolicy:
-        return CodexEnvPolicy()
+        return CodexEnvPolicy(denylist_prefixes=self.capabilities.env_denylist_prefixes)
 
     def session_locator(self) -> CodexSessionLocator:
         return CodexSessionLocator()
@@ -402,6 +398,7 @@ class CodexBackend:
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+            "AUTOSKILLIT_APPLICABLE_GUARDS": " ".join(sorted(self.capabilities.applicable_guards)),
         }
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name

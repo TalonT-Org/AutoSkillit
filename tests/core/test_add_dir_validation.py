@@ -73,6 +73,7 @@ class TestValidateProjectLocalSkillDir:
     def _make_backend(name: str) -> MagicMock:
         b = MagicMock()
         b.name = name
+        b.capabilities.project_local_skills_capable = name != "codex"
         return b
 
     def test_claude_backend_claude_layout_returns_validated_add_dir(self, tmp_path: Path) -> None:

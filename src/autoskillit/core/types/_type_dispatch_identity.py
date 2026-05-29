@@ -43,6 +43,8 @@ signals session completion to the process monitor.
 
 @dataclass(frozen=True, slots=True)
 class DispatchIdentity:
+    """Unique identity and completion sentinels for a single skill dispatch."""
+
     dispatch_id: str
     completion_marker: str
     sentinel_open: str

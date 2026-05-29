@@ -163,4 +163,6 @@ class SubprocessRunner(Protocol):
         marker_dir: Path | None = None,
         session_id: str | None = None,
         stream_parser: Any | None = None,
+        completion_record_types: frozenset[str] = frozenset({"result"}),
+        session_record_types: frozenset[str] = frozenset({"assistant"}),
     ) -> Awaitable[SubprocessResult]: ...

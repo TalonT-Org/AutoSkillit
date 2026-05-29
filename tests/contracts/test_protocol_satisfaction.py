@@ -453,6 +453,8 @@ class TestGroupDApiContractPreservation:
             "marker_dir",
             "session_id",
             "stream_parser",
+            "completion_record_types",
+            "session_record_types",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

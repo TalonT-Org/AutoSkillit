@@ -617,6 +617,8 @@ class DefaultSubprocessRunner:
         marker_dir: Path | None = None,
         session_id: str | None = None,
         stream_parser: StreamParser | None = None,
+        completion_record_types: frozenset[str] = frozenset({"result"}),
+        session_record_types: frozenset[str] = frozenset({"assistant"}),
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -638,4 +640,6 @@ class DefaultSubprocessRunner:
             marker_dir=marker_dir,
             session_id=session_id,
             stream_parser=stream_parser,
+            heartbeat_record_types=completion_record_types,
+            session_record_types=session_record_types,
         )

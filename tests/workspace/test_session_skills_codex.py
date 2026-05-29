@@ -7,13 +7,37 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import ValidatedAddDir
+from autoskillit.core import BackendCapabilities, ValidatedAddDir
 from autoskillit.workspace.session_skills import (
     _SKILLS_SUBDIR,
     CODEX_SKILLS_SUBDIR,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
+
+_CODEX_CAPABILITIES = BackendCapabilities(
+    channel_b_capable=False,
+    pty_required=False,
+    session_resume_capable=True,
+    skill_injection_capable=True,
+    supports_thinking_blocks=False,
+    supports_claude_format_stdout=False,
+    exit_code_is_terminal=True,
+    mcp_config_capable=True,
+    food_truck_capable=True,
+    completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
+    session_record_types=frozenset({"item.completed"}),
+    required_session_files=frozenset({"config.toml"}),
+    session_dir_symlinks=frozenset({"auth.json", "sessions"}),
+    skills_subdir="skills",
+)
+
+
+def _make_codex_backend() -> MagicMock:
+    b = MagicMock()
+    b.name = "codex"
+    b.capabilities = _CODEX_CAPABILITIES
+    return b
 
 
 @pytest.fixture
@@ -26,8 +50,7 @@ def codex_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
-    backend = MagicMock()
-    backend.name = "codex"
+    backend = _make_codex_backend()
 
     return type(
         "CodexEnv",
@@ -117,8 +140,7 @@ def test_codex_init_session_config_toml_missing_raises(
     (fake_home / ".codex").mkdir(parents=True)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
-    backend = MagicMock()
-    backend.name = "codex"
+    backend = _make_codex_backend()
 
     mgr = make_session_skill_manager()
     with pytest.raises(FileNotFoundError):

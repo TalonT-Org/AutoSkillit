@@ -87,7 +87,9 @@ class TestStepBackendPtyOverride:
         minimal_ctx.runner = runner
         minimal_ctx.backend = _mock_backend(pty_required=True)
 
-        codex_step = _mock_backend(pty_required=False, channel_b_capable=False)
+        codex_step = _mock_backend(
+            pty_required=False, channel_b_capable=False, process_name="codex"
+        )
         codex_step.name = "codex"
         _mock_parsed = Mock()
         _mock_parsed.raw = {"subtype": "success"}

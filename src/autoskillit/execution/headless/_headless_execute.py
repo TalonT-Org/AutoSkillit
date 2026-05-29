@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, cast
 import anyio
 
 from autoskillit.core import (
-    AGENT_BACKEND_CODEX,
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
     CmdSpec,
@@ -152,14 +151,16 @@ async def _execute_claude_headless(
 
     if spec.cmd:
         _binary = Path(spec.cmd[0]).stem
-        if _binary in {"claude", "codex"}:
-            _expected = "claude" if _step_backend.name == "claude-code" else "codex"
-            if _binary != _expected:
-                raise RuntimeError(
-                    f"Backend coherence violation: backend.name={_step_backend.name!r} "
-                    f"but subprocess binary is {_binary!r}"
-                )
+        _expected = _step_backend.capabilities.process_name
+        if isinstance(_expected, str) and _expected and _binary != _expected:
+            from autoskillit.execution.backends import BACKEND_REGISTRY  # noqa: PLC0415
 
+            _known = {b().capabilities.process_name for b in BACKEND_REGISTRY.values()}
+            if _binary in _known:
+                raise RuntimeError(
+                    f"Backend coherence violation: expected process_name="
+                    f"{_expected!r} but binary is {_binary!r}"
+                )
     assert_headless_cmd(spec)
 
     linux_tracing_cfg = ctx.config.linux_tracing
@@ -250,6 +251,8 @@ async def _execute_claude_headless(
                 marker_dir=marker_dir,
                 session_id=session_id,
                 stream_parser=_stream_parser,
+                completion_record_types=_step_backend.capabilities.completion_record_types,
+                session_record_types=_step_backend.capabilities.session_record_types,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
@@ -472,7 +475,7 @@ async def _execute_claude_headless(
         from autoskillit.execution.session_log import flush_session_log
 
         _codex_log: Path | None = None
-        if _step_backend.name == AGENT_BACKEND_CODEX and skill_result.session_id:
+        if not _step_backend.capabilities.channel_b_capable and skill_result.session_id:
             try:
                 _codex_log = _step_backend.session_locator().locate_session(
                     skill_result.session_id

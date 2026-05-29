@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import time
 from pathlib import Path
 
@@ -310,6 +311,10 @@ async def run_skill(
             }
         )
     try:
+        from autoskillit.server import _get_ctx
+
+        _cleanup_session_id: str | None = None
+        tool_ctx = _get_ctx()
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
             await _notify(
@@ -320,7 +325,7 @@ async def run_skill(
                 extra={"cwd": cwd, "model": model or "default"},
             )
 
-            from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import _get_config
 
             # Auto-enrich order_id from the fleet dispatcher's env variable when the
             # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
@@ -333,7 +338,6 @@ async def run_skill(
                 if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
                     return gate_error
 
-            tool_ctx = _get_ctx()
             if tool_ctx.executor is None:
                 return json.dumps({"success": False, "error": "Executor not configured"})
 
@@ -507,6 +511,7 @@ async def run_skill(
             ):
                 _ephemeral_root = tool_ctx.ephemeral_root
                 session_id = f"headless-{uuid4().hex[:12]}"
+                _cleanup_session_id = session_id
                 _restored = _runner.restore_skill_snapshot(  # type: ignore[attr-defined]
                     step_name, _ephemeral_root, session_id
                 )
@@ -526,6 +531,7 @@ async def run_skill(
                     allow_only = closure if closure else None
 
                 session_id = f"headless-{uuid4().hex[:12]}"
+                _cleanup_session_id = session_id
                 session_root = tool_ctx.session_skill_manager.init_session(
                     session_id,
                     cook_session=False,
@@ -654,3 +660,27 @@ async def run_skill(
     except BaseException:
         logger.warning("run_skill cancelled", exc_info=True)
         raise
+    finally:
+        _sid: str | None = locals().get("_cleanup_session_id")  # type: ignore[assignment]
+        if _sid is not None:
+            _ssm = tool_ctx.session_skill_manager  # type: ignore[possibly-undefined]
+            if _ssm is not None:
+                try:
+                    _ssm.cleanup_session(_sid)
+                except Exception:
+                    logger.warning(
+                        "session_skill_cleanup_failed",
+                        session_id=_sid,
+                        exc_info=True,
+                    )
+            elif tool_ctx.ephemeral_root is not None:  # type: ignore[possibly-undefined]
+                _cleanup_dir = tool_ctx.ephemeral_root / _sid  # type: ignore[possibly-undefined]
+                if _cleanup_dir.is_dir():
+                    try:
+                        shutil.rmtree(_cleanup_dir)
+                    except Exception:
+                        logger.warning(
+                            "session_dir_rmtree_failed",
+                            path=str(_cleanup_dir),
+                            exc_info=True,
+                        )

@@ -11,7 +11,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 @pytest.mark.anyio
 async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(
-    tool_ctx_kitchen_open, tmp_path
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ):
     """T-OVR-014: run_skill passes ephemeral session dir (not raw skills_extended/) as add_dirs."""
     from autoskillit.server.tools.tools_execution import run_skill
@@ -19,6 +19,11 @@ async def test_raw_skills_extended_excluded_from_run_skill_add_dirs(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
+
+    # Prevent cleanup_session from removing the session dir before we inspect it
+    ssm = tool_ctx_kitchen_open.session_skill_manager
+    if ssm is not None:
+        monkeypatch.setattr(ssm, "cleanup_session", lambda _sid: True)
 
     await run_skill("/autoskillit:investigate foo", str(tmp_path))
 

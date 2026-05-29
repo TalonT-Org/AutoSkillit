@@ -407,3 +407,109 @@ async def test_run_skill_provider_extras_none_when_default_profile(
 
     assert executor.calls[0].provider_extras is None
     assert executor.calls[0].profile_name == ""
+
+
+@pytest.mark.anyio
+async def test_run_skill_calls_cleanup_session_after_execution(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+):
+    """cleanup_session is called with the session_id after executor.run completes."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    cleanup_calls: list[str] = []
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
+    mock_ssm.compute_skill_closure.return_value = None
+    mock_ssm.cleanup_session.side_effect = lambda sid: cleanup_calls.append(sid) or True
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/autoskillit:test-skill", str(tmp_path))
+
+    assert len(cleanup_calls) == 1
+    assert cleanup_calls[0].startswith("headless-")
+
+
+@pytest.mark.anyio
+async def test_run_skill_cleans_up_on_skill_md_not_found(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+):
+    """Early return when SKILL.md not found still triggers session cleanup."""
+    import json
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+
+    cleanup_calls: list[str] = []
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
+    mock_ssm.compute_skill_closure.return_value = frozenset({"target-skill"})
+    mock_ssm.cleanup_session.side_effect = lambda sid: cleanup_calls.append(sid) or True
+    # Return None from resolver so resolve_target_skill returns (cmd, name)
+    # without accessing .source on the info object
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = None
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/autoskillit:target-skill", str(tmp_path)))
+
+    assert len(cleanup_calls) == 1
+    assert not result.get("success", True)
+
+
+@pytest.mark.anyio
+async def test_run_skill_cleans_up_on_init_session_failure(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+):
+    """Partial init_session failure still triggers cleanup for the session_id."""
+    from unittest.mock import MagicMock
+
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    cleanup_calls: list[str] = []
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.side_effect = OSError("disk full")
+    mock_ssm.compute_skill_closure.return_value = None
+    mock_ssm.cleanup_session.side_effect = lambda sid: cleanup_calls.append(sid) or True
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/autoskillit:test-skill", str(tmp_path))
+
+    assert len(cleanup_calls) == 1
+    assert cleanup_calls[0].startswith("headless-")
+
+
+@pytest.mark.anyio
+async def test_run_skill_succeeds_when_cleanup_session_raises(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+):
+    """cleanup_session failure is swallowed — run_skill still returns the result."""
+    import json
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
+    mock_ssm.compute_skill_closure.return_value = None
+    mock_ssm.cleanup_session.side_effect = PermissionError("locked")
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/autoskillit:test-skill", str(tmp_path)))
+
+    mock_ssm.cleanup_session.assert_called_once()
+    assert result.get("success") is True

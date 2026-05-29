@@ -148,6 +148,34 @@ async def _run_deferred_init(ready_event: _asyncio.Event) -> None:
         ready_event.set()
 
 
+_CLEANUP_STALE_MAX_AGE = 86400
+
+
+async def _cleanup_stale_loop(interval: float = 1800.0) -> None:
+    """Periodically sweep stale session skill directories (defense-in-depth).
+
+    Runs for the server lifetime. Sleep-first: deferred_initialize already
+    ran cleanup_stale at startup. CancelledError from sleep propagates
+    uncaught, terminating the loop cleanly.
+    """
+    loop = _asyncio.get_running_loop()
+    while True:
+        await _asyncio.sleep(interval)
+        ctx = _get_ctx_or_none()
+        if ctx is not None and ctx.session_skill_manager is not None:
+            try:
+                removed = await loop.run_in_executor(
+                    None,
+                    lambda: ctx.session_skill_manager.cleanup_stale(  # type: ignore[union-attr]
+                        max_age_seconds=_CLEANUP_STALE_MAX_AGE
+                    ),
+                )
+                if removed:
+                    logger.info("cleanup_stale_sweep", removed=removed)
+            except Exception:
+                logger.warning("cleanup_stale_loop_error", exc_info=True)
+
+
 async def _fleet_auto_gate_boot(ctx: Any) -> None:
     """Auto-open the kitchen gate and prime quota/registry state for fleet sessions.
 
@@ -474,6 +502,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             create_background_task(_run_hook_health_check_async(), label="hook_health")
         )
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
+        bg_tasks.append(create_background_task(_cleanup_stale_loop(), label="cleanup_stale"))
         _boot_ctx = _get_ctx_or_none()
 
         if _boot_ctx is not None:

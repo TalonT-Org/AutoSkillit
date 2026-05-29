@@ -95,7 +95,7 @@ def _post_dispatch_cleanup(
     cache_invalidator: Callable[[str], None] | None,
     quota_refresher: Callable[..., Any],
 ) -> None:
-    """Run quota cache invalidation, background quota refresh, and session skill cleanup."""
+    """Run quota cache invalidation and background quota refresh."""
     if cache_invalidator is not None:
         cache_invalidator(tool_ctx.config.quota_guard.cache_path)
 
@@ -104,17 +104,6 @@ def _post_dispatch_cleanup(
             quota_refresher(tool_ctx.config.quota_guard),
             label="quota_post_dispatch_refresh",
         )
-
-    if tool_ctx.session_skill_manager is not None and skill_result.session_id:
-        try:
-            tool_ctx.session_skill_manager.cleanup_session(skill_result.session_id)
-        except Exception as exc:
-            logger.warning(
-                "session skills cleanup failed — dispatch not affected",
-                session_id=skill_result.session_id,
-                exc_class=type(exc).__name__,
-                exc_info=True,
-            )
 
 
 async def _touch_dispatch_marker(

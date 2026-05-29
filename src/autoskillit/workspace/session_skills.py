@@ -723,7 +723,7 @@ class DefaultSessionSkillManager:
             return True
         return False
 
-    def cleanup_stale(self, max_age_seconds: int = 259200) -> int:
+    def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
         """Remove session dirs not accessed within max_age_seconds.
 
         Returns count of removed directories.

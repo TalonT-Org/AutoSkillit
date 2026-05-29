@@ -155,12 +155,12 @@ def test_init_session_includes_non_disabled_skills(tmp_path: Path) -> None:
 
 
 # REQ-EPH-002
-def test_cleanup_stale_default_is_72_hours() -> None:
+def test_cleanup_stale_default_is_24_hours() -> None:
     import inspect
 
     sig = inspect.signature(DefaultSessionSkillManager.cleanup_stale)
     default = sig.parameters["max_age_seconds"].default
-    assert default == 259200, f"Expected 259200 (72h), got {default}"
+    assert default == 86400, f"Expected 86400 (24h), got {default}"
 
 
 # REQ-PACK-005 / REQ-PACK-006: _resolve_effective_disabled

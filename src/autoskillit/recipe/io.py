@@ -21,6 +21,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.core import fast_loads as _fast_loads
+from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
 from autoskillit.recipe.schema import (
     AUTOSKILLIT_VERSION_KEY,
@@ -92,10 +93,7 @@ def _assert_no_raw_placeholders(
                 + (f" ({context})" if context else "")
             )
     if hidden_ingredient_names:
-        import regex as _re  # noqa: PLC0415
-
-        _hidden_ref_re = _re.compile(r"\$\{\{\s*inputs\.(\w+)\s*\}\}")
-        for _m in _hidden_ref_re.finditer(text):
+        for _m in INPUT_REF_RE.finditer(text):
             _name = _m.group(1)
             if _name in hidden_ingredient_names:
                 raise ValueError(

@@ -137,6 +137,12 @@ class TestIsGhCommand:
     def test_env_gh(self):
         assert is_gh_command(["env", "gh", "pr", "view"])
 
+    def test_gh_after_shell_op(self):
+        segments = tokenize_command_segments("git status && gh pr view 123")
+        gh_segments = [seg for seg in segments if is_gh_command(seg)]
+        assert len(gh_segments) == 1
+        assert gh_segments[0][0] == "gh"
+
 
 class TestExtractInterpreterWritePath:
     def test_open_literal_path(self):

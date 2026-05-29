@@ -337,6 +337,27 @@ class TestExtractBashWriteTargets:
         result_real = _extract_bash_write_targets("echo x > /tmp/out.txt")
         assert result_real == ["/tmp/out.txt"]
 
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "sed -i 's/x/y/' /outside/file.txt",
+            "tee /outside/file.txt",
+            "mv /src /outside/dst",
+            "cp /src /outside/dst",
+            "patch /outside/file.txt",
+            "rm /outside/file.txt",
+            "unlink /outside/file.txt",
+        ],
+    )
+    def test_all_write_cmd_families_have_deny_coverage(
+        self, cmd: str, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/allowed/prefix/")
+        result = _run_hook(_build_bash_event(cmd))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
 
 class TestWriteGuardRealisticCommands:
     """Integration tests: common agent-generated commands must not be blocked."""

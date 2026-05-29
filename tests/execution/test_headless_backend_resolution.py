@@ -50,7 +50,6 @@ class TestResolveSessionLogDir:
         minimal_ctx.backend = _mock_backend(channel_b_capable=False)
         result = _headless_mod._resolve_session_log_dir("/some/cwd", minimal_ctx.backend)
         assert result is None
-        assert result is None
 
 
 class TestStepBackendPtyOverride:

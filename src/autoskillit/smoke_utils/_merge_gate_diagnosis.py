@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import re as _re
 from pathlib import Path
 
-_FAILED_TEST_RE = _re.compile(r"^FAILED\s+(\S+)", _re.MULTILINE)
-_TIMEOUT_RE = _re.compile(r"timeout|timed out|TimeoutError", _re.IGNORECASE)
-_ENV_ERROR_RE = _re.compile(
-    r"ModuleNotFoundError|ImportError|FileNotFoundError|No such file", _re.IGNORECASE
+import regex as re
+
+from autoskillit.core.io import atomic_write
+
+_FAILED_TEST_RE = re.compile(r"^FAILED\s+(\S+)", re.MULTILINE)
+_TIMEOUT_RE = re.compile(r"timeout|timed out|TimeoutError", re.IGNORECASE)
+_ENV_ERROR_RE = re.compile(
+    r"ModuleNotFoundError|ImportError|FileNotFoundError|No such file", re.IGNORECASE
 )
 
 
@@ -68,5 +71,5 @@ def diagnose_merge_gate(
         f"failure_subtype = {subtype}\n"
     )
 
-    out_path.write_text(content, encoding="utf-8")
+    atomic_write(out_path, content)
     return {"diagnosis_path": str(out_path), "ci_conclusion": "failure"}

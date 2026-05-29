@@ -20,7 +20,7 @@ _ARG_TOKEN_PATTERN = re.compile(r"\$\{\{[^}]+\}\}|[^\s]+")
 def _count_skill_args(skill_command: str) -> int:
     """Count positional args in a skill_command after the skill name."""
     tokens = _ARG_TOKEN_PATTERN.findall(skill_command)
-    # First token is the skill name (e.g. /autoskillit:resolve-failures)
+    # First token is the skill name (e.g. /resolve-failures)
     return max(0, len(tokens) - 1)
 
 

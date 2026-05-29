@@ -141,7 +141,7 @@ def main() -> None:
         sys.exit(0)
 
     norm_prefixes = [os.path.realpath(p).rstrip("/") + "/" for p in raw_prefixes]
-    display_prefix = raw_prefixes[0]
+    display_prefix = ", ".join(raw_prefixes)
 
     try:
         data = json.loads(sys.stdin.read())

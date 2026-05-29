@@ -186,10 +186,7 @@ def _build_error_path_telemetry(
 ) -> SessionTelemetry:
     """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
     if github_api_log is not None:
-        if step_name and order_id:
-            _api_usage = github_api_log.drain_step(session_id, step_name, order_id)
-        else:
-            _api_usage = github_api_log.drain(session_id)
+        _api_usage = github_api_log.drain_step(session_id, step_name, order_id)
     else:
         _api_usage = None
     return SessionTelemetry(

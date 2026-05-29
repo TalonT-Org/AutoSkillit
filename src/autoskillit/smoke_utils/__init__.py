@@ -11,6 +11,7 @@ from autoskillit.smoke_utils._eval import (
     parse_eval_manifests,
 )
 from autoskillit.smoke_utils._git import (
+    assert_has_net_changes,
     check_bug_report_non_empty,
     check_commits_ahead,
     close_issue_already_done,
@@ -31,6 +32,7 @@ from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch
 
 __all__ = [
     "LOCAL_ROUND_EXEMPT_VERDICTS",
+    "assert_has_net_changes",
     "annotate_pr_diff",
     "build_agent_eval_context",
     "build_eval_context",

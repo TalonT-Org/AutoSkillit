@@ -364,12 +364,17 @@ steps:
     with:
       callable: "autoskillit.recipe._cmd_rpc.commit_guard"
       worktree_path: "${{ context.worktree_path }}"
-    on_success: main_repo_guard
+      base_branch: "${{ inputs.base_branch }}"
+    on_result:
+    - when: "${{ result.committed }} == 'regression_detected'"
+      route: release_issue_failure
+    - route: main_repo_guard
     on_failure: main_repo_guard
     note: >
       Belt-and-suspenders guard: auto-commits any uncommitted changes before merge.
       Catches dirty state from context-exhausted skills, cascading pre-commit auto-fixes,
       or any other source. Routes to main_repo_guard to handle dirty main repo state.
+      Returns regression_detected if uncommitted changes would revert the implementation.
 
   main_repo_guard:
     tool: run_python
@@ -508,12 +513,29 @@ steps:
       route: verify
     - when: "${{ result.next }} == more_groups"
       route: plan
-    - route: audit_impl
+    - route: assert_has_net_changes
     note: >
       Routing step — no tool call. The agent evaluates what comes next:
       1. If more plan_parts remain for the current group → go to verify with next part.
       2. If all plan_parts done but more groups remain → go to plan with next group's task.
-      3. If all groups complete → go to audit_impl.
+      3. If all groups complete → go to assert_has_net_changes.
+
+  assert_has_net_changes:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.assert_has_net_changes"
+      cwd: "${{ context.work_dir }}"
+      base_branch: "${{ inputs.base_branch }}"
+    on_result:
+    - when: "${{ result.has_net_changes }} == 'false'"
+      route: release_issue_failure
+    - route: audit_impl
+    on_failure: release_issue_failure
+    note: >
+      Zero-diff ghost gate: verifies the branch has non-zero net changes vs
+      base_branch after all plan parts and groups are merged. Catches reversion
+      commits from context-exhausted SKILL.md context-limit handlers that bypass
+      commit_guard.
 
   audit_impl:
     tool: run_skill

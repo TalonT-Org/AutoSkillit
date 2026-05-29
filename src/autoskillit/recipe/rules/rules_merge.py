@@ -448,3 +448,89 @@ def _check_merge_enrollment_auto_consistency(ctx: ValidationContext) -> list[Rul
                     )
                 )
     return findings
+
+
+# ---------------------------------------------------------------------------
+# merge-without-net-change-gate rule
+# ---------------------------------------------------------------------------
+
+_NET_CHANGE_CALLABLE = "autoskillit.smoke_utils.assert_has_net_changes"
+
+
+def _is_net_change_gate(step_name: str, ctx: ValidationContext) -> bool:
+    """Return True if step is a net-change assertion gate."""
+    if step_name.startswith("assert_has_net_changes"):
+        return True
+    step = ctx.recipe.steps.get(step_name)
+    if step and step.tool == "run_python":
+        return step.with_args.get("callable") == _NET_CHANGE_CALLABLE
+    return False
+
+
+def _get_merge_success_routes(step_name: str, ctx: ValidationContext) -> set[str]:
+    """Return the success-path routes from a merge_worktree step.
+
+    Success routes are: all on_result routes without a 'when' condition (fallthrough),
+    plus on_success if set. Failure and error routes are excluded.
+    """
+    step = ctx.recipe.steps.get(step_name)
+    if step is None:
+        return set()
+    routes: set[str] = set()
+    if step.on_result and step.on_result.conditions:
+        for cond in step.on_result.conditions:
+            if cond.when is None and cond.route:
+                routes.add(cond.route)
+    if step.on_success:
+        routes.add(step.on_success)
+    return routes
+
+
+@semantic_rule(
+    name="merge-without-net-change-gate",
+    description=(
+        "A merge_worktree step has no assert_has_net_changes step reachable on its "
+        "success path. Without this gate, a zero-diff ghost commit (e.g. from a "
+        "context-exhausted SKILL.md context-limit handler) can reach merge and produce "
+        "a zero-diff PR. Add assert_has_net_changes between next_or_done's terminal "
+        "done branch and audit_impl."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_merge_without_net_change_gate(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "merge_worktree":
+            continue
+
+        success_routes = _get_merge_success_routes(step_name, ctx)
+        if not success_routes:
+            # No success route defined — check all successors instead
+            success_routes = ctx.step_graph.get(step_name, set())
+
+        # BFS forward from success routes
+        reachable: set[str] = set()
+        frontier = set(success_routes) & set(ctx.step_graph)
+        while frontier:
+            reachable |= frontier
+            next_frontier: set[str] = set()
+            for name in frontier:
+                next_frontier |= ctx.step_graph.get(name, set()) - reachable
+            frontier = next_frontier
+
+        if not any(_is_net_change_gate(r, ctx) for r in reachable | success_routes):
+            findings.append(
+                RuleFinding(
+                    rule="merge-without-net-change-gate",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"merge_worktree step '{step_name}' has no assert_has_net_changes "
+                        f"gate reachable on its success path. A zero-diff ghost commit can "
+                        f"reach merge and produce a zero-diff PR. Add an "
+                        f"assert_has_net_changes step between next_or_done's terminal done "
+                        f"branch and audit_impl."
+                    ),
+                )
+            )
+    return findings

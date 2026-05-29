@@ -61,7 +61,7 @@ def check_dropped_healthy_loop(
 
 
 def main_repo_guard(clone_path: str) -> dict[str, str]:
-    """Stash dirty state from the main repo before merge."""
+    """Discard dirty state from the main repo before merge (ephemeral clone)."""
     result = run_git(["status", "--porcelain"], cwd=clone_path)
     if result.returncode != 0:
         raise subprocess.CalledProcessError(
@@ -131,7 +131,98 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
     return {"cleaned": "true"}
 
 
-def commit_guard(worktree_path: str) -> dict[str, str]:
+def _count_numstat_net(output: str) -> int:
+    """Sum net insertions (insertions - deletions) from git diff --numstat output."""
+    total = 0
+    for line in output.strip().splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) >= 2:
+            try:
+                total += int(parts[0]) - int(parts[1])
+            except ValueError:
+                pass
+    return total
+
+
+def _check_regression(
+    worktree_path: str, files_to_add: list[str], base_branch: str
+) -> dict[str, str] | None:
+    """Detect if uncommitted changes regress the implementation versus base_branch.
+
+    Compares working-tree delta vs committed-only delta (both against merge-base).
+    Returns a regression_detected dict if the uncommitted changes would reduce the
+    implementation's net contribution by more than 10 lines; else returns None.
+    """
+    mb = subprocess.run(
+        ["git", "merge-base", "HEAD", base_branch],
+        cwd=worktree_path,
+        capture_output=True,
+        text=True,
+    )
+    if mb.returncode != 0 or not mb.stdout.strip():
+        return None  # No common ancestor (fresh repo) — skip check
+    merge_base_sha = mb.stdout.strip()
+
+    committed = subprocess.run(
+        ["git", "diff", "--numstat", merge_base_sha, "HEAD", "--", *files_to_add],
+        cwd=worktree_path,
+        capture_output=True,
+        text=True,
+    )
+    committed_net = _count_numstat_net(committed.stdout)
+    if committed_net <= 0:
+        return None  # No implementation commits yet — skip check
+
+    wt = subprocess.run(
+        ["git", "diff", "--numstat", merge_base_sha, "--", *files_to_add],
+        cwd=worktree_path,
+        capture_output=True,
+        text=True,
+    )
+    wt_net = _count_numstat_net(wt.stdout)
+
+    if committed_net - wt_net <= 10:
+        return None  # Uncommitted changes do not meaningfully reduce the implementation
+
+    # Identify per-file regressions (per-file delta loss > 5 lines)
+    reverted: list[str] = []
+    for f in files_to_add:
+        f_c = subprocess.run(
+            ["git", "diff", "--numstat", merge_base_sha, "HEAD", "--", f],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+        f_w = subprocess.run(
+            ["git", "diff", "--numstat", merge_base_sha, "--", f],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+        )
+        if _count_numstat_net(f_c.stdout) - _count_numstat_net(f_w.stdout) > 5:
+            reverted.append(f)
+
+    # Collect insertion/deletion totals from working-tree diff for diagnostics
+    total_ins = 0
+    total_del = 0
+    for line in wt.stdout.strip().splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) >= 2:
+            try:
+                total_ins += int(parts[0])
+                total_del += int(parts[1])
+            except ValueError:
+                pass
+
+    return {
+        "committed": "regression_detected",
+        "reverted_files": ", ".join(reverted),
+        "insertions": str(total_ins),
+        "deletions": str(total_del),
+    }
+
+
+def commit_guard(worktree_path: str, base_branch: str = "") -> dict[str, str]:
     """Auto-commit pending changes if worktree is dirty, excluding generated files."""
     result = subprocess.run(
         ["git", "status", "--porcelain=v1", "-z", "-uall"],
@@ -160,6 +251,11 @@ def commit_guard(worktree_path: str) -> dict[str, str]:
 
     if not files_to_add:
         return {"committed": "false"}
+
+    if base_branch:
+        regression = _check_regression(worktree_path, files_to_add, base_branch)
+        if regression is not None:
+            return regression
 
     run_git(["add", "--", *files_to_add], cwd=worktree_path, check=True)
     run_git(

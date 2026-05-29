@@ -236,7 +236,7 @@ def test_flake_suspected_not_in_merge_cycle_is_clean() -> None:
     ["remediation.yaml", "implementation.yaml", "implementation-groups.yaml"],
 )
 def test_rule_fires_for_all_affected_recipes_before_fix(recipe_name: str) -> None:
-    """Before recipe fix: rule fires ERROR for all three pipeline recipes."""
+    """Post recipe fix: rule no longer fires for the three pipeline recipes."""
     from autoskillit.core import pkg_root
     from autoskillit.recipe.io import load_recipe
 
@@ -244,5 +244,4 @@ def test_rule_fires_for_all_affected_recipes_before_fix(recipe_name: str) -> Non
     recipe = load_recipe(recipe_path)
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "flake-suspected-unwinnable-loop"]
-    # After recipe fixes are applied, this should be zero.
-    assert len(flagged) >= 1
+    assert len(flagged) == 0

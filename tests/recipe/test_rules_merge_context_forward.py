@@ -341,12 +341,7 @@ def test_assess_step_with_failure_context_is_clean() -> None:
     ["remediation.yaml", "implementation.yaml", "implementation-groups.yaml"],
 )
 def test_rule_fires_for_all_affected_recipes_before_fix(recipe_name: str) -> None:
-    """Before recipe fix: rule fires ERROR for all three pipeline recipes.
-
-    This test documents the pre-fix state. Once Step 5-6 fixes are applied,
-    this test should show zero findings — but until then it confirms the rule
-    detects the real structural problem.
-    """
+    """Post recipe fix: rule no longer fires for the three pipeline recipes."""
     from autoskillit.core import pkg_root
     from autoskillit.recipe.io import load_recipe
 
@@ -354,5 +349,4 @@ def test_rule_fires_for_all_affected_recipes_before_fix(recipe_name: str) -> Non
     recipe = load_recipe(recipe_path)
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-test-gate-context-not-forwarded"]
-    # After recipe fixes are applied, this should be zero. Before fixes: may be non-zero.
-    assert len(flagged) >= 1
+    assert len(flagged) == 0

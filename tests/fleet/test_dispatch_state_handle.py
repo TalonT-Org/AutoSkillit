@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+from autoskillit.fleet import (
+    DispatchRecord,
+    DispatchStatus,
+    mark_dispatch_running,
+    read_state,
+    write_initial_state,
+)
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -580,3 +586,39 @@ class TestProcessIdentityPreservation:
         assert abs(disp.dispatched_create_time - _KNOWN_CREATE_TIME) < 1.0, (
             f"Expected create_time≈{_KNOWN_CREATE_TIME}, got {disp.dispatched_create_time}"
         )
+
+
+class TestIdentityDegradedFlag:
+    def test_identity_degraded_when_boot_id_empty(self, tmp_path: Path) -> None:
+        """Dispatch with empty boot_id and valid ticks must store identity_degraded=True."""
+        sp = tmp_path / "state.json"
+        write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
+        mark_dispatch_running(
+            sp,
+            "d1",
+            dispatch_id="id1",
+            dispatched_pid=123,
+            starttime_ticks=5,
+            boot_id="",
+            identity_degraded=True,
+        )
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].identity_degraded is True
+
+    def test_identity_degraded_false_when_full_identity(self, tmp_path: Path) -> None:
+        """Dispatch with valid boot_id and valid ticks must store identity_degraded=False."""
+        sp = tmp_path / "state.json"
+        write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
+        mark_dispatch_running(
+            sp,
+            "d1",
+            dispatch_id="id1",
+            dispatched_pid=123,
+            starttime_ticks=5,
+            boot_id="boot-abc",
+            identity_degraded=False,
+        )
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].identity_degraded is False

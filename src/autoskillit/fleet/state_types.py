@@ -209,6 +209,20 @@ class DispatchRecord:
             resets_at=d.get("resets_at", ""),
         )
 
+    def has_full_identity(self) -> bool:
+        return bool(
+            self.dispatched_pid
+            and self.dispatched_boot_id
+            and self.dispatched_starttime_ticks != 0
+        )
+
+    def has_degraded_identity(self) -> bool:
+        return bool(
+            self.dispatched_pid
+            and self.dispatched_create_time > 0.0
+            and not self.has_full_identity()
+        )
+
     @classmethod
     def refused(
         cls,

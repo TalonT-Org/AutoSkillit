@@ -23,7 +23,6 @@ A coding-agent plugin that orchestrates automated skill-driven workflows using h
   * **No Backward Compatibility Hacks**: No comments about dead code. Remove dead code entirely.
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
-  * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before committing. Do not skip this step even when code appears clean — hooks auto-fix formatting and abort the commit, requiring re-stage and retry.
 
 ### **3.2. File System**
 

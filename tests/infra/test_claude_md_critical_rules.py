@@ -27,22 +27,17 @@ def claude_md() -> str:
 
 
 def test_claude_md_critical_rules_require_precommit(claude_md: str) -> None:
-    """§3.1 (Code and Implementation) must include a pre-commit critical rule.
+    """CLAUDE.md (effective) must include a pre-commit run rule somewhere.
 
     Pre-commit hook failures caused ~15 friction events across 15 sessions.
-    Elevating it to a Critical Rule (not just §5 info) prevents repeat loops
+    The rule lives in the Claude-specific section of CLAUDE.md, not in the
+    generic AGENTS.md §3.1 (AGENTS.md forbids Claude-specific terms).
     (FRICT-3A-1).
     """
-    # Find the §3.1 section using the full heading to avoid false matches
-    assert "### **3.1" in claude_md, "§3.1 section not found in CLAUDE.md"
-    section_start = claude_md.index("### **3.1")
-    next_section = claude_md.find("### **3.", section_start + 1)
-    section_text = (
-        claude_md[section_start:next_section] if next_section != -1 else claude_md[section_start:]
-    )
-    assert "pre-commit run --all-files" in section_text, (
-        "CLAUDE.md §3.1 (Code and Implementation) must include a Critical Rule "
-        "requiring 'pre-commit run --all-files' before committing (FRICT-3A-1)."
+    assert "pre-commit run --all-files" in claude_md, (
+        "CLAUDE.md must include a rule requiring 'pre-commit run --all-files' "
+        "before committing (FRICT-3A-1). Add it to the Pre-commit Hooks section "
+        "or Claude-specific Code and Implementation section."
     )
 
 

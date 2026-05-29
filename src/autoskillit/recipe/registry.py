@@ -88,9 +88,9 @@ def semantic_rule(
     def decorator(
         fn: Callable[[ValidationContext], list[RuleFinding]],
     ) -> Callable[[ValidationContext], list[RuleFinding]]:
+        if any(r.name == name for r in _RULE_REGISTRY):
+            return fn
         if _REGISTRY_FINALIZED:
-            if any(r.name == name for r in _RULE_REGISTRY):
-                return fn
             raise RuntimeError(f"Cannot register rule {name!r} after registry finalization")
         _RULE_REGISTRY.append(
             RuleDef(name=name, description=description, severity=severity, check=fn)

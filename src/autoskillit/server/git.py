@@ -426,7 +426,7 @@ async def perform_merge(
     target = target_or_err
 
     # 7.5b Ref-coherence gate: local vs remote base_branch SHA must match.
-    remote_rc, remote_sha_out, _ = await _run_git(
+    remote_rc, remote_sha_out, remote_stderr = await _run_git(
         ["git", "rev-parse", f"{remote}/{base_branch}"],
         worktree_path,
         10,
@@ -434,7 +434,7 @@ async def perform_merge(
     )
     if remote_rc != 0:
         return {
-            "error": f"Could not resolve {remote}/{base_branch} after fetch",
+            "error": f"Could not resolve {remote}/{base_branch} after fetch: {remote_stderr}",
             "failed_step": MergeFailedStep.REF_COHERENCE,
             "state": MergeState.WORKTREE_INTACT_REF_DIVERGED,
             "worktree_path": worktree_path,

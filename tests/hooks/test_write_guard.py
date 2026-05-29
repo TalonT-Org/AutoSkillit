@@ -722,4 +722,4 @@ class TestExtractBashWriteTargetsNewFamilies:
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets("git reset --hard HEAD")
-        assert result is not None or result == []
+        assert result is None or result == []

@@ -180,7 +180,7 @@ class TestLivenessReaperConsistency:
 
 
 def test_reaper_delegates_to_confirm_dispatch_identity() -> None:
-    source = Path("src/autoskillit/fleet/_dispatch_reaper.py").read_text()
+    source = (Path(__file__).parents[2] / "src/autoskillit/fleet/_dispatch_reaper.py").read_text()
     tree = ast.parse(source)
     calls = [
         node.func.id

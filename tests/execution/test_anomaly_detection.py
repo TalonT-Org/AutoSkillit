@@ -405,3 +405,57 @@ def test_detect_outcome_anomalies_thinking_only_false_falls_back_to_empty_result
     )
     kinds = [a["kind"] for a in anomalies]
     assert "empty_result_with_tokens" in kinds
+
+
+# Model drift detection tests
+
+
+def test_anomaly_kind_model_drift_value():
+    assert AnomalyKind.MODEL_DRIFT == "model_drift"
+
+
+def test_detect_model_drift_emits_anomaly():
+    """detect_model_drift returns MODEL_DRIFT anomaly when configured != observed."""
+    from autoskillit.execution.anomaly_detection import detect_model_drift
+
+    anomalies = detect_model_drift(
+        configured_model="claude-opus-4-6",
+        observed_model="claude-sonnet-4-6",
+    )
+    assert len(anomalies) == 1
+    assert anomalies[0]["kind"] == "model_drift"
+    assert anomalies[0]["detail"]["configured_model"] == "claude-opus-4-6"
+    assert anomalies[0]["detail"]["observed_model"] == "claude-sonnet-4-6"
+
+
+def test_detect_model_drift_no_anomaly_when_matching():
+    """No anomaly when configured model matches the dominant observed model."""
+    from autoskillit.execution.anomaly_detection import detect_model_drift
+
+    anomalies = detect_model_drift(
+        configured_model="claude-opus-4-6",
+        observed_model="claude-opus-4-6",
+    )
+    assert anomalies == []
+
+
+def test_detect_model_drift_skips_when_configured_empty():
+    """No anomaly when configured_model is empty (fallback-only sessions)."""
+    from autoskillit.execution.anomaly_detection import detect_model_drift
+
+    anomalies = detect_model_drift(
+        configured_model="",
+        observed_model="claude-sonnet-4-6",
+    )
+    assert anomalies == []
+
+
+def test_detect_model_drift_skips_when_observed_empty():
+    """No anomaly when observed_model is empty (no token breakdown)."""
+    from autoskillit.execution.anomaly_detection import detect_model_drift
+
+    anomalies = detect_model_drift(
+        configured_model="claude-opus-4-6",
+        observed_model="",
+    )
+    assert anomalies == []

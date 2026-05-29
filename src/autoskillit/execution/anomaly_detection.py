@@ -24,6 +24,7 @@ class AnomalyKind(StrEnum):
     EMPTY_RESULT_WITH_TOKENS = "empty_result_with_tokens"
     THINKING_ONLY_FINAL_TURN = "thinking_only_final_turn"
     API_RETRY_EXHAUSTION = "api_retry_exhaustion"
+    MODEL_DRIFT = "model_drift"
 
 
 class AnomalySeverity(StrEnum):
@@ -359,4 +360,31 @@ def detect_outcome_anomalies(
                 "snapshot": {},
             }
         )
+    return anomalies
+
+
+def detect_model_drift(
+    configured_model: str,
+    observed_model: str,
+) -> list[dict[str, object]]:
+    """Detect model drift: configured model differs from the dominant observed model.
+
+    Returns a MODEL_DRIFT anomaly if both are non-empty and differ.
+    The caller computes the observed model via _primary_model_identifier().
+    """
+    anomalies: list[dict[str, object]] = []
+    if not configured_model or not observed_model:
+        return anomalies
+    if observed_model == configured_model:
+        return anomalies
+    anomalies.append(
+        _anomaly(
+            AnomalyKind.MODEL_DRIFT,
+            AnomalySeverity.WARNING,
+            {"configured_model": configured_model, "observed_model": observed_model},
+            {},
+            OUTCOME_ANOMALY_SEQ_SENTINEL,
+            OUTCOME_ANOMALY_PID_SENTINEL,
+        )
+    )
     return anomalies

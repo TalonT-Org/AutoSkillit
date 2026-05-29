@@ -91,7 +91,11 @@ class TestStepBackendPtyOverride:
         codex_step = _mock_backend(pty_required=False, channel_b_capable=False)
         codex_step.name = "codex"
         _mock_parsed = Mock()
-        _mock_parsed.raw = {}
+        _mock_parsed.raw = {"subtype": "success"}
+        _mock_parsed.error = None
+        _mock_parsed.session_id = "s1"
+        _mock_parsed.success = True
+        _mock_parsed.output = "done"
         _mock_parser = Mock()
         _mock_parser.parse_stdout.return_value = _mock_parsed
         codex_step.result_parser.return_value = _mock_parser

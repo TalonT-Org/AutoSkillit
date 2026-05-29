@@ -260,6 +260,223 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatc
     assert summary["turn_timestamps"] == ["2026-04-15T07:00:00Z", "2026-04-15T07:00:05Z"]
 
 
+def test_flush_session_log_includes_no_request_id_turns(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        _make_cc_jsonl_record(
+            request_id="req-001",
+            timestamp="2026-05-01T10:00:00Z",
+            content=[_make_tool_block("Read")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            timestamp="2026-05-01T10:00:05Z",
+            content=[_make_tool_block("Edit")],
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-05-01T10:00:00Z",
+        proc_snapshots=None,
+        telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert len(summary["turn_timestamps"]) == 2
+    assert len(summary["turn_tool_calls"]) == 2
+    assert len(summary["request_ids"]) == 2
+    assert summary["request_ids"][0] == "req-001"
+    assert summary["request_ids"][1].startswith("turn-")
+    assert (
+        len(summary["turn_timestamps"])
+        == len(summary["turn_tool_calls"])
+        == len(summary["request_ids"])
+    )
+
+
+def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        _make_cc_jsonl_record(
+            timestamp="2026-05-01T10:00:00Z",
+            content=[_make_tool_block("Bash")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            timestamp="2026-05-01T10:00:05Z",
+            content=[_make_tool_block("Read")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            timestamp="2026-05-01T10:00:10Z",
+            content=[_make_tool_block("Edit")],
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-05-01T10:00:00Z",
+        proc_snapshots=None,
+        telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert len(summary["turn_timestamps"]) == 3
+    assert len(summary["turn_tool_calls"]) == 3
+    assert len(summary["request_ids"]) == 3
+    assert summary["turn_timestamps"] == [
+        "2026-05-01T10:00:00Z",
+        "2026-05-01T10:00:05Z",
+        "2026-05-01T10:00:10Z",
+    ]
+    assert all(rid.startswith("turn-") for rid in summary["request_ids"])
+
+
+def test_channel_b_turn_count_bounded_by_channel_a(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        _make_cc_jsonl_record(
+            timestamp="2026-05-01T10:00:00Z",
+            content=[_make_tool_block("Bash")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            timestamp="2026-05-01T10:00:05Z",
+            content=[_make_tool_block("Read")],
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    telemetry = SessionTelemetry(
+        token_usage={"input_tokens": 0, "output_tokens": 0, "turn_count": 2},
+        timing_seconds=None,
+        audit_record=None,
+        github_api_usage=None,
+        github_api_requests=0,
+        loc_insertions=0,
+        loc_deletions=0,
+    )
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-05-01T10:00:00Z",
+        proc_snapshots=None,
+        telemetry=telemetry,
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    tu = json.loads((tmp_path / "sessions" / "s" / "token_usage.json").read_text())
+    turn_count = tu.get("turn_count", 0)
+    assert len(summary["turn_timestamps"]) > 0
+    assert turn_count >= len(summary["turn_timestamps"])
+
+
+def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path, monkeypatch):
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        _make_cc_jsonl_record(
+            request_id="req-a",
+            timestamp="2026-05-01T10:00:00Z",
+            content=[_make_tool_block("ToolA")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            timestamp="2026-05-01T10:00:01Z",
+            content=[_make_tool_block("ToolB")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            request_id="req-b",
+            timestamp="2026-05-01T10:00:02Z",
+            content=[_make_tool_block("ToolC")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            timestamp="2026-05-01T10:00:03Z",
+            content=[_make_tool_block("ToolD")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            request_id="req-c",
+            timestamp="2026-05-01T10:00:04Z",
+            content=[_make_tool_block("ToolE")],
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="s",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-05-01T10:00:00Z",
+        proc_snapshots=None,
+        telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
+    )
+    summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
+    assert (
+        len(summary["request_ids"])
+        == len(summary["turn_timestamps"])
+        == len(summary["turn_tool_calls"])
+        == 5
+    )
+    assert summary["request_ids"] == ["req-a", "turn-0", "req-b", "turn-1", "req-c"]
+    assert summary["turn_tool_calls"] == [
+        ["ToolA"],
+        ["ToolB"],
+        ["ToolC"],
+        ["ToolD"],
+        ["ToolE"],
+    ]
+    assert summary["turn_timestamps"] == [
+        "2026-05-01T10:00:00Z",
+        "2026-05-01T10:00:01Z",
+        "2026-05-01T10:00:02Z",
+        "2026-05-01T10:00:03Z",
+        "2026-05-01T10:00:04Z",
+    ]
+
+
 # turn_tool_calls
 
 

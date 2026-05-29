@@ -15,7 +15,7 @@ from ._label_cleanup import (
     discover_campaign_state_files,
     sweep_stale_dispatch_labels,
 )
-from ._liveness import is_dispatch_session_alive
+from ._liveness import confirm_dispatch_identity, is_dispatch_session_alive
 from ._outcome import classify_dispatch_outcome
 from ._prompts import _build_admiral_dispatch_block as _build_admiral_dispatch_block
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
@@ -145,6 +145,7 @@ __all__ = [
     "derive_orchestrator_resume_spec",
     "find_dispatch_for_issue",
     "checkpoint_from_sidecar",
+    "confirm_dispatch_identity",
     "is_dispatch_session_alive",
     "reap_stale_dispatches",
     "reap_stale_dispatches_async",

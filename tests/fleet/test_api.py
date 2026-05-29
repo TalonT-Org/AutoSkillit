@@ -32,7 +32,7 @@ class TestWritePidExceptionSwallow:
     def test_nonexistent_state_logs_warning(self, tmp_path: Path) -> None:
         bogus = tmp_path / "nope" / "state.json"
         with structlog.testing.capture_logs() as logs:
-            _write_pid(bogus, "d1", "id1", 123, 0)
+            _write_pid(bogus, "d1", "id1", 123, 0, boot_id="")
         assert any(
             "_write_pid" in entry.get("event", "")
             for entry in logs
@@ -49,7 +49,7 @@ class TestWritePidExceptionSwallow:
             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         with structlog.testing.capture_logs() as logs:
-            _write_pid(sp, "d1", "id1", 123, 0)
+            _write_pid(sp, "d1", "id1", 123, 0, boot_id="")
         assert any(
             "_write_pid" in entry.get("event", "")
             for entry in logs

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import psutil
 
 from autoskillit.core import get_logger
-from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
+from autoskillit.execution import kill_process_tree, read_boot_id
 
 if TYPE_CHECKING:
     from autoskillit.fleet import CampaignStateMutator, DispatchRecord
@@ -67,6 +67,7 @@ def reap_stale_dispatches(
     from autoskillit.fleet import (  # noqa: PLC0415
         CampaignStateMutator,
         DispatchStatus,
+        confirm_dispatch_identity,
     )
 
     current_boot_id = read_boot_id()
@@ -130,32 +131,7 @@ def reap_stale_dispatches(
                 _mark_dead_pid(dry_run, name, pid, dispatch, m)
                 continue
 
-            current_ticks = read_starttime_ticks(pid)
-            if current_ticks is not None and current_ticks == dispatch.dispatched_starttime_ticks:
-                identity_confirmed = True
-            elif current_ticks is None and dispatch.dispatched_create_time > 0.0:
-                try:
-                    actual_ct = psutil.Process(pid).create_time()
-                    identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
-                except psutil.NoSuchProcess:
-                    _mark_dead_pid(dry_run, name, pid, dispatch, m)
-                    continue
-                except psutil.AccessDenied:
-                    identity_confirmed = False
-            elif (
-                dispatch.dispatched_starttime_ticks == 0 and dispatch.dispatched_create_time > 0.0
-            ):
-                try:
-                    actual_ct = psutil.Process(pid).create_time()
-                    identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
-                    logger.info("reap: ticks=0 fallback to create_time for %s pid=%d", name, pid)
-                except psutil.NoSuchProcess:
-                    _mark_dead_pid(dry_run, name, pid, dispatch, m)
-                    continue
-                except psutil.AccessDenied:
-                    identity_confirmed = False
-            else:
-                identity_confirmed = False
+            identity_confirmed = confirm_dispatch_identity(dispatch)
 
             if identity_confirmed:
                 if dry_run:

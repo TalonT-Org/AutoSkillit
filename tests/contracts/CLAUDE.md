@@ -69,8 +69,8 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_sous_chef_routing.py` | Contract tests for the CONTEXT LIMIT ROUTING section in sous-chef SKILL.md |
 | `test_sous_chef_scheduling.py` | Contract tests for the PARALLEL STEP SCHEDULING section in sous-chef SKILL.md |
 | `test_stage_data_contracts.py` | Contract tests for stage-data SKILL.md — pre-flight resource feasibility gate |
-| `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 | `test_sub_skill_refusal_contracts.py` | Cross-skill contract: every SKILL.md that invokes sub-skills must contain explicit refusal handling language |
+| `test_synthesize_vis_plan_contracts.py` | Contract tests: synthesize-vis-plan SKILL.md structural and content invariants |
 | `test_ticket_body_size_ceiling.py` | Cross-skill contract: issue-filing skills must document body size guard |
 | `test_target_skill_invocability.py` | Contract: the target skill of a run_skill call must be invocable after session setup |
 | `test_token_summary_contracts.py` | Structural contracts for the token summary pipeline |
@@ -80,9 +80,10 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_version_consistency.py` | Cross-file version consistency: pyproject.toml, __init__.__version__, plugin.json, bundled recipe versions |
 | `test_zero_change_circuit_breaker_contracts.py` | Contract tests: zero-change circuit breaker in implementation/remediation recipes |
 | `test_fetch_issue_mock_contracts.py` | Contract test: all fetch_issue mock return values must include a 'state' field |
-
 | `test_review_pr_severity_calibration.py` | Contract test: review-pr SKILL.md must contain severity calibration examples and grouping rule |
 | `test_dry_walkthrough_transformation_extent.py` | Contract test: dry-walkthrough SKILL.md Step 2 must check transformation extent/scope |
+| `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
+
 ## Architecture Notes
 
 `conftest.py` provides `REFUSAL_SIGNALS` constants shared across many contract tests. `_anti_confirm_helpers.py` mirrors the production anti-confirmation regex for structural contract verification.

@@ -260,8 +260,10 @@ def test_primary_model_prefers_output_tokens() -> None:
     assert result == "claude-opus-4-6"
 
 
-def test_primary_model_warns_on_non_dict_breakdown(caplog: pytest.LogCaptureFixture) -> None:
+def test_primary_model_warns_on_non_dict_breakdown() -> None:
     """_primary_model logs warning for non-dict model_breakdown entries."""
+    import structlog.testing
+
     from autoskillit.pipeline.tokens import _primary_model
 
     token_usage = {
@@ -270,6 +272,7 @@ def test_primary_model_warns_on_non_dict_breakdown(caplog: pytest.LogCaptureFixt
             "bad-entry": 12345,
         }
     }
-    result = _primary_model(token_usage)
+    with structlog.testing.capture_logs() as cap:
+        result = _primary_model(token_usage)
     assert result == "claude-opus-4-6"
-    assert "Unexpected model_breakdown entry type" in caplog.text
+    assert any("Unexpected model_breakdown entry type" in entry.get("event", "") for entry in cap)

@@ -82,6 +82,7 @@ def _resolve_skill_session_id(
 def _parse_stdout(stdout: str, backend: CodingAgentBackend) -> ClaudeSessionResult:
     parser = backend.result_parser()
     if parser is None:
+        logger.warning("backend_result_parser_none_fallback", backend=backend.name)
         from autoskillit.execution.backends.claude import ClaudeResultParser
 
         parser = ClaudeResultParser()

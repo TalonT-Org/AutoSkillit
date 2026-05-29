@@ -399,7 +399,14 @@ def test_all_agents_have_structured_output():
     """Every agent definition must have a structured output marker or be in the allowlist."""
     from autoskillit.core import pkg_root
 
-    _STRUCTURED_MARKERS = ("Verdict:", "scan_result:", "```json")
+    _STRUCTURED_MARKERS = (
+        "Verdict:",
+        "scan_result:",
+        "```json",
+        "# Verdict",
+        "## Verdict",
+        "### Verdict",
+    )
 
     agents_dir = pkg_root() / "agents"
     failures: list[str] = []

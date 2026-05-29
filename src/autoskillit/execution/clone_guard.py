@@ -428,11 +428,13 @@ async def revert_contamination(
             if reset_result.returncode != 0:
                 return dataclasses.replace(report, reverted=False)
         else:
-            await runner(
+            reset_result = await runner(
                 ["git", "reset", snapshot.head_sha],
                 cwd=Path(cwd),
                 timeout=_GIT_TIMEOUT,
             )
+            if reset_result.returncode != 0:
+                return dataclasses.replace(report, reverted=False)
         checkout_result = await runner(
             ["git", "checkout", "--", "."],
             cwd=Path(cwd),

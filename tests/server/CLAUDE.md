@@ -17,7 +17,6 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_factory_codex_backend_gate.py` | Tests for codex_backend feature flag gating in make_context() |
 | `test_git.py` | Tests for server/git.py perform_merge() |
 | `test_git_merge_dirty_check.py` | Tests for the pre-merge dirty check in perform_merge (Layer 3) |
-| `test_git_ref_coherence.py` | Structural guards: ref-coherence gate ordering in server/git.py and base-branch fetch discipline in _cmd_rpc_merge.py |
 | `test_guards_module.py` | Smoke test: all 6 guards are importable from _guards |
 | `test_headless_session.py` | Headless session kitchen visibility via AUTOSKILLIT_HEADLESS=1 |
 | `test_helpers_gate.py` | Contract tests: server helpers gate response schema |

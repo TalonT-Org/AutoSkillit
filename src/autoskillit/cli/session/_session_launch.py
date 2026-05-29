@@ -47,8 +47,7 @@ def _run_interactive_session(
         config = load_config()
         backend = get_backend(config.agent_backend.backend)
 
-        from autoskillit.core import is_feature_enabled
-        from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+        from autoskillit.core import FEATURE_REGISTRY, is_feature_enabled
 
         for feat_name, feat_def in FEATURE_REGISTRY.items():
             if (

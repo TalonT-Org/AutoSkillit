@@ -709,3 +709,108 @@ def test_rule_passes_when_auto_steps_only_reachable_from_auto_route() -> None:
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
     assert flagged == []
+
+
+# ---------------------------------------------------------------------------
+# merge-without-net-change-gate semantic rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_merge_without_net_change_gate_fires() -> None:
+    """merge-without-net-change-gate fires when no assert_has_net_changes is reachable."""
+    recipe = _make_recipe(
+        {
+            "commit_guard": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.recipe._cmd_rpc.commit_guard",
+                    "worktree_path": "/tmp/wt",
+                },
+                on_success="merge",
+                on_failure="done",
+            ),
+            "main_repo_guard": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.recipe._cmd_rpc.main_repo_guard",
+                    "clone_path": "/tmp",
+                },
+                on_success="merge",
+                on_failure="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_success="audit_impl",
+                on_failure="done",
+            ),
+            "audit_impl": RecipeStep(action="stop", message="audit_impl done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-without-net-change-gate"]
+    assert len(flagged) == 1
+    assert flagged[0].severity == Severity.ERROR
+
+
+def test_merge_with_net_change_gate_is_clean() -> None:
+    """No merge-without-net-change-gate finding when assert_has_net_changes is on success path."""
+    recipe = _make_recipe(
+        {
+            "commit_guard": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.recipe._cmd_rpc.commit_guard",
+                    "worktree_path": "/tmp/wt",
+                },
+                on_success="merge",
+                on_failure="done",
+            ),
+            "main_repo_guard": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.recipe._cmd_rpc.main_repo_guard",
+                    "clone_path": "/tmp",
+                },
+                on_success="merge",
+                on_failure="merge",
+            ),
+            "merge": RecipeStep(
+                tool="merge_worktree",
+                with_args={"worktree_path": "/tmp/wt", "base_branch": "main"},
+                on_success="assert_has_net_changes",
+                on_failure="done",
+            ),
+            "assert_has_net_changes": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.assert_has_net_changes",
+                    "cwd": "/tmp",
+                    "base_branch": "main",
+                },
+                on_success="audit_impl",
+                on_failure="done",
+            ),
+            "audit_impl": RecipeStep(action="stop", message="audit_impl done"),
+            "done": RecipeStep(action="stop", message="done"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-without-net-change-gate"]
+    assert flagged == []
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_have_net_change_gate_after_merge(recipe_name: str) -> None:
+    """Bundled recipes must have an assert_has_net_changes step after merge_worktree."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    has_gate = any(
+        name.startswith("assert_has_net_changes")
+        or step.with_args.get("callable") == "autoskillit.smoke_utils.assert_has_net_changes"
+        for name, step in recipe.steps.items()
+    )
+    assert has_gate, (
+        f"{recipe_name}: no assert_has_net_changes step found. "
+        "Add assert_has_net_changes on the terminal done path of next_or_done before audit_impl."
+    )

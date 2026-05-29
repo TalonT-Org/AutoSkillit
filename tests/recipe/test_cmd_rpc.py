@@ -226,6 +226,16 @@ def test_commit_guard_allows_legitimate_uncommitted_work(tmp_path):
     (tmp_path / "feature.py").write_text(impl_content + "\nextra_line = 99\n")
     result = commit_guard(worktree_path=str(tmp_path), base_branch=base_branch)
     assert result["committed"] == "true"
+    log = subprocess.run(
+        ["git", "log", "--oneline"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    lines = [ln for ln in log.stdout.strip().splitlines() if ln]
+    assert len(lines) == 3, (
+        f"Expected 3 commits (init + impl + guard commit), found {len(lines)}: {lines}"
+    )
 
 
 def test_commit_guard_detects_partial_regression(tmp_path):
@@ -311,6 +321,16 @@ def test_commit_guard_allows_precommit_formatting_changes(tmp_path):
     (tmp_path / "feature.py").write_text(content_trimmed)
     result = commit_guard(worktree_path=str(tmp_path), base_branch=base_branch)
     assert result["committed"] == "true"
+    log = subprocess.run(
+        ["git", "log", "--oneline"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    lines = [ln for ln in log.stdout.strip().splitlines() if ln]
+    assert len(lines) == 3, (
+        f"Expected 3 commits (init + impl + guard commit), found {len(lines)}: {lines}"
+    )
 
 
 def test_commit_guard_no_base_branch_skips_check(tmp_path):
@@ -331,7 +351,7 @@ def test_commit_guard_no_base_branch_skips_check(tmp_path):
     assert result["committed"] == "true"
 
 
-def test_main_repo_guard_stash_is_documented_discard(tmp_path):
+def test_main_repo_guard_stash_is_documented_discard():
     """main_repo_guard docstring must explicitly state discard/ephemeral semantics."""
     doc = main_repo_guard.__doc__ or ""
     assert "discard" in doc.lower() or "ephemeral" in doc.lower(), (

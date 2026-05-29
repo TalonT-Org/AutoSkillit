@@ -1008,3 +1008,136 @@ class TestReviewPathRebase:
             mock.return_value = {"status": "conflicts"}
             result = review_path_rebase(work_dir="/tmp/work", base_branch="main")
             assert result == {"status": "conflicts"}
+
+
+# ---------------------------------------------------------------------------
+# commit_guard regression-check tests (Test 1a–1d)
+# ---------------------------------------------------------------------------
+
+
+def _init_git_repo_on_main(tmp_path: Path) -> None:
+    """Init git repo with branch named 'main' and an initial empty commit."""
+    subprocess.run(
+        ["git", "init", "-b", "main"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.local"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+
+
+def test_commit_guard_detects_regression(tmp_path: Path) -> None:
+    """commit_guard must detect and refuse when pending changes revert implementation commits."""
+    _init_git_repo_on_main(tmp_path)
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    # Add implementation: 3 files, 55 total lines
+    (tmp_path / "module_a.py").write_text("\n".join(f"line_{i} = {i}" for i in range(20)) + "\n")
+    (tmp_path / "module_b.py").write_text(
+        "\n".join(f"x_{i} = 'value_{i}'" for i in range(20)) + "\n"
+    )
+    (tmp_path / "module_c.py").write_text("\n".join(f"Y_{i} = True" for i in range(15)) + "\n")
+    subprocess.run(
+        ["git", "add", "--", "module_a.py", "module_b.py", "module_c.py"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "feat: add implementation"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    # Contaminate: overwrite files with minimal content (reverts ~52 lines)
+    (tmp_path / "module_a.py").write_text("line_0 = 0\n")
+    (tmp_path / "module_b.py").write_text("x_0 = 'value_0'\n")
+    (tmp_path / "module_c.py").write_text("Y_0 = True\n")
+    result = commit_guard(worktree_path=str(tmp_path), base_branch="main")
+    assert result["committed"] == "regression_detected", (
+        f"Expected regression_detected but got: {result}"
+    )
+    assert "reverted_files" in result
+
+
+def test_commit_guard_allows_normal_changes(tmp_path: Path) -> None:
+    """commit_guard must allow normal incremental changes after implementation commits."""
+    _init_git_repo_on_main(tmp_path)
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    code_lines = "\n".join(f"line_{i} = {i}" for i in range(20))
+    (tmp_path / "module_a.py").write_text(code_lines + "\n")
+    subprocess.run(
+        ["git", "add", "--", "module_a.py"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "feat: add module_a"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    # Add 3 more lines — small incremental improvement, not a regression
+    (tmp_path / "module_a.py").write_text(
+        code_lines + "\nline_20 = 20\nline_21 = 21\nline_22 = 22\n"
+    )
+    result = commit_guard(worktree_path=str(tmp_path), base_branch="main")
+    assert result["committed"] == "true", (
+        f"Expected committed=true for normal changes but got: {result}"
+    )
+
+
+def test_commit_guard_skips_regression_check_without_base_branch(tmp_path: Path) -> None:
+    """commit_guard must commit normally when no base_branch is provided (backward compat)."""
+    _init_git_repo_on_main(tmp_path)
+    (tmp_path / "newfile.py").write_text("x = 1\n")
+    result = commit_guard(worktree_path=str(tmp_path))
+    assert result["committed"] == "true", (
+        f"Expected committed=true without base_branch but got: {result}"
+    )
+
+
+def test_commit_guard_skips_regression_no_implementation_commits(tmp_path: Path) -> None:
+    """commit_guard must commit normally when there are no implementation commits to protect."""
+    _init_git_repo_on_main(tmp_path)
+    # No feature branch divergence: merge-base == HEAD, committed_net == 0
+    (tmp_path / "new_file.py").write_text("x = 1\n")
+    result = commit_guard(worktree_path=str(tmp_path), base_branch="main")
+    assert result["committed"] == "true", (
+        f"Expected committed=true (no implementation commits) but got: {result}"
+    )

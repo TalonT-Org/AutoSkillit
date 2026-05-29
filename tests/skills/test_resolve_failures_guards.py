@@ -108,3 +108,18 @@ def test_resolve_failures_fix_loop_instructs_stdout_discard() -> None:
         "resolve-failures Step 3 must explicitly instruct discarding full pytest stdout "
         "after extracting failure info. This prevents context bloat across fix iterations."
     )
+
+
+# --- Blind git add guard ---
+
+
+def test_resolve_failures_no_blind_add() -> None:
+    """resolve-failures/SKILL.md must not use blind 'git add -A' as a command."""
+    text = _skill_text()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if "add -A" in stripped and "never use" not in stripped.lower():
+            raise AssertionError(
+                f"resolve-failures/SKILL.md still uses 'add -A' as a command: {stripped!r}"
+            )
+    assert "add --" in text, "resolve-failures/SKILL.md should use scoped 'git add --'"

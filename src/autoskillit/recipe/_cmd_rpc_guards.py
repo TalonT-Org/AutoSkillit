@@ -132,7 +132,78 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
     return {"cleaned": "true"}
 
 
-def commit_guard(worktree_path: str) -> dict[str, str]:
+def _count_numstat_net(numstat_output: str) -> int:
+    """Sum net line changes (insertions - deletions) from git diff --numstat output."""
+    total = 0
+    for line in numstat_output.splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) < 2:
+            continue
+        try:
+            total += int(parts[0]) - int(parts[1])
+        except ValueError:
+            continue  # binary files show "-"
+    return total
+
+
+def _check_regression(
+    worktree_path: str,
+    files_to_add: list[str],
+    base_branch: str,
+) -> dict[str, str] | None:
+    """Detect if pending changes would revert implementation commits.
+
+    Returns a regression dict if the pending dirty files would net-revert
+    more than 10 implementation lines. Returns None to proceed normally.
+    """
+    mb = run_git(["merge-base", "HEAD", base_branch], cwd=worktree_path)
+    if mb.returncode != 0:
+        return None  # fresh repo, no merge-base
+    merge_base = mb.stdout.strip()
+
+    committed_diff = run_git(
+        ["diff", "--numstat", merge_base, "HEAD", "--"] + files_to_add,
+        cwd=worktree_path,
+    )
+    if committed_diff.returncode != 0:
+        return None
+    committed_net = _count_numstat_net(committed_diff.stdout)
+    if committed_net <= 0:
+        return None  # no implementation lines to protect
+
+    wt_diff = run_git(
+        ["diff", "--numstat", merge_base, "--"] + files_to_add,
+        cwd=worktree_path,
+    )
+    if wt_diff.returncode != 0:
+        return None
+    wt_net = _count_numstat_net(wt_diff.stdout)
+
+    regression_lines = committed_net - wt_net
+    if regression_lines <= 10:
+        return None  # within tolerance
+
+    reverted_files: list[str] = []
+    for f in files_to_add:
+        c_diff = run_git(["diff", "--numstat", merge_base, "HEAD", "--", f], cwd=worktree_path)
+        w_diff = run_git(["diff", "--numstat", merge_base, "--", f], cwd=worktree_path)
+        if c_diff.returncode != 0 or w_diff.returncode != 0:
+            continue
+        c_net = _count_numstat_net(c_diff.stdout)
+        w_net = _count_numstat_net(w_diff.stdout)
+        if c_net - w_net > 5:
+            reverted_files.append(f)
+
+    return {
+        "committed": "regression_detected",
+        "reverted_files": ", ".join(reverted_files),
+        "implementation_net": str(committed_net),
+        "working_tree_net": str(wt_net),
+        "regression_lines": str(regression_lines),
+    }
+
+
+def commit_guard(worktree_path: str, base_branch: str = "") -> dict[str, str]:
     """Auto-commit pending changes if worktree is dirty, excluding generated files."""
     result = subprocess.run(
         ["git", "status", "--porcelain=v1", "-z", "-uall"],
@@ -161,6 +232,11 @@ def commit_guard(worktree_path: str) -> dict[str, str]:
 
     if not files_to_add:
         return {"committed": "false"}
+
+    if base_branch:
+        regression = _check_regression(worktree_path, files_to_add, base_branch)
+        if regression is not None:
+            return regression
 
     run_git(["add", "--", *files_to_add], cwd=worktree_path, check=True)
     run_git(

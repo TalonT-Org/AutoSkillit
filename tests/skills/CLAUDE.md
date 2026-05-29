@@ -18,6 +18,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_conflict_resolution_guards.py` | Structural guards for conflict resolution safeguards in SKILL.md files |
 | `test_deletion_regression_guards.py` | Structural guards for deletion regression detection in merge-pr and review-pr skills |
 | `test_dry_walkthrough_contracts.py` | Structural contracts for the dry-walkthrough historical regression check step |
+| `test_generate_report_guards.py` | Guards for generate-report SKILL.md: blind git add prevention |
 | `test_file_audit_issues_contracts.py` | Contract tests for file-audit-issues SKILL.md behavioral invariants |
 | `test_investigate_contracts.py` | Structural contracts for the investigate historical recurrence check step |
 | `test_investigate_deep_mode_contracts.py` | Structural contracts for the investigate deep analysis mode |
@@ -39,6 +40,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_resolve_failures_ci_aware.py` | Contract guards for resolve-failures CI-awareness: verdict decision tree |
 | `test_resolve_failures_guards.py` | Guards for resolve-failures SKILL.md: polling-cascade and output-bloat fixes |
 | `test_resolve_research_review_guards.py` | Behavioral guards for resolve-research-review/SKILL.md |
+| `test_resolve_review_guards.py` | Guards for resolve-review SKILL.md: blind git add prevention |
 | `test_resolve_review_diff_context_consumption.py` | Guards: resolve-review loads and uses diff_context handoff file from review-pr |
 | `test_resolve_review_diff_hunk_preference.py` | Guards: resolve-review Step 3.5 prefers diff_hunk over source file reads |
 | `test_resolve_review_duplicate_comments.py` | Resolve review duplicate comments guard |
@@ -48,6 +50,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_resolve_review_thread_resolution.py` | Resolve review thread resolution tests |
 | `test_resolve_review_token_optimizations.py` | Structural guards for resolve-review SKILL.md token-optimization edits |
 | `test_retired_skill_names.py` | Convention guard: RETIRED_SKILL_NAMES entries must not have live directories, must be lowercase, and runtime raises on retired skill |
+| `test_retry_worktree_guards.py` | Guards for retry-worktree SKILL.md: blind git add prevention |
 | `test_review_design_contracts.py` | Contract tests for review-design SKILL.md behavioral encoding |
 | `test_review_design_guards.py` | Guard tests for review-design SKILL.md — data_acquisition dimension |
 | `test_review_flag_marker.py` | Tests for the REVIEW-FLAG HTML comment marker used in resolve-review replies |

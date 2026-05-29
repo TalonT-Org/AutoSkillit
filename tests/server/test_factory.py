@@ -486,19 +486,35 @@ def test_make_context_uses_explicit_project_dir(tmp_path):
     assert ctx.project_dir == tmp_path
 
 
+def test_serve_passes_project_dir_env_to_make_context(monkeypatch, tmp_path):
+    """serve() reads AUTOSKILLIT_PROJECT_DIR and passes it as project_dir to make_context()."""
+    captured: dict = {}
+
+    def fake_make_context(cfg, **kwargs):
+        captured.update(kwargs)
+        raise SystemExit(0)
+
+    monkeypatch.setenv("AUTOSKILLIT_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setattr("autoskillit.server.make_context", fake_make_context)
+
+    from autoskillit.cli.app import serve
+
+    with pytest.raises(SystemExit):
+        serve()
+
+    assert captured.get("project_dir") == tmp_path
+
+
 def test_make_context_project_dir_git_root_fallback(monkeypatch):
     """make_context() without explicit project_dir falls back to git toplevel."""
-    import subprocess as _sp
+    import subprocess as _subprocess
 
-    expected = Path(
-        _sp.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    )
+    def fake_run(cmd, *, capture_output, text, timeout):
+        return _subprocess.CompletedProcess(cmd, 0, stdout="/fake/git/root\n", stderr="")
+
+    monkeypatch.setattr("autoskillit.server._factory.subprocess.run", fake_run)
     ctx = make_context(AutomationConfig(), runner=_runner())
-    assert ctx.project_dir == expected
+    assert ctx.project_dir == Path("/fake/git/root")
 
 
 # --- _resolve_project_dir unit tests ---

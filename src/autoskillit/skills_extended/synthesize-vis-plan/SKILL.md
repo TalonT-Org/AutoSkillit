@@ -3,10 +3,10 @@ name: synthesize-vis-plan
 categories: [research, vis-lens]
 description: >
   Synthesize step of the vis-lens phoropter: reads captured yaml:figure-spec
-  blocks from lens output files, resolves inter-lens conflicts via the priority
-  hierarchy (accessibility > anti-pattern > methodology-norms > chart-select),
-  and produces visualization-plan.md, report-plan.md, and
-  visualization-plan-trace.md for downstream worktree creation.
+  blocks from lens output files, resolves inter-lens conflicts via the
+  four-level priority hierarchy, and produces visualization-plan.md,
+  report-plan.md, and visualization-plan-trace.md for downstream worktree
+  creation.
 ---
 
 # Synthesize Vis-Plan Skill

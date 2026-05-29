@@ -207,7 +207,7 @@ def _compute_write_prefixes(
     worktree_write_prefixes: list[str] = []
     extracted = extract_skill_name(skill_command)
     if write_watch_dirs and extracted and extracted in WORKTREE_SKILLS:
-        worktree_parent = (Path(cwd).parent / "worktrees").resolve()
+        worktree_parent = Path(cwd).resolve().parent / "worktrees"
         worktree_write_prefixes.append(str(worktree_parent) + "/")
 
     base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]

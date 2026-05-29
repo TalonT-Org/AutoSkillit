@@ -152,6 +152,20 @@ def _count_numstat_net(numstat_output: str) -> int:
     return total
 
 
+def _parse_numstat_per_file(numstat_output: str) -> dict[str, int]:
+    """Parse per-file net line changes from git diff --numstat output."""
+    result: dict[str, int] = {}
+    for line in numstat_output.splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) < 3:
+            continue
+        try:
+            result[parts[2]] = int(parts[0]) - int(parts[1])
+        except ValueError:
+            continue
+    return result
+
+
 def _check_regression(
     worktree_path: str,
     files_to_add: list[str],
@@ -189,14 +203,13 @@ def _check_regression(
     if regression_lines <= 10:
         return None  # within tolerance
 
+    committed_per_file = _parse_numstat_per_file(committed_diff.stdout)
+    wt_per_file = _parse_numstat_per_file(wt_diff.stdout)
+
     reverted_files: list[str] = []
     for f in files_to_add:
-        c_diff = run_git(["diff", "--numstat", merge_base, "HEAD", "--", f], cwd=worktree_path)
-        w_diff = run_git(["diff", "--numstat", merge_base, "--", f], cwd=worktree_path)
-        if c_diff.returncode != 0 or w_diff.returncode != 0:
-            continue
-        c_net = _count_numstat_net(c_diff.stdout)
-        w_net = _count_numstat_net(w_diff.stdout)
+        c_net = committed_per_file.get(f, 0)
+        w_net = wt_per_file.get(f, 0)
         if c_net - w_net > 5:
             reverted_files.append(f)
 

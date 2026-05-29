@@ -291,7 +291,5 @@ async def test_cross_session_contamination_blocked(tmp_path):
     await validate_pre_session_index(str(repo), runner)
 
     assert _git_status(repo) == ""
-    assert (
-        not (repo / "evil.py").exists()
-        or _git(["git", "ls-files", "--error-unmatch", "evil.py"], repo).returncode != 0
-    )
+    assert not (repo / "evil.py").exists()
+    assert _git(["git", "ls-files", "--error-unmatch", "evil.py"], repo).returncode != 0

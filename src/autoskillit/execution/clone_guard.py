@@ -297,16 +297,28 @@ async def validate_pre_session_index(
         )
         return False
 
-    await runner(
+    co_result = await runner(
         ["git", "checkout", "--", "."],
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
-    await runner(
+    if co_result.returncode != 0:
+        logger.warning(
+            "pre_session_checkout_failed",
+            returncode=co_result.returncode,
+            stderr=co_result.stderr.strip(),
+        )
+    clean_result = await runner(
         ["git", "clean", "-fd"],
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
+    if clean_result.returncode != 0:
+        logger.warning(
+            "pre_session_clean_failed",
+            returncode=clean_result.returncode,
+            stderr=clean_result.stderr.strip(),
+        )
 
     logger.info(
         "index_reset_pre_session",

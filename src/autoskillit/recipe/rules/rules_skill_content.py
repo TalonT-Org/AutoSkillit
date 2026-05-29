@@ -201,7 +201,7 @@ def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 _BLIND_GIT_ADD_RE = re.compile(
-    r"(?:^|\s)git\s+(?:-C\s+\S+\s+)?add\s+(?:-A|--all|\.\s*(?:&&|;|\n|$))",
+    r"(?:^|\s)git\s+(?:-C\s+\S+\s+)?add\s+(?:-A|--all|\.\s*(?:#|&&|;|\n|$))",
 )
 
 

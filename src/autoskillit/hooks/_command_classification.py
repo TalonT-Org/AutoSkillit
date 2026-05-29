@@ -19,7 +19,7 @@ _NESTED_SHELL_RE = re.compile(r"(?:^|&&|\|\||;)\s*(?:bash|sh|zsh|dash)\s+-c\s+")
 
 _WRITE_APIS_RE = re.compile(
     r"\.write_text\s*\(|\.write_bytes\s*\("
-    r"|open\s*\([^)]*['\"][wWaA]\+?[bB]?['\"]"
+    r"|open\s*\([^)]*['\"][wWaAxX]\+?[bB]?['\"]"
     r"|shutil\.(?:copy|move|copyfile|copytree)\s*\("
 )
 
@@ -28,7 +28,7 @@ _SUBPROCESS_APIS_RE = re.compile(
     r"|os\.(?:system|popen|exec[lv]p?e?)\s*\("
 )
 
-_LITERAL_OPEN_PATH_RE = re.compile(r"""open\s*\(\s*(['"])(/[^'"]+)\1\s*,\s*['"][wWaA]""")
+_LITERAL_OPEN_PATH_RE = re.compile(r"""open\s*\(\s*(['"])(/[^'"]+)\1\s*,\s*['"][wWaAxX]""")
 _LITERAL_PATH_CONSTRUCTOR_RE = re.compile(
     r"""Path\s*\(\s*(['"])(/[^'"]+)\1\s*\)\s*\.(?:write_text|write_bytes)\s*\("""
 )

@@ -5,27 +5,40 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
-_SKILL_MD = (
-    Path(__file__).parents[2] / "src/autoskillit/skills_extended/synthesize-vis-plan/SKILL.md"
+pytestmark = [pytest.mark.small]
+
+SKILL_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "synthesize-vis-plan"
+    / "SKILL.md"
 )
 
 
 def _text() -> str:
-    assert _SKILL_MD.exists(), "synthesize-vis-plan/SKILL.md does not exist"
-    return _SKILL_MD.read_text()
+    assert SKILL_PATH.exists(), "synthesize-vis-plan/SKILL.md does not exist"
+    return SKILL_PATH.read_text()
 
 
-def _frontmatter() -> dict:
+def _frontmatter() -> dict[str, object]:
     lines = _text().splitlines()
+    assert lines, "SKILL.md is empty"
     assert lines[0].strip() == "---"
-    end = next(i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "---")
+    end = next(
+        (i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "---"),
+        None,
+    )
+    assert end is not None, "SKILL.md frontmatter missing closing ---"
     return yaml.safe_load("\n".join(lines[1:end]))
 
 
 def test_skill_md_exists() -> None:
-    assert _SKILL_MD.exists()
+    assert SKILL_PATH.exists()
 
 
 def test_frontmatter_name() -> None:
@@ -37,7 +50,7 @@ def test_frontmatter_categories() -> None:
 
 
 def test_frontmatter_description_mentions_synthesize() -> None:
-    desc = _frontmatter().get("description", "")
+    desc = str(_frontmatter().get("description", ""))
     assert "synthesize" in desc.lower() or "vis-lens phoropter" in desc.lower()
 
 
@@ -154,7 +167,9 @@ def test_on_failure_routes_to_escalate_stop() -> None:
 
 def test_no_subagents_constraint() -> None:
     text = _text().lower()
-    assert "subagent" in text or "sub-agent" in text
+    assert re.search(r"never[\s\S]{0,500}sub.?agent", text), (
+        "SKILL.md must prohibit sub-agents in a NEVER context"
+    )
 
 
 def test_applied_union_rules_from_arguments_not_recipe() -> None:
@@ -162,3 +177,4 @@ def test_applied_union_rules_from_arguments_not_recipe() -> None:
     text = _text()
     assert "applied_union_rules" in text
     assert "select-vis-lenses" in text
+    assert "not from recipe context" in text

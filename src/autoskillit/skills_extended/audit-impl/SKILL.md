@@ -159,11 +159,26 @@ fi
   O(1), unambiguous, and distinguishes the stale-fast-forward case from legitimate no-op
   branches (empty diff is an unreliable guard; `--is-ancestor` is the correct tool).
 
-Launch one Explore subagent to retrieve:
+Launch one Explore subagent to retrieve the diff using the command form determined in
+Step 0 — do NOT hardcode HEAD:
 
-- `git diff {base_branch}...HEAD --stat` — file-level summary
-- `git log {base_branch}..HEAD --oneline` — commit history
-- `git diff {base_branch}...HEAD` — full diff
+- **SHA ref:** `git diff {implementation_ref}..{base_branch} --stat` — file-level summary
+- **SHA ref:** `git log {implementation_ref}..{base_branch} --oneline` — commit history
+- **SHA ref:** `git diff {implementation_ref}..{base_branch}` — full diff
+- **Branch ref:** `git diff {base_branch}...{implementation_ref} --stat` — file-level summary
+- **Branch ref:** `git log {base_branch}..{implementation_ref} --oneline` — commit history
+- **Branch ref:** `git diff {base_branch}...{implementation_ref}` — full diff
+
+**Diff size guard:** After the subagent returns the `--stat` output, check the diff size:
+
+- If the diff spans more than 20 files OR the raw diff exceeds 50,000 characters, switch to
+  per-file-group chunking:
+  1. Run `git diff {implementation_ref}..{base_branch} --name-only` (SHA) or
+     `git diff {base_branch}...{implementation_ref} --name-only` (branch) to get the file list.
+  2. Split the file list into groups of ~5 files each.
+  3. Fetch the raw unified diff for each group: `git diff {implementation_ref}..{base_branch} -- {file1} {file2} ...`
+  4. Pass each batch (its group diff only) as a separate slice to the Step 3 subagents instead
+     of the full diff.
 
 ### Step 2.5 — Conflict Resolution Context Check
 
@@ -206,6 +221,14 @@ logic (Step 4).
 
 ### Step 3 — Audit via Parallel Subagents
 
+**Data source discipline:** Do NOT call Read, Grep, or Glob to verify file existence or
+content — the diff is the single source of truth for implementation state. The working
+directory (`cwd`) may be checked out on a different branch than the implementation being
+audited; filesystem reads will show the wrong branch's content. If you need to inspect a
+file's full content on the implementation branch (e.g., to verify import structure or
+function signatures beyond what the diff shows), use
+`git show {implementation_ref}:{path}` — never read the filesystem directly.
+
 Divide the requirements inventory into up to 3 slices. Launch parallel Explore subagents,
 each receiving its slice and the full diff. Each subagent checks:
 
@@ -226,6 +249,12 @@ Each subagent returns structured findings:
 - `CONFLICT` — two plans' implementations interfere with each other
 
 ### Step 4 — Verdict
+
+**Branch-mismatch guard:** If any subagent reports ALL MISSING for its entire slice, flag as
+a suspected branch-mismatch before accepting the verdicts. Re-verify one finding using
+`git show {implementation_ref}:{path}` to confirm the file is genuinely absent from the
+implementation. If the file exists on `{implementation_ref}`, the subagent read the wrong
+branch — discard those MISSING findings and re-run the slice with the correct diff.
 
 **NO GO** if any finding is `MISSING` or `CONFLICT`.
 

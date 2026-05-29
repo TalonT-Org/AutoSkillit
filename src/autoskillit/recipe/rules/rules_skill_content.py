@@ -50,6 +50,7 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("promote-to-main", "pr_title"),
         ("promote-to-main", "pr_url"),
         ("promote-to-main", "timestamp"),
+        ("audit-impl", "implementation_ref"),
     }
 )
 

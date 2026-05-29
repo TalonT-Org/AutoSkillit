@@ -13,6 +13,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_arch_lens_context_path.py` | Tests that all arch-lens skills have ## Arguments section and context_path handling |
 | `test_audit_arch_preflight_contracts.py` | Audit-arch skill preflight contract tests |
 | `test_audit_arch_selfvalidation_contracts.py` | Audit-arch skill self-validation contract tests |
+| `test_audit_impl_diff_discipline.py` | Structural guards for audit-impl diff discipline: Step 2 variable usage, Step 3 data source prohibition, diff size guard |
 | `test_audit_review_decisions_contracts.py` | Contract tests for the audit-review-decisions skill SKILL.md |
 | `test_conflict_resolution_guards.py` | Structural guards for conflict resolution safeguards in SKILL.md files |
 | `test_deletion_regression_guards.py` | Structural guards for deletion regression detection in merge-pr and review-pr skills |
@@ -64,6 +65,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_skill_placeholder_contracts.py` | Validate that no SKILL.md bash code block uses an undefined {placeholder} token |
 | `test_skill_preambles.py` | Tests that critical SKILL.md preamble patterns are present (FRICT-1B-1, FRICT-1C-2) |
 | `test_skill_tool_syntax_contracts.py` | Validates that SKILL.md bash blocks do not contain grep BRE \\| alternation patterns |
+| `test_skill_variable_threading.py` | Generic intra-skill variable threading contracts: verifies computed variables appear in correct downstream commands |
 | `test_sous_chef_deferred_escalation.py` | Contract tests for sous-chef deferred issue escalation (T6/T7) |
 | `test_tier1_no_temp_reference.py` | Tier 1 SKILL.md files must not reference temp at all |
 | `test_tier2_3_no_literal_temp.py` | Tier 2/3 SKILL.md files must use {{AUTOSKILLIT_TEMP}}, never the literal |

@@ -87,6 +87,7 @@ class MergeFailedStep(StrEnum):
     MERGE = "merge"
     EDITABLE_INSTALL_GUARD = "editable_install_guard"
     EMBEDDED_WORKTREE = "embedded_worktree"
+    REF_COHERENCE = "ref_coherence"
 
 
 class MergeState(StrEnum):
@@ -94,6 +95,7 @@ class MergeState(StrEnum):
     WORKTREE_INTACT_REBASE_ABORTED = "worktree_intact_rebase_aborted"
     WORKTREE_INTACT_BASE_NOT_PUBLISHED = "worktree_intact_base_not_published"
     WORKTREE_INTACT_MERGE_COMMITS_DETECTED = "worktree_intact_merge_commits_detected"
+    WORKTREE_INTACT_REF_DIVERGED = "worktree_intact_ref_diverged"
     WORKTREE_DIRTY = "worktree_dirty"
     WORKTREE_DIRTY_ABORT_FAILED = "worktree_dirty_abort_failed"
     WORKTREE_DIRTY_MID_OPERATION = "worktree_dirty_mid_operation"

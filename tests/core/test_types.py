@@ -82,6 +82,7 @@ def test_merge_failed_step_values():
         MergeFailedStep.MERGE,
         MergeFailedStep.EDITABLE_INSTALL_GUARD,
         MergeFailedStep.EMBEDDED_WORKTREE,
+        MergeFailedStep.REF_COHERENCE,
     }
 
 
@@ -92,6 +93,7 @@ def test_merge_state_values():
         MergeState.WORKTREE_INTACT_REBASE_ABORTED,
         MergeState.WORKTREE_INTACT_BASE_NOT_PUBLISHED,
         MergeState.WORKTREE_INTACT_MERGE_COMMITS_DETECTED,
+        MergeState.WORKTREE_INTACT_REF_DIVERGED,
         MergeState.WORKTREE_DIRTY,
         MergeState.WORKTREE_DIRTY_ABORT_FAILED,
         MergeState.WORKTREE_DIRTY_MID_OPERATION,

@@ -68,6 +68,7 @@ class GitMergeTarget:
 
     path: str
     branch: str
+    sha: str
 
 
 async def _verify_merge_target(
@@ -106,7 +107,17 @@ async def _verify_merge_target(
             "state": MergeState.WORKTREE_INTACT,
             "worktree_path": "",  # filled in by caller
         }
-    return GitMergeTarget(path=main_repo, branch=current_branch)
+    sha_rc, sha_out, _ = await _run_git(
+        ["git", "rev-parse", expected_branch], main_repo, 10, runner
+    )
+    if sha_rc != 0:
+        return {
+            "error": (f"Failed to resolve SHA of '{expected_branch}' in '{main_repo}'."),
+            "failed_step": MergeFailedStep.MERGE,
+            "state": MergeState.WORKTREE_INTACT,
+            "worktree_path": "",  # filled in by caller
+        }
+    return GitMergeTarget(path=main_repo, branch=current_branch, sha=sha_out.strip())
 
 
 async def perform_merge(
@@ -413,6 +424,39 @@ async def perform_merge(
         target_or_err["worktree_path"] = worktree_path
         return target_or_err
     target = target_or_err
+
+    # 7.5b Ref-coherence gate: local base_branch SHA must match remote tracking ref SHA.
+    # Rebase (step 6) targeted {remote}/{base_branch}; merge (step 8) targets the local
+    # branch. If local has unpushed commits, the rebase is a no-op but the merge target
+    # has diverged, causing duplicate cherry-pick conflicts.
+    remote_rc, remote_sha_out, _ = await _run_git(
+        ["git", "rev-parse", f"{remote}/{base_branch}"],
+        worktree_path,
+        10,
+        runner,
+    )
+    if remote_rc != 0:
+        return {
+            "error": f"Could not resolve {remote}/{base_branch} after fetch",
+            "failed_step": MergeFailedStep.REF_COHERENCE,
+            "state": MergeState.WORKTREE_INTACT_REF_DIVERGED,
+            "worktree_path": worktree_path,
+        }
+    local_sha = target.sha
+    remote_sha = remote_sha_out.strip()
+    if local_sha != remote_sha:
+        return {
+            "error": (
+                f"Local '{base_branch}' ({local_sha[:12]}) has diverged from "
+                f"'{remote}/{base_branch}' ({remote_sha[:12]}). "
+                f"Push the local branch or pull the remote before merging."
+            ),
+            "failed_step": MergeFailedStep.REF_COHERENCE,
+            "state": MergeState.WORKTREE_INTACT_REF_DIVERGED,
+            "worktree_path": worktree_path,
+            "local_sha": local_sha,
+            "remote_sha": remote_sha,
+        }
 
     # 7.6 Pre-merge dirty check — reject if main repo has uncommitted changes
     rc, status_out, _ = await _run_git(["git", "status", "--porcelain"], target.path, 10, runner)

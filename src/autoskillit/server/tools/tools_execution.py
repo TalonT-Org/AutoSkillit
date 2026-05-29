@@ -581,78 +581,75 @@ async def run_skill(
 
             _start = time.monotonic()
             try:
-                try:
-                    skill_result = await tool_ctx.executor.run(
-                        resolved_command,
-                        cwd,
-                        model=effective_model,
-                        add_dirs=skill_add_dirs,
-                        step_name=step_name,
-                        kitchen_id=tool_ctx.kitchen_id,
-                        order_id=effective_order_id,
-                        expected_output_patterns=expected_output_patterns,
-                        write_behavior=write_spec,
-                        stale_threshold=float(stale_threshold)
-                        if stale_threshold is not None
-                        else None,
-                        idle_output_timeout=float(idle_output_timeout)
-                        if idle_output_timeout is not None
-                        else None,
-                        completion_marker=invocation_marker,
-                        recipe_name=tool_ctx.recipe_name,
-                        recipe_content_hash=tool_ctx.recipe_content_hash,
-                        recipe_composite_hash=tool_ctx.recipe_composite_hash,
-                        recipe_version=tool_ctx.recipe_version,
-                        allowed_write_prefix=allowed_write_prefix,
-                        allowed_write_prefixes=allowed_write_prefixes,
-                        readonly_skill=is_read_only,
-                        write_watch_dirs=write_watch_dirs,
-                        provider_extras=provider_extras,
-                        profile_name=profile_name_out,
-                        backend_override=backend_override,
-                        resume_session_id=resume_session_id,
+                skill_result = await tool_ctx.executor.run(
+                    resolved_command,
+                    cwd,
+                    model=effective_model,
+                    add_dirs=skill_add_dirs,
+                    step_name=step_name,
+                    kitchen_id=tool_ctx.kitchen_id,
+                    order_id=effective_order_id,
+                    expected_output_patterns=expected_output_patterns,
+                    write_behavior=write_spec,
+                    stale_threshold=float(stale_threshold)
+                    if stale_threshold is not None
+                    else None,
+                    idle_output_timeout=float(idle_output_timeout)
+                    if idle_output_timeout is not None
+                    else None,
+                    completion_marker=invocation_marker,
+                    recipe_name=tool_ctx.recipe_name,
+                    recipe_content_hash=tool_ctx.recipe_content_hash,
+                    recipe_composite_hash=tool_ctx.recipe_composite_hash,
+                    recipe_version=tool_ctx.recipe_version,
+                    allowed_write_prefix=allowed_write_prefix,
+                    allowed_write_prefixes=allowed_write_prefixes,
+                    readonly_skill=is_read_only,
+                    write_watch_dirs=write_watch_dirs,
+                    provider_extras=provider_extras,
+                    profile_name=profile_name_out,
+                    backend_override=backend_override,
+                    resume_session_id=resume_session_id,
+                )
+                if skill_result.success:
+                    tool_ctx.audit.record_success(skill_command)
+                    _clear_run_skill_state(tool_ctx.project_dir)
+                else:
+                    await _notify(
+                        ctx,
+                        "error",
+                        "run_skill failed",
+                        "autoskillit.run_skill",
+                        extra={
+                            "exit_code": skill_result.exit_code,
+                            "subtype": skill_result.subtype,
+                        },
                     )
-                    if skill_result.success:
-                        tool_ctx.audit.record_success(skill_command)
-                        _clear_run_skill_state(tool_ctx.project_dir)
-                    else:
-                        await _notify(
-                            ctx,
-                            "error",
-                            "run_skill failed",
-                            "autoskillit.run_skill",
-                            extra={
-                                "exit_code": skill_result.exit_code,
-                                "subtype": skill_result.subtype,
-                            },
-                        )
-                        _persist_run_skill_state(skill_result, tool_ctx.project_dir)
-                    if effective_order_id:
-                        skill_result.order_id = effective_order_id
-                    from autoskillit.server._misc import (  # noqa: PLC0415
-                        _refresh_quota_cache,
-                    )
+                    _persist_run_skill_state(skill_result, tool_ctx.project_dir)
+                if effective_order_id:
+                    skill_result.order_id = effective_order_id
+                from autoskillit.server._misc import (  # noqa: PLC0415
+                    _refresh_quota_cache,
+                )
 
-                    if tool_ctx.background is not None:
-                        tool_ctx.background.submit(
-                            _refresh_quota_cache(tool_ctx.config.quota_guard),
-                            label="quota_post_run_refresh",
-                        )
-                    return skill_result.to_json()
-                except Exception as exc:
-                    logger.error("run_skill executor raised unexpectedly", exc_info=True)
-                    return SkillResult.crashed(
-                        exception=exc,
-                        skill_command=resolved_command,
-                        order_id=effective_order_id,
-                    ).to_json()
-                finally:
-                    if step_name:
-                        tool_ctx.timing_log.record(
-                            step_name, time.monotonic() - _start, order_id=effective_order_id
-                        )
+                if tool_ctx.background is not None:
+                    tool_ctx.background.submit(
+                        _refresh_quota_cache(tool_ctx.config.quota_guard),
+                        label="quota_post_run_refresh",
+                    )
+                return skill_result.to_json()
+            except Exception as exc:
+                logger.error("run_skill executor raised unexpectedly", exc_info=True)
+                return SkillResult.crashed(
+                    exception=exc,
+                    skill_command=resolved_command,
+                    order_id=effective_order_id,
+                ).to_json()
             finally:
-                pass  # placeholder — cleanup lives at the outer try level
+                if step_name:
+                    tool_ctx.timing_log.record(
+                        step_name, time.monotonic() - _start, order_id=effective_order_id
+                    )
     except Exception as exc:
         logger.error("run_skill unhandled exception", exc_info=True)
         return SkillResult.crashed(
@@ -679,4 +676,11 @@ async def run_skill(
             elif tool_ctx.ephemeral_root is not None:  # type: ignore[possibly-undefined]
                 _cleanup_dir = tool_ctx.ephemeral_root / _sid  # type: ignore[possibly-undefined]
                 if _cleanup_dir.is_dir():
-                    shutil.rmtree(_cleanup_dir, ignore_errors=True)
+                    try:
+                        shutil.rmtree(_cleanup_dir)
+                    except Exception:
+                        logger.warning(
+                            "session_dir_rmtree_failed",
+                            path=str(_cleanup_dir),
+                            exc_info=True,
+                        )

@@ -399,7 +399,7 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path, monkeypatch):
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     tu = json.loads((tmp_path / "sessions" / "s" / "token_usage.json").read_text())
     turn_count = tu.get("turn_count", 0)
-    assert len(summary["turn_timestamps"]) > 0
+    assert len(summary["turn_timestamps"]) == 2
     assert turn_count >= len(summary["turn_timestamps"])
 
 

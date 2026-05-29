@@ -583,7 +583,7 @@ async def run_skill(
             from autoskillit.pipeline.context import (  # noqa: PLC0415
                 current_order_id as _current_order_id,
             )
-            from autoskillit.pipeline.context import (
+            from autoskillit.pipeline.context import (  # noqa: PLC0415
                 current_step_name as _current_step_name,
             )
             from autoskillit.pipeline.tokens import (  # noqa: PLC0415

@@ -28,6 +28,7 @@ from autoskillit.core import (
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable
+from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 from autoskillit.recipe.schema import _TERMINAL_TARGETS
 
@@ -41,14 +42,13 @@ logger = get_logger(__name__)
 )
 def _check_plan_parts_captured(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
-    _MULTIPART_SKILL_NAMES: frozenset[str] = frozenset({"make-plan", "rectify"})
     findings: list[RuleFinding] = []
 
     for step_name, step in wf.steps.items():
         if step.tool not in SKILL_TOOLS:
             continue
         skill_cmd = step.with_args.get("skill_command", "")
-        if extract_skill_name(skill_cmd) not in _MULTIPART_SKILL_NAMES:
+        if extract_skill_name(skill_cmd) not in MULTIPART_SKILL_NAMES:
             continue
         if "plan_parts" not in step.capture_list:
             findings.append(

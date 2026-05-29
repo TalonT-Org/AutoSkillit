@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from autoskillit.core import SkillLister
 
+MULTIPART_SKILL_NAMES: frozenset[str] = frozenset({"make-plan", "rectify"})
+
 
 def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, frozenset[str]]:
     """Return {skill_name: categories} for all bundled skills."""

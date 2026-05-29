@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity, extract_skill_name
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 
@@ -14,12 +15,11 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 )
 def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding]:
     wf = ctx.recipe
-    _MULTIPART_SKILL_NAMES: frozenset[str] = frozenset({"make-plan", "rectify"})
     findings: list[RuleFinding] = []
 
     has_multipart_step = any(
         step.tool in SKILL_TOOLS
-        and extract_skill_name(step.with_args.get("skill_command", "")) in _MULTIPART_SKILL_NAMES
+        and extract_skill_name(step.with_args.get("skill_command", "")) in MULTIPART_SKILL_NAMES
         for step in wf.steps.values()
     )
     if not has_multipart_step:
@@ -32,7 +32,7 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
         (step.note or "")
         for step in wf.steps.values()
         if step.tool in SKILL_TOOLS
-        and extract_skill_name(step.with_args.get("skill_command", "")) in _MULTIPART_SKILL_NAMES
+        and extract_skill_name(step.with_args.get("skill_command", "")) in MULTIPART_SKILL_NAMES
     ]
     if "*_part_*.md" not in plan_note and not any(
         "*_part_*.md" in note for note in multipart_step_notes

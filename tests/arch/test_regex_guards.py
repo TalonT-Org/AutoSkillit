@@ -148,6 +148,13 @@ REQUIRED_WRITE_GUARD_TEST_FAMILIES = {
     "sed",
     "redirect",
     "tee",
+    "mv",
+    "cp",
+    "rm",
+    "patch",
+    "git_checkout",
+    "git_reset",
+    "gh_api",
 }
 
 
@@ -175,16 +182,20 @@ def test_write_guard_has_interpreter_detection() -> None:
 
 
 def test_write_guard_tests_cover_required_command_families() -> None:
-    """Write guard test file must have test cases for all known file-writing command families."""
-    test_source = (
-        pathlib.Path(__file__).parent.parent / "hooks" / "test_write_guard.py"
-    ).read_text()
+    """Write guard test file must have test function names for all known writing families."""
+    test_path = pathlib.Path(__file__).parent.parent / "hooks" / "test_write_guard.py"
+    tree = ast.parse(test_path.read_text())
+    test_names = {
+        node.name.lower()
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
+    }
     missing = []
     for family in REQUIRED_WRITE_GUARD_TEST_FAMILIES:
-        if family not in test_source.lower():
+        if not any(family.lower() in name for name in test_names):
             missing.append(family)
     assert not missing, (
-        f"test_write_guard.py missing test coverage for command families: {missing}. "
+        f"test_write_guard.py missing test function names for command families: {missing}. "
         f"Every known file-writing command family must have deny-path test coverage."
     )
 
@@ -194,6 +205,7 @@ COMMAND_CLASSIFYING_GUARDS = [
     SRC_ROOT / "hooks" / "guards" / "pr_create_guard.py",
     SRC_ROOT / "hooks" / "guards" / "planner_gh_discovery_guard.py",
     SRC_ROOT / "hooks" / "guards" / "unsafe_install_guard.py",
+    SRC_ROOT / "hooks" / "guards" / "artifact_download_guard.py",
 ]
 
 
@@ -232,3 +244,21 @@ def test_guard_handles_bypass_family(guard_file: str, bypass_family: str) -> Non
         assert "has_interpreter_write" in source or "_command_classification" in source
     elif bypass_family == "interpreter_subprocess":
         assert "has_interpreter_wrapped_command" in source or "_command_classification" in source
+
+
+def test_write_guard_uses_tokenization() -> None:
+    """write_guard.py must use the structural tokenization layer from _command_classification."""
+    source = (SRC_ROOT / "hooks" / "guards" / "write_guard.py").read_text()
+    assert "tokenize_command_segments" in source or "is_gh_command" in source, (
+        "write_guard.py must import and use the structural tokenization layer from "
+        "_command_classification (tokenize_command_segments or is_gh_command)"
+    )
+
+
+def test_command_classification_exports_tokenization() -> None:
+    """_command_classification.py must export the tokenization primitives."""
+    source = (SRC_ROOT / "hooks" / "_command_classification.py").read_text()
+    for name in ("tokenize_command_segments", "command_verb", "is_gh_command"):
+        assert f"def {name}" in source, (
+            f"_command_classification.py must define {name}() for structural command parsing"
+        )

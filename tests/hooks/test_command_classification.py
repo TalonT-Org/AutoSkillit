@@ -5,9 +5,13 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.hooks._command_classification import (
+    command_verb,
+    extract_interpreter_write_path,
     has_interpreter_wrapped_command,
     has_interpreter_write,
     has_nested_shell,
+    is_gh_command,
+    tokenize_command_segments,
 )
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
@@ -77,3 +81,94 @@ def test_detects_python_os_popen():
 def test_interpreter_wrapped_command_case_insensitive():
     cmd = "python3 -c \"import os; os.system('GH PR CREATE')\""
     assert has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"])
+
+
+class TestTokenizeCommandSegments:
+    def test_single_command(self):
+        assert tokenize_command_segments("git status") == [["git", "status"]]
+
+    def test_chained_commands(self):
+        result = tokenize_command_segments("git add . && git commit -m msg")
+        assert result == [["git", "add", "."], ["git", "commit", "-m", "msg"]]
+
+    def test_quoted_args_not_split(self):
+        result = tokenize_command_segments("echo 'hello world'")
+        assert result == [["echo", "hello world"]]
+
+    def test_shell_op_separates_segments(self):
+        result = tokenize_command_segments("cmd1 || cmd2 ; cmd3")
+        assert len(result) == 3
+
+    def test_unclosed_quotes_returns_empty(self):
+        assert tokenize_command_segments("echo 'unclosed") == []
+
+    def test_pipe_separates_segments(self):
+        result = tokenize_command_segments("cat file | tee /tmp/out")
+        assert result == [["cat", "file"], ["tee", "/tmp/out"]]
+
+
+class TestCommandVerb:
+    def test_simple_verb(self):
+        assert command_verb(["git", "status"]) == "git"
+
+    def test_env_prefix_skipped(self):
+        assert command_verb(["env", "python3", "-c", "..."]) == "python3"
+
+    def test_env_with_key_val(self):
+        assert command_verb(["env", "FOO=bar", "python3", "-c", "x"]) == "python3"
+
+    def test_env_with_flag(self):
+        assert command_verb(["env", "-i", "python3", "-c", "x"]) == "python3"
+
+    def test_empty_segment(self):
+        assert command_verb([]) == ""
+
+
+class TestIsGhCommand:
+    def test_gh_at_position_0(self):
+        assert is_gh_command(["gh", "api", "/repos/foo"])
+
+    def test_not_gh(self):
+        assert not is_gh_command(["git", "push"])
+
+    def test_gh_as_argument(self):
+        assert not is_gh_command(["echo", "gh"])
+
+    def test_env_gh(self):
+        assert is_gh_command(["env", "gh", "pr", "view"])
+
+    def test_gh_after_shell_op(self):
+        segments = tokenize_command_segments("git status && gh pr view 123")
+        gh_segments = [seg for seg in segments if is_gh_command(seg)]
+        assert len(gh_segments) == 1
+        assert gh_segments[0][0] == "gh"
+
+
+class TestExtractInterpreterWritePath:
+    def test_open_literal_path(self):
+        cmd = "python3 -c \"open('/clone/.autoskillit/temp/out.json', 'w').write('x')\""
+        assert extract_interpreter_write_path(cmd) == "/clone/.autoskillit/temp/out.json"
+
+    def test_path_write_text(self):
+        cmd = "python3 -c \"Path('/clone/temp/out.json').write_text('x')\""
+        assert extract_interpreter_write_path(cmd) == "/clone/temp/out.json"
+
+    def test_path_write_bytes(self):
+        cmd = "python3 -c \"Path('/clone/temp/out.bin').write_bytes(b'x')\""
+        assert extract_interpreter_write_path(cmd) == "/clone/temp/out.bin"
+
+    def test_dynamic_path_returns_none(self):
+        cmd = "python3 -c \"open(sys.argv[1], 'w').write('x')\""
+        assert extract_interpreter_write_path(cmd) is None
+
+    def test_no_interpreter_returns_none(self):
+        cmd = "open('/tmp/x', 'w')"
+        assert extract_interpreter_write_path(cmd) is None
+
+    def test_shutil_returns_none(self):
+        cmd = "python3 -c \"import shutil; shutil.copy('/tmp/a', '/clone/src/f.py')\""
+        assert extract_interpreter_write_path(cmd) is None
+
+    def test_dynamic_path_with_non_literal_var_returns_none(self):
+        cmd = "python3 -c \"open(some_var, 'w').write('x')\""
+        assert extract_interpreter_write_path(cmd) is None

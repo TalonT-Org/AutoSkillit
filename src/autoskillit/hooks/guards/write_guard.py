@@ -14,23 +14,15 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    command_verb,
+    extract_interpreter_write_path,
     has_interpreter_write,
+    is_gh_command,
+    tokenize_command_segments,
 )
 
 WRITE_GUARD_DENY_TRIGGER = "read-only skill session"
 
-# Patterns that detect file-modifying commands in a bash command string.
-# Used to decide whether a Bash tool call warrants path extraction.
-_IS_WRITE_CMD_RE = re.compile(
-    r"\bsed\s+(?:\S+\s+)*(?:-i|--in-place)"
-    r"|>+\s*/"
-    r"|\btee\s+/"
-    r"|\b(?:mv|cp)\s+"
-    r"|\bpatch\s+"
-    r"|\bgit\s+checkout\s+--"
-    r"|\bgit\s+reset\s+--hard"
-    r"|\b(?:rm|unlink)\s+"
-)
 _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
     {
         "/dev/null",
@@ -41,39 +33,112 @@ _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
     }
 )
 
-# Each pattern extracts the target file path (group 1) from a file-modifying command.
-_BASH_TARGET_PATTERNS: list[re.Pattern[str]] = [
-    # sed -i 's/x/y/' /file  or  sed --in-place 's/x/y/' /file
-    re.compile(
-        r"\bsed\s+(?:\S+\s+)*(?:-i\S*|--in-place\S*)\s+"
-        r"(?:'[^']*'|\"[^\"]*\"|\S+)\s+(/[^\s;|&]+)"
-    ),
-    # anything > /file  or  >> /file  (redirect to absolute path)
-    re.compile(r">+\s*(/[^\s;|&>]+)"),
-    # tee /file
-    re.compile(r"\btee\s+(/[^\s;|&>]+)"),
-    # mv /src /dst  or  cp /src /dst  (captures destination)
-    re.compile(r"\b(?:mv|cp)\s+\S+\s+(/[^\s;|&>]+)"),
-    # patch /file
-    re.compile(r"\bpatch\s+(?:-\S+\s+)*(/[^\s;|&><]+)"),
-    # git checkout -- /file
-    re.compile(r"\bgit\s+checkout\s+--\s+(/[^\s;|&>]+)"),
-    # rm /file  or  unlink /file
-    re.compile(r"\b(?:rm|unlink)\s+(?:-\S+\s+)*(/[^\s;|&>]+)"),
-]
+_WRITE_VERBS: frozenset[str] = frozenset(
+    {
+        "sed",
+        "tee",
+        "mv",
+        "cp",
+        "patch",
+        "rm",
+        "unlink",
+    }
+)
 
-_BASH_TARGET_PATTERNS_RELATIVE: list[re.Pattern[str]] = [
-    # sed -i 's/x/y/' relative/file
-    re.compile(
-        r"\bsed\s+(?:\S+\s+)*(?:-i\S*|--in-place\S*)\s+"
-        r"(?:'[^']*'|\"[^\"]*\"|\S+)\s+([^\s;|&>/][^\s;|&>]*)"
-    ),
-    # mv src dst  or  cp src dst  (relative destination)
-    re.compile(r"\b(?:mv|cp)\s+\S+\s+([^\s;|&>/][^\s;|&>]*)"),
-    re.compile(r"\bmv\s+([^\s;|&>/][^\s;|&>]*)\s+\S+"),
-    # rm relative/file  or  unlink relative/file
-    re.compile(r"\b(?:rm|unlink)\s+(?:-\S+\s+)*([^\s;|&>/][^\s;|&>]*)"),
-]
+_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset({"-C", "--git-dir", "--work-tree", "-c"})
+
+_REDIRECT_RE = re.compile(r">+\s*(/[^\s;|&>]+)")
+
+
+def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
+    """Extract write target paths from a single command segment.
+
+    Returns None if segment is not a write command, [] if write detected
+    but all targets are pseudo-devices, or [paths] otherwise.
+    """
+    if is_gh_command(segment):
+        return None
+
+    verb = command_verb(segment)
+    targets: list[str] = []
+    found_write = False
+
+    if verb == "git" and len(segment) >= 2:
+        idx = 1
+        while idx < len(segment):
+            tok = segment[idx]
+            if tok in _GIT_FLAG_WITH_VALUE:
+                idx += 2
+                if idx >= len(segment):
+                    break
+            elif tok.startswith("-") and "=" not in tok and tok not in ("--", "--hard"):
+                idx += 1
+            else:
+                break
+        if idx < len(segment):
+            subcmd = segment[idx]
+            if subcmd == "checkout" and "--" in segment[idx + 1 :]:
+                found_write = True
+                double_dash = segment.index("--", idx + 1)
+                for t in segment[double_dash + 1 :]:
+                    if t.startswith("/"):
+                        if t not in _PSEUDO_DEVICE_PATHS:
+                            targets.append(t)
+                    elif cwd:
+                        targets.append(os.path.join(cwd, t))
+            elif subcmd == "reset" and "--hard" in segment[idx + 1 :]:
+                found_write = True
+    elif verb in _WRITE_VERBS:
+        found_write = True
+        non_flag = [t for t in segment[1:] if not t.startswith("-")]
+        if verb == "sed":
+            # -i flag must be present; last non-flag arg is the target
+            flags = [t for t in segment[1:] if t.startswith("-")]
+            has_inplace = any(t.startswith("-i") or t == "--in-place" for t in flags)
+            if has_inplace and non_flag:
+                # non_flag: first element is typically the sed expression, last is file
+                path = non_flag[-1]
+                if path.startswith("/"):
+                    if path not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(path)
+                elif cwd:
+                    targets.append(os.path.join(cwd, path))
+        elif verb == "tee":
+            if non_flag:
+                path = non_flag[0]
+                if path.startswith("/"):
+                    if path not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(path)
+                elif cwd:
+                    targets.append(os.path.join(cwd, path))
+        elif verb in ("mv", "cp"):
+            if len(non_flag) >= 2:
+                path = non_flag[-1]
+                if path.startswith("/"):
+                    if path not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(path)
+                elif cwd:
+                    targets.append(os.path.join(cwd, path))
+        elif verb == "patch":
+            for t in non_flag:
+                if t.startswith("/"):
+                    if t not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(t)
+                    break
+                elif cwd:
+                    targets.append(os.path.join(cwd, t))
+                    break
+        elif verb in ("rm", "unlink"):
+            for t in non_flag:
+                if t.startswith("/"):
+                    if t not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(t)
+                elif cwd:
+                    targets.append(os.path.join(cwd, t))
+
+    if found_write:
+        return targets
+    return None
 
 
 def _extract_bash_write_targets(command: str) -> list[str] | None:
@@ -82,23 +147,43 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
     Returns an empty list when a write command is detected but no path can be reliably
     extracted — callers treat this as fail-open (ambiguous = allow).
     """
-    if not _IS_WRITE_CMD_RE.search(command):
-        return None
-    targets: list[str] = []
-    for pattern in _BASH_TARGET_PATTERNS:
-        m = pattern.search(command)
-        if m:
+    segments = tokenize_command_segments(command)
+    cwd = os.environ.get("AUTOSKILLIT_CWD", "")
+    if cwd and not os.path.isabs(cwd):
+        cwd = ""
+
+    all_targets: list[str] = []
+    found_any_write = False
+
+    for segment in segments:
+        result = _extract_segment_targets(segment, cwd)
+        if result is not None:
+            found_any_write = True
+            all_targets.extend(result)
+
+    # Apply redirect regex to full command; skip only when all segments are gh.
+    has_non_gh = any(not is_gh_command(seg) for seg in segments)
+
+    if not segments or has_non_gh:
+        for m in _REDIRECT_RE.finditer(command):
             path = m.group(1)
             if path not in _PSEUDO_DEVICE_PATHS:
-                targets.append(path)
-    cwd = os.environ.get("AUTOSKILLIT_CWD", "")
-    if cwd:
-        for pattern in _BASH_TARGET_PATTERNS_RELATIVE:
-            for m in pattern.finditer(command):
-                rel_path = m.group(1)
-                if not rel_path.startswith("/") and rel_path not in _PSEUDO_DEVICE_PATHS:
-                    targets.append(os.path.join(cwd, rel_path))
-    return targets
+                found_any_write = True
+                all_targets.append(path)
+            else:
+                found_any_write = True
+
+    if not found_any_write:
+        return None
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for t in all_targets:
+        if t not in seen:
+            seen.add(t)
+            unique.append(t)
+    return unique
 
 
 def _extract_paths_from_patch(command: str) -> list[str]:
@@ -163,12 +248,22 @@ def main() -> None:
 
     if tool_name == "Bash" or "run_cmd" in tool_name:
         command = tool_input.get("command", "") or tool_input.get("cmd", "")
-        if has_interpreter_write(command):
+
+        interp_path = extract_interpreter_write_path(command)
+        if interp_path is not None:
+            if not _within_any_prefix(interp_path):
+                _deny(
+                    f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                    f"Only writes to {display_prefix} are permitted."
+                )
+                return
+        elif has_interpreter_write(command):
             _deny(
                 f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
                 f"Interpreter-mediated file writes are not permitted."
             )
             return
+
         targets = _extract_bash_write_targets(command)
         if targets is None:
             sys.exit(0)

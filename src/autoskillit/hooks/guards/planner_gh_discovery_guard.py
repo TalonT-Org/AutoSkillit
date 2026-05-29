@@ -22,13 +22,12 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    _SHELL_OPS,
     has_interpreter_wrapped_command,
     has_nested_shell,
 )
 
 DISCOVERY_DENY_TRIGGER: str = "Planner skills cannot discover GitHub issues"
-
-_SHELL_OPS = frozenset({"&&", "||", ";", "!", "|", "("})
 
 _DENY_REASON = (
     "Planner skills cannot discover GitHub issues or PRs. "

@@ -812,9 +812,19 @@ def test_cli_session_launch_gates_backend_alignment_features() -> None:
     if not alignment_features:
         pytest.skip("No requires_backend_alignment features in registry")
 
-    session_launch_src = (paths.pkg_root() / "cli" / "session" / "_session_launch.py").read_text()
+    import ast
 
-    assert "is_feature_enabled" in session_launch_src, (
-        "_session_launch.py must contain is_feature_enabled to gate CLI-path access "
-        f"for backend-alignment features: {alignment_features}"
+    session_launch_path = paths.pkg_root() / "cli" / "session" / "_session_launch.py"
+    tree = ast.parse(session_launch_path.read_text(), filename=str(session_launch_path))
+
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "is_feature_enabled"
+    ]
+    assert calls, (
+        "_session_launch.py must contain an is_feature_enabled() call to gate CLI-path "
+        f"access for backend-alignment features: {alignment_features}"
     )

@@ -507,6 +507,8 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
         session_record_types=frozenset(),
     )
 
+    build_kwargs: list[dict] = []
+
     class _CodexLikeBackend:
         def binary_name(self) -> str:
             return "codex"
@@ -516,6 +518,7 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
             return caps
 
         def build_interactive_cmd(self, **kwargs):
+            build_kwargs.append(kwargs)
             return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
 
     captured: dict = {}
@@ -530,6 +533,10 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
     assert ClaudeFlags.PLUGIN_DIR not in captured["cmd"]
     assert ClaudeFlags.TOOLS not in captured["cmd"]
     assert "AskUserQuestion" not in captured["cmd"]
+    assert build_kwargs, "build_interactive_cmd must be called"
+    assert build_kwargs[0].get("tools") == ("AskUserQuestion",), (
+        "skill_injection_capable=True backend must receive tools=('AskUserQuestion',)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -607,6 +614,60 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
     _run_interactive_session(system_prompt="test")
     assert backends_used == ["claude-code"], (
         f"Expected fallback to claude-code, got: {backends_used}"
+    )
+
+
+def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When config specifies backend='codex' and codex_backend feature is enabled,
+    _run_interactive_session uses the codex backend (no fallback)."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import CmdSpec
+
+    backends_used: list[str] = []
+
+    class _CodexStub:
+        def binary_name(self) -> str:
+            return "codex"
+
+        @property
+        def capabilities(self):
+            from autoskillit.core import BackendCapabilities
+
+            return BackendCapabilities(
+                channel_b_capable=False,
+                pty_required=True,
+                session_resume_capable=True,
+                skill_injection_capable=True,
+                supports_thinking_blocks=False,
+                supports_claude_format_stdout=False,
+                exit_code_is_terminal=True,
+                mcp_config_capable=False,
+                food_truck_capable=False,
+                completion_record_types=frozenset(),
+                session_record_types=frozenset(),
+            )
+
+        def build_interactive_cmd(self, **kwargs):
+            backends_used.append("codex")
+            return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
+
+    mock_config = MagicMock()
+    mock_config.agent_backend.backend = "codex"
+    mock_config.features = {"codex_backend": True}
+    mock_config.experimental_enabled = True
+
+    monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
+    monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: _CodexStub())
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/codex")
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **kw: type("Result", (), {"returncode": 0})()
+    )
+    _run_interactive_session(system_prompt="test")
+    assert backends_used == ["codex"], (
+        f"Expected codex backend when feature enabled, got: {backends_used}"
     )
 
 

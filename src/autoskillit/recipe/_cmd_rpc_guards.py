@@ -100,7 +100,13 @@ def main_repo_guard(clone_path: str) -> dict[str, str]:
             stash_result.returncode,
             stash_result.stderr.strip(),
         )
-        run_git(["reset", "HEAD"], cwd=clone_path)
+        reset_result = run_git(["reset", "HEAD"], cwd=clone_path)
+        if reset_result.returncode != 0:
+            logger.warning(
+                "git reset HEAD failed (rc=%d): %s",
+                reset_result.returncode,
+                reset_result.stderr.strip(),
+            )
         co = run_git(["checkout", "--", "."], cwd=clone_path)
         if co.returncode != 0:
             logger.warning(

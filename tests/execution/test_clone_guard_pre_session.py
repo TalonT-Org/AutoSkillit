@@ -104,17 +104,12 @@ class _RealAsyncRunner:
                 pid=proc.pid,
             )
         return SubprocessResult(
-            returncode=proc.returncode if proc.returncode is not None else 0,
+            returncode=proc.returncode if proc.returncode is not None else -1,
             stdout=stdout_bytes.decode("utf-8", errors="replace"),
             stderr=stderr_bytes.decode("utf-8", errors="replace"),
             termination=TerminationReason.NATURAL_EXIT,
             pid=proc.pid,
         )
-
-
-# ---------------------------------------------------------------------------
-# Step 1: validate_pre_session_index
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
@@ -227,11 +222,6 @@ async def test_validate_pre_session_index_handles_no_commits_repo(tmp_path):
     assert _git_status(repo) == ""
 
 
-# ---------------------------------------------------------------------------
-# Step 2: selective revert clears staged-only entries
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.anyio
 async def test_selective_revert_clears_staged_only_entries(tmp_path):
     repo = tmp_path / "repo"
@@ -286,11 +276,6 @@ async def test_selective_revert_clears_staged_and_uncommitted(tmp_path):
 
     assert result.reverted
     assert _git_status(repo) == ""
-
-
-# ---------------------------------------------------------------------------
-# Step 4: cross-session contamination blocked end-to-end
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio

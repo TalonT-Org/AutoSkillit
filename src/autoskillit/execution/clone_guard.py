@@ -237,6 +237,7 @@ async def validate_pre_session_index(
     """Reset dirty index state from prior sessions before a new session starts.
 
     Returns True if dirty state was found and reset, False if index was clean.
+    Raises RuntimeError if git infrastructure commands fail.
     Uses pre_session_sha for mixed reset when available; falls back to
     ``git rm --cached -r .`` on repos with no HEAD.
     """
@@ -246,7 +247,9 @@ async def validate_pre_session_index(
         timeout=_GIT_TIMEOUT,
     )
     if status_result.returncode != 0:
-        return False
+        raise RuntimeError(
+            f"git status failed (rc={status_result.returncode}): {status_result.stderr.strip()}"
+        )
     status_lines = [line for line in status_result.stdout.splitlines() if line.strip()]
     if exclude_prefix:
         status_lines = [
@@ -273,17 +276,26 @@ async def validate_pre_session_index(
             reset_sha = head_result.stdout.strip()
 
     if reset_sha:
-        await runner(
+        reset_result = await runner(
             ["git", "reset", reset_sha],
             cwd=Path(cwd),
             timeout=_GIT_TIMEOUT,
         )
     else:
-        await runner(
+        reset_result = await runner(
             ["git", "rm", "--cached", "-r", "."],
             cwd=Path(cwd),
             timeout=_GIT_TIMEOUT,
         )
+
+    if reset_result.returncode != 0:
+        logger.warning(
+            "pre_session_reset_failed",
+            returncode=reset_result.returncode,
+            stderr=reset_result.stderr.strip(),
+            strategy="sha" if reset_sha else "rm_cached",
+        )
+        return False
 
     await runner(
         ["git", "checkout", "--", "."],

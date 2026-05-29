@@ -1010,11 +1010,6 @@ class TestReviewPathRebase:
             assert result == {"status": "conflicts"}
 
 
-# ---------------------------------------------------------------------------
-# commit_guard regression-check tests (Test 1a–1d)
-# ---------------------------------------------------------------------------
-
-
 def _init_git_repo_on_main(tmp_path: Path) -> None:
     """Init git repo with branch named 'main' and an initial empty commit."""
     subprocess.run(
@@ -1055,7 +1050,6 @@ def test_commit_guard_detects_regression(tmp_path: Path) -> None:
         capture_output=True,
         env=_GIT_ENV,
     )
-    # Add implementation: 3 files, 55 total lines
     (tmp_path / "module_a.py").write_text("\n".join(f"line_{i} = {i}" for i in range(20)) + "\n")
     (tmp_path / "module_b.py").write_text(
         "\n".join(f"x_{i} = 'value_{i}'" for i in range(20)) + "\n"
@@ -1075,7 +1069,6 @@ def test_commit_guard_detects_regression(tmp_path: Path) -> None:
         capture_output=True,
         env=_GIT_ENV,
     )
-    # Contaminate: overwrite files with minimal content (reverts ~52 lines)
     (tmp_path / "module_a.py").write_text("line_0 = 0\n")
     (tmp_path / "module_b.py").write_text("x_0 = 'value_0'\n")
     (tmp_path / "module_c.py").write_text("Y_0 = True\n")
@@ -1112,7 +1105,6 @@ def test_commit_guard_allows_normal_changes(tmp_path: Path) -> None:
         capture_output=True,
         env=_GIT_ENV,
     )
-    # Add 3 more lines — small incremental improvement, not a regression
     (tmp_path / "module_a.py").write_text(
         code_lines + "\nline_20 = 20\nline_21 = 21\nline_22 = 22\n"
     )

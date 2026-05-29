@@ -205,7 +205,7 @@ async def _execute_claude_headless(
                 exclude_prefix=_derived_prefix or GUARD_EXCLUDE_PREFIX,
             )
         except Exception:
-            logger.debug("validate_pre_session_index_failed", exc_info=True)
+            logger.warning("validate_pre_session_index_failed", exc_info=True)
 
     _watch_dirs: list[Path] = list(write_watch_dirs) if write_watch_dirs else []
     if not _watch_dirs:

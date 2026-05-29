@@ -605,3 +605,59 @@ def _check_executable_field_content_validity(
                     )
                 )
     return findings
+
+
+_BLIND_ADD_ALL_RE: re.Pattern[str] = re.compile(r"git\b.*\badd\s+(-A|--all|\.)\b")
+
+
+@semantic_rule(
+    name="skill-blind-add-all",
+    description=(
+        "A SKILL.md bash block uses 'git add -A', 'git add .', or 'git add --all'. "
+        "These stage all files including untracked content, bypassing scoped-add safety. "
+        "Use 'git add -- <specific files>' to limit staging to intentionally modified files."
+    ),
+)
+def _check_skill_blind_add_all(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire for any run_skill step whose SKILL.md bash blocks contain a blind git-add pattern."""
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        bash_blocks = extract_bash_blocks(content)
+        if not bash_blocks:
+            continue
+        for block in bash_blocks:
+            for line in block.splitlines():
+                if _BLIND_ADD_ALL_RE.search(line):
+                    findings.append(
+                        RuleFinding(
+                            rule="skill-blind-add-all",
+                            severity=Severity.WARNING,
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{skill_name}' bash block has a blind git-add pattern. "
+                                f"This stages ALL files including untracked content, bypassing "
+                                f"scoped-add safety. Use 'git add -- <specific files>' to limit "
+                                f"staging to intentionally modified files."
+                            ),
+                        )
+                    )
+                    break  # one finding per block
+            else:
+                continue
+            break  # one finding per skill step
+    return findings

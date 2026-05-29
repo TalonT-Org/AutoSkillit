@@ -13,7 +13,7 @@ def _create_time_fallback(pid: int, dispatched_create_time: float) -> bool:
             return False
         actual_ct = psutil.Process(pid).create_time()
         return abs(actual_ct - dispatched_create_time) < 1.0
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
+    except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
         return False
 
 

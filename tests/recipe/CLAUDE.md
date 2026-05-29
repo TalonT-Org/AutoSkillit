@@ -148,6 +148,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_on_result_failure_route.py` | Tests for on_result_failure_route semantic validation rule |
 | `test_rules_outdated_script_version.py` | Tests for outdated_script_version semantic validation rule |
 | `test_rules_packs.py` | Tests for packs semantic validation rule |
+| `test_rules_phoropter_adjacency.py` | Tests for phoropter phase-order and step-interleaving semantic validation rules |
 | `test_rules_pipeline_internal.py` | Tests for pipeline_internal semantic validation rule |
 | `test_rules_predicate_routing.py` | Tests for predicate_routing semantic validation rule |
 | `test_rules_project_local_override.py` | Tests for project_local_override semantic validation rule |

@@ -13,7 +13,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_activate_deps_completeness.py` | Contracts: SKILL.md activate_deps must cover invoked Skill tool calls |
 | `test_advisory_coverage.py` | Contracts: SKILL_FILE_ADVISORY_MAP advisory hook coverage |
 | `test_api_surface_alignment.py` | REQ-C8-01 / C2-01: API surface alignment tests |
-| `test_backend_protocol.py` | Protocol conformance for CodingAgentBackend, StreamParser, ResultParser, ClaudeCodeBackend, and CodexBackend |
+| `test_backend_protocol.py` | Protocol conformance for CodingAgentBackend, StreamParser, ResultParser, and ClaudeCodeBackend |
 | `test_claim_issue_contracts.py` | Contract tests for claim_issue and release_issue MCP tools |
 | `test_claude_code_interface_contracts.py` | Contract tests for Claude Code external interface conventions |
 | `test_collapse_issues_contracts.py` | Contract tests for the collapse-issues skill SKILL.md |

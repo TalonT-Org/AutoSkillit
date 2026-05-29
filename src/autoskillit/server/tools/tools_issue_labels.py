@@ -1,4 +1,4 @@
-"""Helper functions for claim_issue, release_issue (GitHub label management)."""
+"""MCP tool handlers: claim_issue, release_issue (GitHub label management)."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from autoskillit.core import (
     _parse_issue_ref,
     get_logger,
 )
+from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._claim_helpers import (
@@ -28,6 +29,7 @@ def _extract_label_names(raw_labels: list[Any]) -> list[str]:
     return [lbl["name"] if isinstance(lbl, dict) else str(lbl) for lbl in raw_labels]
 
 
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("claim_issue")
 async def claim_issue(
     issue_url: str,
@@ -174,6 +176,7 @@ async def claim_issue(
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 
+@mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
 @track_response_size("release_issue")
 async def release_issue(
     issue_url: str,

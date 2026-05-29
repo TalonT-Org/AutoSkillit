@@ -162,13 +162,13 @@ def test_remediation_next_or_done_routes_more_parts_to_dry_walkthrough(recipe) -
     ), "next_or_done must have a predicate routing more_parts → dry_walkthrough"
 
 
-def test_remediation_next_or_done_routes_done_to_assert_has_net_changes(recipe) -> None:
-    """T_REM_MP3: next_or_done fallthrough must route to assert_has_net_changes."""
+def test_remediation_next_or_done_routes_done_to_push(recipe) -> None:
+    """T_REM_MP3: next_or_done fallthrough must route to check_has_commits (all parts complete)."""
     step = recipe.steps["next_or_done"]
     assert step.on_result is not None
     conds = step.on_result.conditions
-    assert any(c.route == "assert_has_net_changes" for c in conds), (
-        "next_or_done must have a fallthrough condition routing to assert_has_net_changes"
+    assert any(c.route == "check_has_commits" for c in conds), (
+        "next_or_done must have a fallthrough condition routing to check_has_commits"
     )
 
 

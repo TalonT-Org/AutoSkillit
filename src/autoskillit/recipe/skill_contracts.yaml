@@ -2607,17 +2607,8 @@ callable_contracts:
     - name: worktree_path
       type: str
       required: true
-    - name: base_branch
-      type: str
-      required: false
     outputs:
     - name: committed
-      type: str
-    - name: reverted_files
-      type: str
-    - name: insertions
-      type: str
-    - name: deletions
       type: str
   autoskillit.recipe._cmd_rpc.review_path_rebase:
     inputs:
@@ -2869,21 +2860,6 @@ callable_contracts:
     outputs:
     - name: has_commits
       type: string
-  autoskillit.smoke_utils.assert_has_net_changes:
-    inputs:
-    - name: cwd
-      type: directory_path
-      required: true
-    - name: base_branch
-      type: str
-      required: true
-    outputs:
-    - name: has_net_changes
-      type: str
-    - name: net_insertions
-      type: str
-    - name: net_deletions
-      type: str
   autoskillit.smoke_utils.close_issue_already_done:
     inputs:
     - name: issue_url

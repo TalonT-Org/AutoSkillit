@@ -1134,8 +1134,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("workspace/session_skills.py"): {
             "DefaultSkillResolver"
         },  # ephemeral session resolver fallback
-        Path("smoke_utils.py"): {"DefaultTokenLog"},  # run_python callable
-        Path("smoke_utils/_telemetry.py"): {"DefaultTokenLog"},  # smoke_utils package telemetry
+        Path("smoke_utils/_telemetry.py"): {"DefaultTokenLog"},  # run_python callable
     }
 
     violations: list[str] = []

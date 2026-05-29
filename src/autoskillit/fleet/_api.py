@@ -68,10 +68,10 @@ def _write_pid(
     sidecar_path: str | None = None,
     dispatched_create_time: float = 0.0,
     identity_degraded: bool = False,
-    boot_id: str = "",
 ) -> None:
     """on_spawn callback: atomically mark dispatch as running with dispatched_pid."""
-    from autoskillit.fleet import mark_dispatch_running  # noqa: PLC0415
+    from autoskillit.core import read_boot_id
+    from autoskillit.fleet import mark_dispatch_running
 
     try:
         mark_dispatch_running(
@@ -80,7 +80,7 @@ def _write_pid(
             dispatch_id=dispatch_id,
             dispatched_pid=pid,
             starttime_ticks=starttime_ticks,
-            boot_id=boot_id,
+            boot_id=read_boot_id() or "",
             dispatched_create_time=dispatched_create_time,
             sidecar_path=sidecar_path,
             identity_degraded=identity_degraded,
@@ -549,7 +549,7 @@ async def _run_dispatch(
     )
 
     def _on_spawn(pid: int, ticks: int) -> None:
-        from autoskillit.core import read_boot_id  # noqa: PLC0415
+        from autoskillit.core import read_boot_id
 
         _dispatched_pid.append(pid)
         try:
@@ -568,8 +568,7 @@ async def _run_dispatch(
             ticks,
             dispatch_sidecar_path,
             create_time,
-            identity_degraded=(ticks == 0 or not boot_id),
-            boot_id=boot_id,
+            identity_degraded=(ticks == 0),
         )
 
     marker_dir: Path | None = None

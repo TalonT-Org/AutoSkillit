@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
     ApiRetryOutcome,
     ChannelConfirmation,
     CliSubtype,
@@ -48,6 +49,7 @@ from autoskillit.execution.session._exit_classification import classify_infra_ex
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
+    parse_session_result,
 )
 from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
@@ -80,13 +82,9 @@ def _resolve_skill_session_id(
 
 
 def _parse_stdout(stdout: str, backend: CodingAgentBackend) -> ClaudeSessionResult:
-    parser = backend.result_parser()
-    if parser is None:
-        logger.warning("backend_result_parser_none_fallback", backend=backend.name)
-        from autoskillit.execution.backends.claude import ClaudeResultParser
-
-        parser = ClaudeResultParser()
-    agent_result = parser.parse_stdout(stdout)
+    if backend.name == AGENT_BACKEND_CLAUDE_CODE:
+        return parse_session_result(stdout)
+    agent_result = backend.result_parser().parse_stdout(stdout)
     return _adapt_agent_result(agent_result)
 
 

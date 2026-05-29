@@ -343,17 +343,17 @@ class TestImplementationPipelineStructure:
             c.route == "verify" and c.when is not None and "more_parts" in c.when for c in conds
         ), "next_or_done must have a predicate routing more_parts → verify"
 
-    def test_ip9_next_or_done_routes_all_done_to_assert_has_net_changes(self, recipe) -> None:
-        """T_IP9: next_or_done must route all_done to assert_has_net_changes.
+    def test_ip9_next_or_done_routes_all_done_to_audit_impl(self, recipe) -> None:
+        """T_IP9: next_or_done must route all_done to audit_impl.
 
-        Uses predicate format (v0.3.0): fallthrough condition (when=None) routes to
-        assert_has_net_changes (zero-diff ghost gate), which then routes to audit_impl.
+        Uses predicate format (v0.3.0): fallthrough condition (when=None) routes to audit_impl.
         """
         step = recipe.steps["next_or_done"]
         assert step.on_result is not None
         conds = step.on_result.conditions
-        assert any(c.route == "assert_has_net_changes" for c in conds), (
-            "next_or_done must have a condition routing to assert_has_net_changes"
+        # The fallthrough condition (when=None) is the default route to audit_impl
+        assert any(c.route == "audit_impl" for c in conds), (
+            "next_or_done must have a condition routing to audit_impl"
         )
 
     def test_ip_audit_impl_uses_base_sha_as_ref(self, recipe) -> None:
@@ -642,12 +642,12 @@ class TestImplementationGroupsStructure:
             c.route == "verify" and c.when is not None and "more_parts" in c.when for c in conds
         ), "next_or_done must have a predicate routing more_parts → verify"
 
-    def test_ig7_next_or_done_fallthrough_to_assert_has_net_changes(self, recipe) -> None:
-        """T_IG7: next_or_done fallthrough (all done) must route to assert_has_net_changes."""
+    def test_ig7_next_or_done_fallthrough_to_audit_impl(self, recipe) -> None:
+        """T_IG7: next_or_done fallthrough (all done) must route to audit_impl."""
         step = recipe.steps["next_or_done"]
         assert step.on_result is not None
         conds = step.on_result.conditions
-        assert any(c.route == "assert_has_net_changes" for c in conds)
+        assert any(c.route == "audit_impl" for c in conds)
 
     def test_ig8_plan_note_contains_accumulation_instruction(self, recipe) -> None:
         """T_IG8: plan step note must instruct agent to accumulate plan paths across groups."""

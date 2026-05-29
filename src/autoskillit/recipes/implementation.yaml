@@ -436,17 +436,12 @@ steps:
     with:
       callable: autoskillit.recipe._cmd_rpc.commit_guard
       worktree_path: ${{ context.worktree_path }}
-      base_branch: ${{ inputs.base_branch }}
-    on_result:
-    - when: ${{ result.committed }} == 'regression_detected'
-      route: release_issue_failure
-    - route: main_repo_guard
+    on_success: main_repo_guard
     on_failure: main_repo_guard
     note: 'Belt-and-suspenders guard: auto-commits any uncommitted changes before
       merge. Catches dirty state from context-exhausted skills, cascading pre-commit
       auto-fixes, or any other source. Routes to main_repo_guard to handle dirty main
-      repo state. Returns regression_detected if uncommitted changes would revert the
-      implementation.
+      repo state.
 
       '
   main_repo_guard:
@@ -587,26 +582,10 @@ steps:
     on_result:
     - when: ${{ result.next }} == more_parts
       route: verify
-    - route: assert_has_net_changes
+    - route: audit_impl
     note: 'Routing step — no tool call. The agent evaluates what comes next: 1. If
       more plan_parts remain for the current plan → go to verify with next part. 2.
-      If all plan_parts are complete → go to assert_has_net_changes.
-
-      '
-  assert_has_net_changes:
-    tool: run_python
-    with:
-      callable: autoskillit.smoke_utils.assert_has_net_changes
-      cwd: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
-    on_result:
-    - when: ${{ result.has_net_changes }} == 'false'
-      route: release_issue_failure
-    - route: audit_impl
-    on_failure: release_issue_failure
-    note: 'Zero-diff ghost gate: verifies the branch has non-zero net changes vs
-      base_branch after all plan parts are merged. Catches reversion commits from
-      context-exhausted SKILL.md context-limit handlers that bypass commit_guard.
+      If all plan_parts are complete → go to audit_impl.
 
       '
   audit_impl:

@@ -11,7 +11,6 @@ Semantic validation rule modules for recipe analysis (48 rule files).
 | `rules_blocks.py` | Block-level budget rules; loads `block_budgets.yaml` at import |
 | `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts and `hidden-input-ref-in-template` detection (hidden ingredient `${{ inputs.X }}` in step template fields) |
 | `rules_callable_scope.py` | Enforces scoped directory args for file-discovering callables (e.g. `batch_create_issues` → `audit_run_dir`) |
-| `rules_campaign.py` | Semantic validation rules for campaign recipes |
 | `rules_campaign_capture.py` | Campaign capture validation: identifier keys, result refs, sentinel cross-checks |
 | `rules_campaign_deps.py` | Campaign dependency graph rules: valid refs, acyclic, sequential |
 | `rules_campaign_dispatch.py` | Campaign dispatch structure: kind, names, recipe refs, packs, task |
@@ -42,6 +41,7 @@ Semantic validation rule modules for recipe analysis (48 rule files).
 | `rules_merge_queue.py` | Merge queue push routing: `queued_branch` error route enforcement |
 | `rules_optional_capture.py` | Optional capture guard enforcement: detect steps with optional output patterns routing to consumers without a truthiness guard |
 | `rules_packs.py` | Pack validation (names must exist in `PACK_REGISTRY`) |
+| `rules_phoropter_adjacency.py` | Phoropter phase-order and step-interleaving adjacency rules |
 | `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
 | `rules_remediation.py` | audit-impl remediation_path capture must have non-terminal non-GO route |
 | `rules_recipe.py` | Sub-recipe reference validity and `with_args` hygiene |
@@ -58,4 +58,4 @@ Semantic validation rule modules for recipe analysis (48 rule files).
 
 ## Architecture Notes
 
-Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 47 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.
+Side-effect registration: callers import the package to trigger `@semantic_rule` decorator registration of all 48 rule modules. Each rule receives a `ValidationContext` argument. No cross-imports between rule modules.

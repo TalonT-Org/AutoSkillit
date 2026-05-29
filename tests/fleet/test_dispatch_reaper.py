@@ -66,15 +66,11 @@ class TestReap:
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.fleet._liveness.read_starttime_ticks",
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
                 return_value=1000,
             ),
             patch(
                 "autoskillit.fleet._dispatch_reaper.read_boot_id",
-                return_value=BOOT_ID,
-            ),
-            patch(
-                "autoskillit.fleet._liveness.read_boot_id",
                 return_value=BOOT_ID,
             ),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
@@ -92,15 +88,11 @@ class TestReap:
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.fleet._liveness.read_starttime_ticks",
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
                 return_value=9999,
             ),
             patch(
                 "autoskillit.fleet._dispatch_reaper.read_boot_id",
-                return_value=BOOT_ID,
-            ),
-            patch(
-                "autoskillit.fleet._liveness.read_boot_id",
                 return_value=BOOT_ID,
             ),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
@@ -203,15 +195,11 @@ class TestReap:
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.fleet._liveness.read_starttime_ticks",
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
                 return_value=1000,
             ),
             patch(
                 "autoskillit.fleet._dispatch_reaper.read_boot_id",
-                return_value=BOOT_ID,
-            ),
-            patch(
-                "autoskillit.fleet._liveness.read_boot_id",
                 return_value=BOOT_ID,
             ),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree"),
@@ -246,11 +234,10 @@ class TestReap:
         )
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
-            patch("autoskillit.fleet._liveness.read_starttime_ticks", return_value=None),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
-            patch("autoskillit.fleet._liveness.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
-            patch("autoskillit.fleet._liveness.psutil.Process") as mock_proc_cls,
+            patch("autoskillit.fleet._dispatch_reaper.psutil.Process") as mock_proc_cls,
         ):
             mock_proc_cls.return_value.create_time.return_value = 1000000.5
             _reap(sp)
@@ -269,11 +256,10 @@ class TestReap:
         )
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
-            patch("autoskillit.fleet._liveness.read_starttime_ticks", return_value=None),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
-            patch("autoskillit.fleet._liveness.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
-            patch("autoskillit.fleet._liveness.psutil.Process") as mock_proc_cls,
+            patch("autoskillit.fleet._dispatch_reaper.psutil.Process") as mock_proc_cls,
         ):
             mock_proc_cls.return_value.create_time.return_value = 9999999.0
             _reap(sp)
@@ -292,9 +278,8 @@ class TestReap:
         )
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
-            patch("autoskillit.fleet._liveness.read_starttime_ticks", return_value=None),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
-            patch("autoskillit.fleet._liveness.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
         ):
             _reap(sp)
@@ -304,7 +289,7 @@ class TestReap:
         assert state is not None
         assert state.dispatches[0].reason == "reaped_pid_recycled"
 
-    def test_reap_create_time_nosuchprocess_marks_recycled(self, tmp_path: Path) -> None:
+    def test_reap_create_time_nosuchprocess_marks_dead(self, tmp_path: Path) -> None:
         sp = _make_running_state(
             tmp_path,
             dispatched_pid=12345,
@@ -313,11 +298,10 @@ class TestReap:
         )
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
-            patch("autoskillit.fleet._liveness.read_starttime_ticks", return_value=None),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
-            patch("autoskillit.fleet._liveness.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
-            patch("autoskillit.fleet._liveness.psutil.Process") as mock_proc_cls,
+            patch("autoskillit.fleet._dispatch_reaper.psutil.Process") as mock_proc_cls,
         ):
             mock_proc_cls.return_value.create_time.side_effect = psutil.NoSuchProcess(12345)
             _reap(sp)
@@ -325,7 +309,7 @@ class TestReap:
         mock_kill.assert_not_called()
         state = read_state(sp)
         assert state is not None
-        assert state.dispatches[0].reason == "reaped_pid_recycled"
+        assert state.dispatches[0].reason == "reaped_dead_pid"
 
     def test_reap_kills_orphan_via_create_time_when_ticks_zero(self, tmp_path: Path) -> None:
         """When dispatched_starttime_ticks=0, reaper falls back to create_time comparison."""
@@ -338,11 +322,12 @@ class TestReap:
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.fleet._dispatch_reaper.read_boot_id",
-                return_value=BOOT_ID,
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
+                return_value=7777,  # live process has real ticks; stored dispatch has 0
             ),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
-            patch("autoskillit.fleet._liveness.psutil.Process") as mock_proc_cls,
+            patch("autoskillit.fleet._dispatch_reaper.psutil.Process") as mock_proc_cls,
         ):
             mock_proc_cls.return_value.create_time.return_value = 1000000.5
             _reap(sp)
@@ -362,15 +347,11 @@ class TestReap:
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.fleet._liveness.read_starttime_ticks",
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
                 return_value=1000,
             ),
             patch(
                 "autoskillit.fleet._dispatch_reaper.read_boot_id",
-                return_value=BOOT_ID,
-            ),
-            patch(
-                "autoskillit.fleet._liveness.read_boot_id",
                 return_value=BOOT_ID,
             ),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
@@ -385,15 +366,11 @@ class TestReap:
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
             patch(
-                "autoskillit.fleet._liveness.read_starttime_ticks",
+                "autoskillit.fleet._dispatch_reaper.read_starttime_ticks",
                 return_value=1000,
             ),
             patch(
                 "autoskillit.fleet._dispatch_reaper.read_boot_id",
-                return_value=BOOT_ID,
-            ),
-            patch(
-                "autoskillit.fleet._liveness.read_boot_id",
                 return_value=BOOT_ID,
             ),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
@@ -416,6 +393,7 @@ class TestReap:
             dispatched_boot_id=BOOT_ID,
         )
         with (
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
         ):
             _reap(sp, skip_dispatch_ids=frozenset({"my-dispatch"}))

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
     AgentSessionResult,
     CliSubtype,
     FailureRecord,
@@ -77,7 +78,7 @@ def _apply_budget_guard(
 
 
 def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult:
-    raw = agent_result.raw if isinstance(agent_result.raw, dict) else {}
+    raw = agent_result.raw
 
     session_id = agent_result.session_id or ""
     is_error = raw.get("is_error", not agent_result.success)
@@ -90,49 +91,34 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         CliSubtype.ERROR_MAX_TURNS,
         CliSubtype.UNKNOWN,
     }
-    jsonl_context_exhausted = bool(raw.get("jsonl_context_exhausted")) or (
-        subtype in error_subtypes and "context_length_exceeded" in (agent_result.error or "")
+    jsonl_context_exhausted = subtype in error_subtypes and "context_length_exceeded" in (
+        agent_result.error or ""
     )
 
     token_usage = raw.get("canonical_token_usage") or raw.get("token_usage")
 
-    if "tool_uses" in raw:
-        tool_uses: list[dict[str, Any]] = raw["tool_uses"]
-    else:
-        command_executions: list[dict[str, Any]] = raw.get("command_executions", [])
-        mcp_tool_calls: list[dict[str, Any]] = raw.get("mcp_tool_calls", [])
-        file_change_paths: list[str] = raw.get("file_changes", [])
-        file_change_entries = [
-            {"name": "file_change", "type": "file_change", "file_path": p}
-            for p in file_change_paths
-        ]
-        tool_uses = command_executions + mcp_tool_calls + file_change_entries
+    command_executions: list[dict[str, Any]] = raw.get("command_executions", [])
+    mcp_tool_calls: list[dict[str, Any]] = raw.get("mcp_tool_calls", [])
+    file_change_paths: list[str] = raw.get("file_changes", [])
+    file_change_entries = [
+        {"name": "file_change", "type": "file_change", "file_path": p} for p in file_change_paths
+    ]
+    tool_uses = command_executions + mcp_tool_calls + file_change_entries
 
-    if "assistant_messages" in raw:
-        assistant_messages: list[str] = raw["assistant_messages"]
-    else:
-        assistant_messages = raw.get("agent_messages", [])
-
-    errors: list[str] = raw.get("errors", []) or []
+    assistant_messages: list[str] = raw.get("agent_messages", [])
 
     return ClaudeSessionResult(
         subtype=subtype,
         is_error=is_error,
         result=result_text,
         session_id=session_id,
-        errors=errors,
         token_usage=token_usage,
         assistant_messages=assistant_messages,
         tool_uses=tool_uses,
         jsonl_context_exhausted=jsonl_context_exhausted,
         stop_reasons=stop_reasons,
-        has_thinking_only_turn=raw.get("has_thinking_only_turn", False),
-        seen_block_types=frozenset(raw.get("seen_block_types", ())),
-        api_error_status=raw.get("api_error_status"),
-        api_retry_count=raw.get("api_retry_count", 0),
-        api_retry_last_error=raw.get("api_retry_last_error", ""),
-        api_retry_last_status=raw.get("api_retry_last_status"),
-        api_retry_exhausted=raw.get("api_retry_exhausted", False),
+        has_thinking_only_turn=False,
+        seen_block_types=frozenset(),
     )
 
 
@@ -156,12 +142,10 @@ def _compute_write_evidence(
 
 
 def _extract_file_changes(stdout: str, backend: CodingAgentBackend) -> list[str]:
-    parser = backend.result_parser()
-    if parser is None:
+    if backend.name == AGENT_BACKEND_CLAUDE_CODE:
         return []
-    agent_result = parser.parse_stdout(stdout)
-    raw = agent_result.raw if isinstance(agent_result.raw, dict) else {}
-    return list(raw.get("file_changes", []))
+    agent_result = backend.result_parser().parse_stdout(stdout)
+    return list(agent_result.raw.get("file_changes", []))
 
 
 def _stdout_mentions_write_tools(stdout: str) -> bool:

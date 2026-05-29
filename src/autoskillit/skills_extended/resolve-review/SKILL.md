@@ -66,8 +66,8 @@ The recipe routes to `on_context_limit` (typically a re-push step), bypassing th
 normal commit protocol.
 
 **Before every test run and before emitting structured output tokens:**
-1. Run `git status --porcelain`
-2. If any files are dirty: `git add -- <files you modified> && git commit -m "fix: commit pending review changes"`
+1. Run `git -C {work_dir} status --porcelain`
+2. If any files are dirty: `git -C {work_dir} add -A && git -C {work_dir} commit -m "fix: commit pending review changes"`
 3. Only then proceed with the test or structured output
 
 This ensures that even if context exhaustion interrupts the fix loop, all applied

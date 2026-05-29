@@ -566,13 +566,13 @@ def test_server_file_count_under_limit() -> None:
 
 
 def test_tools_integrations_replaced_by_split_modules() -> None:
-    """tools_integrations.py deleted; five replacement modules exist."""
+    """tools_integrations.py deleted; four replacement modules exist."""
     server = SRC_ROOT / "server"
     assert not (server / "tools_integrations.py").exists()
+    assert not (server / "tools" / "tools_issue_lifecycle.py").exists()
     assert (server / "tools" / "tools_github.py").exists()
     assert (server / "tools" / "tools_issue_headless.py").exists()
     assert (server / "tools" / "tools_issue_labels.py").exists()
-    assert (server / "tools" / "tools_issue_lifecycle.py").exists()
     assert (server / "tools" / "tools_pr_ops.py").exists()
 
 
@@ -721,7 +721,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             non-terminal non-GO routes, bringing the rules/ count to 30.
             rules/rules_loop_progress.py adds the loop-body-uncaptured-output rule
             ensuring run_skill steps inside routing cycles capture declared outputs,
-            bringing the rules/ count to 31. Exempt at 48 files.
+            bringing the rules/ count to 31.
+            rules_phoropter_adjacency.py adds phoropter phase-order and step-interleaving
+            semantic validation rules, bringing the count to 50. Exempt at 50 files.
           execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
             focused single-concern modules (_process_io, _process_kill, _process_race,
             etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -849,7 +851,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
         "recipe/rules": 49,
-        "server/tools": 23,  # _auto_overrides.py added for shared _build_auto_overrides() factory
+        "server/tools": 22,  # _auto_overrides.py added for shared _build_auto_overrides() factory
         "hooks/guards": 23,  # artifact_download_guard.py added for gh run/release download guard
     }
     violations: list[str] = []

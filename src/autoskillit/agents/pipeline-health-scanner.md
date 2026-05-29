@@ -1,7 +1,7 @@
 ---
 name: pipeline-health-scanner
 description: "Analyze a batch of pipeline session logs for anomalies, bugs, and regressions. Reads session data, investigates anything suspicious as deeply as warranted, and reports findings with evidence."
-tools: [Read, Bash, Grep, Glob]
+tools: [Read, Bash, Grep, Glob, Agent]
 model: haiku
 maxTurns: 40
 ---
@@ -53,4 +53,22 @@ If the adversarial agent confirms the finding holds up, report it as confirmed. 
 
 ## Output
 
-Report findings with evidence. Not a fixed schema — natural language description of what you found, why you think it's a problem, what sessions are affected, and what you learned from investigating. If nothing is wrong, report that clearly.
+Report findings with evidence. Natural language description of what you found, why you think it's a problem, what sessions are affected, and what you learned from investigating. If nothing is wrong, report that clearly.
+
+After the narrative findings, emit a structured completion token as the final line:
+
+```
+scan_result: {step_group: "<step_name>", sessions_scanned: <N>, findings_count: <M>, status: "complete"}
+```
+
+When no issues are found:
+```
+scan_result: {step_group: "plan", sessions_scanned: 3, findings_count: 0, status: "complete"}
+```
+
+When the scan cannot complete (access failures, errors):
+```
+scan_result: {step_group: "plan", sessions_scanned: 0, findings_count: 0, status: "incomplete", reason: "<why>"}
+```
+
+The `findings_count` is the number of confirmed findings reported above. The token is always the last line of output.

@@ -2251,6 +2251,11 @@ skills:
       type: string
       required: false
     outputs: []
+    expected_output_patterns:
+    - "---pipeline-health-result---"
+    pattern_examples:
+    - "Pipeline health check: no issues found\n---pipeline-health-result---\n%%ORDER_UP%%"
+    - "## Findings\n### confirmed_bug\n...\n---pipeline-health-result---\n%%ORDER_UP%%"
     read_only: true
 callable_contracts:
   autoskillit.smoke_utils.check_loop_iteration:

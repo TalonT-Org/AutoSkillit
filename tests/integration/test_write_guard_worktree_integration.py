@@ -81,7 +81,7 @@ class TestWriteGuardWorktreeIntegration:
         )
         assert len(executor.calls) == 1
         prefixes = executor.calls[0].allowed_write_prefixes
-        assert any(str(clone_dir) in p for p in prefixes)
+        assert str(clone_dir.resolve()) + "/" in prefixes
         worktree_parent = str((clone_dir.parent / "worktrees").resolve()) + "/"
         assert worktree_parent in prefixes
 

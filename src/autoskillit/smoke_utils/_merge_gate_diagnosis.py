@@ -49,10 +49,8 @@ def diagnose_merge_gate(
     else:
         out_path = Path(".autoskillit") / "temp" / "diagnose-merge-gate" / "diagnosis.md"
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
     failed_section = "\n".join(f"- {t}" for t in failed_tests) if failed_tests else "- none"
-    log_excerpt = (test_stdout or test_stderr or "(no output captured)").strip()
+    log_excerpt = test_stdout.strip() or test_stderr.strip() or "(no output captured)"
     if len(log_excerpt) > 4000:
         log_excerpt = log_excerpt[-4000:]
 
@@ -71,5 +69,9 @@ def diagnose_merge_gate(
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
 
-    atomic_write(out_path, content)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        atomic_write(out_path, content)
+    except OSError as exc:
+        raise RuntimeError(f"Failed to write diagnosis to {out_path}") from exc
     return {"diagnosis_path": str(out_path), "ci_conclusion": "failure"}

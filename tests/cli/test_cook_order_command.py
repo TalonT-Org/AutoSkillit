@@ -460,6 +460,9 @@ class TestCLIOrderCommand:
 
         cli.order("test-script")
 
+        assert "cmd" in captured, (
+            "cli.order() did not invoke subprocess.run — check for early exit"
+        )
         cmd = captured["cmd"]
         env = captured["env"]
 

@@ -791,8 +791,10 @@ def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
 def test_cross_validation_contract_all_flags_known(
     monkeypatch: pytest.MonkeyPatch,
+    backend_name: str,
 ) -> None:
     """Every flag-like token in the assembled command must be a member of the
     backend's own Flags enum. This is the test that would have caught #3270."""
@@ -808,23 +810,26 @@ def test_cross_validation_contract_all_flags_known(
     monkeypatch.setattr(subprocess, "run", mock_run)
     _stub_plugin_installed(monkeypatch, installed=False)
 
-    for backend_name, backend_cls in BACKEND_REGISTRY.items():
-        backend = backend_cls()
-        captured.clear()
-        _run_interactive_session(system_prompt="test", backend=backend)
-        cmd = captured.get("cmd", [])
+    backend = BACKEND_REGISTRY[backend_name]()
+    _run_interactive_session(system_prompt="test", backend=backend)
+    cmd = captured.get("cmd", [])
 
-        assert cmd[0] == backend.binary_name(), (
-            f"{backend_name}: cmd[0] must be {backend.binary_name()!r}, got {cmd[0]!r}"
-        )
+    assert cmd[0] == backend.binary_name(), (
+        f"{backend_name}: cmd[0] must be {backend.binary_name()!r}, got {cmd[0]!r}"
+    )
 
-        valid_flags = _BACKEND_FLAGS[backend_name]
-        flag_tokens = {t for t in cmd[1:] if t.startswith("-")}
-        unknown = flag_tokens - valid_flags
-        assert not unknown, (
-            f"{backend_name}: unknown flags in command: {sorted(unknown)}. "
-            f"Valid flags: {sorted(valid_flags)}"
+    valid_flags = _BACKEND_FLAGS.get(backend_name)
+    if valid_flags is None:
+        pytest.fail(
+            f"{backend_name}: not in _BACKEND_FLAGS — "
+            "add it to _BACKEND_FLAGS in test_session_launch.py"
         )
+    flag_tokens = {t for t in cmd[1:] if t.startswith("-")}
+    unknown = flag_tokens - valid_flags
+    assert not unknown, (
+        f"{backend_name}: unknown flags in command: {sorted(unknown)}. "
+        f"Valid flags: {sorted(valid_flags)}"
+    )
 
 
 def test_backend_flags_mapping_covers_registry() -> None:

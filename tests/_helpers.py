@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 
 
@@ -103,7 +104,6 @@ def extract_never_block(skill_text: str) -> str:
     subsequent ``- `` list items until the next ``**`` header or end of text.
     Returns the raw text of the NEVER block (may be empty string if not found).
     """
-    import re
 
     never_match = re.search(r"(?m)^\*\*NEVER(?::\*\*|\*\*)\s*$", skill_text)
     if not never_match:
@@ -126,7 +126,6 @@ def extract_always_block(skill_text: str) -> str:
     subsequent ``- `` list items until the next ``**`` header or end of text.
     Returns the raw text of the ALWAYS block (may be empty string if not found).
     """
-    import re
 
     always_match = re.search(r"(?m)^\*\*ALWAYS(?::\*\*|\*\*)\s*$", skill_text)
     if not always_match:

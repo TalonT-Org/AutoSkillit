@@ -47,7 +47,7 @@ EXPECTED_SUB_CLAUDE_MDS = [
 
 def test_all_32_sub_claude_md_files_exist():
     assert len(EXPECTED_SUB_CLAUDE_MDS) == 32, (
-        f"Expected 28 entries, got {len(EXPECTED_SUB_CLAUDE_MDS)}"
+        f"Expected 32 entries, got {len(EXPECTED_SUB_CLAUDE_MDS)}"
     )
     assert len(EXPECTED_SUB_CLAUDE_MDS) == len(set(EXPECTED_SUB_CLAUDE_MDS)), (
         "Duplicate entries in EXPECTED_SUB_CLAUDE_MDS"

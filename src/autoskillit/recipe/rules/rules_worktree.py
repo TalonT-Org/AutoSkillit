@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
+
 from autoskillit.core import (
     SKILL_TOOLS,
     Severity,
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_success_step_graph
+from autoskillit.recipe._rule_helpers import _find_cycle_members
 from autoskillit.recipe.contracts import INPUT_REF_RE, load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
@@ -301,4 +305,101 @@ def _check_capture_list_requires_retries_zero(ctx: ValidationContext) -> list[Ru
                     ),
                 )
             )
+    return findings
+
+
+# Context variable names that hold worktree filesystem paths.
+_WORKTREE_REF_KEYS = frozenset({"worktree_path", "implementation_ref"})
+
+# Matches 'git worktree remove' shell invocations used as cleanup barriers.
+_GIT_WORKTREE_REMOVE_RE = re.compile(r"git\s+worktree\s+remove")
+
+
+def _is_worktree_barrier(step_name: str, ctx_vars: frozenset[str], recipe) -> bool:
+    """Return True if step consumes or removes the worktree for any of the given ctx_vars."""
+    step = recipe.steps.get(step_name)
+    if step is None:
+        return False
+    if step.tool == "merge_worktree":
+        wt_arg = step.with_args.get("worktree_path", "")
+        return any(f"context.{v}" in wt_arg for v in ctx_vars)
+    if step.tool == "remove_clone":
+        cp_arg = step.with_args.get("clone_path", "")
+        return any(f"context.{v}" in cp_arg for v in ctx_vars)
+    if step.tool == "run_cmd":
+        cmd = step.with_args.get("cmd", "")
+        return bool(_GIT_WORKTREE_REMOVE_RE.search(cmd))
+    return False
+
+
+@semantic_rule(
+    name="worktree-clobber-without-merge",
+    description=(
+        "A worktree-modifying step is reachable again via a routing cycle without "
+        "an intervening merge_worktree or cleanup step consuming the captured variable. "
+        "The second invocation overwrites the context variable, orphaning the first worktree."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_worktree_clobber_without_merge(ctx: ValidationContext) -> list[RuleFinding]:
+    recipe = ctx.recipe
+    findings: list[RuleFinding] = []
+
+    success_graph = _build_success_step_graph(recipe)
+    cycle_sets = _find_cycle_members(success_graph, recipe.steps)
+
+    flagged_steps: set[str] = set()
+    for cycle_set in cycle_sets:
+        for step_name in cycle_set:
+            if step_name in flagged_steps:
+                continue
+            step = recipe.steps.get(step_name)
+            if step is None:
+                continue
+            if step.tool not in SKILL_TOOLS:
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            skill = resolve_skill_name(skill_cmd)
+            if not skill or skill not in _WORKTREE_MODIFYING_SKILLS:
+                continue
+            if not step.capture:
+                continue
+
+            captured_vars = frozenset(k for k in step.capture if k in _WORKTREE_REF_KEYS)
+            if not captured_vars:
+                continue
+
+            # Collect all barrier steps that consume ANY of the captured worktree variables.
+            # When a step captures both worktree_path and implementation_ref as aliases,
+            # a barrier consuming either is sufficient to break the orphan path.
+            barrier_steps = {
+                s for s in recipe.steps if _is_worktree_barrier(s, captured_vars, recipe)
+            }
+
+            # BFS from successors of the worktree step (within the cycle only)
+            # to check if the step itself is reachable without crossing a barrier.
+            cycle_successors = success_graph.get(step_name, set()) & cycle_set
+            visited = _bfs_capped(success_graph, cycle_successors, barrier_steps)
+
+            if step_name in visited:
+                cycle_path = "→".join(sorted(cycle_set))
+                vars_str = ", ".join(f"'{v}'" for v in sorted(captured_vars))
+                flagged_steps.add(step_name)
+                findings.append(
+                    RuleFinding(
+                        rule="worktree-clobber-without-merge",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' creates a worktree and captures "
+                            f"{vars_str} but is reachable again via [{cycle_path}] "
+                            f"without an intervening merge_worktree step consuming "
+                            f"any of those context variables. The second invocation "
+                            f"will overwrite the reference, orphaning the first worktree. "
+                            f"Add a merge or cleanup step before re-entering the "
+                            f"worktree-creating step."
+                        ),
+                    )
+                )
+
     return findings

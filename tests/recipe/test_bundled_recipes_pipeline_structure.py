@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import Severity
+from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_success_step_graph
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
 
@@ -1020,3 +1021,69 @@ class TestDisplayConditionContract:
                             f"display-only value '{operand}' for "
                             f"inputs.{ing_name} — use raw YAML value instead"
                         )
+
+
+# ---------------------------------------------------------------------------
+# Test 1b: Bundled recipe regression — worktree orphan immunity in remediation.yaml
+# ---------------------------------------------------------------------------
+
+
+def test_remediation_no_go_path_has_merge_before_implement_reentry() -> None:
+    """remediation.yaml: the NO GO remediation cycle must include a merge_worktree step
+    before re-entering the implement step, so the original worktree is consumed
+    rather than orphaned.
+
+    Checks:
+    1. The success-path BFS from remediate (the non-exhausted route of
+       check_audit_remediation_loop) to implement contains at least one
+       step with tool=merge_worktree consuming context.implementation_ref.
+    2. run_semantic_rules produces no worktree-clobber-without-merge finding.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+
+    success_graph = _build_success_step_graph(recipe)
+
+    # Find all steps reachable from remediate before hitting implement
+    # (implement is the barrier)
+    # Find the non-exhausted route from check_audit_remediation_loop (the entry to
+    # the remediation cycle) to understand what steps execute before implement re-entry.
+    loop_step = recipe.steps["check_audit_remediation_loop"]
+    assert loop_step.on_result is not None
+    non_exhausted_routes = [
+        c.route
+        for c in loop_step.on_result.conditions
+        if c.when is None or "max_exceeded" not in c.when
+    ]
+    assert non_exhausted_routes, "check_audit_remediation_loop must have a non-exhausted route"
+    cycle_entry = non_exhausted_routes[-1]
+
+    # BFS from cycle entry to implement — all steps on this path form the remediation cycle.
+    steps_before_implement = _bfs_capped(success_graph, {cycle_entry}, {"implement"})
+
+    merge_steps_on_path = [
+        step_name
+        for step_name in steps_before_implement
+        if step_name != "implement"
+        and recipe.steps.get(step_name) is not None
+        and recipe.steps[step_name].tool == "merge_worktree"
+        and (
+            "context.implementation_ref"
+            in recipe.steps[step_name].with_args.get("worktree_path", "")
+            or "context.worktree_path"
+            in recipe.steps[step_name].with_args.get("worktree_path", "")
+        )
+    ]
+
+    assert merge_steps_on_path, (
+        f"No merge_worktree step consuming context.implementation_ref or context.worktree_path "
+        f"found on the success path from {cycle_entry!r} to implement. "
+        f"The remediation cycle must merge the existing worktree before creating a new one. "
+        f"Steps on path before implement: {sorted(steps_before_implement)}"
+    )
+
+    findings = run_semantic_rules(recipe)
+    clobber_findings = [f for f in findings if f.rule == "worktree-clobber-without-merge"]
+    assert clobber_findings == [], (
+        f"remediation.yaml must not trigger worktree-clobber-without-merge after the fix, "
+        f"got: {clobber_findings}"
+    )

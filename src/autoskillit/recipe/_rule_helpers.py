@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -13,9 +14,41 @@ from autoskillit.core import get_logger
 from autoskillit.recipe._analysis import ValidationContext
 
 if TYPE_CHECKING:
-    from autoskillit.recipe.schema import CampaignDispatch, Recipe
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeStep
 
 logger = get_logger(__name__)
+
+
+def _find_cycle_members(
+    graph: dict[str, set[str]], recipe_steps: Mapping[str, RecipeStep]
+) -> list[frozenset[str]]:
+    """Find all sets of steps that participate in a routing cycle.
+
+    Uses DFS back-edge detection. Returns a list of frozensets of step names
+    that form cycles.
+    """
+    visited: set[str] = set()
+    rec_stack: set[str] = set()
+    cycles: list[frozenset[str]] = []
+
+    def dfs(node: str, path: list[str]) -> None:
+        visited.add(node)
+        rec_stack.add(node)
+        for neighbor in sorted(graph.get(node, set())):
+            if neighbor not in recipe_steps:
+                continue
+            if neighbor not in visited:
+                dfs(neighbor, path + [neighbor])
+            elif neighbor in rec_stack and neighbor in path:
+                cycles.append(frozenset(path[path.index(neighbor) :]))
+        rec_stack.discard(node)
+
+    for step_name in recipe_steps:
+        if step_name not in visited:
+            dfs(step_name, [step_name])
+
+    return cycles
+
 
 _SKILL_CMD_PATTERN = re.compile(r"/(?:autoskillit:)?([\w-]+)")
 _ARG_TOKEN_PATTERN = re.compile(r"\$\{\{[^}]+\}\}|[^\s]+")

@@ -53,12 +53,14 @@ PR, and output `pr_url=<url>`.
 - Fail the pipeline if `gh` is unavailable or not authenticated — output `pr_url=` (empty) and exit successfully
 - Close original PRs before the integration PR is successfully created
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Check `gh auth status` before attempting any GitHub operations
 - Output `pr_url=<url>` on the last output line (empty string when GitHub unavailable)
 - Carry forward ALL `Closes #N` and `Fixes #N` lines found in original PR bodies
 - Use `gh pr create --body-file` (never inline body via `--body`)
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 

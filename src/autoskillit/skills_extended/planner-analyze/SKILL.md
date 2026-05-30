@@ -32,6 +32,7 @@ Detect language, framework, test infrastructure, project structure, and existing
 - Modify any target project files
 - Write analysis.json outside `$1/`
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -39,10 +40,15 @@ Detect language, framework, test infrastructure, project structure, and existing
 - Use Explore subagents for all file reads
 - Spawn all 4 subagents in parallel
 - Write valid JSON to `analysis.json`
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
-### Step 1: Launch 4 parallel Explore subagents
+### Step 1: Launch 4 parallel Explore subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn all four concurrently with `model: "sonnet"`:
 

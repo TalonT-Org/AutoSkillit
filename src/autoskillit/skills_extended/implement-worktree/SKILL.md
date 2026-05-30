@@ -36,6 +36,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Blame test failures on "pre-existing issues" — ALL tests must pass
 - Re-run tests just to see failures — grep the saved output file instead
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Create a new worktree from the current branch
@@ -45,6 +46,7 @@ Implement a provided plan in an isolated git worktree branched from the current 
 - Run the project's test suite after implementation
 - Rebase onto base branch before completion (ready for squash-and-merge)
 - **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -94,7 +96,11 @@ WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
 eval "$(bash "{{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh" "${WORKTREE_NAME}" "{{AUTOSKILLIT_TEMP}}")"
 ```
 
-### Step 2: Deep System Understanding (Subagents)
+### Step 2: Deep System Understanding (Subagents) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before implementing ANY code, launch parallel Explore subagents to understand affected systems:
 - **Affected files** — current implementation, dependencies, consumers

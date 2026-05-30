@@ -66,7 +66,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 ## Planning Steps
 
-1. **Understand related systems and validate details** - Use subagents to study the architecture, how components work together, their purpose, patterns, and standards. Validate any details provided in the task description. When the plan involves adding tests that call mutating methods on singleton or module-level objects (enable/disable, register/unregister, connect/disconnect), use a subagent to read the target test directory's existing isolation patterns (conftest fixtures, setup_method/teardown_method, autouse fixtures) before proceeding to Step 3.
+1. **Understand related systems and validate details** (SINGLE MESSAGE) — **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.** Do not output any prose between subagent dispatches. Use subagents to study the architecture, how components work together, their purpose, patterns, and standards. Validate any details provided in the task description. When the plan involves adding tests that call mutating methods on singleton or module-level objects (enable/disable, register/unregister, connect/disconnect), use a subagent to read the target test directory's existing isolation patterns (conftest fixtures, setup_method/teardown_method, autouse fixtures) before proceeding to Step 3.
 
 2. **Explore and design approaches** - Use subagents to investigate different ways to solve the problem. Use subagents with web search to research modern solutions, approaches, designs, and architectures relevant to the problem. For each approach, focus on:
    - Does it solve the problem correctly?
@@ -281,6 +281,7 @@ Before writing the final plan, verify:
 - Create files outside `{{AUTOSKILLIT_TEMP}}/make-plan/` directory
 - **Use `git merge` in implementation plans.** When a plan needs to bring in changes from another branch, use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure. See "Conflict-Resolution Plan Requirements" section for full guidance.
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Write to `{{AUTOSKILLIT_TEMP}}/make-plan/` directory (relative to the current working directory)
@@ -297,6 +298,7 @@ Before writing the final plan, verify:
 - Ground decisions in design quality and correctness
 - Include verification steps
 - Be willing to recommend significant refactoring if that's the right answer
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Output
 

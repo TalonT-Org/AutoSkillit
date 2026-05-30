@@ -43,6 +43,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Pipe test output through `tail`, `head`, or other truncation commands
 - **Execute `git merge` commands** (including `--no-ff`, `--no-commit`, or any variant). All branch content must be applied via `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure.
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Create a new worktree from the current branch
@@ -53,6 +54,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Leave the worktree intact when done
 - **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
 - **Read files fully**: When reading a file to understand it in full, read it in a single call without a `limit` parameter. Do not paginate files with sequential offset reads — read once completely. Use `limit`/`offset` only for targeted section reads of files you have already read in full.
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -127,7 +129,11 @@ execution layer scans `assistant_messages` for `worktree_path=` and surfaces
 it as a top-level field in the `run_skill` JSON response. The orchestrator
 reads this field directly without filesystem discovery heuristics.
 
-### Step 2: Deep System Understanding (Subagents)
+### Step 2: Deep System Understanding (Subagents) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before implementing ANY code, launch parallel Explore subagents to understand affected systems:
 - **Affected files** — current implementation, dependencies, consumers

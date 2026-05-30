@@ -76,9 +76,11 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Choose or accept approaches, solutions, and/or fixes that are chosen simply because they are easier
 - File GitHub issues automatically (issue filing is always a separate, user-directed action)
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents for parallel exploration
+- Issue all Task calls in a single message to maximize parallelism
 - Limit total subagent spawns to 9 across all batches (standard and deep mode). If the investigation requires more exploration vectors, consolidate related questions into fewer, broader subagent prompts rather than spawning additional agents.
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
@@ -107,7 +109,11 @@ Identify what needs investigation:
 - **Module Investigation**: Identify the module/component to understand
 - **Question Investigation**: Clarify the specific question being asked
 
-### Step 2: Launch Parallel Subagents
+### Step 2: Launch Parallel Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn explore subagents to investigate different aspects simultaneously (some aspects may and should require multiple subagents):
 
@@ -371,6 +377,8 @@ Spawn one adversarial subagent (model: "sonnet") whose role is to disconfirm the
 **If no counterevidence is found:** The hypothesis stands. Proceed to D5.
 
 ### Step D5: Solution Convergence
+
+**Issue ALL blast radius subagent calls in a single message — one per candidate — so they execute in parallel. Do not iterate across multiple turns.**
 
 Spawn solution-space subagents to enumerate candidate fixes. For each candidate, spawn one blast radius subagent (model: "sonnet") to assess:
 

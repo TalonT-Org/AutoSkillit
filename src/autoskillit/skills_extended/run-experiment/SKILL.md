@@ -52,11 +52,13 @@ plan, executes what the plan describes, and reports what happened.
 - Assume what kind of experiment this is — read the plan and follow it
 - Commit files under `{{AUTOSKILLIT_TEMP}}/` — this directory is gitignored working space, NOT for version control. Do not use `git add -f` or `git add --force` to bypass the gitignore.
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write results to `{{AUTOSKILLIT_TEMP}}/run-experiment/` in the worktree (disk only, never committed)
 - Report failures with enough detail for the `--adjust` retry to fix them
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -84,7 +86,11 @@ Also scan the worktree for experiment-related files:
 
 Understand what the experiment requires before attempting to run anything.
 
-### Step 2 — Pre-flight Check
+### Step 2 — Pre-flight Check (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before running the experiment:
 1. Verify the project builds or that prerequisites are met.

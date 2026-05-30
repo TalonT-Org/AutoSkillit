@@ -40,10 +40,12 @@ consumption. Does NOT invoke the vis-lens skills — that is handled by the
 - Fabricate lens recommendations or validation conclusions not supported by the data — report what the experiment plan and scope show, not what you assume they should show
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Invoke vis-lens skills — that belongs to the `run_vis_lenses` recipe step
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write a vis-lens context file for each selected lens before emitting tokens
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 

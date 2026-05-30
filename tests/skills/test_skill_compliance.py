@@ -23,6 +23,7 @@ from autoskillit.recipe.rules.rules_skill_content import (
     _extract_subsections,
 )
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests._helpers import extract_always_block, extract_never_block
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
@@ -60,6 +61,10 @@ _LOOP_TOOL_PATTERNS = [
     re.compile(r"(?i)merge_worktree\b"),
     re.compile(r"(?i)run_cmd\b"),
     re.compile(r"(?i)run_python\b"),
+    re.compile(r"(?i)\bspawn\b.*\bsubagent\b"),
+    re.compile(r"(?i)\blaunch\b.*\bsubagent\b"),
+    re.compile(r"(?i)\bTask\s+tool\b"),
+    re.compile(r"(?i)\bAgent\s+tool\b"),
 ]
 
 # Patterns that detect anti-prose guard instructions in loop prologues
@@ -68,7 +73,20 @@ _ANTI_PROSE_GUARD_PATTERNS = [
     re.compile(r"(?i)immediately\s+(?:begin|proceed|start)\b.*\bnext"),
     re.compile(r"(?i)no\s+(?:prose|text|status)\s+(?:between|output)"),
     re.compile(r"(?i)do\s+not\s+emit\s+(?:any\s+)?(?:prose|text|status)"),
+    re.compile(r"(?i)single\s+(?:message|batch)"),
+    re.compile(r"(?i)do\s+not\s+iterate.*(?:turns?|messages?)"),
 ]
+
+# Patterns for three-layer parallel dispatch reinforcement detection
+_PARALLEL_DISPATCH_NEVER_RE = re.compile(
+    r"(?i)sequentially.*single.*message|single.*parallel.*message",
+)
+_PARALLEL_DISPATCH_ALWAYS_RE = re.compile(
+    r"(?i)single\s+message",
+)
+_PARALLEL_DISPATCH_STEP_RE = re.compile(
+    r"(?i)single\s+(?:message|batch)|SINGLE\s+MESSAGE",
+)
 
 # Skills whose narration suppression is handled globally by _inject_narration_suppression()
 # in build_skill_session_cmd() (headless path) and sous-chef/SKILL.md (cook path).
@@ -167,8 +185,16 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
             if not any(p.search(line) for p in _LOOP_HEADER_PATTERNS):
                 continue
 
-            # Extract loop body: from this line to next step header or end
-            loop_body = "\n".join(lines[line_idx:])
+            # Extract loop body: from this line to next sub-heading or end.
+            # Stop at #### or ### sub-headers so tool mentions in unrelated
+            # sections of the same step block aren't attributed to this loop.
+            remaining_lines = lines[line_idx:]
+            loop_end = len(remaining_lines)
+            for k, rl in enumerate(remaining_lines):
+                if k > 0 and re.match(r"^#{3,4}\s+", rl):
+                    loop_end = k
+                    break
+            loop_body = "\n".join(remaining_lines[:loop_end])
 
             # Check if loop body contains tool invocations
             has_tool = any(p.search(loop_body) for p in _LOOP_TOOL_PATTERNS)
@@ -182,8 +208,11 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
             else:
                 prologue = loop_body
 
-            # Check for anti-prose guard in prologue or full loop body
-            search_text = prologue + "\n" + loop_body
+            # Check for anti-prose guard in step preamble (before loop header),
+            # loop prologue (header to first numbered sub-step), or full loop body.
+            # Guard text often appears above the "for each" line in the same step.
+            step_preamble = "\n".join(lines[:line_idx])
+            search_text = step_preamble + "\n" + prologue + "\n" + loop_body
             has_guard = any(p.search(search_text) for p in _ANTI_PROSE_GUARD_PATTERNS)
 
             if not has_guard:
@@ -192,6 +221,43 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
                     f"Step block {block_idx}: loop '{loop_preview}' contains "
                     f"tool invocations but has no anti-prose guard instruction"
                 )
+
+    return violations
+
+
+def _check_parallel_dispatch_reinforcement(skill_text: str) -> list[str]:
+    """Check for missing three-layer single-message dispatch reinforcement.
+
+    Returns a list of violation descriptions (empty if compliant).
+    For skills that spawn parallel subagents, all three layers must be present:
+    1. NEVER block prohibits sequential dispatch
+    2. ALWAYS block requires single-message dispatch
+    3. Step body containing spawn language includes single-message instruction
+    """
+
+    violations: list[str] = []
+
+    never_block = extract_never_block(skill_text)
+    always_block = extract_always_block(skill_text)
+
+    if not _PARALLEL_DISPATCH_NEVER_RE.search(never_block):
+        violations.append(
+            "NEVER block does not prohibit sequential dispatch "
+            "(expected: 'sequentially...single...message' or 'single...parallel...message')"
+        )
+
+    if not _PARALLEL_DISPATCH_ALWAYS_RE.search(always_block):
+        violations.append(
+            "ALWAYS block does not require single-message dispatch (expected: 'single message')"
+        )
+
+    step_blocks = re.split(r"(?m)^#{1,3}\s+Step\s+\d+", skill_text)
+    spawning_steps = [b for b in step_blocks if _SPAWN_INDICATOR_RE.search(b)]
+    if spawning_steps and not any(_PARALLEL_DISPATCH_STEP_RE.search(b) for b in spawning_steps):
+        violations.append(
+            "No step block containing spawn language has a single-message dispatch instruction "
+            "(expected: 'single message' or 'single batch' in a step with subagent spawning)"
+        )
 
     return violations
 
@@ -345,7 +411,6 @@ _FABRICATION_GUARD_RE = FABRICATION_GUARD_RE
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda d: d.name)
 def test_all_skills_have_anti_fabrication_guard(skill_dir: Path) -> None:
     """Every skill with a NEVER block must include anti-fabrication language."""
-    from tests._helpers import extract_never_block
 
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
@@ -430,7 +495,6 @@ _ANTI_BLAME_RE = re.compile(r"(?i)\bblame\b.*\bpre-existing\b")
 def test_implement_skills_have_anti_blame_prohibition(skill_dir: Path) -> None:
     """All implement-* and retry-* skills must have the anti-blame
     prohibition in their NEVER block."""
-    from tests._helpers import extract_never_block
 
     text = (skill_dir / "SKILL.md").read_text()
     never_block = extract_never_block(text)
@@ -465,3 +529,104 @@ def test_reviews_post_requires_input_flag(skill_dir: Path) -> None:
                 f"JSON arrays as string literals, causing HTTP 422. "
                 f"Use: jq -n ... | gh api .../reviews --method POST --input -"
             )
+
+
+# --- Fixture-based tests for parallel dispatch reinforcement detector ---
+
+
+def test_detector_catches_missing_reinforcement() -> None:
+    """Verify _check_parallel_dispatch_reinforcement detects missing layers."""
+    missing_reinforcement = """\
+---
+name: example-skill
+---
+
+**NEVER:**
+- Fabricate information
+
+**ALWAYS:**
+- Do something useful
+
+## Workflow
+
+### Step 1: Launch Subagents
+
+Spawn parallel subagents (Task tool) for each item in the list.
+For each item, spawn the corresponding subagent.
+"""
+    violations = _check_parallel_dispatch_reinforcement(missing_reinforcement)
+    assert len(violations) == 3, (
+        f"Expected 3 violations (one per layer), got {len(violations)}: {violations}"
+    )
+
+
+def test_detector_passes_full_reinforcement() -> None:
+    """Verify _check_parallel_dispatch_reinforcement passes a skill with all three layers."""
+    full_reinforcement = """\
+---
+name: example-skill
+---
+
+**NEVER:**
+- Fabricate information
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
+
+**ALWAYS:**
+- Do something useful
+- Issue all Task calls in a single message to maximize parallelism
+
+## Workflow
+
+### Step 1: Launch Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel.**
+
+Spawn parallel subagents (Task tool) for each item in the list.
+"""
+    violations = _check_parallel_dispatch_reinforcement(full_reinforcement)
+    assert not violations, f"Detector falsely flagged fully reinforced skill: {violations}"
+
+
+def test_detector_catches_unguarded_subagent_spawn_loop() -> None:
+    """Verify _check_loop_boundary catches a 'For each...spawn subagent' loop without guard."""
+    vulnerable_pattern = """\
+### Step 3: Run Subagents
+
+For each dimension name in the list, spawn the corresponding subagent using the Task tool.
+"""
+    violations = _check_loop_boundary(vulnerable_pattern)
+    assert len(violations) >= 1, (
+        "Detector failed to catch unguarded 'For each...spawn...Task tool' loop"
+    )
+
+
+def test_detector_passes_guarded_subagent_spawn_loop() -> None:
+    """Verify _check_loop_boundary passes a guarded 'For each...Task tool' loop."""
+    guarded_pattern = """\
+### Step 3: Run Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per dimension — so they execute in parallel.
+Do not iterate through dimensions across multiple turns.**
+
+For each dimension name in the list, spawn the corresponding subagent using the Task tool.
+"""
+    violations = _check_loop_boundary(guarded_pattern)
+    assert not violations, (
+        f"Detector falsely flagged single-message guarded spawn loop: {violations}"
+    )
+
+
+@pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda d: d.name)
+def test_parallel_dispatch_has_single_message_reinforcement(skill_dir: Path) -> None:
+    """Skills that spawn parallel subagents must include three-layer
+    single-message dispatch reinforcement (NEVER + ALWAYS + step body)."""
+    text = (skill_dir / "SKILL.md").read_text()
+    if skill_dir.name in _NON_SPAWNING_SKILL_DIRS:
+        return
+    if not _SPAWN_INDICATOR_RE.search(text):
+        return
+    violations = _check_parallel_dispatch_reinforcement(text)
+    assert not violations, (
+        f"{skill_dir.name}/SKILL.md spawns parallel subagents but lacks "
+        f"single-message dispatch reinforcement:\n" + "\n".join(f"  - {v}" for v in violations)
+    )

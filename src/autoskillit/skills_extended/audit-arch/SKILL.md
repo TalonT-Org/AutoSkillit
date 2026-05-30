@@ -27,9 +27,11 @@ Audit the codebase for adherence to architectural standards and rules.
 - Modify any source code files
 - Update an existing report - always generate new
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents for parallel exploration
+- Issue all Task calls in a single message to maximize parallelism
 - Write report to `{{AUTOSKILLIT_TEMP}}/audit-arch/arch_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - Provide file paths and line numbers
 - Categorize by severity (CRITICAL, HIGH, MEDIUM, LOW)
@@ -238,7 +240,11 @@ These apply across all principles when evaluating architectural decisions:
    | **Code duplication** | Use the Read tool to retrieve the full body of each function. Compare the full signature (parameters, return type) and logic step-by-step. Same-named functions at different abstraction levels are NOT duplicates. Discard if logically distinct. |
    | **Misplaced file or incorrect import path** | Use the Bash tool to run `git log --oneline -- {file_path}` (substituting the actual path). Inspect commit messages for intentional placement decisions. Discard the finding if a commit explains the placement. |
 
-2. **Launch parallel subagents** for each principle
+2. **Launch parallel subagents (SINGLE MESSAGE)** for each principle
+
+   **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+   Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 3. **Consolidate findings** by principle and severity
 4. **Cross-reference:** Ensure findings are categorized by the principle they violate, not just where discovered
 5. **Suggest new principle** (optional) - see below

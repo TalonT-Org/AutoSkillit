@@ -49,6 +49,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Consider effort as a reason for choosing one approach over another
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Write plan content, corrections, or the verification marker to any file other than the original plan file path provided as input. If the Edit tool is denied on the plan file, do NOT create a copy elsewhere — output a failure message instead.
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Keep the plan as clean implementation instructions only (information/background helpful to implementation is okay)
@@ -59,6 +60,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 - Remove deprecation code/notes and rollback mechanisms
 - Make sure the plan includes warning against using the codebase as a notepad with useless comments
 - Prefer the long term health of project over quick, easy, and minimal fixes
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -93,7 +95,11 @@ After resolving the plan path, check whether this is a part file of a multi-part
    ```
    If the block is absent, or contains the wrong part label or wording, insert or correct it as your **first** edit to the plan file before proceeding to phase validation.
 
-### Step 2: Extract and Validate Each Phase
+### Step 2: Extract and Validate Each Phase (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 For each phase, verify using subagents:
 

@@ -31,6 +31,7 @@ Standards are added here when `/autoskillit:design-guards` recommends them and t
 - Modify any source code files
 - Update an existing report - always generate new
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per standard or group)
@@ -39,6 +40,7 @@ Standards are added here when `/autoskillit:design-guards` recommends them and t
 - Subagents must NOT create their own files - they return findings in their response text only
 - Provide file paths and line numbers for violations
 - Categorize by severity
+- Issue all Task calls in a single message to maximize parallelism
 
 ---
 
@@ -119,7 +121,11 @@ Defense standards come from the `/autoskillit:design-guards` pipeline:
 
 ---
 
-## Audit Workflow
+## Audit Workflow (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 1. **Launch parallel subagents** - one per standard or group of related standards
 2. **Each subagent:** runs the audit strategy, reports violations with file paths and line numbers

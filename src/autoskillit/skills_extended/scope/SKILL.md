@@ -50,12 +50,14 @@ text is supplementary context.
 - Skip the prior art survey — always check what already exists in the codebase
 - Fabricate research findings when external sources return no results — if web searches or literature searches yield nothing, state that explicitly and note what the codebase evidence shows instead
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write output to `{{AUTOSKILLIT_TEMP}}/scope/` directory
 - Clearly separate facts (what the code does) from hypotheses (what might be true)
 - Include a known/unknown matrix in the output
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -65,7 +67,11 @@ text is supplementary context.
 2. If a GitHub issue reference is detected, fetch it via `fetch_github_issue`.
 3. Create the output directory: `mkdir -p {{AUTOSKILLIT_TEMP}}/scope/`
 
-### Step 1 — Parallel Exploration
+### Step 1 — Parallel Exploration (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch subagents via the Task tool (model: "sonnet") to explore in parallel.
 You **must launch at least 5 subagents**. Select from the suggested menu below,

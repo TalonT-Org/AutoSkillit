@@ -42,6 +42,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts outside your designated input files and output directory
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -50,6 +51,7 @@ independently and writes a single elaborated phase result. No dependency on
 - Write result to `$3/{phase_id}_result.json` (keep `_result.json` suffix — downstream consumers glob `*_result.json`)
 - Emit: `elab_result_path = <absolute path to {phase_id}_result.json>`
 - Include all `PhaseElaborated` fields in the result
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -77,7 +79,11 @@ phase — its `technical_approach`, `scope`, and `assignments[]` — must serve 
 Do not elaborate into work not requested by the task. Flag if the phase goal appears
 unrelated to the task.
 
-### Step 2: Launch parallel codebase exploration subagents
+### Step 2: Launch parallel codebase exploration subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn up to 5 simultaneous Explore subagents against the codebase in `source_dir`:
 

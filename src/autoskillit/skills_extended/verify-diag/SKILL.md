@@ -29,12 +29,14 @@ Verify an architecture diagram's factual accuracy against the actual codebase. A
 - Modify source code files
 - Modify the diagram during verification (report findings only)
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Verify every named component exists in the codebase
 - Trace actual code paths for every connection
 - Determine read/write directionality for every connection
 - Report findings to terminal, not to files
+- Issue all Task calls in a single message to maximize parallelism
 
 ---
 
@@ -204,7 +206,11 @@ Common patterns and how to represent them:
 
 ---
 
-## Launching Verification
+## Launching Verification (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn one Explore subagent per diagram. Each agent:
 1. Reads the full diagram file

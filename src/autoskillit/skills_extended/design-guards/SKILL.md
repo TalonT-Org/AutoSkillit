@@ -33,6 +33,7 @@ Path to a bug pattern audit report (typically under `{{AUTOSKILLIT_TEMP}}/audit-
 - Propose bandaid fixes or direct-only patches
 - Create files outside `{{AUTOSKILLIT_TEMP}}/design-guards/` directory
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents for parallel codebase exploration
@@ -42,6 +43,7 @@ Path to a bug pattern audit report (typically under `{{AUTOSKILLIT_TEMP}}/audit-
 - Final report: `{{AUTOSKILLIT_TEMP}}/design-guards/defense_guards_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files - they return findings in their response text only
 - Do not change any code
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -52,7 +54,11 @@ Read the input report and extract each pattern:
 - Affected components and sessions
 - The root architectural gap identified
 
-### Step 2: Investigate Each Pattern in Parallel
+### Step 2: Investigate Each Pattern in Parallel (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 For each pattern (or group of related patterns), launch subagents to explore:
 

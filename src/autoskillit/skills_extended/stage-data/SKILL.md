@@ -49,6 +49,7 @@ compute on doomed downloads.
 - Write files outside `{{AUTOSKILLIT_TEMP}}/stage-data/`
 - Emit a WARN or FAIL verdict without a specific, actionable explanation
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan
@@ -59,6 +60,7 @@ compute on doomed downloads.
   using `mkdir -p`
 - Write the resource feasibility report before emitting the verdict token
 - Use `model: "sonnet"` for all subagents
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -75,7 +77,11 @@ Create any data directories for entries with non-null `location`. Emit
 `verdict = PASS` and exit. This covers plans containing only `synthetic`,
 `fixture`, `literature`, `database`, or `wet_lab` source types.
 
-### Step 3 — Launch Parallel Resource Probe Subagents
+### Step 3 — Launch Parallel Resource Probe Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch parallel subagents — one per `external`/`gitignored` entry — each
 performing:

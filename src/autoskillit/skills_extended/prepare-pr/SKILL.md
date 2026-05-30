@@ -39,10 +39,12 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-pr/`
 - Fail if closing_issue is absent or gh is unavailable — degrade gracefully
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Emit all three output tokens (`prep_path`, `selected_lenses`, `lens_context_paths`)
 - Classify changed files as new (★) vs modified (●)
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -89,7 +91,7 @@ Generate timestamp `ts` from the bash block above.
 
 ### Step 2: Extract PR Title from Plans
 
-Read all plan files. For each, extract the first `# ` heading line, strip the `# ` prefix,
+Read all plan files and extract the first `# ` heading line from each, strip the `# ` prefix,
 and strip any trailing `— PART [A-Z] ONLY` suffix.
 
 - **Single plan:** Use the heading directly as `task_title`.
@@ -125,7 +127,11 @@ git diff --diff-filter=M --name-only $BASE_BRANCH..$FEATURE_BRANCH  # modified_f
 
 Store as separate lists: `new_files` (added, ★) and `modified_files` (modified, ●).
 
-### Step 5: Select Arch-Lens Slugs
+### Step 5: Select Arch-Lens Slugs (SINGLE MESSAGE)
+
+**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn a subagent (Task tool, model: sonnet) with the list of changed file paths and the
 following lens menu:

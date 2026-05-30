@@ -41,11 +41,13 @@ Does NOT invoke lens skills or other sub-skills.
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill when composing the PR body.
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations
 - Emit `pr_url` token as your final output (even if empty)
 - Use Agent subagents to read the prep file
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Diagram Validation Keywords
 
@@ -76,7 +78,11 @@ Create temp directory:
 
 Generate a timestamp `ts` for unique file naming.
 
-### Step 1: Read prep file via Agent subagent
+### Step 1: Read prep file via Agent subagent (SINGLE MESSAGE)
+
+**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn an **Explore** subagent to read `{prep_path}` and extract:
 - `report_path` (from Metadata section)

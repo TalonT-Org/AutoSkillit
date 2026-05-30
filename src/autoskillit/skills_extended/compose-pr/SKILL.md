@@ -39,6 +39,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
 - Invent mermaid classDef colors — when embedding validated diagrams, include them verbatim.
   Using ONLY classDef styles from the mermaid skill (no invented colors).
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations
@@ -48,6 +49,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
   (omit Architecture Impact section; do not include a placeholder)
 - Handle `no diagrams` case: when `all_diagram_paths is empty` or every path fails
   marker check, set `validated_diagrams = []` and omit the Architecture Impact section
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -108,7 +110,11 @@ For each path:
 
 If `all_diagram_paths` is empty or all diagrams fail → `validated_diagrams = []`.
 
-### Step 3: Compose PR Body
+### Step 3: Compose PR Body (SINGLE MESSAGE)
+
+**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Write PR body to `{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md` (using the `ts` variable from Step 0).
 

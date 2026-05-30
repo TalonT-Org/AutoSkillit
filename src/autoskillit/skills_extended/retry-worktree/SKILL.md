@@ -45,6 +45,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Pipe test output through `tail`, `head`, or other truncation commands — `tail -N` buffers the entire stream and produces no output if the process is killed before EOF
 - Default to `main` as the base branch — always discover it from git's upstream structure or the explicit base-branch store file
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use the provided worktree path (do NOT create a new one)
@@ -54,6 +55,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Run the project's test suite from the worktree directory
 - Rebase onto base branch before completion (ready for squash-and-merge)
 - **Read files fully**: When reading a file to understand it in full, read it in a single call without a `limit` parameter. Do not paginate files with sequential offset reads — read once completely. Use `limit`/`offset` only for targeted section reads of files you have already read in full.
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -141,7 +143,11 @@ Then assess what has been implemented:
    - Which phase is partially complete
    - Which phases haven't started
 
-### Step 2: Targeted Exploration (Only If Needed)
+### Step 2: Targeted Exploration (Only If Needed) (SINGLE MESSAGE)
+
+**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Only explore systems related to the **remaining** phases. Do NOT re-explore already-completed work. Use Explore subagents for:
 - Files that will be modified in remaining phases

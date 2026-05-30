@@ -53,6 +53,7 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 - Write L0 prompts to intermediate `l0_prompts/` files and read them back into the L1 context — spawn L0 subagents directly from in-memory context packets
 - Read source code files, test files, or recipe YAML files directly — codebase exploration is the L0 subagents' responsibility
 - Run Bash, Grep, or Glob commands for codebase exploration between L0 spawns
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -63,6 +64,7 @@ file to `$3/refine_contexts/{phase_id}_result.json`.
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1, partial result)
 - When two assignments propose WPs covering the same files, assign ownership to the numerically earlier assignment_id using natural sort on numeric suffixes (e.g. `P1-A1` beats `P1-A2`; `P1-A2` beats `P1-A10`); log each resolution
 - Emit: `phase_refined_path = <absolute path to $3/refine_contexts/{phase_id}_result.json>`
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -111,7 +113,11 @@ For each assignment in `assignments`, build a context packet containing:
 - `task_file_path` — the path to the task description on disk (pass the path reference only; do NOT read the task text into the L1 context or embed it in the L0 prompt)
 - Instructions: review the target assignment in light of peer_summaries; always read the task from disk at `task_file_path` for scope creep verification (flag scope creep if the assignment's goal, scope, or deliverables introduce work not requested by the task); return structured suggestions only — do NOT edit files
 
-### Step 3: Spawn parallel L0 subagents
+### Step 3: Spawn parallel L0 subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Since each phase has 3–5 assignments (always within the 6-L0 ceiling), spawn all in one
 parallel batch via Agent/Task. Do not spawn more than 6 L0s in a single parallel batch:

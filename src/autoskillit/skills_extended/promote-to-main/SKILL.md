@@ -44,9 +44,11 @@ and creates a comprehensive promotion PR.
 - Use the Bash tool for file reads — use Read, Grep, Glob for all codebase inspection
 - Use `gh pr create --body` inline — always use `--body-file`
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Run ALL pre-flight checks before any analysis work
+- Issue all Task calls in a single message to maximize parallelism
 - Check `gh auth status` before any GitHub operations
 - Output `pr_url = <url>` as a structured token (empty string when GitHub unavailable or dry-run)
 - Output `verdict = <value>` as a structured token
@@ -162,7 +164,11 @@ EOF
   contents and embed it in the PR body under `## Token Usage Summary`.
 - If empty or absent (standalone invocation, no pipeline sessions in this cwd), omit this section.
 
-### Phase 1: Pre-flight Checks (parallel, blocking)
+### Phase 1: Pre-flight Checks (parallel, blocking) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn three parallel Task subagents (model: sonnet) to validate promotion readiness.
 All three must pass before analysis proceeds. If any fails, report the failure clearly

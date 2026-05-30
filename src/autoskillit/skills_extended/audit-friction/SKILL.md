@@ -35,12 +35,14 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last month`). I
 - Have subagents write files — they return all findings in response text only
 - Analyze subagent log subdirectories (`*/subagents/`) — top-level session files only
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis
 - All output goes under `{{AUTOSKILLIT_TEMP}}/audit-friction/` (create if needed)
 - Final report: `{{AUTOSKILLIT_TEMP}}/audit-friction/friction_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Report the file and line counts to the terminal before choosing analysis mode
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Friction Categories
 
@@ -126,7 +128,11 @@ EOF
 
 Report both counts to the terminal. If zero files match, extend the window by 15 days and retry, noting the adjustment.
 
-### Step 3: Haiku Batch Scan
+### Step 3: Haiku Batch Scan (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Split the log file list into batches. Use batches of ~5 files for smaller corpora; reduce to ~3 files per batch when the corpus is large so each Haiku agent isn't overloaded. Dispatch one **Haiku model** subagent per batch in parallel.
 
@@ -145,7 +151,11 @@ For each confirmed friction event record: `{file, line_start, line_end, category
 
 Return all findings as structured text. Do not write any files.
 
-### Step 4: Sonnet Deep Analysis per Category
+### Step 4: Sonnet Deep Analysis per Category (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 After all Haiku agents return, group all indicators by category. Dispatch **Sonnet model** subagents to analyze the grouped indicators in parallel. Any category with at least one indicator warrants a subagent. Spawn one subagent per category when there are many; batch smaller related groups when overall volume is low. The orchestrator decides the grouping.
 

@@ -36,6 +36,7 @@ is the sole writer for this phase's assignments — no concurrent write races.
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Read result files from other phases
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -44,6 +45,7 @@ is the sole writer for this phase's assignments — no concurrent write races.
 - Write the phase sentinel file before emitting the output token
 - Emit: `phase_assignments_result_dir = <absolute path to assignments/ directory>`
 - Write a stub result for any L0 that fails or returns invalid JSON
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -78,7 +80,11 @@ For each assignment in the phase, build a self-contained context packet:
 - The phase's `technical_approach` and `scope`
 - The planner directory path `$2` for reading prior results if needed
 
-### Step 4: Spawn L0 subagents in PARALLEL
+### Step 4: Spawn L0 subagents in PARALLEL (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Use the native Agent/Task tool to spawn one L0 per assignment simultaneously.
 All L0s must be launched in a single batch — do NOT wait for one before starting the next.

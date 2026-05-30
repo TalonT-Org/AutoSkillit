@@ -38,12 +38,14 @@ outputs, and synthesizes a complete visualization plan.
 - Write outputs outside `{{AUTOSKILLIT_TEMP}}/plan-visualization/`
 - Fabricate lens recommendations or validation conclusions not supported by the data — report what the experiment plan and scope show, not what you assume they should show
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Write a vis-lens context file for each selected lens before invoking it
 - Log every conflict resolution decision in the Conflict Resolution Log table
 - Emit `visualization_plan_path` and `report_plan_path` tokens as your final output
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -186,7 +188,11 @@ routing_triple:
   candidate_set: [{candidates}]
 ```
 
-### Step 3 — Run Vis-Lens Skills in Parallel
+### Step 3 — Run Vis-Lens Skills in Parallel (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 In a **single assistant message**, invoke all `selected_lenses` as slash commands:
 

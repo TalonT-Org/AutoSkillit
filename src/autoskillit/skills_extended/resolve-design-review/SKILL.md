@@ -41,11 +41,13 @@ MCP-only — not user-invocable directly.
 - Modify the evaluation dashboard, experiment plan, or any source file
 - Apply fixes — this skill triages fixability only
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Exit 0 in all cases — resolution=revised and resolution=failed are both normal outcomes
 - Emit revision_guidance ONLY when resolution=revised
 - Use model: "sonnet" for all subagents
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -74,7 +76,11 @@ abandoning the partial triage.
    - Extract red_team critical findings
    - If no findings parseable: treat all as DISCUSS → emit resolution=revised with generic guidance; add a `> **Warning:** dashboard could not be parsed — falling back to generic guidance` annotation at the top of the revision_guidance file so the parse failure is visible in pipeline logs
 
-### Step 1: Feasibility Validation (Parallel Subagents — BEFORE any guidance is written)
+### Step 1: Feasibility Validation (Parallel Subagents — BEFORE any guidance is written) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 This is the analysis phase. It runs entirely before any guidance is generated.
 

@@ -96,7 +96,11 @@ For each candidate issue, check whether its body already contains
 
 If no candidates remain after filtering, emit the result block immediately and exit.
 
-### Step 5: Per-Issue Analysis
+### Step 5: Per-Issue Analysis (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Process up to 8 candidates in parallel using subagents (`model: "sonnet"`).
 For each candidate:
@@ -233,9 +237,11 @@ After processing all candidates, emit to stdout:
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
   `{{AUTOSKILLIT_TEMP}}/enrich-issues/edit_body_{timestamp}.md` and use `--body-file`
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Respect `--dry-run`: never call `gh issue edit` when this flag is set
 - Verify codebase claims before incorporating them into requirements
 - Use `model: "sonnet"` for per-issue analysis subagents
 - Emit the `---enrich-issues-result---` block as the final output
+- Issue all Task calls in a single message to maximize parallelism

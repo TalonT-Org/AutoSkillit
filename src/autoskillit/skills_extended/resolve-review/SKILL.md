@@ -47,6 +47,7 @@ branch already checked out.
 - Delete or discard the working directory on failure
 - Modify tests to suppress failures introduced by reviewer fixes
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)
@@ -58,6 +59,7 @@ branch already checked out.
 - Report a structured summary: findings fetched, fixes applied, fixes skipped (with reasons)
 - **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
 - **CWD awareness**: Before running `python3` or other interpreters, verify your current working directory is the worktree root (not the orchestrator's project root). Use absolute paths for imports or `cd` to the worktree first. A wrong-CWD import error wastes a full API turn.
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -341,7 +343,11 @@ When a finding matches multiple tiers, use the highest severity.
 
 Critical and warning findings proceed to intent validation (Step 3.5). Info findings are classified with `verdict="INFO"` — they do not enter Step 3.5. Only `ACCEPT`, `REJECT`, and `DISCUSS` verdicts are assigned by Step 3.5 sub-agents; `INFO` is assigned at classification time.
 
-### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes)
+### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before applying any fix, validate every critical and warning finding against the actual
 codebase and git history. This analysis phase runs entirely before code changes are made.

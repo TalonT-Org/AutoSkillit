@@ -49,6 +49,7 @@ comments and emits a verdict for recipe routing.
 - Run deterministic diff annotation (claim positions are report-level, not line-level)
 - Generate findings for `experimental` claims — they are self-evidencing by definition
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use the explicit `pr_url` argument instead of re-discovering via `gh pr list`
@@ -57,6 +58,7 @@ comments and emits a verdict for recipe routing.
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation)
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Deduplicate findings by (file, line) pairs before posting
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -107,7 +109,11 @@ line-level. Subagents use section structure, not line markers.
 
 ### Step 3: Two-Phase Claim Analysis
 
-#### Phase 1 — Claim Extraction (parallel subagents by report section)
+#### Phase 1 — Claim Extraction (parallel subagents by report section) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Divide the diff by top-level markdown section: `## Executive Summary`, `## Results`,
 `## Methodology`, `## Discussion`, `## Limitations`, and any other top-level `##` section.
@@ -153,7 +159,11 @@ Subagent prompt template:
 Aggregate all extracted claims from all subagents. Save to
 `{{AUTOSKILLIT_TEMP}}/audit-claims/claims_{pr_number}.json`.
 
-#### Phase 2 — Evidence Matching (parallel subagents by claim type)
+#### Phase 2 — Evidence Matching (parallel subagents by claim type) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Group extracted claims by `claim_type`. Launch one Task tool subagent (`model: "sonnet"`)
 per non-empty group. Each subagent receives the claim list and the full PR diff, and

@@ -54,6 +54,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
   `git cherry-pick` or `git checkout <branch> -- <file>`)
 - Blame pre-commit or lint failures on "pre-existing issues" — ALL pre-commit checks must pass on the committed code
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Create a new worktree from the current branch
@@ -66,6 +67,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 - Write `tests/test_{script_name}.py` alongside each experiment script created in Step 4
 - Run `pytest --collect-only` after creating tests to verify discovery before committing
 - **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 
@@ -118,7 +120,11 @@ worktree_path = ${WORKTREE_PATH}
 branch_name = ${BRANCH_NAME}
 ```
 
-### Step 2 — Deep Context Understanding (Subagents)
+### Step 2 — Deep Context Understanding (Subagents) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before implementing anything, launch subagents (model: "sonnet") to understand
 the codebase context needed for the experiment. The following are **minimum

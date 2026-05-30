@@ -37,9 +37,11 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Use `--body` shell substitution (`--body "$(...)`) for `gh issue edit` — always write to
   `{{AUTOSKILLIT_TEMP}}/triage-issues/edit_body_{timestamp}.md` and use `--body-file`
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Issue all Task calls in a single message to maximize parallelism
 - Pause for human input on ambiguous classifications
 - Write the triage report and manifest to `{{AUTOSKILLIT_TEMP}}/triage-issues/` (relative to the current working directory)
 - Use `gh` CLI for all GitHub operations (not raw API calls)
@@ -79,7 +81,11 @@ If `gh auth status` fails, abort with a clear error message.
 
 If there are zero open issues (after filtering), skip to Step 7 and output an empty report.
 
-### Step 2a: Parallel Split Analysis
+### Step 2a: Parallel Split Analysis (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before codebase analysis, run `issue-splitter` for every open issue to detect mixed-concern issues and expand the working set.
 

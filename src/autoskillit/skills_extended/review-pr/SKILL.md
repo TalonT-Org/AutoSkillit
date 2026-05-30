@@ -47,6 +47,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Review files outside the PR diff — scope all audit to diff content only
 - Modify any source code
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
@@ -56,6 +57,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Tag the authenticated GitHub user (`gh api user -q .login`) in escalation comments (`needs_human` verdict) — omit the mention silently if username derivation fails
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Deduplicate findings by (file, line) pairs before posting
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -297,17 +299,18 @@ standard agents — this is the graceful-degradation fallback that preserves cur
 Note: Dimension 7 (the deletion regression audit) is NOT part of the dispatch plan — it remains
 unconditionally gated on `deletion_context` being non-null (unchanged from current behavior).
 
-### Step 3: Run Parallel Audit Subagents
+### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
 
-Spawn parallel subagents (Task tool, model: sonnet) for each audit dimension listed in
-`DISPATCH_AGENTS`. If `DISPATCH_AGENTS` is non-empty, spawn ONLY the dimensions it lists.
-If `DISPATCH_AGENTS` is empty, spawn all 6 standard dimensions (1-6).
+Parse `DISPATCH_AGENTS` (comma-separated string) into a list. If `DISPATCH_AGENTS` is
+non-empty, use ONLY the dimensions it lists. If empty, use all 6 standard dimensions (1-6).
 
-Parse `DISPATCH_AGENTS` (comma-separated string) into a list. For each dimension name in
-the list, spawn the corresponding subagent using the prompt template below.
+**Issue ALL Task tool calls in a single message — one per dimension — so they execute
+in parallel. Do NOT iterate through dimensions across multiple turns.**
 
-Each subagent receives only the PR diff content (not the full codebase) and returns
-findings in JSON format:
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
+
+Each subagent (model: sonnet) receives only the PR diff content (not the full codebase) and
+returns findings in JSON format:
 
 ```json
 [

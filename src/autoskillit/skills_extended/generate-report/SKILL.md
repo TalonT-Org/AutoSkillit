@@ -79,6 +79,7 @@ In addition to the arguments above, this skill reads from the worktree:
 - Frame inconclusive results as failures — they are valid findings
 - Create the report outside the worktree's `research/` directory
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -87,6 +88,7 @@ In addition to the arguments above, this skill reads from the worktree:
 - Commit the report to the worktree before returning
 - Include a "What We Learned" section regardless of outcome
 - Link back to the originating GitHub issue if an issue number is available
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Context Limit Behavior
 

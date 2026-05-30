@@ -596,7 +596,7 @@
       "optional_context_refs": [
         "test_fix_loop_count"
       ],
-      "note": "Guards the pre-merge test → fix → test cycle. Caps at test_fix_max_retries iterations (default 3). Prevents unbounded looping when fix repeatedly reports real_fix/already_green/flake_suspected but tests keep failing.\n"
+      "note": "Guards the pre-merge test → fix → test cycle. Caps at test_fix_max_retries iterations (default 3). Prevents unbounded looping when fix repeatedly reports real_fix/already_green/flake_suspected but tests keep failing."
     },
     "rebase_conflict_fix": {
       "tool": "run_skill",

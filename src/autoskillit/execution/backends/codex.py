@@ -568,13 +568,12 @@ class CodexBackend:
                 extra={"tools": list(tools)},
             )
         builder = CmdBuilder("codex")
-        # plugin_source: explicit no-op for Codex
         match resume_spec:
             case NoResume():
                 builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
             case NamedResume(session_id=sid):
                 builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
-                builder.mode_flag(sid)
+                builder.positional(sid)
                 builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
             case BareResume():
                 builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)

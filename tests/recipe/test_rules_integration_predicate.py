@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import deque
+
 import pytest
 
 from autoskillit.core.types import Severity
@@ -7,6 +9,19 @@ from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+def _get_routing_targets(step) -> set[str]:
+    targets: set[str] = set()
+    if step.on_success:
+        targets.add(step.on_success)
+    if step.on_failure:
+        targets.add(step.on_failure)
+    if step.on_result:
+        for cond in step.on_result.conditions:
+            if cond.route:
+                targets.add(cond.route)
+    return targets
 
 
 class TestRecipeIntegrationPredicateRouting:
@@ -229,3 +244,43 @@ class TestLoopBudgetSeparation:
         step = recipe.steps["check_merge_test_fix_loop"]
         assert step.with_args["current_iteration"] == "${{ context.merge_test_fix_loop_count }}"
         assert "merge_test_fix_loop_count" in step.capture
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_test_fix_loop_not_reachable_from_merge_gate_path(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        steps = recipe.steps
+        predecessors: dict[str, set[str]] = {s: set() for s in steps}
+        for step_name, step in steps.items():
+            for target in _get_routing_targets(step):
+                if target in predecessors:
+                    predecessors[target].add(step_name)
+        visited: set[str] = set()
+        queue: deque[str] = deque(["check_test_fix_loop"])
+        while queue:
+            node = queue.popleft()
+            if node in visited:
+                continue
+            visited.add(node)
+            queue.extend(predecessors.get(node, set()))
+        merge_gate_steps = {
+            "diagnose_merge_gate",
+            "merge_gate_assess",
+            "check_merge_test_fix_loop",
+        }
+        present = merge_gate_steps & steps.keys()
+        assert visited.isdisjoint(present), (
+            f"check_test_fix_loop backward-reachable from merge-gate steps: {visited & present}"
+        )
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_merge_gate_assess_routes_through_merge_fix_guard(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        if "merge_gate_assess" not in recipe.steps:
+            pytest.skip(f"{recipe_name}: no merge_gate_assess step")
+        targets = _get_routing_targets(recipe.steps["merge_gate_assess"])
+        assert "check_merge_test_fix_loop" in targets, (
+            f"merge_gate_assess does not route to check_merge_test_fix_loop; targets={targets}"
+        )
+        assert "check_test_fix_loop" not in targets, (
+            f"merge_gate_assess must not route to check_test_fix_loop; targets={targets}"
+        )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -149,7 +150,31 @@ def _extract_file_changes(stdout: str, backend: CodingAgentBackend) -> list[str]
 
 
 def _stdout_mentions_write_tools(stdout: str) -> bool:
-    return '"Edit"' in stdout or '"Write"' in stdout
+    """Return True if stdout contains a write tool call in an assistant NDJSON record.
+
+    Filters by type=assistant to avoid matching tool names in system/init manifests or
+    other non-assistant events. For truncated lines that fail JSON parsing, falls back
+    to an assistant-prefix + substring check to preserve truncation recovery behavior.
+    """
+    _write_names = {"Write", "Edit"}
+    for line in stdout.splitlines():
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            # Truncated line: check if it looks like an assistant record with a write tool name.
+            if (
+                line.startswith('{"type":"assistant"') or line.startswith('{"type": "assistant"')
+            ) and ('"Write"' in line or '"Edit"' in line):
+                return True
+            continue
+        if obj.get("type") != "assistant":
+            continue
+        for block in obj.get("message", {}).get("content", []):
+            if block.get("type") == "tool_use" and block.get("name") in _write_names:
+                return True
+    return False
 
 
 def _build_session_telemetry(

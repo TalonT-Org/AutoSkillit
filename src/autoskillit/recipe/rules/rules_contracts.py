@@ -28,6 +28,21 @@ _RESULT_FIELD_DRIFT_SKILLS = frozenset(
 
 logger = get_logger(__name__)
 
+_HR_SPLIT_RE = re.compile(r"---\n+(/?\w[\w:.-]*---)")
+_DELIM_BOLD_RE = re.compile(r"\*{1,2}(---/?\w[\w:.-]*---)\*{1,2}")
+_DELIM_BACKTICK_RE = re.compile(r"`(---/?\w[\w:.-]*---)`")
+
+
+def _normalize_for_pattern_match(text: str) -> str:
+    """Collapse HR-split delimiters and strip delimiter decorators.
+
+    Duplicated from IL-1 because IL-2 (recipe) cannot import IL-1 (execution).
+    """
+    text = _HR_SPLIT_RE.sub(r"---\1", text)
+    text = _DELIM_BOLD_RE.sub(r"\1", text)
+    text = _DELIM_BACKTICK_RE.sub(r"\1", text)
+    return text
+
 
 @semantic_rule(
     name="missing-output-patterns",
@@ -96,7 +111,10 @@ def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         for pattern in contract.expected_output_patterns:
             try:
-                matched = any(re.search(pattern, ex) for ex in contract.pattern_examples)
+                matched = any(
+                    re.search(pattern, _normalize_for_pattern_match(ex))
+                    for ex in contract.pattern_examples
+                )
             except re.error:
                 findings.append(
                     RuleFinding(
@@ -512,7 +530,7 @@ def _check_all_examples_match_all_patterns(ctx: ValidationContext) -> list[RuleF
         for example in contract.pattern_examples:
             for pattern in contract.expected_output_patterns:
                 try:
-                    matched = bool(re.search(pattern, example))
+                    matched = bool(re.search(pattern, _normalize_for_pattern_match(example)))
                 except re.error:
                     continue  # invalid regex — covered by pattern-examples-match
                 if not matched:

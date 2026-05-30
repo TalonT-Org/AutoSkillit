@@ -529,3 +529,26 @@ def test_ansi_only_stdout_no_sentinel() -> None:
     )
     result = parse_l3_result_block(ANSI_TUI_CLEANUP, DISPATCH_ID)
     assert result.outcome == "no_sentinel"
+
+
+# ---------------------------------------------------------------------------
+# HR-split sentinel immunity tests
+# ---------------------------------------------------------------------------
+
+
+def test_hr_split_open_sentinel_recovered() -> None:
+    """HR-split open sentinel (--- on own line before dispatch_id---) is recovered."""
+    payload = {"status": "ok"}
+    stdout = f"output text\n---\nl3-result::{DISPATCH_ID}---\n{json.dumps(payload)}\n{_close()}"
+    result = parse_l3_result_block(stdout=stdout, expected_dispatch_id=DISPATCH_ID)
+    assert result.outcome == "completed_clean"
+    assert result.payload == payload
+
+
+def test_clean_sentinel_regression_guard() -> None:
+    """Clean (non-split) sentinels continue to work after normalization is applied."""
+    payload = {"status": "ok"}
+    stdout = f"output\n{_open()}\n{json.dumps(payload)}\n{_close()}\n"
+    result = parse_l3_result_block(stdout=stdout, expected_dispatch_id=DISPATCH_ID)
+    assert result.outcome == "completed_clean"
+    assert result.payload == payload

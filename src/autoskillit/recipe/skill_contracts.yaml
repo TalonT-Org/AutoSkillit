@@ -1207,7 +1207,8 @@ skills:
     expected_output_patterns:
     - "---prepare-issue-result---"
     pattern_examples:
-    - "---prepare-issue-result---"
+    - "## Parsed Issue\n\n---prepare-issue-result---\n{\"title\": \"Fix bug\"}\n---/prepare-issue-result---\n\n%%ORDER_UP%%"
+    - "Analysis complete.\n\n---\nprepare-issue-result---\n{\"title\": \"Fix bug\"}\n---/prepare-issue-result---\n\n%%ORDER_UP%%"
 
   enrich-issues:
     inputs: []
@@ -1215,7 +1216,8 @@ skills:
     expected_output_patterns:
     - "---enrich-issues-result---"
     pattern_examples:
-    - "---enrich-issues-result---"
+    - "Enrichment complete.\n\n---enrich-issues-result---\n[{\"issue\": 1}]\n---/enrich-issues-result---\n\n%%ORDER_UP%%"
+    - "Processing issues.\n\n---\nenrich-issues-result---\n[{\"issue\": 1}]\n---/enrich-issues-result---\n\n%%ORDER_UP%%"
 
   report-bug:
     inputs: []
@@ -1223,7 +1225,8 @@ skills:
     expected_output_patterns:
     - "---bug-fingerprint---"
     pattern_examples:
-    - "---bug-fingerprint---"
+    - "Bug analyzed.\n\n---bug-fingerprint---\nroot_cause = missing_guard\n---/bug-fingerprint---\n\n%%ORDER_UP%%"
+    - "Bug analyzed.\n\n---\nbug-fingerprint---\nroot_cause = missing_guard\n---/bug-fingerprint---\n\n%%ORDER_UP%%"
     write_behavior: always
 
   collapse-issues:
@@ -1232,7 +1235,8 @@ skills:
     expected_output_patterns:
     - "---collapse-issues-result---"
     pattern_examples:
-    - "---collapse-issues-result---"
+    - "Collapse complete.\n\n---collapse-issues-result---\n[{\"issue\": 1}]\n---/collapse-issues-result---\n\n%%ORDER_UP%%"
+    - "Collapse complete.\n\n---\ncollapse-issues-result---\n[{\"issue\": 1}]\n---/collapse-issues-result---\n\n%%ORDER_UP%%"
 
   issue-splitter:
     inputs: []
@@ -1240,7 +1244,8 @@ skills:
     expected_output_patterns:
     - "---issue-splitter-result---"
     pattern_examples:
-    - "---issue-splitter-result---"
+    - "Split complete.\n\n---issue-splitter-result---\n[{\"issue\": 1}]\n---/issue-splitter-result---\n\n%%ORDER_UP%%"
+    - "Split complete.\n\n---\nissue-splitter-result---\n[{\"issue\": 1}]\n---/issue-splitter-result---\n\n%%ORDER_UP%%"
 
   process-issues:
     inputs: []
@@ -1250,7 +1255,8 @@ skills:
     expected_output_patterns:
     - "---process-issues-result---"
     pattern_examples:
-    - "---process-issues-result---"
+    - "Processing complete.\n\n---process-issues-result---\n[{\"dispatched\": 1}]\n---/process-issues-result---\n\n%%ORDER_UP%%"
+    - "Processing complete.\n\n---\nprocess-issues-result---\n[{\"dispatched\": 1}]\n---/process-issues-result---\n\n%%ORDER_UP%%"
 
   design-guards:
     inputs:
@@ -2256,6 +2262,7 @@ skills:
     pattern_examples:
     - "Pipeline health check: no issues found\n---pipeline-health-result---\n%%ORDER_UP%%"
     - "## Findings\n### confirmed_bug\n...\n---pipeline-health-result---\n%%ORDER_UP%%"
+    - "Analysis complete.\n\n---\npipeline-health-result---\n%%ORDER_UP%%"
     read_only: true
 callable_contracts:
   autoskillit.smoke_utils.check_loop_iteration:

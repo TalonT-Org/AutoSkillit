@@ -182,6 +182,28 @@ def test_extract_block_preserves_whitespace_in_lines():
     assert _extract_block(text, "---start---", "---end---") == ["  indented"]
 
 
+def test_extract_block_hr_split_start_delimiter():
+    text = "preamble\n---\nbug-fingerprint---\nfp-001\n---/bug-fingerprint---"
+    assert _extract_block(text, "---bug-fingerprint---", "---/bug-fingerprint---") == ["fp-001"]
+
+
+def test_extract_block_hr_split_end_delimiter():
+    text = "preamble\n---bug-fingerprint---\nfp-001\n---\n/bug-fingerprint---"
+    assert _extract_block(text, "---bug-fingerprint---", "---/bug-fingerprint---") == ["fp-001"]
+
+
+def test_extract_block_clean_delimiter_regression():
+    text = "preamble\n---bug-fingerprint---\nfp-001\n---/bug-fingerprint---"
+    assert _extract_block(text, "---bug-fingerprint---", "---/bug-fingerprint---") == ["fp-001"]
+
+
+def test_extract_block_content_not_mutated():
+    text = '---bug-fingerprint---\n{"note": "see ---\\nchanges---"}\n---/bug-fingerprint---'
+    assert _extract_block(text, "---bug-fingerprint---", "---/bug-fingerprint---") == [
+        '{"note": "see ---\\nchanges---"}'
+    ]
+
+
 # ---------------------------------------------------------------------------
 # _parse_prepare_result unit tests
 # ---------------------------------------------------------------------------

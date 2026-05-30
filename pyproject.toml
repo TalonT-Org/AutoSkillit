@@ -361,6 +361,10 @@ ignore_imports = [
     # narrowest place where both the recipe schema and config defaults are simultaneously
     # available. Do not expand fleet's config access beyond this single call site.
     "autoskillit.fleet._api -> autoskillit.config",
+    # result_parser applies _collapse_hr_split_delimiters to normalize HR-split sentinel
+    # tokens before rfind-based scanning. The function is a pure regex substitution with
+    # no execution-layer side effects.
+    "autoskillit.fleet.result_parser -> autoskillit.execution",
 ]
 
 # IL-011 | _dag_ops: shared DAG primitives with no planner-internal imports

@@ -172,13 +172,13 @@ def test_remediation_next_or_done_routes_done_to_push(recipe) -> None:
     )
 
 
-def test_remediation_merge_routes_to_next_or_done(recipe) -> None:
-    """T_REM_MP4: merge step default route must be next_or_done, not push."""
+def test_remediation_merge_routes_to_inter_part_push(recipe) -> None:
+    """T_REM_MP4: merge step default route must be inter_part_push, not push or next_or_done."""
     step = recipe.steps["merge"]
     assert step.on_result is not None
     default_routes = [c.route for c in step.on_result.conditions if c.when is None]
-    assert default_routes == ["next_or_done"], (
-        f"merge default route must be next_or_done, got {default_routes}"
+    assert default_routes == ["inter_part_push"], (
+        f"merge default route must be inter_part_push, got {default_routes}"
     )
 
 

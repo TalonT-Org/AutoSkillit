@@ -53,7 +53,7 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond7 = step.on_result.conditions[7]
         assert cond7.when is None
-        assert cond7.route == "next_or_done"
+        assert cond7.route == "inter_part_push"
 
     def test_investigate_first_merge_step_captures_worktree_path(self) -> None:
         """The merge step captures worktree_path from result.worktree_path."""
@@ -97,7 +97,7 @@ class TestRecipeIntegrationPredicateRouting:
 
         cond7 = step.on_result.conditions[7]
         assert cond7.when is None
-        assert cond7.route == "next_or_done"
+        assert cond7.route == "inter_part_push"
 
     def test_implementation_pipeline_merge_step_captures_worktree_path(self) -> None:
         """The merge step in implementation.yaml captures worktree_path."""

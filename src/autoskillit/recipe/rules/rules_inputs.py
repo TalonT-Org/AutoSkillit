@@ -233,7 +233,7 @@ def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
 
     referenced: set[str] = set()
     for step in wf.steps.values():
-        for field in ("on_success", "on_failure", "on_context_limit"):
+        for field in ("on_success", "on_failure", "on_context_limit", "on_rate_limit"):
             target = getattr(step, field, None)
             if target:
                 referenced.add(target)

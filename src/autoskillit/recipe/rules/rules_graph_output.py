@@ -55,7 +55,12 @@ def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
     # Build raw routing graph (no skip_when_false bypass edges).
     graph: dict[str, set[str]] = {name: set() for name in step_names}
     for name, step in recipe.steps.items():
-        for target in (step.on_success, step.on_failure, step.on_context_limit):
+        for target in (
+            step.on_success,
+            step.on_failure,
+            step.on_context_limit,
+            step.on_rate_limit,
+        ):
             if target and target in step_names:
                 graph[name].add(target)
         if step.on_result:

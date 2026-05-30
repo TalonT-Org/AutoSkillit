@@ -153,6 +153,37 @@ def _check_push_before_audit(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="rate-limit-route-missing",
+    description=(
+        "run_skill steps with on_context_limit should also define on_rate_limit "
+        "so transient 429 rate limits route differently from structural context exhaustion."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_rate_limit_route_missing(ctx: ValidationContext) -> list[RuleFinding]:
+    wf = ctx.recipe
+    findings: list[RuleFinding] = []
+    for step_name, step in wf.steps.items():
+        if step.tool not in SKILL_TOOLS:
+            continue
+        if step.on_context_limit is not None and step.on_rate_limit is None:
+            findings.append(
+                RuleFinding(
+                    rule="rate-limit-route-missing",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' defines on_context_limit but not "
+                        f"on_rate_limit. Transient 429 rate limits will fall back "
+                        f"to on_context_limit routing. Add on_rate_limit: <target> "
+                        f"to handle rate limits explicitly."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
     name="clone-root-as-worktree",
     description="worktree_path must not trace back to result.clone_path (the clone root)",
     severity=Severity.ERROR,

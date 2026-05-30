@@ -146,7 +146,7 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
                 )
 
         # Routing target validation
-        for goto_field in ("on_success", "on_failure", "on_context_limit"):
+        for goto_field in ("on_success", "on_failure", "on_context_limit", "on_rate_limit"):
             target = getattr(step, goto_field)
             if target and target not in step_names and target not in _TERMINAL_TARGETS:
                 errors.append(

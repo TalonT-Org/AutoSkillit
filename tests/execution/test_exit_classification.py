@@ -16,12 +16,26 @@ from autoskillit.execution.backends._codex_parse import CodexResultParser
 from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 from autoskillit.execution.session._exit_classification import (
     _CODEX_API_ERROR_PATTERNS,
+    _RATE_LIMIT_PATTERNS,
     classify_infra_exit,
 )
 from autoskillit.execution.session._session_model import ClaudeSessionResult
 from tests.execution.conftest import CODEX_API_ERROR_SIGNAL_STRINGS
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+# CODEX signals that do NOT match rate-limit patterns (must still classify as API_ERROR).
+_NON_RATE_LIMIT_CODEX_SIGNALS: tuple[str, ...] = tuple(
+    sig
+    for sig in CODEX_API_ERROR_SIGNAL_STRINGS
+    if not any(p.search(sig) for p in _RATE_LIMIT_PATTERNS)
+)
+# CODEX signals that DO match rate-limit patterns (must classify as RATE_LIMITED).
+_RATE_LIMIT_CODEX_SIGNALS: tuple[str, ...] = tuple(
+    sig
+    for sig in CODEX_API_ERROR_SIGNAL_STRINGS
+    if any(p.search(sig) for p in _RATE_LIMIT_PATTERNS)
+)
 
 
 def _sr(
@@ -192,9 +206,9 @@ class TestClassifyInfraExit:
         result = _sr(returncode=1, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
 
-    @pytest.mark.parametrize("signal", CODEX_API_ERROR_SIGNAL_STRINGS)
+    @pytest.mark.parametrize("signal", _NON_RATE_LIMIT_CODEX_SIGNALS)
     def test_api_error_openai_patterns_in_stderr(self, signal: str) -> None:
-        """OpenAI/Codex error pattern in stderr → API_ERROR."""
+        """Non-rate-limit OpenAI/Codex error pattern in stderr → API_ERROR."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
@@ -204,9 +218,9 @@ class TestClassifyInfraExit:
         result = _sr(returncode=1, stderr=f"Error: {signal}")
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
-    @pytest.mark.parametrize("signal", CODEX_API_ERROR_SIGNAL_STRINGS)
+    @pytest.mark.parametrize("signal", _NON_RATE_LIMIT_CODEX_SIGNALS)
     def test_api_error_openai_patterns_in_assistant_messages(self, signal: str) -> None:
-        """OpenAI/Codex error pattern in assistant_messages → API_ERROR."""
+        """Non-rate-limit OpenAI/Codex error pattern in assistant_messages → API_ERROR."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
@@ -219,10 +233,37 @@ class TestClassifyInfraExit:
         result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
+    @pytest.mark.parametrize("signal", _RATE_LIMIT_CODEX_SIGNALS)
+    def test_rate_limit_codex_patterns_in_stderr(self, signal: str) -> None:
+        """Rate-limit Codex error pattern in stderr → RATE_LIMITED."""
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="",
+        )
+        result = _sr(returncode=1, stderr=f"Error: {signal}")
+        assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
+
+    @pytest.mark.parametrize("signal", _RATE_LIMIT_CODEX_SIGNALS)
+    def test_rate_limit_codex_patterns_in_assistant_messages(self, signal: str) -> None:
+        """Rate-limit Codex error pattern in assistant_messages → RATE_LIMITED."""
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="",
+            assistant_messages=[
+                f'OpenAI API Error: {{"type":"{signal}","message":"{signal}"}}',
+            ],
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
+
 
 class TestCodexContextExhaustion:
     """Codex context-exhaustion boundary: context_length_exceeded substring →
-    CONTEXT_EXHAUSTED, rate_limit_exceeded → API_ERROR."""
+    CONTEXT_EXHAUSTED, rate_limit_exceeded → RATE_LIMITED."""
 
     def test_context_length_exceeded_in_errors_produces_context_exhausted(self):
         session = ClaudeSessionResult(
@@ -235,7 +276,7 @@ class TestCodexContextExhaustion:
         result = _sr(returncode=1, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
 
-    def test_rate_limit_exceeded_is_api_error_not_context_exhausted(self):
+    def test_rate_limit_exceeded_is_rate_limited_not_context_exhausted(self):
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
@@ -244,13 +285,19 @@ class TestCodexContextExhaustion:
             errors=["rate_limit_exceeded"],
         )
         result = _sr(returncode=1, stderr="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+        assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
 
 
 @pytest.mark.parametrize("category", list(InfraExitCategory))
 def test_all_infra_categories_handled(category: InfraExitCategory) -> None:
     """Every InfraExitCategory value has a distinct test above."""
-    assert category.value in {"completed", "context_exhausted", "api_error", "process_killed"}
+    assert category.value in {
+        "completed",
+        "context_exhausted",
+        "api_error",
+        "process_killed",
+        "rate_limited",
+    }
 
 
 class TestCodexContextExhaustionFromTurnFailed:
@@ -283,7 +330,8 @@ class TestCodexContextExhaustionFromTurnFailed:
 
 
 class TestRateLimitClassification:
-    def test_rate_limited_text_classified_as_api_error(self) -> None:
+    def test_rate_limited_text_classified_as_rate_limited(self) -> None:
+        """Session text containing 'rate limited' → RATE_LIMITED (not API_ERROR)."""
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
@@ -295,9 +343,10 @@ class TestRateLimitClassification:
             assistant_messages=["Rate limited"],
         )
         result = _sr(returncode=0, stderr="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+        assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
 
-    def test_api_error_status_triggers_api_error_classification(self) -> None:
+    def test_api_error_status_429_classified_as_rate_limited(self) -> None:
+        """api_error_status=429 → RATE_LIMITED (not API_ERROR)."""
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
@@ -306,9 +355,22 @@ class TestRateLimitClassification:
             api_error_status=429,
         )
         result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
+
+    def test_api_error_status_400_classified_as_api_error(self) -> None:
+        """api_error_status=400 (bad request) → API_ERROR (not RATE_LIMITED)."""
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="done",
+            session_id="s1",
+            api_error_status=400,
+        )
+        result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
     def test_api_error_status_below_400_does_not_trigger(self) -> None:
+        """api_error_status=200 → COMPLETED (no infra failure)."""
         session = ClaudeSessionResult(
             subtype="success",
             is_error=False,
@@ -318,6 +380,34 @@ class TestRateLimitClassification:
         )
         result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.COMPLETED
+
+    def test_429_with_api_retry_exhausted_still_rate_limited(self) -> None:
+        """api_error_status=429 AND api_retry_exhausted=True → RATE_LIMITED.
+
+        The 429 check precedes api_retry_exhausted so exhausted retries on a
+        rate-limit do not downgrade to API_ERROR.
+        """
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="s1",
+            api_error_status=429,
+            api_retry_exhausted=True,
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
+
+    def test_rate_limited_text_in_result_no_status_code(self) -> None:
+        """'rate limited' text in result (no numeric status) → RATE_LIMITED."""
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="Error: You are being rate limited. Please wait.",
+            session_id="s1",
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
 
 
 def test_codex_api_error_patterns_count() -> None:

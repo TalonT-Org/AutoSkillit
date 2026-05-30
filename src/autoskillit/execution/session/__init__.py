@@ -18,6 +18,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.session._exit_classification import (
     classify_infra_exit,  # noqa: F401 — re-export for callers
+    has_rate_limit_signal,  # noqa: F401 — re-export for callers
 )
 from autoskillit.execution.session._retry_fsm import (
     _KILL_ANOMALY_SUBTYPES,  # noqa: F401 — re-export for callers
@@ -57,6 +58,7 @@ __all__ = [
     "SessionStateLock",
     "SkillResult",
     "classify_infra_exit",
+    "has_rate_limit_signal",
     "clear_session_state",
     "persist_session_state",
     "read_session_state",

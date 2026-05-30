@@ -72,6 +72,23 @@ def test_recipe_step_has_expected_fields() -> None:
     } <= fields
 
 
+def test_recipe_step_on_rate_limit_field() -> None:
+    """RecipeStep has on_rate_limit field defaulting to None."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep()
+    assert step.on_rate_limit is None
+    step2 = RecipeStep(on_rate_limit="some_step")
+    assert step2.on_rate_limit == "some_step"
+
+
+def test_recipe_step_on_rate_limit_in_parse_handled_fields() -> None:
+    """on_rate_limit must be registered in _PARSE_STEP_HANDLED_FIELDS."""
+    from autoskillit.recipe.io import _PARSE_STEP_HANDLED_FIELDS
+
+    assert "on_rate_limit" in _PARSE_STEP_HANDLED_FIELDS
+
+
 def test_recipe_step_has_retries_field() -> None:
     """RecipeStep must have a retries field defaulting to 3."""
     from autoskillit.recipe.schema import RecipeStep

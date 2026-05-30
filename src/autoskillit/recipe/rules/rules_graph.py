@@ -97,6 +97,7 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                                 _step.on_failure,
                                 _step.on_exhausted,
                                 _step.on_context_limit,
+                                _step.on_rate_limit,
                             )
                             if t
                         }

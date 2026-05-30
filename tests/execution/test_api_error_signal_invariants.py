@@ -1,9 +1,9 @@
 """API error signal invariants: API errors must be detected regardless of channel.
 
-Architectural immunity test: classify_infra_exit must return API_ERROR whether the
-signal arrives via stderr (non-PTY) or via stdout/NDJSON assistant messages (PTY).
-Adding a new detection path that only reads one channel will cause this test to
-fail immediately.
+Architectural immunity test: classify_infra_exit must return API_ERROR (or
+RATE_LIMITED for rate-limit signals) whether the signal arrives via stderr
+(non-PTY) or via stdout/NDJSON assistant messages (PTY). Adding a new detection
+path that only reads one channel will cause this test to fail immediately.
 """
 
 from __future__ import annotations
@@ -30,6 +30,13 @@ from tests.execution.conftest import (
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
+_RATE_LIMIT_SIGNAL_STRINGS: frozenset[str] = frozenset(
+    {
+        "Rate limited",
+        "rate_limit_exceeded",
+    }
+)
+
 # All patterns that _KNOWN_API_ERROR_PATTERNS covers
 API_ERROR_SIGNALS: list[str] = [
     "overloaded",
@@ -41,9 +48,17 @@ API_ERROR_SIGNALS: list[str] = [
     "network error",
     "connection reset",
     "Rate limited",
+    "rate_limit_exceeded",
     # OpenAI/Codex API error types
     *CODEX_API_ERROR_SIGNAL_STRINGS,
 ]
+
+
+def _expected_category(signal: str) -> InfraExitCategory:
+    """Return the expected InfraExitCategory for a given API error signal."""
+    if signal in _RATE_LIMIT_SIGNAL_STRINGS:
+        return InfraExitCategory.RATE_LIMITED
+    return InfraExitCategory.API_ERROR
 
 
 def _make_api_error_session(signal: str) -> ClaudeSessionResult:
@@ -85,18 +100,18 @@ def _make_result(
 
 
 class TestApiErrorChannelInvariant:
-    """API errors must be classified as API_ERROR regardless of channel."""
+    """API errors must be classified as API_ERROR (or RATE_LIMITED) regardless of channel."""
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
     def test_api_error_in_assistant_messages(self, signal: str) -> None:
-        """PTY mode: signal in assistant_messages (via stdout NDJSON) → API_ERROR."""
+        """PTY mode: signal in assistant_messages (via stdout NDJSON) → correct category."""
         session = _make_api_error_session(signal)
         result = _make_result(returncode=0, stderr="", stdout="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+        assert classify_infra_exit(session, result) == _expected_category(signal)
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
     def test_api_error_in_result_field(self, signal: str) -> None:
-        """Signal in session.result (via parsed stdout) → API_ERROR."""
+        """Signal in session.result (via parsed stdout) → correct category."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
@@ -104,11 +119,11 @@ class TestApiErrorChannelInvariant:
             session_id="s1",
         )
         result = _make_result(returncode=0, stderr="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+        assert classify_infra_exit(session, result) == _expected_category(signal)
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
     def test_api_error_in_errors_field(self, signal: str) -> None:
-        """Signal in session.errors (via parsed stdout) → API_ERROR."""
+        """Signal in session.errors (via parsed stdout) → correct category."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
@@ -117,11 +132,11 @@ class TestApiErrorChannelInvariant:
             errors=[f"APIError: {signal}"],
         )
         result = _make_result(returncode=0, stderr="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+        assert classify_infra_exit(session, result) == _expected_category(signal)
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
     def test_api_error_in_stderr_fallback(self, signal: str) -> None:
-        """Stderr fallback: signal in result.stderr → API_ERROR via classify_infra_exit."""
+        """Stderr fallback: signal in result.stderr → correct category via classify_infra_exit."""
         session = ClaudeSessionResult(
             subtype="empty_output",
             is_error=True,
@@ -129,7 +144,7 @@ class TestApiErrorChannelInvariant:
             session_id="s1",
         )
         result = _make_result(returncode=1, stderr=f"Error: {signal}", stdout="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+        assert classify_infra_exit(session, result) == _expected_category(signal)
 
 
 # ---------------------------------------------------------------------------
@@ -138,11 +153,11 @@ class TestApiErrorChannelInvariant:
 
 
 class TestApiErrorPtyModeEndToEnd:
-    """PTY-mode subprocess result (empty stderr, API error in stdout) → RESUME."""
+    """PTY-mode subprocess result (empty stderr, API error in stdout) → RESUME or RATE_LIMITED."""
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
-    def test_api_error_pty_mode_routes_to_resume(self, signal: str) -> None:
-        """Empty stderr + API error in stdout NDJSON → needs_retry=True, RESUME."""
+    def test_api_error_pty_mode_routes_correctly(self, signal: str) -> None:
+        """Empty stderr + API error in stdout NDJSON → needs_retry=True, correct reason."""
 
         ndjson = _make_synthetic_api_error_ndjson(
             error_type=f"{signal}_error" if " " not in signal else signal,
@@ -166,12 +181,16 @@ class TestApiErrorPtyModeEndToEnd:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         sr = _build_skill_result(result, backend=ClaudeCodeBackend())
-        assert sr.infra.exit_category == "api_error", (
-            f"Expected infra.exit_category='api_error' for signal='{signal}', "
+        expected_cat = _expected_category(signal)
+        assert sr.infra.exit_category == expected_cat.value, (
+            f"Expected infra.exit_category='{expected_cat.value}' for signal='{signal}', "
             f"got '{sr.infra.exit_category}'"
         )
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        if signal in _RATE_LIMIT_SIGNAL_STRINGS:
+            assert sr.retry_reason == RetryReason.RATE_LIMITED
+        else:
+            assert sr.retry_reason == RetryReason.RESUME
 
     def test_api_error_pty_mode_realistic_overload(self) -> None:
         """Realistic production scenario: overloaded_error, returncode=0, empty stderr."""
@@ -291,9 +310,9 @@ class TestContextExhaustedCodexInvariant:
 
 
 class TestApiErrorStatusChannelInvariance:
-    """api_error_status structured signal must route to RESUME end-to-end."""
+    """api_error_status structured signal must route correctly end-to-end."""
 
-    def test_api_error_status_triggers_api_error_classification(self) -> None:
+    def test_api_error_status_429_triggers_rate_limited_classification(self) -> None:
         result_line = json.dumps(
             {
                 "type": "result",
@@ -313,6 +332,6 @@ class TestApiErrorStatusChannelInvariance:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         sr = _build_skill_result(result, backend=ClaudeCodeBackend(), completion_marker="DONE")
-        assert sr.infra.exit_category == "api_error"
+        assert sr.infra.exit_category == "rate_limited"
         assert sr.needs_retry is True
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.RATE_LIMITED

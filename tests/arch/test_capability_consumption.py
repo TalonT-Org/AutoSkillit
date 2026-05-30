@@ -2,6 +2,7 @@
 
 import ast
 import dataclasses
+import re
 from pathlib import Path
 
 import pytest
@@ -9,16 +10,15 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 # Fields that are explicitly forward-declared and have no consumer yet.
-# Adding a field here requires a linked issue number justifying the exception.
-_FORWARD_DECLARED: frozenset[str] = frozenset(
-    {
-        "supports_thinking_blocks",  # planned for thinking-block rendering
-        "supports_context_exhaustion_detection",  # planned for context exhaustion handling
-        "mcp_config_capable",  # Codex sets True, planned for MCP config wiring
-        "min_version",  # planned for version validation in doctor
-        "version_check_command",  # planned for version validation in doctor
-    }
-)
+# Every entry must reference a tracking issue: 'field_name': '#NNNN'.
+_FORWARD_DECLARED: dict[str, str] = {
+    "supports_thinking_blocks": "#3298",  # planned for thinking-block rendering
+    "supports_context_exhaustion_detection": "#3299",  # planned for context exhaustion handling
+    "min_version": "#3300",  # planned for version validation in doctor
+    "version_check_command": "#3301",  # planned for version validation in doctor
+}
+
+_ISSUE_REF_RE = re.compile(r"#\d+")
 
 
 def _collect_attribute_reads(src_root: Path, field_names: frozenset[str]) -> dict[str, list[str]]:
@@ -52,5 +52,16 @@ def test_all_capability_fields_have_production_consumers():
     }
     assert not unconsumed, (
         f"BackendCapabilities fields with zero production read sites "
-        f"(add a consumer or add to _FORWARD_DECLARED with issue link): {sorted(unconsumed)}"
+        f"(add a consumer or add to _FORWARD_DECLARED as 'field_name': '#NNNN' dict entry): "
+        f"{sorted(unconsumed)}"
+    )
+
+
+def test_forward_declared_has_linked_issues():
+    """Every _FORWARD_DECLARED entry must have a linked issue reference matching #\\d+."""
+    missing = {
+        field: ref for field, ref in _FORWARD_DECLARED.items() if not _ISSUE_REF_RE.search(ref)
+    }
+    assert not missing, (
+        f"_FORWARD_DECLARED entries missing issue reference (need '#NNNN'): {missing}"
     )

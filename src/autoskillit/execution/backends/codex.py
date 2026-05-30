@@ -664,3 +664,11 @@ class CodexBackend:
 
     def list_plugins(self) -> list[dict[str, Any]]:
         raise NotImplementedError(f"{self.__class__.__name__}.list_plugins not yet implemented")
+
+    def ensure_pre_launch(self) -> list[str]:
+        try:
+            ensure_codex_mcp_registered()
+        except Exception as exc:
+            logger.warning("codex_mcp_registration_failed", exc_info=True)
+            return [f"Failed to ensure MCP registration: {exc}"]
+        return []

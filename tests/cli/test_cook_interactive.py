@@ -600,6 +600,9 @@ class TestCookInteractive:
                 captured_env_extras.append(kwargs.get("env_extras", {}))
                 return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+            def ensure_pre_launch(self) -> list[str]:
+                return []
+
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch("builtins.input", return_value=""),
@@ -637,6 +640,9 @@ class TestCookInteractive:
                 captured_env_extras.append(kwargs.get("env_extras", {}))
                 return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+            def ensure_pre_launch(self) -> list[str]:
+                return []
+
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch("builtins.input", return_value=""),
@@ -671,6 +677,9 @@ class TestCookInteractive:
 
             def build_interactive_cmd(self, **kwargs):
                 return CmdSpec(cmd=("my-test-claude", "--dangerously-skip-permissions"), env={})
+
+            def ensure_pre_launch(self) -> list[str]:
+                return []
 
         def tracking_which(binary):
             captured_which.append(binary)
@@ -710,6 +719,9 @@ class TestCookInteractive:
             def build_interactive_cmd(self, **kwargs):
                 captured_kwargs.append(kwargs)
                 return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+            def ensure_pre_launch(self) -> list[str]:
+                return []
 
         with (
             patch("shutil.which", return_value="/usr/bin/claude"),
@@ -752,6 +764,9 @@ class TestCookInteractive:
                 build_called.append(kwargs)
                 return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+            def ensure_pre_launch(self) -> list[str]:
+                return []
+
         get_backend_called: list = []
 
         with (
@@ -792,6 +807,9 @@ class TestCookInteractive:
 
             def build_interactive_cmd(self, **kwargs):
                 return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+            def ensure_pre_launch(self) -> list[str]:
+                return []
 
         mock_config = MagicMock()
         mock_config.agent_backend.backend = "claude-code"
@@ -840,6 +858,9 @@ class TestCookInteractive:
             def build_interactive_cmd(self, **kwargs):
                 return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+            def ensure_pre_launch(self) -> list[str]:
+                return []
+
         mock_config = MagicMock()
         mock_config.agent_backend.backend = backend_name
         mock_config.features = {}
@@ -886,6 +907,9 @@ class TestCookInteractive:
 
             def build_interactive_cmd(self, **kwargs):
                 return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+            def ensure_pre_launch(self) -> list[str]:
+                return []
 
         mock_config = MagicMock()
         mock_config.agent_backend.backend = "claude-code"
@@ -946,6 +970,9 @@ class TestCookInteractive:
                 from autoskillit.core import CmdSpec
 
                 return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+            def ensure_pre_launch(self) -> list[str]:
+                return []
 
         monkeypatch.setattr(DefaultSessionSkillManager, "init_session", fake_init_session)
         monkeypatch.setattr(subprocess, "run", lambda *a, **kw: type("R", (), {"returncode": 0})())

@@ -31,6 +31,7 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _compute_write_evidence,
+    _stdout_mentions_write_tools,
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._session_outcome import _compute_outcome
@@ -751,6 +752,97 @@ def _truncated_tool_use_line() -> str:
     return '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","id":"t1"'
 
 
+def _system_init_ndjson(tools: list[str] | None = None) -> str:
+    """Return a realistic system/init NDJSON line listing tools in a manifest array."""
+    if tools is None:
+        tools = ["Read", "Write", "Edit", "Bash", "Grep", "Glob", "Agent", "Task", "WebSearch"]
+    return json.dumps(
+        {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "test-session-id",
+            "tools": [{"name": t, "type": "tool"} for t in tools],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "stdout,expected",
+    [
+        # system/init only — must not match
+        pytest.param(
+            _system_init_ndjson(),
+            False,
+            id="system_init_only",
+        ),
+        # assistant/tool_use with Edit — must match
+        pytest.param(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [{"type": "tool_use", "name": "Edit", "id": "t1", "input": {}}]
+                    },
+                }
+            ),
+            True,
+            id="assistant_edit_tool_use",
+        ),
+        # assistant/tool_use with Read only — must not match
+        pytest.param(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [{"type": "tool_use", "name": "Read", "id": "t1", "input": {}}]
+                    },
+                }
+            ),
+            False,
+            id="assistant_read_only",
+        ),
+        # system/init + assistant/tool_use with Edit — must match
+        pytest.param(
+            _system_init_ndjson()
+            + "\n"
+            + json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [{"type": "tool_use", "name": "Edit", "id": "t1", "input": {}}]
+                    },
+                }
+            ),
+            True,
+            id="init_plus_assistant_edit",
+        ),
+        # empty string — must not match
+        pytest.param("", False, id="empty_string"),
+        # parseable assistant with text content mentioning "Edit" — no tool_use block → False
+        pytest.param(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [{"type": "text", "text": 'I will use "Edit" to change it'}]
+                    },
+                }
+            ),
+            False,
+            id="assistant_text_mentions_edit_no_tool_use",
+        ),
+        # truncated assistant record that fails JSON parse, containing "Edit" as tool name → True
+        pytest.param(
+            _truncated_tool_use_line(),
+            True,
+            id="truncated_assistant_edit",
+        ),
+    ],
+)
+def test_stdout_mentions_write_tools_unit(stdout: str, expected: bool) -> None:
+    assert _stdout_mentions_write_tools(stdout) is expected
+
+
 class TestWriteEvidenceCrossCheck:
     def test_cross_check_logs_mismatch(self) -> None:
         result_line = _success_result_json()
@@ -851,6 +943,76 @@ class TestWriteEvidenceCrossCheck:
         result = _idle_stall_result(result_line)
         sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.infra.exit_category == "api_error"
+
+    def test_cross_check_ignores_init_manifest(self) -> None:
+        stdout = _system_init_ndjson() + "\n" + _success_result_json()
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
+        assert sr.evidence.write_call_count == 0, (
+            "system/init tool manifest must not trigger write-tool cross-check"
+        )
+        assert sr.retry_reason != RetryReason.CONTRACT_RECOVERY
+
+    def test_cross_check_detects_real_write_in_assistant_record(self) -> None:
+        stdout = (
+            _system_init_ndjson()
+            + "\n"
+            + _truncated_tool_use_line()
+            + "\n"
+            + _success_result_json()
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
+        assert sr.evidence.write_call_count >= 1, (
+            "truncated assistant/tool_use with 'Edit' must still trigger cross-check "
+            "even when a system/init line also appears in stdout"
+        )
+
+    def test_contract_recovery_suppressed_for_read_only(self) -> None:
+        from autoskillit.pipeline.audit import DefaultAuditLog
+
+        # Produce adjudicated_failure: success subtype + completion_marker present in result
+        # but expected_output_patterns not matched.
+        result_line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "result": "plan summary\n%%ORDER_UP%%",
+                "session_id": "s1",
+                "is_error": False,
+            }
+        )
+        write_tool_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "tool_use", "name": "Write", "id": "t1", "input": {}}]
+                },
+            }
+        )
+        stdout = write_tool_line + "\n" + result_line
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        audit = DefaultAuditLog()
+
+        sr = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=[r"plan_path\s*=\s*/.+"],
+            skill_command="/test:read-only-skill",
+            audit=audit,
+            readonly_skill=True,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.retry_reason != RetryReason.CONTRACT_RECOVERY
+        assert sr.needs_retry is False
+        contract_recovery_entries = [
+            f
+            for f in audit.get_report()
+            if f.skill_command == "/test:read-only-skill" and f.retry_reason == "contract_recovery"
+        ]
+        assert not contract_recovery_entries, (
+            "Audit log must not record CONTRACT_RECOVERY for read-only skills"
+        )
 
 
 class TestCodexPipelineHappyPath:

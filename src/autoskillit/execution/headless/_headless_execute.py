@@ -404,6 +404,7 @@ async def _execute_claude_headless(
             provider_used=current_provider_name,
             supports_claude_format_stdout=_supports_fmt,
             backend=_step_backend,
+            readonly_skill=_readonly_skill,
         )
 
         if (

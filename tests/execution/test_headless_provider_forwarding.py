@@ -440,6 +440,80 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
     assert execute_kwargs["session_id"] == "dispatch-uuid-123"
 
 
+# ── readonly_skill forwarding tests ───────────────────────────────────────────
+
+
+def test_build_skill_result_accepts_readonly_skill_kwarg() -> None:
+    import inspect
+
+    from autoskillit.execution.headless._headless_result import _build_skill_result
+
+    sig = inspect.signature(_build_skill_result)
+    param = sig.parameters["readonly_skill"]
+    assert param.default is False
+    assert param.kind == inspect.Parameter.KEYWORD_ONLY
+
+
+@pytest.mark.anyio
+async def test_execute_forwards_readonly_skill_to_build_result(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    import json
+
+    import autoskillit.execution.headless._headless_execute as _hx
+    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
+    from autoskillit.execution.headless._headless_result import _build_skill_result as _orig_bsr
+    from tests.execution.conftest import _sr
+
+    captured_readonly: list = []
+
+    def _spy_build(result, **kwargs):
+        captured_readonly.append(kwargs.get("readonly_skill", "NOT_PASSED"))
+        return _orig_bsr(result, **kwargs)
+
+    monkeypatch.setattr(_hx, "_build_skill_result", _spy_build)
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
+        lambda *a: "",
+    )
+
+    result_line = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "result": "done",
+            "session_id": "s1",
+            "is_error": False,
+        }
+    )
+
+    async def fake_runner(cmd, **kwargs):
+        return _sr(0, result_line)
+
+    minimal_ctx.runner = fake_runner
+    minimal_ctx.backend = _mock_backend()
+
+    spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
+    await _execute_claude_headless(
+        spec,
+        str(tmp_path),
+        minimal_ctx,
+        timeout=10.0,
+        stale_threshold=5.0,
+        readonly_skill=True,
+    )
+
+    assert captured_readonly, "_build_skill_result was not called"
+    assert captured_readonly[0] is True, (
+        "_execute_claude_headless must pass readonly_skill=True to _build_skill_result"
+    )
+
+
 @pytest.mark.anyio
 async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
     minimal_ctx, tmp_path, monkeypatch

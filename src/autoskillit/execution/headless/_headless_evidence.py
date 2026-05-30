@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -149,7 +150,30 @@ def _extract_file_changes(stdout: str, backend: CodingAgentBackend) -> list[str]
 
 
 def _stdout_mentions_write_tools(stdout: str) -> bool:
-    return '"Edit"' in stdout or '"Write"' in stdout
+    """For truncated lines that fail JSON parsing, falls back to prefix + substring check."""
+    _write_names = {"Write", "Edit"}
+    for line in stdout.splitlines():
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            # Truncated line: check if it looks like an assistant record with a write tool name.
+            if (
+                line.startswith('{"type":"assistant"') or line.startswith('{"type": "assistant"')
+            ) and ('"Write"' in line or '"Edit"' in line):
+                return True
+            continue
+        if obj.get("type") != "assistant":
+            continue
+        for block in obj.get("message", {}).get("content", []):
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("name") in _write_names
+            ):
+                return True
+    return False
 
 
 def _build_session_telemetry(

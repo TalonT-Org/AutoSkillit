@@ -149,6 +149,7 @@ def _build_skill_result(
     provider_used: str = "",
     supports_claude_format_stdout: bool = True,
     backend: CodingAgentBackend,
+    readonly_skill: bool = False,
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
@@ -551,6 +552,7 @@ def _build_skill_result(
         and not needs_retry
         and normalized_subtype == "adjudicated_failure"
         and _has_write_evidence
+        and not readonly_skill
     ):
         _audit_needs_retry = True
         _audit_retry_reason = RetryReason.CONTRACT_RECOVERY
@@ -647,6 +649,7 @@ def _build_skill_result(
         and not sr.needs_retry
         and sr.subtype == "adjudicated_failure"
         and _has_write_evidence
+        and not readonly_skill
     ):
         sr = dataclasses.replace(
             sr,

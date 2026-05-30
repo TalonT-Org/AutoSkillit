@@ -90,6 +90,10 @@ ingredients:
   audit_remediation_max_retries:
     description: Maximum number of audit remediation cycles (audit NO GO recovery) before failing
     default: '2'
+  test_fix_max_retries:
+    default: '3'
+    description: Maximum iterations of the pre-merge test → fix → test cycle.
+    hidden: true
   adversarial_review_level:
     description: Controls adversarial review depth in make-plan. "auto" estimates
       complexity and gates agents accordingly. "full" always runs all 3 agents. "none"
@@ -537,22 +541,41 @@ steps:
       fixes_applied: ${{ result.fixes_applied }}
     on_result:
     - when: ${{ result.verdict }} == 'real_fix'
-      route: test
+      route: check_test_fix_loop
     - when: ${{ result.verdict }} == 'already_green'
-      route: test
+      route: check_test_fix_loop
     - when: ${{ result.verdict }} == 'flake_suspected'
-      route: test
+      route: check_test_fix_loop
     - when: ${{ result.verdict }} == 'ci_only_failure'
       route: release_issue_failure
     - when: ${{ result.verdict }} == 'no_test_infrastructure'
       route: release_issue_failure
-    on_context_limit: test
-    on_rate_limit: test
+    on_context_limit: check_test_fix_loop
+    on_rate_limit: check_test_fix_loop
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
     optional_context_refs:
     - merge_gate_ci_conclusion
     - merge_gate_diagnosis_path
+  check_test_fix_loop:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.test_fix_loop_count }}
+      max_iterations: ${{ inputs.test_fix_max_retries }}
+    capture:
+      test_fix_loop_count: ${{ result.next_iteration }}
+    on_result:
+    - when: ${{ result.max_exceeded }} == true
+      route: release_issue_failure
+    - route: test
+    on_failure: release_issue_failure
+    optional_context_refs:
+    - test_fix_loop_count
+    note: >
+      Guards the pre-merge test → fix → test cycle. Caps at test_fix_max_retries
+      iterations (default 3). Prevents unbounded looping when assess repeatedly
+      reports real_fix/already_green/flake_suspected but tests keep failing.
   rebase_conflict_fix:
     tool: run_skill
     model: ''

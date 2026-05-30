@@ -96,11 +96,13 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                             for t in (
                                 _step.on_failure,
                                 _step.on_exhausted,
-                                _step.on_context_limit,
-                                _step.on_rate_limit,
                             )
                             if t
                         }
+                        if _step.on_context_limit and _step.on_context_limit not in cycle_set:
+                            _fail_targets.add(_step.on_context_limit)
+                        if _step.on_rate_limit and _step.on_rate_limit not in cycle_set:
+                            _fail_targets.add(_step.on_rate_limit)
                         if any(
                             succ in cycle_set
                             for succ in graph.get(_s, set())
@@ -120,10 +122,16 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                                 for t in (
                                     _step_r.on_failure,
                                     _step_r.on_exhausted,
-                                    _step_r.on_context_limit,
                                 )
                                 if t
                             }
+                            if (
+                                _step_r.on_context_limit
+                                and _step_r.on_context_limit not in cycle_set
+                            ):
+                                _fail_targets_r.add(_step_r.on_context_limit)
+                            if _step_r.on_rate_limit and _step_r.on_rate_limit not in cycle_set:
+                                _fail_targets_r.add(_step_r.on_rate_limit)
                             for succ in graph.get(_rs, set()):
                                 if succ not in cycle_set and succ not in _fail_targets_r:
                                     exit_targets.add(succ)

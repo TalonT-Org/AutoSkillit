@@ -523,3 +523,75 @@ def test_bundled_recipes_have_no_bare_rebase_findings():
             f"{yaml_path.name}: found bare rebase findings: "
             f"{[(f.step_name, f.message) for f in bare_rebase]}"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# run-cmd-path-capture-requires-nonempty-guard
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_run_cmd_path_capture_without_guard_flagged():
+    """run_cmd with path-typed capture but no test -s or [ -s guard → WARNING."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": 'echo "output_path=/tmp/out.md"'},
+                "capture": {"output_path": {"from": "${{ result.output_path }}", "type": "path"}},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "run-cmd-path-capture-requires-nonempty-guard" in codes
+    finding = next(f for f in findings if f.rule == "run-cmd-path-capture-requires-nonempty-guard")
+    assert finding.severity.value == "warning"
+
+
+def test_run_cmd_path_capture_with_guard_passes():
+    """run_cmd with path-typed capture and test -s guard → no finding."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": 'test -s "/tmp/out.md" && echo "output_path=/tmp/out.md"'},
+                "capture": {"output_path": {"from": "${{ result.output_path }}", "type": "path"}},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-path-capture-requires-nonempty-guard" for f in findings)
+
+
+def test_run_cmd_string_capture_not_flagged():
+    """run_cmd with string-typed capture (shorthand) → no finding from path guard rule."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": 'echo "output_path=/tmp/out.md"'},
+                "capture": {"output_path": "${{ result.output_path }}"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-path-capture-requires-nonempty-guard" for f in findings)
+
+
+def test_run_cmd_path_capture_bracket_guard_passes():
+    """run_cmd with path-typed capture and [ -s bracket guard → no finding."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": '[ -s "/tmp/out.md" ] && echo "output_path=/tmp/out.md"'},
+                "capture": {"output_path": {"from": "${{ result.output_path }}", "type": "path"}},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-path-capture-requires-nonempty-guard" for f in findings)

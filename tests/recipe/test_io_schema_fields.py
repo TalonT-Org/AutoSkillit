@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core.types import RecipeSource
+from autoskillit.core.types import CaptureEntrySpec, RecipeSource
 from autoskillit.recipe.io import (
     builtin_recipes_dir,
     list_recipes,
@@ -76,7 +76,9 @@ def test_recipe_step_accepts_capture_list_field() -> None:
         retries=0,
         on_success="verify",
     )
-    assert step.capture_list == {"plan_parts": "${{ result.plan_parts }}"}
+    assert step.capture_list["plan_parts"] == CaptureEntrySpec(
+        from_="${{ result.plan_parts }}", value_type="string"
+    )
 
 
 # D2
@@ -107,7 +109,9 @@ def test_recipe_yaml_with_capture_list_parses(tmp_path: Path) -> None:
     }
     path = _write_yaml(tmp_path / "recipe.yaml", data)
     recipe = load_recipe(path)
-    assert recipe.steps["plan"].capture_list == {"plan_parts": "${{ result.plan_parts }}"}
+    assert recipe.steps["plan"].capture_list["plan_parts"] == CaptureEntrySpec(
+        from_="${{ result.plan_parts }}", value_type="string"
+    )
 
 
 # D8

@@ -59,7 +59,7 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step captures worktree_path from result.worktree_path."""
         step = self.if_recipe.steps["merge"]
         assert "worktree_path" in step.capture
-        assert "result.worktree_path" in step.capture["worktree_path"]
+        assert "result.worktree_path" in step.capture["worktree_path"].from_
 
     def test_implementation_pipeline_merge_step_has_predicate_on_result(self) -> None:
         """The merge step in implementation.yaml has predicate on_result."""
@@ -103,7 +103,7 @@ class TestRecipeIntegrationPredicateRouting:
         """The merge step in implementation.yaml captures worktree_path."""
         step = self.ip_recipe.steps["merge"]
         assert "worktree_path" in step.capture
-        assert "result.worktree_path" in step.capture["worktree_path"]
+        assert "result.worktree_path" in step.capture["worktree_path"].from_
 
     def test_both_recipes_validate_cleanly(self) -> None:
         """Both recipes have no structural errors after predicate routing changes."""

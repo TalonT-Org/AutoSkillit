@@ -567,7 +567,7 @@ class TestImplementationPipelineStructure:
     def test_ip_plan_step_captures_all_plan_paths(self, recipe) -> None:
         """plan step must capture all_plan_paths for multi-group accumulation."""
         assert "all_plan_paths" in recipe.steps["plan"].capture
-        assert "result.plan_path" in recipe.steps["plan"].capture["all_plan_paths"]
+        assert "result.plan_path" in recipe.steps["plan"].capture["all_plan_paths"].from_
 
     def test_ip_prepare_pr_references_all_plan_paths(self, recipe) -> None:
         """prepare_pr must pass all accumulated plan paths, not just the last."""
@@ -901,7 +901,7 @@ class TestInvestigateFirstStructure:
             "investigate step must capture investigation_path so rectify receives "
             "the explicit path rather than scanning the filesystem"
         )
-        assert step.capture["investigation_path"] == "${{ result.investigation_path }}"
+        assert step.capture["investigation_path"].from_ == "${{ result.investigation_path }}"
 
     def test_remediation_rectify_uses_context_investigation_path(self, recipe) -> None:
         """1d: rectify step must pass an investigation path context variable in skill_command."""

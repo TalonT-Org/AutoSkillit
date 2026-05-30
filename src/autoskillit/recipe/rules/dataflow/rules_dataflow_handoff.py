@@ -74,8 +74,8 @@ def _check_merge_cleanup_captured(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         # Check whether any capture value references cleanup_succeeded
         captures_cleanup = any(
-            "result.cleanup_succeeded" in str(v) for v in (step.capture or {}).values()
-        ) or any("result.cleanup_succeeded" in str(v) for v in (step.capture_list or {}).values())
+            "result.cleanup_succeeded" in v.from_ for v in (step.capture or {}).values()
+        ) or any("result.cleanup_succeeded" in v.from_ for v in (step.capture_list or {}).values())
         if not captures_cleanup:
             findings.append(
                 RuleFinding(

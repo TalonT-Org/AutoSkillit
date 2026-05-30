@@ -118,13 +118,16 @@ def test_recipe_step_capture_list_with_retries_raises() -> None:
 
 def test_recipe_step_capture_list_retries_zero_ok() -> None:
     """RecipeStep with capture_list and retries=0 must not raise."""
+    from autoskillit.core.types import CaptureEntrySpec
     from autoskillit.recipe.schema import RecipeStep
 
     step = RecipeStep(
         capture_list={"all_diagram_paths": "${{ result.diagram_path }}"},
         retries=0,
     )
-    assert step.capture_list == {"all_diagram_paths": "${{ result.diagram_path }}"}
+    assert step.capture_list["all_diagram_paths"] == CaptureEntrySpec(
+        from_="${{ result.diagram_path }}", value_type="string"
+    )
     assert step.retries == 0
 
 

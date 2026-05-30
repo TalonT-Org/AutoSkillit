@@ -77,8 +77,8 @@ def _check_merge_test_gate_context_not_forwarded(
         if not test_gate_routes:
             continue
 
-        has_stdout = any("test_stdout" in v for v in (step.capture or {}).values())
-        has_stderr = any("test_stderr" in v for v in (step.capture or {}).values())
+        has_stdout = any("test_stdout" in v.from_ for v in (step.capture or {}).values())
+        has_stderr = any("test_stderr" in v.from_ for v in (step.capture or {}).values())
         capture_ok = has_stdout and has_stderr
 
         for route_target in test_gate_routes:

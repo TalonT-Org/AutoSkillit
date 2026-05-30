@@ -959,6 +959,19 @@ def _dispatchable_recipe_names() -> list[str]:
     return names
 
 
+def test_recipe_step_shorthand_capture_parses_to_capture_entry_spec() -> None:
+    """Shorthand capture values must load as CaptureEntrySpec with value_type='string'."""
+    from autoskillit.core import CaptureEntrySpec
+
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    step = recipe.steps["investigate"]
+    assert "investigation_path" in step.capture
+    value = step.capture["investigation_path"]
+    assert isinstance(value, CaptureEntrySpec)
+    assert value.value_type == "string"
+    assert "${{ result." in value.from_
+
+
 @pytest.mark.parametrize("recipe_name", _dispatchable_recipe_names())
 def test_recipe_all_stop_steps_have_sentinel_instructions(recipe_name: str) -> None:
     """Every stop step in bundled dispatchable recipes must include sentinel instructions."""

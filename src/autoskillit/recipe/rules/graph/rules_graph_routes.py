@@ -224,6 +224,6 @@ def _check_clone_root_as_worktree(ctx: ValidationContext) -> list[RuleFinding]:
 
         # Update capture map AFTER the tool check so captures only affect later steps
         for cap_key, cap_val in step.capture.items():
-            captures[cap_key] = str(cap_val)
+            captures[cap_key] = cap_val.from_
 
     return findings

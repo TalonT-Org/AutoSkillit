@@ -782,6 +782,37 @@ def test_extract_path_type_rejects_nonexistent_path(tmp_path: Path):
     assert "path" in msg or "exist" in msg
 
 
+def test_extract_path_type_rejects_zero_byte_file(tmp_path: Path):
+    """A path-type capture with a 0-byte file must raise CaptureValueTypeError."""
+    from autoskillit.core import CaptureValueTypeError
+    from autoskillit.fleet._capture import _extract_captures
+
+    capture_spec = {
+        "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
+    }
+    (tmp_path / "empty.md").touch()
+    payload = {"p": str(tmp_path / "empty.md")}
+
+    with pytest.raises(CaptureValueTypeError) as exc_info:
+        _extract_captures(capture_spec, payload)
+    msg = str(exc_info.value).lower()
+    assert "empty" in msg or "0 bytes" in msg
+
+
+def test_extract_path_type_accepts_nonempty_file(tmp_path: Path):
+    """A path-type capture with a non-empty file must succeed (regression guard)."""
+    from autoskillit.fleet._capture import _extract_captures
+
+    capture_spec = {
+        "p": CaptureEntrySpec(from_="${{ result.p }}", value_type="path"),
+    }
+    (tmp_path / "report.md").write_text("# Report\n")
+    payload = {"p": str(tmp_path / "report.md")}
+
+    result = _extract_captures(capture_spec, payload)
+    assert result["p"] == str(tmp_path / "report.md")
+
+
 def test_interpolate_rejects_empty_string_campaign_ref():
     """_interpolate_campaign_refs must reject an empty-string captured value."""
     from autoskillit.fleet._expressions import _interpolate_campaign_refs

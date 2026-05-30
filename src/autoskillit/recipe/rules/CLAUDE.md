@@ -23,7 +23,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts and `hidden-input-ref-in-template` detection |
 | `rules_callable_scope.py` | Enforces scoped directory args for file-discovering callables |
 | `rules_clone.py` | Clone/push dataflow rules: missing remote URL, local-strategy capture |
-| `rules_cmd.py` | `run_cmd` echo-capture alignment; git remote command detection |
+| `rules_cmd.py` | `run_cmd` echo-capture alignment; git remote command detection; bare git rebase without conflict routing detection; path-typed capture non-empty file guard detection |
 | `rules_contracts.py` | Skill contract completeness rules |
 | `rules_features.py` | Feature-gated tool/skill reference validation |
 | `rules_flake_loop.py` | Flake-suspected unwinnable loop detection for merge gate cycles |

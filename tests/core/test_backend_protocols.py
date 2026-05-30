@@ -148,6 +148,9 @@ def test_stub_class_satisfies_coding_agent_backend():
 
         def list_plugins(self) -> list[dict[str, Any]]: ...
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     assert isinstance(_Backend(), CodingAgentBackend)
 
 

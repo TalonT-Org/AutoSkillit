@@ -160,3 +160,25 @@ def test_codex_init_session_sessions_symlink_respects_xdg(
     target = sessions_link.resolve()
     expected = xdg_dir / "autoskillit" / "logs" / "codex-sessions"
     assert target == expected
+
+
+def test_codex_init_session_calls_ensure_pre_launch(make_session_skill_manager, codex_env) -> None:
+    """init_session() must call backend.ensure_pre_launch() when mcp_config_capable is True."""
+    pre_launch_called: list[bool] = []
+    codex_env.backend.ensure_pre_launch.return_value = []
+    codex_env.backend.ensure_pre_launch.side_effect = lambda: pre_launch_called.append(True) or []
+
+    mgr = make_session_skill_manager()
+    mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
+    assert pre_launch_called, "ensure_pre_launch() must be called during init_session"
+
+
+def test_codex_init_session_raises_when_pre_launch_fails(
+    make_session_skill_manager, codex_env
+) -> None:
+    """init_session() must raise RuntimeError when ensure_pre_launch() returns errors."""
+    codex_env.backend.ensure_pre_launch.return_value = ["Failed to ensure MCP registration: err"]
+
+    mgr = make_session_skill_manager()
+    with pytest.raises(RuntimeError, match="Pre-launch check failed"):
+        mgr.init_session("sid", cook_session=True, backend=codex_env.backend)

@@ -67,6 +67,9 @@ def _make_capturing_backend() -> tuple[object, list[dict]]:
             captured_kwargs.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     return _CapturingBackend(), captured_kwargs
 
 
@@ -253,6 +256,9 @@ def test_skill_injection_disabled_omits_flags(monkeypatch: pytest.MonkeyPatch) -
             build_kwargs.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
     captured: dict = {}
@@ -309,6 +315,9 @@ def test_binary_name_from_backend_used_in_which(monkeypatch: pytest.MonkeyPatch)
         def build_interactive_cmd(self, **kwargs):
             return CmdSpec(cmd=("test-agent-binary", "--dangerously-skip-permissions"), env={})
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     def tracking_which(binary: str):
         captured_which_arg.append(binary)
         if binary == "test-agent-binary":
@@ -353,6 +362,9 @@ def test_run_interactive_session_uses_injected_backend(monkeypatch: pytest.Monke
             build_called.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
     _run_interactive_session(system_prompt="test", backend=_InjectedBackend())
@@ -375,12 +387,16 @@ def test_run_interactive_session_default_backend_calls_get_backend(
         def capabilities(self):
             return MagicMock(
                 skill_injection_capable=True,
+                mcp_config_capable=False,
             )
 
         def build_interactive_cmd(self, **kwargs):
             from autoskillit.core import CmdSpec
 
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        def ensure_pre_launch(self) -> list[str]:
+            return []
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -431,6 +447,9 @@ def test_get_backend_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatch) 
             build_calls.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
 
@@ -476,6 +495,9 @@ def test_skill_injection_false_via_get_backend_forwards_system_prompt_kwarg(
         def build_interactive_cmd(self, **kwargs):
             build_kwargs.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        def ensure_pre_launch(self) -> list[str]:
+            return []
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
@@ -530,6 +552,9 @@ def test_codex_like_backend_no_claude_flags(monkeypatch: pytest.MonkeyPatch) -> 
             build_kwargs.append(kwargs)
             return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     captured: dict = {}
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/codex")
 
@@ -578,6 +603,9 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
             backends_used.append("claude-code")
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     class _CodexStub:
         def binary_name(self) -> str:
             return "codex"
@@ -603,6 +631,9 @@ def test_feature_flag_gate_blocks_codex_backend_without_feature(
         def build_interactive_cmd(self, **kwargs):
             backends_used.append("codex")
             return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
+
+        def ensure_pre_launch(self) -> list[str]:
+            return []
 
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "codex"
@@ -663,6 +694,9 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
             backends_used.append("codex")
             return CmdSpec(cmd=("codex", "--dangerously-bypass-approvals-and-sandbox"), env={})
 
+        def ensure_pre_launch(self) -> list[str]:
+            return []
+
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "codex"
     mock_config.features = {"codex_backend": True}
@@ -704,6 +738,9 @@ def test_launch_cook_session_accepts_backend_param(monkeypatch: pytest.MonkeyPat
         def build_interactive_cmd(self, **kwargs):
             build_calls.append(kwargs)
             return CmdSpec(cmd=("claude", "--dangerously-skip-permissions"), env={})
+
+        def ensure_pre_launch(self) -> list[str]:
+            return []
 
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
     monkeypatch.setattr(
@@ -841,3 +878,104 @@ def test_backend_flags_mapping_covers_registry() -> None:
         f"BACKEND_REGISTRY has backends not covered by _BACKEND_FLAGS: {missing}. "
         "Add the new backend's Flags enum to _BACKEND_FLAGS in test_session_launch.py."
     )
+
+
+# ---------------------------------------------------------------------------
+# T-1e: _run_interactive_session calls ensure_pre_launch() for Codex backend
+# ---------------------------------------------------------------------------
+
+
+def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_run_interactive_session must call backend.ensure_pre_launch() before subprocess.run."""
+    from autoskillit.core import BackendCapabilities, CmdSpec
+
+    pre_launch_called: list[bool] = []
+    subprocess_called: list[bool] = []
+
+    caps = BackendCapabilities(
+        channel_b_capable=False,
+        pty_required=True,
+        session_resume_capable=True,
+        skill_injection_capable=True,
+        supports_thinking_blocks=False,
+        supports_claude_format_stdout=False,
+        exit_code_is_terminal=True,
+        mcp_config_capable=True,
+        food_truck_capable=False,
+        completion_record_types=frozenset(),
+        session_record_types=frozenset(),
+    )
+
+    class _CodexBackendStub:
+        def binary_name(self) -> str:
+            return "codex"
+
+        @property
+        def capabilities(self):
+            return caps
+
+        def ensure_pre_launch(self) -> list[str]:
+            pre_launch_called.append(True)
+            return []
+
+        def build_interactive_cmd(self, **kwargs):
+            return CmdSpec(cmd=("codex",), env={})
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/codex")
+
+    def mock_run(cmd, **kwargs):
+        subprocess_called.append(True)
+        return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    _run_interactive_session(system_prompt="test", backend=_CodexBackendStub())
+    assert pre_launch_called, "ensure_pre_launch() must be called before subprocess.run"
+    assert subprocess_called, "subprocess.run must be called after ensure_pre_launch"
+
+
+def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_run_interactive_session must sys.exit(1) when ensure_pre_launch() returns errors."""
+    from autoskillit.core import BackendCapabilities, CmdSpec
+
+    caps = BackendCapabilities(
+        channel_b_capable=False,
+        pty_required=True,
+        session_resume_capable=True,
+        skill_injection_capable=True,
+        supports_thinking_blocks=False,
+        supports_claude_format_stdout=False,
+        exit_code_is_terminal=True,
+        mcp_config_capable=True,
+        food_truck_capable=False,
+        completion_record_types=frozenset(),
+        session_record_types=frozenset(),
+    )
+
+    class _FailingCodexBackend:
+        def binary_name(self) -> str:
+            return "codex"
+
+        @property
+        def capabilities(self):
+            return caps
+
+        def ensure_pre_launch(self) -> list[str]:
+            return ["Failed to ensure MCP registration: some error"]
+
+        def build_interactive_cmd(self, **kwargs):
+            return CmdSpec(cmd=("codex",), env={})
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/codex")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("subprocess.run must not be called")
+        ),
+    )
+    with pytest.raises(SystemExit, match="1"):
+        _run_interactive_session(system_prompt="test", backend=_FailingCodexBackend())

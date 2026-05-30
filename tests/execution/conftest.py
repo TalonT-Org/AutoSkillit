@@ -319,6 +319,7 @@ def _flush(tmp_path: Path, **overrides) -> None:
         "audit_record": None,
         "loc_insertions": 0,
         "loc_deletions": 0,
+        "profile_name": "",
     }
     defaults.update(overrides)
 

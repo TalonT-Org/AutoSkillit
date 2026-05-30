@@ -97,6 +97,7 @@ class HeadlessExecutor(Protocol):
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
+        profile_name: str = "",
         sentinel_contract: str = "",
         marker_dir: Path | None = None,
         session_id: str | None = None,

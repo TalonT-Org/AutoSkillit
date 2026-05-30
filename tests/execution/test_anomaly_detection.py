@@ -11,6 +11,8 @@ from autoskillit.execution.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
     detect_anomalies,
+    detect_model_drift,
+    normalize_model_id,
 )
 from tests.execution.conftest import _snap as _snap_full
 
@@ -415,23 +417,19 @@ def test_anomaly_kind_model_drift_value():
 
 
 def test_detect_model_drift_emits_anomaly():
-    """detect_model_drift returns MODEL_DRIFT anomaly when configured != observed."""
-    from autoskillit.execution.anomaly_detection import detect_model_drift
-
+    """detect_model_drift returns MODEL_DRIFT anomaly for genuinely different model families."""
     anomalies = detect_model_drift(
-        configured_model="claude-opus-4-6",
-        observed_model="claude-sonnet-4-6",
+        configured_model="sonnet",
+        observed_model="claude-opus-4-6",
     )
     assert len(anomalies) == 1
     assert anomalies[0]["kind"] == "model_drift"
-    assert anomalies[0]["detail"]["configured_model"] == "claude-opus-4-6"
-    assert anomalies[0]["detail"]["observed_model"] == "claude-sonnet-4-6"
+    assert anomalies[0]["detail"]["configured_model"] == "sonnet"
+    assert anomalies[0]["detail"]["observed_model"] == "claude-opus-4-6"
 
 
 def test_detect_model_drift_no_anomaly_when_matching():
     """No anomaly when configured model matches the dominant observed model."""
-    from autoskillit.execution.anomaly_detection import detect_model_drift
-
     anomalies = detect_model_drift(
         configured_model="claude-opus-4-6",
         observed_model="claude-opus-4-6",
@@ -439,9 +437,17 @@ def test_detect_model_drift_no_anomaly_when_matching():
     assert anomalies == []
 
 
+def test_detect_model_drift_no_anomaly_alias_to_full_id():
+    """No anomaly when configured alias matches the API-returned full model ID."""
+    anomalies = detect_model_drift(
+        configured_model="sonnet",
+        observed_model="claude-sonnet-4-6",
+    )
+    assert anomalies == []
+
+
 def test_detect_model_drift_skips_when_configured_empty():
     """No anomaly when configured_model is empty (fallback-only sessions)."""
-    from autoskillit.execution.anomaly_detection import detect_model_drift
 
     anomalies = detect_model_drift(
         configured_model="",
@@ -452,10 +458,97 @@ def test_detect_model_drift_skips_when_configured_empty():
 
 def test_detect_model_drift_skips_when_observed_empty():
     """No anomaly when observed_model is empty (no token breakdown)."""
-    from autoskillit.execution.anomaly_detection import detect_model_drift
 
     anomalies = detect_model_drift(
         configured_model="claude-opus-4-6",
         observed_model="",
     )
     assert anomalies == []
+
+
+@pytest.mark.parametrize(
+    "configured, observed, expect_drift",
+    [
+        ("sonnet", "claude-sonnet-4-6", False),
+        ("opus", "claude-opus-4-6", False),
+        ("haiku", "claude-haiku-4-5-20251001", False),
+        ("claude-sonnet-4-6", "claude-sonnet-4-6", False),
+        ("sonnet", "claude-opus-4-6", True),
+        ("claude-sonnet-4-5", "claude-sonnet-4-6", True),
+    ],
+)
+def test_detect_model_drift_alias_normalization(configured, observed, expect_drift):
+    anomalies = detect_model_drift(configured, observed)
+    assert bool(anomalies) == expect_drift
+
+
+def test_normalize_model_id_short_alias():
+    assert normalize_model_id("sonnet") == "claude-sonnet"
+    assert normalize_model_id("opus") == "claude-opus"
+    assert normalize_model_id("haiku") == "claude-haiku"
+
+
+def test_normalize_model_id_strips_date_suffix():
+    assert normalize_model_id("claude-haiku-4-5-20251001") == "claude-haiku-4-5"
+
+
+def test_normalize_model_id_full_id_unchanged():
+    assert normalize_model_id("claude-sonnet-4-6") == "claude-sonnet-4-6"
+
+
+def test_normalize_model_id_non_anthropic_passthrough():
+    assert normalize_model_id("gpt-4o") == "gpt-4o"
+
+
+def test_rss_growth_startup_artifact_suppressed():
+    """Early-startup RSS (5MB) should not trigger RSS_GROWTH at normal working set."""
+    snaps = [
+        _snap(vm_rss_kb=5000),
+        _snap(vm_rss_kb=50000),
+        _snap(vm_rss_kb=150000),
+        _snap(vm_rss_kb=270000),
+        _snap(vm_rss_kb=280000),
+    ]
+    anomalies = detect_anomalies(snaps, pid=1234)
+    rss = [a for a in anomalies if a["kind"] == AnomalyKind.RSS_GROWTH]
+    assert len(rss) == 0
+
+
+def test_rss_growth_real_growth_still_detected():
+    """Genuine RSS growth from a stable baseline should still be detected."""
+    snaps = [
+        _snap(vm_rss_kb=200000),
+        _snap(vm_rss_kb=220000),
+        _snap(vm_rss_kb=300000),
+        _snap(vm_rss_kb=380000),
+        _snap(vm_rss_kb=450000),
+    ]
+    anomalies = detect_anomalies(snaps, pid=1234)
+    rss = [a for a in anomalies if a["kind"] == AnomalyKind.RSS_GROWTH]
+    assert len(rss) == 1
+
+
+def test_rss_growth_low_baseline_with_genuine_anomalous_growth():
+    """Genuine anomalous growth from a low baseline should be detected via absolute threshold."""
+    snaps = [
+        _snap(vm_rss_kb=10000),
+        _snap(vm_rss_kb=100000),
+        _snap(vm_rss_kb=200000),
+        _snap(vm_rss_kb=400000),
+        _snap(vm_rss_kb=800000),
+    ]
+    anomalies = detect_anomalies(snaps, pid=1234)
+    rss = [a for a in anomalies if a["kind"] == AnomalyKind.RSS_GROWTH]
+    assert len(rss) == 1
+
+
+def test_rss_baseline_floor_is_reasonable():
+    from autoskillit.execution.anomaly_detection import RSS_BASELINE_FLOOR_KB
+
+    assert RSS_BASELINE_FLOOR_KB >= 10_000
+
+
+def test_rss_absolute_growth_threshold_is_reasonable():
+    from autoskillit.execution.anomaly_detection import RSS_ABSOLUTE_GROWTH_KB
+
+    assert RSS_ABSOLUTE_GROWTH_KB >= 300_000

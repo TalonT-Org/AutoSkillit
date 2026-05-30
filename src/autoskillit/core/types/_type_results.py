@@ -475,6 +475,7 @@ class TokenUsageFileEntry(TypedDict):
     provider_used: str
     model_identifier: str
     configured_model: str
+    profile_name: str
     dispatch_id: str
     campaign_id: str
     schema_version: int
@@ -526,6 +527,7 @@ class SessionIndexEntry(TypedDict):
     provider_fallback: bool
     model_identifier: str
     configured_model: str
+    profile_name: str
     caller_session_id: str
     api_retry_count: int
     api_retry_exhausted: bool

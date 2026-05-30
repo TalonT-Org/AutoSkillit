@@ -73,6 +73,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_variadic_ordering.py` | Architectural invariant: positional initial_prompt must precede all variadic CLI flags in build_interactive_cmd |
 | `test_watcher_signal_consistency.py` | Structural guard: all process watchers must call `_has_active_dispatch_marker` |
 | `test_write_restriction_coverage.py` | Architectural invariant: skills with prose write restrictions in NEVER blocks have runtime enforcement (read_only, output_dir, or allowlist) |
+| `test_model_identity_contract.py` | AST guard: detect_model_drift must use normalize_model_id and _models_match — raw alias/full-ID comparison is a false-positive source |
 
 ## Architecture Notes
 

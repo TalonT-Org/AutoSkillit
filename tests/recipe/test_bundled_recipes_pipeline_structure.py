@@ -1043,10 +1043,8 @@ def test_remediation_no_go_path_has_merge_before_implement_reentry() -> None:
 
     success_graph = _build_success_step_graph(recipe)
 
-    # Find all steps reachable from remediate before hitting implement
-    # (implement is the barrier)
-    # Find the non-exhausted route from check_audit_remediation_loop (the entry to
-    # the remediation cycle) to understand what steps execute before implement re-entry.
+    # Find the non-exhausted route from check_audit_remediation_loop to understand
+    # what steps execute before implement re-entry (implement is the barrier).
     loop_step = recipe.steps["check_audit_remediation_loop"]
     assert loop_step.on_result is not None
     non_exhausted_routes = [

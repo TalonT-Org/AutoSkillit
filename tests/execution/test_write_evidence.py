@@ -194,35 +194,35 @@ class TestRecursiveSnapshot:
     """Recursive snapshot detects writes in pre-existing subdirectories."""
 
     def test_detects_write_in_preexisting_subdir(self, tmp_path: Path) -> None:
-        from autoskillit.execution.headless import _recursive_snapshot
+        from autoskillit.execution.headless import _stat_snapshot
 
         watch_dir = tmp_path / "planner_run"
         sub_dir = watch_dir / "refine_contexts"
         sub_dir.mkdir(parents=True)
         (sub_dir / "context_P1.json").write_text("{}")
 
-        pre = _recursive_snapshot(watch_dir)
+        pre = _stat_snapshot(watch_dir)
 
         (sub_dir / "P1_result.json").write_text('{"assignments": []}')
 
-        post = _recursive_snapshot(watch_dir)
+        post = _stat_snapshot(watch_dir)
 
-        assert post - pre == {"refine_contexts/P1_result.json"}
+        assert post.keys() - pre.keys() == {"refine_contexts/P1_result.json"}
 
     def test_detects_write_in_nested_subdir(self, tmp_path: Path) -> None:
-        from autoskillit.execution.headless import _recursive_snapshot
+        from autoskillit.execution.headless import _stat_snapshot
 
         watch_dir = tmp_path / "planner_run"
         nested = watch_dir / "work_packages" / "wp_sentinels"
         nested.mkdir(parents=True)
 
-        pre = _recursive_snapshot(watch_dir)
+        pre = _stat_snapshot(watch_dir)
 
         (nested / "P1_result.json").write_text("{}")
 
-        post = _recursive_snapshot(watch_dir)
+        post = _stat_snapshot(watch_dir)
 
-        assert post - pre == {"work_packages/wp_sentinels/P1_result.json"}
+        assert post.keys() - pre.keys() == {"work_packages/wp_sentinels/P1_result.json"}
 
     @pytest.mark.anyio
     async def test_run_headless_core_detects_subdir_write(
@@ -282,22 +282,6 @@ class TestRecursiveSnapshot:
             write_watch_dirs=[watch_dir],
         )
         assert result.evidence.fs_writes_detected is False
-
-    def test_snapshot_misses_modification_of_existing_file(self, tmp_path: Path) -> None:
-        """Current _recursive_snapshot cannot detect in-place file modifications."""
-        from autoskillit.execution.headless import _recursive_snapshot
-
-        watch_dir = tmp_path / "output"
-        watch_dir.mkdir()
-        target = watch_dir / "plan.md"
-        target.write_text("original content")
-
-        pre = _recursive_snapshot(watch_dir)
-        time.sleep(0.01)
-        target.write_text("modified content — dry walkthrough verified")
-
-        post = _recursive_snapshot(watch_dir)
-        assert post - pre == set()
 
 
 class TestStatSnapshot:

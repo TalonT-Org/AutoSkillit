@@ -48,11 +48,11 @@ from autoskillit.execution.headless._headless_helpers import (
     PostSessionMetrics,
     _compute_post_session_metrics,  # noqa: F401
     _derive_step_name_from_skill_command,
-    _recursive_snapshot,  # noqa: F401
     _resolve_model,
     _resolve_pty_mode,  # noqa: F401
     _resolve_session_log_dir,
     _session_log_dir,  # noqa: F401
+    _stat_snapshot,  # noqa: F401
 )
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,

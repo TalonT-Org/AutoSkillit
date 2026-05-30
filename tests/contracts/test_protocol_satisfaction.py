@@ -370,7 +370,7 @@ class TestGroupDApiContractPreservation:
             "input_data",
             "env",
             "pty_mode",
-            "heartbeat_record_types",
+            "completion_record_types",
             "session_log_dir",
             "completion_marker",
             "stale_threshold",

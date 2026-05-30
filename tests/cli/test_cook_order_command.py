@@ -414,6 +414,74 @@ class TestCLIOrderCommand:
         env = mock_run.call_args[1].get("env") or {}
         assert "AUTOSKILLIT_LAUNCH_ID" in env
 
+    @pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+    def test_order_backend_produces_valid_command(
+        self,
+        backend_name: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """order() produces a valid command for each registered backend."""
+        from autoskillit.execution.backends import get_backend as _real_get_backend
+        from autoskillit.execution.backends.codex import CodexFlags
+
+        real_backend = _real_get_backend(backend_name)
+        captured: dict = {}
+
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        scripts_dir = tmp_path / ".autoskillit" / "recipes"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "my-script.yaml").write_text(_SCRIPT_YAML)
+        monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/fake-binary")
+        monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+
+        mock_config = MagicMock()
+        mock_config.agent_backend.backend = backend_name
+        mock_config.features = {"codex_backend": True}
+        mock_config.experimental_enabled = True
+        mock_config.providers.profiles = {}
+        mock_config.subsets.disabled = []
+        mock_config.packs.enabled = []
+        monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)
+        monkeypatch.setattr(
+            "autoskillit.execution.get_backend",
+            lambda name: _real_get_backend(name),
+        )
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-canary-key")
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = list(cmd)
+            captured["env"] = kwargs.get("env", {}) or {}
+            return type("R", (), {"returncode": 0})()
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        cli.order("test-script")
+
+        cmd = captured["cmd"]
+        env = captured["env"]
+
+        assert cmd[0] == real_backend.binary_name(), (
+            f"Expected {real_backend.binary_name()!r}, got {cmd[0]!r}"
+        )
+
+        claude_flag_values = {str(f) for f in ClaudeFlags}
+        codex_flag_values = {str(f) for f in CodexFlags}
+        claude_only = claude_flag_values - codex_flag_values
+        codex_only = codex_flag_values - claude_flag_values
+
+        if backend_name == "codex":
+            assert set(cmd).isdisjoint(claude_only), (
+                f"Claude-only flags found in codex command: {set(cmd) & claude_only}"
+            )
+            assert "ANTHROPIC_API_KEY" not in env, "Codex env must strip ANTHROPIC_API_KEY"
+        else:
+            assert set(cmd).isdisjoint(codex_only), (
+                f"Codex-only flags found in claude command: {set(cmd) & codex_only}"
+            )
+
 
 # SC-B-4: mark_onboarded() must NOT be called when the cook subprocess exits non-zero
 def test_cook_mark_onboarded_not_called_on_failure(

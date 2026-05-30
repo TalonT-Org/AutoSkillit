@@ -9,6 +9,7 @@ import pytest
 
 from autoskillit.cli.session._session_launch import _run_interactive_session
 from autoskillit.core import ClaudeFlags
+from autoskillit.execution.backends.codex import CodexFlags
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -38,6 +39,14 @@ def _stub_plugin_installed(monkeypatch: pytest.MonkeyPatch, *, installed: bool =
 
     prefix = MARKETPLACE_PREFIX if installed else DIRECT_PREFIX
     monkeypatch.setattr("autoskillit.core.detect_autoskillit_mcp_prefix", lambda: prefix)
+
+
+# Module-level flags map — shared by Tests B, C, and the registry guard.
+# Constructed from the enum values themselves so the enums ARE the ground truth.
+_BACKEND_FLAGS: dict[str, set[str]] = {
+    "claude-code": {str(f) for f in ClaudeFlags},
+    "codex": {str(f) for f in CodexFlags},
+}
 
 
 def _make_capturing_backend() -> tuple[object, list[dict]]:
@@ -740,3 +749,90 @@ def test_multi_backend_no_cross_flag_contamination(monkeypatch: pytest.MonkeyPat
             assert ClaudeFlags.TOOLS not in cmd, (
                 f"{backend_name}: must not contain {ClaudeFlags.TOOLS!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# T-1e: Real-backend parametrized — comprehensive foreign flag exclusion
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("backend_name", ["claude-code", "codex"])
+def test_real_backend_no_foreign_flags(monkeypatch: pytest.MonkeyPatch, backend_name: str) -> None:
+    """Real backend instances must not produce flags from other backends' Flags enums."""
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    captured: dict = {}
+    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
+
+    def mock_run(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    _stub_plugin_installed(monkeypatch, installed=False)
+
+    backend = BACKEND_REGISTRY[backend_name]()
+    _run_interactive_session(system_prompt="test", backend=backend)
+    cmd = captured.get("cmd", [])
+
+    assert cmd[0] == backend.binary_name(), (
+        f"{backend_name}: expected {backend.binary_name()!r} at cmd[0], got {cmd[0]!r}"
+    )
+
+    other_backend = "claude-code" if backend_name == "codex" else "codex"
+    foreign_only = _BACKEND_FLAGS[other_backend] - _BACKEND_FLAGS[backend_name]
+    assert set(cmd).isdisjoint(foreign_only), (
+        f"{backend_name}: foreign flags found in command: {set(cmd) & foreign_only}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T-1f: Cross-validation contract — every assembled flag must belong to backend
+# ---------------------------------------------------------------------------
+
+
+def test_cross_validation_contract_all_flags_known(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every flag-like token in the assembled command must be a member of the
+    backend's own Flags enum. This is the test that would have caught #3270."""
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    captured: dict = {}
+    monkeypatch.setattr(shutil, "which", lambda binary: f"/usr/bin/{binary}")
+
+    def mock_run(cmd, **kwargs):
+        captured["cmd"] = list(cmd)
+        return type("Result", (), {"returncode": 0})()
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    _stub_plugin_installed(monkeypatch, installed=False)
+
+    for backend_name, backend_cls in BACKEND_REGISTRY.items():
+        backend = backend_cls()
+        captured.clear()
+        _run_interactive_session(system_prompt="test", backend=backend)
+        cmd = captured.get("cmd", [])
+
+        assert cmd[0] == backend.binary_name(), (
+            f"{backend_name}: cmd[0] must be {backend.binary_name()!r}, got {cmd[0]!r}"
+        )
+
+        valid_flags = _BACKEND_FLAGS[backend_name]
+        flag_tokens = {t for t in cmd[1:] if t.startswith("-")}
+        unknown = flag_tokens - valid_flags
+        assert not unknown, (
+            f"{backend_name}: unknown flags in command: {sorted(unknown)}. "
+            f"Valid flags: {sorted(valid_flags)}"
+        )
+
+
+def test_backend_flags_mapping_covers_registry() -> None:
+    """Every backend in BACKEND_REGISTRY must have an entry in the flags validation map."""
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    missing = set(BACKEND_REGISTRY) - set(_BACKEND_FLAGS)
+    assert not missing, (
+        f"BACKEND_REGISTRY has backends not covered by _BACKEND_FLAGS: {missing}. "
+        "Add the new backend's Flags enum to _BACKEND_FLAGS in test_session_launch.py."
+    )

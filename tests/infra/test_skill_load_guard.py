@@ -353,6 +353,21 @@ def test_codex_backend_ignores_provider_profile(tmp_path, provider_profile):
     assert not out.strip()
 
 
+def test_applicable_guards_includes_skill_load_guard_proceeds(tmp_path):
+    """T2-18b: When AUTOSKILLIT_APPLICABLE_GUARDS includes skill_load_guard, guard proceeds."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+        agent_backend="codex",
+        applicable_guards="skill_load_guard",
+    )
+    response = json.loads(out)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_non_codex_backend_still_denies(tmp_path):
     """T2-19: claude-code backend does NOT trigger early exit - deny proceeds."""
     out = _run_guard(

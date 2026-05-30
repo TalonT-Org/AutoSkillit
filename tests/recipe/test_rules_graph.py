@@ -206,6 +206,86 @@ def test_cycle_with_on_result_all_routes_in_cycle_is_still_flagged() -> None:
     assert len(cycle_findings) == 1
 
 
+def test_cycle_with_on_context_limit_in_cycle_and_retry_exit_is_error() -> None:
+    """Cycle where on_context_limit points INTO cycle must produce ERROR despite retry exit.
+
+    on_context_limit: A places A in _fail_targets under the old code, masking the
+    on_result route real_fix→A and causing the rule to emit zero findings.
+    After the fix, on_context_limit is only treated as a fail exit when it routes
+    OUTSIDE the cycle — here it routes INTO the cycle, so the ERROR must be emitted.
+    """
+    recipe = _make_recipe(
+        {
+            "A": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "/tmp"},
+                on_success="done",
+                on_failure="B",
+            ),
+            "B": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:resolve-failures /tmp", "cwd": "/tmp"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(when="${{ result.verdict }} == 'real_fix'", route="A"),
+                        StepResultCondition(
+                            when="${{ result.verdict }} == 'ci_only'", route="done"
+                        ),
+                    ]
+                ),
+                on_failure="done",
+                on_exhausted="escalate",
+                on_context_limit="A",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+            "escalate": RecipeStep(action="stop", message="escalate"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    assert len(cycle_findings) == 1
+    assert cycle_findings[0].severity == Severity.ERROR
+
+
+def test_on_context_limit_outside_cycle_is_still_fail_target() -> None:
+    """on_context_limit pointing OUTSIDE the cycle must still be treated as a fail exit.
+
+    Ensures the fix does not over-correct: when on_context_limit routes to a step
+    outside the cycle, it is still an escape edge and should not cause a false positive.
+    """
+    recipe = _make_recipe(
+        {
+            "A": RecipeStep(
+                tool="test_check",
+                with_args={"worktree_path": "/tmp"},
+                on_success="done",
+                on_failure="B",
+            ),
+            "B": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:resolve-failures /tmp", "cwd": "/tmp"},
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(when="${{ result.verdict }} == 'real_fix'", route="A"),
+                        StepResultCondition(
+                            when="${{ result.verdict }} == 'ci_only'", route="done"
+                        ),
+                    ]
+                ),
+                on_failure="done",
+                on_exhausted="escalate",
+                on_context_limit="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+            "escalate": RecipeStep(action="stop", message="escalate"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    assert len(cycle_findings) == 1
+    assert cycle_findings[0].severity == Severity.ERROR
+
+
 def test_cycle_with_loop_guard_step_is_clean() -> None:
     """A cycle containing a check_loop_iteration guard with an exit route is bounded."""
     recipe = _make_recipe(

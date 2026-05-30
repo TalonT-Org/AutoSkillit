@@ -7,6 +7,9 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Literal
 
+from anyio import BrokenResourceError as _BrokenResource
+from anyio import ClosedResourceError as _ClosedResource
+
 from autoskillit.core import RESERVED_LOG_RECORD_KEYS, get_logger
 
 if TYPE_CHECKING:
@@ -52,7 +55,7 @@ async def _notify(
             await ctx.info(message, logger_name=logger_name, extra=extra)
         elif level == "error":
             await ctx.error(message, logger_name=logger_name, extra=extra)
-    except (RuntimeError, AttributeError, KeyError):
+    except (RuntimeError, AttributeError, KeyError, _ClosedResource, _BrokenResource):
         pass
 
 

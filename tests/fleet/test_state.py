@@ -945,7 +945,7 @@ class TestHasFailedDispatchReasonAware:
 
 
 class TestRetryReasonPropagation:
-    def test_kill_reason_stored_in_dispatch_record(self, tmp_path: Path) -> None:
+    def test_retry_reason_stored_in_dispatch_record(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
         record = DispatchRecord(
@@ -958,11 +958,11 @@ class TestRetryReasonPropagation:
         assert state is not None
         assert state.dispatches[0].retry_reason == "idle_stall"
 
-    def test_kill_reason_defaults_empty(self) -> None:
+    def test_retry_reason_defaults_empty(self) -> None:
         record = DispatchRecord(name="x")
         assert record.retry_reason == ""
 
-    def test_kill_reason_round_trips_through_json(self, tmp_path: Path) -> None:
+    def test_retry_reason_round_trips_through_json(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
         record = DispatchRecord(
@@ -1478,10 +1478,10 @@ class TestAllRefusedCampaignDoesNotSilentlyComplete:
 
 
 class TestRetryReasonNotStaleAfterResumableRedispatch:
-    """kill_reason must be cleared when a RESUMABLE dispatch is redispatched to RUNNING."""
+    """retry_reason must be cleared when a RESUMABLE dispatch is redispatched to RUNNING."""
 
-    def test_kill_reason_cleared_on_resumable_to_running(self, tmp_path: Path) -> None:
-        """mark_dispatch_running clears kill_reason when re-dispatching a RESUMABLE dispatch."""
+    def test_retry_reason_cleared_on_resumable_to_running(self, tmp_path: Path) -> None:
+        """mark_dispatch_running clears retry_reason when re-dispatching a RESUMABLE dispatch."""
         from autoskillit.fleet import upsert_dispatch_record_by_name
 
         sp = _state_path(tmp_path)

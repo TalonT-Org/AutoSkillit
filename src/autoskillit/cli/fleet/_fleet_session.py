@@ -142,7 +142,7 @@ def _launch_fleet_session(
             if resume_metadata is not None and resume_metadata.is_resumable
             else ""
         )
-        resume_kill_reason = (
+        resume_retry_reason = (
             resume_metadata.retry_reason
             if resume_metadata is not None and resume_metadata.is_resumable
             else ""
@@ -160,7 +160,7 @@ def _launch_fleet_session(
             campaign_id,
             resumable_dispatch_name=resumable_dispatch_name,
             resume_session_id=resume_session_id,
-            resume_kill_reason=resume_kill_reason,
+            resume_retry_reason=resume_retry_reason,
             ingredients_table=ingredients_table,
             prior_dispatch_id=resume_dispatch_id,
             resume_checkpoint=resume_checkpoint,
@@ -232,7 +232,9 @@ def _launch_fleet_session(
                 fresh_metadata.dispatched_session_id if fresh_metadata.is_resumable else ""
             )
             resume_dispatch_id = fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
-            resume_kill_reason = fresh_metadata.retry_reason if fresh_metadata.is_resumable else ""
+            resume_retry_reason = (
+                fresh_metadata.retry_reason if fresh_metadata.is_resumable else ""
+            )
             resume_checkpoint = (
                 fresh_metadata.resume_checkpoint if fresh_metadata.is_resumable else None
             )
@@ -244,7 +246,7 @@ def _launch_fleet_session(
                 campaign_id,
                 resumable_dispatch_name=resumable_dispatch_name,
                 resume_session_id=resume_session_id,
-                resume_kill_reason=resume_kill_reason,
+                resume_retry_reason=resume_retry_reason,
                 ingredients_table=ingredients_table,
                 prior_dispatch_id=resume_dispatch_id,
                 resume_checkpoint=resume_checkpoint,

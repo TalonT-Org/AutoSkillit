@@ -241,7 +241,7 @@ def resume_campaign_from_state(
         is_resumable = False
         resumable_dispatched_session_id = ""
         resumable_dispatch_id = ""
-        resumable_kill_reason = ""
+        resumable_retry_reason = ""
         resumable_checkpoint: dict[str, Any] = {}
         for d in m.state.dispatches:
             if d.status in _VISIBLE_IN_BLOCK_STATUSES:
@@ -265,7 +265,7 @@ def resume_campaign_from_state(
                     is_resumable = True
                     resumable_dispatched_session_id = d.dispatched_session_id
                     resumable_dispatch_id = d.dispatch_id
-                    resumable_kill_reason = d.retry_reason
+                    resumable_retry_reason = d.retry_reason
                     resumable_checkpoint = d.resume_checkpoint
             elif (
                 d.status
@@ -289,7 +289,7 @@ def resume_campaign_from_state(
             is_resumable=is_resumable,
             dispatched_session_id=resumable_dispatched_session_id,
             dispatch_id=resumable_dispatch_id,
-            retry_reason=resumable_kill_reason,
+            retry_reason=resumable_retry_reason,
             resume_checkpoint=resumable_checkpoint,
         )
 

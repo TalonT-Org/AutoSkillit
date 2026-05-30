@@ -79,13 +79,16 @@ def has_rate_limit_signal(
     )
 
 
+_SHELL_SIGNAL_MAX = 192  # 128 + SIGRTMAX (64 on Linux)
+
+
 def is_signal_death_code(returncode: int) -> bool:
     """Return True if returncode indicates death by signal.
 
     Covers both Python convention (negative: -(signal_number)) and shell
     convention (positive: 128 + signal_number, range 129–192).
     """
-    return returncode < 0 or (128 < returncode <= 192)
+    return returncode < 0 or (128 < returncode <= _SHELL_SIGNAL_MAX)
 
 
 def classify_infra_exit(

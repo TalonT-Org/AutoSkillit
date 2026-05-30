@@ -115,7 +115,7 @@ def _build_fleet_campaign_prompt(
     max_quota_wait_sec: int = 3600,
     resumable_dispatch_name: str = "",
     resume_session_id: str = "",
-    resume_kill_reason: str = "",
+    resume_retry_reason: str = "",
     ingredients_table: str | None = None,
     prior_dispatch_id: str = "",
     resume_checkpoint: dict[str, Any] | None = None,
@@ -211,7 +211,7 @@ dispatch name NOT listed above.
         _prior_dispatch_id_clause = (
             f" {_prior_dispatch_id_line}" if _prior_dispatch_id_line else ""
         )
-        _reason_guidance = _resume_reason_guidance(resume_kill_reason)
+        _reason_guidance = _resume_reason_guidance(resume_retry_reason)
         _reenter_clause = (
             f" issue_urls=<remaining> and allow_reentry=true as ingredient overrides"
             f"{_resume_session_clause}{_prior_dispatch_id_clause}{_resume_checkpoint_line}"

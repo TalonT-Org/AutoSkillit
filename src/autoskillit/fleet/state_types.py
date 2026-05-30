@@ -200,7 +200,7 @@ class DispatchRecord:
             identity_degraded=d.get("identity_degraded", False),
             reason=d.get("reason", ""),
             diagnostic_message=d.get("diagnostic_message", ""),
-            retry_reason=d.get("retry_reason", "") or d.get("kill_reason", ""),
+            retry_reason=d["retry_reason"] if "retry_reason" in d else d.get("kill_reason", ""),
             infra_exit_category=d.get("infra_exit_category", ""),
             reaper_reason=d.get("reaper_reason", ""),
             reaper_dispatch_id=d.get("reaper_dispatch_id", ""),

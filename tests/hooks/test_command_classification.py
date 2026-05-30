@@ -7,6 +7,7 @@ import pytest
 from autoskillit.hooks._command_classification import (
     command_verb,
     extract_interpreter_write_path,
+    extract_redirect_targets,
     has_interpreter_wrapped_command,
     has_interpreter_write,
     has_nested_shell,
@@ -172,3 +173,54 @@ class TestExtractInterpreterWritePath:
     def test_dynamic_path_with_non_literal_var_returns_none(self):
         cmd = "python3 -c \"open(some_var, 'w').write('x')\""
         assert extract_interpreter_write_path(cmd) is None
+
+
+class TestExtractRedirectTargets:
+    @pytest.mark.parametrize(
+        "tokens,expected",
+        [
+            (["echo", "data", ">", "/tmp/out.txt"], ["/tmp/out.txt"]),
+            (["cmd", "2>/dev/null"], ["/dev/null"]),
+            (["2>/dev/null)"], []),
+            (["cmd", "2>/dev/null`"], ["/dev/null"]),
+            (["cmd", "2>/dev/null;"], ["/dev/null"]),
+            (["cmd", ">>", "/tmp/log"], ["/tmp/log"]),
+            (["cmd", ">", "relative.txt"], []),
+            (["echo", "hello"], []),
+            (["cmd", ">", "/tmp/a", "2>/tmp/b"], ["/tmp/a", "/tmp/b"]),
+            (["cmd", "2>", "/tmp/err.log"], ["/tmp/err.log"]),
+            (["x=$(cmd", "2>/tmp/err.log)"], []),
+            (
+                ["x=$(cmd", "2>/tmp/err.log)", "&&", "echo", "done", ">", "/tmp/out.txt"],
+                ["/tmp/out.txt"],
+            ),
+            (["(", "cmd", ">", "/tmp/err.log", ")"], []),
+            (["(cmd", ">", "/tmp/err.log", ")"], []),
+            (["x=$(cmd", ">/tmp/err.log)"], []),
+            (["cmd", ">", "/dev/null"], ["/dev/null"]),
+            (["cmd", "2>/dev/null&"], ["/dev/null"]),
+            (["cmd", "2>/tmp/out|"], ["/tmp/out"]),
+        ],
+        ids=[
+            "separate_redirect",
+            "merged_fd_redirect",
+            "merged_with_trailing_paren_skipped",
+            "merged_trailing_backtick",
+            "merged_trailing_semicolon",
+            "append_redirect",
+            "non_absolute_path",
+            "no_redirects",
+            "multiple_redirects",
+            "split_redirect",
+            "subshell_fused_skipped",
+            "subshell_with_top_level_redirect",
+            "standalone_paren_nesting",
+            "fused_paren_nesting",
+            "only_subshell_redirect_fused",
+            "pseudo_device_returned",
+            "trailing_ampersand_stripped",
+            "trailing_pipe_stripped",
+        ],
+    )
+    def test_extract_redirect_targets(self, tokens, expected):
+        assert extract_redirect_targets(tokens) == expected

@@ -114,6 +114,7 @@ def test_cmd_keyword_regexes_use_path_safe_guards():
 
 HOOK_GUARD_RULE_FILES = [
     SRC_ROOT / "hooks" / "guards" / "write_guard.py",
+    SRC_ROOT / "hooks" / "_command_classification.py",
 ]
 
 
@@ -147,6 +148,7 @@ REQUIRED_WRITE_GUARD_TEST_FAMILIES = {
     "heredoc",
     "sed",
     "redirect",
+    "subshell",
     "tee",
     "mv",
     "cp",
@@ -258,7 +260,32 @@ def test_write_guard_uses_tokenization() -> None:
 def test_command_classification_exports_tokenization() -> None:
     """_command_classification.py must export the tokenization primitives."""
     source = (SRC_ROOT / "hooks" / "_command_classification.py").read_text()
-    for name in ("tokenize_command_segments", "command_verb", "is_gh_command"):
+    for name in (
+        "tokenize_command_segments",
+        "command_verb",
+        "is_gh_command",
+        "extract_redirect_targets",
+    ):
         assert f"def {name}" in source, (
             f"_command_classification.py must define {name}() for structural command parsing"
         )
+
+
+def test_redirect_extraction_uses_tokenization() -> None:
+    """Redirect path extraction must operate on shlex-tokenized output,
+    not raw command strings, to prevent metacharacter contamination."""
+    source = (SRC_ROOT / "hooks" / "guards" / "write_guard.py").read_text()
+    assert "finditer(command)" not in source and "findall(command)" not in source, (
+        "write_guard.py must not apply redirect regex to the raw command string. "
+        "Redirect extraction must use shlex-tokenized tokens to prevent "
+        "metacharacter contamination (see issue #3291)."
+    )
+
+
+def test_command_classification_exports_redirect_extraction() -> None:
+    """_command_classification.py must export redirect extraction for structural parsing."""
+    source = (SRC_ROOT / "hooks" / "_command_classification.py").read_text()
+    assert "def extract_redirect_targets" in source, (
+        "_command_classification.py must define extract_redirect_targets() "
+        "for structural redirect path extraction"
+    )

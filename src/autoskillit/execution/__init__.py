@@ -22,6 +22,7 @@ from autoskillit.execution.backends import (
     CodexBackend,
     _is_autoskillit_registered,
     _read_codex_config,
+    _serialize_toml,
     _write_codex_config,
     ensure_codex_mcp_registered,
     get_backend,
@@ -223,6 +224,7 @@ __all__ = [
     "CodexBackend",
     "_is_autoskillit_registered",
     "_read_codex_config",
+    "_serialize_toml",
     "_write_codex_config",
     "ensure_codex_mcp_registered",
     # anomaly_detection

@@ -7,6 +7,7 @@ from pathlib import Path
 from autoskillit.core import atomic_write
 from autoskillit.execution import (
     _read_codex_config,
+    _serialize_toml,
     _write_codex_config,
 )
 from autoskillit.hook_registry import (
@@ -53,8 +54,6 @@ def _is_autoskillit_hook_entry(entry: dict) -> bool:
 
 def _upsert_hooks_text(config_path: Path, raw_bytes: bytes, fresh_hooks: list[dict]) -> None:
     """Replace autoskillit-owned [[hooks]] blocks in raw config text and append fresh ones."""
-    from autoskillit.execution.backends._codex_config import _serialize_toml
-
     text = raw_bytes.decode("utf-8", errors="replace")
     lines = text.splitlines(keepends=True)
 

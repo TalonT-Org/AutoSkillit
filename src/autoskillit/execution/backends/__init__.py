@@ -5,6 +5,7 @@ from autoskillit.core import CodingAgentBackend
 from ._codex_config import (
     _is_autoskillit_registered,
     _read_codex_config,
+    _serialize_toml,
     _write_codex_config,
     ensure_codex_mcp_registered,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "CodexStreamParser",
     "_is_autoskillit_registered",
     "_read_codex_config",
+    "_serialize_toml",
     "_write_codex_config",
     "ensure_codex_mcp_registered",
     "get_backend",

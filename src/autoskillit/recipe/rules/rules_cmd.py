@@ -304,7 +304,10 @@ def _check_run_cmd_path_capture_nonempty_guard(ctx: ValidationContext) -> list[R
         cmd = (step.with_args or {}).get("cmd", "")
         if not isinstance(cmd, str):
             continue
-        has_path_capture = any(entry.value_type == "path" for entry in step.capture.values())
+        has_path_capture = any(
+            entry.value_type == "path"
+            for entry in (*step.capture.values(), *step.capture_list.values())
+        )
         if not has_path_capture:
             continue
         if not _NONEMPTY_GUARD_RE.search(cmd):

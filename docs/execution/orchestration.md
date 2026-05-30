@@ -47,10 +47,10 @@ tool result. The routing rules per tool:
 - `clone_repo` / `remove_clone` — read `clone_id` and stash for later
   cleanup via `register_clone_status` and `batch_cleanup_clones`.
 
-## The 13 `retry_reason` values
+## The 15 `retry_reason` values
 
 `RetryReason` is a `StrEnum` in `src/autoskillit/core/_type_enums.py` with
-13 distinct values. Each value triggers a different recovery route:
+15 distinct values. Each value triggers a different recovery route:
 
 | Value | When the orchestrator sets it | Recovery |
 |-------|-------------------------------|----------|
@@ -66,7 +66,9 @@ tool result. The routing rules per tool:
 | `path_contamination` | Worker wrote outside its CWD boundary | Hard-fail; do not retry — this is an isolation breach |
 | `contract_recovery` | Marker present and write evidence on disk, but the structured contract token was missing | Treat as success and synthesise the contract from disk |
 | `clone_contamination` | Worker mutated the source clone instead of the worktree | Hard-fail; abort the entire `order` |
+| `idle_stall` | No meaningful output progress detected for an extended period (distinct from `stale` — process is alive but unproductive) | Kill and re-spawn; route to `on_context_limit` |
 | `thinking_stall` | Thinking-only final turn: model consumed tokens (thinking blocks present) but produced no text or tool output | If lifespan_started, route to on_context_limit; else route to on_failure |
+| `rate_limited` | HTTP 429 rate-limit response detected in session output or exit status | Route to `on_rate_limit` if defined; fall back to `on_context_limit` |
 
 `recipe/rules_isolation.py` enforces matching `clone_contamination` and
 `path_contamination` defenses at recipe-validation time.

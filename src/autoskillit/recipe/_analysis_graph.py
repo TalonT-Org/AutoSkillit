@@ -157,7 +157,7 @@ def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
     """Return all routing edges declared on *step*.
 
     Covers every routing field on :class:`RecipeStep`:
-    ``on_success``, ``on_failure``, ``on_context_limit``, ``on_exhausted``,
+    ``on_success``, ``on_failure``, ``on_context_limit``, ``on_rate_limit``, ``on_exhausted``,
     ``on_result.conditions[].route``, and ``on_result.routes`` (dict form).
 
     None targets are skipped. The caller is responsible for filtering by
@@ -171,6 +171,8 @@ def _extract_routing_edges(step: RecipeStep) -> list[RouteEdge]:
         edges.append(RouteEdge(edge_type="failure", target=step.on_failure))
     if step.on_context_limit:
         edges.append(RouteEdge(edge_type="context_limit", target=step.on_context_limit))
+    if step.on_rate_limit:
+        edges.append(RouteEdge(edge_type="rate_limit", target=step.on_rate_limit))
     if step.on_exhausted:
         edges.append(RouteEdge(edge_type="exhausted", target=step.on_exhausted))
 

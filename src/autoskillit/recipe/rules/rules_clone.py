@@ -251,6 +251,8 @@ def _check_clone_terminal_requires_registration(ctx: ValidationContext) -> list[
             targets.add(step.on_failure)
         if step.on_context_limit and step.on_context_limit in all_step_names:
             targets.add(step.on_context_limit)
+        if step.on_rate_limit and step.on_rate_limit in all_step_names:
+            targets.add(step.on_rate_limit)
         if step.on_result:
             for cond in step.on_result.conditions:
                 if cond.route and cond.route in all_step_names:

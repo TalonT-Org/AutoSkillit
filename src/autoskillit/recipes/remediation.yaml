@@ -547,6 +547,7 @@ steps:
     - when: ${{ result.verdict }} == 'no_test_infrastructure'
       route: release_issue_failure
     on_context_limit: test
+    on_rate_limit: test
     on_failure: release_issue_failure
     on_exhausted: release_issue_failure
     optional_context_refs:
@@ -590,6 +591,7 @@ steps:
     - route: check_audit_remediation_loop
     on_failure: register_clone_failure
     on_context_limit: register_clone_failure
+    on_rate_limit: check_audit_remediation_loop
     optional: true
     skip_when_false: inputs.audit
     note: Only run if inputs.audit = true. If inputs.audit = false, skip directly

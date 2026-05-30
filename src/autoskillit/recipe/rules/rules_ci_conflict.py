@@ -245,6 +245,9 @@ def _collect_failure_targets(step: object, step_names: set[str]) -> set[str]:
     on_context_limit = getattr(step, "on_context_limit", None)
     if on_context_limit is not None and on_context_limit in step_names:
         targets.add(on_context_limit)
+    on_rate_limit = getattr(step, "on_rate_limit", None)
+    if on_rate_limit is not None and on_rate_limit in step_names:
+        targets.add(on_rate_limit)
     on_exhausted = getattr(step, "on_exhausted", None)
     if on_exhausted is not None and on_exhausted in step_names:
         targets.add(on_exhausted)

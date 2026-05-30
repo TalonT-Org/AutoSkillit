@@ -34,6 +34,8 @@ def _collect_all_route_targets(step: RecipeStep) -> set[str]:
         targets.add(step.on_failure)
     if step.on_context_limit:
         targets.add(step.on_context_limit)
+    if step.on_rate_limit:
+        targets.add(step.on_rate_limit)
     if step.on_exhausted:
         targets.add(step.on_exhausted)
     if step.on_result:
@@ -146,6 +148,7 @@ def _merge_sub_recipe(parent: Any, placeholder_name: str, sub: Any) -> Any:
             on_success=_fix_route(sub_step.on_success),
             on_failure=_fix_route(sub_step.on_failure),
             on_context_limit=_fix_route(sub_step.on_context_limit),
+            on_rate_limit=_fix_route(sub_step.on_rate_limit),
             on_exhausted=_fix_route(sub_step.on_exhausted),
             on_result=_fix_result_route(sub_step.on_result),
         )
@@ -349,6 +352,8 @@ def _prune_skipped_steps(
                     fixes["on_failure"] = redirect
                 if s.on_context_limit == step_name and redirect is not None:
                     fixes["on_context_limit"] = redirect
+                if s.on_rate_limit == step_name and redirect is not None:
+                    fixes["on_rate_limit"] = redirect
                 if s.on_exhausted == step_name and redirect is not None:
                     fixes["on_exhausted"] = redirect
                 if s.on_result is not None and redirect is not None:

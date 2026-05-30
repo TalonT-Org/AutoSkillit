@@ -61,7 +61,7 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
     """Build an adjacency dict from recipe step routing edges.
 
     Builds the routing graph from on_result.condition route edges and
-    unconditional route edges (on_success, on_failure, on_context_limit).
+    unconditional route edges (on_success, on_failure, on_context_limit, on_rate_limit).
     """
     graph: dict[str, set[str]] = {name: set() for name in recipe.steps}
     for step_name, step in recipe.steps.items():
@@ -75,6 +75,8 @@ def _build_step_graph(recipe: Recipe) -> dict[str, set[str]]:
             graph[step_name].add(step.on_failure)
         if step.on_context_limit:
             graph[step_name].add(step.on_context_limit)
+        if step.on_rate_limit:
+            graph[step_name].add(step.on_rate_limit)
     return graph
 
 

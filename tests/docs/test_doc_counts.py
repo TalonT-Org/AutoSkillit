@@ -339,8 +339,8 @@ def test_recipes_overview_states_6_recipes() -> None:
     _assert_doc_states_number(DOCS_DIR / "recipes" / "overview.md", "bundled recipes", 6)
 
 
-def test_orchestration_states_13_retry_reasons() -> None:
-    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 13)
+def test_orchestration_states_15_retry_reasons() -> None:
+    _assert_doc_states_number(DOCS_DIR / "execution" / "orchestration.md", "retry reasons", 15)
 
 
 def test_authoring_states_28_rule_families() -> None:

@@ -249,6 +249,19 @@ class TestPipelineVariantInvariants:
             "register_clone_status"
         )
 
+    def test_audit_impl_has_on_rate_limit_in_remediation(self, recipe) -> None:
+        if recipe.name != "remediation":
+            pytest.skip("on_rate_limit only added to remediation recipe")
+        step = recipe.steps["audit_impl"]
+        assert step.on_rate_limit is not None, (
+            "audit_impl must define on_rate_limit so transient 429 rate limits "
+            "do not escalate to register_clone_failure"
+        )
+        assert step.on_rate_limit != "register_clone_failure", (
+            "audit_impl on_rate_limit must not escalate — rate limits are transient "
+            "and should route to a retry-friendly target"
+        )
+
     def test_compose_pr_has_on_context_limit(self, recipe) -> None:
         step = recipe.steps["compose_pr"]
         assert step.on_context_limit == "release_issue_failure", (

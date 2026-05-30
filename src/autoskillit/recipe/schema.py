@@ -102,6 +102,7 @@ class RecipeStep:
     on_success: str | None = None
     on_failure: str | None = None
     on_context_limit: str | None = None
+    on_rate_limit: str | None = None
     on_result: StepResultRoute | None = None
     retries: int = 3
     on_exhausted: str = "escalate"

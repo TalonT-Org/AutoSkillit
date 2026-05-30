@@ -21,6 +21,7 @@ def _make_codex_backend() -> MagicMock:
     b = MagicMock()
     b.name = "codex"
     b.capabilities = _CODEX_CAPABILITIES
+    b.ensure_pre_launch.return_value = []
     return b
 
 

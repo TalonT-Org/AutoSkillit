@@ -102,6 +102,7 @@ def test_session_skill_manager_creates_ephemeral_dir(
         backend = MagicMock()
         backend.name = "codex"
         backend.capabilities = _CODEX_CAPABILITIES
+        backend.ensure_pre_launch.return_value = []
 
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("test-session-abc", cook_session=True, backend=backend)
@@ -141,6 +142,7 @@ def test_session_manager_injects_disable_for_tier2(
         backend = MagicMock()
         backend.name = "codex"
         backend.capabilities = _CODEX_CAPABILITIES
+        backend.ensure_pre_launch.return_value = []
 
     mgr = make_session_skill_manager()
     config = make_test_config(
@@ -350,6 +352,7 @@ def test_init_session_codex_backend_uses_codex_skills_subdir(
     codex_backend = MagicMock()
     codex_backend.name = "codex"
     codex_backend.capabilities = _CODEX_CAPABILITIES
+    codex_backend.ensure_pre_launch.return_value = []
 
     fake_home = tmp_path / "fakehome"
     codex_dir = fake_home / ".codex"

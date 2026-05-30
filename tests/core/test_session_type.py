@@ -15,31 +15,27 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
 @pytest.mark.parametrize(
-    "env_val, expected, suppress_deprecation, strict_no_deprecation",
+    "env_val, expected, strict_no_deprecation",
     [
-        ("orchestrator", "ORCHESTRATOR", False, False),
-        ("skill", "SKILL", False, False),
-        ("ORCHESTRATOR", "ORCHESTRATOR", False, False),
-        (None, "SKILL", False, False),
-        ("bogus", "SKILL", True, False),
-        ("fleet", "FLEET", False, False),
-        ("FLEET", "FLEET", False, False),
-        ("fleet", "FLEET", False, True),
+        ("orchestrator", "ORCHESTRATOR", False),
+        ("skill", "SKILL", False),
+        ("ORCHESTRATOR", "ORCHESTRATOR", False),
+        (None, "SKILL", False),
+        ("fleet", "FLEET", False),
+        ("FLEET", "FLEET", False),
+        ("fleet", "FLEET", True),
     ],
     ids=[
         "orchestrator",
         "skill",
         "case-insensitive",
         "unset",
-        "invalid-defaults-skill",
         "fleet",
         "fleet-case-insensitive",
         "fleet-no-warning",
     ],
 )
-def test_session_type_resolver(
-    monkeypatch, env_val, expected, suppress_deprecation, strict_no_deprecation
-):
+def test_session_type_resolver(monkeypatch, env_val, expected, strict_no_deprecation):
     from autoskillit.core import SessionType, session_type
 
     if env_val is None:
@@ -52,22 +48,26 @@ def test_session_type_resolver(
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
             result = session_type()
-    elif suppress_deprecation:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            result = session_type()
     else:
         result = session_type()
 
     assert result is SessionType[expected]
 
 
-def test_session_type_invalid_emits_deprecation_warning(monkeypatch):
+def test_session_type_invalid_raises_value_error(monkeypatch):
     from autoskillit.core import session_type
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "bogus")
-    with pytest.warns(DeprecationWarning, match="Invalid AUTOSKILLIT_SESSION_TYPE"):
+    with pytest.raises(ValueError, match="AUTOSKILLIT_SESSION_TYPE"):
         session_type()
+
+
+@pytest.mark.parametrize("display_label", ["order", "cook"])
+def test_cli_display_labels_are_not_valid_session_type_members(display_label):
+    from autoskillit.core import SessionType
+
+    with pytest.raises(ValueError):
+        SessionType(display_label)
 
 
 def test_transitional_bridge_headless_without_type_warns(monkeypatch):

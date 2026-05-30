@@ -19,6 +19,18 @@ class FleetSessionEnv:
     campaign_state_path: str = ""
     continue_on_failure: str = "false"
 
+    def __post_init__(self) -> None:
+        from ._type_enums import SessionType
+
+        try:
+            SessionType(self.session_type)
+        except ValueError:
+            valid = ", ".join(m.value for m in SessionType)
+            raise ValueError(
+                f"FleetSessionEnv.session_type must be a valid SessionType member, "
+                f"got {self.session_type!r}. Valid values: {valid}"
+            ) from None
+
     def to_dict(self) -> dict[str, str]:
         d = {
             "AUTOSKILLIT_SESSION_TYPE": self.session_type,

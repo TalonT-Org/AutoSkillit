@@ -46,7 +46,12 @@ def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
 
-    st = session_type()
+    try:
+        st = session_type()
+    except ValueError:
+        return headless_error_result(
+            f"{tool_name}: invalid AUTOSKILLIT_SESSION_TYPE in environment." if tool_name else None
+        )
     if st in (SessionType.ORCHESTRATOR, SessionType.FLEET):
         return None
 
@@ -69,7 +74,12 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
 
-    st = session_type()
+    try:
+        st = session_type()
+    except ValueError:
+        return headless_error_result(
+            f"{tool_name}: invalid AUTOSKILLIT_SESSION_TYPE in environment." if tool_name else None
+        )
     if st is SessionType.ORCHESTRATOR:
         return None
 
@@ -97,7 +107,12 @@ def _require_fleet(tool_name: str = "") -> str | None:
     No interactive bypass — fleet is a specific orchestration level, not a headless guard.
     L1 (skill session) and L2 (orchestrator) sessions are both denied.
     """
-    st = session_type()
+    try:
+        st = session_type()
+    except ValueError:
+        return headless_error_result(
+            f"{tool_name}: invalid AUTOSKILLIT_SESSION_TYPE in environment." if tool_name else None
+        )
     if st is SessionType.FLEET:
         return None
 

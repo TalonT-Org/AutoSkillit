@@ -223,3 +223,11 @@ def test_agent_backend_not_scrubbed() -> None:
     result = build_agent_env(base={"AUTOSKILLIT_AGENT_BACKEND": "codex", "HOME": "/tmp"})
     assert "AUTOSKILLIT_AGENT_BACKEND" in result
     assert result["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
+
+
+def test_build_agent_env_rejects_invalid_session_type() -> None:
+    with pytest.raises(ValueError, match="AUTOSKILLIT_SESSION_TYPE"):
+        build_agent_env(
+            base={},
+            extras={"AUTOSKILLIT_SESSION_TYPE": "order"},
+        )

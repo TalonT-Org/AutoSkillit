@@ -387,7 +387,7 @@ class TestCLIOrderCommand:
             cli.order("test-script")
 
         env = mock_run.call_args[1].get("env") or {}
-        assert env.get("AUTOSKILLIT_SESSION_TYPE") == "order"
+        assert env.get("AUTOSKILLIT_SESSION_TYPE") == "orchestrator"
 
     @patch("autoskillit.cli.subprocess.run")
     def test_order_launch_sets_launch_id_env(

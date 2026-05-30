@@ -191,13 +191,12 @@ def session_type() -> SessionType:
         try:
             return SessionType(raw_lower)
         except ValueError:
-            warnings.warn(
-                f"Invalid {SESSION_TYPE_ENV_VAR}={raw!r}, defaulting to SKILL. "
-                f"Valid values: {', '.join(m.value for m in SessionType)}",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return SessionType.SKILL
+            valid = ", ".join(m.value for m in SessionType)
+            raise ValueError(
+                f"AUTOSKILLIT_SESSION_TYPE={raw!r} is not a valid SessionType. "
+                f"Valid values: {valid}. "
+                f"CLI display labels ('cook', 'order') must not be used here."
+            ) from None
     if os.environ.get(HEADLESS_ENV_VAR) == "1":
         warnings.warn(
             f"{HEADLESS_ENV_VAR}=1 without {SESSION_TYPE_ENV_VAR} set. "

@@ -71,9 +71,7 @@ def test_A6_require_orchestrator_or_higher_denies_headless_invalid_session_type(
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "bogus")
     from autoskillit.server._guards import _require_orchestrator_or_higher
 
-    with warnings.catch_warnings(record=True):
-        warnings.simplefilter("always")
-        result = _require_orchestrator_or_higher("run_cmd")
+    result = _require_orchestrator_or_higher("run_cmd")
     assert result is not None
     data = json.loads(result)
     assert data["subtype"] == "headless_error"

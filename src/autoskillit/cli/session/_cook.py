@@ -157,6 +157,7 @@ def cook(
         MarketplaceInstall,
         NamedResume,
         NoResume,
+        SessionType,
         _get_autoskillit_install_path,
         configure_logging,
         get_logger,
@@ -213,7 +214,7 @@ def cook(
             resume_spec = NoResume()
 
     _cook_env_extras: dict[str, str] = {
-        SESSION_TYPE_ENV_VAR: SESSION_TYPE_COOK,
+        SESSION_TYPE_ENV_VAR: SessionType.SKILL.value,
         LAUNCH_ID_ENV_VAR: session_id_local,
     }
     if profile is not None:

@@ -616,7 +616,7 @@ class TestCookInteractive:
 
         assert captured_env_extras, "build_interactive_cmd must have been called"
         env_extras = captured_env_extras[0]
-        assert env_extras.get("AUTOSKILLIT_SESSION_TYPE") == "cook"
+        assert env_extras.get("AUTOSKILLIT_SESSION_TYPE") == "skill"
 
     def test_cook_launch_sets_launch_id_env(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

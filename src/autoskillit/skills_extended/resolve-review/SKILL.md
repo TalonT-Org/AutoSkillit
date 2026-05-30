@@ -452,7 +452,7 @@ that violates any of these must be classified `REJECT` with `category: "arch_vio
 | Regex import | `test_regex_import.py` | `import re` or `from re import` in `src/` outside `hooks/` and `core/` — must use `import regex as re` |
 | Atomic writes | `test_ast_rules.py` (REQ-AST-002) | `.write_text()` / `.write_bytes()` in `src/` — must use `_atomic_write()` |
 | No print | `test_ast_rules.py` (ARCH-001) | `print()` in production `src/` code |
-| Dataclass slots | `test_dataclass_slots.py` | `@dataclass(frozen=True)` without `slots=True` |
+| Dataclass slots | `test_dataclass_slots.py` | `dataclass(frozen=True)` decorator without `slots=True` |
 | Import layer ordering | `test_layer_enforcement.py` | Importing from a higher IL layer (e.g., IL-2 recipe/ imported by IL-0 core/) |
 | Anyio migration | `test_anyio_migration.py` | `asyncio.sleep`, `asyncio.Event`, `asyncio.to_thread` in `execution/process.py` |
 | Protocol types on ToolContext | `test_subpackage_isolation.py` | Concrete class types instead of Protocol types for ToolContext service fields |
@@ -460,7 +460,7 @@ that violates any of these must be classified `REJECT` with `category: "arch_vio
 | step_name in run_cmd | `test_anti_pattern_guards.py` | Missing `step_name` in `run_cmd` `with:` blocks in recipe YAML |
 | No hardcoded temp paths | `test_python_no_hardcoded_temp.py` | Literal `{{AUTOSKILLIT_TEMP}}` path string in Python outside whitelist |
 | SkillResult kill_reason | `test_skill_result_construction_guard.py` | `SkillResult()` without `kill_reason=` kwarg |
-| Never-raises contracts | `test_never_raises_contracts.py` | `@mcp.tool()` handlers without top-level `try/except` and "Never raises" docstring |
+| Never-raises contracts | `test_never_raises_contracts.py` | `mcp.tool()` handlers without top-level `try/except` and "Never raises" docstring |
 | No StrEnum-to-string compare | `test_ast_rules.py` (ARCH-010) | Comparing StrEnum fields to raw string literals |
 
 When a reviewer suggestion would cause a change matching any row above, classify

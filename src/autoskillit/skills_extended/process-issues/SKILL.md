@@ -35,6 +35,7 @@ issues upfront, load recipe, execute session, collect result, report.
 - Reimplement recipe steps inline — always use `load_recipe` to load the recipe YAML and
   follow it as an orchestrator
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Process batches in ascending order: batch 1 before batch 2 before batch 3
@@ -57,6 +58,7 @@ issues upfront, load recipe, execute session, collect result, report.
 - Emit `---process-issues-result---` result block on completion (success or failure)
 - Write the summary report to `{{AUTOSKILLIT_TEMP}}/process-issues/` (relative to the current working directory)
 - Use `model: "sonnet"` when spawning subagents via the Task tool
+- Issue all Task calls in a single message to maximize parallelism
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include `--force` in all `gh label create` calls
 

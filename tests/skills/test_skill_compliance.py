@@ -200,8 +200,11 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
             else:
                 prologue = loop_body
 
-            # Check for anti-prose guard in prologue or full loop body
-            search_text = prologue + "\n" + loop_body
+            # Check for anti-prose guard in step preamble (before loop header),
+            # loop prologue (header to first numbered sub-step), or full loop body.
+            # Guard text often appears above the "for each" line in the same step.
+            step_preamble = "\n".join(lines[:line_idx])
+            search_text = step_preamble + "\n" + prologue + "\n" + loop_body
             has_guard = any(p.search(search_text) for p in _ANTI_PROSE_GUARD_PATTERNS)
 
             if not has_guard:

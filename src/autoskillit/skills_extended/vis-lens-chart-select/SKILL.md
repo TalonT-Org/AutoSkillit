@@ -101,6 +101,7 @@ metadata:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/`
 - Use `radar` or `pie` chart types — these are perceptually inferior and excluded from the controlled vocabulary
+- Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**

@@ -54,15 +54,15 @@ class AnalysisResult:
     session_count: int
 
 
-def _resolve_turn_id(rec: dict) -> str:
+def _resolve_turn_id(rec: dict[str, object]) -> str:
     """Extract canonical turn dedup key: requestId > message.id > empty."""
     rid = rec.get("requestId", "")
-    if rid:
+    if isinstance(rid, str) and rid:
         return rid
     message = rec.get("message")
     if isinstance(message, dict):
         mid = message.get("id", "")
-        if mid:
+        if isinstance(mid, str) and mid:
             return mid
     return ""
 

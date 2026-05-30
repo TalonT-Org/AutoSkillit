@@ -475,6 +475,7 @@ class TokenUsageFileEntry(TypedDict):
     provider_used: str
     model_identifier: str
     configured_model: str
+    profile_name: str
     dispatch_id: str
     campaign_id: str
     schema_version: int

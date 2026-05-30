@@ -166,7 +166,7 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
     if not segments or has_non_gh:
         try:
             flat_tokens = shlex.split(command)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, AttributeError):
             flat_tokens = []
         redirect_paths = extract_redirect_targets(flat_tokens)
         for path in redirect_paths:

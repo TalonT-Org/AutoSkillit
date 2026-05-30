@@ -764,7 +764,7 @@ async def _run_dispatch(
         dispatched_boot_id=_dispatched_boot_id[0] if _dispatched_boot_id else "",
         dispatched_create_time=_dispatched_create_time[0] if _dispatched_create_time else 0.0,
         reason=reason,
-        kill_reason=skill_result.retry_reason or "",
+        retry_reason=skill_result.retry_reason or "",
         infra_exit_category=skill_result.infra.exit_category or "",
         token_usage=normalize_dispatch_token_usage(skill_result.token_usage or {}),
         started_at=started_at,

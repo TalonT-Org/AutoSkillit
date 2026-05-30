@@ -536,3 +536,51 @@ class TestExtractStdoutSessionIdStreamParser:
 
         assert acc.stdout_session_id == "conversation-uuid-BBB"
         assert ready.is_set()
+
+
+class TestResolveTerminationSignalDeath:
+    """resolve_termination returns SIGNAL_DEATH for shell-convention positive signal codes."""
+
+    @pytest.mark.parametrize(
+        "returncode",
+        [130, 137, 143],
+        ids=["SIGINT(130)", "SIGKILL(137)", "SIGTERM(143)"],
+    )
+    def test_positive_signal_code_yields_signal_death(self, returncode: int) -> None:
+        """process_exited=True with 128+N returncode → SIGNAL_DEATH (Test 1C)."""
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=returncode,
+            channel_a_confirmed=False,
+            channel_b_status=ChannelBStatus.STALE,
+            channel_b_session_id="",
+            stdout_session_id=None,
+        )
+        termination, _ = resolve_termination(signals)
+        assert termination == TerminationReason.SIGNAL_DEATH
+
+    def test_returncode_zero_still_natural_exit(self) -> None:
+        """process_exited=True with returncode=0 → NATURAL_EXIT (regression guard)."""
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=False,
+            channel_b_status=ChannelBStatus.STALE,
+            channel_b_session_id="",
+            stdout_session_id=None,
+        )
+        termination, _ = resolve_termination(signals)
+        assert termination == TerminationReason.NATURAL_EXIT
+
+    def test_negative_signal_code_yields_signal_death(self) -> None:
+        """process_exited=True with returncode=-9 → SIGNAL_DEATH (negative codes still work)."""
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=-9,
+            channel_a_confirmed=False,
+            channel_b_status=ChannelBStatus.STALE,
+            channel_b_session_id="",
+            stdout_session_id=None,
+        )
+        termination, _ = resolve_termination(signals)
+        assert termination == TerminationReason.SIGNAL_DEATH

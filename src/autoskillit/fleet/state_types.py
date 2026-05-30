@@ -13,7 +13,7 @@ from autoskillit.core import FleetErrorCode, RetryReason
 
 _resume_lock = threading.Lock()
 
-FLEET_STATE_SCHEMA_VERSION = 5
+FLEET_STATE_SCHEMA_VERSION = 6
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -112,8 +112,10 @@ class DispatchRecord:
     identity_degraded: bool = False
     reason: str = ""
     diagnostic_message: str = ""
-    kill_reason: str = ""
+    retry_reason: str = ""
     infra_exit_category: str = ""
+    reaper_reason: str = ""
+    reaper_dispatch_id: str = ""
     token_usage: dict[str, Any] = field(default_factory=dict)
     started_at: float = 0.0
     ended_at: float = 0.0
@@ -141,8 +143,10 @@ class DispatchRecord:
             "identity_degraded": self.identity_degraded,
             "reason": self.reason,
             "diagnostic_message": self.diagnostic_message,
-            "kill_reason": self.kill_reason,
+            "retry_reason": self.retry_reason,
             "infra_exit_category": self.infra_exit_category,
+            "reaper_reason": self.reaper_reason,
+            "reaper_dispatch_id": self.reaper_dispatch_id,
             "token_usage": dict(self.token_usage),
             "started_at": self.started_at,
             "ended_at": self.ended_at,
@@ -196,8 +200,10 @@ class DispatchRecord:
             identity_degraded=d.get("identity_degraded", False),
             reason=d.get("reason", ""),
             diagnostic_message=d.get("diagnostic_message", ""),
-            kill_reason=d.get("kill_reason", ""),
+            retry_reason=d["retry_reason"] if "retry_reason" in d else d.get("kill_reason", ""),
             infra_exit_category=d.get("infra_exit_category", ""),
+            reaper_reason=d.get("reaper_reason", ""),
+            reaper_dispatch_id=d.get("reaper_dispatch_id", ""),
             token_usage=d.get("token_usage", {}),
             started_at=d.get("started_at", 0.0),
             ended_at=d.get("ended_at", 0.0),
@@ -282,7 +288,7 @@ class ResumeDecision:
     is_resumable: bool = False
     dispatched_session_id: str = ""
     dispatch_id: str = ""
-    kill_reason: str = ""
+    retry_reason: str = ""
     resume_checkpoint: dict[str, Any] = field(default_factory=dict)
 
 

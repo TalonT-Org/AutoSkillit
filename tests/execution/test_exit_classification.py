@@ -18,6 +18,7 @@ from autoskillit.execution.session._exit_classification import (
     _CODEX_API_ERROR_PATTERNS,
     _RATE_LIMIT_PATTERNS,
     classify_infra_exit,
+    is_signal_death_code,
 )
 from autoskillit.execution.session._session_model import ClaudeSessionResult
 from tests.execution.conftest import CODEX_API_ERROR_SIGNAL_STRINGS
@@ -423,6 +424,53 @@ class TestRateLimitClassification:
         )
         result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
+
+
+@pytest.mark.parametrize(
+    "returncode",
+    [130, 134, 137, 139, 143],
+    ids=["SIGINT(130)", "SIGABRT(134)", "SIGKILL(137)", "SIGSEGV(139)", "SIGTERM(143)"],
+)
+def test_positive_signal_death_codes_classified_as_process_killed(returncode: int) -> None:
+    """Shell-convention signal codes (128+N) must classify as PROCESS_KILLED (Test 1A)."""
+    session = ClaudeSessionResult(
+        subtype="empty_output",
+        is_error=True,
+        result="",
+        session_id="s1",
+    )
+    result = _sr(returncode=returncode, stderr="")
+    assert classify_infra_exit(session, result) == InfraExitCategory.PROCESS_KILLED
+
+
+@pytest.mark.parametrize(
+    "returncode,expected",
+    [
+        (-9, True),
+        (-15, True),
+        (137, True),
+        (143, True),
+        (128, False),
+        (0, False),
+        (1, False),
+        (127, False),
+        (193, False),
+    ],
+    ids=[
+        "neg_sigkill",
+        "neg_sigterm",
+        "shell_sigkill",
+        "shell_sigterm",
+        "exactly_128",
+        "zero",
+        "one",
+        "cmd_not_found",
+        "above_range",
+    ],
+)
+def test_is_signal_death_code_boundary_cases(returncode: int, expected: bool) -> None:
+    """is_signal_death_code boundary cases (Test 1B)."""
+    assert is_signal_death_code(returncode) is expected
 
 
 def test_codex_api_error_patterns_count() -> None:

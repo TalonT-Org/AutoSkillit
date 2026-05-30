@@ -212,7 +212,7 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
-_LEGACY_SCHEMA_VERSIONS = frozenset({4})
+_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5})
 
 
 def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
@@ -363,7 +363,7 @@ def mark_dispatch_running(
             raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
         for d in m.state.dispatches:
             if d.name == dispatch_name:
-                d.kill_reason = ""
+                d.retry_reason = ""
                 d.infra_exit_category = ""
                 _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
                 d.status = DispatchStatus.RUNNING
@@ -503,6 +503,10 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
                         else:
                             snapshot[f.name] = val
                     record.attempt_history = [snapshot] + list(record.attempt_history)
+                if d.reaper_reason and not record.reaper_reason:
+                    record.reaper_reason = d.reaper_reason
+                if d.reaper_dispatch_id and not record.reaper_dispatch_id:
+                    record.reaper_dispatch_id = d.reaper_dispatch_id
                 m.state.dispatches[i] = record
                 m.mark_dirty()
                 return

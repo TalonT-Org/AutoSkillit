@@ -140,7 +140,7 @@ def decide_termination_action(
     if process_exited:
         return TerminationAction.NO_KILL
     match termination:
-        case TerminationReason.NATURAL_EXIT:
+        case TerminationReason.NATURAL_EXIT | TerminationReason.SIGNAL_DEATH:
             return TerminationAction.NO_KILL
         case TerminationReason.COMPLETED:
             return TerminationAction.DRAIN_THEN_KILL_IF_ALIVE

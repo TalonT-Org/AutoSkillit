@@ -83,6 +83,10 @@ def _compute_retry(
 
     # Phase 2: Exhaustive termination dispatch
     match termination:
+        case TerminationReason.SIGNAL_DEATH:
+            logger.debug("compute_retry_result", termination="SIGNAL_DEATH", needs_retry=True)
+            return True, RetryReason.RESUME
+
         case TerminationReason.NATURAL_EXIT:
             if channel_confirmation in (
                 ChannelConfirmation.CHANNEL_A,
@@ -194,20 +198,11 @@ def _compute_retry(
                 case _ as _unreachable_cc:
                     assert_never(_unreachable_cc)
 
-        case TerminationReason.STALE:
-            # _build_skill_result intercepts STALE before calling _compute_retry.
-            # Explicit arm exists for exhaustiveness; unreachable in production.
-            logger.debug("compute_retry_result", termination="STALE", needs_retry=False)
-            return False, RetryReason.NONE
-
-        case TerminationReason.IDLE_STALL:
-            # _build_skill_result intercepts IDLE_STALL before calling _compute_retry.
-            # Explicit arm exists for exhaustiveness; unreachable in production.
-            logger.debug("compute_retry_result", termination="IDLE_STALL", needs_retry=False)
+        case TerminationReason.STALE | TerminationReason.IDLE_STALL:
+            logger.debug("compute_retry_result", termination=termination.value, needs_retry=False)
             return False, RetryReason.NONE
 
         case TerminationReason.TIMED_OUT:
-            # Wall-clock timeout: non-retriable (permanent infrastructure limit).
             logger.debug("compute_retry_result", termination="TIMED_OUT", needs_retry=False)
             return False, RetryReason.NONE
 

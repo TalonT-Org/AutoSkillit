@@ -326,7 +326,7 @@ def test_launch_fleet_session_forwards_initial_message_campaign(
             next_dispatch_name="",
             is_resumable=False,
             dispatched_session_id="",
-            kill_reason="",
+            retry_reason="",
         ),
     )
     from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
@@ -379,7 +379,7 @@ def test_launch_fleet_session_clears_initial_message_on_reload_campaign(
             next_dispatch_name="",
             is_resumable=False,
             dispatched_session_id="",
-            kill_reason="",
+            retry_reason="",
         ),
     )
     from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
@@ -401,3 +401,16 @@ def test_launch_fleet_session_clears_initial_message_on_reload_campaign(
     )
     assert captured_messages[0] == "Hello!"
     assert captured_messages[1] is None
+
+
+def test_resume_decision_retry_reason_field() -> None:
+    """ResumeDecision.retry_reason stores RetryReason values."""
+    from autoskillit.fleet import ResumeDecision
+
+    decision = ResumeDecision(
+        completed_dispatches_block="",
+        next_dispatch_name="",
+        is_resumable=True,
+        retry_reason="idle_stall",
+    )
+    assert decision.retry_reason == "idle_stall"

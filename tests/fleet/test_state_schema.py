@@ -72,8 +72,8 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["dispatched_starttime_ticks"] == 42
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
 
-    def test_schema_version_is_5(self) -> None:
-        assert FLEET_STATE_SCHEMA_VERSION == 5
+    def test_schema_version_is_6(self) -> None:
+        assert FLEET_STATE_SCHEMA_VERSION == 6
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""
@@ -375,8 +375,10 @@ class TestDispatchRecordToDict:
             "identity_degraded",
             "reason",
             "diagnostic_message",
-            "kill_reason",
+            "retry_reason",
             "infra_exit_category",
+            "reaper_reason",
+            "reaper_dispatch_id",
             "token_usage",
             "started_at",
             "ended_at",

@@ -604,7 +604,7 @@ class TestResumeReasonInPrompt:
         prompt = _build(
             resumable_dispatch_name="impl-1",
             resume_session_id="sess-1",
-            resume_kill_reason="idle_stall",
+            resume_retry_reason="idle_stall",
         )
         assert "RESUMABLE DISPATCH: impl-1" in prompt
         assert "idle timeout" in prompt
@@ -613,7 +613,7 @@ class TestResumeReasonInPrompt:
     def test_context_exhausted_absent_from_resumable(self) -> None:
         prompt = _build(
             resumable_dispatch_name="impl-1",
-            resume_kill_reason="context_exhausted",
+            resume_retry_reason="context_exhausted",
         )
         assert "RESUMABLE DISPATCH: impl-1" in prompt
         idx = prompt.index("RESUMABLE DISPATCH: impl-1")
@@ -625,7 +625,7 @@ class TestResumeReasonInPrompt:
     def test_api_error_resume_includes_retry_guidance(self) -> None:
         prompt = _build(
             resumable_dispatch_name="impl-1",
-            resume_kill_reason="resume",
+            resume_retry_reason="resume",
         )
         assert "RESUMABLE DISPATCH: impl-1" in prompt
         assert "transient infrastructure failure" in prompt

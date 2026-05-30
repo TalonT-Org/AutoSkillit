@@ -222,6 +222,7 @@ class TerminationReason(StrEnum):
     STALE = "stale"
     IDLE_STALL = "idle_stall"
     TIMED_OUT = "timed_out"
+    SIGNAL_DEATH = "signal_death"
 
 
 class TerminationAction(StrEnum):

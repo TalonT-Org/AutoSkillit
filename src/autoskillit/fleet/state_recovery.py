@@ -116,12 +116,12 @@ def has_blocking_dispatch(state_path: Path) -> bool:
     return False
 
 
-def _is_abandon_kill_metadata(kill_reason: str, infra_exit_category: str) -> bool:
+def _is_abandon_kill_metadata(retry_reason: str, infra_exit_category: str) -> bool:
     """Return True when stored kill metadata indicates resume would be futile."""
-    if kill_reason in _ABANDON_REASONS:
+    if retry_reason in _ABANDON_REASONS:
         return True
     if (
-        kill_reason == RetryReason.RESUME
+        retry_reason == RetryReason.RESUME
         and infra_exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
     ):
         return True
@@ -168,7 +168,7 @@ def classify_stale_dispatch(
                 # treat as having entries to avoid conflating parse errors with 'no entries'.
                 has_entries = bool(raw_lines)
             if not raw_lines or has_entries:
-                if _is_abandon_kill_metadata(dispatch.kill_reason, dispatch.infra_exit_category):
+                if _is_abandon_kill_metadata(dispatch.retry_reason, dispatch.infra_exit_category):
                     return (DispatchStatus.INTERRUPTED, "")
                 return (DispatchStatus.RESUMABLE, sidecar_path_str)
     logger.debug(
@@ -241,7 +241,7 @@ def resume_campaign_from_state(
         is_resumable = False
         resumable_dispatched_session_id = ""
         resumable_dispatch_id = ""
-        resumable_kill_reason = ""
+        resumable_retry_reason = ""
         resumable_checkpoint: dict[str, Any] = {}
         for d in m.state.dispatches:
             if d.status in _VISIBLE_IN_BLOCK_STATUSES:
@@ -265,7 +265,7 @@ def resume_campaign_from_state(
                     is_resumable = True
                     resumable_dispatched_session_id = d.dispatched_session_id
                     resumable_dispatch_id = d.dispatch_id
-                    resumable_kill_reason = d.kill_reason
+                    resumable_retry_reason = d.retry_reason
                     resumable_checkpoint = d.resume_checkpoint
             elif (
                 d.status
@@ -289,7 +289,7 @@ def resume_campaign_from_state(
             is_resumable=is_resumable,
             dispatched_session_id=resumable_dispatched_session_id,
             dispatch_id=resumable_dispatch_id,
-            kill_reason=resumable_kill_reason,
+            retry_reason=resumable_retry_reason,
             resume_checkpoint=resumable_checkpoint,
         )
 

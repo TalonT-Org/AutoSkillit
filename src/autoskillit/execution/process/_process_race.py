@@ -18,6 +18,7 @@ from autoskillit.execution.process._process_monitor import (
     _heartbeat,
     _session_log_monitor,
 )
+from autoskillit.execution.session._exit_classification import is_signal_death_code
 
 if TYPE_CHECKING:
     from autoskillit.core import StreamParser
@@ -453,7 +454,12 @@ def resolve_termination(
 
     # Termination reason: priority order (process exit > idle stall > stale > channel win)
     if signals.process_exited:
-        termination = TerminationReason.NATURAL_EXIT
+        if signals.process_returncode is not None and is_signal_death_code(
+            signals.process_returncode
+        ):
+            termination = TerminationReason.SIGNAL_DEATH
+        else:
+            termination = TerminationReason.NATURAL_EXIT
     elif signals.idle_stall:
         termination = TerminationReason.IDLE_STALL
     else:

@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._helpers import extract_always_block
+
 SKILLS_ROOT = (
     Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "skills_extended"
 )
@@ -22,18 +24,9 @@ def skill_text(request: pytest.FixtureRequest) -> str:
     return path.read_text()
 
 
-def _extract_always_block(text: str) -> str:
-    """Extract the ALWAYS block from Critical Constraints, or "" if absent."""
-    always_idx = text.find("**ALWAYS:**")
-    if always_idx == -1:
-        return ""
-    next_section = text.find("\n## ", always_idx)
-    return text[always_idx:next_section] if next_section != -1 else text[always_idx:]
-
-
 def test_no_pagination_instruction_present(skill_text: str) -> None:
     """The ALWAYS block must contain the no-pagination file read instruction."""
-    always_block = _extract_always_block(skill_text)
+    always_block = extract_always_block(skill_text)
     assert "single call without a `limit` parameter" in always_block, (
         "ALWAYS block must instruct reading files in a single call without limit"
     )
@@ -41,7 +34,7 @@ def test_no_pagination_instruction_present(skill_text: str) -> None:
 
 def test_no_pagination_instruction_prohibits_sequential_offset(skill_text: str) -> None:
     """The instruction must explicitly prohibit sequential offset reads."""
-    always_block = _extract_always_block(skill_text)
+    always_block = extract_always_block(skill_text)
     assert "Do not paginate" in always_block, (
         "ALWAYS block must explicitly prohibit paginated sequential offset reads"
     )
@@ -49,7 +42,7 @@ def test_no_pagination_instruction_prohibits_sequential_offset(skill_text: str) 
 
 def test_no_pagination_instruction_permits_targeted_reads(skill_text: str) -> None:
     """The instruction must permit targeted limit/offset for known files."""
-    always_block = _extract_always_block(skill_text)
+    always_block = extract_always_block(skill_text)
     assert "targeted section reads" in always_block, (
         "ALWAYS block must permit limit/offset for targeted reads of already-read files"
     )

@@ -117,3 +117,26 @@ def extract_never_block(skill_text: str) -> str:
     block = skill_text[start:end]
     lines = [line for line in block.splitlines() if line.strip().startswith("- ")]
     return "\n".join(lines)
+
+
+def extract_always_block(skill_text: str) -> str:
+    """Extract the ALWAYS block from a SKILL.md text.
+
+    Finds the line starting with **ALWAYS:** or **ALWAYS** and collects all
+    subsequent ``- `` list items until the next ``**`` header or end of text.
+    Returns the raw text of the ALWAYS block (may be empty string if not found).
+    """
+    import re
+
+    always_match = re.search(r"(?m)^\*\*ALWAYS(?::\*\*|\*\*)\s*$", skill_text)
+    if not always_match:
+        return ""
+    start = always_match.end()
+    next_header = re.search(r"(?m)^\*\*[A-Z][^\n]*\*\*", skill_text[start:])
+    if next_header:
+        end = start + next_header.start()
+    else:
+        end = len(skill_text)
+    block = skill_text[start:end]
+    lines = [line for line in block.splitlines() if line.strip().startswith("- ")]
+    return "\n".join(lines)

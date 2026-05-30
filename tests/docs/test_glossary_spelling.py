@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._helpers import strip_markdown_code_regions
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = REPO_ROOT / "docs"
 GLOSSARY = DOCS_DIR / "glossary.md"
@@ -27,15 +29,6 @@ BANNED_VARIANTS: list[tuple[str, str]] = [
     (r"\btier-3\b", "Tier 3"),
     (r"retry reason\b", "retry_reason"),
 ]
-
-CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
-INLINE_CODE_RE = re.compile(r"`[^`]*`")
-
-
-def _strip_examples(text: str) -> str:
-    text = CODE_BLOCK_RE.sub("", text)
-    text = INLINE_CODE_RE.sub("", text)
-    return text
 
 
 def _doc_files() -> list[Path]:
@@ -55,7 +48,7 @@ def test_glossary_has_at_least_17_terms() -> None:
 
 @pytest.mark.parametrize("md", _doc_files(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
 def test_no_banned_variants(md: Path) -> None:
-    text = _strip_examples(md.read_text(encoding="utf-8"))
+    text = strip_markdown_code_regions(md.read_text(encoding="utf-8"))
     hits: list[tuple[str, str, int]] = []
     for line_no, line in enumerate(text.splitlines(), start=1):
         for pat, canonical in BANNED_VARIANTS:

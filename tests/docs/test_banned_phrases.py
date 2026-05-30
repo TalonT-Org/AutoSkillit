@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._helpers import strip_markdown_code_regions
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = REPO_ROOT / "docs"
 ROOT_README = REPO_ROOT / "README.md"
@@ -37,14 +39,11 @@ BANNED_PHRASES = [
 # the canonical and banned spellings of every term it covers.
 EXEMPT_FILES = {"glossary.md"}
 
-CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
-INLINE_CODE_RE = re.compile(r"`[^`]*`")
 QUOTED_RE = re.compile(r'"[^"]*"|\'[^\']*\'')
 
 
 def _strip_examples(text: str) -> str:
-    text = CODE_BLOCK_RE.sub("", text)
-    text = INLINE_CODE_RE.sub("", text)
+    text = strip_markdown_code_regions(text)
     text = QUOTED_RE.sub("", text)
     return text
 

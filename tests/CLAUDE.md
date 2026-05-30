@@ -175,6 +175,7 @@ tests/
 ├── test_backend_gating_root.py
 ├── test_conftest.py                     # Tests for conftest fixtures
 ├── test_fakes_conformance.py
+├── test_helpers_strip.py                # Unit tests for strip_markdown_code_regions shared utility
 ├── test_llm_triage.py
 ├── test_no_orchestration_tier_language.py
 ├── test_smoke_utils.py

@@ -8,6 +8,7 @@ REQ-INTENT-002: Adversarial Breakage subagent — challenges removal/change reco
 
 import pytest
 
+from tests._helpers import strip_markdown_code_regions
 from tests.skills.conftest import extract_step_section
 
 
@@ -43,18 +44,6 @@ def design_intent_content(step2_section: str) -> str:
     if next_header != -1:
         return step2_section[start:next_header]
     return step2_section[start:]
-
-
-def _strip_code_fences(text: str) -> str:
-    """Remove lines inside triple-backtick code fences (template content vs. instructions)."""
-    result = []
-    in_fence = False
-    for line in text.split("\n"):
-        if line.strip().startswith("```"):
-            in_fence = not in_fence
-        elif not in_fence:
-            result.append(line)
-    return "\n".join(result)
 
 
 @pytest.fixture(scope="module")
@@ -234,7 +223,7 @@ def test_standard_mode_no_adversarial_breakage(standard_workflow_section: str) -
     # Strip code fences: the Step 4 report template documents what deep mode output looks
     # like, which legitimately contains '## Breakage Analysis'. The intent of this guard
     # is that the *execution instructions* don't spawn adversarial breakage in standard mode.
-    instructions = _strip_code_fences(standard_workflow_section)
+    instructions = strip_markdown_code_regions(standard_workflow_section)
     has_adversarial = "adversarial breakage" in instructions.lower()
     has_breakage_analysis = "breakage analysis" in instructions.lower()
     assert not has_adversarial and not has_breakage_analysis, (

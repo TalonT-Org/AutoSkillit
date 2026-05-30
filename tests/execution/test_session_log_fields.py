@@ -1449,12 +1449,11 @@ class TestModelAliasDriftIntegration:
             },
         )
         anomalies_path = tmp_path / "sessions" / "alias-no-drift-001" / "anomalies.jsonl"
-        if anomalies_path.exists():
-            lines = anomalies_path.read_text().strip().splitlines()
-            drift = [
-                json.loads(line) for line in lines if json.loads(line).get("kind") == "model_drift"
-            ]
-            assert len(drift) == 0
+        lines = anomalies_path.read_text().strip().splitlines() if anomalies_path.exists() else []
+        drift = [
+            json.loads(line) for line in lines if json.loads(line).get("kind") == "model_drift"
+        ]
+        assert len(drift) == 0
 
     def test_alias_configured_wrong_family_observed_emits_drift(self, tmp_path):
         """'sonnet' configured but 'claude-opus-4-6' observed: MODEL_DRIFT should fire."""
@@ -1545,9 +1544,6 @@ class TestModelAliasDriftIntegration:
         ]
         _flush(tmp_path, session_id="rss-startup-flush-001", proc_snapshots=snaps)
         anomalies_path = tmp_path / "sessions" / "rss-startup-flush-001" / "anomalies.jsonl"
-        if anomalies_path.exists():
-            lines = anomalies_path.read_text().strip().splitlines()
-            rss = [
-                json.loads(line) for line in lines if json.loads(line).get("kind") == "rss_growth"
-            ]
-            assert len(rss) == 0
+        lines = anomalies_path.read_text().strip().splitlines() if anomalies_path.exists() else []
+        rss = [json.loads(line) for line in lines if json.loads(line).get("kind") == "rss_growth"]
+        assert len(rss) == 0

@@ -46,8 +46,8 @@ from autoskillit.execution.headless._headless_recovery import (
 )
 from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths
 from autoskillit.execution.session._exit_classification import (
-    _RATE_LIMIT_PATTERNS,
     classify_infra_exit,
+    has_rate_limit_signal,
 )
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
@@ -217,16 +217,7 @@ def _build_skill_result(
                     api_retry=stale_api_retry,
                 )
         # No valid result in stdout — fall through to original stale response
-        # Rate-limit detection before _capture_failure so the correct reason is recorded.
-        _stale_text_sources: list[str] = [
-            *stale_session.assistant_messages,
-            *(stale_session.errors or []),
-        ]
-        if result.stderr:
-            _stale_text_sources.append(result.stderr)
-        _stale_is_rate_limited = stale_session.api_error_status == 429 or any(
-            p.search(msg) for p in _RATE_LIMIT_PATTERNS for msg in _stale_text_sources
-        )
+        _stale_is_rate_limited = has_rate_limit_signal(stale_session, result)
         _stale_is_api_error = stale_session.api_retry_exhausted or (
             stale_session.api_error_status is not None and stale_session.api_error_status >= 400
         )
@@ -306,16 +297,7 @@ def _build_skill_result(
                     provider_used=provider_used,
                     api_retry=idle_api_retry,
                 )
-        # Rate-limit detection before _capture_failure so the correct reason is recorded.
-        _idle_text_sources: list[str] = [
-            *idle_session.assistant_messages,
-            *(idle_session.errors or []),
-        ]
-        if result.stderr:
-            _idle_text_sources.append(result.stderr)
-        _idle_is_rate_limited = idle_session.api_error_status == 429 or any(
-            p.search(msg) for p in _RATE_LIMIT_PATTERNS for msg in _idle_text_sources
-        )
+        _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
         _idle_is_api_error = idle_session.api_retry_exhausted or (
             idle_session.api_error_status is not None and idle_session.api_error_status >= 400
         )

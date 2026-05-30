@@ -23,7 +23,7 @@ _API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"socket hang up", re.IGNORECASE),
     re.compile(r"network error", re.IGNORECASE),
     re.compile(r"connection reset", re.IGNORECASE),
-    re.compile(r"rate.limited", re.IGNORECASE),
+    re.compile(r"rate[\s_\-]limited", re.IGNORECASE),
 )
 
 _CODEX_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -42,7 +42,7 @@ _KNOWN_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
 # _session_model._has_api_error() imports _KNOWN_API_ERROR_PATTERNS and relies on the
 # full union. This tuple exists only for the RATE_LIMITED classification branch.
 _RATE_LIMIT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"rate.limited", re.IGNORECASE),
+    re.compile(r"rate[\s_\-]limited", re.IGNORECASE),
     re.compile(r"rate_limit_exceeded", re.IGNORECASE),
 )
 
@@ -64,6 +64,18 @@ def _all_text_sources(
     if result.stderr:
         sources.append(result.stderr)
     return sources
+
+
+def has_rate_limit_signal(
+    session: ClaudeSessionResult,
+    result: SubprocessResult,
+) -> bool:
+    """Check whether a session exhibits rate-limit signals (HTTP 429 or text patterns)."""
+    if session.api_error_status == 429:
+        return True
+    return any(
+        p.search(msg) for p in _RATE_LIMIT_PATTERNS for msg in _all_text_sources(session, result)
+    )
 
 
 def classify_infra_exit(

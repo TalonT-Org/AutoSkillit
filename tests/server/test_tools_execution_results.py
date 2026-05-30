@@ -399,6 +399,7 @@ class TestNotifyHelper:
         ctx = AsyncMock()
         ctx.info = AsyncMock(side_effect=ClosedResourceError)
         await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
+        ctx.info.assert_awaited_once()
 
     @pytest.mark.anyio
     async def test_notify_swallows_broken_resource_error_from_ctx(self):
@@ -411,6 +412,7 @@ class TestNotifyHelper:
         ctx = AsyncMock()
         ctx.info = AsyncMock(side_effect=BrokenResourceError)
         await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
+        ctx.info.assert_awaited_once()
 
 
 class TestHeadlessGateEnforcement:

@@ -266,7 +266,7 @@ class CodexBackend:
             project_local_skills_capable=False,
             required_skill_fields=frozenset({"name", "description"}),
             required_session_files=frozenset({"config.toml"}),
-            session_dir_symlinks=frozenset({"auth.json", "sessions"}),
+            session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
             applicable_guards=frozenset(),
             env_denylist_prefixes=CODEX_ENV_PREFIX_DENYLIST,
             min_version="0.130.0",

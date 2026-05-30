@@ -17,6 +17,6 @@ _CODEX_CAPABILITIES = BackendCapabilities(
     completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
     session_record_types=frozenset({"item.completed"}),
     required_session_files=frozenset({"config.toml"}),
-    session_dir_symlinks=frozenset({"auth.json", "sessions"}),
+    session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
     skills_subdir="skills",
 )

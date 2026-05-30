@@ -126,7 +126,7 @@ class TestCodexBackend:
 
     def test_capabilities_session_dir_symlinks(self) -> None:
         assert CodexBackend().capabilities.session_dir_symlinks == frozenset(
-            {"auth.json", "sessions"}
+            {"auth.json", ".env", "sessions"}
         )
 
     def test_capabilities_applicable_guards(self) -> None:

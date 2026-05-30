@@ -458,7 +458,7 @@ that violates any of these must be classified `REJECT` with `category: "arch_vio
 | Protocol types on ToolContext | `test_subpackage_isolation.py` | Concrete class types instead of Protocol types for ToolContext service fields |
 | Capability-based dispatch | `test_no_backend_name_bypass.py` | `if backend.name == "..."` — must use capability fields |
 | step_name in run_cmd | `test_anti_pattern_guards.py` | Missing `step_name` in `run_cmd` `with:` blocks in recipe YAML |
-| No hardcoded temp paths | `test_python_no_hardcoded_temp.py` | Literal `.autoskillit/temp` string in Python outside whitelist |
+| No hardcoded temp paths | `test_python_no_hardcoded_temp.py` | Literal `{{AUTOSKILLIT_TEMP}}` path string in Python outside whitelist |
 | SkillResult kill_reason | `test_skill_result_construction_guard.py` | `SkillResult()` without `kill_reason=` kwarg |
 | Never-raises contracts | `test_never_raises_contracts.py` | `@mcp.tool()` handlers without top-level `try/except` and "Never raises" docstring |
 | No StrEnum-to-string compare | `test_ast_rules.py` (ARCH-010) | Comparing StrEnum fields to raw string literals |

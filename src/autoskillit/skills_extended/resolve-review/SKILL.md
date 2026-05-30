@@ -48,6 +48,8 @@ branch already checked out.
 - Modify tests to suppress failures introduced by reviewer fixes
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Classify a finding as ACCEPT when the proposed change violates a project-wide
+  architectural constraint listed in the Architectural Constraint Catalog
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)
@@ -391,17 +393,25 @@ the Task tool (`model: "sonnet"`).
   once, spanning all flagged lines with ±30 lines margin — do not re-read per
   finding.
 - Instructions to run `git log --follow -p --max-count=5 -- {path}` once per unique path (not once per finding) to trace original intent
+- Instructions to check the **Architectural Constraint Catalog** (below) before
+  classifying any finding as ACCEPT — if the proposed change would violate a
+  project-wide constraint listed in the catalog, classify as REJECT with
+  `category: "arch_violation"`
 - Instructions to classify each comment as `ACCEPT`, `REJECT`, or `DISCUSS` with:
   - `verdict`: the classification (`ACCEPT` / `REJECT` / `DISCUSS`)
   - `evidence`: specific references (line numbers, function names, API docs, contracts)
   - `category` (for `REJECT` only): one of `api_direction_misunderstanding`,
-    `false_positive_intentional_pattern`, `design_intent_misread`, `stale_comment`, `other`
+    `false_positive_intentional_pattern`, `design_intent_misread`, `stale_comment`,
+    `arch_violation`, `other`
   - `commit_sha_hint`: the most recent commit touching the flagged line (from `git log`)
 
 **Classification criteria:**
 - `ACCEPT` — the reviewer identified a real issue; a code fix is warranted
 - `REJECT` — the reviewer is factually wrong (misread a guard, misunderstood an API,
-  failed to recognize an intentional design pattern); do NOT change the code
+  failed to recognize an intentional design pattern), OR the proposed change violates
+  a project-wide architectural constraint enforced by `tests/arch/` or `tests/recipe/`
+  (see Architectural Constraint Catalog below — use category `arch_violation`);
+  do NOT change the code
 - `DISCUSS` — the comment raises a valid design question that requires a human decision;
   flag for human review, do NOT change the code automatically
 
@@ -430,6 +440,32 @@ additional context not visible in the hunk. Run `git log` for history as usual.
 
 When `diff_context_map` has no entry AND `diff_hunk` is empty or missing:
 fall back to reading the file at `±30 lines` from the flagged line.
+
+**Architectural Constraint Catalog — consult before classifying ACCEPT:**
+
+The following project-wide constraints are enforced exclusively by pytest tests in
+`tests/arch/` and `tests/recipe/`. They are NOT caught by pre-commit. A suggestion
+that violates any of these must be classified `REJECT` with `category: "arch_violation"`.
+
+| Constraint | Enforced by | What is prohibited |
+|---|---|---|
+| Regex import | `test_regex_import.py` | `import re` or `from re import` in `src/` outside `hooks/` and `core/` — must use `import regex as re` |
+| Atomic writes | `test_ast_rules.py` (REQ-AST-002) | `.write_text()` / `.write_bytes()` in `src/` — must use `_atomic_write()` |
+| No print | `test_ast_rules.py` (ARCH-001) | `print()` in production `src/` code |
+| Dataclass slots | `test_dataclass_slots.py` | `dataclass(frozen=True)` decorator without `slots=True` |
+| Import layer ordering | `test_layer_enforcement.py` | Importing from a higher IL layer (e.g., IL-2 recipe/ imported by IL-0 core/) |
+| Anyio migration | `test_anyio_migration.py` | `asyncio.sleep`, `asyncio.Event`, `asyncio.to_thread` in `execution/process.py` |
+| Protocol types on ToolContext | `test_subpackage_isolation.py` | Concrete class types instead of Protocol types for ToolContext service fields |
+| Capability-based dispatch | `test_no_backend_name_bypass.py` | `if backend.name == "..."` — must use capability fields |
+| step_name in run_cmd | `test_anti_pattern_guards.py` | Missing `step_name` in `run_cmd` `with:` blocks in recipe YAML |
+| No hardcoded temp paths | `test_python_no_hardcoded_temp.py` | Literal `{{AUTOSKILLIT_TEMP}}` path string in Python outside whitelist |
+| SkillResult kill_reason | `test_skill_result_construction_guard.py` | `SkillResult()` without `kill_reason=` kwarg |
+| Never-raises contracts | `test_never_raises_contracts.py` | `mcp.tool()` handlers without top-level `try/except` and "Never raises" docstring |
+| No StrEnum-to-string compare | `test_ast_rules.py` (ARCH-010) | Comparing StrEnum fields to raw string literals |
+
+When a reviewer suggestion would cause a change matching any row above, classify
+the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing
+the specific constraint and enforcement test.
 
 **Fallback:** If a sub-agent fails or times out, classify all comments in that group as
 `DISCUSS` (safe fallback — no code is changed, human reviews). Log the failure including

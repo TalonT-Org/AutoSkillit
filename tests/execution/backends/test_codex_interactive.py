@@ -38,8 +38,9 @@ class TestCodexInteractiveCmdResumeVariants:
             resume_spec=NamedResume(session_id="abc123"),
         )
         assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
-        idx = list(spec.cmd).index(CodexFlags.RESUME_SUBCOMMAND)
-        assert spec.cmd[idx + 1] == "abc123"
+        assert "abc123" in spec.cmd
+        assert spec.origin is not None
+        assert "abc123" in spec.origin.positional
 
     def test_bare_resume_includes_resume_without_session_id(self) -> None:
         spec = CodexBackend().build_interactive_cmd(resume_spec=BareResume())

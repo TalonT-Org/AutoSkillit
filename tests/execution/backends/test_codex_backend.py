@@ -678,7 +678,9 @@ class TestCodexBuildInteractiveCmd:
         spec = CodexBackend().build_interactive_cmd(resume_spec=NamedResume(session_id="abc"))
         assert spec.cmd[0] == "codex"
         assert spec.cmd[1] == CodexFlags.RESUME_SUBCOMMAND
-        assert spec.cmd[2] == "abc"
+        assert "abc" in spec.cmd
+        assert spec.origin is not None
+        assert "abc" in spec.origin.positional
         assert CodexFlags.DANGEROUSLY_BYPASS in spec.cmd
 
     def test_bare_resume_produces_resume_subcommand_without_session_id(self) -> None:

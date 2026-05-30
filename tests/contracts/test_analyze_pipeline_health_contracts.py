@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 import yaml
 
+from autoskillit.execution.session._session_content import _check_expected_patterns
+
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _OUTPUT_DELIMITER = "---pipeline-health-result---"
@@ -51,12 +53,12 @@ def test_analyze_pipeline_health_has_pattern_examples():
 
 
 def test_analyze_pipeline_health_pattern_examples_match_delimiter():
-    """Each pattern_example must contain the output delimiter."""
+    """Each pattern_example must match the output delimiter via the normalizer."""
     contract = _load_contract()
     assert contract, "analyze-pipeline-health entry missing from skill_contracts.yaml"
     examples = contract.get("pattern_examples", [])
     assert examples, "pattern_examples must be non-empty"
     for example in examples:
-        assert _OUTPUT_DELIMITER in example, (
-            f"pattern_example must contain '{_OUTPUT_DELIMITER}': {example!r}"
+        assert _check_expected_patterns(example, [_OUTPUT_DELIMITER]), (
+            f"pattern_example must match '{_OUTPUT_DELIMITER}' after normalization: {example!r}"
         )

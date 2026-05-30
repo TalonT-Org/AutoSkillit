@@ -891,8 +891,7 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
     """_run_interactive_session must call backend.ensure_pre_launch() before subprocess.run."""
     from autoskillit.core import BackendCapabilities, CmdSpec
 
-    pre_launch_called: list[bool] = []
-    subprocess_called: list[bool] = []
+    call_sequence: list[str] = []
 
     caps = BackendCapabilities(
         channel_b_capable=False,
@@ -917,7 +916,7 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
             return caps
 
         def ensure_pre_launch(self) -> list[str]:
-            pre_launch_called.append(True)
+            call_sequence.append("pre_launch")
             return []
 
         def build_interactive_cmd(self, **kwargs):
@@ -926,13 +925,14 @@ def test_run_interactive_session_calls_ensure_pre_launch_for_codex_backend(
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/codex")
 
     def mock_run(cmd, **kwargs):
-        subprocess_called.append(True)
+        call_sequence.append("subprocess")
         return type("Result", (), {"returncode": 0})()
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     _run_interactive_session(system_prompt="test", backend=_CodexBackendStub())
-    assert pre_launch_called, "ensure_pre_launch() must be called before subprocess.run"
-    assert subprocess_called, "subprocess.run must be called after ensure_pre_launch"
+    assert call_sequence == ["pre_launch", "subprocess"], (
+        f"ensure_pre_launch() must be called before subprocess.run, got: {call_sequence}"
+    )
 
 
 def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
@@ -970,12 +970,10 @@ def test_run_interactive_session_aborts_when_pre_launch_returns_errors(
             return CmdSpec(cmd=("codex",), env={})
 
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/codex")
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *a, **kw: (_ for _ in ()).throw(
-            AssertionError("subprocess.run must not be called")
-        ),
-    )
+
+    def _must_not_call(*a, **kw):
+        raise AssertionError("subprocess.run must not be called")
+
+    monkeypatch.setattr(subprocess, "run", _must_not_call)
     with pytest.raises(SystemExit, match="1"):
         _run_interactive_session(system_prompt="test", backend=_FailingCodexBackend())

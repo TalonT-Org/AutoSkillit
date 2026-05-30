@@ -515,6 +515,8 @@ class TestReap:
         sp.write_text(json.dumps(raw))
 
         with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
             patch("autoskillit.fleet._dispatch_reaper.time.time", return_value=1005.0),
         ):

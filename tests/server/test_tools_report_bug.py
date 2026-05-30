@@ -743,6 +743,7 @@ async def test_report_bug_model_as_profile_resolves_provider(
         "ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"
     }
     assert call_kwargs.get("profile_name") == "minimax"
+    assert call_kwargs.get("provider_name") == "minimax"
 
 
 @pytest.mark.anyio
@@ -797,3 +798,4 @@ async def test_report_bug_config_model_as_profile(tool_ctx_kitchen_open, tmp_pat
         "ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"
     }
     assert call_kwargs.get("profile_name") == "minimax"
+    assert call_kwargs.get("provider_name") == "minimax"

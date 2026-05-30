@@ -59,3 +59,25 @@ def test_tier3_unresolvable_step_provider_returns_anthropic():
     )
     assert profile_name == "anthropic"
     assert env_dict == {}
+
+
+def test_all_executor_run_callsites_pass_provider_name_when_profile_name_set():
+    """Every call that passes profile_name= must also pass provider_name=."""
+    import ast
+    from pathlib import Path
+
+    files_to_scan = [
+        "src/autoskillit/server/tools/tools_execution.py",
+        "src/autoskillit/server/tools/tools_github.py",
+        "src/autoskillit/server/tools/tools_issue_headless.py",
+    ]
+    violations = []
+    for rel_path in files_to_scan:
+        source = Path(rel_path).read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                keywords = {kw.arg for kw in node.keywords if kw.arg is not None}
+                if "profile_name" in keywords and "provider_name" not in keywords:
+                    violations.append(f"{rel_path}:{node.lineno}")
+    assert not violations, f"Calls with profile_name= but no provider_name=: {violations}"

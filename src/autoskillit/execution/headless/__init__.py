@@ -202,6 +202,7 @@ async def run_headless_core(
             add_dirs=list(add_dirs) if add_dirs else None,
         )
 
+        effective_provider = provider_name or profile_name
         return await _execute_claude_headless(
             spec,
             cwd,
@@ -225,7 +226,7 @@ async def run_headless_core(
             recipe_version=recipe_version,
             readonly_skill=readonly_skill,
             write_watch_dirs=write_watch_dirs,
-            provider_name=provider_name,
+            provider_name=effective_provider,
             provider_fallback_env=provider_fallback_env,
             provider_fallback_name=provider_fallback_name,
             provider_extras=provider_extras,

@@ -286,6 +286,7 @@ async def report_bug(
                     write_behavior=write_spec,
                     provider_extras=report_provider_extras,
                     profile_name=report_profile_name,
+                    provider_name=report_profile_name,
                 )
                 if not result["success"]:
                     await _notify(
@@ -325,6 +326,7 @@ async def report_bug(
                     status_path=status_path,
                     provider_extras=report_provider_extras,
                     profile_name=report_profile_name,
+                    provider_name=report_profile_name,
                 ),
                 label=step_name or "report_bug",
             )
@@ -608,6 +610,7 @@ async def _run_report_session(
     status_path: Path | None = None,
     provider_extras: dict[str, str] | None = None,
     profile_name: str = "",
+    provider_name: str = "",
 ) -> dict[str, Any]:
     """Run the headless session, write the report, and handle GitHub filing.
 
@@ -626,6 +629,7 @@ async def _run_report_session(
             write_behavior=write_behavior,
             provider_extras=provider_extras,
             profile_name=profile_name,
+            provider_name=provider_name,
         )
 
         report_text = skill_result.result or skill_result.stderr or "No report generated."

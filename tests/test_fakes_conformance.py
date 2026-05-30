@@ -18,6 +18,7 @@ from autoskillit.core.types import (
     TestRunner,
 )
 from tests.fakes import (
+    ExecutorCall,
     InMemoryCIWatcher,
     InMemoryDatabaseReader,
     InMemoryHeadlessExecutor,
@@ -331,3 +332,40 @@ async def test_in_memory_executor_accepts_resume_session_id():
     await executor.run("/implement foo", "/tmp", resume_session_id="sess-123")
     assert len(executor.calls) == 1
     assert executor.calls[0].resume_session_id == "sess-123"
+
+
+def test_executor_fake_captures_all_protocol_parameters():
+    """InMemoryHeadlessExecutor.run() must accept every HeadlessExecutor.run() parameter."""
+    import dataclasses
+    import inspect
+
+    protocol_params = set(inspect.signature(HeadlessExecutor.run).parameters.keys())
+    fake_params = set(inspect.signature(InMemoryHeadlessExecutor.run).parameters.keys())
+    call_fields = {f.name for f in dataclasses.fields(ExecutorCall)}
+    protocol_params.discard("self")
+    missing_in_fake = protocol_params - fake_params
+    missing_in_call = protocol_params - call_fields - {"self"}
+    assert not missing_in_fake, f"InMemoryHeadlessExecutor.run() missing params: {missing_in_fake}"
+    assert not missing_in_call, f"ExecutorCall missing fields: {missing_in_call}"
+
+
+@pytest.mark.anyio
+async def test_in_memory_executor_accepts_provider_name():
+    """InMemoryHeadlessExecutor.run() must accept provider_name kwarg."""
+    executor = InMemoryHeadlessExecutor()
+    await executor.run("/skill", "/cwd", provider_name="bedrock")
+    assert executor.calls[0].provider_name == "bedrock"
+
+
+@pytest.mark.anyio
+async def test_in_memory_executor_accepts_provider_fallback_env():
+    executor = InMemoryHeadlessExecutor()
+    await executor.run("/skill", "/cwd", provider_fallback_env={"KEY": "val"})
+    assert executor.calls[0].provider_fallback_env == {"KEY": "val"}
+
+
+@pytest.mark.anyio
+async def test_in_memory_executor_accepts_provider_fallback_name():
+    executor = InMemoryHeadlessExecutor()
+    await executor.run("/skill", "/cwd", provider_fallback_name="anthropic")
+    assert executor.calls[0].provider_fallback_name == "anthropic"

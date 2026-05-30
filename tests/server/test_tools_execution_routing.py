@@ -367,6 +367,7 @@ async def test_run_skill_injects_provider_extras_when_feature_enabled(
 
     assert executor.calls[0].provider_extras == {"ANTHROPIC_API_KEY": "test-key-xyz"}
     assert executor.calls[0].profile_name == "vertex"
+    assert executor.calls[0].provider_name == "vertex"
 
 
 @pytest.mark.anyio
@@ -385,6 +386,7 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
 
     assert executor.calls[0].provider_extras is None
     assert executor.calls[0].profile_name == ""
+    assert executor.calls[0].provider_name == ""
 
 
 @pytest.mark.anyio
@@ -407,6 +409,7 @@ async def test_run_skill_provider_extras_none_when_default_profile(
 
     assert executor.calls[0].provider_extras is None
     assert executor.calls[0].profile_name == ""
+    assert executor.calls[0].provider_name == ""
 
 
 @pytest.mark.anyio

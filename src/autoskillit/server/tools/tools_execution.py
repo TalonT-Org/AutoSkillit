@@ -632,6 +632,7 @@ async def run_skill(
                     write_watch_dirs=write_watch_dirs,
                     provider_extras=provider_extras,
                     profile_name=profile_name_out,
+                    provider_name=profile_name_out,
                     backend_override=backend_override,
                     resume_session_id=resume_session_id,
                 )

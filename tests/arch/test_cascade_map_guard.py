@@ -231,12 +231,12 @@ def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
                     if (recipe_init.parent / f"{stem}.py").exists():
                         graph.setdefault(stem, set()).add("recipe")
             elif node.module.startswith("autoskillit.recipe."):
-                subpkg = node.module.split(".")[2]
-                subpkg_dir = recipe_init.parent / subpkg
-                if subpkg_dir.is_dir():
+                parts = node.module.split(".")
+                subpkg_path = recipe_init.parent / "/".join(parts[2:])
+                if subpkg_path.is_dir():
                     for alias in node.names:
                         name = alias.name
-                        if (subpkg_dir / f"{name}.py").exists():
+                        if (subpkg_path / f"{name}.py").exists():
                             graph.setdefault(name, set()).add("recipe")
     return graph
 

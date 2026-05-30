@@ -193,7 +193,7 @@ def _retry_reason_values() -> list[str]:
 
 
 def _count_semantic_rule_files() -> int:
-    return sum(1 for p in (SRC_DIR / "recipe" / "rules").glob("rules_*.py"))
+    return sum(1 for p in (SRC_DIR / "recipe" / "rules").rglob("rules_*.py"))
 
 
 # ----- tests ------------------------------------------------------------------

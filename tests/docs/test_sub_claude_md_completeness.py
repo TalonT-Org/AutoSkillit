@@ -17,6 +17,10 @@ EXPECTED_SUB_CLAUDE_MDS = [
     "execution/session/CLAUDE.md",
     "execution/merge_queue/CLAUDE.md",
     "recipe/rules/CLAUDE.md",
+    "recipe/rules/campaign/CLAUDE.md",
+    "recipe/rules/ci/CLAUDE.md",
+    "recipe/rules/dataflow/CLAUDE.md",
+    "recipe/rules/graph/CLAUDE.md",
     "server/tools/CLAUDE.md",
     "cli/doctor/CLAUDE.md",
     "cli/fleet/CLAUDE.md",
@@ -41,8 +45,8 @@ EXPECTED_SUB_CLAUDE_MDS = [
 ]
 
 
-def test_all_28_sub_claude_md_files_exist():
-    assert len(EXPECTED_SUB_CLAUDE_MDS) == 28, (
+def test_all_32_sub_claude_md_files_exist():
+    assert len(EXPECTED_SUB_CLAUDE_MDS) == 32, (
         f"Expected 28 entries, got {len(EXPECTED_SUB_CLAUDE_MDS)}"
     )
     assert len(EXPECTED_SUB_CLAUDE_MDS) == len(set(EXPECTED_SUB_CLAUDE_MDS)), (

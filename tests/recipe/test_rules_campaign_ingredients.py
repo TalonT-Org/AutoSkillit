@@ -9,7 +9,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 def test_auto_injected_campaign_ingredients_includes_config_authoritative_keys():
     """_get_auto_injected_ingredients includes config-authoritative ingredient keys."""
-    from autoskillit.recipe.rules.rules_campaign_ingredients import (
+    from autoskillit.recipe.rules.campaign.rules_campaign_ingredients import (
         _get_auto_injected_ingredients,
     )
     from autoskillit.recipe.schema import RecipeIngredient

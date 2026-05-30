@@ -851,7 +851,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 11,
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
-        "recipe/rules": 51,
+        "recipe/rules": 34,
         "server/tools": 22,  # _auto_overrides.py added for shared _build_auto_overrides() factory
         "hooks/guards": 23,  # artifact_download_guard.py added for gh run/release download guard
     }
@@ -1239,7 +1239,7 @@ def test_installed_version_in_core_types() -> None:
 
 def test_rule_submodules_no_autoskillit_init_import() -> None:
     """P3-F2: rules_*.py submodules must not import from autoskillit top-level __init__."""
-    rule_files = sorted((SRC_ROOT / "recipe" / "rules").glob("rules_*.py"))
+    rule_files = sorted((SRC_ROOT / "recipe" / "rules").rglob("rules_*.py"))
     assert len(rule_files) >= 5, f"Expected >=5 rules_*.py files, found {len(rule_files)}"
     for rules_path in rule_files:
         assert "from autoskillit import __version__" not in rules_path.read_text(), (

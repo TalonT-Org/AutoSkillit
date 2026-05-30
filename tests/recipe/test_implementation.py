@@ -144,7 +144,7 @@ def test_check_review_loop_captures_review_loop_count(recipe) -> None:
     step = recipe.steps["check_review_loop"]
     capture = step.capture or {}
     assert "review_loop_count" in capture
-    assert "next_iteration" in capture["review_loop_count"]
+    assert "next_iteration" in capture["review_loop_count"].from_
 
 
 # T_IP_LOOP11
@@ -169,7 +169,7 @@ def test_review_pr_captures_review_verdict(recipe) -> None:
     step = recipe.steps["review_pr"]
     capture = step.capture or {}
     assert "review_verdict" in capture
-    assert "result.verdict" in capture["review_verdict"]
+    assert "result.verdict" in capture["review_verdict"].from_
 
 
 # T_IP_LOOP13

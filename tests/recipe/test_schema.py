@@ -124,7 +124,7 @@ def test_recipe_step_capture_list_retries_zero_ok() -> None:
         capture_list={"all_diagram_paths": "${{ result.diagram_path }}"},
         retries=0,
     )
-    assert step.capture_list == {"all_diagram_paths": "${{ result.diagram_path }}"}
+    assert step.capture_list["all_diagram_paths"].from_ == "${{ result.diagram_path }}"
     assert step.retries == 0
 
 

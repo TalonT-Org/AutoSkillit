@@ -91,6 +91,18 @@ class StepResultRoute:
 _TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 
+def _coerce_capture_dict(d: dict) -> dict[str, CaptureEntrySpec]:
+    if not d:
+        return d
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, str):
+            out[k] = CaptureEntrySpec(from_=v, value_type="string")
+        else:
+            out[k] = v
+    return out
+
+
 @dataclass
 class RecipeStep:
     name: str = ""  # Set from the YAML dict key after parsing; enables block member lookup
@@ -129,6 +141,8 @@ class RecipeStep:
     phoropter_family: str | None = None
 
     def __post_init__(self) -> None:
+        self.capture = _coerce_capture_dict(self.capture)
+        self.capture_list = _coerce_capture_dict(self.capture_list)
         if self.capture_list and self.retries > 0:
             raise ValueError(
                 f"Step '{self.name}' uses capture_list (accumulated list items across "

@@ -47,6 +47,7 @@ from autoskillit.execution.backends._claude_prompt import (
     _inject_cwd_anchor,
     _inject_narration_suppression,
 )
+from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 
@@ -566,29 +567,33 @@ class CodexBackend:
                 "codex_tools_ignored",
                 extra={"tools": list(tools)},
             )
-        cmd: list[str] = []
+        builder = CmdBuilder("codex")
+        # plugin_source: explicit no-op for Codex
         match resume_spec:
             case NoResume():
-                cmd = ["codex", CodexFlags.DANGEROUSLY_BYPASS]
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
             case NamedResume(session_id=sid):
-                cmd = ["codex", CodexFlags.RESUME_SUBCOMMAND, sid, CodexFlags.DANGEROUSLY_BYPASS]
+                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
+                builder.mode_flag(sid)
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
             case BareResume():
-                cmd = ["codex", CodexFlags.RESUME_SUBCOMMAND, CodexFlags.DANGEROUSLY_BYPASS]
+                builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
+                builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
         if model:
-            cmd += [CodexFlags.MODEL, model]
-        # plugin_source: explicit no-op for Codex
-        if initial_prompt is not None:
-            cmd.append(initial_prompt)
-        for d in add_dirs:
-            cmd += [CodexFlags.ADD_DIR, str(d)]
+            builder.kv_flag(CodexFlags.MODEL, model)
         if system_prompt is not None and isinstance(resume_spec, NoResume):
-            cmd += [CodexFlags.CONFIG_OVERRIDE, f"developer_instructions={system_prompt}"]
+            builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, f"developer_instructions={system_prompt}")
+        if initial_prompt is not None:
+            builder.positional(initial_prompt)
+        for d in add_dirs:
+            builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
         base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
         if add_dirs:
             merged_extras.setdefault("CODEX_HOME", str(add_dirs[0]))
         env = CodexEnvPolicy().build_env(base_env, extras=merged_extras, required=required_env)
-        return CmdSpec(cmd=tuple(cmd), env=env)
+        partial = builder.build()
+        return CmdSpec(cmd=partial.cmd, env=env, origin=partial.origin)
 
     def build_resume_cmd(
         self,

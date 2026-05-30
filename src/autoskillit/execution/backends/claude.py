@@ -59,6 +59,7 @@ from autoskillit.execution.backends._claude_prompt import (
     _inject_cwd_anchor,
     _inject_narration_suppression,
 )
+from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import parse_session_result
 
@@ -356,40 +357,43 @@ class ClaudeCodeBackend:
         an interactive session is determined at runtime by kitchen state, not by a
         ``SESSION_TYPE`` env variable.
         """
-        cmd: list[str] = ["claude", ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
+        builder = CmdBuilder("claude")
+        builder.mode_flag(ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS)
         match resume_spec:
             case NamedResume(session_id=sid):
-                cmd += [ClaudeFlags.RESUME, sid]
+                builder.kv_flag(ClaudeFlags.RESUME, sid)
             case BareResume():
-                cmd.append(ClaudeFlags.RESUME)
+                builder.mode_flag(ClaudeFlags.RESUME)
             case NoResume():
                 pass
         if system_prompt is not None and isinstance(resume_spec, NoResume):
-            cmd += [ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt]
+            builder.kv_flag(ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt)
         if model:
-            cmd += [ClaudeFlags.MODEL, model]
+            builder.kv_flag(ClaudeFlags.MODEL, model)
         match plugin_source:
             case DirectInstall(plugin_dir=p):
-                cmd += [ClaudeFlags.PLUGIN_DIR, str(p)]
+                builder.kv_flag(ClaudeFlags.PLUGIN_DIR, str(p))
             case MarketplaceInstall():
                 pass
             case None:
                 pass
         if initial_prompt is not None:
-            cmd.append(initial_prompt)
+            builder.positional(initial_prompt)
         for d in add_dirs:
-            cmd += [ClaudeFlags.ADD_DIR, str(d)]
+            builder.variadic_pair(ClaudeFlags.ADD_DIR, str(d))
         for t in tools:
-            cmd += [ClaudeFlags.TOOLS, t]
+            builder.variadic_pair(ClaudeFlags.TOOLS, t)
         merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
         if env_extras:
             merged.update(env_extras)
         interactive_base = {
             k: v for k, v in os.environ.items() if k not in _INTERACTIVE_ENV_EXCLUSIONS
         }
+        partial = builder.build()
         return CmdSpec(
-            cmd=tuple(cmd),
+            cmd=partial.cmd,
             env=build_agent_env(base=interactive_base, extras=merged, required=required_env),
+            origin=partial.origin,
         )
 
     def build_resume_cmd(

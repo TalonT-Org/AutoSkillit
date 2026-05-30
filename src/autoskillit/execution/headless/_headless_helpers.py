@@ -8,13 +8,43 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import (
+    VARIADIC_CLAUDE_FLAGS,
+    ClaudeFlags,
     CmdSpec,
     CodingAgentBackend,
     SkillResult,
     claude_code_project_dir,
     get_logger,
 )
+from autoskillit.execution.backends.codex import CodexFlags
 from autoskillit.execution.headless._headless_git import _compute_loc_changed
+
+_CLAUDE_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
+    {
+        ClaudeFlags.PRINT,
+        ClaudeFlags.MODEL,
+        ClaudeFlags.OUTPUT_FORMAT,
+        ClaudeFlags.RESUME,
+        ClaudeFlags.APPEND_SYSTEM_PROMPT,
+        ClaudeFlags.PLUGIN_DIR,
+        ClaudeFlags.ADD_DIR,
+        ClaudeFlags.TOOLS,
+    }
+)
+
+_CODEX_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
+    {
+        CodexFlags.MODEL,
+        CodexFlags.MODEL_SHORT,
+        CodexFlags.ADD_DIR,
+        CodexFlags.ASK_FOR_APPROVAL,
+        CodexFlags.ASK_FOR_APPROVAL_SHORT,
+        CodexFlags.SANDBOX,
+        CodexFlags.CONFIG_OVERRIDE,
+    }
+)
+
+_ALL_VALUE_BEARING_FLAGS: frozenset[str] = _CLAUDE_VALUE_BEARING_FLAGS | _CODEX_VALUE_BEARING_FLAGS
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -47,6 +77,36 @@ def assert_headless_cmd(spec: CmdSpec) -> None:
         raise ValueError(
             f"CmdSpec for claude is missing -p flag — would enter TUI mode. cmd={spec.cmd!r}"
         )
+
+
+def assert_interactive_ordering(
+    spec: CmdSpec,
+    *,
+    variadic_flags: frozenset[str] = VARIADIC_CLAUDE_FLAGS,
+    value_bearing_flags: frozenset[str] | None = None,
+) -> None:
+    """Validate that positional arguments precede variadic flags in an interactive CmdSpec.
+
+    Always scans the raw cmd tuple — never trusts origin metadata alone, since
+    CmdOrigin is a public dataclass and callers could set it on a misordered cmd.
+    """
+    if value_bearing_flags is None:
+        value_bearing_flags = _ALL_VALUE_BEARING_FLAGS
+    cmd = spec.cmd
+    positional_indices = [
+        i
+        for i, tok in enumerate(cmd)
+        if not tok.startswith("-") and i > 0 and cmd[i - 1] not in value_bearing_flags
+    ]
+    for flag in variadic_flags:
+        if flag in cmd:
+            flag_idx = cmd.index(flag)
+            for pi in positional_indices:
+                if pi > flag_idx:
+                    raise ValueError(
+                        f"Positional arg at index {pi} ({cmd[pi]!r}) must precede "
+                        f"variadic flag {flag!r} at index {flag_idx}"
+                    )
 
 
 def _resolve_session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path | None:

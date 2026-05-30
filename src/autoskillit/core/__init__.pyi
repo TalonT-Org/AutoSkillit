@@ -186,6 +186,7 @@ from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
+from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
@@ -214,6 +215,7 @@ from .types import CloneGateUnpublished as CloneGateUnpublished
 from .types import CloneManager as CloneManager
 from .types import CloneResult as CloneResult
 from .types import CloneSuccessResult as CloneSuccessResult
+from .types import CmdOrigin as CmdOrigin
 from .types import CmdSpec as CmdSpec
 from .types import CodexEventData as CodexEventData
 from .types import CodingAgentBackend as CodingAgentBackend

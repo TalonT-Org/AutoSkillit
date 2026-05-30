@@ -14,6 +14,7 @@ from ._type_results import ValidatedAddDir
 __all__ = [
     "BackendCapabilities",
     "CLAUDE_CODE_CAPABILITIES",
+    "CmdOrigin",
     "CmdSpec",
     "SkillSessionConfig",
     "ClaudeEventData",
@@ -109,12 +110,24 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
 
 
 @dataclass(frozen=True, slots=True)
+class CmdOrigin:
+    """Provenance metadata for a CmdSpec, capturing the structural role of each element."""
+
+    binary: str
+    mode_flags: tuple[str, ...] = ()
+    kv_flags: tuple[tuple[str, str], ...] = ()
+    positional: tuple[str, ...] = ()
+    variadic_pairs: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class CmdSpec:
     """Fully-resolved subprocess command specification passed to the runner."""
 
     cmd: tuple[str, ...]
     env: Mapping[str, str]
     cwd: str = ""
+    origin: CmdOrigin | None = None
 
 
 @dataclass(frozen=True, slots=True)

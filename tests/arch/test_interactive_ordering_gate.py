@@ -57,17 +57,21 @@ def test_cook_calls_assert_interactive_ordering():
     )
 
 
-def test_session_launch_imports_assert_interactive_ordering():
-    source = _session_launch_source()
+def _collect_imported_names(source: str) -> set[str]:
     tree = ast.parse(source)
-    imported_names: set[str] = set()
+    names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             for alias in node.names:
-                imported_names.add(alias.asname or alias.name)
+                names.add(alias.asname or alias.name)
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                imported_names.add(alias.asname or alias.name)
+                names.add(alias.asname or alias.name)
+    return names
+
+
+def test_session_launch_imports_assert_interactive_ordering():
+    imported_names = _collect_imported_names(_session_launch_source())
     assert _GATE_NAME in imported_names, (
         f"_session_launch.py does not import {_GATE_NAME}. "
         "It must be imported and called before subprocess invocation."
@@ -75,16 +79,7 @@ def test_session_launch_imports_assert_interactive_ordering():
 
 
 def test_cook_imports_assert_interactive_ordering():
-    source = _cook_source()
-    tree = ast.parse(source)
-    imported_names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                imported_names.add(alias.asname or alias.name)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                imported_names.add(alias.asname or alias.name)
+    imported_names = _collect_imported_names(_cook_source())
     assert _GATE_NAME in imported_names, (
         f"_cook.py does not import {_GATE_NAME}. "
         "It must be imported and called before subprocess invocation."

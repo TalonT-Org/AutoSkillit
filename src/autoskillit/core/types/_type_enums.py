@@ -16,6 +16,7 @@ __all__ = [
     "RecipeSource",
     "ClaudeFlags",
     "VARIADIC_CLAUDE_FLAGS",
+    "NON_VARIADIC_CLAUDE_FLAGS",
     "OutputFormat",
     "Severity",
     "TerminationReason",
@@ -163,6 +164,20 @@ class ClaudeFlags(StrEnum):
 
 
 VARIADIC_CLAUDE_FLAGS: frozenset[str] = frozenset({ClaudeFlags.ADD_DIR, ClaudeFlags.TOOLS})
+
+NON_VARIADIC_CLAUDE_FLAGS: frozenset[str] = frozenset(
+    {
+        ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS,
+        ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS,
+        ClaudeFlags.PRINT,
+        ClaudeFlags.MODEL,
+        ClaudeFlags.PLUGIN_DIR,
+        ClaudeFlags.OUTPUT_FORMAT,
+        ClaudeFlags.VERBOSE,
+        ClaudeFlags.RESUME,
+        ClaudeFlags.APPEND_SYSTEM_PROMPT,
+    }
+)
 
 
 class OutputFormat(StrEnum):

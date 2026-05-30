@@ -60,6 +60,7 @@ from autoskillit.execution.github import (
 )
 from autoskillit.execution.headless import (
     DefaultHeadlessExecutor,
+    assert_interactive_ordering,
     run_headless_core,
 )
 from autoskillit.execution.linux_tracing import (
@@ -181,6 +182,7 @@ __all__ = [
     # headless
     "run_headless_core",
     "DefaultHeadlessExecutor",
+    "assert_interactive_ordering",
     # testing
     "parse_pytest_summary",
     "check_test_passed",

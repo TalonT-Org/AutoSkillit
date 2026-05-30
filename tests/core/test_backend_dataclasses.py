@@ -23,7 +23,7 @@ def test_cmd_spec_fields():
     from autoskillit.core import CmdSpec
 
     fields = {f.name for f in dataclasses.fields(CmdSpec)}
-    assert fields == {"cmd", "env", "cwd"}
+    assert fields == {"cmd", "env", "cwd", "origin"}
 
 
 def test_cmd_spec_env_accepts_mapping():
@@ -177,6 +177,7 @@ def test_backend_module_all_exhaustive():
     assert set(__all__) == {
         "BackendCapabilities",
         "CLAUDE_CODE_CAPABILITIES",
+        "CmdOrigin",
         "CmdSpec",
         "SkillSessionConfig",
         "ClaudeEventData",

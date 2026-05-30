@@ -228,6 +228,8 @@ def cook(
 
     _max_reloads = 10
     seen_reload_ids: set[str] = set()
+    from autoskillit.execution import assert_interactive_ordering
+
     while True:
         spec = backend.build_interactive_cmd(
             plugin_source=plugin_source,
@@ -236,6 +238,7 @@ def cook(
             resume_spec=current_resume_spec,
             env_extras=_cook_env_extras,
         )
+        assert_interactive_ordering(spec=spec)
         reload_session_id = _run_cook_session(
             cmd=[*spec.cmd],
             env=spec.env,

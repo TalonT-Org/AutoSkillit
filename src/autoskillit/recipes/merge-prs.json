@@ -960,7 +960,7 @@
         "worktree_path": "${{ context.worktree_path }}"
       },
       "on_success": "push_worktree_branch",
-      "on_failure": "fix"
+      "on_failure": "check_test_fix_loop"
     },
     "push_worktree_branch": {
       "tool": "run_cmd",
@@ -1144,15 +1144,15 @@
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
-          "route": "check_test_fix_loop"
+          "route": "test"
         },
         {
           "when": "${{ result.verdict }} == 'already_green'",
-          "route": "check_test_fix_loop"
+          "route": "test"
         },
         {
           "when": "${{ result.verdict }} == 'flake_suspected'",
-          "route": "check_test_fix_loop"
+          "route": "test"
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
@@ -1167,7 +1167,7 @@
       "retries": 3,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
-      "note": "Fixes test failures without merging. Routes back to check_test_fix_loop for iteration guard before re-validation before the GitHub-API merge sequence. The base_branch with: key is present for contract compatibility only; the merge target is always the integration branch.\n"
+      "note": "Fixes test failures without merging. Routes to test for verification; test failure increments check_test_fix_loop before retrying. The base_branch with: key is present for contract compatibility only; the merge target is always the integration branch.\n"
     },
     "check_test_fix_loop": {
       "tool": "run_python",
@@ -1185,14 +1185,14 @@
           "route": "register_clone_failure"
         },
         {
-          "route": "test"
+          "route": "fix"
         }
       ],
       "on_failure": "register_clone_failure",
       "optional_context_refs": [
         "test_fix_loop_count"
       ],
-      "note": "Guards the test → fix → test cycle. Caps at 3 fix-retest iterations. If tests still fail after 3 fix attempts, escalates to clone failure.\n"
+      "note": "Guards the test → fix → test cycle. Caps at 3 fix-retest iterations. Counter increments after test failure, so the last fix attempt always gets verified before the budget is exhausted.\n"
     },
     "next_part_or_next_pr": {
       "action": "route",

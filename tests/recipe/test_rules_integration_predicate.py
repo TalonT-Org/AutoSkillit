@@ -196,6 +196,9 @@ class TestLoopBudgetSeparation:
         assert "test_fix_max_retries" in recipe.ingredients
         assert recipe.ingredients["test_fix_max_retries"].default == "3"
         assert recipe.ingredients["test_fix_max_retries"].hidden is True
+        assert "merge_test_fix_max_retries" in recipe.ingredients
+        assert recipe.ingredients["merge_test_fix_max_retries"].default == "3"
+        assert recipe.ingredients["merge_test_fix_max_retries"].hidden is True
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
     def test_guard_steps_use_ingredients(self, recipe_name: str) -> None:
@@ -214,3 +217,15 @@ class TestLoopBudgetSeparation:
         )
         test_fix_guard = recipe.steps["check_test_fix_loop"]
         assert test_fix_guard.with_args["max_iterations"] == "${{ inputs.test_fix_max_retries }}"
+        merge_test_fix_guard = recipe.steps["check_merge_test_fix_loop"]
+        assert (
+            merge_test_fix_guard.with_args["max_iterations"]
+            == "${{ inputs.merge_test_fix_max_retries }}"
+        )
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_merge_test_fix_loop_uses_separate_counter(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        step = recipe.steps["check_merge_test_fix_loop"]
+        assert step.with_args["current_iteration"] == "${{ context.merge_test_fix_loop_count }}"
+        assert "merge_test_fix_loop_count" in step.capture

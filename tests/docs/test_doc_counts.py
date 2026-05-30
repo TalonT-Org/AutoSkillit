@@ -272,8 +272,8 @@ def test_retry_reason_value_count_is_15() -> None:
     assert len(values) == 15, f"RetryReason has {len(values)} values: {values}"
 
 
-def test_semantic_rule_family_count_is_50() -> None:
-    assert _count_semantic_rule_files() == 50
+def test_semantic_rule_family_count_is_51() -> None:
+    assert _count_semantic_rule_files() == 51
 
 
 # ----- per-doc count assertions (run once docs exist) -------------------------

@@ -384,6 +384,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "rules_inline_script": frozenset({"recipe"}),
     "rules_inputs": frozenset({"recipe"}),
     "rules_isolation": frozenset({"recipe"}),
+    "rules_loop_counter": frozenset({"recipe"}),
     "rules_merge": frozenset({"recipe"}),
     "rules_packs": frozenset({"recipe"}),
     "rules_reachability": frozenset({"recipe"}),

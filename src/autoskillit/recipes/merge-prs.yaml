@@ -929,7 +929,7 @@ steps:
     with:
       worktree_path: ${{ context.worktree_path }}
     on_success: push_worktree_branch
-    on_failure: fix
+    on_failure: check_test_fix_loop
   push_worktree_branch:
     tool: run_cmd
     with:
@@ -1127,11 +1127,11 @@ steps:
       fixes_applied: ${{ result.fixes_applied }}
     on_result:
     - when: ${{ result.verdict }} == 'real_fix'
-      route: check_test_fix_loop
+      route: test
     - when: ${{ result.verdict }} == 'already_green'
-      route: check_test_fix_loop
+      route: test
     - when: ${{ result.verdict }} == 'flake_suspected'
-      route: check_test_fix_loop
+      route: test
     - when: ${{ result.verdict }} == 'ci_only_failure'
       route: register_clone_failure
     - when: ${{ result.verdict }} == 'no_test_infrastructure'
@@ -1140,8 +1140,8 @@ steps:
     retries: 3
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
-    note: 'Fixes test failures without merging. Routes back to check_test_fix_loop
-      for iteration guard before re-validation before the GitHub-API merge sequence.
+    note: 'Fixes test failures without merging. Routes to test for verification;
+      test failure increments check_test_fix_loop before retrying.
       The base_branch with: key is present for contract compatibility only; the merge
       target is always the integration branch.
 
@@ -1157,12 +1157,13 @@ steps:
     on_result:
     - when: ${{ result.max_exceeded }} == true
       route: register_clone_failure
-    - route: test
+    - route: fix
     on_failure: register_clone_failure
     optional_context_refs:
     - test_fix_loop_count
-    note: 'Guards the test → fix → test cycle. Caps at 3 fix-retest iterations. If
-      tests still fail after 3 fix attempts, escalates to clone failure.
+    note: 'Guards the test → fix → test cycle. Caps at 3 fix-retest iterations.
+      Counter increments after test failure, so the last fix attempt always gets
+      verified before the budget is exhausted.
 
       '
   next_part_or_next_pr:

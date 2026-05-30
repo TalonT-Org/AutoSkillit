@@ -724,7 +724,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
             ensuring run_skill steps inside routing cycles capture declared outputs,
             bringing the rules/ count to 31.
             rules_phoropter_adjacency.py adds phoropter phase-order and step-interleaving
-            semantic validation rules, bringing the count to 50. Exempt at 50 files.
+            semantic validation rules, bringing the count to 50.
+            rules_loop_counter.py adds loop-counter-cross-path-sharing and
+            loop-guard-before-verify semantic rules, bringing the count to 51.
+            Exempt at 51 files.
           execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
             focused single-concern modules (_process_io, _process_kill, _process_race,
             etc.) that cannot be merged without re-introducing the coupling they isolate.

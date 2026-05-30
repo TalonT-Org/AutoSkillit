@@ -418,18 +418,18 @@ def test_degraded_hooks_are_expected() -> None:
     )
 
 
-# HR-CODEX-3: skill_load_guard.py must reference AUTOSKILLIT_AGENT_BACKEND
+# HR-CODEX-3: skill_load_guard.py must reference AUTOSKILLIT_APPLICABLE_GUARDS
 @pytest.mark.layer("hooks")
 @pytest.mark.small
 def test_skill_load_guard_has_codex_bypass() -> None:
-    """skill_load_guard.py must contain AUTOSKILLIT_AGENT_BACKEND for Codex bypass."""
+    """skill_load_guard.py must use AUTOSKILLIT_APPLICABLE_GUARDS for guard opt-out."""
     import importlib
     from pathlib import Path
 
     mod = importlib.import_module("autoskillit.hooks.guards.skill_load_guard")
     source_path = Path(mod.__file__)
     source = source_path.read_text(encoding="utf-8")
-    assert "AUTOSKILLIT_AGENT_BACKEND" in source
+    assert "AUTOSKILLIT_APPLICABLE_GUARDS" in source
 
 
 # HR-CODEX-4: write_guard.py must handle apply_patch tool

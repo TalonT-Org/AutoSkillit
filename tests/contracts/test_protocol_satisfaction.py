@@ -370,7 +370,7 @@ class TestGroupDApiContractPreservation:
             "input_data",
             "env",
             "pty_mode",
-            "heartbeat_record_types",
+            "completion_record_types",
             "session_log_dir",
             "completion_marker",
             "stale_threshold",
@@ -453,6 +453,8 @@ class TestGroupDApiContractPreservation:
             "marker_dir",
             "session_id",
             "stream_parser",
+            "completion_record_types",
+            "session_record_types",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

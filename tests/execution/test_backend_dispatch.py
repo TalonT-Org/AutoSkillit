@@ -156,7 +156,9 @@ class TestStepBackendOverride:
                 pid=12345,
             )
         )
-        codex_backend = _mock_backend(pty_required=False, channel_b_capable=False)
+        codex_backend = _mock_backend(
+            pty_required=False, channel_b_capable=False, process_name="codex"
+        )
         codex_backend.name = "codex"
         with (
             patch(
@@ -190,7 +192,9 @@ class TestStepBackendOverride:
     @pytest.mark.anyio
     async def test_step_backend_flows_to_stream_parser_and_build_result(self, minimal_ctx):
         ctx_backend = _mock_backend()
-        step_backend_mock = _mock_backend(pty_required=False, channel_b_capable=False)
+        step_backend_mock = _mock_backend(
+            pty_required=False, channel_b_capable=False, process_name="codex"
+        )
         step_backend_mock.name = "codex"
         minimal_ctx.backend = ctx_backend
         minimal_ctx.runner = AsyncMock(

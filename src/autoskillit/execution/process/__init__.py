@@ -192,7 +192,7 @@ async def run_managed_async(
     input_data: str | None = None,
     env: Mapping[str, str] | None = None,
     pty_mode: bool = False,
-    heartbeat_record_types: frozenset[str] = frozenset({"result"}),
+    completion_record_types: frozenset[str] = frozenset({"result"}),
     session_log_dir: Path | None = None,
     completion_marker: str = "",
     stale_threshold: float = 1200,
@@ -334,7 +334,7 @@ async def run_managed_async(
                         _poll_interval=_heartbeat_poll,
                     ),
                     stdout_path,
-                    heartbeat_record_types,
+                    completion_record_types,
                     completion_marker,
                     acc,
                     trigger,
@@ -617,6 +617,8 @@ class DefaultSubprocessRunner:
         marker_dir: Path | None = None,
         session_id: str | None = None,
         stream_parser: StreamParser | None = None,
+        completion_record_types: frozenset[str] = frozenset({"result"}),
+        session_record_types: frozenset[str] = frozenset({"assistant"}),
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -638,4 +640,6 @@ class DefaultSubprocessRunner:
             marker_dir=marker_dir,
             session_id=session_id,
             stream_parser=stream_parser,
+            completion_record_types=completion_record_types,
+            session_record_types=session_record_types,
         )

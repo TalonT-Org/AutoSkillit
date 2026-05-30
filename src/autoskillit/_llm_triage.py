@@ -103,7 +103,7 @@ async def _triage_batch(
     if not triageable:
         return pre_results
 
-    if agent_backend != "claude-code":
+    if not get_backend(agent_backend).capabilities.triage_capable:
         return pre_results + [
             {
                 "skill": i.skill,

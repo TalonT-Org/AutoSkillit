@@ -110,26 +110,8 @@ class TestCodexBackend:
     def test_capabilities_triage_capable_false(self) -> None:
         assert CodexBackend().capabilities.triage_capable is False
 
-    def test_capabilities_record_capable_false(self) -> None:
-        assert CodexBackend().capabilities.record_capable is False
-
-    def test_capabilities_replay_capable_false(self) -> None:
-        assert CodexBackend().capabilities.replay_capable is False
-
-    def test_capabilities_plugin_install_capable_false(self) -> None:
-        assert CodexBackend().capabilities.plugin_install_capable is False
-
-    def test_capabilities_anthropic_provider_capable_false(self) -> None:
-        assert CodexBackend().capabilities.anthropic_provider_capable is False
-
-    def test_capabilities_session_log_compressed_false(self) -> None:
-        assert CodexBackend().capabilities.session_log_compressed is False
-
     def test_capabilities_supports_context_exhaustion_detection_false(self) -> None:
         assert CodexBackend().capabilities.supports_context_exhaustion_detection is False
-
-    def test_capabilities_supports_api_retry_events_false(self) -> None:
-        assert CodexBackend().capabilities.supports_api_retry_events is False
 
     def test_capabilities_project_local_skills_capable_false(self) -> None:
         assert CodexBackend().capabilities.project_local_skills_capable is False

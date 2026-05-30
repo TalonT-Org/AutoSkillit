@@ -50,7 +50,7 @@ def test_backend_capabilities_slots():
 
 
 def test_backend_capabilities_field_count():
-    """29 fields: 18 bool + 6 frozenset[str] + 4 str + 1 tuple."""
+    """Field count by type must match the dataclass definition."""
     from autoskillit.core import BackendCapabilities
 
     fields = dataclasses.fields(BackendCapabilities)
@@ -70,13 +70,7 @@ def test_backend_capabilities_field_count():
         "mcp_config_capable",
         "food_truck_capable",
         "triage_capable",
-        "record_capable",
-        "replay_capable",
-        "plugin_install_capable",
-        "anthropic_provider_capable",
-        "session_log_compressed",
         "supports_context_exhaustion_detection",
-        "supports_api_retry_events",
         "project_local_skills_capable",
     }
     assert frozenset_fields == {
@@ -92,7 +86,7 @@ def test_backend_capabilities_field_count():
 
 
 def test_backend_capabilities_field_names_locked():
-    """Field names match the 29-field design specification."""
+    """Field names match the design specification."""
     from autoskillit.core import BackendCapabilities
 
     expected = {
@@ -108,13 +102,7 @@ def test_backend_capabilities_field_names_locked():
         "completion_record_types",
         "session_record_types",
         "triage_capable",
-        "record_capable",
-        "replay_capable",
-        "plugin_install_capable",
-        "anthropic_provider_capable",
-        "session_log_compressed",
         "supports_context_exhaustion_detection",
-        "supports_api_retry_events",
         "project_local_skills_capable",
         "required_skill_fields",
         "required_session_files",
@@ -146,13 +134,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.completion_record_types == frozenset({"result"})
     assert CLAUDE_CODE_CAPABILITIES.session_record_types == frozenset({"assistant"})
     assert CLAUDE_CODE_CAPABILITIES.triage_capable is True
-    assert CLAUDE_CODE_CAPABILITIES.record_capable is True
-    assert CLAUDE_CODE_CAPABILITIES.replay_capable is True
-    assert CLAUDE_CODE_CAPABILITIES.plugin_install_capable is True
-    assert CLAUDE_CODE_CAPABILITIES.anthropic_provider_capable is True
-    assert CLAUDE_CODE_CAPABILITIES.session_log_compressed is False
     assert CLAUDE_CODE_CAPABILITIES.supports_context_exhaustion_detection is True
-    assert CLAUDE_CODE_CAPABILITIES.supports_api_retry_events is False
     assert CLAUDE_CODE_CAPABILITIES.project_local_skills_capable is True
     assert CLAUDE_CODE_CAPABILITIES.required_skill_fields == frozenset({"name", "description"})
     assert CLAUDE_CODE_CAPABILITIES.required_session_files == frozenset()

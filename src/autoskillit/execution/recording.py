@@ -130,6 +130,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
         marker_dir: Path | None = None,
         session_id: str | None = None,
         stream_parser: StreamParser | None = None,
+        completion_record_types: frozenset[str] = frozenset({"result"}),
+        session_record_types: frozenset[str] = frozenset({"assistant"}),
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -169,6 +171,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     session_id=session_id,
                     stream_parser=stream_parser,
                     step_name=step_name,
+                    completion_record_types=completion_record_types,
+                    session_record_types=session_record_types,
                 )
 
             # Non-Codex, non-PTY with step_name: run inner + record summary.
@@ -192,6 +196,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 marker_dir=marker_dir,
                 session_id=session_id,
                 stream_parser=stream_parser,
+                completion_record_types=completion_record_types,
+                session_record_types=session_record_types,
             )
             self.recorder.record_non_session_step(
                 step_name=step_name,
@@ -224,6 +230,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
             marker_dir=marker_dir,
             session_id=session_id,
             stream_parser=stream_parser,
+            completion_record_types=completion_record_types,
+            session_record_types=session_record_types,
         )
 
     async def _record_session(
@@ -297,6 +305,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
         session_id: str | None,
         stream_parser: StreamParser | None,
         step_name: str,
+        completion_record_types: frozenset[str] = frozenset({"result"}),
+        session_record_types: frozenset[str] = frozenset({"assistant"}),
     ) -> SubprocessResult:
         """Record a non-PTY (Codex) session step via cassette files."""
         result = await self._inner(
@@ -319,6 +329,8 @@ class RecordingSubprocessRunner(SubprocessRunner):
             marker_dir=marker_dir,
             session_id=session_id,
             stream_parser=stream_parser,
+            completion_record_types=completion_record_types,
+            session_record_types=session_record_types,
         )
 
         if self._scenario_dir is None:
@@ -411,6 +423,8 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         marker_dir: Path | None = None,
         session_id: str | None = None,
         stream_parser: StreamParser | None = None,
+        completion_record_types: frozenset[str] = frozenset({"result"}),
+        session_record_types: frozenset[str] = frozenset({"assistant"}),
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

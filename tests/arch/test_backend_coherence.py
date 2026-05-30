@@ -105,3 +105,56 @@ def test_non_infrastructure_features_do_not_require_alignment(feature_name):
 
     defn = FEATURE_REGISTRY[feature_name]
     assert defn.requires_backend_alignment is False
+
+
+def test_triage_uses_capability_field():
+    """server/_misc.py triage gate must read triage_capable, not compare backend name."""
+    import inspect
+
+    from autoskillit.server import _misc
+
+    source = inspect.getsource(_misc._apply_triage_gate)
+    tree = ast.parse(source)
+    has_triage_capable = any(
+        isinstance(node, ast.Attribute) and node.attr == "triage_capable"
+        for node in ast.walk(tree)
+    )
+    assert has_triage_capable, "_apply_triage_gate must read .triage_capable capability field"
+    has_string_compare = any(
+        isinstance(node, ast.Compare)
+        and any(
+            isinstance(c, ast.Constant) and c.value in {"claude-code", "codex"}
+            for c in [node.left, *node.comparators]
+        )
+        for node in ast.walk(tree)
+    )
+    assert not has_string_compare, "_apply_triage_gate must not compare backend name strings"
+
+
+def test_skills_subdir_uses_capability_field():
+    """session_skills.py must read backend.capabilities.skills_subdir, not module constants."""
+    import inspect
+    import textwrap
+
+    from autoskillit.workspace import session_skills
+
+    source = inspect.getsource(session_skills.DefaultSessionSkillManager.init_session)
+    tree = ast.parse(textwrap.dedent(source))
+    has_skills_subdir = any(
+        isinstance(node, ast.Attribute) and node.attr == "skills_subdir" for node in ast.walk(tree)
+    )
+    assert has_skills_subdir, "init_session must read .skills_subdir capability field"
+
+
+def test_applicable_guards_uses_capability_field():
+    """skill_load_guard must check AUTOSKILLIT_APPLICABLE_GUARDS env var, not backend name."""
+    from autoskillit.core import paths
+
+    guard_path = paths.pkg_root() / "hooks" / "guards" / "skill_load_guard.py"
+    source = guard_path.read_text()
+    assert "AUTOSKILLIT_APPLICABLE_GUARDS" in source, (
+        "skill_load_guard must check AUTOSKILLIT_APPLICABLE_GUARDS env var"
+    )
+    assert 'casefold() == "codex"' not in source, (
+        "skill_load_guard must not compare backend name directly"
+    )

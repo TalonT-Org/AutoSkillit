@@ -25,34 +25,59 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class BackendCapabilities:
+    """Per-backend capability declaration consumed by runtime gates.
+
+    Every field must have at least one production read site in src/ —
+    enforced by tests/arch/test_capability_consumption.py. Fields without
+    a consumer must be added to the _FORWARD_DECLARED exemption set with
+    a linked issue justifying the exception.
+    """
+
+    # True when backend streams a side-channel JSONL log (Channel B)
     channel_b_capable: bool
+    # True when the subprocess needs a pseudo-TTY allocation
     pty_required: bool
+    # True when backend supports --resume <session_id>
     session_resume_capable: bool
+    # True when backend accepts --add-dir / --plugin-dir skill injection
     skill_injection_capable: bool
+    # Forward-declared: planned for thinking-block rendering
     supports_thinking_blocks: bool
+    # True when backend stdout is Claude JSON format
     supports_claude_format_stdout: bool
+    # True when non-zero exit code definitively signals failure
     exit_code_is_terminal: bool
+    # Forward-declared: planned for MCP config wiring
     mcp_config_capable: bool
+    # True when backend can be used for food-truck (fleet) dispatches
     food_truck_capable: bool
+    # JSONL record types that signal session completion
     completion_record_types: frozenset[str]
+    # JSONL record types that constitute session activity
     session_record_types: frozenset[str]
+    # True when backend supports LLM triage via claude -p
     triage_capable: bool = field(default=False)
-    record_capable: bool = field(default=False)
-    replay_capable: bool = field(default=False)
-    plugin_install_capable: bool = field(default=False)
-    anthropic_provider_capable: bool = field(default=False)
-    session_log_compressed: bool = field(default=False)
+    # Forward-declared: planned for context exhaustion handling
     supports_context_exhaustion_detection: bool = field(default=False)
-    supports_api_retry_events: bool = field(default=False)
+    # True when backend supports project-local --add-dir skill discovery
     project_local_skills_capable: bool = field(default=False)
+    # SKILL.md front-matter fields required by this backend
     required_skill_fields: frozenset[str] = field(default_factory=frozenset)
+    # Files that must be copied into the session directory at launch
     required_session_files: frozenset[str] = field(default_factory=frozenset)
+    # Symlink targets to create in the session directory at launch
     session_dir_symlinks: frozenset[str] = field(default_factory=frozenset)
+    # Guard script names that apply to sessions for this backend
     applicable_guards: frozenset[str] = field(default_factory=frozenset)
+    # Env var prefixes stripped before session launch
     env_denylist_prefixes: tuple[str, ...] = field(default=())
+    # Forward-declared: planned for version validation in doctor
     min_version: str = ""
+    # Forward-declared: planned for version validation in doctor
     version_check_command: str = ""
+    # Binary stem used for backend coherence check at session launch
     process_name: str = ""
+    # Relative path from session root to the skills directory
     skills_subdir: str = ""
 
 
@@ -69,13 +94,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     completion_record_types=frozenset({"result"}),
     session_record_types=frozenset({"assistant"}),
     triage_capable=True,
-    record_capable=True,
-    replay_capable=True,
-    plugin_install_capable=True,
-    anthropic_provider_capable=True,
-    session_log_compressed=False,
     supports_context_exhaustion_detection=True,
-    supports_api_retry_events=False,
     project_local_skills_capable=True,
     required_skill_fields=frozenset({"name", "description"}),
     required_session_files=frozenset(),
@@ -91,6 +110,8 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
 
 @dataclass(frozen=True, slots=True)
 class CmdSpec:
+    """Fully-resolved subprocess command specification passed to the runner."""
+
     cmd: tuple[str, ...]
     env: Mapping[str, str]
     cwd: str = ""
@@ -98,6 +119,8 @@ class CmdSpec:
 
 @dataclass(frozen=True, slots=True)
 class SkillSessionConfig:
+    """Configuration for a single skill session launch."""
+
     completion_marker: str = ""
     model: str | None = None
     plugin_source: PluginSource | None = None
@@ -157,6 +180,8 @@ class CodexEventData:
 
 @dataclass(frozen=True, slots=True)
 class SessionEvent:
+    """A single parsed event emitted by a running backend session."""
+
     kind: BackendEventKind
     is_terminal: bool
     has_marker: bool
@@ -167,6 +192,8 @@ class SessionEvent:
 
 @dataclass(frozen=True, slots=True)
 class AgentSessionResult:
+    """Final result produced by a completed agent session."""
+
     success: bool
     exit_code: int
     backend_name: str

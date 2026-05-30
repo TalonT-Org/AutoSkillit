@@ -24,6 +24,7 @@ def _run_guard(
     headless: bool = False,
     session_type: str | None = None,
     agent_backend: str | None = None,
+    applicable_guards: str | None = None,
 ) -> str:
     """Run skill_load_guard.main(), return stdout."""
     from autoskillit.hooks.guards.skill_load_guard import main
@@ -52,6 +53,11 @@ def _run_guard(
         env_updates["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
     else:
         env_removals.append("AUTOSKILLIT_AGENT_BACKEND")
+
+    if applicable_guards is not None:
+        env_updates["AUTOSKILLIT_APPLICABLE_GUARDS"] = applicable_guards
+    else:
+        env_removals.append("AUTOSKILLIT_APPLICABLE_GUARDS")
 
     base_env = {k: v for k, v in os.environ.items() if k not in env_removals}
     base_env.update(env_updates)
@@ -319,7 +325,7 @@ def test_guard_records_denial_when_below_threshold(tmp_path):
 
 
 def test_codex_backend_early_exit(tmp_path):
-    """T2-17: Codex backend triggers early exit even when all denial conditions are met."""
+    """T2-17: Codex backend triggers early exit via applicable_guards env var."""
     out = _run_guard(
         _make_event("Read"),
         tmp_dir=tmp_path,
@@ -327,13 +333,14 @@ def test_codex_backend_early_exit(tmp_path):
         headless=True,
         session_type="skill",
         agent_backend="codex",
+        applicable_guards="",
     )
     assert not out.strip()
 
 
 @pytest.mark.parametrize("provider_profile", ["minimax", "anthropic", "", None])
 def test_codex_backend_ignores_provider_profile(tmp_path, provider_profile):
-    """T2-18: Codex bypass fires regardless of provider profile value."""
+    """T2-18: Codex bypass via applicable_guards fires regardless of provider profile."""
     out = _run_guard(
         _make_event("Read"),
         tmp_dir=tmp_path,
@@ -341,6 +348,7 @@ def test_codex_backend_ignores_provider_profile(tmp_path, provider_profile):
         headless=True,
         session_type="skill",
         agent_backend="codex",
+        applicable_guards="",
     )
     assert not out.strip()
 

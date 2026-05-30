@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 import regex as re
 
 from autoskillit.core import (
-    AGENT_BACKEND_CODEX,
     FEATURE_REGISTRY,
     PACK_REGISTRY,
     ClaudeDirectoryConventions,
@@ -530,46 +529,61 @@ class DefaultSessionSkillManager:
         overrides: frozenset[str] = (
             detect_project_local_overrides(project_dir) if project_dir is not None else frozenset()
         )
-        _is_codex = backend is not None and backend.name == AGENT_BACKEND_CODEX
-        skills_subdir = CODEX_SKILLS_SUBDIR if _is_codex else _SKILLS_SUBDIR
-        self._skills_subdir = skills_subdir
+        self._skills_subdir = (
+            Path(backend.capabilities.skills_subdir)
+            if backend is not None and backend.capabilities.skills_subdir
+            else _SKILLS_SUBDIR
+        )
 
         session_skills_dir = self._root / session_id
-        skills_base = session_skills_dir / skills_subdir
+        skills_base = session_skills_dir / self._skills_subdir
         skills_base.mkdir(parents=True, exist_ok=True)
 
-        if _is_codex:
+        if backend is not None and backend.capabilities.required_session_files:
             codex_home_source = Path.home() / ".codex"
-            try:
-                shutil.copy2(codex_home_source / "config.toml", session_skills_dir / "config.toml")
-                logger.debug("codex_config_copy", src=str(codex_home_source / "config.toml"))
-            except FileNotFoundError:
-                logger.error(
-                    "codex_config_copy_missing", src=str(codex_home_source / "config.toml")
-                )
-                raise
-            auth_source = codex_home_source / "auth.json"
-            auth_dest = session_skills_dir / "auth.json"
-            if auth_source.exists():
+            if "config.toml" in backend.capabilities.required_session_files:
                 try:
-                    auth_dest.symlink_to(auth_source.resolve())
-                    logger.debug("codex_auth_symlink", src=str(auth_source), dest=str(auth_dest))
-                except OSError:
-                    logger.warning("codex_auth_symlink_failed", src=str(auth_source))
-            else:
-                logger.warning("codex_auth_copy_missing", src=str(auth_source))
+                    shutil.copy2(
+                        codex_home_source / "config.toml",
+                        session_skills_dir / "config.toml",
+                    )
+                    logger.debug("codex_config_copy", src=str(codex_home_source / "config.toml"))
+                except FileNotFoundError:
+                    logger.error(
+                        "codex_config_copy_missing",
+                        src=str(codex_home_source / "config.toml"),
+                    )
+                    raise
+        if backend is not None and backend.capabilities.session_dir_symlinks:
+            codex_home_source = Path.home() / ".codex"
+            if "auth.json" in backend.capabilities.session_dir_symlinks:
+                auth_source = codex_home_source / "auth.json"
+                auth_dest = session_skills_dir / "auth.json"
+                if auth_source.exists():
+                    try:
+                        auth_dest.symlink_to(auth_source.resolve())
+                        logger.debug(
+                            "codex_auth_symlink",
+                            src=str(auth_source),
+                            dest=str(auth_dest),
+                        )
+                    except OSError:
+                        logger.warning("codex_auth_symlink_failed", src=str(auth_source))
+                else:
+                    logger.warning("codex_auth_copy_missing", src=str(auth_source))
             env_source = codex_home_source / ".env"
             if env_source.exists():
                 shutil.copy2(env_source, session_skills_dir / ".env")
                 logger.debug("codex_env_copy", src=str(env_source))
-            sessions_target = default_log_dir() / "codex-sessions"
-            sessions_target.mkdir(parents=True, exist_ok=True)
-            sessions_link = session_skills_dir / "sessions"
-            try:
-                sessions_link.symlink_to(sessions_target)
-                logger.debug("codex_sessions_symlink", target=str(sessions_target))
-            except OSError:
-                logger.warning("codex_sessions_symlink_failed", target=str(sessions_target))
+            if "sessions" in backend.capabilities.session_dir_symlinks:
+                sessions_target = default_log_dir() / "codex-sessions"
+                sessions_target.mkdir(parents=True, exist_ok=True)
+                sessions_link = session_skills_dir / "sessions"
+                try:
+                    sessions_link.symlink_to(sessions_target)
+                    logger.debug("codex_sessions_symlink", target=str(sessions_target))
+                except OSError:
+                    logger.warning("codex_sessions_symlink_failed", target=str(sessions_target))
         format_rejected: set[str] = set()
         for skill_info in self._provider.list_skills():
             if allow_only is not None and skill_info.name not in allow_only:

@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .paths import is_git_worktree
-from .types import AGENT_BACKEND_CODEX, CodingAgentBackend, ValidatedAddDir, ValidatedWorktreePath
+from .types import CodingAgentBackend, ValidatedAddDir, ValidatedWorktreePath
 
 
 class LayoutError(ValueError):
@@ -67,7 +67,7 @@ def validate_project_local_skill_dir(
     cwd: Path,
     backend: CodingAgentBackend | None,
 ) -> ValidatedAddDir | None:
-    if backend is not None and backend.name == AGENT_BACKEND_CODEX:
+    if backend is not None and not backend.capabilities.project_local_skills_capable:
         return None
     try:
         return validate_add_dir(cwd)

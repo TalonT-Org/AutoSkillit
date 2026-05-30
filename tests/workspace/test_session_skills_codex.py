@@ -12,8 +12,16 @@ from autoskillit.workspace.session_skills import (
     _SKILLS_SUBDIR,
     CODEX_SKILLS_SUBDIR,
 )
+from tests.workspace.conftest import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
+
+
+def _make_codex_backend() -> MagicMock:
+    b = MagicMock()
+    b.name = "codex"
+    b.capabilities = _CODEX_CAPABILITIES
+    return b
 
 
 @pytest.fixture
@@ -26,8 +34,7 @@ def codex_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
-    backend = MagicMock()
-    backend.name = "codex"
+    backend = _make_codex_backend()
 
     return type(
         "CodexEnv",
@@ -117,8 +124,7 @@ def test_codex_init_session_config_toml_missing_raises(
     (fake_home / ".codex").mkdir(parents=True)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
-    backend = MagicMock()
-    backend.name = "codex"
+    backend = _make_codex_backend()
 
     mgr = make_session_skill_manager()
     with pytest.raises(FileNotFoundError):

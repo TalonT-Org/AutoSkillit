@@ -11,8 +11,8 @@ the Skill tool first.
 
 Bypass conditions (early-exit before the gate):
 - ``agent_id`` present in hook payload — subagent exemption
-- ``AUTOSKILLIT_AGENT_BACKEND == "codex"`` (case-insensitive) — Codex backends
-  cannot respond to Skill tool directives and would deadlock
+- ``AUTOSKILLIT_APPLICABLE_GUARDS`` is set and does not contain ``skill_load_guard`` —
+  backend explicitly declares this guard does not apply to its sessions
 
 Known limitation: when the model invokes Skill + native tools in a single
 parallel message, the native tools fire PreToolUse before the Skill PostToolUse
@@ -99,8 +99,11 @@ def main() -> None:
     if data.get("agent_id"):
         sys.exit(0)
 
-    backend = os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip()
-    if backend.casefold() == "codex":
+    applicable_guards_raw = os.environ.get("AUTOSKILLIT_APPLICABLE_GUARDS")
+    if (
+        applicable_guards_raw is not None
+        and "skill_load_guard" not in applicable_guards_raw.split()
+    ):
         sys.exit(0)
 
     profile = os.environ.get("AUTOSKILLIT_PROVIDER_PROFILE", "").strip()

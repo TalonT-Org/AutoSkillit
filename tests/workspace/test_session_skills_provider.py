@@ -18,6 +18,7 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
 )
+from tests.workspace.conftest import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -97,8 +98,10 @@ def test_session_skill_manager_creates_ephemeral_dir(
         codex_dir.mkdir(parents=True)
         (codex_dir / "config.toml").write_text("[codex]\n")
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
         backend = MagicMock()
         backend.name = "codex"
+        backend.capabilities = _CODEX_CAPABILITIES
 
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("test-session-abc", cook_session=True, backend=backend)
@@ -134,8 +137,10 @@ def test_session_manager_injects_disable_for_tier2(
         codex_dir.mkdir(parents=True)
         (codex_dir / "config.toml").write_text("[codex]\n")
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
         backend = MagicMock()
         backend.name = "codex"
+        backend.capabilities = _CODEX_CAPABILITIES
 
     mgr = make_session_skill_manager()
     config = make_test_config(
@@ -339,12 +344,12 @@ def test_init_session_codex_backend_uses_codex_skills_subdir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When backend.name == 'codex', skills_base resolves to skills/ (not .claude/skills/)."""
-    from unittest.mock import MagicMock
 
     from autoskillit.workspace.session_skills import CODEX_SKILLS_SUBDIR
 
     codex_backend = MagicMock()
     codex_backend.name = "codex"
+    codex_backend.capabilities = _CODEX_CAPABILITIES
 
     fake_home = tmp_path / "fakehome"
     codex_dir = fake_home / ".codex"

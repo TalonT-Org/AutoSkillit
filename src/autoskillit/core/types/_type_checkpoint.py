@@ -13,6 +13,8 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class SessionCheckpoint:
+    """Resumable progress snapshot written at each completed pipeline item."""
+
     completed_items: list[str] = field(default_factory=list)
     step_name: str = ""
     progress_pct: float = 0.0

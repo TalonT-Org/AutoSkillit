@@ -461,7 +461,9 @@ async def _run_codex_mcp_registration_async() -> None:
         from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
 
         loop = _asyncio.get_running_loop()
-        await loop.run_in_executor(None, ensure_codex_mcp_registered)
+        written = await loop.run_in_executor(None, ensure_codex_mcp_registered)
+        if written:
+            logger.warning("codex_mcp_registration_repaired_at_runtime")
     except Exception:
         logger.warning("codex_mcp_registration_failed", exc_info=True)
 

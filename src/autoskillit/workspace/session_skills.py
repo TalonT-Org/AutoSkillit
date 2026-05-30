@@ -539,6 +539,12 @@ class DefaultSessionSkillManager:
         skills_base = session_skills_dir / self._skills_subdir
         skills_base.mkdir(parents=True, exist_ok=True)
 
+        if backend is not None and backend.capabilities.mcp_config_capable:
+            pre_launch_errors = backend.ensure_pre_launch()
+            if pre_launch_errors:
+                msg = "; ".join(pre_launch_errors)
+                raise RuntimeError(f"Pre-launch check failed: {msg}")
+
         if backend is not None and backend.capabilities.required_session_files:
             codex_home_source = Path.home() / ".codex"
             if "config.toml" in backend.capabilities.required_session_files:

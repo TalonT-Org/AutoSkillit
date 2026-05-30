@@ -762,3 +762,6 @@ class ClaudeCodeBackend:
         except Exception:
             log.warning("list_plugins() failed", exc_info=True)
             return []
+
+    def ensure_pre_launch(self) -> list[str]:
+        return []

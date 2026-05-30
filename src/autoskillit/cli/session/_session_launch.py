@@ -77,6 +77,11 @@ def _run_interactive_session(
             "Install: https://docs.anthropic.com/en/docs/claude-code"
         )
         sys.exit(1)
+    pre_launch_errors = backend.ensure_pre_launch()
+    if pre_launch_errors:
+        for err in pre_launch_errors:
+            print(f"ERROR: {err}", file=sys.stderr)
+        sys.exit(1)
     from autoskillit.cli.session._reload import consume_reload_sentinel
     from autoskillit.cli.ui._terminal import terminal_guard
     from autoskillit.core import (

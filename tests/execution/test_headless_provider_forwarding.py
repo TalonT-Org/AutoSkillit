@@ -199,6 +199,39 @@ async def test_run_headless_core_forwards_provider_name_and_fallback_env(
 
 
 @pytest.mark.anyio
+async def test_run_headless_core_bridges_profile_to_provider_when_empty(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    """When provider_name is empty, profile_name is used as the effective provider."""
+    from autoskillit.core import CmdSpec
+    from autoskillit.execution.headless import run_headless_core
+
+    execute_kwargs: dict = {}
+
+    backend = _mock_backend()
+    backend.build_skill_session_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "test"), env={}
+    )
+    minimal_ctx.backend = backend
+
+    async def fake_execute(spec, cwd, ctx, **kwargs):  # noqa: ARG001
+        execute_kwargs.update(kwargs)
+        return _STUB_RESULT
+
+    monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
+
+    await run_headless_core(
+        "/autoskillit:probe",
+        str(tmp_path),
+        minimal_ctx,
+        profile_name="vertex",
+        provider_name="",
+    )
+
+    assert execute_kwargs["provider_name"] == "vertex"
+
+
+@pytest.mark.anyio
 async def test_default_executor_run_forwards_provider_name_and_fallback_env(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:

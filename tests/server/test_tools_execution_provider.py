@@ -93,6 +93,7 @@ async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
 
     assert captured.get("provider_extras") == {"AWS_REGION": "us-east-1"}
     assert captured.get("profile_name") == "bedrock"
+    assert captured.get("provider_name") == "bedrock"
 
 
 @pytest.mark.anyio
@@ -128,6 +129,7 @@ async def test_run_skill_model_as_profile_resolves_provider(
     assert captured.get("model") == "M2.7"
     assert captured.get("provider_extras") == {"BASE_URL": "https://api.minimax.chat/v1"}
     assert captured.get("profile_name") == "minimax"
+    assert captured.get("provider_name") == "minimax"
 
 
 @pytest.mark.anyio
@@ -582,3 +584,25 @@ async def test_run_skill_backend_override_none_providers_disabled(
     await run_skill("/autoskillit:probe", str(tmp_path))
 
     assert captured.get("backend_override") is None
+
+
+@pytest.mark.anyio
+async def test_run_skill_forwards_provider_name_matching_profile(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    """run_skill must pass provider_name=profile_name_out so telemetry is populated."""
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
+    )
+
+    await run_skill("/autoskillit:probe", str(tmp_path))
+
+    assert executor.calls[0].profile_name == "minimax"
+    assert executor.calls[0].provider_name == "minimax"

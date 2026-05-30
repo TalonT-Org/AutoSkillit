@@ -78,6 +78,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_git_split.py` | Git split structural guard |
 | `test_tools_github.py` | Tests for server/tools_github.py — fetch_github_issue and get_issue_title |
 | `test_tools_github_api_tracking.py` | GitHub API tracking tests |
+| `test_tools_github_provider.py` | Tests for provider_name forwarding through the report_bug call chain |
 | `test_tools_integrations.py` | Integration tests for issue lifecycle, headless tool diagnostics, and PR ops |
 | `test_tools_integrations_release.py` | Tests for release_issue staged lifecycle behaviour |
 | `test_claim_liveness.py` | Tests for liveness-aware claiming — dead dispatch recovery, alive dispatch blocking, shared helper parity |

@@ -87,6 +87,9 @@ class ExecutorCall:
     write_watch_dirs: tuple[Any, ...] = ()
     provider_extras: Mapping[str, str] | None = None
     profile_name: str = ""
+    provider_name: str = ""
+    provider_fallback_env: dict[str, str] | None = None
+    provider_fallback_name: str = ""
     resume_session_id: str = ""
     resume_checkpoint: SessionCheckpoint | None = None
     resume_message: str | None = None
@@ -182,6 +185,9 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         write_watch_dirs: Sequence[Any] = (),
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
+        provider_name: str = "",
+        provider_fallback_env: dict[str, str] | None = None,
+        provider_fallback_name: str = "",
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
@@ -212,6 +218,9 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 write_watch_dirs=tuple(write_watch_dirs),
                 provider_extras=provider_extras,
                 profile_name=profile_name,
+                provider_name=provider_name,
+                provider_fallback_env=provider_fallback_env,
+                provider_fallback_name=provider_fallback_name,
                 resume_session_id=resume_session_id,
                 resume_checkpoint=resume_checkpoint,
                 resume_message=resume_message,

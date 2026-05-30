@@ -222,8 +222,10 @@ def _log_secret_scan_bypass(project_dir: Path) -> None:
     try:
         raw = (load_yaml(state_path) or {}) if state_path.is_file() else {}
         data: dict = raw if isinstance(raw, dict) else {}
-    except YAMLError:
-        data = {}
+    except YAMLError as exc:
+        logger.warning("corrupt_state_yaml", path=str(state_path), error=str(exc))
+        msg = f"Cannot update {state_path}: file has YAML syntax errors. Delete the file to reset."
+        raise SystemExit(msg) from exc
     data.setdefault("safety", {})["secret_scan_bypass_accepted"] = datetime.now(UTC).isoformat()
     state_path.parent.mkdir(exist_ok=True)
     atomic_write(state_path, dump_yaml_str(data, default_flow_style=False, allow_unicode=True))

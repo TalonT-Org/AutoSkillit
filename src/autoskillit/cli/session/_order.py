@@ -16,12 +16,15 @@ from autoskillit.cli.session._session_launch import _launch_cook_session, _write
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
+    get_logger,
     pkg_root,
     resume_spec_from_cli,
 )
 
 if TYPE_CHECKING:
     from autoskillit.recipe import Recipe, RecipeInfo
+
+logger = get_logger(__name__)
 
 _UUID_RE = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 
@@ -61,8 +64,13 @@ def _enable_packs_permanently(project_dir: Path, packs: frozenset[str]) -> None:
     config_path = project_dir / ".autoskillit" / "config.yaml"
     try:
         data: dict = (load_yaml(config_path) or {}) if config_path.exists() else {}
-    except YAMLError:
-        data = {}
+    except YAMLError as exc:
+        logger.warning("corrupt_config_yaml", path=str(config_path), error=str(exc))
+        msg = (
+            f"Cannot update {config_path}: file has YAML syntax errors."
+            " Fix the syntax or delete the file to reset."
+        )
+        raise SystemExit(msg) from exc
     packs_section = data.setdefault("packs", {})
     current_enabled: list[str] = packs_section.get("enabled", [])
     new_enabled = sorted(set(current_enabled) | packs)
@@ -79,8 +87,13 @@ def _enable_subsets_permanently(project_dir: Path, subsets: frozenset[str]) -> N
     config_path = project_dir / ".autoskillit" / "config.yaml"
     try:
         data: dict = (load_yaml(config_path) or {}) if config_path.exists() else {}
-    except YAMLError:
-        data = {}
+    except YAMLError as exc:
+        logger.warning("corrupt_config_yaml", path=str(config_path), error=str(exc))
+        msg = (
+            f"Cannot update {config_path}: file has YAML syntax errors."
+            " Fix the syntax or delete the file to reset."
+        )
+        raise SystemExit(msg) from exc
     subsets_section = data.setdefault("subsets", {})
     current_disabled: list[str] = subsets_section.get("disabled", [])
     subsets_section["disabled"] = [s for s in current_disabled if s not in subsets]

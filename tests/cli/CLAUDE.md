@@ -49,6 +49,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_init.py` | Tests for CLI init, config, and serve-related commands |
 | `test_input_tty_contracts.py` | Structural enforcement: every input() call in cli/ must go through timed_prompt() |
 | `test_init_helpers.py` | Unit tests for _is_plugin_installed backend guard |
+| `test_init_helpers_state.py` | Tests for _log_secret_scan_bypass parse-failure write guard |
 | `test_install.py` | Tests for CLI install, upgrade, and quota-related commands |
 | `test_install_info.py` | Tests for cli/_install_info.py — install classification and update policy |
 | `test_installed_plugins_file.py` | Unit tests for the InstalledPluginsFile repository |
@@ -57,6 +58,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_mcp_names.py` | Tests for cli/_mcp_names.py — MCP prefix detection |
 | `test_menu.py` | Tests: shared selection menu primitive |
 | `test_onboarding.py` | Tests for first-run detection and guided onboarding menu |
+| `test_order_config.py` | Tests for parse-failure write guards in _enable_packs_permanently and _enable_subsets_permanently |
 | `test_order_resume.py` | Tests for order CLI infra-exit detection and auto-resume via NamedResume |
 | `test_orchestrator_prompt_contract.py` | Tests for orchestrator prompt contract: failure predicates and dispatch consistency |
 | `test_plugin_cache.py` | Tests for _plugin_cache: retiring cache, install locking, kitchen registry |

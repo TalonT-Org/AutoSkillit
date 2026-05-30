@@ -63,6 +63,13 @@ class InstalledPluginsFile:
         if not self._path.exists():
             return
         data = self._read()
+        if data == {} and self._path.exists() and self._path.stat().st_size > 0:
+            logger.warning(
+                "installed_plugins_corrupt_skip_remove",
+                path=str(self._path),
+                plugin_ref=plugin_ref,
+            )
+            return
         plugins = data.get("plugins", {})
         if plugin_ref not in plugins:
             return

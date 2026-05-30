@@ -434,6 +434,40 @@ steps:
       Shares merge_fix_count with check_merge_fix_loop and
       check_merge_rebase_loop.
 
+  check_ref_push_loop:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_loop_iteration
+      current_iteration: ${{ context.ref_push_count }}
+      max_iterations: '2'
+    capture:
+      ref_push_count: ${{ result.next_iteration }}
+    on_result:
+    - when: ${{ result.max_exceeded }} == true
+      route: release_issue_failure
+    - route: ref_push
+    on_failure: release_issue_failure
+    optional_context_refs:
+    - ref_push_count
+    note: >
+      Ref-coherence recovery guard. Uses a SEPARATE counter (ref_push_count,
+      max 2) from merge_fix_count. Push-and-retry is cheap and near-deterministic
+      (no LLM invocation), so it does not share the merge_fix_count budget.
+      If max exceeded, the divergence is not fixable by pushing — escalate.
+
+  ref_push:
+    tool: push_to_remote
+    with:
+      clone_path: ${{ context.work_dir }}
+      remote_url: ${{ context.remote_url }}
+      branch: ${{ context.merge_target }}
+    on_success: commit_guard
+    on_failure: release_issue_failure
+    note: >
+      Pushes the feature branch to remote to resolve ref_coherence divergence.
+      After push, routes back to commit_guard → main_repo_guard → merge to
+      retry the merge with aligned local/remote SHAs.
+
   check_audit_remediation_loop:
     tool: run_python
     with:
@@ -501,6 +535,8 @@ steps:
       route: check_merge_rebase_loop
     - when: result.failed_step == 'dirty_main_repo'
       route: check_dirty_main_retry
+    - when: result.failed_step == 'ref_coherence'
+      route: check_ref_push_loop
     - when: result.error
       route: release_issue_failure
     - route: next_or_done

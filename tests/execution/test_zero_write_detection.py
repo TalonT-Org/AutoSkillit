@@ -738,7 +738,7 @@ class TestTempDirSnapshot:
         (temp_dir / "existing.md").write_text("content")
         pre = _stat_snapshot(temp_dir)
         post = _stat_snapshot(temp_dir)
-        assert post.keys() - pre.keys() == set()
+        assert post == pre
 
 
 class TestGitWritesClonePath:

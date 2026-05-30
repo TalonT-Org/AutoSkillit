@@ -215,14 +215,14 @@ async def _execute_claude_headless(
         if _default:
             _watch_dirs.append(_default)
 
-    _temp_snapshots_pre: dict[Path, dict[str, tuple[int, int]]] = {}
+    _temp_snapshots_pre: dict[Path, dict[str, tuple[int, int]] | None] = {}
     for _wd in _watch_dirs:
         if _wd.is_dir():
             try:
                 _temp_snapshots_pre[_wd] = _stat_snapshot(_wd)
             except OSError:
                 logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
-                _temp_snapshots_pre[_wd] = {}
+                _temp_snapshots_pre[_wd] = None
 
     _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
@@ -378,11 +378,13 @@ async def _execute_claude_headless(
         for _wd in _watch_dirs:
             if _wd.is_dir():
                 try:
-                    _post = _stat_snapshot(_wd)
+                    _post: dict[str, tuple[int, int]] | None = _stat_snapshot(_wd)
                 except OSError:
                     logger.warning("watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True)
-                    _post = {}
-                _pre = _temp_snapshots_pre.get(_wd, {})
+                    continue
+                _pre = _temp_snapshots_pre.get(_wd)
+                if _pre is None:
+                    continue
                 if _post != _pre:
                     _fs_writes_detected = True
                     break

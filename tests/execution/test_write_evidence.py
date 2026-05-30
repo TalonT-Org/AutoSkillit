@@ -190,8 +190,8 @@ class TestBashFilePathEnrichment:
         assert "/tmp/output/" in paths
 
 
-class TestRecursiveSnapshot:
-    """Recursive snapshot detects writes in pre-existing subdirectories."""
+class TestSubdirSnapshot:
+    """Stat-based snapshot detects writes in pre-existing subdirectories."""
 
     def test_detects_write_in_preexisting_subdir(self, tmp_path: Path) -> None:
         from autoskillit.execution.headless import _stat_snapshot
@@ -396,11 +396,7 @@ class TestSnapshotTypeContract:
 
         sig = _inspect.signature(_stat_snapshot)
         ret = sig.return_annotation
-        assert (
-            "dict" in str(ret).lower()
-            or ret is dict
-            or (hasattr(ret, "__origin__") and ret.__origin__ is dict)
-        )
+        assert "dict" in str(ret).lower()
 
 
 class TestPlannerSkillEndToEnd:

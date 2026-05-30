@@ -5,61 +5,62 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.execution.session._session_content import (
+    _check_expected_patterns,
     _check_session_content,
     _evaluate_content_state,
-    _strip_markdown_from_tokens,
+    _normalize_model_output,
 )
 from autoskillit.execution.session._session_model import ClaudeSessionResult, ContentState
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
-class TestStripMarkdownFromTokens:
-    """_strip_markdown_from_tokens normalizes model output decorators to canonical form."""
+class TestNormalizeModelOutput:
+    """_normalize_model_output normalizes model output decorators to canonical form."""
 
     def test_bold_equals_lowercase(self) -> None:
         """**plan_path** = /abs/path → plan_path = /abs/path"""
-        result = _strip_markdown_from_tokens("**plan_path** = /abs/path/plan.md")
+        result = _normalize_model_output("**plan_path** = /abs/path/plan.md")
         assert result == "plan_path = /abs/path/plan.md"
 
     def test_bold_equals_uppercase_key_lowercased(self) -> None:
         """**Plan_Path** = /abs/path → plan_path = /abs/path"""
-        result = _strip_markdown_from_tokens("**Plan_Path** = /abs/path/plan.md")
+        result = _normalize_model_output("**Plan_Path** = /abs/path/plan.md")
         assert result == "plan_path = /abs/path/plan.md"
 
     def test_italic_equals(self) -> None:
         """*plan_path* = /abs/path → plan_path = /abs/path"""
-        result = _strip_markdown_from_tokens("*plan_path* = /abs/path/plan.md")
+        result = _normalize_model_output("*plan_path* = /abs/path/plan.md")
         assert result == "plan_path = /abs/path/plan.md"
 
     def test_bold_colon_separator(self) -> None:
         """**Plan_Path:** /abs/path → plan_path = /abs/path"""
-        result = _strip_markdown_from_tokens("**Plan_Path:** /abs/path/plan.md")
+        result = _normalize_model_output("**Plan_Path:** /abs/path/plan.md")
         assert result == "plan_path = /abs/path/plan.md"
 
     def test_backtick_equals(self) -> None:
         """`plan_path` = /abs/path → plan_path = /abs/path"""
-        result = _strip_markdown_from_tokens("`plan_path` = /abs/path/plan.md")
+        result = _normalize_model_output("`plan_path` = /abs/path/plan.md")
         assert result == "plan_path = /abs/path/plan.md"
 
     def test_backtick_equals_uppercase_key_lowercased(self) -> None:
         """`Plan_Path` = /abs/path → plan_path = /abs/path"""
-        result = _strip_markdown_from_tokens("`Plan_Path` = /abs/path/plan.md")
+        result = _normalize_model_output("`Plan_Path` = /abs/path/plan.md")
         assert result == "plan_path = /abs/path/plan.md"
 
     def test_canonical_no_change(self) -> None:
         """Already-canonical token is unchanged."""
-        result = _strip_markdown_from_tokens("plan_path = /abs/path/plan.md")
+        result = _normalize_model_output("plan_path = /abs/path/plan.md")
         assert result == "plan_path = /abs/path/plan.md"
 
     def test_non_adjacent_bold_untouched(self) -> None:
         """Bold decorators not adjacent to = or : are left unchanged."""
-        result = _strip_markdown_from_tokens("Some text with **bold** words here")
+        result = _normalize_model_output("Some text with **bold** words here")
         assert result == "Some text with **bold** words here"
 
     def test_multiple_tokens_all_normalized(self) -> None:
         """Multiple decorated tokens in one string are all normalized."""
-        result = _strip_markdown_from_tokens(
+        result = _normalize_model_output(
             "**worktree_path** = /tmp/wt\n`branch_name` = impl-xyz\n*status* = running\n"
         )
         assert "worktree_path = /tmp/wt" in result
@@ -68,8 +69,68 @@ class TestStripMarkdownFromTokens:
 
     def test_worktree_path_bold_colon_variant(self) -> None:
         """The colon-decorated variant that caused #1716 contract failures."""
-        result = _strip_markdown_from_tokens("**worktree_path:** /tmp/wt")
+        result = _normalize_model_output("**worktree_path:** /tmp/wt")
         assert result == "worktree_path = /tmp/wt"
+
+    def test_hr_split_open_delimiter(self) -> None:
+        """HR on its own line followed by token name rejoins into full delimiter."""
+        assert _check_expected_patterns(
+            "Section content\n\n---\npipeline-health-result---\n\n%%ORDER_UP::abc%%",
+            ["---pipeline-health-result---"],
+        )
+
+    def test_hr_split_double_newline_delimiter(self) -> None:
+        """Double-newline between HR and token name is still collapsed."""
+        assert _check_expected_patterns(
+            "Content\n\n---\n\npipeline-health-result---\n%%ORDER_UP::abc%%",
+            ["---pipeline-health-result---"],
+        )
+
+    def test_inline_delimiter_no_regression(self) -> None:
+        """Inline delimiter on same line as other text continues to match."""
+        assert _check_expected_patterns(
+            "Result: ---pipeline-health-result---\n%%ORDER_UP::abc%%",
+            ["---pipeline-health-result---"],
+        )
+
+    def test_bold_wrapped_delimiter(self) -> None:
+        """Bold-wrapped delimiter token is stripped and matched."""
+        assert _check_expected_patterns(
+            "**---pipeline-health-result---**\n%%ORDER_UP::abc%%",
+            ["---pipeline-health-result---"],
+        )
+
+    def test_backtick_wrapped_delimiter(self) -> None:
+        """Backtick-wrapped delimiter token is stripped and matched."""
+        assert _check_expected_patterns(
+            "`---pipeline-health-result---`\n%%ORDER_UP::abc%%",
+            ["---pipeline-health-result---"],
+        )
+
+    def test_multiple_delimiters_mixed_hr_split_and_inline(self) -> None:
+        """Open delimiter HR-split and close delimiter inline both match."""
+        assert _check_expected_patterns(
+            "---\nbug-fingerprint---\nfp-001\n---/bug-fingerprint---\n%%ORDER_UP::abc%%",
+            ["---bug-fingerprint---", "---/bug-fingerprint---"],
+        )
+
+    def test_hr_split_close_delimiter_with_slash(self) -> None:
+        """Close delimiter HR-split (with / prefix) is collapsed and matched."""
+        assert _check_expected_patterns(
+            "---bug-fingerprint---\nfp-001\n---\n/bug-fingerprint---\n%%ORDER_UP::abc%%",
+            ["---bug-fingerprint---", "---/bug-fingerprint---"],
+        )
+
+    def test_italic_colon_dedicated(self) -> None:
+        """Italic-colon variant is normalized and the pattern matches."""
+        assert _check_expected_patterns(
+            "*worktree_path*: /tmp/worktrees/impl-foo\n%%ORDER_UP%%",
+            [r"worktree_path\s*=\s*/.+"],
+        )
+
+    def test_invalid_regex_returns_false(self) -> None:
+        """Invalid regex pattern returns False without raising."""
+        assert _check_expected_patterns("any text", ["[invalid regex"]) is False
 
 
 _PREP_RESULT = "prep_path = /tmp/plan.md\nselected_lenses = dev\nlens_context_paths = /tmp/ctx.md"

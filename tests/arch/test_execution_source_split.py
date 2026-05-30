@@ -98,7 +98,7 @@ NEW_MQ_MODULES = ["_merge_queue_classifier.py", "_merge_queue_repo_state.py"]
 SESSION_SIZE_BUDGETS = {
     "session/__init__.py": 65,  # was 420; facade is ~40 lines after P2
     "session/_session_model.py": 500,
-    "session/_session_content.py": 200,
+    "session/_session_content.py": 230,
 }
 NEW_SESSION_FSM_MODULES = ["_retry_fsm.py", "_session_outcome.py"]
 SESSION_FSM_SIZE_BUDGETS = {
@@ -146,8 +146,9 @@ def test_session_facade_does_not_define_content_functions():
     for sym in (
         "def _check_expected_patterns",
         "def _check_session_content",
+        "def _collapse_hr_split_delimiters",
         "def _evaluate_content_state",
-        "def _strip_markdown_from_tokens",
+        "def _normalize_model_output",
     ):
         assert sym not in src, f"{sym} must live in _session_content.py"
 

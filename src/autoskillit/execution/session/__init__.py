@@ -28,6 +28,7 @@ from autoskillit.execution.session._retry_fsm import (
 from autoskillit.execution.session._session_content import (
     _check_expected_patterns,  # noqa: F401 — re-export for callers
     _check_session_content,  # noqa: F401 — re-export for callers
+    _collapse_hr_split_delimiters,  # noqa: F401 — re-export for callers
     _evaluate_content_state,  # noqa: F401 — re-export for callers
 )
 from autoskillit.execution.session._session_model import (

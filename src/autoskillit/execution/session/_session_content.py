@@ -37,28 +37,50 @@ _MARKDOWN_ITALIC_COLON_RE: re.Pattern[str] = re.compile(
 )
 # Backtick: `key` = value → key = value
 _MARKDOWN_BACKTICK_RE: re.Pattern[str] = re.compile(r"`(\w[\w_-]*)`(\s*=)", re.MULTILINE)
+# HR-split delimiter: ---\n[/]name--- → ---[/]name--- (open and close delimiter variants)
+_HR_SPLIT_DELIMITER_RE: re.Pattern[str] = re.compile(r"---\n+(/?\w[\w-]*---)")
+# Bold-wrapped delimiter: **---[/]name---** or *---[/]name---* → ---[/]name---
+_DELIMITER_BOLD_RE: re.Pattern[str] = re.compile(r"\*{1,2}(---/?\w[\w-]*---)\*{1,2}")
+# Backtick-wrapped delimiter: `---[/]name---` → ---[/]name---
+_DELIMITER_BACKTICK_RE: re.Pattern[str] = re.compile(r"`(---/?\w[\w-]*---)`")
 
 
-def _strip_markdown_from_tokens(text: str) -> str:
-    """Remove bold/italic markdown decorators from structured output token names.
+def _collapse_hr_split_delimiters(text: str) -> str:
+    """Collapse markdown HR + delimiter suffix into a contiguous delimiter token.
 
-    Transforms model output like:
-        **plan_path** = /abs/path/plan.md
-        **Plan_Path:** /abs/path/plan.md
-        `plan_path` = /abs/path/plan.md
-    into the canonical form:
-        plan_path = /abs/path/plan.md
-
-    Applied before regex pattern matching to make adjudication tolerant of the
-    model's choice to visually style its output summary. Three decorator variants
-    are handled: bold/italic with equals, bold/italic with colon, and backtick
-    wrapping. Decorators elsewhere in the text are left unchanged.
+    When a model emits a markdown horizontal rule (``---``) on its own line
+    immediately before the name portion of a ``---X---`` or ``---/X---`` token,
+    the three leading hyphens land on a separate line and pattern matching fails.
+    This function rejoins them so downstream regex searches find the full token.
     """
+    return _HR_SPLIT_DELIMITER_RE.sub(r"---\1", text)
+
+
+def _normalize_model_output(text: str) -> str:
+    """Normalize model output formatting variations that interfere with pattern matching.
+
+    Applies three sequential normalization stages:
+
+    Stage 1 — HR-split collapse: rejoins ``---\\n[/]name---`` into ``---[/]name---``
+    when the model emits a markdown horizontal rule immediately before a delimiter
+    token name on a separate line.
+
+    Stage 2 — Key=value decorator strip: removes bold/italic/backtick decorators
+    from ``key = value`` structured output token names so ``**plan_path** = /path``
+    is treated identically to ``plan_path = /path``.
+
+    Stage 3 — Delimiter decorator strip: removes bold and backtick wrapping from
+    ``---X---`` delimiter tokens so ``**---pipeline-health-result---**`` is treated
+    identically to ``---pipeline-health-result---``.
+    """
+    text = _collapse_hr_split_delimiters(text)
     text = _MARKDOWN_BOLD_EQUALS_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
     text = _MARKDOWN_BOLD_COLON_RE.sub(lambda m: m.group(1).lower() + " = ", text)
     text = _MARKDOWN_ITALIC_EQUALS_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
     text = _MARKDOWN_ITALIC_COLON_RE.sub(lambda m: m.group(1).lower() + " = ", text)
     text = _MARKDOWN_BACKTICK_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
+    text = _DELIMITER_BOLD_RE.sub(r"\1", text)
+    text = _DELIMITER_BACKTICK_RE.sub(r"\1", text)
     return text
 
 
@@ -70,14 +92,16 @@ def _check_expected_patterns(result: str, patterns: Sequence[str]) -> bool:
     AND semantics are intentional: patterns represent content contracts (e.g.,
     block start/end delimiters) that must all be present simultaneously.
 
-    Normalizes bold/italic markdown decorators on token names before matching,
-    so ``**plan_path** = /path`` is treated identically to ``plan_path = /path``.
+    Normalizes model formatting variations on token names before matching,
+    so ``**plan_path** = /path`` is treated identically to ``plan_path = /path``
+    and ``---\\npipeline-health-result---`` is treated identically to
+    ``---pipeline-health-result---``.
 
     If any pattern is an invalid regex, returns False rather than raising.
     """
     if not patterns:
         return True
-    normalized = _strip_markdown_from_tokens(result)
+    normalized = _normalize_model_output(result)
     for p in patterns:
         try:
             if not re.search(p, normalized):

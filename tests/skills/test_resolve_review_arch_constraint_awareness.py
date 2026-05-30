@@ -3,7 +3,10 @@ constraint catalog that intent validation subagents can consult before
 classifying ACCEPT.
 """
 
+import re
 from pathlib import Path
+
+import pytest
 
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
@@ -13,18 +16,23 @@ SKILL_PATH = (
     / "resolve-review"
     / "SKILL.md"
 )
-assert SKILL_PATH.exists()
-SKILL_TEXT = SKILL_PATH.read_text()
 
 ARCH_DIR = Path(__file__).parent.parent / "arch"
+
+
+@pytest.fixture(scope="module")
+def skill_text():
+    if not SKILL_PATH.exists():
+        pytest.fail(f"SKILL.md not found at {SKILL_PATH}")
+    return SKILL_PATH.read_text()
 
 
 # --- Catalog presence ---
 
 
-def test_arch_constraint_catalog_section_exists():
+def test_arch_constraint_catalog_section_exists(skill_text):
     """SKILL.md must contain an 'Architectural Constraint Catalog' section."""
-    assert "architectural constraint catalog" in SKILL_TEXT.lower(), (
+    assert "architectural constraint catalog" in skill_text.lower(), (
         "resolve-review SKILL.md must contain an 'Architectural Constraint Catalog' "
         "section for intent validation subagents"
     )
@@ -33,7 +41,7 @@ def test_arch_constraint_catalog_section_exists():
 # --- Catalog references key arch tests ---
 
 
-def test_catalog_references_key_constraint_tests():
+def test_catalog_references_key_constraint_tests(skill_text):
     """The catalog must reference the most commonly violated constraint
     enforcement test filenames — from tests/arch/ and tests/recipe/."""
     key_test_files = [
@@ -44,7 +52,7 @@ def test_catalog_references_key_constraint_tests():
         "test_anti_pattern_guards.py",  # tests/recipe/
     ]
     for test_file in key_test_files:
-        assert test_file in SKILL_TEXT, (
+        assert test_file in skill_text, (
             f"Architectural Constraint Catalog must reference {test_file} by name"
         )
 
@@ -52,14 +60,14 @@ def test_catalog_references_key_constraint_tests():
 # --- REJECT criteria include arch violation ---
 
 
-def test_reject_criteria_includes_arch_violation():
+def test_reject_criteria_includes_arch_violation(skill_text):
     """The REJECT classification criteria prose must include language about
     architecturally prohibited changes — not just the category enum."""
-    criteria_idx = SKILL_TEXT.find("Classification criteria:")
+    criteria_idx = skill_text.find("Classification criteria:")
     if criteria_idx == -1:
-        criteria_idx = SKILL_TEXT.find("**Classification criteria:**")
+        criteria_idx = skill_text.find("**Classification criteria:**")
     assert criteria_idx != -1, "SKILL.md must have a Classification criteria section"
-    criteria_region = SKILL_TEXT[criteria_idx : criteria_idx + 1200].lower()
+    criteria_region = skill_text[criteria_idx : criteria_idx + 1200].lower()
     assert (
         "architectural constraint" in criteria_region
         or "architecturally prohibited" in criteria_region
@@ -74,16 +82,16 @@ def test_reject_criteria_includes_arch_violation():
 # --- Sub-agent prompt references catalog ---
 
 
-def test_subagent_prompt_references_constraint_catalog():
+def test_subagent_prompt_references_constraint_catalog(skill_text):
     """Step 3.5 sub-agent prompt must instruct subagents to check the
     Architectural Constraint Catalog — not just mention 'arch' generically."""
-    step35_idx = SKILL_TEXT.find("### Step 3.5")
+    step35_idx = skill_text.find("### Step 3.5")
     assert step35_idx != -1
-    step4_idx = SKILL_TEXT.find("### Step 4", step35_idx + 10)
+    step4_idx = skill_text.find("### Step 4", step35_idx + 10)
     step35_section = (
-        SKILL_TEXT[step35_idx:step4_idx]
+        skill_text[step35_idx:step4_idx]
         if step4_idx != -1
-        else SKILL_TEXT[step35_idx : step35_idx + 5000]
+        else skill_text[step35_idx : step35_idx + 5000]
     )
     assert "architectural constraint catalog" in step35_section.lower(), (
         "Step 3.5 sub-agent instructions must reference the "
@@ -95,20 +103,20 @@ def test_subagent_prompt_references_constraint_catalog():
 # --- NEVER block ---
 
 
-def test_never_block_prohibits_ignoring_arch_constraints():
+def test_never_block_prohibits_ignoring_arch_constraints(skill_text):
     """NEVER block must prohibit accepting changes that violate
     architectural constraints."""
-    never_start = SKILL_TEXT.find("**NEVER:**")
+    never_start = skill_text.find("**NEVER:**")
     if never_start == -1:
-        never_start = SKILL_TEXT.find("NEVER:")
+        never_start = skill_text.find("NEVER:")
     assert never_start != -1, "SKILL.md must have a NEVER block"
-    always_start = SKILL_TEXT.find("**ALWAYS:**", never_start)
+    always_start = skill_text.find("**ALWAYS:**", never_start)
     if always_start == -1:
-        always_start = SKILL_TEXT.find("ALWAYS:", never_start)
+        always_start = skill_text.find("ALWAYS:", never_start)
     never_block = (
-        SKILL_TEXT[never_start:always_start]
+        skill_text[never_start:always_start]
         if always_start != -1
-        else SKILL_TEXT[never_start : never_start + 1000]
+        else skill_text[never_start : never_start + 1000]
     )
     assert (
         "architectural constraint" in never_block.lower()
@@ -122,21 +130,19 @@ def test_never_block_prohibits_ignoring_arch_constraints():
 # --- Bidirectional staleness guard ---
 
 
-def test_catalog_forward_references_valid():
+def test_catalog_forward_references_valid(skill_text):
     """Every arch test file referenced in the catalog must actually exist
     in tests/arch/ or tests/recipe/."""
-    catalog_idx = SKILL_TEXT.lower().find("architectural constraint catalog")
+    catalog_idx = skill_text.lower().find("architectural constraint catalog")
     if catalog_idx == -1:
         return  # test_arch_constraint_catalog_section_exists will catch this
-    catalog_section = SKILL_TEXT[catalog_idx : catalog_idx + 3000]
+    catalog_section = skill_text[catalog_idx : catalog_idx + 3000]
     arch_test_files = {f.name for f in ARCH_DIR.glob("test_*.py")}
     recipe_test_dir = ARCH_DIR.parent / "recipe"
     recipe_test_files = (
         {f.name for f in recipe_test_dir.glob("test_*.py")} if recipe_test_dir.exists() else set()
     )
     all_test_files = arch_test_files | recipe_test_files
-    import re
-
     referenced_files = set(re.findall(r"`(test_\w+\.py)`", catalog_section))
     for ref in referenced_files:
         assert ref in all_test_files, (
@@ -144,7 +150,7 @@ def test_catalog_forward_references_valid():
         )
 
 
-def test_catalog_reverse_coverage():
+def test_catalog_reverse_coverage(skill_text):
     """High-risk arch test files must be referenced in the catalog.
     When a new arch test is added that enforces a constraint violable by
     reviewer suggestions, this test ensures the catalog is updated."""
@@ -166,7 +172,7 @@ def test_catalog_reverse_coverage():
         recipe_path = ARCH_DIR.parent / "recipe" / test_file
         if not arch_path.exists() and not recipe_path.exists():
             continue
-        assert test_file in SKILL_TEXT, (
+        assert test_file in skill_text, (
             f"High-risk arch test {test_file} exists but is not referenced "
             f"in the Architectural Constraint Catalog. Update the catalog."
         )
@@ -175,8 +181,8 @@ def test_catalog_reverse_coverage():
 # --- arch_violation category ---
 
 
-def test_arch_violation_category_defined():
+def test_arch_violation_category_defined(skill_text):
     """The REJECT category enum must include arch_violation."""
-    assert "arch_violation" in SKILL_TEXT, (
+    assert "arch_violation" in skill_text, (
         "REJECT category enum must include 'arch_violation' for architecturally prohibited changes"
     )

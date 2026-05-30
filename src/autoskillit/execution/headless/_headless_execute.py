@@ -378,14 +378,12 @@ async def _execute_claude_headless(
         for _wd in _watch_dirs:
             if _wd.is_dir():
                 try:
-                    _post: dict[str, tuple[int, int]] | None = _stat_snapshot(_wd)
+                    _post = _stat_snapshot(_wd)
                 except OSError:
                     logger.warning("watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True)
                     continue
                 _pre = _temp_snapshots_pre.get(_wd)
-                if _pre is None:
-                    continue
-                if _post != _pre:
+                if _pre is not None and _post != _pre:
                     _fs_writes_detected = True
                     break
 

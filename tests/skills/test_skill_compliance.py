@@ -23,7 +23,7 @@ from autoskillit.recipe.rules.rules_skill_content import (
     _extract_subsections,
 )
 from autoskillit.workspace.skills import DefaultSkillResolver
-from tests._helpers import extract_always_block
+from tests._helpers import extract_always_block, extract_never_block
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
@@ -234,7 +234,6 @@ def _check_parallel_dispatch_reinforcement(skill_text: str) -> list[str]:
     2. ALWAYS block requires single-message dispatch
     3. Step body containing spawn language includes single-message instruction
     """
-    from tests._helpers import extract_never_block
 
     violations: list[str] = []
 
@@ -412,7 +411,6 @@ _FABRICATION_GUARD_RE = FABRICATION_GUARD_RE
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda d: d.name)
 def test_all_skills_have_anti_fabrication_guard(skill_dir: Path) -> None:
     """Every skill with a NEVER block must include anti-fabrication language."""
-    from tests._helpers import extract_never_block
 
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
@@ -497,7 +495,6 @@ _ANTI_BLAME_RE = re.compile(r"(?i)\bblame\b.*\bpre-existing\b")
 def test_implement_skills_have_anti_blame_prohibition(skill_dir: Path) -> None:
     """All implement-* and retry-* skills must have the anti-blame
     prohibition in their NEVER block."""
-    from tests._helpers import extract_never_block
 
     text = (skill_dir / "SKILL.md").read_text()
     never_block = extract_never_block(text)
@@ -558,8 +555,8 @@ Spawn parallel subagents (Task tool) for each item in the list.
 For each item, spawn the corresponding subagent.
 """
     violations = _check_parallel_dispatch_reinforcement(missing_reinforcement)
-    assert len(violations) >= 1, (
-        "Detector failed to catch missing single-message dispatch reinforcement"
+    assert len(violations) == 3, (
+        f"Expected 3 violations (one per layer), got {len(violations)}: {violations}"
     )
 
 

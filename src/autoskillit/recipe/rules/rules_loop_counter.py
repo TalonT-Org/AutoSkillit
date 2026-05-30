@@ -7,7 +7,7 @@ import regex as _re
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe._analysis_graph import _extract_routing_edges
-from autoskillit.recipe._rule_helpers import _build_graph_without_nodes, _find_cycle_members
+from autoskillit.recipe._rule_helpers import _build_graph_without_nodes
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _CTX_VAR_RE = _re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
@@ -54,7 +54,6 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
     graph = ctx.step_graph
 
     yaml_preds = _build_yaml_predecessor_map(ctx)
-    all_cycles = _find_cycle_members(graph, recipe.steps)
 
     for step_name, step in recipe.steps.items():
         if step.tool != "run_python":
@@ -71,7 +70,9 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
         if counter_var not in step.capture:
             continue
 
-        full_cycle = frozenset().union(*(c for c in all_cycles if step_name in c))
+        forward = bfs_reachable(graph, step_name)
+        backward = bfs_reachable(yaml_preds, step_name)
+        full_cycle = frozenset((forward & backward) | {step_name})
         if not full_cycle:
             continue
 

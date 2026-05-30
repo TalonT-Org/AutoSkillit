@@ -110,6 +110,18 @@ def reap_stale_dispatches(
                 continue
             pid = dispatch.dispatched_pid
 
+            if (
+                dispatch.started_at > 0
+                and (time.time() - dispatch.started_at) < min_reap_age_seconds
+            ):
+                logger.info(
+                    "reap: [SKIPPED]     %s  dispatch_id=%s  (too young, age=%.1fs)",
+                    name,
+                    dispatch.dispatch_id,
+                    time.time() - dispatch.started_at,
+                )
+                continue
+
             if pid == 0:
                 if dry_run:
                     logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
@@ -138,21 +150,6 @@ def reap_stale_dispatches(
 
             if not psutil.pid_exists(pid):
                 _mark_dead_pid(dry_run, name, pid, dispatch, m)
-                continue
-
-            # Age guard: only applies to live processes — dead/zero-pid dispatches bypass this.
-            # Prevents killing a sibling that was just spawned and hasn't yet been identified
-            # as orphaned vs. legitimate.
-            if (
-                dispatch.started_at > 0
-                and (time.time() - dispatch.started_at) < min_reap_age_seconds
-            ):
-                logger.info(
-                    "reap: [SKIPPED]     %s  dispatch_id=%s  (too young, age=%.1fs)",
-                    name,
-                    dispatch.dispatch_id,
-                    time.time() - dispatch.started_at,
-                )
                 continue
 
             current_ticks = read_starttime_ticks(pid)

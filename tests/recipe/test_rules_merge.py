@@ -776,3 +776,45 @@ def test_rule_passes_when_auto_steps_only_reachable_from_auto_route() -> None:
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
     assert flagged == []
+
+
+# ---------------------------------------------------------------------------
+# T-IPP-1: inter-part push wired between merge and routing step
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_push_between_parts(recipe_name: str) -> None:
+    """Multi-part recipes must push the feature branch between parts.
+
+    The merge step's success path must reach a push_to_remote step
+    before looping back for the next part.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+
+    merge_steps = {
+        name: step
+        for name, step in recipe.steps.items()
+        if getattr(step, "tool", None) == "merge_worktree"
+    }
+    assert merge_steps, f"{recipe_name}: no merge_worktree step found"
+
+    for step_name, step in merge_steps.items():
+        success_route = None
+        if step.on_result and step.on_result.conditions:
+            for cond in step.on_result.conditions:
+                if cond.when is None:
+                    success_route = cond.route
+                    break
+        if success_route is None:
+            success_route = step.on_success
+
+        if success_route is None:
+            continue
+
+        push_step = recipe.steps.get(success_route)
+        assert push_step is not None, f"{step_name} routes to {success_route} which does not exist"
+        assert getattr(push_step, "tool", None) == "push_to_remote", (
+            f"{step_name} success route {success_route} must be a push_to_remote step, "
+            f"got tool={getattr(push_step, 'tool', None)}"
+        )

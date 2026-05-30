@@ -733,11 +733,23 @@
           "route": "release_issue_failure"
         },
         {
-          "route": "next_or_done"
+          "route": "inter_part_push"
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "After merge, route to next_or_done to process remaining parts before pushing.\n"
+      "note": "After merge, route to inter_part_push to sync the remote branch, then next_or_done to process remaining parts before pushing.\n"
+    },
+    "inter_part_push": {
+      "tool": "push_to_remote",
+      "with": {
+        "clone_path": "${{ context.work_dir }}",
+        "remote_url": "${{ context.remote_url }}",
+        "branch": "${{ context.merge_target }}",
+        "force": "true"
+      },
+      "on_success": "next_or_done",
+      "on_failure": "next_or_done",
+      "note": "Pushes the feature branch to remote after each part's merge succeeds. Closes the ref_coherence divergence window between multi-part merges. Routes to next_or_done on both success and failure — push failure here is not fatal; the ref_coherence recovery route handles it if the next part's merge detects divergence.\n"
     },
     "next_or_done": {
       "action": "route",

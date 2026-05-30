@@ -504,11 +504,11 @@
           "route": "release_issue_failure"
         },
         {
-          "route": "check_next_iteration"
+          "route": "inter_part_push"
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "After merge, route to check_next_iteration to process remaining parts/groups before pushing. GROUPS MODE: When all plan_parts for the current group are merged, advance to the next group (back to plan step with the next group's description). When all groups are complete, go to audit_impl (via next_or_done). By default (open_pr=true), merge_target is the feature branch named from run_name. When open_pr=false, merge_target equals base_branch — merges go directly to base. test_gate failures route to fix (resolve-failures) for recovery; all other failures route to release_issue_failure.\n"
+      "note": "After merge, route to inter_part_push to sync the remote branch, then check_next_iteration to process remaining parts/groups before pushing. GROUPS MODE: When all plan_parts for the current group are merged, advance to the next group (back to plan step with the next group's description). When all groups are complete, go to audit_impl (via next_or_done). By default (open_pr=true), merge_target is the feature branch named from run_name. When open_pr=false, merge_target equals base_branch — merges go directly to base. test_gate failures route to fix (resolve-failures) for recovery; all other failures route to release_issue_failure.\n"
     },
     "push": {
       "tool": "push_to_remote",
@@ -593,6 +593,18 @@
       "on_context_limit": "release_issue_failure",
       "retries": 1,
       "on_exhausted": "release_issue_failure"
+    },
+    "inter_part_push": {
+      "tool": "push_to_remote",
+      "with": {
+        "clone_path": "${{ context.work_dir }}",
+        "remote_url": "${{ context.remote_url }}",
+        "branch": "${{ context.merge_target }}",
+        "force": "true"
+      },
+      "on_success": "check_next_iteration",
+      "on_failure": "check_next_iteration",
+      "note": "Pushes the feature branch to remote after each part's merge succeeds. Closes the ref_coherence divergence window between multi-part merges. Routes to check_next_iteration on both success and failure — push failure here is not fatal; the ref_coherence recovery route handles it if the next part's merge detects divergence.\n"
     },
     "check_next_iteration": {
       "tool": "run_python",

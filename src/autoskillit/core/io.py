@@ -62,6 +62,10 @@ class ReadResult:
     raw_bytes: bytes | None
     is_corrupt: bool
 
+    def __post_init__(self) -> None:
+        if self.is_corrupt and self.raw_bytes is None:
+            raise ValueError("corrupt ReadResult must carry raw_bytes")
+
     @classmethod
     def missing(cls, default: dict[str, Any]) -> ReadResult:
         return cls(data=default, raw_bytes=None, is_corrupt=False)

@@ -85,7 +85,6 @@ def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
                 skip_next = True
                 continue
             if combined == end_delim and in_block:
-                skip_next = True
                 return block_lines
         if stripped == start_delim:
             in_block = True

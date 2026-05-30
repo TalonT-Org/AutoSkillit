@@ -159,27 +159,27 @@ from autoskillit.recipe.rules.ci import rules_ci_conflict as _rules_ci_conflict 
 from autoskillit.recipe.rules.ci import rules_ci_guards as _rules_ci_guards  # noqa: E402 F401
 from autoskillit.recipe.rules.ci import (
     rules_ci_merge_queue as _rules_ci_merge_queue,  # noqa: E402 F401
-)  # noqa: E402
+)
 from autoskillit.recipe.rules.dataflow import rules_dataflow as _rules_dataflow  # noqa: E402 F401
 from autoskillit.recipe.rules.dataflow import (
     rules_dataflow_callable as _rules_dataflow_callable,  # noqa: E402 F401
-)  # noqa: E402
+)
 from autoskillit.recipe.rules.dataflow import (
     rules_dataflow_handoff as _rules_dataflow_handoff,  # noqa: E402 F401
-)  # noqa: E402
+)
 from autoskillit.recipe.rules.dataflow import (
     rules_dataflow_multipart as _rules_dataflow_multipart,  # noqa: E402 F401
-)  # noqa: E402
+)
 from autoskillit.recipe.rules.graph import rules_graph as _rules_graph  # noqa: E402 F401
 from autoskillit.recipe.rules.graph import (
     rules_graph_output as _rules_graph_output,  # noqa: E402 F401
-)  # noqa: E402
+)
 from autoskillit.recipe.rules.graph import (
     rules_graph_review as _rules_graph_review,  # noqa: E402 F401
-)  # noqa: E402
+)
 from autoskillit.recipe.rules.graph import (
     rules_graph_routes as _rules_graph_routes,  # noqa: E402 F401
-)  # noqa: E402
+)
 from autoskillit.recipe.schema import (  # noqa: E402
     AUTOSKILLIT_VERSION_KEY,
     CAMPAIGN_REF_RE,

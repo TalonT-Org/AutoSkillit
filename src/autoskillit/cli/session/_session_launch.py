@@ -104,7 +104,7 @@ def _run_interactive_session(
         plugin_source = None
         tools_arg = ()
 
-    from autoskillit.execution.headless._headless_helpers import assert_interactive_ordering
+    from autoskillit.execution import assert_interactive_ordering
 
     spec = backend.build_interactive_cmd(
         initial_prompt=initial_message,
@@ -115,7 +115,7 @@ def _run_interactive_session(
         plugin_source=plugin_source,
         tools=tools_arg,
     )
-    assert_interactive_ordering(spec)
+    assert_interactive_ordering(spec=spec)
     cmd = [*spec.cmd]
     with terminal_guard():
         result = subprocess.run(cmd, env=spec.env)

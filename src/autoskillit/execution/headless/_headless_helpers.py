@@ -104,8 +104,8 @@ def assert_interactive_ordering(
             for pi in positional_indices:
                 if pi > flag_idx:
                     raise ValueError(
-                        f"Positional arg at index {pi} ({cmd[pi]!r}) must precede "
-                        f"variadic flag {flag!r} at index {flag_idx}"
+                        f"positional arg at index {pi} ({cmd[pi]!r}) must precede "
+                        f"variadic flag {str(flag)!r} at index {flag_idx}"
                     )
 
 

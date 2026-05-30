@@ -53,6 +53,7 @@ from autoskillit.execution.headless._headless_helpers import (
     _resolve_session_log_dir,
     _session_log_dir,  # noqa: F401
     _stat_snapshot,  # noqa: F401
+    assert_interactive_ordering,
 )
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
@@ -91,6 +92,7 @@ if TYPE_CHECKING:
 __all__ = [
     "DefaultHeadlessExecutor",
     "PostSessionMetrics",
+    "assert_interactive_ordering",
     "run_headless_core",
 ]
 

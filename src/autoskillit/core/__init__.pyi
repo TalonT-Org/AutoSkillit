@@ -154,6 +154,7 @@ from .types import KNOWN_CI_EVENTS as KNOWN_CI_EVENTS
 from .types import LABEL_LIFECYCLE_REGISTRY as LABEL_LIFECYCLE_REGISTRY
 from .types import LABEL_TRANSITIONS as LABEL_TRANSITIONS
 from .types import LAUNCH_ID_ENV_VAR as LAUNCH_ID_ENV_VAR
+from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
 from .types import PACK_REGISTRY as PACK_REGISTRY
 from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
 from .types import PR_TELEMETRY_SECTIONS as PR_TELEMETRY_SECTIONS
@@ -186,7 +187,6 @@ from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
-from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult

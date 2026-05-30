@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from autoskillit.execution.backends._cmd_builder import CmdBuilder, CmdOrderingError
 
 from autoskillit.core import VARIADIC_CLAUDE_FLAGS
+from autoskillit.execution.backends._cmd_builder import CmdBuilder, CmdOrderingError
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

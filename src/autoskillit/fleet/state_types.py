@@ -13,7 +13,7 @@ from autoskillit.core import FleetErrorCode, RetryReason
 
 _resume_lock = threading.Lock()
 
-FLEET_STATE_SCHEMA_VERSION = 5
+FLEET_STATE_SCHEMA_VERSION = 6
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -112,7 +112,7 @@ class DispatchRecord:
     identity_degraded: bool = False
     reason: str = ""
     diagnostic_message: str = ""
-    kill_reason: str = ""
+    retry_reason: str = ""
     infra_exit_category: str = ""
     reaper_reason: str = ""
     reaper_dispatch_id: str = ""
@@ -143,7 +143,7 @@ class DispatchRecord:
             "identity_degraded": self.identity_degraded,
             "reason": self.reason,
             "diagnostic_message": self.diagnostic_message,
-            "kill_reason": self.kill_reason,
+            "retry_reason": self.retry_reason,
             "infra_exit_category": self.infra_exit_category,
             "reaper_reason": self.reaper_reason,
             "reaper_dispatch_id": self.reaper_dispatch_id,
@@ -200,7 +200,7 @@ class DispatchRecord:
             identity_degraded=d.get("identity_degraded", False),
             reason=d.get("reason", ""),
             diagnostic_message=d.get("diagnostic_message", ""),
-            kill_reason=d.get("kill_reason", ""),
+            retry_reason=d.get("retry_reason", "") or d.get("kill_reason", ""),
             infra_exit_category=d.get("infra_exit_category", ""),
             reaper_reason=d.get("reaper_reason", ""),
             reaper_dispatch_id=d.get("reaper_dispatch_id", ""),
@@ -288,7 +288,7 @@ class ResumeDecision:
     is_resumable: bool = False
     dispatched_session_id: str = ""
     dispatch_id: str = ""
-    kill_reason: str = ""
+    retry_reason: str = ""
     resume_checkpoint: dict[str, Any] = field(default_factory=dict)
 
 

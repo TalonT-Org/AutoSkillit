@@ -76,7 +76,7 @@ class TestResetBlockingDispatch:
                 started_at=1000.0,
                 ended_at=2000.0,
                 sidecar_path="/old/sidecar",
-                kill_reason="stale",
+                retry_reason="stale",
                 infra_exit_category="timeout",
             ),
         )
@@ -99,7 +99,7 @@ class TestResetBlockingDispatch:
         assert d2.started_at == 0.0
         assert d2.ended_at == 0.0
         assert d2.sidecar_path is None
-        assert d2.kill_reason == ""
+        assert d2.retry_reason == ""
         assert d2.infra_exit_category == ""
 
     def test_returns_true_on_success(self, tmp_path: Path):
@@ -257,7 +257,7 @@ class TestResumeResetOnRetry:
             DispatchRecord(
                 name="d2",
                 status=DispatchStatus.FAILURE,
-                kill_reason="stale",
+                retry_reason="stale",
                 infra_exit_category="timeout",
             ),
         )
@@ -267,7 +267,7 @@ class TestResumeResetOnRetry:
         state = read_state(sp)
         assert state is not None
         d2 = next(d for d in state.dispatches if d.name == "d2")
-        assert d2.kill_reason == ""
+        assert d2.retry_reason == ""
         assert d2.infra_exit_category == ""
 
 
@@ -282,7 +282,7 @@ class TestAttemptHistoryOnRetry:
             dispatched_session_id="old-sess",
             dispatched_pid=12345,
             reason="task_failed",
-            kill_reason="stale",
+            retry_reason="stale",
             infra_exit_category="timeout",
             started_at=1000.0,
             ended_at=2000.0,
@@ -293,7 +293,7 @@ class TestAttemptHistoryOnRetry:
         attempt = d.attempt_history[0]
         assert attempt["dispatch_id"] == "old-id"
         assert attempt["status"] == "failure"
-        assert attempt["kill_reason"] == "stale"
+        assert attempt["retry_reason"] == "stale"
         assert attempt["started_at"] == 1000.0
         assert attempt["ended_at"] == 2000.0
 

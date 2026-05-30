@@ -71,7 +71,7 @@ class TestInitialState:
                 dispatched_starttime_ticks=9999,
                 dispatched_boot_id="b1",
                 reason="started",
-                kill_reason="",
+                retry_reason="",
                 infra_exit_category="",
                 token_usage={"input": 100},
                 started_at=1.0,
@@ -114,7 +114,7 @@ class TestDispatchRecordFromDict:
             "dispatched_starttime_ticks": 9999,
             "dispatched_boot_id": "b1",
             "reason": "started",
-            "kill_reason": "",
+            "retry_reason": "",
             "infra_exit_category": "",
             "token_usage": {"input": 100},
             "started_at": 1.0,
@@ -132,7 +132,7 @@ class TestDispatchRecordFromDict:
         assert rec.dispatched_starttime_ticks == 9999
         assert rec.dispatched_boot_id == "b1"
         assert rec.reason == "started"
-        assert rec.kill_reason == ""
+        assert rec.retry_reason == ""
         assert rec.infra_exit_category == ""
         assert rec.token_usage == {"input": 100}
         assert rec.started_at == 1.0
@@ -944,23 +944,23 @@ class TestHasFailedDispatchReasonAware:
         assert has_failed_dispatch(sp) is True
 
 
-class TestKillReasonPropagation:
+class TestRetryReasonPropagation:
     def test_kill_reason_stored_in_dispatch_record(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("x"))
         record = DispatchRecord(
             name="x",
             status=DispatchStatus.FAILURE,
-            kill_reason="idle_stall",
+            retry_reason="idle_stall",
         )
         append_dispatch_record(sp, record)
         state = read_state(sp)
         assert state is not None
-        assert state.dispatches[0].kill_reason == "idle_stall"
+        assert state.dispatches[0].retry_reason == "idle_stall"
 
     def test_kill_reason_defaults_empty(self) -> None:
         record = DispatchRecord(name="x")
-        assert record.kill_reason == ""
+        assert record.retry_reason == ""
 
     def test_kill_reason_round_trips_through_json(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)
@@ -968,16 +968,16 @@ class TestKillReasonPropagation:
         record = DispatchRecord(
             name="x",
             status=DispatchStatus.FAILURE,
-            kill_reason="context_exhausted",
+            retry_reason="context_exhausted",
             infra_exit_category="context_exhausted",
         )
         append_dispatch_record(sp, record)
         raw = sp.read_text(encoding="utf-8")
-        assert '"kill_reason"' in raw
+        assert '"retry_reason"' in raw
         assert '"infra_exit_category"' in raw
         state = read_state(sp)
         assert state is not None
-        assert state.dispatches[0].kill_reason == "context_exhausted"
+        assert state.dispatches[0].retry_reason == "context_exhausted"
         assert state.dispatches[0].infra_exit_category == "context_exhausted"
 
     def test_resume_decision_includes_kill_reason(self, tmp_path: Path) -> None:
@@ -990,14 +990,26 @@ class TestKillReasonPropagation:
         data = json.loads(sp.read_text())
         for d in data["dispatches"]:
             if d["name"] == "x":
-                d["kill_reason"] = "idle_stall"
+                d["retry_reason"] = "idle_stall"
                 d["infra_exit_category"] = ""
                 d["dispatched_session_id"] = "sess-1"
         sp.write_text(json.dumps(data))
         decision = resume_campaign_from_state(sp, continue_on_failure=False)
         assert decision is not None
         assert decision.is_resumable is True
-        assert decision.kill_reason == "idle_stall"
+        assert decision.retry_reason == "idle_stall"
+
+    def test_dispatch_record_retry_reason_field(self) -> None:
+        """DispatchRecord.retry_reason stores RetryReason values."""
+        record = DispatchRecord(name="test", retry_reason="resume")
+        assert record.retry_reason == "resume"
+        assert not hasattr(record, "kill_reason")
+
+    def test_dispatch_record_from_dict_reads_legacy_kill_reason_key(self) -> None:
+        """Old state files with 'kill_reason' JSON key deserialize into retry_reason."""
+        raw: dict[str, object] = {"name": "test", "status": "running", "kill_reason": "stale"}
+        record = DispatchRecord.from_dict(raw)
+        assert record.retry_reason == "stale"
 
 
 class TestOrchestratorSessionIdRoundTrip:
@@ -1081,7 +1093,7 @@ class TestClassifyStaleDispatch:
             name="d1",
             status=DispatchStatus.RUNNING,
             sidecar_path=str(sidecar),
-            kill_reason="idle_stall",
+            retry_reason="idle_stall",
         )
         _orig_read_text = Path.read_text
 
@@ -1103,7 +1115,7 @@ class TestClassifyStaleDispatch:
             name="d1",
             status=DispatchStatus.RUNNING,
             sidecar_path=str(sidecar),
-            kill_reason="resume",
+            retry_reason="resume",
             infra_exit_category="context_exhausted",
         )
         status, sidecar_path_out = classify_stale_dispatch(record)
@@ -1118,7 +1130,7 @@ class TestClassifyStaleDispatch:
             name="d1",
             status=DispatchStatus.RUNNING,
             sidecar_path=str(sidecar),
-            kill_reason="idle_stall",
+            retry_reason="idle_stall",
             infra_exit_category="",
         )
         status, sidecar_path_out = classify_stale_dispatch(record)
@@ -1416,7 +1428,7 @@ class TestAllInterruptedCampaignDoesNotSilentlyComplete:
 
         upsert_dispatch_record_by_name(
             sp,
-            DispatchRecord(name="A", status=DispatchStatus.INTERRUPTED, kill_reason="stale"),
+            DispatchRecord(name="A", status=DispatchStatus.INTERRUPTED, retry_reason="stale"),
         )
 
         decision = resume_campaign_from_state(sp, continue_on_failure=True, reset_on_retry=True)
@@ -1465,7 +1477,7 @@ class TestAllRefusedCampaignDoesNotSilentlyComplete:
         assert decision.next_dispatch_name == "A"
 
 
-class TestKillReasonNotStaleAfterResumableRedispatch:
+class TestRetryReasonNotStaleAfterResumableRedispatch:
     """kill_reason must be cleared when a RESUMABLE dispatch is redispatched to RUNNING."""
 
     def test_kill_reason_cleared_on_resumable_to_running(self, tmp_path: Path) -> None:
@@ -1483,7 +1495,7 @@ class TestKillReasonNotStaleAfterResumableRedispatch:
             DispatchRecord(
                 name="A",
                 status=DispatchStatus.RESUMABLE,
-                kill_reason="idle_stall",
+                retry_reason="idle_stall",
                 infra_exit_category="something",
                 sidecar_path=str(sidecar),
             ),
@@ -1494,7 +1506,7 @@ class TestKillReasonNotStaleAfterResumableRedispatch:
         state = read_state(sp)
         assert state is not None
         a = next(d for d in state.dispatches if d.name == "A")
-        assert a.kill_reason == "", "kill_reason was not cleared on RESUMABLE→RUNNING transition"
+        assert a.retry_reason == "", "retry_reason was not cleared on RESUMABLE→RUNNING transition"
         assert a.infra_exit_category == "", (
             "infra_exit_category was not cleared on RESUMABLE→RUNNING transition"
         )
@@ -1629,7 +1641,7 @@ class TestUpsertFailureToFailureSnapshotsPrior:
                 name="run-implement",
                 status=DispatchStatus.FAILURE,
                 reason="fleet_l3_parse_failed",
-                kill_reason="context_exhausted",
+                retry_reason="context_exhausted",
             ),
         )
 
@@ -1648,7 +1660,7 @@ class TestUpsertFailureToFailureSnapshotsPrior:
         assert len(disp.attempt_history) == 1
         snapshot = disp.attempt_history[0]
         assert snapshot["reason"] == "fleet_l3_parse_failed"
-        assert snapshot["kill_reason"] == "context_exhausted"
+        assert snapshot["retry_reason"] == "context_exhausted"
         assert disp.status == DispatchStatus.FAILURE
         assert disp.reason == "fleet_l3_no_result_block"
 

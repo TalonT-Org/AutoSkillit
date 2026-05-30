@@ -143,7 +143,7 @@ def _launch_fleet_session(
             else ""
         )
         resume_kill_reason = (
-            resume_metadata.kill_reason
+            resume_metadata.retry_reason
             if resume_metadata is not None and resume_metadata.is_resumable
             else ""
         )
@@ -232,7 +232,7 @@ def _launch_fleet_session(
                 fresh_metadata.dispatched_session_id if fresh_metadata.is_resumable else ""
             )
             resume_dispatch_id = fresh_metadata.dispatch_id if fresh_metadata.is_resumable else ""
-            resume_kill_reason = fresh_metadata.kill_reason if fresh_metadata.is_resumable else ""
+            resume_kill_reason = fresh_metadata.retry_reason if fresh_metadata.is_resumable else ""
             resume_checkpoint = (
                 fresh_metadata.resume_checkpoint if fresh_metadata.is_resumable else None
             )

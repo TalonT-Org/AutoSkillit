@@ -42,6 +42,7 @@ conflicts from earlier merges in the queue.
 - Leave the git working tree in a dirty state
 - Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state
@@ -50,6 +51,7 @@ conflicts from earlier merges in the queue.
 - Use `gh pr merge {pr_number} --squash` when `autoMergeAllowed=false` — GitHub merges synchronously without waiting for checks
 - Poll `gh pr view {pr_number} --json state,mergedAt` to confirm the merge completed
 - Fetch the PR branch from remote before the deletion regression scan and conflict analysis
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -221,7 +223,11 @@ In both cases, poll `gh pr view {pr_number} --json state,mergedAt` until:
 
 Do NOT fall back to local git merge regardless of `AUTO_MERGE_ALLOWED`.
 
-### Step 3: Complexity Path — `needs_check` (Re-assessment)
+### Step 3: Complexity Path — `needs_check` (Re-assessment) (SINGLE MESSAGE)
+
+**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before attempting any merge, re-assess complexity against the current integration branch state.
 

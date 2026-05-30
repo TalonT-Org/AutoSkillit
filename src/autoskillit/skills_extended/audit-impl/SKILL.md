@@ -53,12 +53,14 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-impl/`
 - Emit a GO verdict when any `MISSING` or `CONFLICT` finding exists
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use Explore subagents for all file reads and diff retrieval
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Resolve all plan files before starting (abort early if any are missing)
 - Write `Dry-walkthrough verified = TRUE` as the absolute first line of any remediation file
+- Issue all Task calls in a single message to maximize parallelism
 - On a NO GO verdict, after writing the remediation file, emit the **absolute path** as a
   structured output token as your final output. Resolve the relative
   `temp/audit-impl/...` save path to absolute by prepending the full CWD:
@@ -119,7 +121,11 @@ exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, e
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
-### Step 1 — Load Plans via Parallel Subagents
+### Step 1 — Load Plans via Parallel Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch one Explore subagent per plan file in parallel. Each returns:
 
@@ -219,7 +225,11 @@ Record all findings from this cross-reference alongside the standard Step 3 audi
 Each `CONFLICT` or `MISSING` finding here forces a `NO GO` verdict per the existing verdict
 logic (Step 4).
 
-### Step 3 — Audit via Parallel Subagents
+### Step 3 — Audit via Parallel Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 **Data source discipline:** Do NOT call Read, Grep, or Glob to verify file existence or
 content — the diff is the single source of truth for implementation state. The working

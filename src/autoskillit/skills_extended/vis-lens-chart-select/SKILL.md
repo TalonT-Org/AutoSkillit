@@ -101,6 +101,7 @@ metadata:
 - Do not litter the codebase with useless comments, TODO markers, or explanatory annotations — the skill output and diagram speak for themselves
 - Create files outside `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/`
 - Use `radar` or `pie` chart types — these are perceptually inferior and excluded from the controlled vocabulary
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Apply the Cleveland-McGill perceptual hierarchy when ranking chart alternatives: **position > length > angle > area > color saturation > color hue**
@@ -109,6 +110,7 @@ metadata:
 - Use colorblind-safe palettes (wong, okabe-ito, viridis, cividis)
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Issue all Task calls in a single message to maximize parallelism
 - Write output to `{{AUTOSKILLIT_TEMP}}/vis-lens-chart-select/vis_spec_chart_select_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -129,7 +131,11 @@ arg 2 (experiment_plan_path) is provided and exists, read the experiment plan fo
 methodology. Use this structured context as the foundation for Steps 1–4; skip the CWD
 exploration for these fields if the context file supplies them.
 
-### Step 1: Parallel Exploration
+### Step 1: Parallel Exploration (SINGLE MESSAGE)
+
+**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn parallel exploration tasks to investigate:
 

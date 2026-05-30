@@ -38,6 +38,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 - Include implementation steps disguised as requirements ("Refactor X to use Y" is an instruction, not a requirement)
 - Write requirements that can only be verified by reading source code
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents to understand the source material and relevant codebase context
@@ -45,6 +46,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 - Provide background and context for each group
 - State requirements as verifiable conditions
 - Write to `{{AUTOSKILLIT_TEMP}}/make-req/` directory (relative to the current working directory)
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -52,7 +54,7 @@ Decompose a task, plan, roadmap, or feature description into a structured set of
 
 Identify the input: a task description, plan document, roadmap, conversation context, or file reference. Read it fully.
 
-If the input references existing systems or codebases, launch parallel Explore subagents to understand:
+If the input references existing systems or codebases, launch parallel Explore subagents (SINGLE MESSAGE — issue ALL Task calls at once) to understand:
 
 - What exists today that the requirements relate to
 - Current capabilities and boundaries

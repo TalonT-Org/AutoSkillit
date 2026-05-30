@@ -45,6 +45,7 @@ hooks:
 - Accept a "pass" result without asking what a false result would have looked like under this design
 - Create files outside `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/`
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - For every positive claim, identify what error the test was capable of detecting
@@ -53,6 +54,7 @@ hooks:
 - Flag confirmatory theater: experiments designed to confirm rather than risk refutation
 - BEFORE creating any diagram, LOAD the `/autoskillit:mermaid` skill using the Skill tool - this is MANDATORY
 - If the Skill tool cannot be used (disable-model-invocation) or refuses this invocation, do NOT proceed with diagram creation. Abort this step and omit the diagram from output.
+- Issue all Task calls in a single message to maximize parallelism
 - Write output to `{{AUTOSKILLIT_TEMP}}/exp-lens-severity-testing/exp_diag_severity_testing_{YYYY-MM-DD_HHMMSS}.md`
 - After writing the file, emit the structured output token as **literal plain text** with no
   markdown formatting on the token name (the adjudicator performs a regex match):
@@ -73,7 +75,11 @@ arg 2 (experiment_plan_path) is provided and exists, read the experiment plan fo
 methodology. Use this structured context as the foundation for Steps 1-5; skip the CWD
 exploration for these fields if the context file supplies them. For any field absent from the context file, perform CWD exploration for that specific field only.
 
-### Step 1: Launch Parallel Exploration Subagents
+### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+
+**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn Explore subagents to investigate:
 

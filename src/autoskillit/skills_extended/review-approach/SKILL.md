@@ -29,6 +29,7 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/review-approach/` directory
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
@@ -45,6 +46,7 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
   review_path = /absolute/cwd/temp/review-approach/{filename}.md
   ```
   This token is MANDATORY — the pipeline cannot proceed without it.
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -52,7 +54,11 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 
 From the report, plan, or conversation context, identify the core problems and proposed features that need external research. Break them into distinct research topics.
 
-### Step 2: Launch Parallel Web Search Subagents
+### Step 2: Launch Parallel Web Search Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn general-purpose subagents (with web search) for each research topic. Each subagent should investigate:
 

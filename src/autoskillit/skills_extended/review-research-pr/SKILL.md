@@ -46,9 +46,11 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 - Flag the absence of a clear experimental conclusion as a deficiency — inconclusive
   results are valid outcomes for research PRs (do not flag them)
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)
+- Issue all Task calls in a single message to maximize parallelism
 - Output `verdict=` on the final line
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=approved)
@@ -126,7 +128,11 @@ fi
 new-file line numbers present in the diff. When available, Step 4 uses set-membership for
 validation. `VALID_LINE_RANGES` is used as fallback for interval checking.
 
-### Step 3: Run Parallel Audit Subagents
+### Step 3: Run Parallel Audit Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn parallel subagents (Task tool, model: sonnet) for each research audit dimension.
 Each subagent receives only the PR diff content (not the full codebase) and returns

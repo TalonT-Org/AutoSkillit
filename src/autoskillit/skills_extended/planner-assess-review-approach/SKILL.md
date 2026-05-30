@@ -34,6 +34,7 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 - Write output outside `$2/`
 - Modify input files
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -43,6 +44,7 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 - Read `$2/analysis.json` for codebase technology context
 - Write `$2/review_approach_assessment.json`
 - Emit: `review_approach_assessment_path = <absolute path to review_approach_assessment.json>`
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -59,7 +61,11 @@ for codebase technology context: available libraries, architectural patterns in 
 established conventions. This context informs whether a WP is "following established patterns"
 (no-benefit) versus "introducing something new" (benefit signal).
 
-### Step 3: Evaluate each WP
+### Step 3: Evaluate each WP (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn 1–2 subagents (model: "sonnet") to evaluate WPs in parallel batches. For each WP,
 evaluate against these signals:

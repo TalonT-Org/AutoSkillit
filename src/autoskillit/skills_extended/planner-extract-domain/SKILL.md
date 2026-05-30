@@ -34,6 +34,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 - Abort the calling recipe on failure — log a warning and return gracefully
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - If `$1` is empty or the file does not exist, STOP immediately and report failure
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -41,6 +42,7 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 - Read the analysis file from argument $1 before spawning subagents
 - Use Explore subagents for all file reads
 - Spawn subagents in parallel
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -48,7 +50,11 @@ Extract domain knowledge, naming conventions, and structural patterns specific t
 
 Read the `analysis.json` file from argument $1. Use its `language`, `framework`, `architecture_style`, and `key_patterns` fields to focus subagent queries.
 
-### Step 2: Launch 3–5 parallel Explore subagents
+### Step 2: Launch 3–5 parallel Explore subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Read the task description: if $2 is provided and non-empty, read the file at that path.
 

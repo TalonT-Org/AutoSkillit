@@ -31,6 +31,7 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/merge-prs/` directory
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents to fetch PR data in parallel
@@ -42,6 +43,7 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
   subagent batches. Processing PRs one-at-a-time without an explicit user instruction to do
   so is the wrong default. Up to 8 PRs should be processed in a single parallel batch;
   launch additional batches for larger sets.
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Arguments
 
@@ -103,7 +105,11 @@ is active on `{base_branch}` with `MERGEABLE` entries.
 | `QUEUE_MODE` | boolean | `true` when the merge queue has ≥1 MERGEABLE entry; `false` otherwise |
 | `QUEUE_ENTRIES` | list[dict] | Sorted queue entries `{position, state, pr_number, pr_title}` when `QUEUE_MODE = true`; empty list when `false` |
 
-### Step 1: Fetch PR Data
+### Step 1: Fetch PR Data (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 - **If `QUEUE_MODE = false`**: **ALWAYS launch subagents in parallel** — never process PRs
   sequentially. Launch one Explore subagent per PR (up to 8 simultaneously; batch in groups

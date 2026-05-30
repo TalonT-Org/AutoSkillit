@@ -47,6 +47,7 @@ hooks:
 - Include static structure details (that's C4 lens)
 - Show data storage details (that's data lineage lens)
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Focus on BEHAVIOR and STATE TRANSITIONS
@@ -61,6 +62,7 @@ hooks:
   ```
   diagram_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/arch-lens-process-flow/arch_diag_process_flow_{"{"}YYYY-MM-DD_HHMMSS{}}.md
   ```
+- Issue all Task calls in a single message to maximize parallelism
 
 
 ## Analysis Workflow
@@ -76,7 +78,11 @@ If a `context_path` positional argument is present:
 
 If no `context_path` is provided, skip this step and explore the full CWD in Step 1.
 
-### Step 1: Launch Parallel Exploration Subagents
+### Step 1: Launch Parallel Exploration Subagents (SINGLE MESSAGE)
+
+**Issue ALL Explore/Task subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn Explore subagents to investigate:
 

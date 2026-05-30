@@ -37,6 +37,7 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - Explore parent directories of your input paths (e.g., `ls $(dirname $1)/..`)
 - Read result files from other phases
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -45,6 +46,7 @@ is the sole writer for this phase's WPs — no concurrent write races.
 - Write the phase sentinel file before emitting the output token
 - Emit: `phase_wps_result_dir = <absolute path to work_packages/ directory>`
 - Write a stub result for any L0 that fails or returns invalid JSON
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -89,7 +91,11 @@ Each packet contains:
 - Phase goal and scope
 - Task file path (absolute) — the agent reads this for scope-creep verification
 
-### Step 4: Spawn L0 subagents in PARALLEL
+### Step 4: Spawn L0 subagents in PARALLEL (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Use the native Agent tool with `subagent_type: "autoskillit:wp-elaborator"` to spawn one
 agent per WP simultaneously. If WP count > 6, spawn in sequential batches of 6 — await

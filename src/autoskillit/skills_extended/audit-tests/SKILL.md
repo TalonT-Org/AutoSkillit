@@ -31,9 +31,11 @@ Audit the test suite to identify useless tests, consolidation opportunities, qua
 - Recommend removing tests that guard against real regressions
 - Recommend changes that would reduce meaningful coverage
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents for parallel exploration
+- Issue all Task calls in a single message to maximize parallelism
 - Read both the test AND the code it tests before judging
 - Provide file paths, line numbers, and an explanation for each finding
 - Write the improvement plan to `{{AUTOSKILLIT_TEMP}}/audit-tests/test_audit_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
@@ -179,7 +181,11 @@ Tests and configuration that maintain the path-based test filter's correctness. 
 
 ## Audit Workflow
 
-### Step 1: Launch Parallel Subagents
+### Step 1: Launch Parallel Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn 6 domain-based subagents. Each covers all issue categories (C1–C11) within its area. Group by source domain, not by issue category. Each subagent must read both test files AND the corresponding production code before making judgements.
 

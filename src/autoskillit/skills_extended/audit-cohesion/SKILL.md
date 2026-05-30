@@ -32,9 +32,11 @@ Audit the codebase for internal cohesion: how well components integrate and main
 - Update an existing report — always generate new
 - Duplicate findings that belong in audit-arch (rule violations)
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents for parallel exploration (one per cohesion dimension)
+- Issue all Task calls in a single message to maximize parallelism
 - All output goes under `{{AUTOSKILLIT_TEMP}}/audit-cohesion/` (create if needed)
 - Final report: `{{AUTOSKILLIT_TEMP}}/audit-cohesion/cohesion_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files — they return findings in their response text only
@@ -372,7 +374,11 @@ Flag duplicates (same name in different agents).
 
 ## Audit Workflow
 
-### Step 1: Launch Parallel Subagents
+### Step 1: Launch Parallel Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn subagents for each cohesion dimension. Each subagent MUST be instructed:
 

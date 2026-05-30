@@ -33,9 +33,11 @@ Audit all documentation sources for drift, staleness, and inconsistency against 
 - Update an existing report — always generate a new one
 - Compare doc-to-doc without first grounding claims in actual code behavior
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Ground every cross-reference finding in what the code actually does (not what other docs say)
+- Issue all Task calls in a single message to maximize parallelism
 - Use subagents for parallel exploration
 - Write report to `{{AUTOSKILLIT_TEMP}}/audit-docs/docs_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Provide file:line references for every finding
@@ -74,7 +76,11 @@ Flag findings in these categories (maps to REQ-SKILL-004):
 
 1. **Pre-flight**: Verify `{{AUTOSKILLIT_TEMP}}/audit-docs/` directory exists; create it if not.
 
-2. **Familiarization wave** — spawn 6 parallel subagents, one per subsystem group. Each subagent reports: actual module/component names, exported symbols, behavioral summary (2–5 sentences per module). If any subagent fails, record the gap and continue.
+2. **Familiarization wave (SINGLE MESSAGE)** — spawn 6 parallel subagents, one per subsystem group. Each subagent reports: actual module/component names, exported symbols, behavioral summary (2–5 sentences per module). If any subagent fails, record the gap and continue.
+
+   **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+   Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
    | Agent | Subsystems | Focus |
    |---|---|---|

@@ -60,6 +60,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Create groups that cannot be independently planned
 - Include implementation steps or technical approach in the group descriptions
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents to verify codebase structure before finalizing groups
@@ -77,6 +78,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
   group_files = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-groups/{groups_filename}.md
   ```
   These tokens are MANDATORY — the pipeline cannot proceed without them.
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -84,7 +86,11 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 Read the full document. Inventory every requirement (REQ-*), feature, and deliverable. Build a raw list with original IDs preserved.
 
-### Step 2: Verify Against Codebase
+### Step 2: Verify Against Codebase (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch **parallel Explore subagents** to understand:
 

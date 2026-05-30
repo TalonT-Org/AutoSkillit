@@ -43,6 +43,7 @@ implemented. Identify review debt before it compounds.
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Use `gh pr list` without `--limit` to avoid pagination truncation
 - Use `\|` in Grep patterns — use `|` for alternation (ERE, not BRE)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Save raw PR JSON to temp before any analysis (Step 1)
@@ -54,6 +55,7 @@ implemented. Identify review debt before it compounds.
 - Skip threads that already contain an `[AUDIT]` comment
 - Resolve owner/repo from `git remote get-url origin` — never hardcode
 - Use `/autoskillit:` prefix when invoking any other skill
+- Issue all Task calls in a single message to maximize parallelism
 
 ---
 
@@ -138,7 +140,11 @@ implemented. Identify review debt before it compounds.
 
 ---
 
-### Step 2: Triage (Haiku — Broad Pass)
+### Step 2: Triage (Haiku — Broad Pass) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 1. List all JSON files in `raw/`. Split into batches of ~5 files per agent.
 
@@ -170,7 +176,11 @@ implemented. Identify review debt before it compounds.
 
 ---
 
-### Step 3: Validation (Sonnet — Deep Pass)
+### Step 3: Validation (Sonnet — Deep Pass) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 1. Group candidates into batches of ~10. Launch **parallel Sonnet subagents**
    (`model: "sonnet"`) per batch.

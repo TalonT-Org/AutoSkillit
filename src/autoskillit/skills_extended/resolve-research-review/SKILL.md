@@ -47,6 +47,7 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Modify tests to suppress failures introduced by reviewer fixes
 - Use file-path-segment grouping — research comments are grouped by **dimension**, not by file path
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not a hardcoded number)
@@ -54,6 +55,7 @@ Bounded by `retries: 2` — on exhaustion routes to `research_complete`.
 - Run intent validation BEFORE making any code changes
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary including escalation count
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -182,7 +184,11 @@ Apply `DIMENSION_PATTERN` to each comment body to extract the dimension label.
 
 Save `dimension_groups_{pr}.json` with findings keyed by group.
 
-### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes)
+### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Before applying any fix, validate every critical and warning finding against the actual
 codebase and git history. This analysis phase runs entirely before code changes are made.

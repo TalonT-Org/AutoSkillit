@@ -33,6 +33,7 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last week`). If
 - Modify any source code files
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-bugs/` directory
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents heavily for parallel log analysis
@@ -40,6 +41,7 @@ The user may provide a "since" date (e.g., `2/7`, `2026-02-07`, `last week`). If
 - Final report: `{{AUTOSKILLIT_TEMP}}/audit-bugs/bug_pattern_audit_{YYYY-MM-DD_HHMMSS}.md`
 - Subagents must NOT create their own files - they return findings in their response text only
 - Do not change any code
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -65,7 +67,11 @@ Verify the directory exists and contains `.jsonl` files.
 3. Also `grep -l '/autoskillit:investigate'` to catch user-typed invocations
 4. Combine and deduplicate. Only use top-level files (not subagent logs under `*/subagents/`)
 
-### Step 3: Dispatch Subagents for Parallel Analysis
+### Step 3: Dispatch Subagents for Parallel Analysis (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Split the matching files into batches of ~5 and dispatch general-purpose subagents in parallel. Each subagent should extract from each log file:
 

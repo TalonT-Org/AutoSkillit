@@ -65,6 +65,7 @@ incorporate the feedback before writing the plan.
   any external dataset identifier) in the data_manifest without first confirming their
   existence via web search — accession patterns learned during training are frequently
   hallucinated
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
@@ -78,6 +79,7 @@ incorporate the feedback before writing the plan.
 - Apply all 10 validation rules before writing the frontmatter block
 - Log V1–V4, V9, V10 ERRORs in a ## Frontmatter Validation Errors section instead of writing frontmatter
 - Log V5–V8, V10 network failure WARNINGs as # WARNING: ... YAML comments on the relevant field lines
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -104,7 +106,11 @@ Detect and read inputs:
    your initial analysis in Step 2. Note which sections of the plan need rework.
    When absent or empty, omit this sub-step and proceed normally (first pass).
 
-### Step 2 — Explore Feasibility
+### Step 2 — Explore Feasibility (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch subagents (model: "sonnet") to assess feasibility. The following are
 **minimum required** — launch as many additional subagents as needed to fill

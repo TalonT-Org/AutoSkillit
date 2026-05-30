@@ -47,6 +47,7 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Treat a medium-severity cross-assessment as grounds for deferral — only critical severity defers
 - Emit has_deferred / deferred_count / dispatched_count with markdown decorators
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use parallel subagents (up to 8) for issue fetching in Step 1
@@ -57,6 +58,7 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 - Check the actual codebase when uncertain whether two issues' changes overlap
 - Capture per-pair reasoning in `pairwise_assessments` for auditability
 - Anchor all output paths to the current working directory
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -72,7 +74,11 @@ with `"Error: --max-parallel must be a positive integer"`. Validate the issue co
 - **One issue**: emit a warning and write a trivial single-group map (single issue always gets `parallel: false`).
 - **Two or more issues**: proceed to Step 0.5.
 
-### Step 1 — Fetch Issue Data (parallel subagents)
+### Step 1 — Fetch Issue Data (parallel subagents) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch up to 8 parallel `sonnet` subagents, one per issue. Each subagent:
 1. Calls `gh issue view {N} --json number,title,body,labels`. If the call fails (non-zero

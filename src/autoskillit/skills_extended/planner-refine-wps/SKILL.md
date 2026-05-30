@@ -48,6 +48,7 @@ directory.
 - Spawn one L0 per WP — L0s operate per PHASE
 - Read `{{AUTOSKILLIT_TEMP}}` artifacts not passed as positional arguments
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -58,6 +59,7 @@ directory.
 - Log `CRITICAL` to stdout for any L0 subagent that fails entirely (proceed with N-1 suggestions)
 - When two WPs claim the same deliverable file, assign ownership to the WP with the numerically earlier ID using natural sort (e.g., `P1-A1-WP1` beats `P2-A1-WP1`)
 - Emit: `phase_wp_refined_path = <absolute path to $3/wp_refine_contexts/{phase_id}_result.json>`
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -126,7 +128,11 @@ For each phase (one context file = one phase), build a context packet containing
 - Instructions: review this phase's WPs against peer stubs; return structured suggestions only — do NOT edit files
 - Use `overlap_notes` from the PhaseElaborated entry as a prior signal for subsumption detection
 
-### Step 3: Spawn parallel L0 subagents
+### Step 3: Spawn parallel L0 subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 If phase count ≤ 6: spawn all in one parallel batch via Agent/Task.
 If phase count > 6: spawn sequential batches of 6. Between batches, emit

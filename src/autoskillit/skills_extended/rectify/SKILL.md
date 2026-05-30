@@ -41,6 +41,7 @@ Do not change any code.
 - Suggest backward compatibility shims
 - Create files outside `{{AUTOSKILLIT_TEMP}}/rectify/` directory
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use subagents for parallel exploration
@@ -49,6 +50,7 @@ Do not change any code.
 - Identify how tests missed the issue and similar/related bugs
 - Map the components and their connections thoroughly
 - Write the plan as markdown to `{{AUTOSKILLIT_TEMP}}/rectify/` directory (relative to the current working directory)
+- Issue all Task calls in a single message to maximize parallelism
 - After writing the plan file, emit the **absolute path** as a structured output token
   as your final output. The save path is relative (`{{AUTOSKILLIT_TEMP}}/rectify/...`) but
   the token **must** use the absolute path (prepend the full CWD):
@@ -74,7 +76,11 @@ exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, e
 `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
 sibling parallel-call cancellations.
 
-### Step 2: Deep Exploration with Subagents
+### Step 2: Deep Exploration with Subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch parallel subagents to investigate (some of the listed aspects may require multiple subagents):
 

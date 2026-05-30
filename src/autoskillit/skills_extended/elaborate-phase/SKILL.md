@@ -38,6 +38,7 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 - Make assumptions about codebase state without verifying
 - Read previous `Phase#.md` files unless you have a specific question that requires looking up a detail
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Assess current codebase state with subagents FIRST
@@ -47,6 +48,7 @@ Elaborate a single phase from a high-level migration plan into a complete, self-
 - Include verification commands and success criteria
 - Report findings to terminal output
 - Update the master plan if dry walkthrough reveals issues affecting subsequent phases
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Plan Directory Structure
 
@@ -111,7 +113,11 @@ Load and understand:
 
 **IMPORTANT:** Do NOT read previous `Phase#.md` files. They exist in the directory but reading them wastes context. Only look up a specific detail from a previous phase if you encounter a concrete question during assessment that cannot be answered from the codebase itself.
 
-### Step 3: Assess Current Codebase State
+### Step 3: Assess Current Codebase State (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch **parallel Explore subagents** to understand the current state:
 

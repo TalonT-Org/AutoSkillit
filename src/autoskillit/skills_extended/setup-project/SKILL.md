@@ -43,6 +43,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 - Include install instructions or "Getting Started" sections — user is already running the skill
 - Hardcode `base_branch = main` — detect the current branch
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Read the target project using Glob, Read, and Grep — no shell commands against target
@@ -51,6 +52,7 @@ Explore a target project and generate tailored recipes and AutoSkillit config th
 - Present candidate workflows one by one for user approval before generating scripts
 - Show a summary confirmation gate before writing anything to disk
 - Use the two-directory model (project_dir + work_dir) in generated recipes
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -76,7 +78,11 @@ Then prompt the user:
 
 Store the answer for Step 1.
 
-### Step 1: Explore Target Project (Parallel Subagents)
+### Step 1: Explore Target Project (Parallel Subagents) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Launch parallel Explore subagents against `project_dir`. If the user opted into history mining, include Subagent E in the same parallel launch:
 

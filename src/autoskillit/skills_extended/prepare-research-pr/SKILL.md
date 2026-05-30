@@ -39,11 +39,13 @@ Does NOT invoke any exp-lens skills or create a PR.
 - Create files outside `{{AUTOSKILLIT_TEMP}}/prepare-research-pr/` (relative to the current working directory)
 - Fail silently — always emit all three output tokens as your final output
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use Agent subagents (not slash commands) for reading and synthesis
 - Emit `prep_path`, `selected_lenses`, and `lens_context_paths` as your final output
 - Write all output paths as absolute paths
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Lens Selection Table
 
@@ -91,7 +93,11 @@ Create temp directory:
 
 Generate a timestamp `ts` (format: `YYYY-MM-DD_HHMMSS`) for unique file naming.
 
-### Step 1: Read report via Agent subagent
+### Step 1: Read report via Agent subagent (SINGLE MESSAGE)
+
+**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn an **Explore** subagent to read `{report_path}` and extract:
 - Executive summary

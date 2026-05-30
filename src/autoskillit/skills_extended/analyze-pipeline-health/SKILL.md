@@ -30,12 +30,14 @@ Coordinator skill that reads session logs from a pipeline run, groups them by st
 - Modify any source code files
 - Create issues or PRs (findings are reported to the calling session only)
 - Run subagents in the background (run_in_background: true is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Filter sessions.jsonl by kitchen_id to scope to this pipeline run
 - Spawn scanner subagents in parallel (one per step group)
 - Use model: "haiku" for scanner subagents
 - Report "no issues found" clearly when the pipeline is clean
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -47,7 +49,11 @@ Read ~/.local/share/autoskillit/logs/sessions.jsonl and filter entries where kit
 
 Group the filtered entries by step_name. Each group represents one phase of the pipeline (e.g., plan, implement, test, merge).
 
-### Step 3: Spawn scanner subagents
+### Step 3: Spawn scanner subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 For each step group, spawn a scanner subagent via the Agent tool with subagent_type: "autoskillit:pipeline-health-scanner".
 

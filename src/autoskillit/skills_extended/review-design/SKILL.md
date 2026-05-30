@@ -50,9 +50,11 @@ best available plan.
 - Include code snippets, shell commands, or specific tool invocations in findings or revision guidance — findings describe gaps and risks, not implementation instructions
 - Prescribe HOW to fix an issue — findings must describe WHAT is lacking or at risk; the fix is the plan author's responsibility
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Issue all Task calls in a single message to maximize parallelism
 - Write output to `{{AUTOSKILLIT_TEMP}}/review-design/` (relative to the current working directory)
 - After writing output files, emit the **absolute paths** as structured output tokens
   as your final output. Resolve relative save paths to absolute by prepending
@@ -254,7 +256,11 @@ Do NOT evaluate:
 If a code snippet in the plan reveals a design-level concern (e.g., the metric definition
 contradicts the hypothesis), flag the design concern, not the code bug.
 
-### Step 2: Level 1 Analysis — Fail-Fast (parallel)
+### Step 2: Level 1 Analysis — Fail-Fast (parallel) (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Two subagents run in parallel. Both are always H-weight; severity thresholds are calibrated per experiment_type via the rubric below.
 

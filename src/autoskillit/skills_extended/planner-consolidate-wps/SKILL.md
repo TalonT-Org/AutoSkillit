@@ -47,6 +47,7 @@ merging).
 - Allow an L0 to write files outside `$2/work_packages/consolidation/`
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Spawn more than 6 L0s in a single parallel batch
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
@@ -55,6 +56,7 @@ merging).
 - Validate each L0 response before writing its manifest
 - Write a manifest for every phase, even if it contains only singleton groups
 - Emit: `consolidation_manifest_dir = {planner_dir}/work_packages/consolidation`
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 
@@ -94,7 +96,11 @@ For each phase, assemble a context packet containing:
     files). This is guidance, not a hard gate — use judgment about whether the combined
     work forms a coherent unit.
 
-### Step 4: Dispatch parallel L0 subagents
+### Step 4: Dispatch parallel L0 subagents (SINGLE MESSAGE)
+
+**Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
+
+Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 If phase count ≤ 6: spawn all in one parallel batch.
 If phase count > 6: spawn sequential batches of 6.

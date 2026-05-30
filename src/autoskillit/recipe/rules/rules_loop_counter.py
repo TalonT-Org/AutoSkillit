@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-from collections import deque
-
 import regex as _re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe._analysis_graph import _extract_routing_edges
-from autoskillit.recipe._rule_helpers import _build_graph_without_nodes
+from autoskillit.recipe._rule_helpers import _build_graph_without_nodes, _find_cycle_members
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _CTX_VAR_RE = _re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
-
-_MAX_LOOP_HOPS = 4
 
 
 def _build_yaml_predecessor_map(ctx: ValidationContext) -> dict[str, set[str]]:
@@ -24,43 +20,6 @@ def _build_yaml_predecessor_map(ctx: ValidationContext) -> dict[str, set[str]]:
             if edge.target in ctx.recipe.steps:
                 preds.setdefault(edge.target, set()).add(name)
     return preds
-
-
-def _build_yaml_successor_map(ctx: ValidationContext) -> dict[str, set[str]]:
-    succs: dict[str, set[str]] = {}
-    for name, step in ctx.recipe.steps.items():
-        for edge in _extract_routing_edges(step):
-            if edge.target in ctx.recipe.steps:
-                succs.setdefault(name, set()).add(edge.target)
-    return succs
-
-
-def _find_guard_loop_body(
-    guard_name: str,
-    yaml_succs: dict[str, set[str]],
-    recipe_steps: dict,
-) -> set[str] | None:
-    """BFS from G's successors back to G within _MAX_LOOP_HOPS using YAML-only edges."""
-    start_successors = yaml_succs.get(guard_name, set())
-    queue: deque[tuple[str, list[str]]] = deque()
-    for s in sorted(start_successors):
-        if s in recipe_steps and s != guard_name:
-            queue.append((s, [s]))
-
-    visited: set[str] = set()
-    while queue:
-        current, path = queue.popleft()
-        if len(path) > _MAX_LOOP_HOPS:
-            continue
-        if current == guard_name:
-            return set(path)
-        if current in visited:
-            continue
-        visited.add(current)
-        for succ in sorted(yaml_succs.get(current, set())):
-            if succ in recipe_steps:
-                queue.append((succ, path + [succ]))
-    return None
 
 
 def _has_disconnected_preds(
@@ -95,7 +54,7 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
     graph = ctx.step_graph
 
     yaml_preds = _build_yaml_predecessor_map(ctx)
-    yaml_succs = _build_yaml_successor_map(ctx)
+    all_cycles = _find_cycle_members(graph, recipe.steps)
 
     for step_name, step in recipe.steps.items():
         if step.tool != "run_python":
@@ -112,11 +71,9 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
         if counter_var not in step.capture:
             continue
 
-        loop_body = _find_guard_loop_body(step_name, yaml_succs, recipe.steps)
-        if loop_body is None:
+        full_cycle = frozenset().union(*(c for c in all_cycles if step_name in c))
+        if not full_cycle:
             continue
-
-        full_cycle = loop_body | {step_name}
 
         if len(full_cycle) < 3:
             continue

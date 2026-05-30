@@ -54,7 +54,10 @@ def _is_autoskillit_hook_entry(entry: dict) -> bool:
 
 def _upsert_hooks_text(config_path: Path, raw_bytes: bytes, fresh_hooks: list[dict]) -> None:
     """Replace autoskillit-owned [[hooks]] blocks in raw config text and append fresh ones."""
-    text = raw_bytes.decode("utf-8", errors="replace")
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(f"config file contains non-UTF-8 bytes: {exc}") from exc
     lines = text.splitlines(keepends=True)
 
     owned_ranges: list[tuple[int, int]] = []
@@ -89,7 +92,8 @@ def sync_hooks_to_codex_config(config_path: Path | None = None) -> bool:
         config_path = Path.home() / ".codex" / "config.toml"
     result = _read_codex_config(config_path)
     if result.is_corrupt:
-        assert result.raw_bytes is not None
+        if result.raw_bytes is None:
+            raise RuntimeError("corrupt ReadResult has no raw_bytes")
         fresh = generate_codex_hooks_config()
         _upsert_hooks_text(config_path, result.raw_bytes, fresh)
         return True

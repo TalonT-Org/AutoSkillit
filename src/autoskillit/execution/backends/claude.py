@@ -375,12 +375,12 @@ class ClaudeCodeBackend:
                 pass
             case None:
                 pass
+        if initial_prompt is not None:
+            cmd.append(initial_prompt)
         for d in add_dirs:
             cmd += [ClaudeFlags.ADD_DIR, str(d)]
         for t in tools:
             cmd += [ClaudeFlags.TOOLS, t]
-        if initial_prompt is not None:
-            cmd.append(initial_prompt)
         merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
         if env_extras:
             merged.update(env_extras)

@@ -182,6 +182,7 @@ from .types import SKILL_TOOLS as SKILL_TOOLS
 from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
+from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult

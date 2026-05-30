@@ -260,6 +260,27 @@ def test_primary_model_prefers_output_tokens() -> None:
     assert result == "claude-opus-4-6"
 
 
+def test_primary_model_argmax_returns_subagent_when_dominant() -> None:
+    """Raw argmax returns subagent model when subagent output_tokens exceed parent.
+    Callers must use the authoritative model_identifier instead of relying on argmax."""
+    from autoskillit.pipeline.tokens import _primary_model
+
+    token_usage = {
+        "model_breakdown": {
+            "claude-opus-4-6": {
+                "input_tokens": 50000,
+                "output_tokens": 8000,
+            },
+            "claude-sonnet-4-6": {
+                "input_tokens": 200000,
+                "output_tokens": 25000,
+            },
+        }
+    }
+    result = _primary_model(token_usage)
+    assert result == "claude-sonnet-4-6"
+
+
 def test_primary_model_warns_on_non_dict_breakdown() -> None:
     """_primary_model logs warning for non-dict model_breakdown entries."""
     import structlog.testing

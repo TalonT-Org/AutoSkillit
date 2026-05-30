@@ -475,6 +475,9 @@ def test_detect_model_drift_skips_when_observed_empty():
         ("claude-sonnet-4-6", "claude-sonnet-4-6", False),
         ("sonnet", "claude-opus-4-6", True),
         ("claude-sonnet-4-5", "claude-sonnet-4-6", True),
+        ("opus[1m]", "claude-opus-4-6", False),
+        ("sonnet[1m]", "claude-sonnet-4-6", False),
+        ("opus[1m]", "claude-sonnet-4-6", True),
     ],
 )
 def test_detect_model_drift_alias_normalization(configured, observed, expect_drift):
@@ -498,6 +501,19 @@ def test_normalize_model_id_full_id_unchanged():
 
 def test_normalize_model_id_non_anthropic_passthrough():
     assert normalize_model_id("gpt-4o") == "gpt-4o"
+
+
+def test_normalize_model_id_strips_context_window_suffix():
+    assert normalize_model_id("opus[1m]") == "claude-opus"
+    assert normalize_model_id("sonnet[1m]") == "claude-sonnet"
+    assert normalize_model_id("claude-opus-4-6[1m]") == "claude-opus-4-6"
+    assert normalize_model_id("claude-sonnet-4-6-20250514[200k]") == "claude-sonnet-4-6"
+
+
+def test_detect_model_drift_includes_profile_name():
+    anomalies = detect_model_drift("sonnet", "claude-opus-4-6", profile_name="minimax")
+    assert len(anomalies) == 1
+    assert anomalies[0]["detail"]["profile_name"] == "minimax"
 
 
 def test_rss_growth_startup_artifact_suppressed():

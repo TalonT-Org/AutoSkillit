@@ -1426,3 +1426,128 @@ class TestSessionIndexSummaryConsistency:
             assert entry[field] == summary[field], (
                 f"Field '{field}' differs: index={entry[field]!r}, summary={summary[field]!r}"
             )
+
+
+class TestModelAliasDriftIntegration:
+    """Integration tests: alias normalization and profile_name in flush_session_log."""
+
+    def test_alias_configured_full_observed_no_drift(self, tmp_path):
+        """Alias 'sonnet' vs API-returned 'claude-sonnet-4-6' should produce no MODEL_DRIFT."""
+        _flush(
+            tmp_path,
+            session_id="alias-no-drift-001",
+            proc_snapshots=None,
+            model_identifier="sonnet",
+            token_usage={
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "model_breakdown": {
+                    "claude-sonnet-4-6": {"input_tokens": 1000, "output_tokens": 500},
+                },
+            },
+        )
+        anomalies_path = tmp_path / "sessions" / "alias-no-drift-001" / "anomalies.jsonl"
+        if anomalies_path.exists():
+            lines = anomalies_path.read_text().strip().splitlines()
+            drift = [
+                json.loads(line) for line in lines if json.loads(line).get("kind") == "model_drift"
+            ]
+            assert len(drift) == 0
+
+    def test_alias_configured_wrong_family_observed_emits_drift(self, tmp_path):
+        """'sonnet' configured but 'claude-opus-4-6' observed: MODEL_DRIFT should fire."""
+        _flush(
+            tmp_path,
+            session_id="alias-real-drift-001",
+            proc_snapshots=None,
+            model_identifier="sonnet",
+            token_usage={
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "model_breakdown": {
+                    "claude-opus-4-6": {"input_tokens": 1000, "output_tokens": 500},
+                },
+            },
+        )
+        anomalies_path = tmp_path / "sessions" / "alias-real-drift-001" / "anomalies.jsonl"
+        assert anomalies_path.exists()
+        lines = anomalies_path.read_text().strip().splitlines()
+        drift = [
+            json.loads(line) for line in lines if json.loads(line).get("kind") == "model_drift"
+        ]
+        assert len(drift) == 1
+
+    def test_profile_name_recorded_in_sessions_jsonl(self, tmp_path):
+        """profile_name is written to sessions.jsonl index entry."""
+        _flush(
+            tmp_path,
+            session_id="profile-record-001",
+            proc_snapshots=None,
+            profile_name="minimax",
+        )
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+        assert entry["profile_name"] == "minimax"
+
+    def test_profile_name_recorded_in_token_usage(self, tmp_path):
+        """profile_name is written to token_usage.json."""
+        _flush(
+            tmp_path,
+            session_id="profile-tu-001",
+            proc_snapshots=None,
+            step_name="step-with-profile",
+            profile_name="minimax",
+            token_usage={"input_tokens": 100, "output_tokens": 50},
+        )
+        tu = json.loads(
+            (tmp_path / "sessions" / "profile-tu-001" / "token_usage.json").read_text()
+        )
+        assert tu["profile_name"] == "minimax"
+
+    def test_profile_name_in_drift_detail_when_drifting(self, tmp_path):
+        """When MODEL_DRIFT fires and profile_name is set, it appears in the anomaly detail."""
+        _flush(
+            tmp_path,
+            session_id="profile-drift-detail-001",
+            proc_snapshots=None,
+            model_identifier="sonnet",
+            profile_name="minimax",
+            token_usage={
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "model_breakdown": {
+                    "claude-opus-4-6": {"input_tokens": 1000, "output_tokens": 500},
+                },
+            },
+        )
+        anomalies_path = tmp_path / "sessions" / "profile-drift-detail-001" / "anomalies.jsonl"
+        assert anomalies_path.exists()
+        lines = anomalies_path.read_text().strip().splitlines()
+        drift = [
+            json.loads(line) for line in lines if json.loads(line).get("kind") == "model_drift"
+        ]
+        assert len(drift) == 1
+        assert drift[0]["detail"]["profile_name"] == "minimax"
+
+    def test_rss_startup_artifact_suppressed_through_flush(self, tmp_path):
+        """5MB startup RSS → 270MB working set should produce no RSS_GROWTH via flush."""
+        snaps = [
+            _snap(vm_rss_kb=5000),
+            _snap(vm_rss_kb=50000),
+            _snap(vm_rss_kb=150000),
+            _snap(vm_rss_kb=270000),
+            _snap(vm_rss_kb=280000),
+        ]
+        _flush(tmp_path, session_id="rss-startup-flush-001", proc_snapshots=snaps)
+        anomalies_path = tmp_path / "sessions" / "rss-startup-flush-001" / "anomalies.jsonl"
+        if anomalies_path.exists():
+            lines = anomalies_path.read_text().strip().splitlines()
+            rss = [
+                json.loads(line) for line in lines if json.loads(line).get("kind") == "rss_growth"
+            ]
+            assert len(rss) == 0

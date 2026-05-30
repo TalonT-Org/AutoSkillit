@@ -58,7 +58,7 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
     assert config.provider_extras == {"AWS_REGION": "us-east-1"}
     assert config.profile_name == "bedrock"
     assert execute_kwargs.get("provider_extras") == {"AWS_REGION": "us-east-1"}
-    assert "profile_name" not in execute_kwargs
+    assert execute_kwargs.get("profile_name") == "bedrock"
 
 
 @pytest.mark.anyio

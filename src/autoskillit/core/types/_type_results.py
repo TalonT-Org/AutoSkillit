@@ -526,6 +526,7 @@ class SessionIndexEntry(TypedDict):
     provider_fallback: bool
     model_identifier: str
     configured_model: str
+    profile_name: str
     caller_session_id: str
     api_retry_count: int
     api_retry_exhausted: bool

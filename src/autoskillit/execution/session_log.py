@@ -148,6 +148,7 @@ def flush_session_log(
     api_retry_exhausted: bool = False,
     versions: dict[str, Any] | None = None,
     model_identifier: str = "",
+    profile_name: str = "",
     max_sessions: int | None = None,
     is_resume: bool = False,
     codex_log_path: Path | None = None,
@@ -307,7 +308,7 @@ def flush_session_log(
 
     effective_model_id = model_identifier or _primary_model_identifier(token_usage)
     _observed = _primary_model_identifier(token_usage) if token_usage else ""
-    anomalies.extend(detect_model_drift(model_identifier, _observed))
+    anomalies.extend(detect_model_drift(model_identifier, _observed, profile_name=profile_name))
 
     # Write anomalies.jsonl (only if anomalies exist)
     if anomalies:
@@ -443,6 +444,7 @@ def flush_session_log(
             "provider_used": provider_outcome.provider_used,
             "model_identifier": effective_model_id,
             "configured_model": model_identifier,
+            "profile_name": profile_name,
             "dispatch_id": dispatch_id,
             "campaign_id": campaign_id,
         }
@@ -513,6 +515,7 @@ def flush_session_log(
         "api_retry_last_status": api_retry_last_status,
         "model_identifier": effective_model_id,
         "configured_model": model_identifier,
+        "profile_name": profile_name,
         "schema_version": 3,
     }
     index_path = log_root / "sessions.jsonl"

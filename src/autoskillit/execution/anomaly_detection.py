@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 
+import regex as _re
+
 
 class AnomalyKind(StrEnum):
     OOM_SPIKE = "oom_spike"
@@ -53,6 +55,45 @@ BENIGN_WCHANS: frozenset[str] = frozenset(
         "0",  # kernel reports literal "0" when thread is runnable
     }
 )
+
+RSS_BASELINE_FLOOR_KB: int = 50_000
+RSS_ABSOLUTE_GROWTH_KB: int = 500_000
+
+_MODEL_SHORT_ALIASES: dict[str, str] = {
+    "sonnet": "claude-sonnet",
+    "opus": "claude-opus",
+    "haiku": "claude-haiku",
+}
+
+
+_DATE_SUFFIX_RE = _re.compile(r"-\d{8}$")
+
+
+def normalize_model_id(model: str) -> str:
+    """Normalize a model identifier to its canonical prefix for comparison.
+
+    Handles three cases:
+    1. Short aliases: "sonnet" → "claude-sonnet"
+    2. Full IDs with date suffixes: "claude-haiku-4-5-20251001" → "claude-haiku-4-5"
+    3. Full IDs without dates: "claude-sonnet-4-6" → "claude-sonnet-4-6" (unchanged)
+
+    Non-Anthropic model names pass through unchanged.
+    """
+    expanded = _MODEL_SHORT_ALIASES.get(model, model)
+    return _DATE_SUFFIX_RE.sub("", expanded)
+
+
+def _models_match(a: str, b: str) -> bool:
+    """True if normalized model IDs refer to the same model.
+
+    Handles alias-to-full-ID matching via hyphen-bounded prefix:
+    'claude-sonnet' matches 'claude-sonnet-4-6' (alias prefix),
+    'claude-sonnet-4-5' does NOT match 'claude-sonnet-4-6' (version drift).
+    """
+    if a == b:
+        return True
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    return longer.startswith(shorter + "-")
 
 
 def _safe_int(value: object, *, default: int) -> int:
@@ -250,25 +291,31 @@ def detect_anomalies(
                     )
                 )
 
-    # RSS growth: total growth exceeds 2x initial over 5+ snapshots
+    # RSS growth: dual-threshold to avoid startup-artifact false positives
     if initial_rss is not None and initial_rss > 0 and len(snapshots) >= 5:
         last_rss = snapshots[-1].get("vm_rss_kb", 0)
-        if isinstance(last_rss, int) and last_rss > 2 * initial_rss:
-            anomalies.append(
-                _anomaly(
-                    AnomalyKind.RSS_GROWTH,
-                    AnomalySeverity.WARNING,
-                    {
-                        "initial_rss_kb": initial_rss,
-                        "final_rss_kb": last_rss,
-                        "growth_factor": round(last_rss / initial_rss, 2),
-                        "snapshot_count": len(snapshots),
-                    },
-                    snapshots[-1],
-                    len(snapshots) - 1,
-                    pid,
+        if isinstance(last_rss, int):
+            is_anomalous: bool
+            if initial_rss >= RSS_BASELINE_FLOOR_KB:
+                is_anomalous = last_rss > 2 * initial_rss
+            else:
+                is_anomalous = (last_rss - initial_rss) > RSS_ABSOLUTE_GROWTH_KB
+            if is_anomalous:
+                anomalies.append(
+                    _anomaly(
+                        AnomalyKind.RSS_GROWTH,
+                        AnomalySeverity.WARNING,
+                        {
+                            "initial_rss_kb": initial_rss,
+                            "final_rss_kb": last_rss,
+                            "growth_factor": round(last_rss / initial_rss, 2),
+                            "snapshot_count": len(snapshots),
+                        },
+                        snapshots[-1],
+                        len(snapshots) - 1,
+                        pid,
+                    )
                 )
-            )
 
     return anomalies
 
@@ -366,22 +413,36 @@ def detect_outcome_anomalies(
 def detect_model_drift(
     configured_model: str,
     observed_model: str,
+    *,
+    profile_name: str = "",
 ) -> list[dict[str, object]]:
     """Detect model drift: configured model differs from the dominant observed model.
 
-    Returns a MODEL_DRIFT anomaly if both are non-empty and differ.
+    Returns a MODEL_DRIFT anomaly if both are non-empty and the normalized
+    identifiers do not match. Normalizes aliases (e.g. "sonnet") and strips
+    date suffixes before comparison.
     The caller computes the observed model via _primary_model_identifier().
     """
     anomalies: list[dict[str, object]] = []
     if not configured_model or not observed_model:
         return anomalies
-    if observed_model == configured_model:
+    norm_cfg = normalize_model_id(configured_model)
+    norm_obs = normalize_model_id(observed_model)
+    if _models_match(norm_cfg, norm_obs):
         return anomalies
+    detail: dict[str, object] = {
+        "configured_model": configured_model,
+        "observed_model": observed_model,
+        "configured_model_normalized": norm_cfg,
+        "observed_model_normalized": norm_obs,
+    }
+    if profile_name:
+        detail["profile_name"] = profile_name
     anomalies.append(
         _anomaly(
             AnomalyKind.MODEL_DRIFT,
             AnomalySeverity.WARNING,
-            {"configured_model": configured_model, "observed_model": observed_model},
+            detail,
             {},
             OUTCOME_ANOMALY_SEQ_SENTINEL,
             OUTCOME_ANOMALY_PID_SENTINEL,

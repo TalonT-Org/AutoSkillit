@@ -119,6 +119,7 @@ class DispatchFoodTruckCall:
     allowed_write_prefix: str = ""
     allowed_write_prefixes: tuple[str, ...] = ()
     sentinel_contract: str = ""
+    profile_name: str = ""
     prior_completion_markers: Sequence[str] | None = None
     marker_dir: Path | None = None
     session_id: str | None = None
@@ -251,6 +252,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
+        profile_name: str = "",
         sentinel_contract: str = "",
         prior_completion_markers: Sequence[str] | None = None,
         marker_dir: Path | None = None,
@@ -281,6 +283,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 allowed_write_prefix=allowed_write_prefix,
                 allowed_write_prefixes=allowed_write_prefixes,
                 sentinel_contract=sentinel_contract,
+                profile_name=profile_name,
                 prior_completion_markers=prior_completion_markers,
                 marker_dir=marker_dir,
                 session_id=session_id,

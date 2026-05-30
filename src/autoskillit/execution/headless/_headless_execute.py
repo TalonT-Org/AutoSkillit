@@ -107,6 +107,7 @@ async def _execute_claude_headless(
     session_id: str | None = None,
     step_backend: CodingAgentBackend | None = None,
     model_identifier: str = "",
+    profile_name: str = "",
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -294,6 +295,7 @@ async def _execute_claude_headless(
                     ),
                     max_sessions=ctx.config.linux_tracing.max_sessions,
                     model_identifier=model_identifier,
+                    profile_name=profile_name,
                     telemetry=_build_error_path_telemetry(
                         ctx.github_api_log,
                         session_id="",
@@ -355,6 +357,7 @@ async def _execute_claude_headless(
                         ),
                         max_sessions=ctx.config.linux_tracing.max_sessions,
                         model_identifier=model_identifier,
+                        profile_name=profile_name,
                         telemetry=_build_error_path_telemetry(
                             ctx.github_api_log,
                             session_id="",
@@ -551,6 +554,7 @@ async def _execute_claude_headless(
                 ),
                 max_sessions=ctx.config.linux_tracing.max_sessions,
                 model_identifier=model_identifier,
+                profile_name=profile_name,
                 is_resume="--resume" in spec.cmd,
                 codex_log_path=_codex_log,
             )

@@ -231,6 +231,7 @@ async def run_headless_core(
             provider_extras=provider_extras,
             step_backend=step_backend,
             model_identifier=resolved_model or "",
+            profile_name=profile_name,
         )
 
 
@@ -339,6 +340,7 @@ class DefaultHeadlessExecutor:
         provider_name: str = "",
         provider_fallback_env: dict[str, str] | None = None,
         provider_fallback_name: str = "",
+        profile_name: str = "",
         sentinel_contract: str = "",
         marker_dir: Path | None = None,
         session_id: str | None = None,
@@ -445,4 +447,5 @@ class DefaultHeadlessExecutor:
             marker_dir=effective_marker_dir,
             session_id=session_id,
             model_identifier=resolved_model or "",
+            profile_name=profile_name,
         )

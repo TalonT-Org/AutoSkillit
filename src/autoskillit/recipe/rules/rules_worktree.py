@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import regex as re
 
 from autoskillit.core import (
@@ -15,6 +17,9 @@ from autoskillit.recipe._rule_helpers import _find_cycle_members
 from autoskillit.recipe.contracts import INPUT_REF_RE, load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+if TYPE_CHECKING:
+    from autoskillit.recipe.schema import Recipe
 
 logger = get_logger(__name__)
 
@@ -315,7 +320,7 @@ _WORKTREE_REF_KEYS = frozenset({"worktree_path", "implementation_ref"})
 _GIT_WORKTREE_REMOVE_RE = re.compile(r"git\s+worktree\s+remove")
 
 
-def _is_worktree_barrier(step_name: str, ctx_vars: frozenset[str], recipe) -> bool:
+def _is_worktree_barrier(step_name: str, ctx_vars: frozenset[str], recipe: Recipe) -> bool:
     """Return True if step consumes or removes the worktree for any of the given ctx_vars."""
     step = recipe.steps.get(step_name)
     if step is None:
@@ -328,7 +333,9 @@ def _is_worktree_barrier(step_name: str, ctx_vars: frozenset[str], recipe) -> bo
         return any(f"context.{v}" in cp_arg for v in ctx_vars)
     if step.tool == "run_cmd":
         cmd = step.with_args.get("cmd", "")
-        return bool(_GIT_WORKTREE_REMOVE_RE.search(cmd))
+        if not _GIT_WORKTREE_REMOVE_RE.search(cmd):
+            return False
+        return any(f"context.{v}" in cmd for v in ctx_vars)
     return False
 
 

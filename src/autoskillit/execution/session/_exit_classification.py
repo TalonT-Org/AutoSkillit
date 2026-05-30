@@ -23,6 +23,7 @@ _API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"socket hang up", re.IGNORECASE),
     re.compile(r"network error", re.IGNORECASE),
     re.compile(r"connection reset", re.IGNORECASE),
+    re.compile(r"socket connection was closed", re.IGNORECASE),  # Bun HTTP client
     re.compile(r"rate[\s_\-]limited", re.IGNORECASE),
 )
 

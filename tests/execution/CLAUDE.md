@@ -121,6 +121,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_zero_write_detection.py` | Contract: sessions expected to write must actually write (behavioral write-count gate) |
 
 | `test_session_log_recovery_split_integrity.py` | Split integrity tests for `_session_log_recovery` module |
+| `test_assert_interactive_ordering.py` | Tests for the assert_interactive_ordering runtime gate — positional/variadic ordering validation |
 
 ## Architecture Notes
 
@@ -145,3 +146,4 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_stream_parser.py` | Full test suite for CodexStreamParser: happy-path, item parsing, degradation, fixture-driven integration, protocol conformance |
 | `test_codex_result_parser.py` | Tests for CodexResultParser |
 | `test_codex_config.py` | Tests for TOML read/write primitives, _is_autoskillit_registered, and ensure_codex_mcp_registered |
+| `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |

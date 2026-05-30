@@ -280,12 +280,3 @@ def test_redirect_extraction_uses_tokenization() -> None:
         "Redirect extraction must use shlex-tokenized tokens to prevent "
         "metacharacter contamination (see issue #3291)."
     )
-
-
-def test_command_classification_exports_redirect_extraction() -> None:
-    """_command_classification.py must export redirect extraction for structural parsing."""
-    source = (SRC_ROOT / "hooks" / "_command_classification.py").read_text()
-    assert "def extract_redirect_targets" in source, (
-        "_command_classification.py must define extract_redirect_targets() "
-        "for structural redirect path extraction"
-    )

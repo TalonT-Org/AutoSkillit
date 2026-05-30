@@ -76,7 +76,7 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
         if not full_cycle:
             continue
 
-        if len(full_cycle) < 3:
+        if len(full_cycle) < 3 or len(full_cycle) > 10:
             continue
 
         has_test_step = any(

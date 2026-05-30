@@ -11,6 +11,7 @@ from typing import Literal
 import regex as re
 
 from autoskillit.core import ClaudeContentBlockType, get_logger
+from autoskillit.execution.session import _collapse_hr_split_delimiters
 
 logger = get_logger(__name__)
 
@@ -162,7 +163,7 @@ def parse_l3_result_block(
     open_sentinel = f"---l3-result::{expected_dispatch_id}---"
     close_sentinel = f"---end-l3-result::{expected_dispatch_id}---"
 
-    cleaned = _ANSI_RE.sub("", stdout)
+    cleaned = _collapse_hr_split_delimiters(_ANSI_RE.sub("", stdout))
 
     positions = _scan_for_sentinel(cleaned, open_sentinel, close_sentinel)
     if positions is not None:
@@ -171,7 +172,9 @@ def parse_l3_result_block(
 
     jsonl_text: str | None = None
     if assistant_messages_path is not None:
-        jsonl_text = _extract_text_from_jsonl(assistant_messages_path)
+        jsonl_text = _collapse_hr_split_delimiters(
+            _extract_text_from_jsonl(assistant_messages_path)
+        )
         positions = _scan_for_sentinel(jsonl_text, open_sentinel, close_sentinel)
         if positions is not None:
             open_pos, close_pos = positions
@@ -203,7 +206,7 @@ def parse_l3_result_block(
     # Stage 4: scan additional JSONL paths (cross-session recovery for resume)
     if additional_jsonl_paths:
         for jsonl_path in additional_jsonl_paths:
-            additional_text = _extract_text_from_jsonl(jsonl_path)
+            additional_text = _collapse_hr_split_delimiters(_extract_text_from_jsonl(jsonl_path))
             if not additional_text:
                 continue
             positions = _scan_for_sentinel(additional_text, open_sentinel, close_sentinel)

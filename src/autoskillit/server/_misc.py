@@ -71,11 +71,26 @@ def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
     """
     in_block = False
     block_lines: list[str] = []
-    for line in text.splitlines():
-        if line.strip() == start_delim:
+    lines = text.splitlines()
+    skip_next = False
+    for i, line in enumerate(lines):
+        if skip_next:
+            skip_next = False
+            continue
+        stripped = line.strip()
+        if stripped == "---" and i + 1 < len(lines):
+            combined = "---" + lines[i + 1].strip()
+            if combined == start_delim and not in_block:
+                in_block = True
+                skip_next = True
+                continue
+            if combined == end_delim and in_block:
+                skip_next = True
+                return block_lines
+        if stripped == start_delim:
             in_block = True
             continue
-        if line.strip() == end_delim:
+        if stripped == end_delim:
             if not in_block:
                 return []
             return block_lines

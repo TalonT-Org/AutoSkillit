@@ -135,8 +135,10 @@ def test_catalog_forward_references_valid(skill_text):
     in tests/arch/ or tests/recipe/."""
     catalog_idx = skill_text.lower().find("architectural constraint catalog")
     if catalog_idx == -1:
-        return  # test_arch_constraint_catalog_section_exists will catch this
+        pytest.fail("Architectural Constraint Catalog section not found in SKILL.md")
     catalog_section = skill_text[catalog_idx : catalog_idx + 3000]
+    if not ARCH_DIR.is_dir():
+        pytest.fail(f"tests/arch/ not found at {ARCH_DIR}")
     arch_test_files = {f.name for f in ARCH_DIR.glob("test_*.py")}
     recipe_test_dir = ARCH_DIR.parent / "recipe"
     recipe_test_files = (

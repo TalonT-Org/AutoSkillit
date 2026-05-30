@@ -54,6 +54,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_no_error_dict_return.py` | AST guard: load_and_validate must not return dicts with 'error' key — errors flow via exceptions |
 | `test_flush_no_rid_guard.py` | AST guard: no requestId truthiness guard in flush_session_log turn extraction loop |
 | `test_no_inline_jsonl_request_id_dedup.py` | AST guard: no inline requestId dedup in session_log.py or tool_sequence_analysis.py |
+| `test_resolve_turn_id_guard.py` | AST guard: no direct .get("requestId") calls outside _resolve_turn_id() in tool_sequence_analysis.py |
 | `test_protocol_names.py` | T5-T6: Protocol naming and DefaultSkillResolver export smoke tests |
 | `test_provider_profile_contract.py` | Tier 3 contract: _resolve_provider_profile must never return step_name as profile |
 | `test_pty_coherence.py` | Dispatch-type-aware PTY allocation guards: AST enforcement that dispatch_food_truck passes pty_override=False and _attempt_contract_nudge accepts pty_override |

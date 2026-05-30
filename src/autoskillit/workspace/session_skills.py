@@ -554,6 +554,8 @@ class DefaultSessionSkillManager:
                         src=str(codex_home_source / "config.toml"),
                     )
                     raise
+        if backend is not None and backend.capabilities.session_dir_symlinks:
+            codex_home_source = Path.home() / ".codex"
             if "auth.json" in backend.capabilities.session_dir_symlinks:
                 auth_source = codex_home_source / "auth.json"
                 auth_dest = session_skills_dir / "auth.json"

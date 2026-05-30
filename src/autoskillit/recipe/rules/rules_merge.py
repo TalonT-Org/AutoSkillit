@@ -35,6 +35,22 @@ _RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
         MergeFailedStep.POST_REBASE_TEST_GATE,
         MergeFailedStep.REBASE,
         MergeFailedStep.DIRTY_MAIN_REPO,
+        MergeFailedStep.REF_COHERENCE,
+    }
+)
+
+_TERMINAL_FAILED_STEPS: frozenset[str] = frozenset(
+    {
+        MergeFailedStep.PATH_VALIDATION,
+        MergeFailedStep.PROTECTED_BRANCH,
+        MergeFailedStep.BRANCH_DETECTION,
+        MergeFailedStep.GENERATED_FILE_CLEANUP,
+        MergeFailedStep.FETCH,
+        MergeFailedStep.PRE_REBASE_CHECK,
+        MergeFailedStep.MERGE_COMMITS_DETECTED,
+        MergeFailedStep.MERGE,
+        MergeFailedStep.EDITABLE_INSTALL_GUARD,
+        MergeFailedStep.EMBEDDED_WORKTREE,
     }
 )
 

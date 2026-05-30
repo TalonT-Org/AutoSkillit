@@ -76,7 +76,7 @@ class TestMergeRoutingIncompleteRule:
         assert len(errors) == 1
         assert "rebase" in errors[0].message
 
-    def test_rmr4_clears_when_all_four_covered(self):
+    def test_rmr4_clears_when_all_recoverable_steps_covered(self):
         """RMR4: No finding when all recoverable values are explicitly routed."""
         recipe = self._make_merge_step(
             [
@@ -85,6 +85,7 @@ class TestMergeRoutingIncompleteRule:
                 {"when": "result.failed_step == 'post_rebase_test_gate'", "route": "recover"},
                 {"when": "result.failed_step == 'rebase'", "route": "recover"},
                 {"when": "result.failed_step == 'dirty_main_repo'", "route": "recover"},
+                {"when": "result.failed_step == 'ref_coherence'", "route": "recover"},
                 {"when": "result.error", "route": "escalate"},
                 {"route": "done"},
             ]

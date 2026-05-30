@@ -7,7 +7,7 @@ import pytest
 from autoskillit.core import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
-from autoskillit.recipe.rules.rules_merge import _RECOVERABLE_FAILED_STEPS
+from autoskillit.recipe.rules.rules_merge import _RECOVERABLE_FAILED_STEPS, _TERMINAL_FAILED_STEPS
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -57,6 +57,73 @@ def test_bundled_recipes_route_dirty_main_repo(recipe_name: str) -> None:
             f"DIRTY_MAIN_REPO in on_result. Add a condition like "
             f"${{{{ result.failed_step == 'DIRTY_MAIN_REPO' }}}} to route to the "
             f"appropriate recovery step."
+        )
+
+
+def test_every_merge_failed_step_is_classified() -> None:
+    """Every MergeFailedStep enum member must appear in exactly one of
+    _RECOVERABLE_FAILED_STEPS or _TERMINAL_FAILED_STEPS."""
+    from autoskillit.core.types import MergeFailedStep
+
+    all_values = {member.value for member in MergeFailedStep}
+    classified = _RECOVERABLE_FAILED_STEPS | _TERMINAL_FAILED_STEPS
+    overlap = _RECOVERABLE_FAILED_STEPS & _TERMINAL_FAILED_STEPS
+
+    assert overlap == set(), (
+        f"Steps appear in BOTH recoverable and terminal sets: {sorted(overlap)}"
+    )
+    assert all_values == classified, (
+        f"Unclassified MergeFailedStep members: {sorted(all_values - classified)}. "
+        f"Every new MergeFailedStep value must be added to either "
+        f"_RECOVERABLE_FAILED_STEPS or _TERMINAL_FAILED_STEPS in rules_merge.py."
+    )
+
+
+def test_ref_coherence_in_recoverable_steps() -> None:
+    """MergeFailedStep.REF_COHERENCE must be in _RECOVERABLE_FAILED_STEPS."""
+    from autoskillit.core.types import MergeFailedStep
+
+    assert MergeFailedStep.REF_COHERENCE in _RECOVERABLE_FAILED_STEPS, (
+        "REF_COHERENCE must be recoverable so the recipe can push the diverged "
+        "branch and retry the merge"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_pass_merge_routing_incomplete(recipe_name: str) -> None:
+    """All bundled recipes must have zero merge-routing-incomplete findings."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    findings = run_semantic_rules(recipe)
+    flagged = [f for f in findings if f.rule == "merge-routing-incomplete"]
+    assert flagged == [], f"{recipe_name}: merge-routing-incomplete findings: {flagged}"
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_route_ref_coherence(recipe_name: str) -> None:
+    """All bundled recipes must route REF_COHERENCE in their merge_worktree on_result."""
+    from autoskillit.core.types import MergeFailedStep
+
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+
+    merge_steps = {
+        name: step
+        for name, step in recipe.steps.items()
+        if getattr(step, "tool", None) == "merge_worktree"
+    }
+    assert merge_steps, f"{recipe_name}: no merge_worktree step found"
+
+    for step_name, step in merge_steps.items():
+        if step.on_result is None:
+            continue
+        matched = set()
+        for cond in step.on_result.conditions:
+            if cond.when is None:
+                continue
+            if "ref_coherence" in cond.when.lower():
+                matched.add(MergeFailedStep.REF_COHERENCE)
+        assert MergeFailedStep.REF_COHERENCE in matched, (
+            f"{recipe_name}: merge_worktree step '{step_name}' does not route "
+            f"REF_COHERENCE in on_result."
         )
 
 
@@ -136,7 +203,7 @@ def test_merge_worktree_all_recoverable_steps_routed_is_clean() -> None:
 
 
 def test_merge_worktree_missing_one_recoverable_step_is_error() -> None:
-    """Covers 3 of 4 recoverable steps → ERROR, message lists the missing one."""
+    """Covers all but one recoverable step → ERROR, message lists the missing one."""
     all_values = list(_RECOVERABLE_FAILED_STEPS)
     present = all_values[:-1]  # all but the last
     missing = all_values[-1]
@@ -162,7 +229,7 @@ def test_merge_worktree_missing_one_recoverable_step_is_error() -> None:
 
 
 def test_merge_worktree_missing_all_recoverable_steps_is_error() -> None:
-    """has on_result but no step matches _RECOVERABLE_FAILED_STEPS → ERROR, all 4 in message."""
+    """has on_result but no step matches _RECOVERABLE_FAILED_STEPS → ERROR, all in message."""
     recipe = _make_recipe(
         {
             "merge": RecipeStep(
@@ -709,3 +776,45 @@ def test_rule_passes_when_auto_steps_only_reachable_from_auto_route() -> None:
     findings = run_semantic_rules(recipe)
     flagged = [f for f in findings if f.rule == "merge-enrollment-auto-consistency"]
     assert flagged == []
+
+
+# ---------------------------------------------------------------------------
+# T-IPP-1: inter-part push wired between merge and routing step
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_push_between_parts(recipe_name: str) -> None:
+    """Multi-part recipes must push the feature branch between parts.
+
+    The merge step's success path must reach a push_to_remote step
+    before looping back for the next part.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+
+    merge_steps = {
+        name: step
+        for name, step in recipe.steps.items()
+        if getattr(step, "tool", None) == "merge_worktree"
+    }
+    assert merge_steps, f"{recipe_name}: no merge_worktree step found"
+
+    for step_name, step in merge_steps.items():
+        success_route = None
+        if step.on_result and step.on_result.conditions:
+            for cond in step.on_result.conditions:
+                if cond.when is None:
+                    success_route = cond.route
+                    break
+        if success_route is None:
+            success_route = step.on_success
+
+        if success_route is None:
+            continue
+
+        push_step = recipe.steps.get(success_route)
+        assert push_step is not None, f"{step_name} routes to {success_route} which does not exist"
+        assert getattr(push_step, "tool", None) == "push_to_remote", (
+            f"{step_name} success route {success_route} must be a push_to_remote step, "
+            f"got tool={getattr(push_step, 'tool', None)}"
+        )

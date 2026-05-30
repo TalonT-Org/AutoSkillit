@@ -33,14 +33,16 @@ def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
                 declared_type=declared_type,
                 reason="path value must be non-empty",
             )
-        if not Path(value).exists():
+        try:
+            st = Path(value).stat()
+        except OSError:
             raise CaptureValueTypeError(
                 key=key,
                 value=value,
                 declared_type=declared_type,
                 reason=f"path does not exist: {value}",
             )
-        if Path(value).stat().st_size == 0:
+        if st.st_size == 0:
             raise CaptureValueTypeError(
                 key=key,
                 value=value,

@@ -15,7 +15,7 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "cli/doctor/_doctor_mcp.py",  # MCP config path checks
         "cli/_init_helpers.py",  # CLI init — string config, no CodingAgentBackend
         "cli/_marketplace.py",  # Marketplace — Claude Code-only install guard
-        "execution/recording.py",  # Recording format dispatch (pre-capabilities context)
+        "execution/recording.py",  # Cassette format detection + env-var PTY guard
         "execution/headless/_headless_evidence.py",  # Claude-specific evidence extraction
         "execution/headless/_headless_result.py",  # Claude-specific result parsing
         "server/tools/tools_execution.py",  # Provider-override backend routing

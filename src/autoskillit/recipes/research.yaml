@@ -536,7 +536,7 @@ steps:
     on_result:
     - when: "${{ result.max_exceeded }} == true"
       route: audit_impl
-    - route: plan_phase
+    - route: cleanup_phase_worktree
     on_failure: audit_impl
     optional_context_refs:
     - phase_loop_count
@@ -544,6 +544,18 @@ steps:
       Guards the plan_phase → implement_phase → next_phase_or_experiment cycle.
       The loop is data-bounded by the finite group_files list; this provides a
       structural bound. 15 iterations allows complex multi-phase setups.
+
+  cleanup_phase_worktree:
+    tool: run_cmd
+    with:
+      cmd: "git worktree remove --force \"${{ context.worktree_path }}\""
+      step_name: cleanup_phase_worktree
+    on_success: plan_phase
+    on_failure: plan_phase
+    note: >
+      Removes the previous phase worktree before implement_phase creates a new
+      one. Each phase gets its own timestamped worktree via implement-experiment;
+      this prevents orphaning the old worktree when the loop re-enters.
 
   audit_impl:
     tool: run_skill

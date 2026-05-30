@@ -788,14 +788,15 @@ def test_bundled_recipes_push_between_parts(recipe_name: str) -> None:
     """Multi-part recipes must push the feature branch between parts.
 
     The merge step's success path must reach a push_to_remote step
-    before looping back for the next part.
+    before looping back for the next part.  Pre-remediation merge steps
+    are excluded — they clean up before replanning, not between parts.
     """
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
 
     merge_steps = {
         name: step
         for name, step in recipe.steps.items()
-        if getattr(step, "tool", None) == "merge_worktree"
+        if getattr(step, "tool", None) == "merge_worktree" and "pre_remediation" not in name
     }
     assert merge_steps, f"{recipe_name}: no merge_worktree step found"
 

@@ -110,15 +110,13 @@ def reap_stale_dispatches(
                 continue
             pid = dispatch.dispatched_pid
 
-            if (
-                dispatch.started_at > 0
-                and (time.time() - dispatch.started_at) < min_reap_age_seconds
-            ):
+            age = time.time() - dispatch.started_at if dispatch.started_at > 0 else float("inf")
+            if age < min_reap_age_seconds:
                 logger.info(
                     "reap: [SKIPPED]     %s  dispatch_id=%s  (too young, age=%.1fs)",
                     name,
                     dispatch.dispatch_id,
-                    time.time() - dispatch.started_at,
+                    age,
                 )
                 continue
 

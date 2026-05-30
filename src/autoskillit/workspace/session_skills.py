@@ -571,10 +571,11 @@ class DefaultSessionSkillManager:
                         logger.warning("codex_auth_symlink_failed", src=str(auth_source))
                 else:
                     logger.warning("codex_auth_copy_missing", src=str(auth_source))
-            env_source = codex_home_source / ".env"
-            if env_source.exists():
-                shutil.copy2(env_source, session_skills_dir / ".env")
-                logger.debug("codex_env_copy", src=str(env_source))
+            if ".env" in backend.capabilities.session_dir_symlinks:
+                env_source = codex_home_source / ".env"
+                if env_source.exists():
+                    shutil.copy2(env_source, session_skills_dir / ".env")
+                    logger.debug("codex_env_copy", src=str(env_source))
             if "sessions" in backend.capabilities.session_dir_symlinks:
                 sessions_target = default_log_dir() / "codex-sessions"
                 sessions_target.mkdir(parents=True, exist_ok=True)

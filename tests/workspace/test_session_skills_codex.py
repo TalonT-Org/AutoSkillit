@@ -12,7 +12,7 @@ from autoskillit.workspace.session_skills import (
     _SKILLS_SUBDIR,
     CODEX_SKILLS_SUBDIR,
 )
-from tests.workspace.conftest import _CODEX_CAPABILITIES
+from tests.workspace._helpers import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 

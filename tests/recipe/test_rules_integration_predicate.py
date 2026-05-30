@@ -193,6 +193,9 @@ class TestLoopBudgetSeparation:
         assert recipe.ingredients["merge_fix_max_retries"].default == "3"
         assert "audit_remediation_max_retries" in recipe.ingredients
         assert recipe.ingredients["audit_remediation_max_retries"].default == "2"
+        assert "test_fix_max_retries" in recipe.ingredients
+        assert recipe.ingredients["test_fix_max_retries"].default == "3"
+        assert recipe.ingredients["test_fix_max_retries"].hidden is True
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
     def test_guard_steps_use_ingredients(self, recipe_name: str) -> None:
@@ -209,3 +212,5 @@ class TestLoopBudgetSeparation:
             audit_guard.with_args["max_iterations"]
             == "${{ inputs.audit_remediation_max_retries }}"
         )
+        test_fix_guard = recipe.steps["check_test_fix_loop"]
+        assert test_fix_guard.with_args["max_iterations"] == "${{ inputs.test_fix_max_retries }}"

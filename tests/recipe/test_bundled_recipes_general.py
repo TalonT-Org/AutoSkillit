@@ -43,13 +43,75 @@ for _dir in (builtin_recipes_dir(), PROJECT_ROOT / ".autoskillit" / "recipes"):
     sorted(builtin_recipes_dir().glob("*.yaml")),
     ids=lambda p: p.stem,
 )
-def test_no_unbounded_cycle_errors_in_bundled_recipes(recipe_yaml: Path) -> None:
+def test_no_unbounded_cycle_findings_in_bundled_recipes(recipe_yaml: Path) -> None:
     """Every bundled recipe must have zero unbounded-cycle ERROR findings."""
     recipe = load_recipe(recipe_yaml)
     findings = run_semantic_rules(recipe)
-    errors = [f for f in findings if f.rule == "unbounded-cycle" and f.severity == Severity.ERROR]
-    assert errors == [], (
-        f"{recipe_yaml.stem}: {[f'{f.step_name}: {f.message[:80]}' for f in errors]}"
+    cycle_findings = [
+        f for f in findings if f.rule == "unbounded-cycle" and f.severity == Severity.ERROR
+    ]
+    assert cycle_findings == [], (
+        f"{recipe_yaml.stem}: "
+        f"{[f'{f.severity.name} {f.step_name}: {f.message[:80]}' for f in cycle_findings]}"
+    )
+
+
+_PRE_MERGE_CYCLE_RECIPES = ["implementation", "implementation-groups", "remediation"]
+
+
+@pytest.mark.parametrize("recipe_name", _PRE_MERGE_CYCLE_RECIPES)
+def test_pre_merge_test_fix_cycle_has_guard(recipe_name: str) -> None:
+    """fix/assess on_result routes must pass through a check_loop_iteration guard."""
+    recipe = load_recipe(_resolve_recipe_path(recipe_name))
+    test_step = recipe.steps["test"]
+    fix_step_name = test_step.on_failure
+    assert fix_step_name is not None
+    fix_step = recipe.steps[fix_step_name]
+    assert fix_step.on_result is not None
+    direct_to_test = [c.route for c in fix_step.on_result.conditions if c.route == "test"]
+    assert direct_to_test == [], (
+        f"{recipe_name}: {fix_step_name} must not route directly to 'test' — "
+        "use a check_loop_iteration guard step"
+    )
+    guard_route = next(
+        (
+            c.route
+            for c in fix_step.on_result.conditions
+            if c.route and c.route.startswith("check_") and "loop" in c.route
+        ),
+        None,
+    )
+    assert guard_route is not None, (
+        f"{recipe_name}: {fix_step_name} must route to a check_*_loop guard step"
+    )
+    guard_step = recipe.steps[guard_route]
+    assert guard_step.tool == "run_python"
+    assert guard_step.with_args.get("callable") == "autoskillit.smoke_utils.check_loop_iteration"
+    assert guard_step.on_result is not None
+    exceeded_routes = [
+        c.route for c in guard_step.on_result.conditions if c.when and "max_exceeded" in c.when
+    ]
+    assert any(r != "test" for r in exceeded_routes), (
+        f"{recipe_name}: {guard_route} max_exceeded must route outside the cycle"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _PRE_MERGE_CYCLE_RECIPES)
+def test_pre_merge_fix_on_context_limit_routes_through_guard(recipe_name: str) -> None:
+    """fix/assess on_context_limit must route through the loop guard, not directly to test."""
+    recipe = load_recipe(_resolve_recipe_path(recipe_name))
+    test_step = recipe.steps["test"]
+    fix_step_name = test_step.on_failure
+    assert fix_step_name is not None
+    fix_step = recipe.steps[fix_step_name]
+    assert fix_step.on_context_limit != "test", (
+        f"{recipe_name}: {fix_step_name}.on_context_limit must not route directly to 'test' — "
+        "use a check_loop_iteration guard step"
+    )
+    guard = fix_step.on_context_limit
+    assert guard is not None and guard.startswith("check_") and "loop" in guard, (
+        f"{recipe_name}: {fix_step_name}.on_context_limit must route to a check_*_loop guard, "
+        f"got: {fix_step.on_context_limit!r}"
     )
 
 

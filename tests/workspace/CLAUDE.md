@@ -7,6 +7,7 @@ Workspace cleanup, clone lifecycle, session skills, and worktree tests.
 | File | Purpose |
 |------|---------|
 | `__init__.py` | empty |
+| `_helpers.py` | Shared test constants (e.g., _CODEX_CAPABILITIES) for tests/workspace/ |
 | `conftest.py` | Shared fixtures for tests/workspace/ |
 | `test_cleanup.py` | L1 unit tests for workspace/cleanup.py — CleanupResult and directory deletion |
 | `test_clone_core.py` | Core clone_repo + remove_clone tests — setup, paths, error handling, origin contracts |

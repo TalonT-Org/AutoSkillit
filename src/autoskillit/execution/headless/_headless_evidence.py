@@ -150,12 +150,7 @@ def _extract_file_changes(stdout: str, backend: CodingAgentBackend) -> list[str]
 
 
 def _stdout_mentions_write_tools(stdout: str) -> bool:
-    """Return True if stdout contains a write tool call in an assistant NDJSON record.
-
-    Filters by type=assistant to avoid matching tool names in system/init manifests or
-    other non-assistant events. For truncated lines that fail JSON parsing, falls back
-    to an assistant-prefix + substring check to preserve truncation recovery behavior.
-    """
+    """For truncated lines that fail JSON parsing, falls back to prefix + substring check."""
     _write_names = {"Write", "Edit"}
     for line in stdout.splitlines():
         if not line:

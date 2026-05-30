@@ -93,13 +93,17 @@ _TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 def _coerce_capture_dict(d: dict) -> dict[str, CaptureEntrySpec]:
     if not d:
-        return d
-    out = {}
+        return {}
+    out: dict[str, CaptureEntrySpec] = {}
     for k, v in d.items():
         if isinstance(v, str):
             out[k] = CaptureEntrySpec(from_=v, value_type="string")
-        else:
+        elif isinstance(v, CaptureEntrySpec):
             out[k] = v
+        else:
+            raise TypeError(
+                f"capture key {k!r}: expected str or CaptureEntrySpec, got {type(v).__name__}"
+            )
     return out
 
 

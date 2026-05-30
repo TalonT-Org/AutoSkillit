@@ -172,7 +172,11 @@ def _stdout_mentions_write_tools(stdout: str) -> bool:
         if obj.get("type") != "assistant":
             continue
         for block in obj.get("message", {}).get("content", []):
-            if block.get("type") == "tool_use" and block.get("name") in _write_names:
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "tool_use"
+                and block.get("name") in _write_names
+            ):
                 return True
     return False
 

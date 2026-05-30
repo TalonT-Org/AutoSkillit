@@ -68,21 +68,45 @@ def _check_mcp_server_registered(
             _read_codex_config,
         )
 
-        config = _read_codex_config(Path.home() / ".codex" / "config.toml")
-        if _is_autoskillit_registered(config, headless_auto_gate=False):
-            return DoctorResult(
-                severity=Severity.OK,
-                check="mcp_server_registered",
-                message="autoskillit registered in codex config.toml",
+        read_result = _read_codex_config(Path.home() / ".codex" / "config.toml")
+        if read_result.is_corrupt:
+            raw_text = (
+                read_result.raw_bytes.decode("utf-8", errors="replace")
+                if read_result.raw_bytes
+                else ""
             )
-        return DoctorResult(
-            severity=Severity.WARNING,
-            check="mcp_server_registered",
-            message=(
-                "autoskillit not registered in codex config.toml. "
-                "Run 'autoskillit init' to register."
-            ),
-        )
+            if "[mcp_servers.autoskillit]" in raw_text:
+                return DoctorResult(
+                    severity=Severity.OK,
+                    check="mcp_server_registered",
+                    message=(
+                        "autoskillit registered in codex config.toml "
+                        "(TOML parse error on other sections — run 'codex config' to inspect)"
+                    ),
+                )
+            return DoctorResult(
+                severity=Severity.WARNING,
+                check="mcp_server_registered",
+                message=(
+                    "autoskillit not registered in codex config.toml AND file has "
+                    "TOML parse errors. Manual inspection recommended."
+                ),
+            )
+        else:
+            if _is_autoskillit_registered(read_result.data, headless_auto_gate=False):
+                return DoctorResult(
+                    severity=Severity.OK,
+                    check="mcp_server_registered",
+                    message="autoskillit registered in codex config.toml",
+                )
+            return DoctorResult(
+                severity=Severity.WARNING,
+                check="mcp_server_registered",
+                message=(
+                    "autoskillit not registered in codex config.toml. "
+                    "Run 'autoskillit init' to register."
+                ),
+            )
     if backend is not None and backend != "claude-code":
         return DoctorResult(Severity.OK, "mcp_server_registered", f"Skipped (backend={backend})")
     if claude_json_path is None:

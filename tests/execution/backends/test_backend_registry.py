@@ -54,6 +54,7 @@ class TestBackendRegistry:
             "CodexStreamParser",
             "_is_autoskillit_registered",
             "_read_codex_config",
+            "_serialize_toml",
             "_write_codex_config",
             "ensure_codex_mcp_registered",
             "get_backend",

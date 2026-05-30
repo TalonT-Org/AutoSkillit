@@ -96,3 +96,24 @@ def test_installed_plugins_read_logs_on_json_error(tmp_path: Path) -> None:
         result = InstalledPluginsFile(p).get_plugins()
     assert result == {}
     assert any("installed_plugins" in entry.get("event", "").lower() for entry in cap_logs)
+
+
+class TestRemoveCorruptFileGuard:
+    def test_remove_returns_without_writing_when_file_corrupt(self, tmp_path: Path) -> None:
+        p = tmp_path / "installed_plugins.json"
+        corrupt_content = "{{{not json"
+        p.write_text(corrupt_content)
+
+        InstalledPluginsFile(p).remove("some_plugin")
+
+        assert p.read_text() == corrupt_content
+
+    def test_remove_works_normally_on_valid_file(self, tmp_path: Path) -> None:
+        p = tmp_path / "installed_plugins.json"
+        payload = {"version": 2, "plugins": {"myplugin@local": {"name": "myplugin"}}}
+        p.write_text(json.dumps(payload))
+
+        InstalledPluginsFile(p).remove("myplugin@local")
+
+        data = json.loads(p.read_text())
+        assert "myplugin@local" not in data.get("plugins", {})

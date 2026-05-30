@@ -35,21 +35,24 @@ class InstalledPluginsFile:
     def path(self) -> Path:
         return self._path
 
-    def _read(self) -> dict[str, Any]:
+    def _read(self) -> dict[str, Any] | None:
         if not self._path.exists():
             return {}
         try:
             return json.loads(self._path.read_text())
         except json.JSONDecodeError as exc:
             logger.warning("installed_plugins.json is corrupt (%s): %s", self._path, exc)
-            return {}
+            return None
         except OSError as exc:
             logger.warning("Could not read installed_plugins.json (%s): %s", self._path, exc)
-            return {}
+            return None
 
     def get_plugins(self) -> dict[str, Any]:
         """Return the nested plugins dict (never raises)."""
-        return self._read().get("plugins", {})
+        data = self._read()
+        if data is None:
+            return {}
+        return data.get("plugins", {})
 
     def contains(self, plugin_ref: str) -> bool:
         """Return True iff plugin_ref is present in data['plugins']."""
@@ -63,6 +66,13 @@ class InstalledPluginsFile:
         if not self._path.exists():
             return
         data = self._read()
+        if data is None:
+            logger.warning(
+                "installed_plugins_corrupt_skip_remove",
+                path=str(self._path),
+                plugin_ref=plugin_ref,
+            )
+            return
         plugins = data.get("plugins", {})
         if plugin_ref not in plugins:
             return

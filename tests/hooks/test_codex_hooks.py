@@ -89,7 +89,7 @@ class TestSyncHooksToCodexConfig:
         p = tmp_path / "config.toml"
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         assert "hooks" in config
 
     def test_sync_idempotent(self, tmp_path):
@@ -109,7 +109,7 @@ class TestSyncHooksToCodexConfig:
         )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         hooks = config.get("hooks", [])
         foreign = [h for h in hooks if "/usr/local/" in str(h)]
         assert len(foreign) > 0
@@ -122,7 +122,7 @@ class TestSyncHooksToCodexConfig:
         )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         hooks = config.get("hooks", [])
         autoskillit_hooks = [h for h in hooks if "/autoskillit/" in str(h)]
         assert len(autoskillit_hooks) > 0
@@ -138,3 +138,23 @@ class TestSyncHooksToCodexConfig:
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
         assert p.exists()
+
+
+class TestHookSyncCorruptFilePreservation:
+    def test_sync_hooks_preserves_corrupt_file_content(self, tmp_path):
+        p = tmp_path / "config.toml"
+        original = "[projects./home/user/repo]\ntrust = true\n"
+        p.write_text(original, encoding="utf-8")
+        sync_hooks_to_codex_config(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert "[projects./home/user/repo]" in content
+        assert "trust = true" in content
+
+    def test_sync_hooks_appends_to_corrupt_file(self, tmp_path):
+        p = tmp_path / "config.toml"
+        original = "[projects./home/user/repo]\ntrust = true\n"
+        p.write_text(original, encoding="utf-8")
+        sync_hooks_to_codex_config(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert "[projects./home/user/repo]" in content
+        assert "[[hooks]]" in content

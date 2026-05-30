@@ -19,19 +19,19 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 class TestReadCodexConfig:
     def test_returns_empty_dict_when_path_missing(self, tmp_path):
         result = _read_codex_config(tmp_path / "nonexistent.toml")
-        assert result == {}
+        assert result.data == {} and not result.is_corrupt
 
     def test_returns_empty_dict_when_file_is_empty(self, tmp_path):
         p = tmp_path / "config.toml"
         p.write_bytes(b"")
         result = _read_codex_config(p)
-        assert result == {}
+        assert result.data == {} and not result.is_corrupt
 
     def test_parses_mcp_servers_section(self, tmp_path):
         p = tmp_path / "config.toml"
         p.write_bytes(b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\n')
         result = _read_codex_config(p)
-        assert result["mcp_servers"]["autoskillit"]["command"] == "autoskillit"
+        assert result.data["mcp_servers"]["autoskillit"]["command"] == "autoskillit"
 
 
 class TestSerializeToml:
@@ -156,14 +156,18 @@ class TestSerializeToml:
 
 class TestWriteCodexConfig:
     def test_writes_readable_toml(self, tmp_path):
+        from autoskillit.core import ReadResult
+
         p = tmp_path / "config.toml"
         data = {"mcp_servers": {"test": {"command": "test"}}}
-        _write_codex_config(p, data)
-        assert _read_codex_config(p) == data
+        _write_codex_config(p, data, source=ReadResult.ok(data))
+        assert _read_codex_config(p).data == data
 
     def test_atomic_write_creates_parent_dirs(self, tmp_path):
+        from autoskillit.core import ReadResult
+
         p = tmp_path / "nested" / "dir" / "config.toml"
-        _write_codex_config(p, {"key": "val"})
+        _write_codex_config(p, {"key": "val"}, source=ReadResult.missing({}))
         assert p.exists()
 
 
@@ -253,7 +257,7 @@ class TestEnsureCodexMcpRegistered:
         p = tmp_path / ".codex" / "config.toml"
         result = ensure_codex_mcp_registered(config_path=p)
         assert result is True
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         entry = config["mcp_servers"]["autoskillit"]
         assert entry["command"] == "autoskillit"
         assert entry["env"]["AUTOSKILLIT_HEADLESS"] == "1"
@@ -263,13 +267,13 @@ class TestEnsureCodexMcpRegistered:
     def test_headless_auto_gate_true_includes_auto_gate_env(self, tmp_path):
         p = tmp_path / "config.toml"
         ensure_codex_mcp_registered(config_path=p, headless_auto_gate=True)
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         assert config["mcp_servers"]["autoskillit"]["env"]["AUTOSKILLIT_HEADLESS_AUTO_GATE"] == "1"
 
     def test_headless_auto_gate_false_omits_auto_gate_env(self, tmp_path):
         p = tmp_path / "config.toml"
         ensure_codex_mcp_registered(config_path=p, headless_auto_gate=False)
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         assert "AUTOSKILLIT_HEADLESS_AUTO_GATE" not in config["mcp_servers"]["autoskillit"]["env"]
 
     def test_second_call_returns_false(self, tmp_path):
@@ -303,7 +307,7 @@ class TestEnsureCodexMcpRegistered:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text('[mcp_servers.other]\ncommand = "other"\n')
         ensure_codex_mcp_registered(config_path=p)
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         assert "other" in config["mcp_servers"]
         assert "autoskillit" in config["mcp_servers"]
 
@@ -312,9 +316,76 @@ class TestEnsureCodexMcpRegistered:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text('[mcp_servers.other]\ncommand = "other"\nargs = ["--stdio"]\n')
         ensure_codex_mcp_registered(config_path=p)
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         assert config["mcp_servers"]["other"]["args"] == ["--stdio"]
         assert "autoskillit" in config["mcp_servers"]
+
+
+class TestReadResultDiscrimination:
+    def test_read_missing_file_returns_missing_variant(self, tmp_path):
+        from autoskillit.core import ReadResult
+
+        result = _read_codex_config(tmp_path / "nonexistent.toml")
+        assert isinstance(result, ReadResult)
+        assert result.is_corrupt is False
+        assert result.data == {}
+
+    def test_read_corrupt_file_returns_corrupt_variant(self, tmp_path):
+        from autoskillit.core import ReadResult
+
+        p = tmp_path / "config.toml"
+        original = (
+            b"[projects./home/user/repo]\ntrust = true\n\n"
+            b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\n'
+        )
+        p.write_bytes(original)
+        result = _read_codex_config(p)
+        assert isinstance(result, ReadResult)
+        assert result.is_corrupt is True
+        assert result.raw_bytes == original
+
+    def test_read_valid_file_returns_ok_variant(self, tmp_path):
+        from autoskillit.core import ReadResult
+
+        p = tmp_path / "config.toml"
+        p.write_bytes(b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\n')
+        result = _read_codex_config(p)
+        assert isinstance(result, ReadResult)
+        assert result.is_corrupt is False
+        assert result.data["mcp_servers"]["autoskillit"]["command"] == "autoskillit"
+
+
+class TestDestructiveOverwritePrevention:
+    def test_ensure_mcp_registered_preserves_corrupt_file_content(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text(
+            "[projects./home/user/repo]\ntrust = true\n\n"
+            '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
+            encoding="utf-8",
+        )
+        ensure_codex_mcp_registered(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert "[projects./home/user/repo]" in content
+        assert "[mcp_servers.autoskillit]" in content
+
+    def test_ensure_mcp_registered_appends_to_corrupt_file(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text(
+            "[projects./home/user/repo]\ntrust = true\n",
+            encoding="utf-8",
+        )
+        ensure_codex_mcp_registered(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert "[projects./home/user/repo]" in content
+        assert "[mcp_servers.autoskillit]" in content
+
+    def test_ensure_mcp_registered_full_rewrite_on_valid_toml(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text('[mcp_servers.other]\ncommand = "other"\n', encoding="utf-8")
+        ensure_codex_mcp_registered(config_path=p)
+        result = _read_codex_config(p)
+        assert result.data["mcp_servers"]["other"]["command"] == "other"
+        assert "autoskillit" in result.data["mcp_servers"]
 
 
 class TestExports:

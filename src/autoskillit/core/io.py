@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import tempfile
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -33,17 +34,49 @@ except ImportError:
     from yaml import Dumper as _Dumper  # type: ignore[misc,assignment]
 
 __all__ = [
+    "ReadResult",
     "YAMLError",
     "atomic_write",
     "ensure_project_temp",
     "load_yaml",
     "dump_yaml_str",
+    "read_versioned_json",
     "resolve_skill_temp_dir",
     "resolve_temp_dir",
+    "safe_upsert_section",
     "temp_dir_display_str",
     "write_versioned_json",
-    "read_versioned_json",
 ]
+
+
+@dataclass
+class ReadResult:
+    """Discriminated result of a config file read operation.
+
+    Use the factory classmethods to construct instances; do not instantiate directly.
+    Callers that want to write back after reading must branch on ``is_corrupt``:
+    corrupt sources must use text-level operations to preserve unreadable content.
+    """
+
+    data: dict[str, Any]
+    raw_bytes: bytes | None
+    is_corrupt: bool
+
+    def __post_init__(self) -> None:
+        if self.is_corrupt and self.raw_bytes is None:
+            raise ValueError("corrupt ReadResult must carry raw_bytes")
+
+    @classmethod
+    def missing(cls, default: dict[str, Any]) -> ReadResult:
+        return cls(data=default, raw_bytes=None, is_corrupt=False)
+
+    @classmethod
+    def ok(cls, data: dict[str, Any]) -> ReadResult:
+        return cls(data=data, raw_bytes=None, is_corrupt=False)
+
+    @classmethod
+    def corrupt(cls, raw_bytes: bytes) -> ReadResult:
+        return cls(data={}, raw_bytes=raw_bytes, is_corrupt=True)
 
 
 class _WarningLogger(Protocol):
@@ -135,6 +168,53 @@ def atomic_write(path: Path, content: str) -> None:
                 os.close(dir_fd)
         except OSError:
             pass  # Non-fatal — data is durable at path after os.replace()
+
+
+def safe_upsert_section(
+    path: Path,
+    section_header: str,
+    section_text: str,
+    *,
+    end_marker: str | None = None,
+) -> None:
+    """Replace or append a ``[single.section]`` TOML section in a text file.
+
+    Operates on raw text — safe to use on files that fail TOML parsing. Only
+    suitable for ``[single.section]`` headers; for ``[[array.of.tables]]``
+    headers use a dedicated helper (``_upsert_hooks_text`` in cli/_hooks_codex.py).
+
+    If ``section_header`` is found, the region from that header to the next
+    line starting with ``[`` (or ``end_marker``, or EOF) is replaced with
+    ``section_text``. If not found, ``section_text`` is appended.
+    Writes back via ``atomic_write``.
+    """
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = existing.splitlines(keepends=True)
+
+    start_idx: int | None = None
+    end_idx: int | None = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == section_header:
+            start_idx = i
+            continue
+        if start_idx is not None and end_idx is None:
+            if end_marker is not None and stripped == end_marker:
+                end_idx = i
+                break
+            if stripped.startswith("[") and stripped != section_header:
+                end_idx = i
+                break
+
+    if start_idx is not None:
+        if end_idx is None:
+            end_idx = len(lines)
+        new_lines = lines[:start_idx] + [section_text] + lines[end_idx:]
+    else:
+        separator = "\n\n" if existing.strip() else ""
+        new_lines = lines + [separator + section_text]
+
+    atomic_write(path, "".join(new_lines))
 
 
 def write_versioned_json(path: Path, payload: dict[str, Any], schema_version: int) -> None:

@@ -384,3 +384,78 @@ class TestReadVersionedJson:
             read_versioned_json(target, expected_version=3)
             read_versioned_json(target, expected_version=5)
         assert len(w) == 2
+
+
+class TestReadResult:
+    def test_missing_is_not_corrupt(self):
+        from autoskillit.core.io import ReadResult
+
+        r = ReadResult.missing({})
+        assert r.is_corrupt is False
+        assert r.data == {}
+
+    def test_corrupt_carries_raw_bytes(self):
+        from autoskillit.core.io import ReadResult
+
+        r = ReadResult.corrupt(b"content")
+        assert r.raw_bytes == b"content"
+        assert r.is_corrupt is True
+        assert r.data == {}
+
+    def test_ok_data_accessible(self):
+        from autoskillit.core.io import ReadResult
+
+        r = ReadResult.ok({"key": "val"})
+        assert r.data == {"key": "val"}
+        assert r.is_corrupt is False
+
+
+class TestSafeUpsertSection:
+    def test_appends_section_to_file_without_it(self, tmp_path):
+        from autoskillit.core.io import safe_upsert_section
+
+        p = tmp_path / "config.toml"
+        p.write_text("[other]\nkey = 1\n", encoding="utf-8")
+        section_text = '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n'
+        safe_upsert_section(p, "[mcp_servers.autoskillit]", section_text)
+        result = p.read_text(encoding="utf-8")
+        assert "[other]" in result
+        assert "key = 1" in result
+        assert "[mcp_servers.autoskillit]" in result
+        assert 'command = "autoskillit"' in result
+
+    def test_replaces_existing_section(self, tmp_path):
+        from autoskillit.core.io import safe_upsert_section
+
+        p = tmp_path / "config.toml"
+        p.write_text(
+            "[preamble]\nfoo = 1\n\n"
+            '[mcp_servers.autoskillit]\ncommand = "old"\n\n'
+            "[other]\nbar = 2\n",
+            encoding="utf-8",
+        )
+        section_text = '[mcp_servers.autoskillit]\ncommand = "new"\n'
+        safe_upsert_section(p, "[mcp_servers.autoskillit]", section_text)
+        result = p.read_text(encoding="utf-8")
+        assert "[preamble]" in result
+        assert "foo = 1" in result
+        assert "[other]" in result
+        assert "bar = 2" in result
+        assert 'command = "new"' in result
+        assert 'command = "old"' not in result
+
+    def test_handles_section_at_end_of_file(self, tmp_path):
+        from autoskillit.core.io import safe_upsert_section
+
+        p = tmp_path / "config.toml"
+        p.write_text(
+            '[preamble]\nfoo = 1\n\n[mcp_servers.autoskillit]\ncommand = "old"\n',
+            encoding="utf-8",
+        )
+        section_text = '[mcp_servers.autoskillit]\ncommand = "new"\n'
+        safe_upsert_section(p, "[mcp_servers.autoskillit]", section_text)
+        result = p.read_text(encoding="utf-8")
+        assert "[preamble]" in result
+        assert "foo = 1" in result
+        assert 'command = "new"' in result
+        assert 'command = "old"' not in result

@@ -87,7 +87,7 @@ generic_automation_mcp/
 | `workspace/` | IL-1 | Clone management, worktrees, skill resolution |
 | `planner/` | IL-1 | Progressive resolution planner — phases, assignments, WPs, validation |
 | `report/` | IL-1 | HTML report renderer — `renderer.py` uses `pkg_root()` for asset resolution |
-| `recipe/` | IL-2 | Recipe schema, validation, semantic rules/ |
+| `recipe/` | IL-2 | Recipe schema, validation, semantic rules/ (campaign/, ci/, dataflow/, graph/) |
 | `migration/` | IL-2 | Versioned migration engine + failure store |
 | `fleet/` | IL-2 | Campaign dispatch, semaphore, sidecar, liveness, state persistence |
 | `server/` | IL-3 | FastMCP server — tools/, kitchen gating, session-type dispatch |

@@ -571,7 +571,7 @@ def test_research_campaign_run_archive_no_capture():
 
 
 def test_research_campaign_capture_keys_are_identifiers():
-    from autoskillit.recipe.rules.rules_campaign_capture import _IDENT_RE
+    from autoskillit.recipe.rules.campaign.rules_campaign_capture import _IDENT_RE
 
     path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     recipe = load_recipe(path)
@@ -583,7 +583,7 @@ def test_research_campaign_capture_keys_are_identifiers():
 
 
 def test_research_campaign_capture_values_reference_result():
-    from autoskillit.recipe.rules.rules_campaign_capture import _RESULT_TEMPLATE_RE
+    from autoskillit.recipe.rules.campaign.rules_campaign_capture import _RESULT_TEMPLATE_RE
 
     path = pkg_root() / "recipes" / "campaigns" / "research-campaign.yaml"
     recipe = load_recipe(path)

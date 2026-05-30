@@ -999,7 +999,7 @@ def test_ci_watch_post_queue_fix_has_auto_trigger() -> None:
 def test_no_runs_re_is_module_level_constant():
     import regex
 
-    import autoskillit.recipe.rules.rules_ci as rules_ci
+    import autoskillit.recipe.rules.ci.rules_ci as rules_ci
 
     assert hasattr(rules_ci, "_NO_RUNS_RE")
     assert isinstance(rules_ci._NO_RUNS_RE, regex.Pattern)
@@ -1009,7 +1009,7 @@ def test_no_runs_re_is_module_level_constant():
 def test_timed_out_re_is_module_level_constant():
     import regex
 
-    import autoskillit.recipe.rules.rules_ci as rules_ci
+    import autoskillit.recipe.rules.ci.rules_ci as rules_ci
 
     assert hasattr(rules_ci, "_TIMED_OUT_RE")
     assert isinstance(rules_ci._TIMED_OUT_RE, regex.Pattern)

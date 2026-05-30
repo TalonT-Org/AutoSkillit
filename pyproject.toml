@@ -142,6 +142,7 @@ select = ["E", "F", "I", "UP", "TID251"]
 "tests/cli/test_cli_prompts.py" = ["E501"]
 "tests/fleet/test_dispatch_failure_semantics.py" = ["E501"]
 "tests/execution/test_session_log_fields.py" = ["E501"]
+"src/autoskillit/recipe/__init__.py" = ["E402"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}

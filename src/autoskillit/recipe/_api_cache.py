@@ -78,8 +78,8 @@ def _compute_deep_mtime() -> int:
     for subdir in _STALENESS_SCAN_DIRS:
         d = root / subdir
         if d.is_dir():
-            for f in d.iterdir():
-                if f.suffix == ".py" and f.is_file():
+            for f in d.rglob("*.py"):
+                if f.is_file():
                     try:
                         mt = f.stat().st_mtime_ns
                         if mt > max_mt:

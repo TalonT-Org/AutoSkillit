@@ -64,3 +64,12 @@ def test_empty_string_returns_empty() -> None:
 def test_no_code_regions_returns_unchanged() -> None:
     text = "Just some prose text.\nWith multiple lines."
     assert strip_markdown_code_regions(text) == text
+
+
+def test_unclosed_fence_is_fail_open() -> None:
+    text = "prose before\n```python\nunclosed content\nprose after"
+    result = strip_markdown_code_regions(text)
+    assert "prose before" in result
+    # Fail-open: regex requires both opening+closing ```, so unclosed fence is not consumed.
+    assert "unclosed content" in result
+    assert "prose after" in result

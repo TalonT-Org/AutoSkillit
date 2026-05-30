@@ -56,6 +56,8 @@ from .io import read_versioned_json as read_versioned_json
 from .io import resolve_skill_temp_dir as resolve_skill_temp_dir
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import temp_dir_display_str as temp_dir_display_str
+from .io import ReadResult as ReadResult
+from .io import safe_upsert_section as safe_upsert_section
 from .io import write_versioned_json as write_versioned_json
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger

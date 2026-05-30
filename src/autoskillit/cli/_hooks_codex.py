@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from autoskillit.core import atomic_write
 from autoskillit.execution import (
     _read_codex_config,
     _write_codex_config,
@@ -50,6 +51,36 @@ def _is_autoskillit_hook_entry(entry: dict) -> bool:
     return False
 
 
+def _upsert_hooks_text(config_path: Path, raw_bytes: bytes, fresh_hooks: list[dict]) -> None:
+    """Replace autoskillit-owned [[hooks]] blocks in raw config text and append fresh ones."""
+    from autoskillit.execution.backends._codex_config import _serialize_toml
+
+    text = raw_bytes.decode("utf-8", errors="replace")
+    lines = text.splitlines(keepends=True)
+
+    owned_ranges: list[tuple[int, int]] = []
+    i = 0
+    while i < len(lines):
+        if lines[i].strip() == "[[hooks]]":
+            block_start = i
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("["):
+                i += 1
+            block_end = i
+            block_text = "".join(lines[block_start:block_end])
+            if "/autoskillit/" in block_text or "_dispatch.py" in block_text:
+                owned_ranges.append((block_start, block_end))
+        else:
+            i += 1
+
+    for start, end in reversed(owned_ranges):
+        del lines[start:end]
+
+    fresh_text = _serialize_toml({"hooks": fresh_hooks})
+    result_text = "".join(lines).rstrip("\n") + "\n\n" + fresh_text
+    atomic_write(config_path, result_text)
+
+
 def sync_hooks_to_codex_config(config_path: Path | None = None) -> bool:
     """Sync autoskillit hooks to Codex config.toml.
 
@@ -57,13 +88,20 @@ def sync_hooks_to_codex_config(config_path: Path | None = None) -> bool:
     """
     if config_path is None:
         config_path = Path.home() / ".codex" / "config.toml"
-    config = _read_codex_config(config_path)
-    existing_hooks = config.get("hooks", [])
-    foreign_hooks = [e for e in existing_hooks if not _is_autoskillit_hook_entry(e)]
-    fresh = generate_codex_hooks_config()
-    new_hooks = foreign_hooks + fresh
-    if new_hooks == existing_hooks:
-        return False
-    config["hooks"] = new_hooks
-    _write_codex_config(config_path, config)
-    return True
+    result = _read_codex_config(config_path)
+    if result.is_corrupt:
+        assert result.raw_bytes is not None
+        fresh = generate_codex_hooks_config()
+        _upsert_hooks_text(config_path, result.raw_bytes, fresh)
+        return True
+    else:
+        config = result.data
+        existing_hooks = config.get("hooks", [])
+        foreign_hooks = [e for e in existing_hooks if not _is_autoskillit_hook_entry(e)]
+        fresh = generate_codex_hooks_config()
+        new_hooks = foreign_hooks + fresh
+        if new_hooks == existing_hooks:
+            return False
+        config["hooks"] = new_hooks
+        _write_codex_config(config_path, config, source=result)
+        return True

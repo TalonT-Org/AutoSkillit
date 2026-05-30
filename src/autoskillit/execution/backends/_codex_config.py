@@ -8,8 +8,10 @@ from typing import Any
 from autoskillit.core import (
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
+    ReadResult,
     atomic_write,
     get_logger,
+    safe_upsert_section,
 )
 
 logger = get_logger()
@@ -136,22 +138,32 @@ def _serialize_toml(data: dict[str, Any]) -> str:
     return text + "\n" if text else ""
 
 
-def _read_codex_config(path: Path) -> dict[str, Any]:
+def _read_codex_config(path: Path) -> ReadResult:
     import tomllib
 
     try:
         with open(path, "rb") as f:
             data = tomllib.load(f)
     except FileNotFoundError:
-        return {}
+        return ReadResult.missing({})
     except tomllib.TOMLDecodeError:
         logger.warning("corrupt_codex_config", path=str(path))
-        return {}
-    return data
+        raw_bytes = path.read_bytes()
+        return ReadResult.corrupt(raw_bytes)
+    return ReadResult.ok(data)
 
 
-def _write_codex_config(path: Path, data: dict[str, Any]) -> None:
+def _write_codex_config(path: Path, data: dict[str, Any], *, source: ReadResult) -> None:
+    if source.is_corrupt:
+        raise ValueError(
+            "_write_codex_config does not handle corrupt sources — "
+            "callers must route corrupt paths before calling"
+        )
     atomic_write(path, _serialize_toml(data))
+
+
+def _serialize_mcp_autoskillit_section(entry: dict[str, Any]) -> str:
+    return _serialize_toml({"mcp_servers": {"autoskillit": entry}})
 
 
 def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bool) -> bool:
@@ -176,9 +188,7 @@ def ensure_codex_mcp_registered(
     """Return True if the entry was written, False if already registered."""
     if config_path is None:
         config_path = Path.home() / ".codex" / "config.toml"
-    config = _read_codex_config(config_path)
-    if _is_autoskillit_registered(config, headless_auto_gate=headless_auto_gate):
-        return False
+    result = _read_codex_config(config_path)
     env: dict[str, str] = {HEADLESS_ENV_VAR: "1"}
     if headless_auto_gate:
         env[HEADLESS_AUTO_GATE_ENV_VAR] = "1"
@@ -188,6 +198,17 @@ def ensure_codex_mcp_registered(
         "startup_timeout_sec": 30.0,
         "tool_timeout_sec": 120.0,
     }
-    config.setdefault("mcp_servers", {})["autoskillit"] = entry
-    _write_codex_config(config_path, config)
-    return True
+
+    if result.is_corrupt:
+        # Corrupt file: always upsert via text-level operation.
+        # safe_upsert_section is idempotent (replaces if found, appends if not).
+        section_text = _serialize_mcp_autoskillit_section(entry)
+        safe_upsert_section(config_path, "[mcp_servers.autoskillit]", section_text)
+        return True
+    else:
+        config = result.data
+        if _is_autoskillit_registered(config, headless_auto_gate=headless_auto_gate):
+            return False
+        config.setdefault("mcp_servers", {})["autoskillit"] = entry
+        _write_codex_config(config_path, config, source=result)
+        return True

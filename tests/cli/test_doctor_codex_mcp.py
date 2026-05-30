@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
-from autoskillit.core import Severity
+from autoskillit.core import ReadResult, Severity
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -15,14 +15,16 @@ class TestCheckMcpServerRegisteredCodexBranch:
         monkeypatch.setattr(
             _exec_mod,
             "_read_codex_config",
-            lambda path: {
-                "mcp_servers": {
-                    "autoskillit": {
-                        "command": "autoskillit",
-                        "env": {"AUTOSKILLIT_HEADLESS": "1"},
+            lambda path: ReadResult.ok(
+                {
+                    "mcp_servers": {
+                        "autoskillit": {
+                            "command": "autoskillit",
+                            "env": {"AUTOSKILLIT_HEADLESS": "1"},
+                        }
                     }
                 }
-            },
+            ),
         )
         result = _check_mcp_server_registered(backend="codex")
         assert result.severity == Severity.OK
@@ -33,7 +35,7 @@ class TestCheckMcpServerRegisteredCodexBranch:
         monkeypatch.setattr(
             _exec_mod,
             "_read_codex_config",
-            lambda path: {"mcp_servers": {}},
+            lambda path: ReadResult.ok({"mcp_servers": {}}),
         )
         result = _check_mcp_server_registered(backend="codex")
         assert result.severity == Severity.WARNING
@@ -44,7 +46,7 @@ class TestCheckMcpServerRegisteredCodexBranch:
         monkeypatch.setattr(
             _exec_mod,
             "_read_codex_config",
-            lambda path: {},
+            lambda path: ReadResult.missing({}),
         )
         result = _check_mcp_server_registered(backend="codex")
         assert result.severity == Severity.WARNING

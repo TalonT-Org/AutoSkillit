@@ -89,7 +89,7 @@ class TestSyncHooksToCodexConfig:
         p = tmp_path / "config.toml"
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         assert "hooks" in config
 
     def test_sync_idempotent(self, tmp_path):
@@ -109,7 +109,7 @@ class TestSyncHooksToCodexConfig:
         )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         hooks = config.get("hooks", [])
         foreign = [h for h in hooks if "/usr/local/" in str(h)]
         assert len(foreign) > 0
@@ -122,7 +122,7 @@ class TestSyncHooksToCodexConfig:
         )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
-        config = _read_codex_config(p)
+        config = _read_codex_config(p).data
         hooks = config.get("hooks", [])
         autoskillit_hooks = [h for h in hooks if "/autoskillit/" in str(h)]
         assert len(autoskillit_hooks) > 0

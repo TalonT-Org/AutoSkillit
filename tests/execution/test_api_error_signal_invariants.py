@@ -47,6 +47,7 @@ API_ERROR_SIGNALS: list[str] = [
     "socket hang up",
     "network error",
     "connection reset",
+    "socket connection was closed",
     "Rate limited",
     "rate_limit_exceeded",
     # OpenAI/Codex API error types

@@ -109,6 +109,21 @@ class TestClassifyInfraExit:
         result = _sr(returncode=0, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
 
+    def test_api_error_socket_connection_closed_in_assistant_messages(self):
+        """Bun socket-closed error in assistant_messages → API_ERROR."""
+        session = ClaudeSessionResult(
+            subtype="empty_output",
+            is_error=True,
+            result="",
+            session_id="",
+            assistant_messages=[
+                "The socket connection was closed unexpectedly. "
+                "For more information, pass 'verbose: true' in the second argument to fetch()",
+            ],
+        )
+        result = _sr(returncode=0, stderr="")
+        assert classify_infra_exit(session, result) == InfraExitCategory.API_ERROR
+
     def test_process_killed_sigkill(self):
         """returncode=-9 (SIGKILL) → PROCESS_KILLED."""
         session = ClaudeSessionResult(

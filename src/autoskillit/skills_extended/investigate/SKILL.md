@@ -378,6 +378,8 @@ Spawn one adversarial subagent (model: "sonnet") whose role is to disconfirm the
 
 ### Step D5: Solution Convergence
 
+**Issue ALL blast radius subagent calls in a single message — one per candidate — so they execute in parallel. Do not iterate across multiple turns.**
+
 Spawn solution-space subagents to enumerate candidate fixes. For each candidate, spawn one blast radius subagent (model: "sonnet") to assess:
 
 - Which components would be affected by this fix

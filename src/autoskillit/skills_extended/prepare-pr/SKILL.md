@@ -91,7 +91,7 @@ Generate timestamp `ts` from the bash block above.
 
 ### Step 2: Extract PR Title from Plans
 
-Read all plan files. For each, extract the first `# ` heading line, strip the `# ` prefix,
+Read all plan files and extract the first `# ` heading line from each, strip the `# ` prefix,
 and strip any trailing `— PART [A-Z] ONLY` suffix.
 
 - **Single plan:** Use the heading directly as `task_title`.

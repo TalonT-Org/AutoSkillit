@@ -185,8 +185,16 @@ def _check_loop_boundary(skill_text: str) -> list[str]:
             if not any(p.search(line) for p in _LOOP_HEADER_PATTERNS):
                 continue
 
-            # Extract loop body: from this line to next step header or end
-            loop_body = "\n".join(lines[line_idx:])
+            # Extract loop body: from this line to next sub-heading or end.
+            # Stop at #### or ### sub-headers so tool mentions in unrelated
+            # sections of the same step block aren't attributed to this loop.
+            remaining_lines = lines[line_idx:]
+            loop_end = len(remaining_lines)
+            for k, rl in enumerate(remaining_lines):
+                if k > 0 and re.match(r"^#{3,4}\s+", rl):
+                    loop_end = k
+                    break
+            loop_body = "\n".join(remaining_lines[:loop_end])
 
             # Check if loop body contains tool invocations
             has_tool = any(p.search(loop_body) for p in _LOOP_TOOL_PATTERNS)

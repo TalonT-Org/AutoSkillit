@@ -295,7 +295,6 @@ def detect_anomalies(
     if initial_rss is not None and initial_rss > 0 and len(snapshots) >= 5:
         last_rss = snapshots[-1].get("vm_rss_kb", 0)
         if isinstance(last_rss, int):
-            is_anomalous: bool
             if initial_rss >= RSS_BASELINE_FLOOR_KB:
                 is_anomalous = last_rss > 2 * initial_rss
             else:

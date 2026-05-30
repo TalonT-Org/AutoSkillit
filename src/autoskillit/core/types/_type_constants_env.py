@@ -31,6 +31,7 @@ __all__ = [
     "AGENT_BACKEND_CLAUDE_CODE",
     "AGENT_BACKEND_CODEX",
     "FLEET_SESSION_REQUIRED_ENV",
+    "CODEX_MCP_ENV_FORWARD_VARS",
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
@@ -94,6 +95,13 @@ FLEET_SESSION_REQUIRED_ENV: frozenset[str] = frozenset(
         "AUTOSKILLIT_FLEET_MODE",
         "AUTOSKILLIT_PROJECT_DIR",
         "AUTOSKILLIT_HEADLESS",
+    }
+)
+
+CODEX_MCP_ENV_FORWARD_VARS: frozenset[str] = frozenset(
+    {
+        HEADLESS_ENV_VAR,
+        HEADLESS_AUTO_GATE_ENV_VAR,
     }
 )
 

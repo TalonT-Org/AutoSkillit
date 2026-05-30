@@ -395,6 +395,7 @@ class CodexBackend:
 
         extras: dict[str, str] = {
             "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,

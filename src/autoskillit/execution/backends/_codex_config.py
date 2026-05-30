@@ -172,10 +172,10 @@ def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bo
         return False
     if entry.get("command") != "autoskillit":
         return False
-    env = entry.get("env", {})
-    if env.get(HEADLESS_ENV_VAR) != "1":
+    env_vars = entry.get("env_vars", [])
+    if HEADLESS_ENV_VAR not in env_vars:
         return False
-    if headless_auto_gate and env.get(HEADLESS_AUTO_GATE_ENV_VAR) != "1":
+    if headless_auto_gate and HEADLESS_AUTO_GATE_ENV_VAR not in env_vars:
         return False
     return True
 
@@ -189,12 +189,12 @@ def ensure_codex_mcp_registered(
     if config_path is None:
         config_path = Path.home() / ".codex" / "config.toml"
     result = _read_codex_config(config_path)
-    env: dict[str, str] = {HEADLESS_ENV_VAR: "1"}
+    env_vars: list[str] = [HEADLESS_ENV_VAR]
     if headless_auto_gate:
-        env[HEADLESS_AUTO_GATE_ENV_VAR] = "1"
+        env_vars.append(HEADLESS_AUTO_GATE_ENV_VAR)
     entry: dict[str, Any] = {
         "command": "autoskillit",
-        "env": env,
+        "env_vars": env_vars,
         "startup_timeout_sec": 30.0,
         "tool_timeout_sec": 120.0,
     }

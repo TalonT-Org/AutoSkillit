@@ -175,9 +175,7 @@ class TestCheckMcpServerRegisteredCodexBackend:
         (codex_dir / "config.toml").write_text(
             "[mcp_servers.autoskillit]\n"
             'command = "autoskillit"\n'
-            "\n"
-            "[mcp_servers.autoskillit.env]\n"
-            'AUTOSKILLIT_HEADLESS = "1"\n'
+            'env_vars = ["AUTOSKILLIT_HEADLESS"]\n'
         )
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         result = _check_mcp_server_registered(backend="codex")

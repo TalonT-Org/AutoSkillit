@@ -13,7 +13,8 @@ logger = get_logger(__name__)
 def _reap_stale_dispatches(state_path: Path, *, dry_run: bool = False) -> None:
     from autoskillit.fleet import reap_stale_dispatches  # noqa: PLC0415
 
-    reap_stale_dispatches(state_path, dry_run=dry_run)
+    # User-invoked fleet reap bypasses the age guard — explicitly reap everything found.
+    reap_stale_dispatches(state_path, dry_run=dry_run, min_reap_age_seconds=0.0)
 
 
 def _pick_resume_campaign(project_dir: Path) -> tuple[str, str]:

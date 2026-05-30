@@ -249,7 +249,11 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
         try:
             from autoskillit.fleet import reap_stale_dispatches_async  # noqa: PLC0415
 
-            await reap_stale_dispatches_async(_campaign_state_paths)
+            await reap_stale_dispatches_async(
+                _campaign_state_paths,
+                own_campaign_id=ctx.kitchen_id,
+                min_reap_age_seconds=60.0,
+            )
         except Exception:
             logger.warning("fleet_auto_gate_boot_reap_failed", exc_info=True)
 
@@ -360,15 +364,25 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
             from autoskillit.fleet import reap_stale_dispatches_async  # noqa: PLC0415
 
             _skip: frozenset[str] | None = None
+            _own_campaign_id: str | None = None
             try:
-                from autoskillit.core import DISPATCH_ID_ENV_VAR  # noqa: PLC0415
+                from autoskillit.core import (  # noqa: PLC0415
+                    CAMPAIGN_ID_ENV_VAR,
+                    DISPATCH_ID_ENV_VAR,
+                )
 
                 _own_dispatch_id = os.environ.get(DISPATCH_ID_ENV_VAR, "")
                 _skip = frozenset({_own_dispatch_id}) if _own_dispatch_id else None
+                _own_campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR, "") or None
             except Exception:
                 logger.warning("food_truck_auto_gate_boot_self_exclusion_failed", exc_info=True)
 
-            await reap_stale_dispatches_async(_campaign_state_paths, skip_dispatch_ids=_skip)
+            await reap_stale_dispatches_async(
+                _campaign_state_paths,
+                skip_dispatch_ids=_skip,
+                own_campaign_id=_own_campaign_id,
+                min_reap_age_seconds=60.0,
+            )
         except Exception:
             logger.warning("food_truck_auto_gate_boot_reap_failed", exc_info=True)
 

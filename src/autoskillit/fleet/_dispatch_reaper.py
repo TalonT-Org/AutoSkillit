@@ -53,6 +53,8 @@ def reap_stale_dispatches(
     *,
     dry_run: bool = False,
     skip_dispatch_ids: frozenset[str] | None = None,
+    own_campaign_id: str | None = None,
+    min_reap_age_seconds: float = 60.0,
 ) -> None:
     """Reap stale RUNNING dispatches with PID-recycling-safe identity checks.
 
@@ -85,6 +87,14 @@ def reap_stale_dispatches(
             logger.info("reap: no running dispatches in campaign %s", m.state.campaign_id)
             return
 
+        if own_campaign_id and m.state.campaign_id == own_campaign_id:
+            logger.info(
+                "reap: [SKIPPED]     campaign %s  (own campaign, %d running siblings)",
+                m.state.campaign_id,
+                len(running),
+            )
+            return
+
         logger.info(
             "reap: scanning %d dispatches in campaign %s", len(running), m.state.campaign_id
         )
@@ -99,6 +109,16 @@ def reap_stale_dispatches(
                 )
                 continue
             pid = dispatch.dispatched_pid
+
+            age = time.time() - dispatch.started_at if dispatch.started_at > 0 else float("inf")
+            if age < min_reap_age_seconds:
+                logger.info(
+                    "reap: [SKIPPED]     %s  dispatch_id=%s  (too young, age=%.1fs)",
+                    name,
+                    dispatch.dispatch_id,
+                    age,
+                )
+                continue
 
             if pid == 0:
                 if dry_run:
@@ -189,6 +209,8 @@ async def reap_stale_dispatches_async(
     state_paths: list[Path],
     *,
     skip_dispatch_ids: frozenset[str] | None = None,
+    own_campaign_id: str | None = None,
+    min_reap_age_seconds: float = 60.0,
 ) -> None:
     import functools  # noqa: PLC0415
 
@@ -196,5 +218,11 @@ async def reap_stale_dispatches_async(
     for sp in state_paths:
         await loop.run_in_executor(
             None,
-            functools.partial(reap_stale_dispatches, sp, skip_dispatch_ids=skip_dispatch_ids),
+            functools.partial(
+                reap_stale_dispatches,
+                sp,
+                skip_dispatch_ids=skip_dispatch_ids,
+                own_campaign_id=own_campaign_id,
+                min_reap_age_seconds=min_reap_age_seconds,
+            ),
         )

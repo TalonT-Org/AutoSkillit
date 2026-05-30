@@ -246,6 +246,22 @@ def test_remediation_has_bridge_investigation_step(recipe) -> None:
     assert step.on_success == "rectify"
 
 
+def test_remediation_bridge_investigation_capture_is_path_typed(recipe) -> None:
+    """bridge_investigation capture must declare type: path for effective_investigation_path."""
+    from autoskillit.core import CaptureEntrySpec
+
+    step = recipe.steps["bridge_investigation"]
+    entry = step.capture["effective_investigation_path"]
+    assert isinstance(entry, CaptureEntrySpec)
+    assert entry.value_type == "path"
+
+
+def test_remediation_bridge_investigation_cmd_has_nonempty_guard(recipe) -> None:
+    """bridge_investigation cmd must contain a non-empty file guard (test -s or [ -s)."""
+    cmd = recipe.steps["bridge_investigation"].with_args["cmd"]
+    assert "test -s" in cmd or "[ -s" in cmd
+
+
 def test_remediation_investigate_routes_to_bridge(recipe) -> None:
     """investigate step on_success must route to bridge_investigation."""
     step = recipe.steps["investigate"]

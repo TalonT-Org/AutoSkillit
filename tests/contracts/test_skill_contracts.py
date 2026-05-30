@@ -540,7 +540,7 @@ def test_delimiter_patterns_have_hr_split_example(skills: dict[str, Any]) -> Non
         if not patterns or not examples:
             continue
         for pattern in patterns:
-            if not _re.match(r"^---\w", pattern):
+            if not _re.match(r"^---[/\w]", pattern):
                 continue
             name_suffix = pattern[3:]
             hr_split_variant = f"---\n{name_suffix}"

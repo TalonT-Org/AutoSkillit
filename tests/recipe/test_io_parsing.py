@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import CaptureEntrySpec
 from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
@@ -258,7 +259,11 @@ class TestRecipeParser:
             },
         }
         wf = load_recipe(_write_yaml(tmp_path / "recipe.yaml", data))
-        assert wf.steps["run"].capture == {"worktree_path": "${{ result.worktree_path }}"}
+        assert wf.steps["run"].capture == {
+            "worktree_path": CaptureEntrySpec(
+                from_="${{ result.worktree_path }}", value_type="string"
+            )
+        }
 
     # CAP2
     def test_capture_defaults_empty(self, tmp_path: Path) -> None:

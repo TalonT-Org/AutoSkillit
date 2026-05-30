@@ -22,6 +22,7 @@ import regex as re
 from autoskillit.core import (
     SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
+    CaptureEntrySpec,
     Severity,
     extract_skill_name,
     get_logger,
@@ -118,13 +119,13 @@ _TEMPLATE_RE = re.compile(r"\$\{\{.*?\}\}", re.DOTALL)
 _SAFE_STRATEGIES = {"", "proceed"}
 
 
-def _captures_result_remote_url(capture: dict[str, str]) -> bool:
+def _captures_result_remote_url(capture: dict[str, CaptureEntrySpec]) -> bool:
     """Return True if any capture entry reads result.remote_url from the step result."""
     for tmpl in capture.values():
         # Only flag entries whose template expression references result.remote_url.
         # An entry like `other_key: "${{ result.remote_url }}"` still captures the
         # empty value, so it is equally dangerous.
-        if "result.remote_url" in tmpl:
+        if "result.remote_url" in tmpl.from_:
             return True
     return False
 

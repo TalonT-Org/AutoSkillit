@@ -49,7 +49,7 @@ def _check_pass_through_validity(ctx: ValidationContext) -> list[RuleFinding]:
         if step.capture:
             for captured_var, capture_expr in step.capture.items():
                 for output_name in all_output_names:
-                    if f"result.{output_name}" in capture_expr:
+                    if f"result.{output_name}" in capture_expr.from_:
                         captured_outputs.add(output_name)
         used_in_when: set[str] = set()
         if step.on_result and step.on_result.conditions:

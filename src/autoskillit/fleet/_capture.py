@@ -40,6 +40,13 @@ def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
                 declared_type=declared_type,
                 reason=f"path does not exist: {value}",
             )
+        if Path(value).stat().st_size == 0:
+            raise CaptureValueTypeError(
+                key=key,
+                value=value,
+                declared_type=declared_type,
+                reason=f"path exists but file is empty (0 bytes): {value}",
+            )
     elif declared_type == "string":
         if not value:
             raise CaptureValueTypeError(

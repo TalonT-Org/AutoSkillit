@@ -105,7 +105,7 @@ def test_review_pr_captures_review_verdict(recipe) -> None:
     step = recipe.steps["review_pr"]
     capture = step.capture or {}
     assert "review_verdict" in capture
-    assert "result.verdict" in capture["review_verdict"]
+    assert "result.verdict" in capture["review_verdict"].from_
 
 
 # T_REM_LOOP7

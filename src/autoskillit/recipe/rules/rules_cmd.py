@@ -40,7 +40,7 @@ def _check_run_cmd_emit_alignment(ctx: ValidationContext) -> list[RuleFinding]:
         if re.match(r"^\s*bash\s+/\S+\.sh\b", cmd):
             continue
         for cap_key, cap_val in step.capture.items():
-            m = RESULT_CAPTURE_RE.search(cap_val)
+            m = RESULT_CAPTURE_RE.search(cap_val.from_)
             if m is None:
                 # Cannot determine the result field — skip (e.g. pipe-filtered values).
                 continue

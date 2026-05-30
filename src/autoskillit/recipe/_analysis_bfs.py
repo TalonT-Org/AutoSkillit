@@ -38,15 +38,13 @@ def _build_capture_origin_map(recipe: Recipe) -> dict[str, str]:
     origin: dict[str, str] = {}
     for step in recipe.steps.values():
         for cap_var, cap_expr in (step.capture or {}).items():
-            if isinstance(cap_expr, str):
-                keys = RESULT_CAPTURE_RE.findall(cap_expr)
-                if len(keys) == 1:
-                    origin[cap_var] = keys[0]
+            keys = RESULT_CAPTURE_RE.findall(cap_expr.from_)
+            if len(keys) == 1:
+                origin[cap_var] = keys[0]
         for cap_var, cap_expr in (step.capture_list or {}).items():
-            if isinstance(cap_expr, str):
-                keys = RESULT_CAPTURE_RE.findall(cap_expr)
-                if len(keys) == 1:
-                    origin[cap_var] = keys[0]
+            keys = RESULT_CAPTURE_RE.findall(cap_expr.from_)
+            if len(keys) == 1:
+                origin[cap_var] = keys[0]
     return origin
 
 

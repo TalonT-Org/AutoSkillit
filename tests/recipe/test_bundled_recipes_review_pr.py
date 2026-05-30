@@ -85,7 +85,7 @@ class TestReviewPrRecipeIntegration:
         """T_RP4b: review_pr captures the verdict output as review_verdict to avoid clobber."""
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
         assert "review_verdict" in step.capture
-        assert step.capture["review_verdict"] == "${{ result.verdict }}"
+        assert step.capture["review_verdict"].from_ == "${{ result.verdict }}"
 
     def test_review_pr_changes_requested_routes_to_resolve_review(self, recipe: object) -> None:
         """T_RP4c: changes_requested reaches resolve_review."""
@@ -177,7 +177,7 @@ class TestReviewPrRecipeIntegration:
     def test_annotate_step_captures_diff_metrics_path(self, recipe: object) -> None:
         step = recipe.steps["annotate_pr_diff"]  # type: ignore[attr-defined]
         assert "diff_metrics_path" in step.capture
-        assert step.capture["diff_metrics_path"] == "${{ result.diff_metrics_path }}"
+        assert step.capture["diff_metrics_path"].from_ == "${{ result.diff_metrics_path }}"
 
     def test_review_pr_command_includes_diff_metrics_path(self, recipe: object) -> None:
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
@@ -270,7 +270,7 @@ class TestAnnotatePrDiffLocalReviewRounds:
         """T4.1: annotate_pr_diff step captures review_mode."""
         step = recipe.steps["annotate_pr_diff"]
         assert "review_mode" in step.capture
-        assert step.capture["review_mode"] == "${{ result.review_mode }}"
+        assert step.capture["review_mode"].from_ == "${{ result.review_mode }}"
 
     def test_annotate_step_passes_local_review_rounds(self, recipe: object) -> None:
         """T4.2: annotate_pr_diff step passes local_review_rounds via with_args."""

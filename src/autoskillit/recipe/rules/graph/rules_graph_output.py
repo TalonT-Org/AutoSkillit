@@ -223,7 +223,7 @@ def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]
         if step.capture:
             for captured_var, capture_expr in step.capture.items():
                 for output_name in outputs_with_allowed_values:
-                    if f"result.{output_name}" in capture_expr:
+                    if f"result.{output_name}" in capture_expr.from_:
                         captured_outputs.add(output_name)
         pass_through_set = set(step.pass_through)
         captured_outputs -= pass_through_set

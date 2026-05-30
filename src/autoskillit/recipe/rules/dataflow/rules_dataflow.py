@@ -84,7 +84,7 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
         declared_keys = {out.name for out in contract.outputs}
 
         for _capture_var, capture_expr in step.capture.items():
-            for ref_key in RESULT_CAPTURE_RE.findall(capture_expr):
+            for ref_key in RESULT_CAPTURE_RE.findall(capture_expr.from_):
                 if ref_key not in declared_keys:
                     findings.append(
                         RuleFinding(
@@ -100,7 +100,7 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
                     )
 
         for _capture_var, capture_expr in step.capture_list.items():
-            for ref_key in RESULT_CAPTURE_RE.findall(capture_expr):
+            for ref_key in RESULT_CAPTURE_RE.findall(capture_expr.from_):
                 if ref_key not in declared_keys:
                     findings.append(
                         RuleFinding(
@@ -145,9 +145,9 @@ def _check_python_capture_output_coverage(ctx: ValidationContext) -> list[RuleFi
         # Collect all result.* references from capture, capture_list, and on_result
         result_refs: list[str] = []
         for _capture_var, capture_expr in step.capture.items():
-            result_refs.extend(RESULT_CAPTURE_RE.findall(capture_expr))
+            result_refs.extend(RESULT_CAPTURE_RE.findall(capture_expr.from_))
         for _capture_var, capture_expr in step.capture_list.items():
-            result_refs.extend(RESULT_CAPTURE_RE.findall(capture_expr))
+            result_refs.extend(RESULT_CAPTURE_RE.findall(capture_expr.from_))
         if step.on_result is not None:
             for cond in step.on_result.conditions:
                 if cond.when is not None:

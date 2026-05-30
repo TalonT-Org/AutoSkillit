@@ -102,7 +102,7 @@ def test_pmp_plan_step_captures_all_plan_paths(recipe) -> None:
         "plan step must capture all_plan_paths via capture_list — needed so audit_impl receives "
         "explicit plan file paths instead of a directory"
     )
-    assert "${{ result.plan_path }}" in step.capture_list["all_plan_paths"], (
+    assert "${{ result.plan_path }}" in step.capture_list["all_plan_paths"].from_, (
         "all_plan_paths must accumulate result.plan_path on each loop iteration"
     )
 
@@ -637,7 +637,7 @@ def test_merge_pr_captures_merged(recipe) -> None:
     step = recipe.steps["merge_pr"]
     assert step.capture is not None
     assert "merged" in step.capture
-    assert "${{ result.merged }}" in step.capture["merged"]
+    assert "${{ result.merged }}" in step.capture["merged"].from_
 
 
 def test_merge_pr_routes_merged_false_to_failure(recipe) -> None:

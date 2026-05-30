@@ -221,7 +221,7 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
         for cap_key, cap_val in step.capture.items():
             if step.constant is not None:
                 continue
-            all_refs = _TEMPLATE_REF_RE.findall(cap_val)
+            all_refs = _TEMPLATE_REF_RE.findall(cap_val.from_)
             if not all_refs:
                 errors.append(
                     f"Step '{step_name}'.capture.{cap_key} must contain "

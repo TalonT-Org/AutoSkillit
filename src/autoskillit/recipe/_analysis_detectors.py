@@ -141,8 +141,11 @@ def _is_observability_capture(cap_key: str, step_name: str, step: RecipeStep) ->
 
     # merge_worktree cleanup_succeeded: matched by tool name + capture value,
     # not skill_command (merge_worktree is a direct tool, not a skill).
-    if step.tool == "merge_worktree" and "result.cleanup_succeeded" in str(
-        (step.capture or {}).get(cap_key, "") or (step.capture_list or {}).get(cap_key, "")
+    _cap = (step.capture or {}).get(cap_key) or (step.capture_list or {}).get(cap_key)
+    if (
+        step.tool == "merge_worktree"
+        and _cap is not None
+        and "result.cleanup_succeeded" in _cap.from_
     ):
         return True
 

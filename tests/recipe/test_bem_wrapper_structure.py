@@ -82,7 +82,7 @@ def test_bem_wrapper_fallback_writes_file_not_json_to_stdout():
     step = recipe.steps["emit_fallback_map"]
     assert step.tool == "run_python"
     assert step.with_args["callable"] == "autoskillit.recipe._cmd_rpc.emit_fallback_map"
-    assert step.capture.get("execution_map") == "${{ result.execution_map }}"
+    assert step.capture["execution_map"].from_ == "${{ result.execution_map }}"
 
 
 def test_bem_wrapper_emit_result_consumes_execution_map_context():
@@ -118,8 +118,7 @@ def test_bem_wrapper_run_skill_capture_keys_in_contract():
     step = recipe.steps["run_bem"]
     for key in step.capture:
         capture_val = step.capture[key]
-        # capture value format: "${{ result.<field_name> }}"
-        field = capture_val.replace("${{ result.", "").replace(" }}", "").strip()
+        field = capture_val.from_.replace("${{ result.", "").replace(" }}", "").strip()
         assert field in bem_outputs, f"Captured field '{field}' not in build-execution-map outputs"
 
 

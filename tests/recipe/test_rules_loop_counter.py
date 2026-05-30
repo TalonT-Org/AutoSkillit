@@ -133,12 +133,15 @@ class TestLoopCounterCrossPathSharing:
         sharing = [f for f in findings if f.rule == "loop-counter-cross-path-sharing"]
         assert sharing == []
 
-    def test_bundled_recipes_no_counter_sharing(self) -> None:
-        for name in ("remediation", "implementation", "implementation-groups", "merge-prs"):
-            recipe = load_recipe(builtin_recipes_dir() / f"{name}.yaml")
-            findings = run_semantic_rules(recipe)
-            sharing = [f for f in findings if f.rule == "loop-counter-cross-path-sharing"]
-            assert sharing == [], f"{name}: {[(f.step_name, f.message) for f in sharing]}"
+    @pytest.mark.parametrize(
+        "recipe_name",
+        ("remediation", "implementation", "implementation-groups", "merge-prs"),
+    )
+    def test_bundled_recipes_no_counter_sharing(self, recipe_name: str) -> None:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        findings = run_semantic_rules(recipe)
+        sharing = [f for f in findings if f.rule == "loop-counter-cross-path-sharing"]
+        assert sharing == [], f"{recipe_name}: {[(f.step_name, f.message) for f in sharing]}"
 
 
 class TestLoopGuardBeforeVerify:
@@ -184,9 +187,12 @@ class TestLoopGuardBeforeVerify:
         gbv = [f for f in findings if f.rule == "loop-guard-before-verify"]
         assert gbv == []
 
-    def test_bundled_recipes_no_guard_before_verify(self) -> None:
-        for name in ("remediation", "implementation", "implementation-groups", "merge-prs"):
-            recipe = load_recipe(builtin_recipes_dir() / f"{name}.yaml")
-            findings = run_semantic_rules(recipe)
-            gbv = [f for f in findings if f.rule == "loop-guard-before-verify"]
-            assert gbv == [], f"{name}: {[(f.step_name, f.message) for f in gbv]}"
+    @pytest.mark.parametrize(
+        "recipe_name",
+        ("remediation", "implementation", "implementation-groups", "merge-prs"),
+    )
+    def test_bundled_recipes_no_guard_before_verify(self, recipe_name: str) -> None:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        findings = run_semantic_rules(recipe)
+        gbv = [f for f in findings if f.rule == "loop-guard-before-verify"]
+        assert gbv == [], f"{recipe_name}: {[(f.step_name, f.message) for f in gbv]}"

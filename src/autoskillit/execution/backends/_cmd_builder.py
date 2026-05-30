@@ -24,6 +24,8 @@ class CmdBuilder:
     """
 
     def __init__(self, binary: str) -> None:
+        if not binary:
+            raise ValueError("binary must be a non-empty string")
         self._binary = binary
         self._mode_flags: list[str] = []
         self._kv_flags: list[tuple[str, str]] = []

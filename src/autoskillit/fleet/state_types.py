@@ -114,6 +114,8 @@ class DispatchRecord:
     diagnostic_message: str = ""
     kill_reason: str = ""
     infra_exit_category: str = ""
+    reaper_reason: str = ""
+    reaper_dispatch_id: str = ""
     token_usage: dict[str, Any] = field(default_factory=dict)
     started_at: float = 0.0
     ended_at: float = 0.0
@@ -143,6 +145,8 @@ class DispatchRecord:
             "diagnostic_message": self.diagnostic_message,
             "kill_reason": self.kill_reason,
             "infra_exit_category": self.infra_exit_category,
+            "reaper_reason": self.reaper_reason,
+            "reaper_dispatch_id": self.reaper_dispatch_id,
             "token_usage": dict(self.token_usage),
             "started_at": self.started_at,
             "ended_at": self.ended_at,
@@ -198,6 +202,8 @@ class DispatchRecord:
             diagnostic_message=d.get("diagnostic_message", ""),
             kill_reason=d.get("kill_reason", ""),
             infra_exit_category=d.get("infra_exit_category", ""),
+            reaper_reason=d.get("reaper_reason", ""),
+            reaper_dispatch_id=d.get("reaper_dispatch_id", ""),
             token_usage=d.get("token_usage", {}),
             started_at=d.get("started_at", 0.0),
             ended_at=d.get("ended_at", 0.0),

@@ -377,6 +377,8 @@ class TestDispatchRecordToDict:
             "diagnostic_message",
             "kill_reason",
             "infra_exit_category",
+            "reaper_reason",
+            "reaper_dispatch_id",
             "token_usage",
             "started_at",
             "ended_at",

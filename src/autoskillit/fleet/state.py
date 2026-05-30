@@ -503,6 +503,10 @@ def upsert_dispatch_record_by_name(state_path: Path, record: DispatchRecord) -> 
                         else:
                             snapshot[f.name] = val
                     record.attempt_history = [snapshot] + list(record.attempt_history)
+                if d.reaper_reason and not record.reaper_reason:
+                    record.reaper_reason = d.reaper_reason
+                if d.reaper_dispatch_id and not record.reaper_dispatch_id:
+                    record.reaper_dispatch_id = d.reaper_dispatch_id
                 m.state.dispatches[i] = record
                 m.mark_dirty()
                 return

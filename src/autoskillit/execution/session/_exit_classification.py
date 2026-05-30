@@ -79,6 +79,15 @@ def has_rate_limit_signal(
     )
 
 
+def is_signal_death_code(returncode: int) -> bool:
+    """Return True if returncode indicates death by signal.
+
+    Covers both Python convention (negative: -(signal_number)) and shell
+    convention (positive: 128 + signal_number, range 129–192).
+    """
+    return returncode < 0 or (128 < returncode <= 192)
+
+
 def classify_infra_exit(
     session: ClaudeSessionResult,
     result: SubprocessResult,
@@ -113,6 +122,6 @@ def classify_infra_exit(
         return InfraExitCategory.API_ERROR
     if session.api_error_status is not None and session.api_error_status >= 400:
         return InfraExitCategory.API_ERROR
-    if result.returncode is not None and result.returncode < 0:
+    if result.returncode is not None and is_signal_death_code(result.returncode):
         return InfraExitCategory.PROCESS_KILLED
     return InfraExitCategory.COMPLETED

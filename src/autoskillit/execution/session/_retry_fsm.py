@@ -83,6 +83,14 @@ def _compute_retry(
 
     # Phase 2: Exhaustive termination dispatch
     match termination:
+        case TerminationReason.SIGNAL_DEATH:
+            logger.debug(
+                "compute_retry_result",
+                termination="SIGNAL_DEATH",
+                needs_retry=True,
+            )
+            return True, RetryReason.RESUME
+
         case TerminationReason.NATURAL_EXIT:
             if channel_confirmation in (
                 ChannelConfirmation.CHANNEL_A,

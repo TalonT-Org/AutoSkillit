@@ -199,6 +199,26 @@ class TestDispatchRecordFromDict:
         rec = DispatchRecord.from_dict(d)
         assert rec.dispatched_starttime_ticks == 0
 
+    def test_reaper_fields_round_trip_through_serialization(self) -> None:
+        """reaper_reason and reaper_dispatch_id survive to_dict/from_dict (Test 1H)."""
+        rec = DispatchRecord(
+            name="t",
+            reaper_reason="reaped_orphan",
+            reaper_dispatch_id="xyz-456",
+        )
+        d = rec.to_dict()
+        assert d["reaper_reason"] == "reaped_orphan"
+        assert d["reaper_dispatch_id"] == "xyz-456"
+        rec2 = DispatchRecord.from_dict(d)
+        assert rec2.reaper_reason == "reaped_orphan"
+        assert rec2.reaper_dispatch_id == "xyz-456"
+
+    def test_reaper_fields_default_to_empty_string(self) -> None:
+        """reaper fields default to empty string when absent from dict (Test 1H complement)."""
+        rec = DispatchRecord.from_dict({"name": "t"})
+        assert rec.reaper_reason == ""
+        assert rec.reaper_dispatch_id == ""
+
 
 class TestStateDecompositionImports:
     def test_state_types_importable(self) -> None:

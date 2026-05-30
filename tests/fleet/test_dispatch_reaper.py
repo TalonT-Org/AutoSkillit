@@ -418,7 +418,106 @@ class TestReap:
             skip_dispatch_ids=frozenset({"skip-me"}),
             own_campaign_id=None,
             min_reap_age_seconds=60.0,
+            reaper_dispatch_id="",
         )
+
+    def test_reap_writes_tombstone_to_victim_session_log_dir(self, tmp_path: Path) -> None:
+        """Reaper writes reaper_action.json into victim's session log dir (Test 1E)."""
+        session_log_dir = tmp_path / "session-logs"
+        session_log_dir.mkdir()
+        sp = _make_running_state(
+            tmp_path,
+            dispatch_id="victim-dispatch-001",
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_boot_id=BOOT_ID,
+        )
+        raw = json.loads(sp.read_text())
+        raw["dispatches"][0]["dispatched_session_log_dir"] = str(session_log_dir)
+        sp.write_text(json.dumps(raw))
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree"),
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+        ):
+            from autoskillit.fleet import reap_stale_dispatches
+
+            reap_stale_dispatches(sp, reaper_dispatch_id="reaper-aaa-001")
+
+        tombstone_path = session_log_dir / "reaper_action.json"
+        assert tombstone_path.exists(), "reaper_action.json should be written to session log dir"
+        tombstone = json.loads(tombstone_path.read_text())
+        assert tombstone["action"] == "reaped_orphan"
+        assert tombstone["reaper_dispatch_id"] == "reaper-aaa-001"
+        assert tombstone["victim_dispatch_id"] == "victim-dispatch-001"
+        assert tombstone["victim_pid"] == 12345
+
+    def test_reap_appends_to_central_reaper_events_log(self, tmp_path: Path) -> None:
+        """Reaper appends event to reaper_events.jsonl (Test 1F)."""
+        sp = _make_running_state(
+            tmp_path,
+            dispatch_id="victim-dispatch-002",
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_boot_id=BOOT_ID,
+        )
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree"),
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch("autoskillit.fleet._dispatch_reaper.default_log_dir", return_value=tmp_path),
+        ):
+            from autoskillit.fleet import reap_stale_dispatches
+
+            reap_stale_dispatches(sp, reaper_dispatch_id="reaper-bbb-002")
+
+        log_path = tmp_path / "reaper_events.jsonl"
+        assert log_path.exists(), "reaper_events.jsonl should be created"
+        lines = [ln for ln in log_path.read_text().splitlines() if ln.strip()]
+        assert len(lines) == 1
+        event = json.loads(lines[0])
+        assert event["action"] == "reaped_orphan"
+        assert event["victim_dispatch_id"] == "victim-dispatch-002"
+        assert event["victim_pid"] == 12345
+        assert event["reaper_dispatch_id"] == "reaper-bbb-002"
+        assert "ts" in event
+        assert "campaign_id" in event
+
+    def test_reaper_reason_survives_upsert_dispatch_record_by_name(self, tmp_path: Path) -> None:
+        """reaper_reason/reaper_dispatch_id survive a subsequent upsert (Test 1G)."""
+        from autoskillit.fleet import upsert_dispatch_record_by_name, write_initial_state
+
+        sp = tmp_path / "state.json"
+        write_initial_state(sp, "cid-1g", "1g-campaign", "/m.yaml", [DispatchRecord(name="d1")])
+
+        raw = json.loads(sp.read_text())
+        raw["dispatches"][0].update(
+            {
+                "status": "failure",
+                "reaper_reason": "reaped_orphan",
+                "reaper_dispatch_id": "abc-123",
+            }
+        )
+        sp.write_text(json.dumps(raw))
+
+        overwrite = DispatchRecord(
+            name="d1",
+            status=DispatchStatus.FAILURE,
+            reason="some_other_reason",
+            reaper_reason="",
+            reaper_dispatch_id="",
+        )
+        upsert_dispatch_record_by_name(sp, overwrite)
+
+        state = read_state(sp)
+        assert state is not None
+        record = state.dispatches[0]
+        assert record.reaper_reason == "reaped_orphan"
+        assert record.reaper_dispatch_id == "abc-123"
 
     def test_reap_skips_own_campaign_state_file(self, tmp_path: Path) -> None:
         sp = tmp_path / "state.json"

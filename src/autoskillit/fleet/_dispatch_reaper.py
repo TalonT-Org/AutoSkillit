@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,10 +19,32 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _append_reaper_event(dispatch: DispatchRecord, reason: str, reaper_dispatch_id: str) -> None:
+    from autoskillit.core import default_log_dir  # noqa: PLC0415
+
+    log_path = default_log_dir() / "reaper_events.jsonl"
+    event = {
+        "ts": time.time(),
+        "action": reason,
+        "victim_dispatch_id": dispatch.dispatch_id,
+        "victim_pid": dispatch.dispatched_pid,
+        "victim_session_id": dispatch.dispatched_session_id,
+        "reaper_dispatch_id": reaper_dispatch_id,
+        "campaign_id": dispatch.campaign_id,
+    }
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event) + "\n")
+    except OSError:
+        logger.warning("reaper: failed to append reaper event", exc_info=True)
+
+
 def _apply_stale_dispatch(
     dispatch: DispatchRecord,
     reason: str,
     m: CampaignStateMutator,
+    reaper_dispatch_id: str = "",
 ) -> None:
     from autoskillit.fleet import classify_stale_dispatch  # noqa: PLC0415
 
@@ -31,6 +54,29 @@ def _apply_stale_dispatch(
     if sidecar:
         dispatch.sidecar_path = sidecar
     dispatch.ended_at = time.time()
+
+    dispatch.reaper_reason = reason
+    dispatch.reaper_dispatch_id = reaper_dispatch_id
+
+    if dispatch.dispatched_session_log_dir:
+        tombstone_dir = Path(dispatch.dispatched_session_log_dir)
+        if tombstone_dir.exists():
+            tombstone = {
+                "ts": dispatch.ended_at,
+                "action": reason,
+                "reaper_dispatch_id": reaper_dispatch_id,
+                "victim_pid": dispatch.dispatched_pid,
+                "victim_dispatch_id": dispatch.dispatch_id,
+                "campaign_id": dispatch.campaign_id,
+            }
+            try:
+                (tombstone_dir / "reaper_action.json").write_text(
+                    json.dumps(tombstone), encoding="utf-8"
+                )
+            except OSError:
+                logger.warning("reaper: failed to write tombstone", exc_info=True)
+
+    _append_reaper_event(dispatch, reason, reaper_dispatch_id)
     m.mark_dirty()
 
 
@@ -40,11 +86,12 @@ def _mark_dead_pid(
     pid: int,
     dispatch: DispatchRecord,
     m: CampaignStateMutator,
+    reaper_dispatch_id: str = "",
 ) -> None:
     if dry_run:
         logger.info("reap: [WOULD MARK]  %s  pid=%d  (process dead)", name, pid)
     else:
-        _apply_stale_dispatch(dispatch, "reaped_dead_pid", m)
+        _apply_stale_dispatch(dispatch, "reaped_dead_pid", m, reaper_dispatch_id)
         logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
 
 
@@ -55,6 +102,7 @@ def reap_stale_dispatches(
     skip_dispatch_ids: frozenset[str] | None = None,
     own_campaign_id: str | None = None,
     min_reap_age_seconds: float = 60.0,
+    reaper_dispatch_id: str = "",
 ) -> None:
     """Reap stale RUNNING dispatches with PID-recycling-safe identity checks.
 
@@ -124,7 +172,7 @@ def reap_stale_dispatches(
                 if dry_run:
                     logger.info("reap: [WOULD MARK]  %s  pid=0  (no PID recorded)", name)
                 else:
-                    _apply_stale_dispatch(dispatch, "reaped_dead_pid", m)
+                    _apply_stale_dispatch(dispatch, "reaped_dead_pid", m, reaper_dispatch_id)
                     logger.info("reap: [MARKED]      %s  (no PID recorded)", name)
                 continue
 
@@ -138,7 +186,7 @@ def reap_stale_dispatches(
                         "reap: [WOULD MARK]  %s  pid=%d  (rebooted, pid_recycled)", name, pid
                     )
                 else:
-                    _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m)
+                    _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m, reaper_dispatch_id)
                     logger.info(
                         "reap: [MARKED]      %s  pid=%d  (rebooted, pid_recycled)",
                         name,
@@ -147,7 +195,7 @@ def reap_stale_dispatches(
                 continue
 
             if not psutil.pid_exists(pid):
-                _mark_dead_pid(dry_run, name, pid, dispatch, m)
+                _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
                 continue
 
             current_ticks = read_starttime_ticks(pid)
@@ -158,7 +206,7 @@ def reap_stale_dispatches(
                     actual_ct = psutil.Process(pid).create_time()
                     identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
                 except psutil.NoSuchProcess:
-                    _mark_dead_pid(dry_run, name, pid, dispatch, m)
+                    _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
                     continue
                 except psutil.AccessDenied:
                     identity_confirmed = False
@@ -170,7 +218,7 @@ def reap_stale_dispatches(
                     identity_confirmed = abs(actual_ct - dispatch.dispatched_create_time) < 1.0
                     logger.info("reap: ticks=0 fallback to create_time for %s pid=%d", name, pid)
                 except psutil.NoSuchProcess:
-                    _mark_dead_pid(dry_run, name, pid, dispatch, m)
+                    _mark_dead_pid(dry_run, name, pid, dispatch, m, reaper_dispatch_id)
                     continue
                 except psutil.AccessDenied:
                     identity_confirmed = False
@@ -189,7 +237,7 @@ def reap_stale_dispatches(
                         logger.warning(
                             "reap: kill_process_tree failed for pid=%d", pid, exc_info=True
                         )
-                    _apply_stale_dispatch(dispatch, "reaped_orphan", m)
+                    _apply_stale_dispatch(dispatch, "reaped_orphan", m, reaper_dispatch_id)
                     logger.info("reap: [KILLED]      %s  pid=%d  (orphan reaped)", name, pid)
             else:
                 if dry_run:
@@ -197,7 +245,7 @@ def reap_stale_dispatches(
                         "reap: [WOULD MARK]  %s  pid=%d  (PID recycled, no kill)", name, pid
                     )
                 else:
-                    _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m)
+                    _apply_stale_dispatch(dispatch, "reaped_pid_recycled", m, reaper_dispatch_id)
                     logger.info(
                         "reap: [MARKED]      %s  pid=%d  (PID recycled, no kill)",
                         name,
@@ -211,6 +259,7 @@ async def reap_stale_dispatches_async(
     skip_dispatch_ids: frozenset[str] | None = None,
     own_campaign_id: str | None = None,
     min_reap_age_seconds: float = 60.0,
+    reaper_dispatch_id: str = "",
 ) -> None:
     import functools  # noqa: PLC0415
 
@@ -224,5 +273,6 @@ async def reap_stale_dispatches_async(
                 skip_dispatch_ids=skip_dispatch_ids,
                 own_campaign_id=own_campaign_id,
                 min_reap_age_seconds=min_reap_age_seconds,
+                reaper_dispatch_id=reaper_dispatch_id,
             ),
         )

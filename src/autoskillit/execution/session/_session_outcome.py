@@ -102,6 +102,9 @@ def _compute_success(
             )
             return content_ok
 
+        case TerminationReason.SIGNAL_DEATH:
+            return False
+
         case TerminationReason.NATURAL_EXIT:
             # The process exited on its own. A non-zero returncode is normally
             # authoritative evidence of failure — no asymmetric bypass.

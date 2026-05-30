@@ -1439,3 +1439,24 @@ def test_build_skill_result_ansi_only_stdout_exit_143() -> None:
     )
     assert skill_result.success is False
     assert skill_result.lifespan_started is False
+
+
+def test_build_skill_result_signal_death_returncode_yields_resume() -> None:
+    """SIGNAL_DEATH + rc=143 yields retry_reason=RESUME and exit_category=process_killed."""
+    proc_result = SubprocessResult(
+        returncode=143,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.SIGNAL_DEATH,
+        pid=12345,
+        kill_reason=KillReason.NATURAL_EXIT,
+    )
+    skill_result = _build_skill_result(
+        result=proc_result,
+        backend=ClaudeCodeBackend(),
+        skill_command="test",
+        completion_marker="%%DONE%%",
+    )
+    assert skill_result.success is False
+    assert skill_result.retry_reason == RetryReason.RESUME
+    assert skill_result.infra.exit_category == "process_killed"

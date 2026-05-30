@@ -91,21 +91,18 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                     success_stays_in_cycle = False
                     for _s in retrying_steps:
                         _step = recipe.steps[_s]
-                        _fail_targets = {
-                            t
-                            for t in (
-                                _step.on_failure,
-                                _step.on_exhausted,
-                            )
-                            if t
-                        }
-                        if _step.on_context_limit and _step.on_context_limit not in cycle_set:
-                            _fail_targets.add(_step.on_context_limit)
-                        if _step.on_rate_limit and _step.on_rate_limit not in cycle_set:
-                            _fail_targets.add(_step.on_rate_limit)
+                        _success_routes: set[str] = set()
+                        if _step.on_result:
+                            if _step.on_result.conditions:
+                                _success_routes = {c.route for c in _step.on_result.conditions}
+                            elif _step.on_result.routes:
+                                _success_routes = set(_step.on_result.routes.values())
+                        if _step.on_success:
+                            _success_routes.add(_step.on_success)
+                        _fail_targets = {t for t in (_step.on_failure, _step.on_exhausted) if t}
                         if any(
                             succ in cycle_set
-                            for succ in graph.get(_s, set())
+                            for succ in _success_routes
                             if succ not in _fail_targets
                         ):
                             success_stays_in_cycle = True

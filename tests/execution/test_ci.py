@@ -20,8 +20,6 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 # Helpers
 # ---------------------------------------------------------------------------
 
-_NOW = datetime.now(UTC)
-
 
 def _run(
     run_id: int = 12345,
@@ -38,7 +36,7 @@ def _run(
         "conclusion": conclusion,
         "head_sha": head_sha,
         "event": event,
-        "updated_at": updated_at or _NOW.isoformat(),
+        "updated_at": updated_at or datetime.now(UTC).isoformat(),
     }
 
 

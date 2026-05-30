@@ -390,13 +390,17 @@ class TestIterMergedAssistantTurns:
         ts: str = "",
         tools: list[str] | None = None,
         thinking: bool = False,
+        message_id: str = "",
     ) -> str:
         content: list[dict] = []
         if thinking:
             content.append({"type": "thinking", "thinking": "..."})
         for name in tools or []:
             content.append({"type": "tool_use", "name": name})
-        rec: dict = {"type": "assistant", "message": {"content": content}}
+        msg: dict = {"content": content}
+        if message_id:
+            msg["id"] = message_id
+        rec: dict = {"type": "assistant", "message": msg}
         if rid:
             rec["requestId"] = rid
         if ts:
@@ -464,3 +468,109 @@ class TestIterMergedAssistantTurns:
         assert len(turns) == 1
         assert turns[0].timestamp == "first-ts"
         assert turns[0].tool_names == ("Bash",)
+
+    def test_message_id_fallback_when_request_id_absent(self) -> None:
+        """Records sharing message.id but lacking requestId merge into one turn."""
+        mid = "0669d3ed14adce24ccf227c37a5884d4"
+        rec1 = json.dumps(
+            {
+                "type": "assistant",
+                "timestamp": "2026-05-30T08:33:53.843Z",
+                "message": {"id": mid, "content": [{"type": "thinking", "thinking": "..."}]},
+            }
+        )
+        rec2 = json.dumps(
+            {
+                "type": "assistant",
+                "timestamp": "2026-05-30T08:33:54.810Z",
+                "message": {"id": mid, "content": [{"type": "tool_use", "name": "Bash"}]},
+            }
+        )
+        turns = self._parse(rec1, rec2)
+        assert len(turns) == 1
+        assert turns[0].request_id == mid
+        assert turns[0].timestamp == "2026-05-30T08:33:53.843Z"
+        assert turns[0].tool_names == ("Bash",)
+
+    def test_request_id_takes_precedence_over_message_id(self) -> None:
+        """When both requestId and message.id are present, requestId wins."""
+        rec = json.dumps(
+            {
+                "type": "assistant",
+                "requestId": "req_001",
+                "message": {"id": "hex-mid", "content": [{"type": "tool_use", "name": "Read"}]},
+            }
+        )
+        turns = self._parse(rec)
+        assert len(turns) == 1
+        assert turns[0].request_id == "req_001"
+
+    def test_mixed_request_id_and_message_id_interleaved(self) -> None:
+        """Anthropic records (requestId) and MiniMax records (message.id only) coexist."""
+        r1 = json.dumps(
+            {
+                "type": "assistant",
+                "requestId": "req-A",
+                "message": {"content": [{"type": "tool_use", "name": "A"}]},
+            }
+        )
+        r2 = json.dumps(
+            {
+                "type": "assistant",
+                "timestamp": "ts2",
+                "message": {"id": "mid-B", "content": [{"type": "tool_use", "name": "B"}]},
+            }
+        )
+        r3 = json.dumps(
+            {
+                "type": "assistant",
+                "requestId": "req-C",
+                "message": {"content": [{"type": "tool_use", "name": "C"}]},
+            }
+        )
+        turns = self._parse(r1, r2, r3)
+        assert len(turns) == 3
+        assert turns[0].request_id == "req-A"
+        assert turns[1].request_id == "mid-B"
+        assert turns[2].request_id == "req-C"
+
+    def test_no_request_id_no_message_id_gets_synthetic(self) -> None:
+        """Records with neither requestId nor message.id get synthetic turn-N."""
+        rec = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "name": "Bash"}]},
+            }
+        )
+        turns = self._parse(rec)
+        assert len(turns) == 1
+        assert turns[0].request_id == "turn-0"
+
+    def test_merged_turns_preserve_first_timestamp_monotonicity(self) -> None:
+        """Multi-record turns with non-monotonic chunk timestamps use first ts only."""
+        mid = "mid-mono"
+        rec1 = json.dumps(
+            {
+                "type": "assistant",
+                "timestamp": "2026-05-30T08:33:53.843Z",
+                "message": {"id": mid, "content": [{"type": "thinking", "thinking": "..."}]},
+            }
+        )
+        rec2 = json.dumps(
+            {
+                "type": "assistant",
+                "timestamp": "2026-05-30T08:33:54.810Z",
+                "message": {"id": mid, "content": [{"type": "tool_use", "name": "A"}]},
+            }
+        )
+        rec3 = json.dumps(
+            {
+                "type": "assistant",
+                "timestamp": "2026-05-30T08:33:54.538Z",
+                "message": {"id": mid, "content": [{"type": "tool_use", "name": "B"}]},
+            }
+        )
+        turns = self._parse(rec1, rec2, rec3)
+        assert len(turns) == 1
+        assert turns[0].timestamp == "2026-05-30T08:33:53.843Z"
+        assert turns[0].tool_names == ("A", "B")

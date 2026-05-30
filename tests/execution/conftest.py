@@ -162,14 +162,20 @@ def _make_cc_jsonl_record(
     timestamp: str = "",
     content: list[dict] | None = None,
     record_type: str = "assistant",
+    message_id: str = "",
 ) -> str:
     rec: dict[str, object] = {"type": record_type}
     if request_id:
         rec["requestId"] = request_id
     if timestamp:
         rec["timestamp"] = timestamp
-    if content is not None:
-        rec["message"] = {"content": content}
+    if content is not None or message_id:
+        msg: dict[str, object] = {}
+        if content is not None:
+            msg["content"] = content
+        if message_id:
+            msg["id"] = message_id
+        rec["message"] = msg
     return json.dumps(rec)
 
 

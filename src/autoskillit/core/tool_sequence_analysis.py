@@ -54,16 +54,29 @@ class AnalysisResult:
     session_count: int
 
 
+def _resolve_turn_id(rec: dict[str, object]) -> str:
+    """Extract canonical turn dedup key: requestId > message.id > empty."""
+    rid = rec.get("requestId", "")
+    if isinstance(rid, str) and rid:
+        return rid
+    message = rec.get("message")
+    if isinstance(message, dict):
+        mid = message.get("id", "")
+        if isinstance(mid, str) and mid:
+            return mid
+    return ""
+
+
 def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Iterator[AssistantTurn]:
     """Yield one AssistantTurn per logical assistant turn, merging across records.
 
-    When multiple JSONL records share the same requestId (e.g., extended thinking
-    emits a thinking-only record followed by a tool-bearing record), tool calls
-    are accumulated across all records for that requestId. The cap is applied
-    after accumulation.
+    When multiple JSONL records share the same canonical turn ID (requestId or
+    message.id) (e.g., extended thinking emits a thinking-only record followed
+    by a tool-bearing record), tool calls are accumulated across all records for
+    that turn ID. The cap is applied after accumulation.
 
-    Records without a requestId are yielded individually (no dedup possible).
-    Turns are yielded in the order their requestId (or no-rid record) was first
+    Records with neither requestId nor message.id are yielded individually (no dedup possible).
+    Turns are yielded in the order their turn ID (or no-rid record) was first
     encountered — preserving file-order interleaving for correct DFG bigram analysis.
     """
     pending: OrderedDict[str, tuple[str, list[str]]] = OrderedDict()
@@ -82,7 +95,7 @@ def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Itera
         if not isinstance(rec, dict) or rec.get("type") != "assistant":
             continue
 
-        rid = rec.get("requestId", "")
+        rid = _resolve_turn_id(rec)
         ts = rec.get("timestamp", "")
         message = rec.get("message")
         content = message.get("content", []) if isinstance(message, dict) else []

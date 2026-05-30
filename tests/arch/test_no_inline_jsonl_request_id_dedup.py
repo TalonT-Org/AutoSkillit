@@ -1,8 +1,8 @@
 """AST guard: no inline requestId dedup in session_log.py or tool_sequence_analysis.py.
 
 Both files previously contained independent first-occurrence-wins dedup logic using
-a local `seen_request_ids` set. The dedup is now centralised in
-`iter_merged_assistant_turns()`. This guard prevents regression.
+a local `seen_request_ids` set. The dedup key resolution is centralised in
+`_resolve_turn_id()` (called by `iter_merged_assistant_turns()`). This guard prevents regression.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class TestNoInlineJsonlRequestIdDedup:
         hits = _function_scoped_names(tree, "seen_request_ids")
         assert not hits, (
             "execution/session_log.py re-introduced an inline requestId dedup set.\n"
-            "Use iter_merged_assistant_turns() instead.\n"
+            "Use _resolve_turn_id() (called by iter_merged_assistant_turns()) instead.\n"
             "Offending lines: " + ", ".join(str(ln) for ln in hits)
         )
 
@@ -47,6 +47,6 @@ class TestNoInlineJsonlRequestIdDedup:
         hits = _function_scoped_names(tree, "seen_request_ids")
         assert not hits, (
             "core/tool_sequence_analysis.py re-introduced an inline requestId dedup set.\n"
-            "Use iter_merged_assistant_turns() instead.\n"
+            "Use _resolve_turn_id() (called by iter_merged_assistant_turns()) instead.\n"
             "Offending lines: " + ", ".join(str(ln) for ln in hits)
         )

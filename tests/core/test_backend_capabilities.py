@@ -50,7 +50,7 @@ def test_backend_capabilities_slots():
 
 
 def test_backend_capabilities_field_count():
-    """23 fields: 12 bool + 6 frozenset[str] + 4 str + 1 tuple."""
+    """Field count by type must match the dataclass definition."""
     from autoskillit.core import BackendCapabilities
 
     fields = dataclasses.fields(BackendCapabilities)
@@ -86,7 +86,7 @@ def test_backend_capabilities_field_count():
 
 
 def test_backend_capabilities_field_names_locked():
-    """Field names match the 23-field design specification."""
+    """Field names match the design specification."""
     from autoskillit.core import BackendCapabilities
 
     expected = {

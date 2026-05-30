@@ -533,6 +533,8 @@ steps:
       base_branch: ${{ context.merge_target }}
     capture:
       cleanup_succeeded: ${{ result.cleanup_succeeded }}
+      merge_test_stdout: ${{ result.test_stdout }}
+      merge_test_stderr: ${{ result.test_stderr }}
     on_result:
     - when: result.failed_step == 'dirty_tree'
       route: commit_guard_pre_remediation

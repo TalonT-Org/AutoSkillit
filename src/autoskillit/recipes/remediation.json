@@ -553,7 +553,9 @@
         "base_branch": "${{ context.merge_target }}"
       },
       "capture": {
-        "cleanup_succeeded": "${{ result.cleanup_succeeded }}"
+        "cleanup_succeeded": "${{ result.cleanup_succeeded }}",
+        "merge_test_stdout": "${{ result.test_stdout }}",
+        "merge_test_stderr": "${{ result.test_stderr }}"
       },
       "on_result": [
         {

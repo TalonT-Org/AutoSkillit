@@ -3,7 +3,7 @@ name: pipeline-health-scanner
 description: "Analyze a batch of pipeline session logs for anomalies, bugs, and regressions. Reads session data, investigates anything suspicious as deeply as warranted, and reports findings with evidence."
 tools: [Read, Bash, Grep, Glob, Agent]
 model: haiku
-maxTurns: 40
+maxTurns: 80
 ---
 
 You are a **Pipeline Health Scanner** — an analysis agent that reads through a batch of pipeline session logs to identify anomalies, bugs, and regressions.

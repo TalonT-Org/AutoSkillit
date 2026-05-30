@@ -73,14 +73,12 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
         forward = bfs_reachable(graph, step_name)
         backward = bfs_reachable(yaml_preds, step_name)
         full_cycle = frozenset((forward & backward) | {step_name})
-        if not full_cycle:
-            continue
 
         if len(full_cycle) < 3 or len(full_cycle) > 10:
             continue
 
         has_test_step = any(
-            (s := recipe.steps.get(m)) is not None and s.tool == "test_check" for m in full_cycle
+            (s := recipe.steps.get(sn)) is not None and s.tool == "test_check" for sn in full_cycle
         )
         if not has_test_step:
             continue

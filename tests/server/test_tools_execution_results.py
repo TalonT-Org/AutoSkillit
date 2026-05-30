@@ -388,6 +388,30 @@ class TestNotifyHelper:
             extra={"exit_code": 1},
         )
 
+    @pytest.mark.anyio
+    async def test_notify_swallows_closed_resource_error_from_ctx(self):
+        """Contract: must not raise when ctx.info raises ClosedResourceError
+        (send end closed on MCP client disconnect)."""
+        from anyio import ClosedResourceError
+
+        from autoskillit.server._notify import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock(side_effect=ClosedResourceError)
+        await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
+
+    @pytest.mark.anyio
+    async def test_notify_swallows_broken_resource_error_from_ctx(self):
+        """Contract: must not raise when ctx.info raises BrokenResourceError
+        (receive end closed on MCP client disconnect)."""
+        from anyio import BrokenResourceError
+
+        from autoskillit.server._notify import _notify
+
+        ctx = AsyncMock()
+        ctx.info = AsyncMock(side_effect=BrokenResourceError)
+        await _notify(ctx, "info", "msg", "logger", extra={"cwd": "/tmp"})
+
 
 class TestHeadlessGateEnforcement:
     """T_HGE: run_skill, run_cmd, run_python each return headless_error

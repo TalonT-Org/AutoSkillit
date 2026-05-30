@@ -379,6 +379,11 @@ def test_pipeline_health_scanner_agent_exists():
     parts = content.split("---", 2)
     assert len(parts) >= 3, "pipeline-health-scanner.md must have YAML frontmatter"
     frontmatter = yaml.safe_load(parts[1]) or {}
+    max_turns = frontmatter.get("maxTurns")
+    assert max_turns is not None and max_turns >= 80, (
+        f"pipeline-health-scanner maxTurns must be >= 80 (got {max_turns}); "
+        "80 minimum: scanner needs > 40 turns for adversarial sub-cycles"
+    )
     tools = frontmatter.get("tools", [])
     assert "Agent" in tools, (
         "pipeline-health-scanner.md frontmatter tools must include 'Agent' "

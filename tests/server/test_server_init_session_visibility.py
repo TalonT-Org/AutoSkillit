@@ -967,6 +967,7 @@ class TestFoodTruckAutoGateBoot:
             [dispatches_dir / "campaign1.json"],
             skip_dispatch_ids=frozenset({"my-ft-dispatch"}),
             own_campaign_id="my-campaign-1",
+            min_reap_age_seconds=60.0,
         )
 
     @pytest.mark.anyio
@@ -1016,6 +1017,7 @@ class TestFoodTruckAutoGateBoot:
             [dispatches_dir / "campaign1.json"],
             skip_dispatch_ids=None,
             own_campaign_id="my-campaign-2",
+            min_reap_age_seconds=60.0,
         )
 
 

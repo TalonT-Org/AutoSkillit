@@ -9,6 +9,8 @@ from typing import Any, Final
 import pytest
 import yaml
 
+from autoskillit.execution.session._session_content import _check_expected_patterns
+
 _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
 
 
@@ -66,8 +68,6 @@ def test_every_pattern_example_matches_its_patterns(skills):
 
     Permanent architectural guard: pattern/SKILL.md divergence fails CI before production.
     """
-    import re
-
     failures = []
     for skill_name, contract in skills.items():
         patterns = contract.get("expected_output_patterns", [])
@@ -75,7 +75,7 @@ def test_every_pattern_example_matches_its_patterns(skills):
         if not patterns or not examples:
             continue
         for pattern in patterns:
-            if not any(re.search(pattern, ex) for ex in examples):
+            if not any(_check_expected_patterns(ex, [pattern]) for ex in examples):
                 failures.append(
                     f"Skill '{skill_name}': pattern {pattern!r} "
                     f"matches none of the examples {examples!r}"
@@ -288,7 +288,7 @@ def test_every_pattern_example_satisfies_all_patterns(skills):
             continue
         for i, example in enumerate(examples):
             for pattern in patterns:
-                if not re.search(pattern, example):
+                if not _check_expected_patterns(example, [pattern]):
                     failures.append(
                         f"Skill '{skill_name}': example[{i}] does not match pattern "
                         f"{pattern!r}.\n  Example: {example!r}"
@@ -494,4 +494,62 @@ def test_cross_newline_patterns_anchored(skills: dict[str, Any]) -> None:
                 )
     assert not failures, (
         r"Patterns with \s* matched cross-newline inputs:" + "\n" + "\n".join(failures)
+    )
+
+
+def test_pattern_examples_are_not_trivial(skills: dict[str, Any]) -> None:
+    """For every skill with expected_output_patterns and pattern_examples, no pattern_example
+    may be identical to any of its patterns (after stripping whitespace).
+
+    Trivial examples (example == pattern) produce a circular test that passes regardless
+    of normalizer behavior — they cannot detect formatting-related adjudication failures.
+    Examples must contain realistic model output context surrounding the token.
+    """
+    failures = []
+    for skill_name, contract in skills.items():
+        patterns = contract.get("expected_output_patterns", [])
+        examples = contract.get("pattern_examples", [])
+        if not patterns or not examples:
+            continue
+        for example in examples:
+            for pattern in patterns:
+                if example.strip() == pattern.strip():
+                    failures.append(
+                        f"Skill '{skill_name}': pattern_example {example!r} is identical "
+                        f"to pattern {pattern!r} — add surrounding context to the example"
+                    )
+    assert not failures, (
+        "Trivial pattern_examples detected (example == pattern). "
+        "Examples must contain surrounding model output context:\n" + "\n".join(failures)
+    )
+
+
+def test_delimiter_patterns_have_hr_split_example(skills: dict[str, Any]) -> None:
+    r"""For every skill with a ---X--- delimiter pattern, at least one pattern_example must
+    contain the HR-split variant (``---\n`` followed by the token name suffix).
+
+    This ensures the normalizer's HR-split handling is exercised by contract tests,
+    not just the inline delimiter happy path.
+    """
+    import re as _re
+
+    failures = []
+    for skill_name, contract in skills.items():
+        patterns = contract.get("expected_output_patterns", [])
+        examples = contract.get("pattern_examples", [])
+        if not patterns or not examples:
+            continue
+        for pattern in patterns:
+            if not _re.match(r"^---\w", pattern):
+                continue
+            name_suffix = pattern[3:]
+            hr_split_variant = f"---\n{name_suffix}"
+            if not any(hr_split_variant in ex for ex in examples):
+                failures.append(
+                    f"Skill '{skill_name}': pattern {pattern!r} has no pattern_example "
+                    f"containing the HR-split variant {hr_split_variant!r}"
+                )
+    assert not failures, (
+        "Delimiter patterns lack HR-split examples. Add an example with "
+        "---\\n<name>--- to each listed skill:\n" + "\n".join(failures)
     )

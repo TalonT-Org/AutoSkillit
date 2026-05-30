@@ -173,6 +173,8 @@ def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bo
     if entry.get("command") != "autoskillit":
         return False
     env_vars = entry.get("env_vars", [])
+    if not isinstance(env_vars, list):
+        return False
     if HEADLESS_ENV_VAR not in env_vars:
         return False
     if headless_auto_gate and HEADLESS_AUTO_GATE_ENV_VAR not in env_vars:

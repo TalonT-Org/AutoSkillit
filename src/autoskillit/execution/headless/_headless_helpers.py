@@ -95,10 +95,18 @@ def _derive_step_name_from_skill_command(skill_command: str) -> str:
     return token
 
 
-def _recursive_snapshot(directory: Path) -> set[str]:
-    return {
-        str(Path(dp).relative_to(directory) / f) for dp, _, fns in os.walk(directory) for f in fns
-    }
+def _stat_snapshot(directory: Path) -> dict[str, tuple[int, int]]:
+    result: dict[str, tuple[int, int]] = {}
+    for dp, _, fns in os.walk(directory):
+        for f in fns:
+            rel = str(Path(dp).relative_to(directory) / f)
+            full = os.path.join(dp, f)
+            try:
+                st = os.stat(full)
+                result[rel] = (st.st_mtime_ns, st.st_size)
+            except OSError:
+                logger.debug("stat_snapshot_skipped", path=full)
+    return result
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

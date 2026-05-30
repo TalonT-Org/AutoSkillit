@@ -720,25 +720,25 @@ class TestTempDirSnapshot:
 
     def test_snapshot_detects_new_file(self, tmp_path: Path) -> None:
         """A file created between pre and post snapshot is detected."""
-        from autoskillit.execution.headless import _recursive_snapshot
+        from autoskillit.execution.headless import _stat_snapshot
 
         temp_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
         temp_dir.mkdir(parents=True)
-        pre = _recursive_snapshot(temp_dir)
+        pre = _stat_snapshot(temp_dir)
         (temp_dir / "pr_prep_20260425.md").write_text("content")
-        post = _recursive_snapshot(temp_dir)
-        assert len(post - pre) > 0
+        post = _stat_snapshot(temp_dir)
+        assert len(post.keys() - pre.keys()) > 0
 
     def test_snapshot_empty_when_no_new_files(self, tmp_path: Path) -> None:
         """No new files between snapshots yields empty diff."""
-        from autoskillit.execution.headless import _recursive_snapshot
+        from autoskillit.execution.headless import _stat_snapshot
 
         temp_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
         temp_dir.mkdir(parents=True)
         (temp_dir / "existing.md").write_text("content")
-        pre = _recursive_snapshot(temp_dir)
-        post = _recursive_snapshot(temp_dir)
-        assert post - pre == set()
+        pre = _stat_snapshot(temp_dir)
+        post = _stat_snapshot(temp_dir)
+        assert post == pre
 
 
 class TestGitWritesClonePath:

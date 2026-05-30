@@ -74,7 +74,7 @@ def test_headless_facade_does_not_define_helpers():
         "def _resolve_session_log_dir",
         "def _resolve_model",
         "def _derive_step_name_from_skill_command",
-        "def _recursive_snapshot",
+        "def _stat_snapshot",
         "class PostSessionMetrics",
         "def _compute_post_session_metrics",
     ):

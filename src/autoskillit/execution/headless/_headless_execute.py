@@ -53,9 +53,9 @@ from autoskillit.execution.headless._headless_git import (
 )
 from autoskillit.execution.headless._headless_helpers import (
     _compute_post_session_metrics,
-    _recursive_snapshot,
     _resolve_pty_mode,
     _resolve_session_log_dir,
+    _stat_snapshot,
     assert_headless_cmd,
 )
 from autoskillit.execution.headless._headless_recovery import _attempt_contract_nudge
@@ -215,14 +215,14 @@ async def _execute_claude_headless(
         if _default:
             _watch_dirs.append(_default)
 
-    _temp_snapshots_pre: dict[Path, set[str]] = {}
+    _temp_snapshots_pre: dict[Path, dict[str, tuple[int, int]] | None] = {}
     for _wd in _watch_dirs:
         if _wd.is_dir():
             try:
-                _temp_snapshots_pre[_wd] = _recursive_snapshot(_wd)
+                _temp_snapshots_pre[_wd] = _stat_snapshot(_wd)
             except OSError:
                 logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
-                _temp_snapshots_pre[_wd] = set()
+                _temp_snapshots_pre[_wd] = None
 
     _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
@@ -378,12 +378,12 @@ async def _execute_claude_headless(
         for _wd in _watch_dirs:
             if _wd.is_dir():
                 try:
-                    _post = _recursive_snapshot(_wd)
+                    _post = _stat_snapshot(_wd)
                 except OSError:
                     logger.warning("watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True)
-                    _post = set()
-                _pre = _temp_snapshots_pre.get(_wd, set())
-                if _post - _pre:
+                    continue
+                _pre = _temp_snapshots_pre.get(_wd)
+                if _pre is not None and _post != _pre:
                     _fs_writes_detected = True
                     break
 

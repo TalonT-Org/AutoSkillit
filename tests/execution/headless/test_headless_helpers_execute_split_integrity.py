@@ -39,10 +39,10 @@ class TestHeadlessHelpersModuleExists:
 
         assert callable(_derive_step_name_from_skill_command)
 
-    def test_recursive_snapshot_importable(self):
-        from autoskillit.execution.headless._headless_helpers import _recursive_snapshot
+    def test_stat_snapshot_importable(self):
+        from autoskillit.execution.headless._headless_helpers import _stat_snapshot
 
-        assert callable(_recursive_snapshot)
+        assert callable(_stat_snapshot)
 
     def test_post_session_metrics_importable(self):
         from autoskillit.execution.headless._headless_helpers import PostSessionMetrics

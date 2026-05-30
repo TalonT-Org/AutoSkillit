@@ -317,6 +317,73 @@ class TestEnsureCodexMcpRegistered:
         assert "autoskillit" in config["mcp_servers"]
 
 
+class TestReadResultDiscrimination:
+    def test_read_missing_file_returns_missing_variant(self, tmp_path):
+        from autoskillit.core import ReadResult
+
+        result = _read_codex_config(tmp_path / "nonexistent.toml")
+        assert isinstance(result, ReadResult)
+        assert result.is_corrupt is False
+        assert result.data == {}
+
+    def test_read_corrupt_file_returns_corrupt_variant(self, tmp_path):
+        from autoskillit.core import ReadResult
+
+        p = tmp_path / "config.toml"
+        original = (
+            b"[projects./home/user/repo]\ntrust = true\n\n"
+            b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\n'
+        )
+        p.write_bytes(original)
+        result = _read_codex_config(p)
+        assert isinstance(result, ReadResult)
+        assert result.is_corrupt is True
+        assert result.raw_bytes == original
+
+    def test_read_valid_file_returns_ok_variant(self, tmp_path):
+        from autoskillit.core import ReadResult
+
+        p = tmp_path / "config.toml"
+        p.write_bytes(b'[mcp_servers.autoskillit]\ncommand = "autoskillit"\n')
+        result = _read_codex_config(p)
+        assert isinstance(result, ReadResult)
+        assert result.is_corrupt is False
+        assert result.data["mcp_servers"]["autoskillit"]["command"] == "autoskillit"
+
+
+class TestDestructiveOverwritePrevention:
+    def test_ensure_mcp_registered_preserves_corrupt_file_content(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text(
+            "[projects./home/user/repo]\ntrust = true\n\n"
+            '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
+            encoding="utf-8",
+        )
+        ensure_codex_mcp_registered(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert "[projects./home/user/repo]" in content
+        assert "[mcp_servers.autoskillit]" in content
+
+    def test_ensure_mcp_registered_appends_to_corrupt_file(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text(
+            "[projects./home/user/repo]\ntrust = true\n",
+            encoding="utf-8",
+        )
+        ensure_codex_mcp_registered(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert "[projects./home/user/repo]" in content
+        assert "[mcp_servers.autoskillit]" in content
+
+    def test_ensure_mcp_registered_full_rewrite_on_valid_toml(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text('[mcp_servers.other]\ncommand = "other"\n', encoding="utf-8")
+        ensure_codex_mcp_registered(config_path=p)
+        result = _read_codex_config(p)
+        assert result.data["mcp_servers"]["other"]["command"] == "other"
+        assert "autoskillit" in result.data["mcp_servers"]
+
+
 class TestExports:
     def test_ensure_codex_mcp_registered_in_codex_all(self):
         from autoskillit.execution.backends import codex

@@ -399,6 +399,27 @@ class TestRunDoctorBackendWiring:
         assert captured_backends == ["aider"]
 
 
+class TestDoctorCorruptConfigDetail:
+    def test_doctor_reports_parse_error_not_just_unregistered(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Corrupt TOML containing [mcp_servers.autoskillit] text → OK, not WARNING."""
+        from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
+        from autoskillit.core import Severity
+
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        (codex_dir / "config.toml").write_text(
+            "[projects./home/user/repo]\ntrust = true\n\n"
+            '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        result = _check_mcp_server_registered(backend="codex")
+        assert result.severity == Severity.OK
+        assert result.check == "mcp_server_registered"
+
+
 class TestCheckCodexVersion:
     """Tests for _check_codex_version doctor check (Check 30)."""
 

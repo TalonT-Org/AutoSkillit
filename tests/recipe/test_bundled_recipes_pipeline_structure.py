@@ -386,12 +386,11 @@ class TestImplementationPipelineStructure:
             "audit_impl must NOT use context.branch_name (deleted by merge_worktree)"
         )
 
-    def test_ip_c1_fix_step_routes_via_on_result_to_test(self, recipe) -> None:
-        """T_IP_C1: fix step must route via verdict-gated on_result back to test.
+    def test_ip_c1_fix_step_routes_via_on_result_to_check_test_fix_loop(self, recipe) -> None:
+        """T_IP_C1: fix step must route via verdict-gated on_result through check_test_fix_loop.
 
-        After Part B, fix uses on_result: verdict dispatch instead of unconditional
-        on_success: test. real_fix and already_green verdicts route to test for
-        re-validation before entering merge_worktree.
+        fix uses on_result: verdict dispatch. real_fix and already_green verdicts route to
+        check_test_fix_loop (iteration guard) rather than directly to test, bounding the cycle.
         """
         step = recipe.steps["fix"]
         assert step.on_success is None, (
@@ -401,8 +400,8 @@ class TestImplementationPipelineStructure:
         test_routes = [
             c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when
         ]
-        assert any(r == "test" for r in test_routes), (
-            "fix step on_result must route verdict=real_fix to test for re-validation"
+        assert any(r == "check_test_fix_loop" for r in test_routes), (
+            "fix step on_result must route verdict=real_fix to check_test_fix_loop"
         )
 
     def test_ip_base_sha_captured_before_implement(self, recipe) -> None:
@@ -682,16 +681,16 @@ class TestImplementationGroupsStructure:
         assert "context.base_sha" in skill_cmd
         assert "context.branch_name" not in skill_cmd
 
-    def test_ig_fix_step_routes_via_on_result_to_test(self, recipe) -> None:
-        """fix step must route via verdict-gated on_result to test."""
+    def test_ig_fix_step_routes_via_on_result_to_check_test_fix_loop(self, recipe) -> None:
+        """fix step must route via verdict-gated on_result through check_test_fix_loop."""
         step = recipe.steps["fix"]
         assert step.on_success is None, "fix step must use on_result: verdict dispatch"
         assert step.on_result is not None, "fix step must have on_result: verdict dispatch"
         test_routes = [
             c.route for c in step.on_result.conditions if c.when and "real_fix" in c.when
         ]
-        assert any(r == "test" for r in test_routes), (
-            "fix step on_result must route verdict=real_fix to test"
+        assert any(r == "check_test_fix_loop" for r in test_routes), (
+            "fix step on_result must route verdict=real_fix to check_test_fix_loop"
         )
 
     def test_ig_push_after_audit_warning_fires(self, recipe) -> None:
@@ -951,16 +950,16 @@ class TestInvestigateFirstStructure:
             f"{[(f.step_name, f.message) for f in add_dir_dead]}"
         )
 
-    def test_remediation_assess_step_has_on_context_limit(self, recipe) -> None:
-        """REQ-RCP-002: assess step in remediation.yaml must declare on_context_limit: test.
+    def test_remediation_assess_step_on_context_limit_routes_through_guard(self, recipe) -> None:
+        """REQ-RCP-002: assess step must route on_context_limit through check_test_fix_loop.
 
         assess runs resolve-failures inside an existing worktree. Partial fixes are committed
-        to disk, so routing to test checks whether partial work was sufficient — same rationale
-        as the fix step in implementation.yaml.
+        to disk. Routing through check_test_fix_loop bounds the recovery cycle before re-checking
+        whether partial work was sufficient.
         """
         assess = recipe.steps["assess"]
-        assert assess.on_context_limit == "test", (
-            f"remediation.yaml assess step must declare on_context_limit: test, "
+        assert assess.on_context_limit == "check_test_fix_loop", (
+            f"remediation.yaml assess step must declare on_context_limit: check_test_fix_loop, "
             f"got: {assess.on_context_limit!r}"
         )
 

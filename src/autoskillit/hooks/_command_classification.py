@@ -35,6 +35,10 @@ _LITERAL_PATH_CONSTRUCTOR_RE = re.compile(
 
 _SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 
+_REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
+_REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
+_TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
+
 
 def tokenize_command_segments(command: str) -> list[list[str]]:
     """Split a shell command into segments of (verb, args...) token lists.
@@ -58,6 +62,73 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     if current:
         segments.append(current)
     return segments
+
+
+def extract_redirect_targets(tokens: list[str]) -> list[str]:
+    """Extract absolute redirect target paths from shlex-tokenized command tokens.
+
+    Returns ALL absolute paths including pseudo-devices — caller filters.
+
+    Handles three redirect forms at depth 0 only:
+    - Separate:  ['>', '/path'] or ['>>', '/path']
+    - Split:     ['2>', '/path'] (operator-only token + next token)
+    - Merged:    ['2>/path'] or ['2>>/path']
+
+    Tracks subshell nesting via '(' and ')' — both standalone and fused
+    with adjacent text (shlex merges '(' with following chars in POSIX mode).
+    """
+    targets: list[str] = []
+    depth = 0
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "(" or (tok.startswith("(") and len(tok) > 1):
+            depth += 1
+            if tok.endswith(")") and len(tok) > 1:
+                depth -= 1
+            i += 1
+            continue
+        if tok == ")":
+            if depth > 0:
+                depth -= 1
+            i += 1
+            continue
+        if tok.endswith(")") and len(tok) > 1:
+            if depth > 0:
+                depth -= 1
+            i += 1
+            continue
+        if depth > 0:
+            i += 1
+            continue
+        if tok in (">", ">>"):
+            if i + 1 < len(tokens):
+                path = tokens[i + 1]
+                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                    path = path[:-1]
+                if path.startswith("/"):
+                    targets.append(path)
+                i += 2
+                continue
+        elif _REDIRECT_OP_ONLY_RE.match(tok):
+            if i + 1 < len(tokens):
+                path = tokens[i + 1]
+                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                    path = path[:-1]
+                if path.startswith("/"):
+                    targets.append(path)
+                i += 2
+                continue
+        else:
+            m = _REDIRECT_TOKEN_RE.match(tok)
+            if m:
+                path = m.group(2)
+                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                    path = path[:-1]
+                if path.startswith("/"):
+                    targets.append(path)
+        i += 1
+    return targets
 
 
 def command_verb(segment: list[str]) -> str:

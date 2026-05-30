@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 import os
-import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -16,6 +16,7 @@ if _HOOKS_DIR not in sys.path:
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     command_verb,
     extract_interpreter_write_path,
+    extract_redirect_targets,
     has_interpreter_write,
     is_gh_command,
     tokenize_command_segments,
@@ -46,8 +47,6 @@ _WRITE_VERBS: frozenset[str] = frozenset(
 )
 
 _GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset({"-C", "--git-dir", "--work-tree", "-c"})
-
-_REDIRECT_RE = re.compile(r">+\s*(/[^\s;|&>]+)")
 
 
 def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
@@ -165,13 +164,15 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
     has_non_gh = any(not is_gh_command(seg) for seg in segments)
 
     if not segments or has_non_gh:
-        for m in _REDIRECT_RE.finditer(command):
-            path = m.group(1)
+        try:
+            flat_tokens = shlex.split(command)
+        except (ValueError, TypeError, AttributeError):
+            flat_tokens = []
+        redirect_paths = extract_redirect_targets(flat_tokens)
+        for path in redirect_paths:
+            found_any_write = True
             if path not in _PSEUDO_DEVICE_PATHS:
-                found_any_write = True
                 all_targets.append(path)
-            else:
-                found_any_write = True
 
     if not found_any_write:
         return None

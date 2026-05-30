@@ -352,6 +352,61 @@ class TestExtractBashWriteTargets:
         assert result_real == ["/tmp/out.txt"]
 
     @pytest.mark.parametrize(
+        "command",
+        [
+            "x=$(grep foo 2>/dev/null)",
+            'BRANCH=$(cat "${STORE_FILE}" 2>/dev/null)',
+            "result=$(some_cmd 2>/dev/null) && echo $result",
+            "x=`cmd 2>/dev/null`",
+            "{ cmd 2>/dev/null; }",
+        ],
+        ids=["subshell_grep", "subshell_cat", "subshell_chain", "backtick", "brace_group"],
+    )
+    def test_subshell_redirect_to_dev_null_not_blocked(self, command):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets(command)
+        assert result is None or result == [], f"Should not detect writes in: {command}"
+
+    @pytest.mark.parametrize(
+        "command,expected_targets,excluded_targets",
+        [
+            (
+                "x=$(cmd 2>/tmp/err.log) && echo done > /tmp/out.txt",
+                ["/tmp/out.txt"],
+                ["/tmp/err.log"],
+            ),
+            (
+                "x=$(grep errors 2>/tmp/debug.log)",
+                [],
+                ["/tmp/debug.log"],
+            ),
+        ],
+        ids=["subshell_with_real_redirect", "subshell_only_real_path"],
+    )
+    def test_subshell_redirect_excludes_nested_real_paths(
+        self, command, expected_targets, excluded_targets
+    ):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        result = _extract_bash_write_targets(command)
+        if not expected_targets:
+            assert result is None or result == [], f"Should not detect writes in: {command}"
+        else:
+            assert result is not None
+            for expected in expected_targets:
+                assert expected in result, f"Expected {expected} in result {result}"
+        if result:
+            for excluded in excluded_targets:
+                assert excluded not in result, (
+                    f"Subshell-internal redirect {excluded!r} must not appear in {result}"
+                )
+            for path in result:
+                assert not path.endswith(")"), f"Path should not end with ')': {path}"
+                assert not path.endswith("`"), f"Path should not end with backtick: {path}"
+                assert not path.endswith("}"), f"Path should not end with '}}': {path}"
+
+    @pytest.mark.parametrize(
         "cmd",
         [
             "sed -i 's/x/y/' /outside/file.txt",

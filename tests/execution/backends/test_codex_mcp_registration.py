@@ -42,11 +42,11 @@ class TestEnsureCodexMcpRegisteredCreate:
         section = data["mcp_servers"]["autoskillit"]
         assert section["command"] == "autoskillit"
 
-    def test_env_contains_headless_flag(self, fake_home: Path) -> None:
+    def test_env_vars_forwards_headless_flag(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
-        env = data["mcp_servers"]["autoskillit"]["env"]
-        assert env["AUTOSKILLIT_HEADLESS"] == "1"
+        env_vars = data["mcp_servers"]["autoskillit"]["env_vars"]
+        assert "AUTOSKILLIT_HEADLESS" in env_vars
 
     def test_startup_timeout(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()

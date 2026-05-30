@@ -557,6 +557,10 @@ class TestCodexBuildSkillSessionCmd:
         )
         assert spec.cwd == "/my/project"
 
+    def test_headless_auto_gate_env_set(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.env.get("AUTOSKILLIT_HEADLESS_AUTO_GATE") == "1"
+
     def test_json_flag_always_present(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "--json" in spec.cmd

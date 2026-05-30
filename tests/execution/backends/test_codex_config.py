@@ -186,7 +186,7 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "wrong",
-                    "env": {"AUTOSKILLIT_HEADLESS": "1"},
+                    "env_vars": ["AUTOSKILLIT_HEADLESS"],
                 }
             }
         }
@@ -197,7 +197,7 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env": {},
+                    "env_vars": [],
                 }
             }
         }
@@ -208,7 +208,7 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env": {"AUTOSKILLIT_HEADLESS": "1"},
+                    "env_vars": ["AUTOSKILLIT_HEADLESS"],
                 }
             }
         }
@@ -219,7 +219,7 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env": {"AUTOSKILLIT_HEADLESS": "1"},
+                    "env_vars": ["AUTOSKILLIT_HEADLESS"],
                 }
             }
         }
@@ -230,10 +230,10 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env": {
-                        "AUTOSKILLIT_HEADLESS": "1",
-                        "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-                    },
+                    "env_vars": [
+                        "AUTOSKILLIT_HEADLESS",
+                        "AUTOSKILLIT_HEADLESS_AUTO_GATE",
+                    ],
                 }
             }
         }
@@ -244,7 +244,7 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env": {"AUTOSKILLIT_HEADLESS": "1", "EXTRA": "yes"},
+                    "env_vars": ["AUTOSKILLIT_HEADLESS"],
                     "extra_field": 42,
                 }
             }
@@ -260,7 +260,7 @@ class TestEnsureCodexMcpRegistered:
         config = _read_codex_config(p).data
         entry = config["mcp_servers"]["autoskillit"]
         assert entry["command"] == "autoskillit"
-        assert entry["env"]["AUTOSKILLIT_HEADLESS"] == "1"
+        assert "AUTOSKILLIT_HEADLESS" in entry["env_vars"]
         assert entry["startup_timeout_sec"] == 30.0
         assert entry["tool_timeout_sec"] == 120.0
 
@@ -268,13 +268,16 @@ class TestEnsureCodexMcpRegistered:
         p = tmp_path / "config.toml"
         ensure_codex_mcp_registered(config_path=p, headless_auto_gate=True)
         config = _read_codex_config(p).data
-        assert config["mcp_servers"]["autoskillit"]["env"]["AUTOSKILLIT_HEADLESS_AUTO_GATE"] == "1"
+        assert "AUTOSKILLIT_HEADLESS_AUTO_GATE" in config["mcp_servers"]["autoskillit"]["env_vars"]
 
     def test_headless_auto_gate_false_omits_auto_gate_env(self, tmp_path):
         p = tmp_path / "config.toml"
         ensure_codex_mcp_registered(config_path=p, headless_auto_gate=False)
         config = _read_codex_config(p).data
-        assert "AUTOSKILLIT_HEADLESS_AUTO_GATE" not in config["mcp_servers"]["autoskillit"]["env"]
+        assert (
+            "AUTOSKILLIT_HEADLESS_AUTO_GATE"
+            not in config["mcp_servers"]["autoskillit"]["env_vars"]
+        )
 
     def test_second_call_returns_false(self, tmp_path):
         p = tmp_path / "config.toml"
@@ -386,6 +389,73 @@ class TestDestructiveOverwritePrevention:
         result = _read_codex_config(p)
         assert result.data["mcp_servers"]["other"]["command"] == "other"
         assert "autoskillit" in result.data["mcp_servers"]
+
+
+class TestConfigEnvBoundary:
+    def test_codex_mcp_config_contains_no_static_private_vars(self, tmp_path):
+        """env dict must not contain AUTOSKILLIT_PRIVATE_ENV_VARS as static values."""
+        from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+        p = tmp_path / "config.toml"
+        ensure_codex_mcp_registered(config_path=p)
+        config = _read_codex_config(p).data
+        entry = config["mcp_servers"]["autoskillit"]
+        static_env = entry.get("env", {})
+        leaked = set(static_env.keys()) & AUTOSKILLIT_PRIVATE_ENV_VARS
+        assert not leaked, (
+            f"Private env vars written as static literals in config.toml: {leaked}. "
+            f"Use env_vars (forwarding) instead of env (static injection)."
+        )
+
+    def test_uses_env_vars_forwarding_not_static_env(self, tmp_path):
+        """Config must use env_vars (forwarding list) not env (static dict)."""
+        p = tmp_path / "config.toml"
+        ensure_codex_mcp_registered(config_path=p)
+        config = _read_codex_config(p).data
+        entry = config["mcp_servers"]["autoskillit"]
+        assert "env" not in entry, "Static env dict must not be used — use env_vars"
+        assert "env_vars" in entry, "Must use env_vars for conditional forwarding"
+        assert "AUTOSKILLIT_HEADLESS" in entry["env_vars"]
+
+    def test_env_vars_format_returns_true(self):
+        """Registration check must accept env_vars list format."""
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": ["AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_HEADLESS_AUTO_GATE"],
+                }
+            }
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
+
+    def test_old_env_format_returns_false(self):
+        """Old static env format must be treated as unregistered (triggers migration)."""
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env": {"AUTOSKILLIT_HEADLESS": "1"},
+                }
+            }
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=False) is False
+
+    def test_round_trip_env_vars_list(self):
+        """TOML serializer must round-trip env_vars as a string array."""
+        original = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": ["AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_HEADLESS_AUTO_GATE"],
+                    "startup_timeout_sec": 30.0,
+                    "tool_timeout_sec": 120.0,
+                }
+            }
+        }
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
 
 
 class TestExports:

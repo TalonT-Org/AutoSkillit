@@ -21,6 +21,18 @@ _CLAUDE_CODE_PASSTHROUGH_VARS: frozenset[str] = frozenset(
 )
 
 
+def test_codex_mcp_env_forward_vars_subset_of_private() -> None:
+    """Every var in CODEX_MCP_ENV_FORWARD_VARS must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+    from autoskillit.core.types._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS
+
+    uncovered = CODEX_MCP_ENV_FORWARD_VARS - AUTOSKILLIT_PRIVATE_ENV_VARS
+    assert not uncovered, (
+        f"CODEX_MCP_ENV_FORWARD_VARS not in PRIVATE_ENV_VARS: {uncovered}. "
+        f"All forwarded vars must be private to prevent uncontrolled propagation."
+    )
+
+
 def test_fleet_injected_vars_covered_by_filter_lists() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS

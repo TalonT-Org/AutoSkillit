@@ -35,7 +35,7 @@ async def test_triage_batch_non_claude_backend_returns_all_meaningful(
     mock_run = AsyncMock()
     monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
 
-    results = await _triage_batch(items, cache, agent_backend="aider")
+    results = await _triage_batch(items, cache, agent_backend="codex")
 
     assert len(results) == 1
     assert results[0]["meaningful"] is True
@@ -66,7 +66,7 @@ async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
         ),
     ]
 
-    results = await triage_staleness(items, agent_backend="aider")
+    results = await triage_staleness(items, agent_backend="codex")
 
     assert len(results) == 1
     assert results[0]["meaningful"] is True

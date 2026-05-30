@@ -1551,3 +1551,54 @@ class TestModelAliasDriftIntegration:
         lines = anomalies_path.read_text().strip().splitlines() if anomalies_path.exists() else []
         rss = [json.loads(line) for line in lines if json.loads(line).get("kind") == "rss_growth"]
         assert len(rss) == 0
+
+
+def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path, monkeypatch):
+    """MiniMax-shaped JSONL (message.id, no requestId) deduplicates into correct turn count."""
+    mid = "0669d3ed14adce24ccf227c37a5884d4"
+    cb_log = tmp_path / "s.jsonl"
+    cb_log.write_text(
+        _make_cc_jsonl_record(
+            message_id=mid,
+            timestamp="2026-05-30T08:33:53.843Z",
+            content=[_make_thinking_block("reasoning...")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            message_id=mid,
+            timestamp="2026-05-30T08:33:54.810Z",
+            content=[_make_tool_block("Bash")],
+        )
+        + "\n"
+        + _make_cc_jsonl_record(
+            message_id="aabbccddeeff00112233445566778899",
+            timestamp="2026-05-30T08:34:01.000Z",
+            content=[_make_tool_block("Read")],
+        )
+        + "\n"
+    )
+    import autoskillit.execution.session_log as sl_mod
+
+    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
+    flush_session_log(
+        log_dir=str(tmp_path),
+        cwd="/tmp",
+        session_id="minimax-dedup-001",
+        pid=1,
+        skill_command="test",
+        success=True,
+        subtype="completed",
+        exit_code=0,
+        start_ts="2026-05-30T08:33:53.843Z",
+        proc_snapshots=None,
+        telemetry=SessionTelemetry.empty(),
+        provider_outcome=ProviderOutcome.none_used(),
+        recipe_identity=RecipeIdentity.empty(),
+    )
+    summary = json.loads(
+        (tmp_path / "sessions" / "minimax-dedup-001" / "summary.json").read_text()
+    )
+    assert summary["request_ids"] == [mid, "aabbccddeeff00112233445566778899"]
+    assert len(summary["turn_timestamps"]) == 2
+    assert len(summary["turn_tool_calls"]) == 2
+    assert summary["turn_timestamps"][0] == "2026-05-30T08:33:53.843Z"

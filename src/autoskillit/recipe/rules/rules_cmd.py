@@ -282,3 +282,43 @@ def _check_run_cmd_bare_rebase(ctx: ValidationContext) -> list[RuleFinding]:
             )
         )
     return findings
+
+
+_NONEMPTY_GUARD_RE = re.compile(r"(?:test\s+-s\s+|\[\s+-s\s+)")
+
+
+@semantic_rule(
+    name="run-cmd-path-capture-requires-nonempty-guard",
+    description=(
+        "run_cmd step echoes a path-typed capture without a test -s or [ -s "
+        "non-empty file guard in the cmd. A command that writes to a file via "
+        "redirect (>) and echoes the path can silently produce a 0-byte file."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_run_cmd_path_capture_nonempty_guard(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = (step.with_args or {}).get("cmd", "")
+        if not isinstance(cmd, str):
+            continue
+        has_path_capture = any(entry.value_type == "path" for entry in step.capture.values())
+        if not has_path_capture:
+            continue
+        if not _NONEMPTY_GUARD_RE.search(cmd):
+            findings.append(
+                RuleFinding(
+                    rule="run-cmd-path-capture-requires-nonempty-guard",
+                    severity=Severity.WARNING,
+                    step_name=name,
+                    message=(
+                        f"Step '{name}' captures a path-typed value but cmd "
+                        "does not contain a 'test -s' or '[ -s' non-empty "
+                        'file guard. Add `test -s "$FILE" &&` before the '
+                        "echo statement to prevent emitting a 0-byte file path."
+                    ),
+                )
+            )
+    return findings

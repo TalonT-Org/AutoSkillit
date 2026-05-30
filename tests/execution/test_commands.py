@@ -68,9 +68,36 @@ class TestBuildInteractiveCmd:
         assert ClaudeFlags.MODEL not in result.cmd
 
     def test_includes_initial_prompt_as_positional_arg(self) -> None:
-        result = build_interactive_cmd(initial_prompt="Hello chef")
+        result = build_interactive_cmd(initial_prompt="Hello chef", tools=("AskUserQuestion",))
         assert "Hello chef" in result.cmd
         assert ClaudeFlags.PRINT not in result.cmd  # still interactive, not headless
+        prompt_idx = result.cmd.index("Hello chef")
+        tools_idx = result.cmd.index(ClaudeFlags.TOOLS)
+        assert prompt_idx < tools_idx
+
+    def test_initial_prompt_precedes_tools_flag(self) -> None:
+        result = build_interactive_cmd(initial_prompt="Hello chef", tools=("AskUserQuestion",))
+        prompt_idx = result.cmd.index("Hello chef")
+        tools_idx = result.cmd.index(ClaudeFlags.TOOLS)
+        assert prompt_idx < tools_idx
+
+    def test_initial_prompt_precedes_add_dir_flag(self) -> None:
+        result = build_interactive_cmd(initial_prompt="Hello chef", add_dirs=[Path("/tmp/skills")])
+        prompt_idx = result.cmd.index("Hello chef")
+        add_dir_idx = result.cmd.index(ClaudeFlags.ADD_DIR)
+        assert prompt_idx < add_dir_idx
+
+    def test_initial_prompt_precedes_all_variadic_flags_combined(self) -> None:
+        result = build_interactive_cmd(
+            initial_prompt="Hello chef",
+            tools=("AskUserQuestion",),
+            add_dirs=[Path("/tmp/skills")],
+        )
+        prompt_idx = result.cmd.index("Hello chef")
+        tools_idx = result.cmd.index(ClaudeFlags.TOOLS)
+        add_dir_idx = result.cmd.index(ClaudeFlags.ADD_DIR)
+        assert prompt_idx < tools_idx
+        assert prompt_idx < add_dir_idx
 
     def test_omits_prompt_when_initial_prompt_is_none(self) -> None:
         result = build_interactive_cmd()

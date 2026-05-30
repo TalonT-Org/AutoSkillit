@@ -15,6 +15,7 @@ __all__ = [
     "SkillSource",
     "RecipeSource",
     "ClaudeFlags",
+    "VARIADIC_CLAUDE_FLAGS",
     "OutputFormat",
     "Severity",
     "TerminationReason",
@@ -159,6 +160,9 @@ class ClaudeFlags(StrEnum):
     # Interactive session restrictions
     TOOLS = "--tools"
     APPEND_SYSTEM_PROMPT = "--append-system-prompt"
+
+
+VARIADIC_CLAUDE_FLAGS: frozenset[str] = frozenset({ClaudeFlags.ADD_DIR, ClaudeFlags.TOOLS})
 
 
 class OutputFormat(StrEnum):

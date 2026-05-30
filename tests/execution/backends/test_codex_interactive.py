@@ -130,3 +130,14 @@ class TestCodexInteractiveCmdCodexHome:
             env_extras={"CODEX_HOME": "/override"},
         )
         assert spec.env["CODEX_HOME"] == "/override"
+
+
+class TestCodexInteractiveCmdPositionalOrdering:
+    def test_codex_initial_prompt_precedes_add_dir(self) -> None:
+        result = CodexBackend().build_interactive_cmd(
+            initial_prompt="hello",
+            add_dirs=[Path("/tmp/a")],
+        )
+        prompt_idx = list(result.cmd).index("hello")
+        add_dir_idx = list(result.cmd).index(CodexFlags.ADD_DIR)
+        assert prompt_idx < add_dir_idx

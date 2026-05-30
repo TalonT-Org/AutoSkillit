@@ -70,6 +70,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_tool_annotation_completeness.py` | AST annotation test shield for MCP tool readOnlyHint semantics (layers 1a, 1b) |
 | `test_tools_execution_decomposition.py` | Structural decomposition guard for tools_execution.py split |
 | `test_transforms_hygiene.py` | Structural guards for FastMCP visibility tag hygiene |
+| `test_variadic_ordering.py` | Architectural invariant: positional initial_prompt must precede all variadic CLI flags in build_interactive_cmd |
 | `test_watcher_signal_consistency.py` | Structural guard: all process watchers must call `_has_active_dispatch_marker` |
 | `test_write_restriction_coverage.py` | Architectural invariant: skills with prose write restrictions in NEVER blocks have runtime enforcement (read_only, output_dir, or allowlist) |
 

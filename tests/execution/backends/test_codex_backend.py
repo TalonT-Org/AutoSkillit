@@ -707,9 +707,9 @@ class TestCodexBuildInteractiveCmd:
             spec.cmd[spec.cmd.index(CodexFlags.ADD_DIR) + 1],
         )
 
-    def test_initial_prompt_is_final_element(self) -> None:
+    def test_initial_prompt_is_present_when_no_variadic_flags(self) -> None:
         spec = CodexBackend().build_interactive_cmd(initial_prompt="hello")
-        assert spec.cmd[-1] == "hello"
+        assert "hello" in spec.cmd
 
     def test_plugin_source_is_silently_ignored(self) -> None:
         from pathlib import Path

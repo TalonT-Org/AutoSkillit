@@ -278,9 +278,7 @@ def test_primary_model_argmax_returns_subagent_when_dominant() -> None:
         }
     }
     result = _primary_model(token_usage)
-    assert (
-        result == "claude-sonnet-4-6"
-    )  # argmax picks wrong model — callers must use model_identifier
+    assert result == "claude-sonnet-4-6"
 
 
 def test_primary_model_warns_on_non_dict_breakdown() -> None:

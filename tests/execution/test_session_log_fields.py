@@ -1280,9 +1280,7 @@ def test_primary_model_identifier_argmax_returns_subagent_when_dominant():
         }
     }
     result = _primary_model_identifier(token_usage)
-    assert (
-        result == "claude-sonnet-4-6"
-    )  # argmax picks wrong model — callers must use model_identifier
+    assert result == "claude-sonnet-4-6"
 
 
 def test_flush_session_log_configured_model_written_to_token_usage(tmp_path):
@@ -1326,6 +1324,7 @@ def test_flush_session_log_no_false_drift_with_configured_model(tmp_path):
         },
     )
     anomalies_path = tmp_path / "sessions" / "no-false-drift-001" / "anomalies.jsonl"
+    drift_entries = []
     if anomalies_path.exists():
         anomaly_lines = anomalies_path.read_text().strip().splitlines()
         drift_entries = [
@@ -1333,7 +1332,7 @@ def test_flush_session_log_no_false_drift_with_configured_model(tmp_path):
             for line in anomaly_lines
             if json.loads(line).get("kind") == "model_drift"
         ]
-        assert len(drift_entries) == 0
+    assert len(drift_entries) == 0
 
 
 def test_flush_session_log_bracket_suffix_no_drift(tmp_path):
@@ -1350,10 +1349,11 @@ def test_flush_session_log_bracket_suffix_no_drift(tmp_path):
         },
     )
     anomalies_path = tmp_path / "sessions" / "bracket-suffix-001" / "anomalies.jsonl"
+    drift = []
     if anomalies_path.exists():
         lines = anomalies_path.read_text().strip().splitlines()
         drift = [json.loads(ln) for ln in lines if json.loads(ln).get("kind") == "model_drift"]
-        assert len(drift) == 0
+    assert len(drift) == 0
 
 
 def test_flush_session_log_argmax_fallback_prefers_output_tokens(tmp_path):

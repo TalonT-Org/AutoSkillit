@@ -105,7 +105,7 @@ def _stat_snapshot(directory: Path) -> dict[str, tuple[int, int]]:
                 st = os.stat(full)
                 result[rel] = (st.st_mtime_ns, st.st_size)
             except OSError:
-                pass
+                logger.debug("stat_snapshot_skipped", path=full)
     return result
 
 

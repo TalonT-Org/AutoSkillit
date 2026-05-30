@@ -12,7 +12,6 @@ from __future__ import annotations
 import inspect
 import json
 import os
-import time
 from pathlib import Path
 
 import pytest
@@ -288,7 +287,6 @@ class TestStatSnapshot:
     """Stat-based snapshot detects creation, modification, and deletion."""
 
     def test_stat_snapshot_detects_modified_file(self, tmp_path: Path) -> None:
-        """Stat-based snapshot detects in-place file modification via mtime+size change."""
         from autoskillit.execution.headless import _stat_snapshot
 
         watch_dir = tmp_path / "output"
@@ -297,7 +295,7 @@ class TestStatSnapshot:
         target.write_text("original content")
 
         pre = _stat_snapshot(watch_dir)
-        time.sleep(0.01)
+        # Detection relies on size difference, not mtime — no sleep needed.
         target.write_text("modified content — longer text means different size")
 
         post = _stat_snapshot(watch_dir)

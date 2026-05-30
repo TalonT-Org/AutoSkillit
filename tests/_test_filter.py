@@ -287,6 +287,7 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
         {
             "cli",
             "execution",
+            "fleet",
             "server",
             "migration/test_engine.py",
             "test_llm_triage.py",

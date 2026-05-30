@@ -38,7 +38,7 @@ _MARKDOWN_ITALIC_COLON_RE: re.Pattern[str] = re.compile(
 # Backtick: `key` = value → key = value
 _MARKDOWN_BACKTICK_RE: re.Pattern[str] = re.compile(r"`(\w[\w_-]*)`(\s*=)", re.MULTILINE)
 # HR-split delimiter: ---\n[/]name--- → ---[/]name--- (open and close delimiter variants)
-_HR_SPLIT_DELIMITER_RE: re.Pattern[str] = re.compile(r"---\n+(/?\w[\w-]*---)")
+_HR_SPLIT_DELIMITER_RE: re.Pattern[str] = re.compile(r"---\n+(/?\w[\w:.-]*---)")
 # Bold-wrapped delimiter: **---[/]name---** or *---[/]name---* → ---[/]name---
 _DELIMITER_BOLD_RE: re.Pattern[str] = re.compile(r"\*{1,2}(---/?\w[\w-]*---)\*{1,2}")
 # Backtick-wrapped delimiter: `---[/]name---` → ---[/]name---

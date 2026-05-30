@@ -11,7 +11,7 @@ from typing import Literal
 import regex as re
 
 from autoskillit.core import ClaudeContentBlockType, get_logger
-from autoskillit.execution.session import _collapse_hr_split_delimiters
+from autoskillit.execution import _collapse_hr_split_delimiters
 
 logger = get_logger(__name__)
 

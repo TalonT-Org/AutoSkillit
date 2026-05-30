@@ -111,6 +111,7 @@ from autoskillit.execution.session import (
     ClaudeSessionResult,
     ContentState,
     SessionState,
+    _collapse_hr_split_delimiters,  # noqa: F401 — re-exported for fleet.result_parser
     classify_infra_exit,
     clear_session_state,
     extract_token_usage,

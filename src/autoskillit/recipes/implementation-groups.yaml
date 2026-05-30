@@ -568,18 +568,18 @@ steps:
       fixes_applied: "${{ result.fixes_applied }}"
     on_result:
     - when: "${{ result.verdict }} == 'real_fix'"
-      route: check_merge_test_fix_loop
+      route: merge_gate_test
     - when: "${{ result.verdict }} == 'already_green'"
-      route: check_merge_test_fix_loop
+      route: merge_gate_test
     - when: "${{ result.verdict }} == 'flake_suspected'"
-      route: check_merge_test_fix_loop
+      route: merge_gate_test
     - when: "${{ result.verdict }} == 'ci_only_failure'"
       route: release_issue_failure
     - when: "${{ result.verdict }} == 'no_test_infrastructure'"
       route: release_issue_failure
     - route: release_issue_failure
     on_failure: release_issue_failure
-    on_context_limit: check_merge_test_fix_loop
+    on_context_limit: merge_gate_test
     optional_context_refs:
     - merge_gate_ci_conclusion
     - merge_gate_diagnosis_path
@@ -587,6 +587,13 @@ steps:
       Merge-gate-path variant of fix. Uses a separate counter
       (merge_test_fix_loop_count) so merge-gate retries do not drain
       the pre-merge test fix budget.
+
+  merge_gate_test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: commit_guard
+    on_failure: check_merge_test_fix_loop
 
   check_merge_test_fix_loop:
     tool: run_python
@@ -599,7 +606,7 @@ steps:
     on_result:
     - when: "${{ result.max_exceeded }} == true"
       route: release_issue_failure
-    - route: merge_gate_test
+    - route: merge_gate_fix
     on_failure: release_issue_failure
     optional_context_refs:
     - merge_test_fix_loop_count
@@ -607,13 +614,6 @@ steps:
       Merge-gate test fix iteration guard. Uses merge_test_fix_loop_count
       (independent of test_fix_loop_count) to prevent merge-gate retries
       from consuming the pre-merge fix budget.
-
-  merge_gate_test:
-    tool: test_check
-    with:
-      worktree_path: "${{ context.worktree_path }}"
-    on_success: commit_guard
-    on_failure: merge_gate_fix
 
   rebase_conflict_fix:
     tool: run_skill

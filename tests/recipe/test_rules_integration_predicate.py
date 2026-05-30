@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections import deque
-
 import pytest
 
 from autoskillit.core.types import Severity
@@ -249,27 +247,15 @@ class TestLoopBudgetSeparation:
     def test_test_fix_loop_not_reachable_from_merge_gate_path(self, recipe_name: str) -> None:
         recipe = self.recipes[recipe_name]
         steps = recipe.steps
-        predecessors: dict[str, set[str]] = {s: set() for s in steps}
-        for step_name, step in steps.items():
-            for target in _get_routing_targets(step):
-                if target in predecessors:
-                    predecessors[target].add(step_name)
-        visited: set[str] = set()
-        queue: deque[str] = deque(["check_test_fix_loop"])
-        while queue:
-            node = queue.popleft()
-            if node in visited:
-                continue
-            visited.add(node)
-            queue.extend(predecessors.get(node, set()))
-        merge_gate_steps = {
-            "diagnose_merge_gate",
-            "merge_gate_assess",
-            "check_merge_test_fix_loop",
-        }
-        present = merge_gate_steps & steps.keys()
-        assert visited.isdisjoint(present), (
-            f"check_test_fix_loop backward-reachable from merge-gate steps: {visited & present}"
+        merge_guard = steps["check_merge_test_fix_loop"]
+        merge_guard_targets = _get_routing_targets(merge_guard)
+        assert "test" not in merge_guard_targets, (
+            f"check_merge_test_fix_loop routes to shared 'test': {merge_guard_targets}"
+        )
+        assert "merge_gate_test" in steps, "merge_gate_test step missing"
+        mgt = steps["merge_gate_test"]
+        assert mgt.on_failure != "check_test_fix_loop", (
+            "merge_gate_test.on_failure must not be check_test_fix_loop"
         )
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
@@ -278,9 +264,13 @@ class TestLoopBudgetSeparation:
         if "merge_gate_assess" not in recipe.steps:
             pytest.skip(f"{recipe_name}: no merge_gate_assess step")
         targets = _get_routing_targets(recipe.steps["merge_gate_assess"])
-        assert "check_merge_test_fix_loop" in targets, (
-            f"merge_gate_assess does not route to check_merge_test_fix_loop; targets={targets}"
+        assert "merge_gate_test" in targets, (
+            f"merge_gate_assess does not route to merge_gate_test; targets={targets}"
         )
         assert "check_test_fix_loop" not in targets, (
             f"merge_gate_assess must not route to check_test_fix_loop; targets={targets}"
+        )
+        mgt_failure = recipe.steps["merge_gate_test"].on_failure
+        assert mgt_failure == "check_merge_test_fix_loop", (
+            f"merge_gate_test.on_failure should be check_merge_test_fix_loop, got {mgt_failure}"
         )

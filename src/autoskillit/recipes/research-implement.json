@@ -294,7 +294,7 @@
           "route": "audit_impl"
         },
         {
-          "route": "plan_phase"
+          "route": "cleanup_phase_worktree"
         }
       ],
       "on_failure": "audit_impl",
@@ -302,6 +302,16 @@
         "phase_loop_count"
       ],
       "note": "Guards the plan_phase → implement_phase → next_phase_or_experiment cycle. The loop is data-bounded by the finite group_files list; this provides a structural bound. 15 iterations allows complex multi-phase setups.\n"
+    },
+    "cleanup_phase_worktree": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "git worktree remove --force \"${{ context.worktree_path }}\"",
+        "step_name": "cleanup_phase_worktree"
+      },
+      "on_success": "plan_phase",
+      "on_failure": "plan_phase",
+      "note": "Removes the previous phase worktree before implement_phase creates a new one. Each phase gets its own timestamped worktree via implement-experiment; this prevents orphaning the old worktree when the loop re-enters.\n"
     },
     "audit_impl": {
       "tool": "run_skill",
@@ -357,7 +367,7 @@
           "route": "escalate_stop"
         },
         {
-          "route": "plan_phase"
+          "route": "pre_remediation_cleanup"
         }
       ],
       "on_failure": "escalate_stop",
@@ -365,6 +375,16 @@
         "audit_retry_count"
       ],
       "note": "Guards the audit_impl → remediate → plan_phase remediation cycle. Allows up to 2 remediation attempts before escalating. This prevents unbounded re-planning when audit_impl repeatedly returns NO GO.\n"
+    },
+    "pre_remediation_cleanup": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "git worktree remove --force \"${{ context.worktree_path }}\"",
+        "step_name": "pre_remediation_cleanup"
+      },
+      "on_success": "plan_phase",
+      "on_failure": "plan_phase",
+      "note": "Removes the old worktree before the remediation cycle creates a new one via implement_phase. on_failure routes to plan_phase regardless — if the worktree is already gone (e.g., context_limit cleanup), the new worktree creation will still succeed.\n"
     },
     "run_experiment": {
       "tool": "run_skill",

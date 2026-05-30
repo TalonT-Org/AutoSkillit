@@ -1051,3 +1051,209 @@ class TestCaptureListRequiresRetriesZero:
             "capture-list-requires-retries-zero must not fire for empty capture_list, "
             f"got: {rule_findings}"
         )
+
+
+# ---------------------------------------------------------------------------
+# worktree-clobber-without-merge tests (Test 1a and 1c)
+# ---------------------------------------------------------------------------
+
+
+def _make_cycle_clobber_workflow(*, with_merge_barrier: bool = False) -> Recipe:
+    """Build a minimal recipe with a worktree-creating step inside a remediation cycle.
+
+    With with_merge_barrier=False: implement → audit → NO GO → remediate → implement
+    reproduces the cycle-clobber pattern.
+
+    With with_merge_barrier=True: a merge_worktree step is inserted before re-entering
+    implement, which should suppress the finding.
+    """
+    if with_merge_barrier:
+        steps = {
+            "implement": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan"},
+                "capture": {
+                    "worktree_path": "${{ result.worktree_path }}",
+                    "implementation_ref": "${{ result.worktree_path }}",
+                },
+                "retries": 0,
+                "on_context_limit": "retry_wt",
+                "on_success": "audit",
+                "on_failure": "fail_stop",
+            },
+            "retry_wt": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:retry-worktree p ${{ context.worktree_path }}",
+                    "cwd": "${{ context.worktree_path }}",
+                },
+                "capture": {
+                    "worktree_path": "${{ result.worktree_path }}",
+                    "implementation_ref": "${{ result.worktree_path }}",
+                },
+                "on_success": "audit",
+                "on_failure": "fail_stop",
+            },
+            "audit": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:audit-impl plan branch main"},
+                "capture": {"remediation_path": "${{ result.remediation_path }}"},
+                "on_result": [
+                    {"when": "${{ result.verdict }} == GO", "route": "merge"},
+                    {"route": "loop_guard"},
+                ],
+                "on_failure": "fail_stop",
+            },
+            "loop_guard": {
+                "tool": "run_python",
+                "with": {
+                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                    "current_iteration": "${{ context.audit_count }}",
+                    "max_iterations": "2",
+                },
+                "capture": {"audit_count": "${{ result.next_iteration }}"},
+                "on_result": [
+                    {"when": "${{ result.max_exceeded }} == true", "route": "fail_stop"},
+                    {"route": "pre_merge"},
+                ],
+                "on_failure": "fail_stop",
+                "optional_context_refs": ["audit_count"],
+            },
+            "pre_merge": {
+                "tool": "merge_worktree",
+                "with": {
+                    "worktree_path": "${{ context.implementation_ref }}",
+                    "base_branch": "main",
+                },
+                "on_success": "remediate",
+                "on_failure": "fail_stop",
+            },
+            "remediate": {
+                "action": "route",
+                "with": {"remediation_path": "${{ context.remediation_path }}"},
+                "on_success": "implement",
+            },
+            "merge": {
+                "tool": "merge_worktree",
+                "with": {
+                    "worktree_path": "${{ context.implementation_ref }}",
+                    "base_branch": "main",
+                },
+                "on_success": "done",
+                "on_failure": "fail_stop",
+            },
+            "done": {"action": "stop", "message": "Done."},
+            "fail_stop": {"action": "stop", "message": "Failed."},
+        }
+    else:
+        steps = {
+            "implement": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:implement-worktree-no-merge plan"},
+                "capture": {
+                    "worktree_path": "${{ result.worktree_path }}",
+                    "implementation_ref": "${{ result.worktree_path }}",
+                },
+                "retries": 0,
+                "on_context_limit": "retry_wt",
+                "on_success": "audit",
+                "on_failure": "fail_stop",
+            },
+            "retry_wt": {
+                "tool": "run_skill",
+                "with": {
+                    "skill_command": "/autoskillit:retry-worktree p ${{ context.worktree_path }}",
+                    "cwd": "${{ context.worktree_path }}",
+                },
+                "capture": {
+                    "worktree_path": "${{ result.worktree_path }}",
+                    "implementation_ref": "${{ result.worktree_path }}",
+                },
+                "on_success": "audit",
+                "on_failure": "fail_stop",
+            },
+            "audit": {
+                "tool": "run_skill",
+                "with": {"skill_command": "/autoskillit:audit-impl plan branch main"},
+                "capture": {"remediation_path": "${{ result.remediation_path }}"},
+                "on_result": [
+                    {"when": "${{ result.verdict }} == GO", "route": "merge"},
+                    {"route": "loop_guard"},
+                ],
+                "on_failure": "fail_stop",
+            },
+            "loop_guard": {
+                "tool": "run_python",
+                "with": {
+                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                    "current_iteration": "${{ context.audit_count }}",
+                    "max_iterations": "2",
+                },
+                "capture": {"audit_count": "${{ result.next_iteration }}"},
+                "on_result": [
+                    {"when": "${{ result.max_exceeded }} == true", "route": "fail_stop"},
+                    {"route": "remediate"},
+                ],
+                "on_failure": "fail_stop",
+                "optional_context_refs": ["audit_count"],
+            },
+            "remediate": {
+                "action": "route",
+                "with": {"remediation_path": "${{ context.remediation_path }}"},
+                "on_success": "implement",
+            },
+            "merge": {
+                "tool": "merge_worktree",
+                "with": {
+                    "worktree_path": "${{ context.implementation_ref }}",
+                    "base_branch": "main",
+                },
+                "on_success": "done",
+                "on_failure": "fail_stop",
+            },
+            "done": {"action": "stop", "message": "Done."},
+            "fail_stop": {"action": "stop", "message": "Failed."},
+        }
+    return _make_workflow(steps)
+
+
+def test_worktree_clobber_without_merge_fires_on_cycle() -> None:
+    """worktree-clobber-without-merge ERROR fires when implement is in a cycle without merge."""
+    wf = _make_cycle_clobber_workflow(with_merge_barrier=False)
+    findings = run_semantic_rules(wf)
+    errors = [f for f in findings if f.severity == Severity.ERROR]
+    assert any(f.rule == "worktree-clobber-without-merge" for f in errors), (
+        f"Expected worktree-clobber-without-merge ERROR. Got errors: "
+        f"{[(f.rule, f.step_name) for f in errors]}"
+    )
+
+
+def test_worktree_clobber_without_merge_clean_with_barrier() -> None:
+    """worktree-clobber-without-merge does NOT fire when merge_worktree precedes re-entry."""
+    wf = _make_cycle_clobber_workflow(with_merge_barrier=True)
+    findings = run_semantic_rules(wf)
+    rule_findings = [f for f in findings if f.rule == "worktree-clobber-without-merge"]
+    assert rule_findings == [], (
+        f"worktree-clobber-without-merge must not fire when merge barrier is present, "
+        f"got: {rule_findings}"
+    )
+
+
+def test_existing_rules_do_not_catch_cycle_clobber_pattern() -> None:
+    """superseded-input-after-capture and loop-body-uncaptured-output do NOT catch cycle-clobber.
+
+    Documents the gap that worktree-clobber-without-merge fills: the existing rules
+    do not detect context variable overwrite across loop iterations.
+    """
+    wf = _make_cycle_clobber_workflow(with_merge_barrier=False)
+    findings = run_semantic_rules(wf)
+    superseded_findings = [f for f in findings if f.rule == "superseded-input-after-capture"]
+    uncaptured_findings = [f for f in findings if f.rule == "loop-body-uncaptured-output"]
+    assert superseded_findings == [], (
+        f"superseded-input-after-capture should NOT catch cycle-clobber pattern, "
+        f"got: {superseded_findings}"
+    )
+    assert uncaptured_findings == [], (
+        f"loop-body-uncaptured-output should NOT catch cycle-clobber pattern "
+        f"(implement step HAS a capture block), got: {uncaptured_findings}"
+    )

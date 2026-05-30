@@ -205,12 +205,14 @@ class TestResearchImplementRemediationLoop:
         assert max_cond is not None
         assert max_cond.route == "escalate_stop"
 
-    def test_check_audit_retry_loop_default_routes_to_plan_phase(self, recipe) -> None:
+    def test_check_audit_retry_loop_default_routes_to_pre_remediation_cleanup(
+        self, recipe
+    ) -> None:
         step = recipe.steps["check_audit_retry_loop"]
         conditions = step.on_result.conditions
         default_cond = next((c for c in conditions if c.when is None), None)
         assert default_cond is not None
-        assert default_cond.route == "plan_phase"
+        assert default_cond.route == "pre_remediation_cleanup"
 
     def test_check_audit_retry_loop_on_failure_escalates(self, recipe) -> None:
         step = recipe.steps["check_audit_retry_loop"]

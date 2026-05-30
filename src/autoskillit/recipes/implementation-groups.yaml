@@ -599,7 +599,7 @@ steps:
     on_result:
     - when: "${{ result.max_exceeded }} == true"
       route: release_issue_failure
-    - route: test
+    - route: merge_gate_test
     on_failure: release_issue_failure
     optional_context_refs:
     - merge_test_fix_loop_count
@@ -607,6 +607,13 @@ steps:
       Merge-gate test fix iteration guard. Uses merge_test_fix_loop_count
       (independent of test_fix_loop_count) to prevent merge-gate retries
       from consuming the pre-merge fix budget.
+
+  merge_gate_test:
+    tool: test_check
+    with:
+      worktree_path: "${{ context.worktree_path }}"
+    on_success: commit_guard
+    on_failure: merge_gate_fix
 
   rebase_conflict_fix:
     tool: run_skill

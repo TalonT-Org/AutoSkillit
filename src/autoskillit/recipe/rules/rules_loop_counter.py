@@ -102,6 +102,14 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
                 if pred not in full_cycle and pred not in guard_steps:
                     external_preds.setdefault(member, set()).add(pred)
 
+        for member in list(external_preds):
+            external_preds[member] = {
+                p
+                for p in external_preds[member]
+                if not (yaml_preds.get(p, set()) and yaml_preds[p] <= full_cycle)
+            }
+        external_preds = {k: v for k, v in external_preds.items() if v}
+
         all_ext = {p for ps in external_preds.values() for p in ps}
         if len(all_ext) < 2:
             continue

@@ -750,7 +750,7 @@
           "route": "release_issue_failure"
         },
         {
-          "route": "test"
+          "route": "merge_gate_test"
         }
       ],
       "on_failure": "release_issue_failure",
@@ -758,6 +758,14 @@
         "merge_test_fix_loop_count"
       ],
       "note": "Merge-gate test fix iteration guard. Uses merge_test_fix_loop_count (independent of test_fix_loop_count) to prevent merge-gate retries from consuming the pre-merge fix budget."
+    },
+    "merge_gate_test": {
+      "tool": "test_check",
+      "with": {
+        "worktree_path": "${{ context.implementation_ref }}"
+      },
+      "on_success": "audit_impl",
+      "on_failure": "merge_gate_assess"
     },
     "rebase_conflict_fix": {
       "tool": "run_skill",

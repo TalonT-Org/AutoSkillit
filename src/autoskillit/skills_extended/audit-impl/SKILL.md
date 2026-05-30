@@ -56,7 +56,8 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
-- Use Explore subagents for all file reads and diff retrieval
+- Use Explore subagents for file reads and diff retrieval in Steps 1, 2, and 2.5
+- Use `Agent(subagent_type="autoskillit:audit-impl-slice-auditor")` for Step 3 audit slices
 - Use `model: "sonnet"` when spawning all subagents via the Task tool
 - Resolve all plan files before starting (abort early if any are missing)
 - Write `Dry-walkthrough verified = TRUE` as the absolute first line of any remediation file
@@ -231,16 +232,15 @@ logic (Step 4).
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-**Data source discipline:** Do NOT call Read, Grep, or Glob to verify file existence or
-content — the diff is the single source of truth for implementation state. The working
-directory (`cwd`) may be checked out on a different branch than the implementation being
-audited; filesystem reads will show the wrong branch's content. If you need to inspect a
-file's full content on the implementation branch (e.g., to verify import structure or
-function signatures beyond what the diff shows), use
-`git show {implementation_ref}:{path}` — never read the filesystem directly.
+**Data source discipline:** The diff is the single source of truth for implementation state.
+The working directory (`cwd`) may be on a different branch than the implementation being
+audited. Do NOT use Read, Grep, or Glob — subagents are tool-restricted to Bash only via
+their agent definition, blocking filesystem reads at the platform level. When full file
+content is needed beyond the diff, subagents use `git show {implementation_ref}:{path}`.
 
-Divide the requirements inventory into up to 3 slices. Launch parallel Explore subagents,
-each receiving its slice and the full diff. Each subagent checks:
+Divide the requirements inventory into up to 3 slices. Launch parallel subagents using
+`Agent(subagent_type="autoskillit:audit-impl-slice-auditor")`, each receiving its slice,
+the full diff, and the `implementation_ref`. Each subagent checks:
 
 1. **Coverage** — Is every file and function the plan named present in the diff?
 2. **Correctness** — Does the implementation match the plan's stated intent? Flag inversions,

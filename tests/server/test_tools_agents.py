@@ -327,6 +327,42 @@ def test_elaborate_wps_subagent_type_refs_resolve():
         )
 
 
+# T-NEW-4: audit-impl SKILL.md subagent_type refs resolve to agent files
+def test_audit_impl_subagent_type_refs_resolve():
+    """audit-impl SKILL.md subagent_type refs resolve to agent files."""
+    import re
+
+    from autoskillit.core import pkg_root
+
+    content = (pkg_root() / "skills_extended" / "audit-impl" / "SKILL.md").read_text()
+    refs = re.findall(r'subagent_type.*?["\']autoskillit:([a-z][a-z0-9-]+)["\']', content)
+    unique_refs = set(refs)
+    assert len(unique_refs) >= 1, (
+        f"Expected >=1 subagent_type ref in audit-impl SKILL.md, found {len(unique_refs)}"
+    )
+    agents_dir = pkg_root() / "agents"
+    for agent_name in unique_refs:
+        agent_file = agents_dir / f"{agent_name}.md"
+        assert agent_file.exists(), (
+            f"SKILL.md references autoskillit:{agent_name} but {agent_file} does not exist"
+        )
+
+
+# T-NEW-5: audit-impl-slice-auditor is subagent_type-only — not in any agent pack
+def test_audit_impl_slice_auditor_is_packless():
+    """audit-impl-slice-auditor is subagent_type-only — not in any agent pack."""
+    from autoskillit.core import pkg_root
+    from autoskillit.core.types._type_constants_registries import AGENT_PACK_REGISTRY
+
+    agent_path = pkg_root() / "agents" / "audit-impl-slice-auditor.md"
+    assert agent_path.exists(), "audit-impl-slice-auditor.md must exist"
+    for pack_name in AGENT_PACK_REGISTRY:
+        assert "audit-impl-slice-auditor" not in pack_name, (
+            f"audit-impl-slice-auditor must NOT appear in any AGENT_PACK_REGISTRY pack name — "
+            f"found in '{pack_name}'. It is subagent_type-only."
+        )
+
+
 # T-NEW-2: wp-elaborator.md JSON schema must contain all WPResult fields
 def test_wp_elaborator_schema_covers_all_wp_fields():
     """wp-elaborator.md JSON schema must contain all WPResult fields, not just WP_REQUIRED_KEYS."""

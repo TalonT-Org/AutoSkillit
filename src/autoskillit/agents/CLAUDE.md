@@ -50,6 +50,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 | `plan-review` | `plan-review` | 3 adversarial reviewers | make-plan Steps 6-9, rectify Steps 5-7 |
 | _(none)_ | _(none)_ | `wp-elaborator` | planner-elaborate-wps (subagent_type-only) |
 | _(none)_ | _(none)_ | `pipeline-health-scanner` | analyze-pipeline-health (subagent_type-only) |
+| _(none)_ | _(none)_ | `audit-impl-slice-auditor` | audit-impl Step 3 (subagent_type-only) |
 
 ## Adding Agents
 
@@ -63,4 +64,4 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 `subagent_type: "autoskillit:{name}"` and does NOT need MCP resource access via
 `unlock_agent_pack`, only step 1 is required. Steps 2–5 exist for the
 `agent://{pack}/{name}` resource path and can be skipped for packless agents.
-Current packless agents: `wp-elaborator`.
+Current packless agents: `wp-elaborator`, `pipeline-health-scanner`, `audit-impl-slice-auditor`.

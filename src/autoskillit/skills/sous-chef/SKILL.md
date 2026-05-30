@@ -63,8 +63,8 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   (typically `test` or `retry_worktree`) to check whether partial work was sufficient.
   API infrastructure errors (overload, 529, ECONNRESET) also produce `retry_reason=resume`
   with `infra_exit_category="api_error"` — route them identically to context exhaustion.
-  The `infra_exit_category` field is informational only
-  (`"completed"`, `"context_exhausted"`, `"api_error"`, `"process_killed"`).
+  The `infra_exit_category` field is informational for telemetry and is NOT used for
+  routing decisions — routing is driven exclusively by `retry_reason`.
 - **If `retry_reason: resume` AND `subtype≠stale` AND the step has no `on_context_limit`** → fall through to `on_failure`.
 - **If `retry_reason: drain_race` AND the step defines `on_context_limit`** → follow `on_context_limit`.
   The channel signal confirmed session completion; stdout was not fully flushed before kill.
@@ -93,6 +93,13 @@ When `run_skill` returns `needs_retry=true` for **any step**:
   but prior tool calls suggest partial progress on disk.
 - **If `retry_reason: idle_stall` AND `lifespan_started` is false** → fall through to `on_failure`.
   No progress was made.
+- **If `retry_reason: rate_limited` AND the step defines `on_rate_limit`** → follow `on_rate_limit`.
+  HTTP 429 or text-based rate-limit signal detected. Route to the designated recovery step
+  (typically `test`) to continue after the rate limit window resets. Partial progress may
+  exist on disk.
+- **If `retry_reason: rate_limited` AND the step has no `on_rate_limit`** → fall back to `on_context_limit`.
+  Backward compatible with recipes that do not yet declare `on_rate_limit`. If the step also
+  has no `on_context_limit`, fall through to `on_failure`.
 - **If `retry_reason: early_stop` AND `has_progress_evidence` is true in the result AND the step
   defines `on_context_limit`** → follow `on_context_limit`. The model made progress (wrote files
   or created a worktree) but stopped before emitting the completion marker. Partial progress
@@ -143,6 +150,8 @@ Summary: `needs_retry=true` + `retry_reason=resume` + `subtype=stale` → re-exe
          `needs_retry=true` + `retry_reason=thinking_stall` + `lifespan_started=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=idle_stall` + `lifespan_started=false` → `on_failure`.
+         `needs_retry=true` + `retry_reason=rate_limited` + step has `on_rate_limit` → follow `on_rate_limit`.
+         `needs_retry=true` + `retry_reason=rate_limited` + no `on_rate_limit` → follow `on_context_limit` (fallback) or `on_failure`.
          `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.
          `needs_retry=true` + `retry_reason=early_stop` + `has_progress_evidence=false` → `on_failure`.
          `needs_retry=true` + `retry_reason=zero_writes` + `has_progress_evidence=true` + step has `on_context_limit` → follow `on_context_limit`.

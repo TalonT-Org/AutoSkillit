@@ -55,6 +55,7 @@ class RetryReason(StrEnum):
     CLONE_CONTAMINATION = "clone_contamination"
     THINKING_STALL = "thinking_stall"  # final turn: thinking blocks only, no text or tool output
     IDLE_STALL = "idle_stall"  # stdout idle watchdog kill — session may have partial progress
+    RATE_LIMITED = "rate_limited"  # transient HTTP 429 or rate-limit pattern — wait-and-retry
 
 
 class InfraExitCategory(StrEnum):
@@ -69,6 +70,7 @@ class InfraExitCategory(StrEnum):
     CONTEXT_EXHAUSTED = "context_exhausted"
     API_ERROR = "api_error"
     PROCESS_KILLED = "process_killed"
+    RATE_LIMITED = "rate_limited"
 
 
 class MergeFailedStep(StrEnum):

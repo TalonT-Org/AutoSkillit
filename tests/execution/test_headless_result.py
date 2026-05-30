@@ -893,7 +893,8 @@ class TestWriteEvidenceCrossCheck:
         )
         assert sr.success is True
 
-    def test_rate_limit_session_not_classified_as_early_stop(self) -> None:
+    def test_rate_limit_session_produces_rate_limited_retry_reason(self) -> None:
+        """api_error_status=429 → retry_reason=RATE_LIMITED (not RESUME or EARLY_STOP)."""
         result_line = json.dumps(
             {
                 "type": "result",
@@ -912,9 +913,10 @@ class TestWriteEvidenceCrossCheck:
         )
         sr = _build_skill_result(result, completion_marker="DONE", backend=ClaudeCodeBackend())
         assert sr.retry_reason != RetryReason.EARLY_STOP
-        assert sr.retry_reason == RetryReason.RESUME
+        assert sr.retry_reason == RetryReason.RATE_LIMITED
 
-    def test_stale_session_api_error_status_classified(self) -> None:
+    def test_stale_session_api_error_status_429_classified_as_rate_limited(self) -> None:
+        """STALE session with api_error_status=429 → infra.exit_category=rate_limited."""
         result_line = json.dumps(
             {
                 "type": "result",
@@ -927,9 +929,11 @@ class TestWriteEvidenceCrossCheck:
         )
         result = _stale_result(stdout=result_line)
         sr = _build_skill_result(result, backend=ClaudeCodeBackend())
-        assert sr.infra.exit_category == "api_error"
+        assert sr.infra.exit_category == "rate_limited"
+        assert sr.retry_reason == RetryReason.RATE_LIMITED
 
-    def test_idle_stall_session_api_error_status_classified(self) -> None:
+    def test_idle_stall_session_api_error_status_429_classified_as_rate_limited(self) -> None:
+        """IDLE_STALL session with api_error_status=429 → infra.exit_category=rate_limited."""
         result_line = json.dumps(
             {
                 "type": "result",
@@ -942,7 +946,8 @@ class TestWriteEvidenceCrossCheck:
         )
         result = _idle_stall_result(result_line)
         sr = _build_skill_result(result, backend=ClaudeCodeBackend())
-        assert sr.infra.exit_category == "api_error"
+        assert sr.infra.exit_category == "rate_limited"
+        assert sr.retry_reason == RetryReason.RATE_LIMITED
 
     def test_cross_check_ignores_init_manifest(self) -> None:
         stdout = _system_init_ndjson() + "\n" + _success_result_json()

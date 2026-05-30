@@ -60,6 +60,7 @@ def test_retry_reason_values():
         RetryReason.CLONE_CONTAMINATION,
         RetryReason.THINKING_STALL,
         RetryReason.IDLE_STALL,
+        RetryReason.RATE_LIMITED,
     }
     assert RetryReason.NONE.value == "none"
 

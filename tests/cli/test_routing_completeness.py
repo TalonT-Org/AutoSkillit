@@ -36,6 +36,7 @@ _EXPECTED_ROUTES: dict[RetryReason, tuple[str, str | None]] = {
     RetryReason.ZERO_WRITES: ("on_context_limit", "has_progress_evidence"),
     RetryReason.CONTRACT_RECOVERY: ("on_context_limit", "has_progress_evidence"),
     RetryReason.CLONE_CONTAMINATION: ("on_failure", "pre_contamination_retry_reason"),
+    RetryReason.RATE_LIMITED: ("on_rate_limit", None),
 }
 
 

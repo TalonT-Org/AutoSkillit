@@ -45,7 +45,10 @@ from autoskillit.execution.headless._headless_recovery import (
     _synthesize_from_write_artifacts,
 )
 from autoskillit.execution.headless._headless_scan import _scan_jsonl_write_paths
-from autoskillit.execution.session._exit_classification import classify_infra_exit
+from autoskillit.execution.session._exit_classification import (
+    _RATE_LIMIT_PATTERNS,
+    classify_infra_exit,
+)
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
@@ -214,23 +217,37 @@ def _build_skill_result(
                     api_retry=stale_api_retry,
                 )
         # No valid result in stdout — fall through to original stale response
+        # Rate-limit detection before _capture_failure so the correct reason is recorded.
+        _stale_text_sources: list[str] = [
+            *stale_session.assistant_messages,
+            *(stale_session.errors or []),
+        ]
+        if result.stderr:
+            _stale_text_sources.append(result.stderr)
+        _stale_is_rate_limited = stale_session.api_error_status == 429 or any(
+            p.search(msg) for p in _RATE_LIMIT_PATTERNS for msg in _stale_text_sources
+        )
+        _stale_is_api_error = stale_session.api_retry_exhausted or (
+            stale_session.api_error_status is not None and stale_session.api_error_status >= 400
+        )
+        _stale_retry_reason = (
+            RetryReason.RATE_LIMITED if _stale_is_rate_limited else RetryReason.STALE
+        )
         _capture_failure(
             skill_command,
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="stale",
             needs_retry=True,
-            retry_reason=RetryReason.STALE,
+            retry_reason=_stale_retry_reason,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
-        _stale_is_api_error = stale_session.api_retry_exhausted or (
-            stale_session.api_error_status is not None and stale_session.api_error_status >= 400
-        )
-        stale_infra = (
-            InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
-            if _stale_is_api_error
-            else InfraOutcome()
-        )
+        if _stale_is_rate_limited:
+            stale_infra = InfraOutcome(exit_category=InfraExitCategory.RATE_LIMITED.value)
+        elif _stale_is_api_error:
+            stale_infra = InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
+        else:
+            stale_infra = InfraOutcome()
         stale_sr = _make_terminated_result(
             result=result,
             session=stale_session,
@@ -241,7 +258,7 @@ def _build_skill_result(
             ),
             subtype="stale",
             needs_retry=True,
-            retry_reason=RetryReason.STALE,
+            retry_reason=_stale_retry_reason,
             evidence=stale_evidence,
             provider_used=provider_used,
             infra=stale_infra,
@@ -289,26 +306,40 @@ def _build_skill_result(
                     provider_used=provider_used,
                     api_retry=idle_api_retry,
                 )
+        # Rate-limit detection before _capture_failure so the correct reason is recorded.
+        _idle_text_sources: list[str] = [
+            *idle_session.assistant_messages,
+            *(idle_session.errors or []),
+        ]
+        if result.stderr:
+            _idle_text_sources.append(result.stderr)
+        _idle_is_rate_limited = idle_session.api_error_status == 429 or any(
+            p.search(msg) for p in _RATE_LIMIT_PATTERNS for msg in _idle_text_sources
+        )
+        _idle_is_api_error = idle_session.api_retry_exhausted or (
+            idle_session.api_error_status is not None and idle_session.api_error_status >= 400
+        )
+        _idle_retry_reason = (
+            RetryReason.RATE_LIMITED if _idle_is_rate_limited else RetryReason.IDLE_STALL
+        )
         _capture_failure(
             skill_command,
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="idle_stall",
             needs_retry=True,
-            retry_reason=RetryReason.IDLE_STALL,
+            retry_reason=_idle_retry_reason,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
         logger.warning(
             "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
         )
-        _idle_is_api_error = idle_session.api_retry_exhausted or (
-            idle_session.api_error_status is not None and idle_session.api_error_status >= 400
-        )
-        idle_infra = (
-            InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
-            if _idle_is_api_error
-            else InfraOutcome()
-        )
+        if _idle_is_rate_limited:
+            idle_infra = InfraOutcome(exit_category=InfraExitCategory.RATE_LIMITED.value)
+        elif _idle_is_api_error:
+            idle_infra = InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
+        else:
+            idle_infra = InfraOutcome()
         idle_sr = _make_terminated_result(
             result=result,
             session=idle_session,
@@ -319,7 +350,7 @@ def _build_skill_result(
             ),
             subtype="idle_stall",
             needs_retry=True,
-            retry_reason=RetryReason.IDLE_STALL,
+            retry_reason=_idle_retry_reason,
             evidence=idle_evidence,
             provider_used=provider_used,
             infra=idle_infra,
@@ -501,6 +532,18 @@ def _build_skill_result(
             promoted_to="resume",
         )
         retry_reason = RetryReason.RESUME
+        needs_retry = True
+
+    # Rate-limit override: HTTP 429 is a transient rate limit, not structural context
+    # exhaustion. Produce RATE_LIMITED so the orchestrator can route to on_rate_limit
+    # instead of on_context_limit, enabling wait-and-retry rather than escalation.
+    if not success and infra_category == InfraExitCategory.RATE_LIMITED:
+        logger.info(
+            "rate_limit_override",
+            original_retry_reason=retry_reason.value,
+            promoted_to="rate_limited",
+        )
+        retry_reason = RetryReason.RATE_LIMITED
         needs_retry = True
 
     # Process kill override: external kills (SIGKILL/OOM, not autoskillit-initiated)

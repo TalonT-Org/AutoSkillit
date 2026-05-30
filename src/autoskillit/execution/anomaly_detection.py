@@ -67,19 +67,23 @@ _MODEL_SHORT_ALIASES: dict[str, str] = {
 
 
 _DATE_SUFFIX_RE = _re.compile(r"-\d{8}$")
+_CONTEXT_WINDOW_SUFFIX_RE = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
 
 
 def normalize_model_id(model: str) -> str:
     """Normalize a model identifier to its canonical prefix for comparison.
 
-    Handles three cases:
+    Handles four cases:
     1. Short aliases: "sonnet" → "claude-sonnet"
     2. Full IDs with date suffixes: "claude-haiku-4-5-20251001" → "claude-haiku-4-5"
     3. Full IDs without dates: "claude-sonnet-4-6" → "claude-sonnet-4-6" (unchanged)
+    4. Context-window suffixes stripped before alias lookup:
+       "opus[1m]" → "claude-opus", "claude-opus-4-6[1m]" → "claude-opus-4-6"
 
     Non-Anthropic model names pass through unchanged.
     """
-    expanded = _MODEL_SHORT_ALIASES.get(model, model)
+    stripped = _CONTEXT_WINDOW_SUFFIX_RE.sub("", model)
+    expanded = _MODEL_SHORT_ALIASES.get(stripped, stripped)
     return _DATE_SUFFIX_RE.sub("", expanded)
 
 

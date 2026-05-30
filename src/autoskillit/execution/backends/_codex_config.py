@@ -142,13 +142,13 @@ def _read_codex_config(path: Path) -> ReadResult:
     import tomllib
 
     try:
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
+        raw_bytes = path.read_bytes()
     except FileNotFoundError:
         return ReadResult.missing({})
-    except tomllib.TOMLDecodeError:
+    try:
+        data = tomllib.loads(raw_bytes.decode("utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError):
         logger.warning("corrupt_codex_config", path=str(path))
-        raw_bytes = path.read_bytes()
         return ReadResult.corrupt(raw_bytes)
     return ReadResult.ok(data)
 

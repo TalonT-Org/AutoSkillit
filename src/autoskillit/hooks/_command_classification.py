@@ -84,6 +84,8 @@ def extract_redirect_targets(tokens: list[str]) -> list[str]:
         tok = tokens[i]
         if tok == "(" or (tok.startswith("(") and len(tok) > 1):
             depth += 1
+            if tok.endswith(")") and len(tok) > 1:
+                depth -= 1
             i += 1
             continue
         if tok == ")":
@@ -94,6 +96,34 @@ def extract_redirect_targets(tokens: list[str]) -> list[str]:
         if tok.endswith(")") and len(tok) > 1:
             if depth > 0:
                 depth -= 1
+            else:
+                stripped = tok[:-1]
+                if stripped in (">", ">>"):
+                    if i + 1 < len(tokens):
+                        path = tokens[i + 1]
+                        while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                            path = path[:-1]
+                        if path.startswith("/"):
+                            targets.append(path)
+                        i += 2
+                        continue
+                elif _REDIRECT_OP_ONLY_RE.match(stripped):
+                    if i + 1 < len(tokens):
+                        path = tokens[i + 1]
+                        while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                            path = path[:-1]
+                        if path.startswith("/"):
+                            targets.append(path)
+                        i += 2
+                        continue
+                else:
+                    m = _REDIRECT_TOKEN_RE.match(stripped)
+                    if m:
+                        path = m.group(2)
+                        while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                            path = path[:-1]
+                        if path.startswith("/"):
+                            targets.append(path)
             i += 1
             continue
         if depth > 0:

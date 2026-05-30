@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import psutil
 
-from autoskillit.core import get_logger
+from autoskillit.core import default_log_dir, get_logger
 from autoskillit.execution import kill_process_tree, read_boot_id, read_starttime_ticks
 
 if TYPE_CHECKING:
@@ -20,8 +20,6 @@ logger = get_logger(__name__)
 
 
 def _append_reaper_event(dispatch: DispatchRecord, reason: str, reaper_dispatch_id: str) -> None:
-    from autoskillit.core import default_log_dir  # noqa: PLC0415
-
     log_path = default_log_dir() / "reaper_events.jsonl"
     event = {
         "ts": time.time(),
@@ -70,9 +68,8 @@ def _apply_stale_dispatch(
                 "campaign_id": dispatch.campaign_id,
             }
             try:
-                (tombstone_dir / "reaper_action.json").write_text(
-                    json.dumps(tombstone), encoding="utf-8"
-                )
+                with (tombstone_dir / "reaper_action.json").open("w", encoding="utf-8") as f:
+                    f.write(json.dumps(tombstone))
             except OSError:
                 logger.warning("reaper: failed to write tombstone", exc_info=True)
 

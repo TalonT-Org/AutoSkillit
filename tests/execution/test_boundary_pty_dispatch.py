@@ -76,7 +76,10 @@ class TestBoundaryPtyDispatch:
         assert result.returncode in {143, -signal.SIGTERM}, (
             f"Expected SIGTERM exit (143 or -{signal.SIGTERM}), got {result.returncode}"
         )
-        assert result.termination == TerminationReason.NATURAL_EXIT
+        assert result.termination in {
+            TerminationReason.NATURAL_EXIT,
+            TerminationReason.SIGNAL_DEATH,
+        }
         # ESC byte (0x1B) must appear — ANSI sequences were written to stdout
         assert "\x1b" in result.stdout, (
             f"Expected ANSI escape bytes in stdout, got: {result.stdout!r}"

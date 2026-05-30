@@ -477,6 +477,7 @@ class TestAdjudicationCoverageMatrix:
         {
             TerminationReason.COMPLETED,  # TestChannelBDrainRacePipelineAdjudication
             TerminationReason.NATURAL_EXIT,  # TestSTOPDelayPipelineAdjudication
+            TerminationReason.SIGNAL_DEATH,  # TestBoundaryPtyDispatch
             TerminationReason.STALE,  # TestStaleRecoveryPipelineAdjudication
             TerminationReason.TIMED_OUT,  # TestTimedOutPipelineAdjudication
             TerminationReason.IDLE_STALL,  # TestIdleStallWatchdog in test_process_run.py

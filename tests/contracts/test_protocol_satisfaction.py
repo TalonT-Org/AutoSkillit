@@ -630,7 +630,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_006_termination_reason_members(self):
-        """TerminationReason must have exactly the 4 canonical values."""
+        """TerminationReason must have exactly the 6 canonical values."""
         from autoskillit.core.types import TerminationReason
 
         assert set(TerminationReason) == {
@@ -639,6 +639,7 @@ class TestGroupDApiContractPreservation:
             TerminationReason.STALE,
             TerminationReason.IDLE_STALL,
             TerminationReason.TIMED_OUT,
+            TerminationReason.SIGNAL_DEATH,
         }
 
     def test_req_api_006_termination_reason_string_values(self):

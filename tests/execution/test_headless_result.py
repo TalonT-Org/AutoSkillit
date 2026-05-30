@@ -982,8 +982,15 @@ class TestWriteEvidenceCrossCheck:
                 "is_error": False,
             }
         )
-        # Truncated tool_use triggers cross-check → _has_write_evidence=True
-        stdout = _truncated_tool_use_line() + "\n" + result_line
+        write_tool_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "tool_use", "name": "Write", "id": "t1", "input": {}}]
+                },
+            }
+        )
+        stdout = write_tool_line + "\n" + result_line
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         audit = DefaultAuditLog()
 

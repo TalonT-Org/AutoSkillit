@@ -491,6 +491,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Watcher dispatch marker | `test_watcher_signal_consistency.py` | Process watchers that skip `_has_active_dispatch_marker()` check |
 | Write restriction enforcement | `test_write_restriction_coverage.py` | Skills with prose write restrictions (`never modify source`, `read-only`, `output dir`) lacking runtime `WriteBehaviorSpec` enforcement |
 | Subagent filter guard | `test_subagent_filter_guard.py` | NDJSON assistant-record consumers missing `_is_parent_assistant_record` or `_is_parent_assistant` predicate — subagent records contaminate parent metrics |
+| Env-var-set constant consumption | `test_canonical_constant_consumption.py` | `*_ENV_FORWARD_VARS` or `*_REQUIRED_ENV` constant with zero production importers — every canonical env-var-set must be consumed |
 
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing

@@ -85,6 +85,8 @@ class TestBuildTestScopeConfigCascade:
             assert excluded not in dir_names, (
                 f"narrow cascade for ingredient_defaults should not include {excluded}"
             )
+        assert "arch" in dir_names
+        assert "contracts" in dir_names
 
     def test_settings_falls_through_to_full_cascade(self, tmp_path: Path) -> None:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)

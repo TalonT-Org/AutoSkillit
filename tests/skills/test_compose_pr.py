@@ -24,7 +24,7 @@ def test_closes_issue_outside_architecture_impact_block():
     omitted when no validated diagrams exist (the entire block is skipped).
     """
     end_marker = "{## End Architecture Impact conditional}"
-    closes_pattern = "Closes #"
+    closes_pattern = "Closes #{closing_issue}"
     marker_positions = [i for i in range(len(SKILL_TEXT)) if SKILL_TEXT[i:].startswith(end_marker)]
     assert marker_positions, (
         "compose-pr/SKILL.md must contain '{## End Architecture Impact conditional}' marker"
@@ -32,7 +32,9 @@ def test_closes_issue_outside_architecture_impact_block():
     closes_positions = [
         i for i in range(len(SKILL_TEXT)) if SKILL_TEXT[i:].startswith(closes_pattern)
     ]
-    assert closes_positions, "compose-pr/SKILL.md must contain 'Closes #' template variable"
+    assert closes_positions, (
+        "compose-pr/SKILL.md must contain 'Closes #{closing_issue}' template variable"
+    )
     for closes_pos in closes_positions:
         nearest_marker = max(
             (m for m in marker_positions if m < closes_pos),

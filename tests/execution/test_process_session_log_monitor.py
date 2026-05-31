@@ -544,6 +544,177 @@ class TestSessionLogMonitorDirMissing:
         assert result.session_id == ""
 
 
+class TestResumeBoundary:
+    """Phase 2 must not fire on completion markers that existed before monitoring began."""
+
+    @pytest.mark.anyio
+    async def test_monitor_skips_preexisting_completion_marker(self, tmp_path):
+        """Phase 2 must NOT fire on a completion marker that existed before monitoring began.
+
+        Reproduces the resume-boundary false-fire: on `claude --resume`, the JSONL
+        file already contains the completion marker from the prior session.
+        """
+        import json
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        marker = "%%L3_DONE::abcd1234%%"
+        spawn_time = time.time() - 10
+
+        session_file = log_dir / "session-abc.jsonl"
+        # Pre-populate with a completion marker from the "prior session"
+        session_file.write_text(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": f"Done\n\n{marker}"}],
+                    },
+                }
+            )
+            + "\n"
+        )
+
+        poll_count = 0
+
+        def count_polls():
+            nonlocal poll_count
+            poll_count += 1
+
+        async def append_activity():
+            for i in range(3):
+                await anyio.sleep(0.1)
+                with session_file.open("a") as f:
+                    f.write(
+                        json.dumps(
+                            {
+                                "type": "assistant",
+                                "message": {"role": "assistant", "content": f"resumed msg {i}"},
+                            }
+                        )
+                        + "\n"
+                    )
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    log_dir,
+                    marker,
+                    stale_threshold=1.0,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                    _on_poll=count_polls,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_activity)
+
+        assert result_box[0].status == ChannelBStatus.STALE
+        assert poll_count > 2, "Monitor should have polled multiple times, not fired immediately"
+
+    @pytest.mark.anyio
+    async def test_monitor_fires_on_new_marker_after_preexisting_content(self, tmp_path):
+        """Phase 2 fires on a new marker written after monitoring starts,
+        even when the file has substantial pre-existing content."""
+        import json
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        marker = "%%L3_DONE::efgh5678%%"
+        spawn_time = time.time() - 10
+
+        session_file = log_dir / "session-def.jsonl"
+        lines = []
+        for i in range(10):
+            lines.append(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {"role": "assistant", "content": f"prior msg {i}"},
+                    }
+                )
+            )
+        session_file.write_text("\n".join(lines) + "\n")
+
+        async def append_new_marker():
+            await anyio.sleep(0.3)
+            with session_file.open("a") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {
+                                "role": "assistant",
+                                "content": f"Completed\n\n{marker}",
+                            },
+                        }
+                    )
+                    + "\n"
+                )
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    log_dir,
+                    marker,
+                    stale_threshold=30,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_new_marker)
+
+        assert result_box[0].status == ChannelBStatus.COMPLETION
+
+    @pytest.mark.anyio
+    async def test_phase2_no_spurious_read_on_preexisting_content(self, tmp_path):
+        """When file has pre-existing content and no new writes occur,
+        Phase 2 should go stale without ever triggering a content read."""
+        import json
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        marker = "%%L3_DONE::ijkl9012%%"
+        spawn_time = time.time() - 10
+
+        session_file = log_dir / "session-ghi.jsonl"
+        session_file.write_text(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": f"Prior session done\n\n{marker}"}],
+                    },
+                }
+            )
+            + "\n"
+        )
+
+        result = await _session_log_monitor(
+            log_dir,
+            marker,
+            stale_threshold=0.2,
+            spawn_time=spawn_time,
+            _phase1_poll=0.01,
+            _phase2_poll=0.05,
+        )
+
+        assert result.status == ChannelBStatus.STALE
+
+
 @pytest.mark.anyio
 async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
     tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch

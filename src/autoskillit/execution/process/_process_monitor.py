@@ -284,9 +284,29 @@ async def _session_log_monitor(
     _session_id = session_file.stem
 
     # Phase 2: Monitor the session log
-    last_size = 0
+    # Initialize scan offset from file state at discovery. On resumed sessions,
+    # the JSONL already contains records (including completion markers) from the
+    # prior session. Starting at the current file boundary ensures Phase 2 only
+    # scans content written AFTER monitoring began.
+    #
+    # The two reads are in separate try/except blocks so that a transient
+    # stat() failure does not discard a correctly computed scan_pos.
+    try:
+        _initial_content = session_file.read_text(errors="replace")
+        scan_pos = len(_initial_content)
+    except OSError:
+        scan_pos = 0
+    try:
+        last_size = session_file.stat().st_size
+    except OSError:
+        last_size = 0
     last_change = _time.monotonic()
-    scan_pos = 0
+    logger.debug(
+        "session_log_phase2_init",
+        file=str(session_file),
+        initial_scan_pos=scan_pos,
+        initial_last_size=last_size,
+    )
     os_error_count = 0
     suppression_start: float | None = None
     _last_record_type: str | None = None

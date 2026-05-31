@@ -736,6 +736,41 @@ every step at full fidelity regardless of session length.
 
 ---
 
+## INGREDIENT LOCKING — STRUCTURAL ENFORCEMENT
+
+When the user requests skipping or enabling specific recipe steps at session start,
+translate those instructions into `lock_ingredients` calls **immediately after
+`open_kitchen`**. This converts natural language into machine-enforced locks that
+persist for the entire session.
+
+### When to call lock_ingredients
+
+- User says "skip investigate" → `lock_ingredients(locked={"investigate": "false"}, pipeline_id="<pid>")`
+- User says "turn on review_approach" → `lock_ingredients(locked={"review_approach": "true"}, pipeline_id="<pid>")`
+- User says "go straight to rectify" → `lock_ingredients(locked={"investigate": "false"}, pipeline_id="<pid>")`
+
+### Pipeline ID
+
+- For single-issue flows: use the same `order_id` you pass to `run_skill`
+- For multi-issue flows: use the per-issue pipeline ID from the execution map
+- The `pipeline_id` parameter defaults to `AUTOSKILLIT_DISPATCH_ID` if empty (food truck sessions get this automatically)
+
+### What happens after locking
+
+- `run_skill` calls for locked-out steps are **denied server-side** with an error message
+- You do not need to manually check locks — the system enforces them
+- To release a lock mid-session: `lock_ingredients(unlock=["investigate"], pipeline_id="<pid>")`
+
+### Do not use overrides for user skip instructions
+
+`open_kitchen(overrides={"investigate": "false"})` prunes the step from the recipe
+entirely — you never see it. `lock_ingredients` keeps the step visible but prevents
+execution, allowing you to unlock it later if needed. Use `lock_ingredients` for
+user-requested skip/enable instructions; use `overrides` only for recipe-level
+configuration that should be invisible.
+
+---
+
 ## NARRATION SUPPRESSION — MANDATORY
 
 Do NOT output prose status text, phase announcements, or progress summaries between

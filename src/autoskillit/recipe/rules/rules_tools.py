@@ -227,6 +227,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "default_model",
         }
     ),
+    "lock_ingredients": frozenset({"locked", "pipeline_id", "unlock"}),
 }
 
 

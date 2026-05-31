@@ -33,6 +33,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_command_classification.py` | Tests for the shared _command_classification.py command classification primitives |
 | `test_pr_create_guard.py` | Tests for pr_create_guard.py interpreter bypass detection |
 | `test_planner_gh_discovery_guard.py` | Tests for planner_gh_discovery_guard.py interpreter bypass detection |
+| `test_ingredient_lock_guard.py` | Tests for ingredient_lock_guard.py PreToolUse hook: deny/allow, fail-open, pipeline scoping |
 
 ## Architecture Notes
 

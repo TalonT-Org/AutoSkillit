@@ -322,6 +322,7 @@ def test_free_range_tools_contains_expected_names():
         "reload_session",
         "configure_fleet",
         "configure_order",
+        "lock_ingredients",
     }
 
 

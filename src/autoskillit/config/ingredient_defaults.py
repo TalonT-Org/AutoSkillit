@@ -87,6 +87,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "reload_session",
             "configure_fleet",
             "configure_order",
+            "lock_ingredients",
         ),
     ),
 )

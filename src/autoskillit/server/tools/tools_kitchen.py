@@ -16,11 +16,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit import __version__
 from autoskillit.config import (
+    SERVER_AUTHORITATIVE_INGREDIENTS,
     build_config_authoritative_layer,
     iter_display_categories,
     resolve_ingredient_defaults,
 )
 from autoskillit.core import (
+    DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
     ProcessStaleError,
     _collect_disabled_feature_tags,
@@ -698,6 +700,188 @@ async def disable_quota_guard() -> str:
         )
     except Exception as exc:
         logger.error("disable_quota_guard unhandled exception", exc_info=True)
+        return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+
+
+def _write_ingredient_locks(
+    project_dir: Path,
+    pipeline_id: str,
+    locked_ingredients: dict[str, str] | None,
+    locked_steps: dict[str, bool] | None,
+    unlock_keys: list[str] | None = None,
+) -> tuple[bool, dict]:
+    """Atomically update ingredient locks in the overlay with flock serialization."""
+    overlay_path = _hook_config_overlay_path(project_dir)
+    lock_path = overlay_path.with_suffix(".lock")
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+
+    import fcntl
+
+    with open(lock_path, "wb") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            existing = {}
+            if overlay_path.exists():
+                try:
+                    existing = json.loads(overlay_path.read_text())
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            li = existing.setdefault("locked_ingredients", {})
+            ls = existing.setdefault("locked_steps", {})
+
+            if locked_ingredients is not None:
+                pipeline_li = li.setdefault(pipeline_id, {})
+                pipeline_li.update(locked_ingredients)
+                li[pipeline_id] = pipeline_li
+
+            if locked_steps is not None:
+                pipeline_ls = ls.setdefault(pipeline_id, {})
+                pipeline_ls.update(locked_steps)
+                ls[pipeline_id] = pipeline_ls
+
+            if unlock_keys:
+                for key in unlock_keys:
+                    li.get(pipeline_id, {}).pop(key, None)
+                if pipeline_id in ls:
+                    ls[pipeline_id] = locked_steps if locked_steps is not None else {}
+
+            atomic_write(overlay_path, json.dumps(existing))
+            return True, existing
+        finally:
+            pass  # flock released on file close
+
+
+@mcp.tool(
+    tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
+)
+@track_response_size("lock_ingredients")
+async def lock_ingredients(
+    locked: dict[str, str] | None = None,
+    pipeline_id: str = "",
+    unlock: list[str] | None = None,
+) -> str:
+    """Lock recipe ingredient values for this session.
+
+    Call at session start to bind ingredient values structurally.
+    Locked ingredients are enforced by a server-side check in run_skill
+    and supplementally by the ingredient_lock_guard PreToolUse hook.
+    run_skill calls for steps whose skip_when_false ingredient is locked
+    to a falsy value will be denied.
+
+    Call with unlock=["ingredient_name"] to release a lock.
+
+    Never raises.
+    """
+    try:
+        if (h := _require_orchestrator_exact("lock_ingredients")) is not None:
+            return h
+        from autoskillit.server import _get_ctx
+
+        ctx = _get_ctx()
+        hook_cfg_path = _hook_config_path(ctx.project_dir)
+        if not hook_cfg_path.exists():
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "Kitchen is not open — hook config file absent.",
+                }
+            )
+        effective_pipeline_id = pipeline_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+
+        if locked:
+            server_auth_overlap = set(locked.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS
+            if server_auth_overlap:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": (
+                            f"Cannot lock server-authoritative ingredients: "
+                            f"{sorted(server_auth_overlap)}. "
+                            "These are set by the server and cannot be overridden."
+                        ),
+                    }
+                )
+
+        if not locked and not unlock:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "At least one of 'locked' or 'unlock' must be provided.",
+                }
+            )
+
+        # Resolve locked_steps from active_recipe_steps
+        locked_steps: dict[str, bool] = {}
+        active_steps = getattr(ctx, "active_recipe_steps", None) or {}
+        for step_name, step_obj in active_steps.items():
+            swf = (
+                getattr(step_obj, "skip_when_false", None)
+                if hasattr(step_obj, "skip_when_false")
+                else None
+            )
+            if swf:
+                # Strip "inputs." prefix if present
+                ingredient_name = swf.removeprefix("inputs.")
+                if locked and ingredient_name in locked:
+                    val = locked[ingredient_name]
+                    is_truthy = val.lower() not in ("false", "0", "no", "off", "")
+                    locked_steps[step_name] = is_truthy
+                elif locked is None and unlock:
+                    pass  # unlock path rebuilds below
+
+        # Handle unlock: rebuild locked_steps from remaining locked_ingredients
+        existing = {}
+        overlay_path = _hook_config_overlay_path(ctx.project_dir)
+        if overlay_path.exists():
+            try:
+                existing = json.loads(overlay_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        li = existing.get("locked_ingredients", {})
+        current_pipeline_li = dict(li.get(effective_pipeline_id, {}))
+
+        # Remove unlock keys from current state
+        if unlock:
+            for key in unlock:
+                current_pipeline_li.pop(key, None)
+
+        # Merge new locked values
+        if locked:
+            current_pipeline_li.update(locked)
+
+        # Rebuild locked_steps for this pipeline
+        unlocked_steps: dict[str, bool] = {}
+        for step_name, step_obj in active_steps.items():
+            swf = (
+                getattr(step_obj, "skip_when_false", None)
+                if hasattr(step_obj, "skip_when_false")
+                else None
+            )
+            if swf:
+                ingredient_name = swf.removeprefix("inputs.")
+                if ingredient_name in current_pipeline_li:
+                    val = current_pipeline_li[ingredient_name]
+                    is_truthy = val.lower() not in ("false", "0", "no", "off", "")
+                    unlocked_steps[step_name] = is_truthy
+
+        success, updated = _write_ingredient_locks(
+            ctx.project_dir,
+            effective_pipeline_id,
+            current_pipeline_li if (locked or unlock) else None,
+            unlocked_steps,
+        )
+
+        return json.dumps(
+            {
+                "success": success,
+                "locked": updated.get("locked_ingredients", {}).get(effective_pipeline_id, {}),
+                "locked_steps": updated.get("locked_steps", {}).get(effective_pipeline_id, {}),
+            }
+        )
+    except Exception as exc:
+        logger.error("lock_ingredients unhandled exception", exc_info=True)
         return json.dumps({"success": False, "error": f"{type(exc).__name__}: {exc}"})
 
 

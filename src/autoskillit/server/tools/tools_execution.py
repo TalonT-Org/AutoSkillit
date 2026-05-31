@@ -34,7 +34,7 @@ from autoskillit.server._guards import (
     _require_orchestrator_or_higher,
     _validate_skill_command,
 )
-from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
+from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV, _hook_config_overlay_path
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 
@@ -49,6 +49,53 @@ _PURE_SLEEP_RE = re.compile(
 def _is_absolute_path(path: str) -> bool:
     """Return True if path is an absolute filesystem path."""
     return Path(path).is_absolute()
+
+
+def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
+    """Check if step_name is locked out by ingredient locks. Returns deny JSON or None."""
+    from autoskillit.server import _get_ctx
+
+    ctx = _get_ctx()
+    overlay_path = _hook_config_overlay_path(ctx.project_dir)
+    if not overlay_path.exists():
+        return None
+    try:
+        overlay = json.loads(overlay_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    locked_steps = overlay.get("locked_steps", {})
+    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+
+    if effective_oid and effective_oid in locked_steps:
+        if locked_steps[effective_oid].get(step_name) is False:
+            ingredient_info = overlay.get("locked_ingredients", {}).get(effective_oid, {})
+            return json.dumps(
+                {
+                    "success": False,
+                    "is_error": True,
+                    "error": (
+                        f"INGREDIENT LOCK ENFORCED: Step '{step_name}' is locked out. "
+                        f"Locked ingredients for pipeline '{effective_oid}': {ingredient_info}. "
+                        f"Call lock_ingredients(unlock=[...]) to release."
+                    ),
+                }
+            )
+    elif not effective_oid:
+        for pid, steps in locked_steps.items():
+            if steps.get(step_name) is False:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "is_error": True,
+                        "error": (
+                            f"INGREDIENT LOCK ENFORCED: Step '{step_name}' is locked out "
+                            f"by pipeline '{pid}'. Pass order_id to scope the check, "
+                            f"or call lock_ingredients(unlock=[...]) to release."
+                        ),
+                    }
+                )
+    return None
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -312,6 +359,10 @@ async def run_skill(
                 "error": f"run_skill: cwd does not exist: {cwd}",
             }
         )
+    if step_name and not resume_session_id:
+        _lock_denial = _check_ingredient_locks(step_name, order_id)
+        if _lock_denial is not None:
+            return _lock_denial
     try:
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx

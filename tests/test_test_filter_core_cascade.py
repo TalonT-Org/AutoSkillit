@@ -679,6 +679,9 @@ class TestCoreStemCompleteness:
     def test_all_core_stems_classified(self) -> None:
         core_root = Path("src/autoskillit/core")
         actual_stems = {p.stem for p in core_root.rglob("*.py") if p.stem != "__init__"}
+        assert actual_stems, (
+            f"No .py files found under {core_root} — is pytest running from the project root?"
+        )
         classified = set(_CORE_UNIVERSAL_MODULES) | set(MODULE_CASCADE_CORE)
         unclassified = actual_stems - classified
         assert not unclassified, (

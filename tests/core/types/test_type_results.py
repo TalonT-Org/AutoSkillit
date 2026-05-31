@@ -54,3 +54,31 @@ class TestWriteEvidence:
     def test_file_changes_count_default_is_zero(self) -> None:
         we = WriteEvidence(write_call_count=0, fs_writes_detected=False, git_writes_detected=False)
         assert we.file_changes_count == 0
+
+    def test_has_implementation_evidence_excludes_infra_only(self) -> None:
+        ev = WriteEvidence(
+            write_call_count=0,
+            fs_writes_detected=True,
+            git_writes_detected=True,
+            file_changes_count=0,
+        )
+        assert ev.has_implementation_evidence is False
+        assert ev.has_evidence is True
+
+    def test_has_implementation_evidence_true_with_write_calls(self) -> None:
+        ev = WriteEvidence(
+            write_call_count=1,
+            fs_writes_detected=False,
+            git_writes_detected=False,
+            file_changes_count=0,
+        )
+        assert ev.has_implementation_evidence is True
+
+    def test_has_implementation_evidence_true_with_file_changes(self) -> None:
+        ev = WriteEvidence(
+            write_call_count=0,
+            fs_writes_detected=False,
+            git_writes_detected=False,
+            file_changes_count=1,
+        )
+        assert ev.has_implementation_evidence is True

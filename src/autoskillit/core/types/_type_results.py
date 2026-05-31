@@ -262,6 +262,10 @@ class WriteEvidence:
             or self.file_changes_count >= 1
         )
 
+    @property
+    def has_implementation_evidence(self) -> bool:
+        return self.write_call_count >= 1 or self.file_changes_count >= 1
+
 
 @dataclass
 class SkillResult:

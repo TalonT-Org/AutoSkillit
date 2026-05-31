@@ -28,9 +28,15 @@ _SUBPROCESS_APIS_RE = re.compile(
     r"|os\.(?:system|popen|exec[lv]p?e?)\s*\("
 )
 
-_LITERAL_OPEN_PATH_RE = re.compile(r"""open\s*\(\s*(['"])(/[^'"]+)\1\s*,\s*['"][wWaAxX]""")
+_LITERAL_OPEN_PATH_RE = re.compile(r"""open\s*\(\s*(['"])([^'"]+)\1\s*,\s*['"][wWaAxX]""")
 _LITERAL_PATH_CONSTRUCTOR_RE = re.compile(
-    r"""Path\s*\(\s*(['"])(/[^'"]+)\1\s*\)\s*\.(?:write_text|write_bytes)\s*\("""
+    r"""Path\s*\(\s*(['"])([^'"]+)\1\s*\)\s*\.(?:write_text|write_bytes)\s*\("""
+)
+
+_WRITE_CALL_SITE_RE = re.compile(
+    r"open\s*\([^)]*['\"][wWaAxX]\+?[bB]?['\"]"
+    r"|Path\s*\([^)]*\)\s*\.(?:write_text|write_bytes)\s*\("
+    r"|shutil\.(?:copy|move|copyfile|copytree)\s*\("
 )
 
 _SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
@@ -154,30 +160,32 @@ def has_interpreter_write(command: str) -> bool:
     return bool(_WRITE_APIS_RE.search(command))
 
 
-def extract_interpreter_write_path(command: str) -> str | None:
-    """Extract the literal file path from an interpreter write command.
+def extract_interpreter_write_paths(command: str) -> list[str] | None:
+    """Extract literal file paths from an interpreter write command.
 
-    Returns the path string when a static literal is found.
-    Returns None when:
-    - The command is not an interpreter write (no interpreter prefix or no write API)
-    - The path is constructed dynamically (variable, f-string, concatenation)
-    - The write API is shutil.copy/move (two paths — ambiguous which is the target)
-
-    shutil.* calls intentionally return None (fall through to has_interpreter_write's
-    unconditional deny) because they have two path arguments and extracting the correct
-    target requires deeper parsing than regex can reliably provide.
+    Returns:
+        None    — command is not an interpreter write (no prefix or no write API).
+        []      — interpreter write detected but not all paths are static literals
+                  (dynamic variable, f-string, shutil two-arg, or mixed).
+        [paths] — all write target paths are static literals (may be relative).
     """
     if not _INTERPRETER_RE.search(command):
         return None
     if not _WRITE_APIS_RE.search(command):
         return None
-    m = _LITERAL_OPEN_PATH_RE.search(command)
-    if m:
-        return m.group(2)
-    m = _LITERAL_PATH_CONSTRUCTOR_RE.search(command)
-    if m:
-        return m.group(2)
-    return None
+
+    call_site_count = len(_WRITE_CALL_SITE_RE.findall(command))
+
+    paths: list[str] = []
+    for m in _LITERAL_OPEN_PATH_RE.finditer(command):
+        paths.append(m.group(2))
+    for m in _LITERAL_PATH_CONSTRUCTOR_RE.finditer(command):
+        paths.append(m.group(2))
+
+    if len(paths) < call_site_count:
+        return []
+
+    return paths if paths else []
 
 
 def has_interpreter_wrapped_command(command: str, *, target_commands: Sequence[str]) -> bool:

@@ -671,6 +671,80 @@ class TestRelativePathResolution:
         assert result == []
 
 
+class TestInterpreterRelativePathResolution:
+    """Tests for interpreter write relative path resolution via AUTOSKILLIT_CWD."""
+
+    def test_relative_open_resolved_against_cwd(self, monkeypatch: pytest.MonkeyPatch):
+        """Relative open() path should be resolved and allowed when within prefix."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        event = _build_bash_event(
+            "python3 -c \"open('.autoskillit/temp/out.txt', 'w').write('x')\""
+        )
+        out = _run_hook(event)
+        assert "blocked" not in out.lower()
+
+    def test_relative_open_outside_prefix_denied(self, monkeypatch: pytest.MonkeyPatch):
+        """Relative open() path outside prefix should be denied after resolution."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        event = _build_bash_event("python3 -c \"open('src/main.py', 'w').write('x')\"")
+        out = _run_hook(event)
+        assert "blocked" in out.lower()
+
+    def test_no_cwd_denies_relative_interpreter_write(self, monkeypatch: pytest.MonkeyPatch):
+        """Without AUTOSKILLIT_CWD, relative interpreter writes are denied."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
+        event = _build_bash_event(
+            "python3 -c \"open('.autoskillit/temp/out.txt', 'w').write('x')\""
+        )
+        out = _run_hook(event)
+        assert "blocked" in out.lower()
+
+    def test_non_absolute_cwd_denies_relative_interpreter_write(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Non-absolute AUTOSKILLIT_CWD denies relative interpreter writes."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "relative/cwd")
+        event = _build_bash_event(
+            "python3 -c \"open('.autoskillit/temp/out.txt', 'w').write('x')\""
+        )
+        out = _run_hook(event)
+        assert "blocked" in out.lower()
+
+    def test_multi_path_all_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        """Multiple open() calls all within prefix should be allowed."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        event = _build_bash_event(
+            'python3 -c "'
+            "open('.autoskillit/temp/a.txt', 'w').write('x'); "
+            "open('.autoskillit/temp/b.txt', 'w').write('y')\""
+        )
+        out = _run_hook(event)
+        assert "blocked" not in out.lower()
+
+    def test_multi_path_one_outside_prefix_denied(self, monkeypatch: pytest.MonkeyPatch):
+        """If any of multiple open() paths is outside prefix, deny the command."""
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        event = _build_bash_event(
+            'python3 -c "'
+            "open('.autoskillit/temp/a.txt', 'w').write('x'); "
+            "open('src/main.py', 'w').write('y')\""
+        )
+        out = _run_hook(event)
+        assert "blocked" in out.lower()
+
+
 class TestWriteGuardMultiPrefix:
     """Tests for multi-prefix (AUTOSKILLIT_ALLOWED_WRITE_PREFIXES) support."""
 

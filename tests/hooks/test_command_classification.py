@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.hooks._command_classification import (
     command_verb,
-    extract_interpreter_write_path,
+    extract_interpreter_write_paths,
     extract_redirect_targets,
     has_interpreter_wrapped_command,
     has_interpreter_write,
@@ -145,34 +145,90 @@ class TestIsGhCommand:
         assert gh_segments[0][0] == "gh"
 
 
-class TestExtractInterpreterWritePath:
+class TestExtractInterpreterWritePaths:
     def test_open_literal_path(self):
         cmd = "python3 -c \"open('/clone/.autoskillit/temp/out.json', 'w').write('x')\""
-        assert extract_interpreter_write_path(cmd) == "/clone/.autoskillit/temp/out.json"
+        assert extract_interpreter_write_paths(cmd) == ["/clone/.autoskillit/temp/out.json"]
 
     def test_path_write_text(self):
         cmd = "python3 -c \"Path('/clone/temp/out.json').write_text('x')\""
-        assert extract_interpreter_write_path(cmd) == "/clone/temp/out.json"
+        assert extract_interpreter_write_paths(cmd) == ["/clone/temp/out.json"]
 
     def test_path_write_bytes(self):
         cmd = "python3 -c \"Path('/clone/temp/out.bin').write_bytes(b'x')\""
-        assert extract_interpreter_write_path(cmd) == "/clone/temp/out.bin"
+        assert extract_interpreter_write_paths(cmd) == ["/clone/temp/out.bin"]
 
-    def test_dynamic_path_returns_none(self):
+    def test_dynamic_path_returns_empty_list(self):
         cmd = "python3 -c \"open(sys.argv[1], 'w').write('x')\""
-        assert extract_interpreter_write_path(cmd) is None
+        assert extract_interpreter_write_paths(cmd) == []
 
     def test_no_interpreter_returns_none(self):
         cmd = "open('/tmp/x', 'w')"
-        assert extract_interpreter_write_path(cmd) is None
+        assert extract_interpreter_write_paths(cmd) is None
 
-    def test_shutil_returns_none(self):
+    def test_shutil_returns_empty_list(self):
         cmd = "python3 -c \"import shutil; shutil.copy('/tmp/a', '/clone/src/f.py')\""
-        assert extract_interpreter_write_path(cmd) is None
+        assert extract_interpreter_write_paths(cmd) == []
 
-    def test_dynamic_path_with_non_literal_var_returns_none(self):
+    def test_dynamic_path_with_non_literal_var_returns_empty_list(self):
         cmd = "python3 -c \"open(some_var, 'w').write('x')\""
-        assert extract_interpreter_write_path(cmd) is None
+        assert extract_interpreter_write_paths(cmd) == []
+
+
+class TestExtractInterpreterWritePathsRelative:
+    def test_relative_open_path(self):
+        cmd = "python3 -c \"open('.autoskillit/temp/foo.txt', 'w').write('x')\""
+        assert extract_interpreter_write_paths(cmd) == [".autoskillit/temp/foo.txt"]
+
+    def test_relative_path_constructor(self):
+        cmd = "python3 -c \"Path('temp/out.json').write_text('x')\""
+        assert extract_interpreter_write_paths(cmd) == ["temp/out.json"]
+
+    def test_dotslash_relative_path(self):
+        cmd = "python3 -c \"open('./output.txt', 'w').write('x')\""
+        assert extract_interpreter_write_paths(cmd) == ["./output.txt"]
+
+
+class TestExtractInterpreterWritePathsMulti:
+    def test_multiple_open_calls(self):
+        cmd = (
+            'python3 -c "'
+            "open('/clone/.autoskillit/temp/a.txt', 'w').write('x'); "
+            "open('/clone/.autoskillit/temp/b.txt', 'w').write('y'); "
+            "open('/clone/.autoskillit/temp/c.txt', 'w').write('z')"
+            '"'
+        )
+        result = extract_interpreter_write_paths(cmd)
+        assert result is not None
+        assert len(result) == 3
+        assert "/clone/.autoskillit/temp/a.txt" in result
+        assert "/clone/.autoskillit/temp/b.txt" in result
+        assert "/clone/.autoskillit/temp/c.txt" in result
+
+    def test_mixed_open_and_path_constructor(self):
+        cmd = (
+            'python3 -c "'
+            "open('/clone/a.txt', 'w').write('x'); "
+            "Path('/clone/b.txt').write_text('y')"
+            '"'
+        )
+        result = extract_interpreter_write_paths(cmd)
+        assert result is not None
+        assert len(result) == 2
+        assert "/clone/a.txt" in result
+        assert "/clone/b.txt" in result
+
+    def test_partial_dynamic_denies_all(self):
+        cmd = "python3 -c \"open('/clone/a.txt', 'w').write('x'); open(var, 'w').write('y')\""
+        assert extract_interpreter_write_paths(cmd) == []
+
+    def test_chained_write_text_on_open_not_double_counted(self):
+        cmd = "python3 -c \"open('/clone/temp/out.txt', 'w').write_text('data')\""
+        assert extract_interpreter_write_paths(cmd) == ["/clone/temp/out.txt"]
+
+    def test_chained_write_bytes_on_open_not_double_counted(self):
+        cmd = "python3 -c \"open('/clone/temp/out.bin', 'wb').write_bytes(b'data')\""
+        assert extract_interpreter_write_paths(cmd) == ["/clone/temp/out.bin"]
 
 
 class TestExtractRedirectTargets:

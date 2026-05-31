@@ -48,6 +48,7 @@ immediately.
 - Write files outside `{{AUTOSKILLIT_TEMP}}/download-data/`
 - Fabricate or hallucinate download results — only report actual command output
 - Attribute a missing or partial file to a completed download
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Read the `data_manifest` frontmatter section of the experiment plan
@@ -58,6 +59,7 @@ immediately.
 - Verify each download using the entry's `verification` criteria
 - Write the download report before emitting the verdict token
 - Spawn all subagents via `Agent(model="sonnet")`
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 

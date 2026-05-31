@@ -25,7 +25,7 @@ class TestSkillFormatCompliance:
     def test_skill_mds_collection_nonempty(self) -> None:
         assert _SKILL_MDS, "No bundled SKILL.md files found — check package installation"
 
-    @pytest.mark.parametrize("skill_name,content", _SKILL_MDS)
+    @pytest.mark.parametrize("skill_name,content", _SKILL_MDS, ids=[n for n, _ in _SKILL_MDS])
     def test_skill_md_has_valid_frontmatter(self, skill_name: str, content: str) -> None:
         fm = parse_frontmatter_content(content)
         errors = validate_skill_frontmatter(fm, skill_name)

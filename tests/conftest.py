@@ -72,38 +72,46 @@ class TimeoutTier:
     CHANNEL_B = 60  # Full session_log_dir + Channel B path
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _structlog_session_init():
+    """One-time structlog proxy cache flush per worker session.
+
+    Repairs module-level loggers cached at import time (before any fixture ran).
+    After this, cache_logger_on_first_use=False prevents new proxy caches from
+    forming, so the expensive _flush_structlog_proxy_caches() scan is not needed
+    per-test.
+    """
+    import structlog
+
+    structlog.configure(cache_logger_on_first_use=False)
+    _flush_structlog_proxy_caches()
+
+
 @pytest.fixture(autouse=True)
 def _structlog_to_null():
-    """Prevent structlog from writing to stdout in any test.
+    """Suppress structlog output in every test.
 
-    In the default state (before configure_logging() is called), structlog's
-    PrintLoggerFactory routes all log output to sys.stdout. Tests that use
-    capsys to inspect stdout are silently corrupted when a mock bypass causes
-    a real production function to log.
+    Lightweight per-test fixture. The expensive proxy cache flush runs once
+    per session via _structlog_session_init. Here we only re-configure (cheap)
+    and wrap the test in capture_logs().
 
-    Two-layer isolation strategy:
+    The session fixture sets cache_logger_on_first_use=False, preventing new
+    proxy caches. reset_defaults() in teardown restores structlog defaults
+    (including cache_logger_on_first_use=True), but no log calls occur between
+    teardown and the next test's setup, so no proxies cache in that window.
 
-    1. Primary: ``structlog.configure(cache_logger_on_first_use=False)`` — the
-       official structlog recommendation for test environments. Prevents proxy
-       caches from being populated during tests, so ``reset_defaults()`` is
-       sufficient after each test without manual cache surgery.
-
-    2. Secondary: ``_flush_structlog_proxy_caches()`` — repairs loggers that
-       were cached before this fixture ran (e.g., module-level loggers cached
-       at import time before the fixture had a chance to set
-       cache_logger_on_first_use=False).
-
-    Then wraps the test in ``capture_logs()`` to drop all log output.
-
-    Note: TestConfigureLogging in test_logging.py has its own class-scoped
-    ``_structlog_to_null`` no-op override and ``_reset_structlog`` fixture that
-    owns structlog state management for those tests.
+    Three test classes manage their own structlog state alongside this fixture:
+    TestConfigureLogging (tests/core/test_logging.py) overrides _structlog_to_null
+    with a no-op and manages state via its own _reset_structlog fixture.
+    TestParseSessionResult (tests/execution/test_session_parsing.py) and
+    TestReadTempOutputLogging (tests/execution/test_process_run.py) add separate
+    autouse _reset_structlog/_reset_structlog_config fixtures that run alongside
+    the conftest _structlog_to_null.
     """
     import structlog
     import structlog.testing
 
     structlog.configure(cache_logger_on_first_use=False)
-    _flush_structlog_proxy_caches()
     structlog.contextvars.clear_contextvars()
     with structlog.testing.capture_logs():
         yield

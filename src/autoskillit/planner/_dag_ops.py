@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections import deque
 from typing import Any
 
-import networkx as nx
-
 
 def topological_sort(wp_results: dict[str, dict[str, Any]]) -> list[str]:
     """Return topologically sorted WP IDs. Raises RuntimeError on cycle."""
@@ -36,6 +34,8 @@ def topological_sort(wp_results: dict[str, dict[str, Any]]) -> list[str]:
 
 def find_sccs(adjacency: dict[str, list[str]]) -> list[set[str]]:
     """Return all SCCs with size >= 2 using Tarjan's algorithm via NetworkX."""
+    import networkx as nx
+
     graph: nx.DiGraph = nx.DiGraph()
     for node, neighbors in adjacency.items():
         graph.add_node(node)

@@ -672,6 +672,9 @@ _REVIEWS_POST_RE: re.Pattern[str] = re.compile(
 )
 
 
+_LINE_CONTINUATION_RE: re.Pattern[str] = re.compile(r"\\\n\s*")
+
+
 @semantic_rule(
     name="reviews-post-requires-input-flag",
     severity=Severity.ERROR,
@@ -701,7 +704,7 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
         except OSError:
             continue
         for subsection in _extract_subsections(content):
-            collapsed = re.sub(r"\\\n\s*", " ", subsection)
+            collapsed = _LINE_CONTINUATION_RE.sub(" ", subsection)
             if _REVIEWS_POST_RE.search(collapsed) and "--input -" not in collapsed:
                 findings.append(
                     RuleFinding(

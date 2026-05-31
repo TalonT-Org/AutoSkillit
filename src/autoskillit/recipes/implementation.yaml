@@ -854,7 +854,9 @@ steps:
       output_dir: '.'
       step_name: compose_pr
     capture:
-      pr_url: ${{ result.pr_url }}
+      pr_url:
+        from: ${{ result.pr_url }}
+        type: optional_string
     on_result:
     - when: ${{ result.pr_url }}
       route: guard_pr_url

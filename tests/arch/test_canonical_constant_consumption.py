@@ -33,7 +33,7 @@ def _has_production_import(src_root: Path, constant_name: str, definition_file: 
     for py_file in src_root.rglob("*.py"):
         if py_file == definition_file:
             continue
-        if "test" in py_file.name:
+        if py_file.name.startswith("test_"):
             continue
         try:
             tree = ast.parse(py_file.read_text())

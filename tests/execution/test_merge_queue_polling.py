@@ -897,3 +897,140 @@ class TestMergeGroupDropInternalReenqueue:
         assert result["success"] is False
         assert result["pr_state"] == "dropped_merge_group_ci"
         assert len(enqueue_calls) == 0
+
+    @pytest.mark.anyio
+    async def test_wait_resets_deadline_after_internal_reenqueue(self):
+        """Deadline must be reset after internal re-enqueue so polling continues."""
+        import autoskillit.execution.merge_queue as _mq
+
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            if call_count == 2:
+                return _queue_state(
+                    in_queue=False,
+                    checks_state="SUCCESS",
+                    state="OPEN",
+                    mergeable="MERGEABLE",
+                    merge_state_status="CLEAN",
+                    auto_merge_present=False,
+                )
+            if call_count == 3:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            return _queue_state(merged=True)
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+
+        async def _mock_enqueue(*a, **kw):
+            return {"success": True, "pr_number": 42, "enrollment_method": "auto_merge"}
+
+        watcher.enqueue = _mock_enqueue  # type: ignore[method-assign]
+
+        mono_call = 0
+        reenqueue_happened = False
+
+        def _monotonic():
+            nonlocal mono_call, reenqueue_happened
+            mono_call += 1
+            if mono_call <= 2:
+                return 0.0
+            if reenqueue_happened:
+                return 150.0
+            return 99.0
+
+        orig_enqueue = watcher.enqueue
+
+        async def _tracked_enqueue(*a, **kw):
+            nonlocal reenqueue_happened
+            reenqueue_happened = True
+            return await orig_enqueue(*a, **kw)
+
+        watcher.enqueue = _tracked_enqueue  # type: ignore[method-assign]
+
+        with (
+            patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock),
+            patch(
+                "autoskillit.execution.merge_queue.time.monotonic",
+                side_effect=_monotonic,
+            ),
+            patch.object(
+                _mq,
+                "_query_merge_group_ci",
+                new_callable=AsyncMock,
+                return_value="FAILURE",
+            ),
+        ):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                timeout_seconds=100,
+                max_merge_group_drops=1,
+                merge_group_drop_backoff=0.01,
+                not_in_queue_confirmation_cycles=1,
+            )
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+
+    @pytest.mark.anyio
+    async def test_wait_emits_progress_notifications(self):
+        """progress_callback must be called when 60s has elapsed between polls."""
+        import autoskillit.execution.merge_queue as _mq
+
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            return _queue_state(merged=True)
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+
+        progress_cb = AsyncMock()
+
+        mono_call = 0
+
+        def _monotonic():
+            nonlocal mono_call
+            mono_call += 1
+            if mono_call <= 2:
+                return 0.0
+            if mono_call <= 4:
+                return 1.0
+            if mono_call <= 8:
+                return 70.0
+            return 71.0
+
+        with (
+            patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock),
+            patch(
+                "autoskillit.execution.merge_queue.time.monotonic",
+                side_effect=_monotonic,
+            ),
+            patch.object(
+                _mq,
+                "_query_merge_group_ci",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                timeout_seconds=1000,
+                progress_callback=progress_cb,
+                not_in_queue_confirmation_cycles=1,
+            )
+
+        assert result["success"] is True
+        assert progress_cb.await_count >= 1

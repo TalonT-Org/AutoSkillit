@@ -720,6 +720,25 @@ def test_review_research_pr_step4_uses_valid_diff_lines():
     assert "VALID_DIFF_LINES" in step4_section
 
 
+def test_resolve_review_batch_payload_excludes_subject_type():
+    """resolve-review batch reviews POST must NOT include subject_type.
+
+    The batch Reviews API (POST /repos/{owner}/{repo}/pulls/{N}/reviews)
+    does not accept subject_type in the comments array. Including it
+    causes HTTP 422.
+    """
+    text = RESOLVE_SKILL_TEXT
+    step15_start = text.find("### Step 1.5")
+    step2_start = text.find("### Step 2")
+    assert step15_start != -1, "resolve-review must have Step 1.5"
+    assert step2_start != -1, "resolve-review must have Step 2"
+    step15_section = text[step15_start:step2_start]
+    assert "subject_type" not in step15_section, (
+        "resolve-review Step 1.5 batch reviews POST must NOT include 'subject_type'. "
+        "The batch Reviews API does not accept this field — it causes HTTP 422."
+    )
+
+
 def test_resolve_research_review_handles_null_line_file_level_threads():
     """resolve-research-review must handle null-line file-level comment threads gracefully."""
     text = RESOLVE_RESEARCH_SKILL_TEXT

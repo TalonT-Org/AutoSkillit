@@ -903,3 +903,60 @@ def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_r
         f"{recipe.name}; got no such finding among: "
         f"{[(f.step_name, f.severity, f.message[:80]) for f in cycle_findings]}"
     )
+
+
+def test_unbounded_cycle_suppressed_when_dropped_merge_group_ci_has_guard(any_recipe) -> None:
+    """unbounded-cycle must NOT fire for dropped_merge_group_ci when max_merge_group_drops >= 1."""
+    from autoskillit.core.types import Severity
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    findings = run_semantic_rules(any_recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    dmgci_error_findings = [
+        f
+        for f in cycle_findings
+        if f.severity == Severity.ERROR and "dropped_merge_group_ci" in f.message
+    ]
+    assert not dmgci_error_findings, (
+        f"unbounded-cycle must NOT fire ERROR for guarded dropped_merge_group_ci branch in "
+        f"{any_recipe.name} (max_merge_group_drops >= 1); got: "
+        f"{[(f.step_name, f.message[:80]) for f in dmgci_error_findings]}"
+    )
+
+
+def test_dropped_merge_group_ci_reenqueue_guard_fires_without_guard(any_recipe) -> None:
+    """Semantic rule I9 must fire ERROR when max_merge_group_drops is absent."""
+    import copy
+
+    from autoskillit.core.types import Severity
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    recipe = copy.deepcopy(any_recipe)
+    for step in recipe.steps.values():
+        if step.tool == "wait_for_merge_queue" and step.with_args:
+            step.with_args.pop("max_merge_group_drops", None)
+
+    findings = run_semantic_rules(recipe)
+    i9_findings = [
+        f
+        for f in findings
+        if f.rule == "dropped-merge-group-ci-unguarded-reenqueue-loop"
+        and f.severity == Severity.ERROR
+    ]
+    assert i9_findings, (
+        f"Rule I9 must fire ERROR for unguarded dropped_merge_group_ci in {recipe.name}"
+    )
+
+
+def test_dropped_merge_group_ci_reenqueue_guard_suppressed_with_guard(any_recipe) -> None:
+    """Semantic rule I9 must NOT fire when max_merge_group_drops >= 1."""
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    findings = run_semantic_rules(any_recipe)
+    i9_findings = [
+        f for f in findings if f.rule == "dropped-merge-group-ci-unguarded-reenqueue-loop"
+    ]
+    assert not i9_findings, (
+        f"Rule I9 must NOT fire for guarded recipe {any_recipe.name}; got: "
+        f"{[(f.step_name, f.severity, f.message[:80]) for f in i9_findings]}"
+    )

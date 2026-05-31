@@ -15,6 +15,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_audit_arch_selfvalidation_contracts.py` | Audit-arch skill self-validation contract tests |
 | `test_audit_impl_diff_discipline.py` | Structural guards for audit-impl diff discipline: Step 2 variable usage, Step 3 data source prohibition, diff size guard |
 | `test_audit_review_decisions_contracts.py` | Contract tests for the audit-review-decisions skill SKILL.md |
+| `test_compose_pr.py` | Guard tests for compose-pr/SKILL.md template structure |
 | `test_conflict_resolution_guards.py` | Structural guards for conflict resolution safeguards in SKILL.md files |
 | `test_deletion_regression_guards.py` | Structural guards for deletion regression detection in merge-pr and review-pr skills |
 | `test_dry_walkthrough_contracts.py` | Structural contracts for the dry-walkthrough historical regression check step |

@@ -69,3 +69,4 @@ def test_scope_mixed_script_and_src_py(tmp_path: Path) -> None:
     assert isinstance(result, set)
     names = {p.name for p in result}
     assert "infra" in names
+    assert "core" in names

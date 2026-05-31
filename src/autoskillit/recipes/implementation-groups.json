@@ -2303,7 +2303,7 @@
     },
     "done": {
       "action": "stop",
-      "message": "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged. Emit the L3 result sentinel JSON block now with success=true. Example sentinel: {\"success\": true, \"reason\": \"implementation-groups complete\"}"
+      "message": "Implementation pipeline complete. All groups/tasks have been planned, implemented, tested, and merged. Emit the L3 result sentinel JSON block now with success=true. Example sentinel: {\"success\": true, \"reason\": \"implementation_groups_complete\"}"
     },
     "escalate_stop": {
       "action": "stop",

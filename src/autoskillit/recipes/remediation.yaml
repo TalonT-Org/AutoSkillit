@@ -384,13 +384,13 @@ steps:
       issue_url: ${{ inputs.issue_url }}
       target_branch: ${{ inputs.base_branch }}
       close_issue: 'true'
-    on_success: register_clone_success
-    on_failure: register_clone_success
+    on_success: register_clone_no_changes
+    on_failure: register_clone_no_changes
     note: 'Zero changes detected post-implement. Passes target_branch so release_issue
       stages on non-default branches (base_branch != promotion_target) or closes on
       the promotion target branch. close_issue is silently ignored by release_issue
       when staging applies (Branch 1 takes precedence over Branch 3). Routes to
-      register_clone_success for clone cleanup and diagnostics.'
+      register_clone_no_changes for clone cleanup and distinct terminal.'
   test:
     tool: test_check
     with:
@@ -872,11 +872,11 @@ steps:
     with:
       callable: autoskillit.smoke_utils.close_issue_already_done
       issue_url: ${{ inputs.issue_url }}
-    on_success: register_clone_success
-    on_failure: register_clone_success
+    on_success: register_clone_already_done
+    on_failure: register_clone_already_done
     note: 'Zero commits ahead of base means the feature is already merged. Remove
       in-progress label, close issue with "already implemented" comment, and route
-      to clone cleanup.
+      to clone cleanup with distinct terminal.
 
       '
   push:
@@ -2339,11 +2339,79 @@ steps:
       routing.
 
       '
+  register_clone_no_changes:
+    description: Register clone as cleanup candidate (zero-change path)
+    tool: register_clone_status
+    with:
+      clone_path: ${{ context.work_dir }}
+      status: success
+      step_name: register_clone_no_changes
+    on_success: run_diagnostic_no_changes
+    on_failure: run_diagnostic_no_changes
+  run_diagnostic_no_changes:
+    description: Run post-pipeline diagnostic analysis (zero-change path)
+    tool: run_skill
+    model: ''
+    stale_threshold: 2400
+    optional: true
+    skip_when_false: inputs.post_run_diagnostics
+    with:
+      skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
+        --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir
+        }}
+      cwd: ${{ context.work_dir }}
+      step_name: post_run_diagnostics
+    on_success: done_no_changes
+    on_failure: done_no_changes
+    on_context_limit: done_no_changes
+    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
+      routing.
+
+      '
+  register_clone_already_done:
+    description: Register clone as cleanup candidate (already-done path)
+    tool: register_clone_status
+    with:
+      clone_path: ${{ context.work_dir }}
+      status: success
+      step_name: register_clone_already_done
+    on_success: run_diagnostic_already_done
+    on_failure: run_diagnostic_already_done
+  run_diagnostic_already_done:
+    description: Run post-pipeline diagnostic analysis (already-done path)
+    tool: run_skill
+    model: ''
+    stale_threshold: 2400
+    optional: true
+    skip_when_false: inputs.post_run_diagnostics
+    with:
+      skill_command: /autoskillit:analyze-pipeline-health ${{ inputs.kitchen_id }}
+        --dispatch-id=${{ inputs.dispatch_id }} --diagnostics-log-dir=${{ inputs.diagnostics_log_dir
+        }}
+      cwd: ${{ context.work_dir }}
+      step_name: post_run_diagnostics
+    on_success: done_already_done
+    on_failure: done_already_done
+    on_context_limit: done_already_done
+    note: 'Execute this diagnostic step. Failures are logged but do not alter pipeline
+      routing.
+
+      '
   done:
     action: stop
     message: 'Investigation complete. Fix implemented and PR opened. Emit the L3 result
       sentinel JSON block now with success=true. Example sentinel: {"success": true,
-      "reason": "remediation complete"}'
+      "reason": "remediation_complete"}'
+  done_no_changes:
+    action: stop
+    message: 'Pipeline completed with zero changes — the implement step produced no
+      commits. Emit the L3 result sentinel JSON block now with success=true and
+      reason="no_changes". Example sentinel: {"success": true, "reason": "no_changes"}'
+  done_already_done:
+    action: stop
+    message: 'Pipeline completed — changes were already merged by a prior run. Emit
+      the L3 result sentinel JSON block now with success=true and reason="already_done".
+      Example sentinel: {"success": true, "reason": "already_done"}'
   escalate_stop:
     action: stop
     message: 'Human intervention needed. Review the latest output for details. Emit

@@ -94,16 +94,45 @@ def test_close_issue_no_changes_passes_target_branch() -> None:
         )
 
 
-def test_close_issue_no_changes_routes_to_register_clone_success() -> None:
-    """close_issue_no_changes must route to register_clone_success, not bare done."""
+def test_close_issue_no_changes_routes_to_register_clone_no_changes() -> None:
+    """close_issue_no_changes must route to register_clone_no_changes for distinct terminal."""
     for name in ("implementation", "remediation"):
         data = _load(name)
         step = data["steps"]["close_issue_no_changes"]
-        assert step.get("on_success") == "register_clone_success", (
-            f"{name}: close_issue_no_changes.on_success must be 'register_clone_success', "
+        assert step.get("on_success") == "register_clone_no_changes", (
+            f"{name}: close_issue_no_changes.on_success must be 'register_clone_no_changes', "
             f"got {step.get('on_success')!r}"
         )
-        assert step.get("on_failure") == "register_clone_success", (
-            f"{name}: close_issue_no_changes.on_failure must be 'register_clone_success', "
+        assert step.get("on_failure") == "register_clone_no_changes", (
+            f"{name}: close_issue_no_changes.on_failure must be 'register_clone_no_changes', "
             f"got {step.get('on_failure')!r}"
+        )
+
+
+def test_close_issue_already_done_routes_to_distinct_terminal() -> None:
+    """close_issue_already_done must route to register_clone_already_done for distinct terminal."""
+    for name in ("implementation", "remediation"):
+        data = _load(name)
+        step = data["steps"]["close_issue_already_done"]
+        assert step.get("on_success") == "register_clone_already_done", (
+            f"{name}: close_issue_already_done.on_success must be 'register_clone_already_done', "
+            f"got {step.get('on_success')!r}"
+        )
+        assert step.get("on_failure") == "register_clone_already_done", (
+            f"{name}: close_issue_already_done.on_failure must be 'register_clone_already_done', "
+            f"got {step.get('on_failure')!r}"
+        )
+
+
+def test_done_step_message_says_implementation_complete() -> None:
+    """done step must use underscore-convention reason string."""
+    expected = {
+        "implementation": "implementation_complete",
+        "remediation": "remediation_complete",
+    }
+    for name, reason in expected.items():
+        data = _load(name)
+        step = data["steps"]["done"]
+        assert f'"{reason}"' in step["message"], (
+            f"{name}: done.message must contain '\"{reason}\"', got: {step['message']!r}"
         )

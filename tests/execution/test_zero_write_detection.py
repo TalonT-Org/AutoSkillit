@@ -989,6 +989,81 @@ class TestSessionScopedGitDetection:
         )
 
 
+class TestDetectSessionGitWritesUnit:
+    """Unit tests for _detect_session_git_writes (T-ZW-GIT-SESSION-*)."""
+
+    def test_empty_pre_sha_returns_false(self, tmp_path: Path) -> None:
+        """T-ZW-GIT-SESSION-1: empty baseline is safe default (non-git dir or capture error)."""
+        from autoskillit.execution.headless._headless_git import _detect_session_git_writes
+
+        result = _detect_session_git_writes(str(tmp_path), "")
+        assert result is False
+
+    def test_same_sha_returns_false(self, tmp_path: Path) -> None:
+        """T-ZW-GIT-SESSION-2: pre and post SHA identical → no session commits → False."""
+        import subprocess
+
+        from autoskillit.execution.headless._headless_git import (
+            _capture_git_head_sha,
+            _detect_session_git_writes,
+        )
+
+        repo = tmp_path / "repo"
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        for cmd in [
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+
+        pre_sha = _capture_git_head_sha(str(repo))
+        assert pre_sha, "should have captured a valid SHA"
+
+        result = _detect_session_git_writes(str(repo), pre_sha)
+        assert result is False
+
+    def test_different_sha_returns_true(self, tmp_path: Path) -> None:
+        """T-ZW-GIT-SESSION-3: SHA moved after a new commit → True."""
+        import subprocess
+
+        from autoskillit.execution.headless._headless_git import (
+            _capture_git_head_sha,
+            _detect_session_git_writes,
+        )
+
+        repo = tmp_path / "repo"
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        for cmd in [
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+
+        pre_sha = _capture_git_head_sha(str(repo))
+        assert pre_sha, "should have captured a valid SHA"
+
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "session-commit"],
+            check=True,
+            capture_output=True,
+        )
+
+        result = _detect_session_git_writes(str(repo), pre_sha)
+        assert result is True
+
+    def test_post_capture_error_returns_false(self, tmp_path: Path) -> None:
+        """T-ZW-GIT-SESSION-4: valid pre_sha but post-capture fails (non-git cwd) → False."""
+        from autoskillit.execution.headless._headless_git import _detect_session_git_writes
+
+        non_git = tmp_path / "not_a_git_repo"
+        non_git.mkdir()
+
+        result = _detect_session_git_writes(str(non_git), "abc123def456deadbeef")
+        assert result is False
+
+
 class TestWriteExpectedWhenPatternSync:
     """write_expected_when patterns in tests must match skill_contracts.yaml."""
 

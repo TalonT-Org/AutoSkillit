@@ -67,6 +67,21 @@ def _compute_loc_changed(cwd: str, pre_sha: str) -> tuple[int, int]:
         return 0, 0
 
 
+def _detect_session_git_writes(cwd: str, pre_session_sha: str) -> bool:
+    """Return True iff the session committed new changes to the repo.
+
+    Compares pre-session HEAD SHA to post-session HEAD SHA; if they differ
+    the session made commits. Returns False when pre_session_sha is empty
+    (non-git dir or capture error at session start — safe default).
+    """
+    if not pre_session_sha:
+        return False
+    post_sha = _capture_git_head_sha(cwd)
+    if not post_sha:
+        return False
+    return post_sha != pre_session_sha
+
+
 def _detect_branch_divergence(cwd: str) -> bool:
     """Check if current branch has commits ahead of the remote default branch.
 

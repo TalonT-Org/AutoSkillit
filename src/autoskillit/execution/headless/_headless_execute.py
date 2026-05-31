@@ -49,7 +49,7 @@ from autoskillit.execution.headless._headless_evidence import (
 )
 from autoskillit.execution.headless._headless_git import (
     _capture_git_head_sha,
-    _detect_branch_divergence,
+    _detect_session_git_writes,
 )
 from autoskillit.execution.headless._headless_helpers import (
     _compute_post_session_metrics,
@@ -223,6 +223,10 @@ async def _execute_claude_headless(
             except OSError:
                 logger.warning("watch_dir_pre_scan_failed", watch_dir=str(_wd), exc_info=True)
                 _temp_snapshots_pre[_wd] = None
+        else:
+            # {} sentinel: dir missing at pre-scan. Distinct from None (OSError): {} allows
+            # post-scan comparison so session-created files are detected as writes.
+            _temp_snapshots_pre[_wd] = {}
 
     _pre_session_sha = _capture_git_head_sha(cwd)
     _result: SubprocessResult | None = None
@@ -389,7 +393,7 @@ async def _execute_claude_headless(
 
         _git_writes_detected = False
         if is_in_git_repo(Path(cwd)):
-            _git_writes_detected = _detect_branch_divergence(cwd)
+            _git_writes_detected = _detect_session_git_writes(cwd, _pre_session_sha)
 
         audit_count_before = len(ctx.audit.get_report())
         _supports_fmt = _step_backend.capabilities.supports_claude_format_stdout

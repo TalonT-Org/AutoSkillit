@@ -7,7 +7,7 @@ Sub-package: tools/ (see tools/CLAUDE.md).
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Re-exports `mcp`, `ToolContext`, `make_context`; applies `mcp.disable(tags={'kitchen'})` at import |
+| `__init__.py` | Re-exports `mcp`, `ToolContext`, `make_context`; disables all `ALL_VISIBILITY_TAGS` at import |
 | `_editable_guard.py` | Pre-deletion editable install guard for `perform_merge()` — scans site-packages for PEP 610 direct_url.json links into the worktree |
 | `_factory.py` | Composition root — `make_context()` is the sole legal instantiation point for all 23 service contracts |
 | `_guards.py` | Orchestration-level gate functions for MCP tool access control |
@@ -48,10 +48,7 @@ Controls whether the tool appears in `tools/list` (whether the agent can see it)
   - **ORCHESTRATOR + HEADLESS**: `kitchen` (or `kitchen-core` + pack tags) revealed
   - **SKILL + HEADLESS**: `headless`-tagged tools revealed (`test_check`); with `HEADLESS_AUTO_GATE=1`, `kitchen-core` also revealed
   - **Interactive** (no HEADLESS): nothing pre-revealed; `open_kitchen` reveals `kitchen` tag
-- Tags not disabled at startup (`kitchen-core`, `fleet-dispatch`, `fleet`, `headless`) remain
-  visible unless a session-type or feature-gate transform explicitly disables them
-- `ALL_VISIBILITY_TAGS` in `core/types/_type_constants.py` is the canonical set:
-  `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}`
+- All tags in `ALL_VISIBILITY_TAGS` are disabled at startup via `for tag in sorted(ALL_VISIBILITY_TAGS): mcp.disable(tags={tag})`. Session-type dispatch and `open_kitchen` selectively re-enable per session. `ALL_VISIBILITY_TAGS` is defined in `core/types/_type_constants_registries.py`.
 
 ### Application-Gate (Python layer)
 
@@ -64,11 +61,7 @@ Controls whether the tool succeeds when called (independent of visibility):
 
 ### The Anomalies
 
-1. **Fleet-dispatch tools are tag-visible but application-gated.** `fetch_github_issue`, `get_issue_title`,
-   `list_recipes`, and `load_recipe` carry the `fleet-dispatch` tag (not `kitchen`), so they are
-   NOT hidden by `mcp.disable(tags={"kitchen"})`. In interactive sessions they appear in `tools/list`
-   without `open_kitchen`. But they call `_require_enabled()` internally — an agent that sees them
-   and calls them gets an unexpected gate error.
+1. **Fleet-dispatch tools are hidden at startup (via `ALL_VISIBILITY_TAGS` loop) and revealed only for FLEET+dispatch sessions.** Application-gate (`_require_enabled()`) provides defense-in-depth.
 
 2. **`test_check` is tag-hidden but NOT application-gated.** It carries the `kitchen`, `kitchen-core`,
    `headless`, and `autoskillit` tags (hidden at startup), but does NOT call `_require_enabled()`. Headless skill sessions need
@@ -80,8 +73,8 @@ Controls whether the tool succeeds when called (independent of visibility):
 | Category | Tag(s) | Hidden at startup? | Application-gated? | Example tools |
 |----------|--------|-------------------|--------------------|--------------|
 | Standard kitchen | `kitchen` | Yes | Yes (`_require_enabled`) | `run_cmd`, `run_skill`, `report_bug` |
-| Fleet tool | `fleet`, `kitchen-core` | No (no `kitchen` tag) | Yes (`_require_fleet` or `_require_enabled`) | `dispatch_food_truck`, `record_gate_dispatch` |
-| Fleet-dispatch tool | `fleet-dispatch` (± `kitchen-core`) | No (no `kitchen` tag) | Yes (`_require_enabled`) | `fetch_github_issue`, `list_recipes` |
+| Fleet tool | `fleet`, `kitchen-core` | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_fleet` or `_require_enabled`) | `dispatch_food_truck`, `record_gate_dispatch` |
+| Fleet-dispatch tool | `fleet-dispatch` (± `kitchen-core`) | Yes (via `ALL_VISIBILITY_TAGS` loop) | Yes (`_require_enabled`) | `fetch_github_issue`, `list_recipes` |
 | Headless-exempt | `kitchen`, `headless` | Yes | No | `test_check` |
 | Free-range | _(none of the above)_ | No | No | `open_kitchen`, `close_kitchen` |
 
@@ -94,4 +87,4 @@ The canonical tool sets are in `core/types/_type_constants.py`:
 - `HEADLESS_TOOLS` — `{"test_check"}` — kitchen-tagged but not application-gated
 - `FLEET_TOOLS` — fleet-session-only tools
 - `FLEET_DISPATCH_TOOLS` — fleet-dispatch-mode tools (always tag-visible, application-gated)
-- `ALL_VISIBILITY_TAGS` — `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core"}`
+- `ALL_VISIBILITY_TAGS` — `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core", "plan-review"}`

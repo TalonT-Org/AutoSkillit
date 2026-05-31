@@ -65,7 +65,13 @@ __all__ = [
 # Import all tool sub-modules to trigger @mcp.tool() registration.
 # These imports must come AFTER mcp, _get_ctx, _get_config are defined
 # because tool modules import `mcp` from this package at import time.
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS  # noqa: E402, F401
+# All conditional visibility tags start disabled. Session-type dispatch and
+# open_kitchen selectively re-enable per session. Must appear after all tool
+# module imports so the registered tools are in place.
+from autoskillit.core import (  # noqa: E402
+    ALL_VISIBILITY_TAGS,
+    PIPELINE_FORBIDDEN_TOOLS,  # noqa: F401
+)
 from autoskillit.server import (  # noqa: E402, F401
     _misc,
     _notify,
@@ -128,10 +134,8 @@ from autoskillit.server.tools import (  # noqa: E402, F401
 )
 from autoskillit.server.tools.tools_kitchen import _build_tool_category_listing  # noqa: E402, F401
 
-# Apply global visibility transform: all sessions start with kitchen tools hidden.
-# Must appear after all tool module imports so the registered tools are in place.
-mcp.disable(tags={"kitchen"})
-mcp.disable(tags={"plan-review"})
+for tag in sorted(ALL_VISIBILITY_TAGS):
+    mcp.disable(tags={tag})
 
 # Wire-format sanitization: strip fields that trigger Claude Code #25081
 # (silent full-tool-list rejection when outputSchema/annotations are present).

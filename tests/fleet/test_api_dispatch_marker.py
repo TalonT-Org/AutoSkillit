@@ -1,4 +1,4 @@
-"""Tests for _run_dispatch marker lifecycle and _touch_dispatch_marker heartbeat."""
+"""Tests for _run_dispatch marker lifecycle via execution_marker context manager."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from pathlib import Path
 import anyio
 import pytest
 
-from autoskillit.fleet._api import _run_dispatch, _touch_dispatch_marker
+from autoskillit.core._execution_marker import _touch_marker
+from autoskillit.fleet._api import _run_dispatch
 from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher, _setup_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium, pytest.mark.feature("fleet")]
@@ -25,7 +26,7 @@ async def test_marker_created_before_dispatch(tool_ctx, monkeypatch, tmp_path: P
     )
 
     async def _asserting_dispatch(**_kw):
-        found = list(marker_dir.glob("dispatch-in-progress--*.marker"))
+        found = list(marker_dir.glob("*-in-progress-*.marker"))
         assert len(found) == 1, f"Expected 1 marker, found {len(found)}"
         raise asyncio.CancelledError
 
@@ -67,7 +68,7 @@ async def test_marker_deleted_after_success(tool_ctx, monkeypatch, tmp_path: Pat
         quota_refresher=_noop_quota_refresher,
     )
 
-    remaining = list(marker_dir.glob("dispatch-in-progress--*.marker"))
+    remaining = list(marker_dir.glob("*-in-progress-*.marker"))
     assert remaining == [], f"Expected no marker files, found {remaining}"
 
 
@@ -101,7 +102,7 @@ async def test_marker_deleted_after_exception(tool_ctx, monkeypatch, tmp_path: P
     except* RuntimeError:
         pass
 
-    remaining = list(marker_dir.glob("dispatch-in-progress--*.marker"))
+    remaining = list(marker_dir.glob("*-in-progress-*.marker"))
     assert remaining == [], f"Expected no marker files after exception, found {remaining}"
 
 
@@ -114,7 +115,7 @@ async def test_heartbeat_refreshes_mtime(tmp_path: Path) -> None:
     trigger = anyio.Event()
 
     async with anyio.create_task_group() as tg:
-        tg.start_soon(_touch_dispatch_marker, marker_path, 0.05, trigger)
+        tg.start_soon(_touch_marker, marker_path, 0.05, trigger)
 
         async def _stop():
             await anyio.sleep(2.1)

@@ -4,6 +4,7 @@ from ._cmd_runner import CmdRunner as CmdRunner
 from ._cmd_runner import default_cmd_runner as default_cmd_runner
 from ._cmd_runner import run_gh as run_gh
 from ._cmd_runner import run_git as run_git
+from ._execution_marker import execution_marker as execution_marker
 from ._install_detect import DirectUrlInfo as DirectUrlInfo
 from ._install_detect import _is_release_tag as _is_release_tag
 from ._install_detect import _is_stable_track as _is_stable_track

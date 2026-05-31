@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 
 import anyio
@@ -32,7 +33,6 @@ class TestSessionLogMonitor:
     @pytest.mark.anyio
     async def test_session_log_monitor_detects_completion(self, tmp_path):
         """Session log with completion marker in assistant record returns 'completion'."""
-        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
@@ -86,7 +86,6 @@ class TestSessionLogMonitor:
     @pytest.mark.anyio
     async def test_session_log_monitor_detects_staleness(self, tmp_path):
         """Session log that stops being written to returns 'stale'."""
-        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
@@ -116,7 +115,6 @@ class TestSessionLogMonitor:
     @pytest.mark.anyio
     async def test_staleness_resets_on_activity(self, tmp_path):
         """Session log that keeps getting written to does not fire staleness."""
-        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
@@ -175,7 +173,6 @@ class TestSessionLogMonitor:
         the completion marker) into a queue-operation/enqueue record at byte 0.
         The monitor should ignore it. Only an assistant-type record triggers.
         """
-        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
@@ -250,7 +247,6 @@ class TestSessionLogMonitor:
 
         Only record 3 should trigger completion.
         """
-        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
@@ -330,7 +326,6 @@ class TestSessionLogMonitorSessionId:
     @pytest.mark.anyio
     async def test_session_log_monitor_returns_session_id_from_filename(self, tmp_path):
         """_session_log_monitor returns the JSONL filename stem as session_id."""
-        import json
 
         session_uuid = "d9adcc78-3098-4c3e-8720-ddcf3da35fff"
         jsonl_file = tmp_path / f"{session_uuid}.jsonl"
@@ -372,7 +367,6 @@ class TestSessionLogMonitorSessionId:
     @pytest.mark.anyio
     async def test_session_log_monitor_returns_session_id_on_stale(self, tmp_path):
         """Even stale sessions capture the session ID from the discovered file."""
-        import json
 
         session_uuid = "abc12345-dead-beef-cafe-123456789abc"
         jsonl_file = tmp_path / f"{session_uuid}.jsonl"
@@ -415,7 +409,6 @@ class TestSessionLogMonitorSessionId:
     @pytest.mark.anyio
     async def test_session_log_monitor_status_is_channel_b_status_enum(self, tmp_path):
         """SessionMonitorResult.status is a ChannelBStatus enum member."""
-        import json
 
         from autoskillit.core.types import ChannelBStatus
 
@@ -460,7 +453,6 @@ class TestWatchSessionLogSessionId:
     @pytest.mark.anyio
     async def test_watch_session_log_deposits_session_id(self, tmp_path):
         """_watch_session_log writes channel_b_session_id to the accumulator."""
-        import json
 
         acc = RaceAccumulator()
         trigger = anyio.Event()
@@ -507,7 +499,6 @@ class TestSessionIdBasedSelection:
     @pytest.mark.anyio
     async def test_session_id_selects_correct_file_over_newer(self, tmp_path):
         """When expected_session_id is provided, selects matching file regardless of ctime."""
-        import json
 
         session_a = "session-aaa-target"
         session_b = "session-bbb-newer"
@@ -558,7 +549,6 @@ class TestSessionIdBasedSelection:
     @pytest.mark.anyio
     async def test_session_id_falls_back_to_recency_when_no_match(self, tmp_path):
         """When expected_session_id doesn't match any file, falls back to newest."""
-        import json
 
         session_b = "session-bbb-only"
         file_b = tmp_path / f"{session_b}.jsonl"
@@ -630,7 +620,6 @@ class TestResumeBoundary:
         Reproduces the resume-boundary false-fire: on `claude --resume`, the JSONL
         file already contains the completion marker from the prior session.
         """
-        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
@@ -698,7 +687,6 @@ class TestResumeBoundary:
     async def test_monitor_fires_on_new_marker_after_preexisting_content(self, tmp_path):
         """Phase 2 fires on a new marker written after monitoring starts,
         even when the file has substantial pre-existing content."""
-        import json
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
@@ -756,9 +744,7 @@ class TestResumeBoundary:
 
     @pytest.mark.anyio
     async def test_phase2_no_spurious_read_on_preexisting_content(self, tmp_path):
-        """When file has pre-existing content and no new writes occur,
-        Phase 2 should go stale without ever triggering a content read."""
-        import json
+        """Pre-existing content with no new writes triggers STALE within threshold."""
 
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()

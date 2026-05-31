@@ -109,7 +109,7 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
     if agent_result.error:
         errors.append(agent_result.error)
 
-    api_error_status: int | None = _CODEX_ERROR_CODE_API_STATUS.get(error_code) or None
+    api_error_status: int | None = _CODEX_ERROR_CODE_API_STATUS.get(error_code)
 
     token_usage = raw.get("canonical_token_usage") or raw.get("token_usage")
 

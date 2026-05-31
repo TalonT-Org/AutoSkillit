@@ -156,18 +156,18 @@ def _has_active_child_processes(pid: int) -> bool:
     return active
 
 
-def _has_active_dispatch_marker(
+def _has_active_execution_marker(
     marker_dir: Path,
     session_id: str | None = None,
     max_marker_age: float = 60.0,
 ) -> bool:
-    """Return True if any dispatch-in-progress marker was touched within max_marker_age seconds."""
+    """Return True if any execution-in-progress marker was touched within max_marker_age secs."""
     try:
         now = time.time()
         pattern = (
-            f"dispatch-in-progress-{session_id}-*.marker"
+            f"*-in-progress-{session_id}-*.marker"
             if session_id is not None
-            else "dispatch-in-progress-*.marker"
+            else "*-in-progress-*.marker"
         )
         for p in marker_dir.glob(pattern):
             try:
@@ -390,7 +390,7 @@ async def _session_log_monitor(
                         elapsed,
                         pid,
                     )
-                elif marker_dir is not None and _has_active_dispatch_marker(
+                elif marker_dir is not None and _has_active_execution_marker(
                     marker_dir, session_id=caller_session_id
                 ):
                     if suppression_start is None:

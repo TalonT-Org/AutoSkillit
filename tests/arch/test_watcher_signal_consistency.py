@@ -1,4 +1,4 @@
-"""Structural guard: all process watchers must call _has_active_dispatch_marker."""
+"""Structural guard: all process watchers must call _has_active_execution_marker."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _PROCESS_RACE = Path("src/autoskillit/execution/process/_process_race.py")
 _PROCESS_MONITOR = Path("src/autoskillit/execution/process/_process_monitor.py")
 
-_WATCHERS_THAT_MUST_CHECK_DISPATCH_MARKER = frozenset(
+_WATCHERS_THAT_MUST_CHECK_EXECUTION_MARKER = frozenset(
     {
         "_watch_child_activity",
         "_session_log_monitor",
@@ -37,13 +37,15 @@ def _functions_calling_predicate(source_path: Path, predicate: str) -> set[str]:
     return result
 
 
-@pytest.mark.parametrize("watcher", sorted(_WATCHERS_THAT_MUST_CHECK_DISPATCH_MARKER))
-def test_watcher_calls_has_active_dispatch_marker(watcher: str) -> None:
-    """Each watcher in the set must call _has_active_dispatch_marker."""
-    callers_race = _functions_calling_predicate(_PROCESS_RACE, "_has_active_dispatch_marker")
-    callers_monitor = _functions_calling_predicate(_PROCESS_MONITOR, "_has_active_dispatch_marker")
+@pytest.mark.parametrize("watcher", sorted(_WATCHERS_THAT_MUST_CHECK_EXECUTION_MARKER))
+def test_watcher_calls_has_active_execution_marker(watcher: str) -> None:
+    """Each watcher in the set must call _has_active_execution_marker."""
+    callers_race = _functions_calling_predicate(_PROCESS_RACE, "_has_active_execution_marker")
+    callers_monitor = _functions_calling_predicate(
+        _PROCESS_MONITOR, "_has_active_execution_marker"
+    )
     all_callers = callers_race | callers_monitor
     assert watcher in all_callers, (
-        f"{watcher} does not call _has_active_dispatch_marker. "
+        f"{watcher} does not call _has_active_execution_marker. "
         f"Functions that do: {sorted(all_callers)}"
     )

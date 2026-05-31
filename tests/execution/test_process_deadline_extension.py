@@ -185,7 +185,7 @@ async def test_extends_deadline_when_dispatch_marker_active(monkeypatch, tmp_pat
         lambda pid: False,
     )
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_dispatch_marker",
+        "autoskillit.execution.process._process_race._has_active_execution_marker",
         lambda marker_dir, **kw: True,
     )
     trigger = anyio.Event()
@@ -228,7 +228,7 @@ async def test_no_extension_when_marker_inactive(monkeypatch, tmp_path) -> None:
         lambda pid: False,
     )
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_dispatch_marker",
+        "autoskillit.execution.process._process_race._has_active_execution_marker",
         lambda marker_dir, **kw: False,
     )
     trigger = anyio.Event()

@@ -21,7 +21,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "RaceSignals",
         "_has_active_api_connection",
         "_has_active_child_processes",
-        "_has_active_dispatch_marker",
+        "_has_active_execution_marker",
         "_heartbeat",
         "_jsonl_contains_marker",
         "_jsonl_has_record_type",
@@ -99,7 +99,7 @@ def test_process_monitor_exports():
     are defined in _process_monitor submodule."""
     from autoskillit.execution.process._process_monitor import (
         _has_active_api_connection,
-        _has_active_dispatch_marker,
+        _has_active_execution_marker,
         _heartbeat,
         _session_log_monitor,
     )
@@ -112,9 +112,9 @@ def test_process_monitor_exports():
     assert (
         _has_active_api_connection.__module__ == "autoskillit.execution.process._process_monitor"
     )
-    assert callable(_has_active_dispatch_marker)
+    assert callable(_has_active_execution_marker)
     assert (
-        _has_active_dispatch_marker.__module__ == "autoskillit.execution.process._process_monitor"
+        _has_active_execution_marker.__module__ == "autoskillit.execution.process._process_monitor"
     )
 
 

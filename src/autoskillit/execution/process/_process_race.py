@@ -14,7 +14,7 @@ from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
     _has_active_child_processes,
-    _has_active_dispatch_marker,
+    _has_active_execution_marker,
     _heartbeat,
     _session_log_monitor,
 )
@@ -189,7 +189,7 @@ async def _watch_stdout_idle(
             last_growth_time = _time.monotonic()
             suppression_start_marker = None
         elif _time.monotonic() - last_growth_time >= idle_output_timeout:
-            if marker_dir is not None and _has_active_dispatch_marker(
+            if marker_dir is not None and _has_active_execution_marker(
                 marker_dir, session_id=session_id
             ):
                 now = _time.monotonic()
@@ -240,7 +240,7 @@ async def _watch_child_activity(
     """Extend the wall-clock CancelScope.deadline when child processes are active.
 
     Polls _has_active_child_processes, _has_active_api_connection, and
-    _has_active_dispatch_marker every _poll_interval seconds. When any
+    _has_active_execution_marker every _poll_interval seconds. When any
     returns True, pushes timeout_scope.deadline forward (up to
     max_extension_seconds beyond the original deadline).
 
@@ -267,7 +267,7 @@ async def _watch_child_activity(
             or _has_active_api_connection(pid)
             or (
                 marker_dir is not None
-                and _has_active_dispatch_marker(marker_dir, session_id=session_id)
+                and _has_active_execution_marker(marker_dir, session_id=session_id)
             )
         )
         if not active:

@@ -101,6 +101,11 @@ class TestModuleCascadeCore:
             "_type_session_env",
             "_type_capture",
             "_type_token",
+            "_type_constants_env",
+            "_type_constants_features",
+            "_type_constants_registries",
+            "_type_exceptions",
+            "_step_context",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 
@@ -174,6 +179,31 @@ class TestModuleCascadeCore:
     def test_json_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_json"] == frozenset(
             {"core", "execution", "pipeline", "recipe", "server"}
+        )
+
+    def test_type_constants_env_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_constants_env"] == frozenset(
+            {"cli", "config", "core", "execution", "recipe", "server", "smoke_utils", "workspace"}
+        )
+
+    def test_type_constants_features_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_constants_features"] == frozenset(
+            {"cli", "config", "core", "fleet", "recipe", "server", "workspace"}
+        )
+
+    def test_type_constants_registries_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_constants_registries"] == frozenset(
+            {"cli", "config", "core", "pipeline", "recipe", "server", "workspace"}
+        )
+
+    def test_type_exceptions_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_exceptions"] == frozenset(
+            {"core", "fleet", "recipe", "server"}
+        )
+
+    def test_step_context_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_step_context"] == frozenset(
+            {"core", "execution", "pipeline", "server"}
         )
 
 
@@ -548,6 +578,116 @@ class TestBuildTestScopeCoreCascade:
             assert pkg in dir_names, f"narrow cascade should include {pkg}"
         for excluded in ["config", "fleet", "migration", "workspace", "cli", "planner"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_type_constants_env_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_constants_env → narrow cascade (smoke_utils silently dropped, no test dir)."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_constants_env.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "cli", "config", "execution", "recipe", "server", "workspace"]:
+            assert pkg in dir_names, f"_type_constants_env cascade should include {pkg}"
+        for excluded in ["fleet", "pipeline", "migration", "planner", "hooks"]:
+            assert excluded not in dir_names, (
+                f"_type_constants_env cascade should not include {excluded}"
+            )
+
+    def test_type_constants_features_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_constants_features → narrow cascade of 7 dirs."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_constants_features.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "cli", "config", "fleet", "recipe", "server", "workspace"]:
+            assert pkg in dir_names, f"_type_constants_features cascade should include {pkg}"
+        for excluded in ["execution", "pipeline", "migration", "planner", "hooks"]:
+            assert excluded not in dir_names, (
+                f"_type_constants_features cascade should not include {excluded}"
+            )
+
+    def test_type_constants_registries_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_constants_registries → narrow cascade of 7 dirs."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_constants_registries.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "cli", "config", "pipeline", "recipe", "server", "workspace"]:
+            assert pkg in dir_names, f"_type_constants_registries cascade should include {pkg}"
+        for excluded in ["execution", "fleet", "migration", "planner", "hooks"]:
+            assert excluded not in dir_names, (
+                f"_type_constants_registries cascade should not include {excluded}"
+            )
+
+    def test_type_exceptions_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_exceptions → narrow cascade of 4 dirs."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_exceptions.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "fleet", "recipe", "server"]:
+            assert pkg in dir_names, f"_type_exceptions cascade should include {pkg}"
+        for excluded in [
+            "cli",
+            "config",
+            "execution",
+            "pipeline",
+            "migration",
+            "workspace",
+            "hooks",
+        ]:
+            assert excluded not in dir_names, (
+                f"_type_exceptions cascade should not include {excluded}"
+            )
+
+    def test_step_context_narrow_cascade(self, tmp_path: Path) -> None:
+        """_step_context → narrow cascade of 4 dirs."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/_step_context.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        for pkg in ["core", "execution", "pipeline", "server"]:
+            assert pkg in dir_names, f"_step_context cascade should include {pkg}"
+        for excluded in ["cli", "config", "fleet", "migration", "workspace", "recipe", "hooks"]:
+            assert excluded not in dir_names, (
+                f"_step_context cascade should not include {excluded}"
+            )
+
+
+class TestCoreStemCompleteness:
+    """REQ-FILT-007: every core/ .py stem must be classified."""
+
+    def test_all_core_stems_classified(self) -> None:
+        core_root = Path("src/autoskillit/core")
+        actual_stems = {p.stem for p in core_root.rglob("*.py") if p.stem != "__init__"}
+        assert actual_stems, (
+            f"No .py files found under {core_root} — is pytest running from the project root?"
+        )
+        classified = set(_CORE_UNIVERSAL_MODULES) | set(MODULE_CASCADE_CORE)
+        unclassified = actual_stems - classified
+        assert not unclassified, (
+            f"Unclassified core stems (will fall through to full 18-dir cascade): "
+            f"{sorted(unclassified)}"
+        )
 
 
 class TestClosureCoreNarrowCascade:

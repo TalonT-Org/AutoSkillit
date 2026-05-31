@@ -233,6 +233,17 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_session_env": frozenset({"core", "cli"}),
     "_type_capture": frozenset({"core", "fleet", "recipe", "cli"}),
     "_type_token": frozenset({"core", "execution"}),
+    "_type_constants_env": frozenset(
+        {"cli", "config", "core", "execution", "recipe", "server", "smoke_utils", "workspace"}
+    ),
+    "_type_constants_features": frozenset(
+        {"cli", "config", "core", "fleet", "recipe", "server", "workspace"}
+    ),
+    "_type_constants_registries": frozenset(
+        {"cli", "config", "core", "pipeline", "recipe", "server", "workspace"}
+    ),
+    "_type_exceptions": frozenset({"core", "fleet", "recipe", "server"}),
+    "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

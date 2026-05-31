@@ -211,7 +211,7 @@ def test_skill_contracts_yaml_includes_prepare_research_pr(skills):
 def test_skill_contracts_yaml_includes_compose_research_pr(skills):
     """compose-research-pr must be registered with pr_url output pattern."""
     _assert_skill_has_patterns(
-        skills, "compose-research-pr", r"pr_url[ \t]*=[ \t]*(https://github\.com/.*/pull/\d+)?"
+        skills, "compose-research-pr", r"pr_url[ \t]*=[ \t]*https://github\.com/.*/pull/\d+"
     )
 
 

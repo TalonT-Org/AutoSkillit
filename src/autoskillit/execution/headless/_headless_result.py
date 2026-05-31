@@ -204,7 +204,7 @@ def _build_skill_result(
                 logger.warning(
                     "Session went stale but stdout contained a valid result; recovering"
                 )
-                return _make_terminated_result(
+                _stale_success_sr = _make_terminated_result(
                     result=result,
                     session=stale_session,
                     success=True,
@@ -216,6 +216,20 @@ def _build_skill_result(
                     provider_used=provider_used,
                     api_retry=stale_api_retry,
                 )
+                if (
+                    _stale_success_sr.success
+                    and write_behavior is not None
+                    and write_behavior.mode in ("always", "conditional")
+                    and not stale_evidence.has_implementation_evidence
+                ):
+                    _stale_success_sr = dataclasses.replace(
+                        _stale_success_sr,
+                        success=False,
+                        subtype="zero_writes",
+                        needs_retry=True,
+                        retry_reason=RetryReason.ZERO_WRITES,
+                    )
+                return _stale_success_sr
         # No valid result in stdout — fall through to original stale response
         _stale_is_rate_limited = has_rate_limit_signal(stale_session, result)
         _stale_is_api_error = stale_session.api_retry_exhausted or (
@@ -285,7 +299,7 @@ def _build_skill_result(
                 logger.warning(
                     "Session idle-stalled but stdout contained a valid result; recovering"
                 )
-                return _make_terminated_result(
+                _idle_success_sr = _make_terminated_result(
                     result=result,
                     session=idle_session,
                     success=True,
@@ -297,6 +311,20 @@ def _build_skill_result(
                     provider_used=provider_used,
                     api_retry=idle_api_retry,
                 )
+                if (
+                    _idle_success_sr.success
+                    and write_behavior is not None
+                    and write_behavior.mode in ("always", "conditional")
+                    and not idle_evidence.has_implementation_evidence
+                ):
+                    _idle_success_sr = dataclasses.replace(
+                        _idle_success_sr,
+                        success=False,
+                        subtype="zero_writes",
+                        needs_retry=True,
+                        retry_reason=RetryReason.ZERO_WRITES,
+                    )
+                return _idle_success_sr
         _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
         _idle_is_api_error = idle_session.api_retry_exhausted or (
             idle_session.api_error_status is not None and idle_session.api_error_status >= 400
@@ -558,6 +586,18 @@ def _build_skill_result(
         needs_retry = False
         retry_reason = RetryReason.NONE
 
+    if (
+        success
+        and write_behavior is not None
+        and write_behavior.mode in ("always", "conditional")
+        and not evidence.has_implementation_evidence
+    ):
+        normalized_subtype = "zero_writes"
+        outcome = SessionOutcome.RETRIABLE
+        success = False
+        needs_retry = True
+        retry_reason = RetryReason.ZERO_WRITES
+
     # Invariant: TIMED_OUT sessions must produce subtype='timeout'.
     if (
         result.termination == TerminationReason.TIMED_OUT
@@ -686,7 +726,7 @@ def _build_skill_result(
     # Zero-write gate: demote success to retriable failure when a write-expected
     # skill produced zero Edit/Write calls (silent degradation detection).
     # Write expectation is resolved from skill_contracts.yaml via WriteBehaviorSpec.
-    if sr.success and not _has_write_evidence and write_behavior is not None:
+    if sr.success and not evidence.has_implementation_evidence and write_behavior is not None:
         write_expected = False
         if write_behavior.mode == "always":
             write_expected = True

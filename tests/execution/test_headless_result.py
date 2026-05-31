@@ -815,6 +815,19 @@ def _system_init_ndjson(tools: list[str] | None = None) -> str:
             True,
             id="truncated_assistant_edit",
         ),
+        # truncated instructional text mentioning "Edit" without tool_use context → False
+        pytest.param(
+            '{"type":"assistant","message":{"content":[{"type":"text",'
+            '"text":"Use the \\"Edit\\" tool to',
+            False,
+            id="truncated_instructional_text_mentioning_edit",
+        ),
+        # truncated tool_use with Edit — has "tool_use" in the line → True
+        pytest.param(
+            '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","id":"toolu_',
+            True,
+            id="truncated_tool_use_with_edit",
+        ),
     ],
 )
 def test_stdout_mentions_write_tools_unit(stdout: str, expected: bool) -> None:
@@ -1438,3 +1451,137 @@ def test_build_skill_result_signal_death_returncode_yields_resume() -> None:
     assert skill_result.success is False
     assert skill_result.retry_reason == RetryReason.RESUME
     assert skill_result.infra.exit_category == "process_killed"
+
+
+class TestFalseSuccessInfraWritesBypass:
+    """Tests for false success when infrastructure-only writes satisfy write evidence checks."""
+
+    def test_marker_absent_contract_met_with_zero_impl_writes_fails(self) -> None:
+        """marker_absent_contract_met + fs_writes_detected but zero impl writes → zero_writes."""
+        stdout = (
+            _tool_use_ndjson("Read", file_path="/a/b.py")
+            + "\n"
+            + _success_result_json("worktree_path = /tmp/wt\nsome output")
+        )
+        result = SubprocessResult(
+            returncode=1,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            session_id="sess-mcm-1",
+            channel_b_session_id="",
+        )
+        sr = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=(r"worktree_path[ \t]*=[ \t]*/.+",),
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            fs_writes_detected=True,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
+        assert sr.needs_retry is True
+
+    def test_normalized_subtype_upgrade_respects_write_gate(self) -> None:
+        """missing_completion_marker upgrade with zero impl writes → zero_writes."""
+        stdout = (
+            _tool_use_ndjson("Read", file_path="/a/b.py")
+            + "\n"
+            + _success_result_json("worktree_path = /tmp/wt\nsome output")
+        )
+        result = SubprocessResult(
+            returncode=1,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            session_id="sess-upgrade-1",
+            channel_b_session_id="",
+        )
+        sr = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=(r"worktree_path[ \t]*=[ \t]*/.+",),
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            fs_writes_detected=True,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
+
+    def test_stale_recovery_with_zero_impl_writes_fails(self) -> None:
+        """Stale recovery + fs_writes_detected but zero impl writes → zero_writes."""
+        stdout = (
+            _tool_use_ndjson("Read", file_path="/a/b.py") + "\n" + _success_result_json("done")
+        )
+        result = SubprocessResult(
+            returncode=-1,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.STALE,
+            pid=12345,
+            session_id="sess-stale-impl-1",
+            channel_b_session_id="",
+        )
+        sr = _build_skill_result(
+            result,
+            completion_marker="done",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            fs_writes_detected=True,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
+
+    def test_idle_stall_recovery_with_zero_impl_writes_fails(self) -> None:
+        """Idle-stall recovery + fs_writes_detected but zero impl writes → zero_writes."""
+        stdout = (
+            _tool_use_ndjson("Read", file_path="/a/b.py") + "\n" + _success_result_json("done")
+        )
+        result = SubprocessResult(
+            returncode=-1,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.IDLE_STALL,
+            pid=12345,
+            session_id="sess-idle-impl-1",
+            channel_b_session_id="",
+        )
+        sr = _build_skill_result(
+            result,
+            completion_marker="done",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            fs_writes_detected=True,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
+
+    def test_conditional_mode_upgrade_path_with_zero_impl_writes_fails(self) -> None:
+        """Conditional mode upgrade with zero impl writes → zero_writes."""
+        stdout = (
+            _tool_use_ndjson("Read", file_path="/a/b.py")
+            + "\n"
+            + _success_result_json("worktree_path = /tmp/wt\nsome output")
+        )
+        result = SubprocessResult(
+            returncode=1,
+            stdout=stdout,
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+            session_id="sess-cond-1",
+            channel_b_session_id="",
+        )
+        sr = _build_skill_result(
+            result,
+            completion_marker="%%ORDER_UP%%",
+            expected_output_patterns=(r"worktree_path[ \t]*=[ \t]*/.+",),
+            write_behavior=WriteBehaviorSpec(mode="conditional", expected_when=("committed",)),
+            fs_writes_detected=True,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"

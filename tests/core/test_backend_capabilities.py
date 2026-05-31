@@ -72,6 +72,7 @@ def test_backend_capabilities_field_count():
         "triage_capable",
         "supports_context_exhaustion_detection",
         "project_local_skills_capable",
+        "supports_tool_list_changed",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -113,6 +114,7 @@ def test_backend_capabilities_field_names_locked():
         "version_check_command",
         "process_name",
         "skills_subdir",
+        "supports_tool_list_changed",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected
@@ -145,6 +147,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.version_check_command == "claude --version"
     assert CLAUDE_CODE_CAPABILITIES.process_name == "claude"
     assert CLAUDE_CODE_CAPABILITIES.skills_subdir == ".claude/skills"
+    assert CLAUDE_CODE_CAPABILITIES.supports_tool_list_changed is True
 
 
 def test_backend_capabilities_frozenset_defaults():

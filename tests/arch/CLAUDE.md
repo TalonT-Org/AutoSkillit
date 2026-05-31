@@ -78,6 +78,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_write_restriction_coverage.py` | Architectural invariant: skills with prose write restrictions in NEVER blocks have runtime enforcement (read_only, output_dir, or allowlist) |
 | `test_model_identity_contract.py` | AST guard: detect_model_drift must use normalize_model_id and _models_match — raw alias/full-ID comparison is a false-positive source |
 | `test_helpers_exports.py` | Asserts shared test helpers export required symbols (strip_markdown_code_regions) |
+| `test_session_type_exhaustive.py` | AST guard: _apply_session_type_visibility must use exhaustive match/assert_never dispatch |
 
 ## Architecture Notes
 

@@ -72,6 +72,23 @@ def test_no_unrecognized_claude_code_vars_pass_through() -> None:
         )
 
 
+def test_ensure_codex_mcp_registered_includes_mcp_client_backend(tmp_path) -> None:
+    """ensure_codex_mcp_registered must write MCP_CLIENT_BACKEND_ENV_VAR to env_vars."""
+    import tomllib
+
+    from autoskillit.core.types._type_constants_env import MCP_CLIENT_BACKEND_ENV_VAR
+    from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
+
+    config_path = tmp_path / "config.toml"
+    ensure_codex_mcp_registered(config_path=config_path)
+    data = tomllib.loads(config_path.read_bytes().decode())
+    env_vars = data["mcp_servers"]["autoskillit"]["env_vars"]
+    assert MCP_CLIENT_BACKEND_ENV_VAR in env_vars, (
+        f"MCP_CLIENT_BACKEND_ENV_VAR ({MCP_CLIENT_BACKEND_ENV_VAR}) must be present in "
+        f"Codex MCP env_vars so the server knows the client backend at startup. Got: {env_vars}"
+    )
+
+
 def test_unknown_claude_code_var_is_caught() -> None:
     """Verify the filter framework catches unclassified CLAUDE_CODE_* vars."""
     from autoskillit.core._claude_env import IDE_ENV_DENYLIST, IDE_ENV_PREFIX_DENYLIST

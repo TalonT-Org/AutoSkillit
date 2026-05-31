@@ -274,6 +274,26 @@ def test_no_retired_agent_name_has_a_live_file():
         )
 
 
+# T15: plan-review resources are pre-revealed at startup for non-notification backends
+@pytest.mark.anyio
+async def test_plan_review_pre_revealed_for_non_notification_backend(monkeypatch):
+    """For codex (non-notification) backend, plan-review resources are visible at startup
+    without calling unlock_agent_pack."""
+    from autoskillit.core import MCP_CLIENT_BACKEND_ENV_VAR
+    from autoskillit.server import _apply_session_type_visibility, mcp
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
+    _apply_session_type_visibility()
+
+    templates = await mcp.list_resource_templates()
+    uris = {t.uri_template for t in templates}
+    assert "agent://plan-review/{name}" in uris, (
+        "plan-review resources should be pre-revealed at startup for codex non-notification backend"
+    )
+
+
 # T15: RETIRED_AGENT_NAMES entries are lowercase
 def test_retired_agent_names_lowercase():
     """All entries in RETIRED_AGENT_NAMES must be lowercase."""

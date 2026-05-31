@@ -443,6 +443,40 @@ class TestSessionTypeVisibility:
             f"Fleet-dispatch tools visible with no session type: {visible & FLEET_DISPATCH_TOOLS}"
         )
 
+    @pytest.mark.anyio
+    async def test_codex_non_notification_backend_gets_kitchen_pre_reveal(self, monkeypatch):
+        """Non-notification backend (codex) gets kitchen tools pre-revealed at startup."""
+        from autoskillit.core import GATED_TOOLS, MCP_CLIENT_BACKEND_ENV_VAR
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
+        _apply_session_type_visibility()
+
+        tools = list(await mcp.list_tools())
+        tool_names = {t.name for t in tools}
+        assert GATED_TOOLS & tool_names, (
+            "At least one kitchen tool should be visible for codex non-notification backend"
+        )
+
+    @pytest.mark.anyio
+    async def test_codex_non_notification_plan_review_pre_revealed(self, monkeypatch):
+        """Non-notification backend (codex) gets plan-review resources pre-revealed."""
+        from autoskillit.core import MCP_CLIENT_BACKEND_ENV_VAR
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
+        _apply_session_type_visibility()
+
+        templates = await mcp.list_resource_templates()
+        uris = {t.uri_template for t in templates}
+        assert "agent://plan-review/{name}" in uris, (
+            "plan-review resource template should be visible for codex non-notification backend"
+        )
+
 
 @pytest.mark.feature("fleet")
 class TestFleetAutoGateBoot:
@@ -1428,6 +1462,65 @@ class TestSkillAutoGateBoot:
         assert tool_ctx.gate.enabled is False
         mock_write_hook_config.assert_not_called()
         mock_register_kitchen.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_codex_non_headless_pre_reveal_opens_gate(self, build_ctx, monkeypatch):
+        """Non-notification backend non-headless session pre-reveals kitchen and opens gate."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.supports_tool_list_changed = False
+        ctx = build_ctx(backend=mock_backend)
+        ctx.gate = DefaultGateState(enabled=False)
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.core.register_active_kitchen"):
+                    await _skill_auto_gate_boot(ctx)
+
+        assert ctx.gate.enabled is True, "Gate should be open for non-notification backend"
+
+    @pytest.mark.anyio
+    async def test_codex_non_headless_pre_reveal_suppresses_disabled_subset(
+        self, build_ctx, monkeypatch
+    ):
+        """Non-notification backend: disabled config subsets are hidden even though kitchen
+        was pre-revealed at startup."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import mcp
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
+
+        monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.supports_tool_list_changed = False
+        # Disable the "plan-review" subset (simulates a user-configured disabled subset)
+        ctx = build_ctx(backend=mock_backend)
+        ctx.gate = DefaultGateState(enabled=False)
+        ctx.config.subsets.disabled = ["plan-review"]
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.core.register_active_kitchen"):
+                    await _skill_auto_gate_boot(ctx)
+
+        # plan-review resources should remain hidden
+        templates = await mcp.list_resource_templates()
+        uris = {t.uri_template for t in templates}
+        assert "agent://plan-review/{name}" not in uris, (
+            "plan-review resources must remain hidden when plan-review subset is disabled"
+        )
 
 
 @pytest.mark.feature("skill")

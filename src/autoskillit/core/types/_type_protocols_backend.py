@@ -74,6 +74,13 @@ class CodingAgentBackend(Protocol):
     Composes capabilities, command building, and the four sub-protocols
     (StreamParser, ResultParser, EnvPolicy, SessionLocator). Concrete
     implementations (e.g., ClaudeCodeBackend) satisfy this Protocol.
+
+    Env Forwarding Contract:
+        Backends with non-empty ``capabilities.mcp_env_forward_vars`` must
+        ensure those vars appear in ``spec.env`` for all cmd-builders. The
+        canonical injection mechanism is via ``extras`` in ``build_env()``,
+        which bypasses ``AUTOSKILLIT_PRIVATE_ENV_VARS`` stripping. Enforced
+        by ``tests/arch/test_mcp_env_forward_coverage.py``.
     """
 
     @property

@@ -16,6 +16,7 @@ _FORWARD_DECLARED: dict[str, str] = {
     "supports_context_exhaustion_detection": "#3299",  # planned for context exhaustion handling
     "min_version": "#3300",  # planned for version validation in doctor
     "version_check_command": "#3301",  # planned for version validation in doctor
+    "mcp_env_forward_vars": "#3458",  # consumed by tests/arch/test_mcp_env_forward_coverage.py
 }
 
 _ISSUE_REF_RE = re.compile(r"#\d+")

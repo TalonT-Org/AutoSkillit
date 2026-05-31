@@ -46,6 +46,21 @@ def test_skill_and_food_truck_share_required_env_vars() -> None:
             )
 
 
+def test_resume_cmd_has_baseline_env() -> None:
+    """build_resume_cmd must include MAX_MCP_OUTPUT_TOKENS (from _SESSION_BASELINE_ENV)."""
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
+    for name, cls in BACKEND_REGISTRY.items():
+        backend = cls()
+        if not backend.capabilities.session_resume_capable:
+            continue
+        resume_spec = backend.build_resume_cmd(resume_session_id="test-session", prompt="continue")
+        assert "MAX_MCP_OUTPUT_TOKENS" in resume_spec.env, (
+            f"{name}: MAX_MCP_OUTPUT_TOKENS missing from build_resume_cmd env"
+        )
+
+
 def test_agent_backend_env_var_in_food_truck(monkeypatch: pytest.MonkeyPatch) -> None:
     """AUTOSKILLIT_AGENT_BACKEND must appear in build_food_truck_cmd env for every backend."""
     from autoskillit.core.types._type_plugin_source import DirectInstall

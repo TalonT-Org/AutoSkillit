@@ -137,6 +137,8 @@ CODEX_MCP_ENV_FORWARD_VARS: frozenset[str] = frozenset(
         HEADLESS_ENV_VAR,
         HEADLESS_AUTO_GATE_ENV_VAR,
         MCP_CLIENT_BACKEND_ENV_VAR,
+        SESSION_TYPE_ENV_VAR,
+        FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     }
 )
 

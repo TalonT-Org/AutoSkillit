@@ -33,6 +33,69 @@ def test_codex_mcp_env_forward_vars_subset_of_private() -> None:
     )
 
 
+def test_codex_forward_vars_cover_server_consumed() -> None:
+    """CODEX_MCP_ENV_FORWARD_VARS must cover every server-consumed env var."""
+    from autoskillit.core import (
+        CODEX_MCP_ENV_FORWARD_VARS,
+        FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+        HEADLESS_AUTO_GATE_ENV_VAR,
+        HEADLESS_ENV_VAR,
+        MCP_CLIENT_BACKEND_ENV_VAR,
+        SESSION_TYPE_ENV_VAR,
+    )
+
+    server_consumed_forward_vars: frozenset[str] = frozenset(
+        {
+            HEADLESS_ENV_VAR,
+            HEADLESS_AUTO_GATE_ENV_VAR,
+            MCP_CLIENT_BACKEND_ENV_VAR,
+            SESSION_TYPE_ENV_VAR,
+            FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+        }
+    )
+    missing = server_consumed_forward_vars - CODEX_MCP_ENV_FORWARD_VARS
+    assert not missing, (
+        f"Server-consumed vars missing from CODEX_MCP_ENV_FORWARD_VARS: {missing}. "
+        f"The MCP server reads these via os.environ.get() but Codex config.toml "
+        f"won't forward them without an entry in CODEX_MCP_ENV_FORWARD_VARS."
+    )
+
+
+def test_ensure_codex_mcp_registered_env_vars_match_canonical_set(tmp_path) -> None:
+    """ensure_codex_mcp_registered() must write exactly CODEX_MCP_ENV_FORWARD_VARS."""
+    import tomllib
+
+    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
+    from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
+
+    config_path = tmp_path / "config.toml"
+    ensure_codex_mcp_registered(config_path=config_path, headless_auto_gate=True)
+    data = tomllib.loads(config_path.read_bytes().decode())
+    env_vars = data["mcp_servers"]["autoskillit"]["env_vars"]
+    assert set(env_vars) == set(CODEX_MCP_ENV_FORWARD_VARS), (
+        f"Written env_vars {sorted(env_vars)} != canonical "
+        f"CODEX_MCP_ENV_FORWARD_VARS {sorted(CODEX_MCP_ENV_FORWARD_VARS)}"
+    )
+
+
+def test_ensure_codex_mcp_registered_auto_gate_false_excludes_only_auto_gate(tmp_path) -> None:
+    """headless_auto_gate=False must exclude only HEADLESS_AUTO_GATE_ENV_VAR."""
+    import tomllib
+
+    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR
+    from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
+
+    config_path = tmp_path / "config.toml"
+    ensure_codex_mcp_registered(config_path=config_path, headless_auto_gate=False)
+    data = tomllib.loads(config_path.read_bytes().decode())
+    env_vars = data["mcp_servers"]["autoskillit"]["env_vars"]
+    expected = CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR}
+    assert set(env_vars) == set(expected), (
+        f"With headless_auto_gate=False, written env_vars {sorted(env_vars)} != "
+        f"expected {sorted(expected)}"
+    )
+
+
 def test_fleet_injected_vars_covered_by_filter_lists() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS

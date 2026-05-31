@@ -245,13 +245,59 @@ class TestClassifyDispatchOutcomeSidecarSynthesis:
         assert result.source == "sidecar"
 
     def test_sidecar_synthesized_completed_clean_is_success(self):
-        """completed_clean from sidecar synthesis with success=True → SUCCESS."""
+        """completed_clean from sidecar synthesis with success=True → SUCCESS with reason."""
         parsed = L3ParseResult(
             outcome="completed_clean",
             payload={"success": True, "reason": "sidecar_recovery"},
             raw_body=None,
             parse_error=None,
             source="sidecar",
+        )
+        skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
+        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        assert status == DispatchStatus.SUCCESS
+        assert reason == "sidecar_recovery"
+
+
+class TestCompletedCleanSuccessPreservesReason:
+    def test_completed_clean_success_preserves_reason(self):
+        """completed_clean with success=True preserves reason from payload."""
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True, "reason": "implementation_complete"},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
+        )
+        skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
+        status, reason = classify_dispatch_outcome(parsed, skill_result)
+        assert status == DispatchStatus.SUCCESS
+        assert reason == "implementation_complete"
+
+    def test_completed_clean_success_distinct_reasons_distinguishable(self):
+        """Distinct reason strings are preserved through classification."""
+        reasons = ["implementation_complete", "no_changes", "already_done"]
+        for expected_reason in reasons:
+            parsed = L3ParseResult(
+                outcome="completed_clean",
+                payload={"success": True, "reason": expected_reason},
+                raw_body=None,
+                parse_error=None,
+                source="stdout",
+            )
+            skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
+            status, reason = classify_dispatch_outcome(parsed, skill_result)
+            assert status == DispatchStatus.SUCCESS
+            assert reason == expected_reason
+
+    def test_completed_clean_success_empty_reason_returns_empty(self):
+        """Backward compat: success with no reason key returns empty string."""
+        parsed = L3ParseResult(
+            outcome="completed_clean",
+            payload={"success": True},
+            raw_body=None,
+            parse_error=None,
+            source="stdout",
         )
         skill_result = dataclasses.replace(_DEFAULT_SKILL_RESULT)
         status, reason = classify_dispatch_outcome(parsed, skill_result)

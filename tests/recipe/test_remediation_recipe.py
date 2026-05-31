@@ -210,6 +210,29 @@ def test_done_unconfirmed_stop_exists(recipe) -> None:
     assert "unconfirmed" in step.message.lower() or "timeout" in step.message.lower()
 
 
+def test_done_step_uses_underscore_reason(recipe) -> None:
+    """done step must use remediation_complete (underscore convention)."""
+    step = recipe.steps["done"]
+    assert step.action == "stop"
+    assert '"remediation_complete"' in step.message
+
+
+def test_done_no_changes_stop_exists(recipe) -> None:
+    """remediation.yaml must have a done_no_changes stop step."""
+    assert "done_no_changes" in recipe.steps
+    step = recipe.steps["done_no_changes"]
+    assert step.action == "stop"
+    assert '"no_changes"' in step.message
+
+
+def test_done_already_done_stop_exists(recipe) -> None:
+    """remediation.yaml must have a done_already_done stop step."""
+    assert "done_already_done" in recipe.steps
+    step = recipe.steps["done_already_done"]
+    assert step.action == "stop"
+    assert '"already_done"' in step.message
+
+
 def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
     """register_clone_unconfirmed must route toward done_unconfirmed."""
     step = recipe.steps["register_clone_unconfirmed"]

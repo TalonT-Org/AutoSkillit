@@ -668,6 +668,13 @@ def test_recipe_has_unconditional_register_steps(recipe_name: str) -> None:
     )
     assert "check_defer_cleanup" not in recipe.steps
     assert "check_defer_on_failure" not in recipe.steps
+    if recipe_name in ("implementation", "remediation"):
+        assert "register_clone_no_changes" in recipe.steps
+        nc = recipe.steps["register_clone_no_changes"]
+        assert nc.on_success == "run_diagnostic_no_changes"
+        assert "register_clone_already_done" in recipe.steps
+        ad = recipe.steps["register_clone_already_done"]
+        assert ad.on_success == "run_diagnostic_already_done"
 
 
 @pytest.mark.parametrize(

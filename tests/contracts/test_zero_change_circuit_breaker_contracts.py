@@ -94,16 +94,16 @@ def test_close_issue_no_changes_passes_target_branch() -> None:
         )
 
 
-def test_close_issue_no_changes_routes_to_register_clone_success() -> None:
-    """close_issue_no_changes must route to register_clone_success, not bare done."""
+def test_close_issue_no_changes_routes_to_register_clone_no_changes() -> None:
+    """close_issue_no_changes must route to register_clone_no_changes for distinct terminal."""
     for name in ("implementation", "remediation"):
         data = _load(name)
         step = data["steps"]["close_issue_no_changes"]
-        assert step.get("on_success") == "register_clone_success", (
-            f"{name}: close_issue_no_changes.on_success must be 'register_clone_success', "
+        assert step.get("on_success") == "register_clone_no_changes", (
+            f"{name}: close_issue_no_changes.on_success must be 'register_clone_no_changes', "
             f"got {step.get('on_success')!r}"
         )
-        assert step.get("on_failure") == "register_clone_success", (
-            f"{name}: close_issue_no_changes.on_failure must be 'register_clone_success', "
+        assert step.get("on_failure") == "register_clone_no_changes", (
+            f"{name}: close_issue_no_changes.on_failure must be 'register_clone_no_changes', "
             f"got {step.get('on_failure')!r}"
         )

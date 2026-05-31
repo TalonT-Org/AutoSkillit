@@ -407,6 +407,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "rules_recipe": frozenset({"recipe"}),
     "rules_skills": frozenset({"recipe"}),
     "rules_temp_path": frozenset({"recipe"}),
+    "rules_terminal_convergence": frozenset({"recipe"}),
     "rules_tools": frozenset({"recipe"}),
     "rules_verdict": frozenset({"recipe"}),
     "rules_worktree": frozenset({"recipe"}),

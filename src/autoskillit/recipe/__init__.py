@@ -137,6 +137,9 @@ from autoskillit.recipe.rules import (  # noqa: E402 F401
 )
 from autoskillit.recipe.rules import rules_step_naming as _rules_step_naming  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_temp_path as _rules_temp_path  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: E402
+    rules_terminal_convergence as _rules_terminal_convergence,  # noqa: F401
+)
 from autoskillit.recipe.rules import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_verdict as _rules_verdict  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_worktree as _rules_worktree  # noqa: E402 F401

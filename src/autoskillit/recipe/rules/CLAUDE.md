@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (33 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis (34 flat rule files + 4 subdirectories).
 
 ## Subdirectories
 
@@ -49,6 +49,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_step_naming.py` | Step-key vs invoked-skill collision detection |
 | `rules_skip_inviting_notes.py` | Flags note: fields with skip-inviting phrases on optional steps |
 | `rules_temp_path.py` | Rejects bare `{{AUTOSKILLIT_TEMP}}/` without scope prefix |
+| `rules_terminal_convergence.py` | Success-stop reason uniqueness; detects convergent success paths with shared reasons |
 | `rules_tools.py` | MCP tool name validity (must be in known tool sets) |
 | `rules_verdict.py` | Skill verdict routing completeness and cross-step consistency |
 | `rules_worktree.py` | Worktree and retry validation rules |

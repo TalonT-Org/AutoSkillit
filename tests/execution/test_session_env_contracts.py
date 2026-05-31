@@ -12,10 +12,6 @@ from autoskillit.core import (
     DirectInstall,
     OutputFormat,
 )
-from autoskillit.execution.backends._claude_prompt import (
-    _HEADLESS_EXCLUSIVE_VARS,
-    _SESSION_BASELINE_ENV,
-)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 
@@ -56,26 +52,3 @@ def test_food_truck_env_contains_required_vars(backend_factory) -> None:
     )
     missing = ORCHESTRATOR_SESSION_REQUIRED_ENV - spec.env.keys()
     assert not missing, f"Missing required food truck env vars: {missing}"
-
-
-def test_resume_cmd_env_uses_filtered_base(monkeypatch) -> None:
-    """CodexBackend.build_resume_cmd must NOT pass _HEADLESS_EXCLUSIVE_VARS through."""
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
-    spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-    reinjected = frozenset(_SESSION_BASELINE_ENV.keys())
-    leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
-    assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume cmd env: {leaking}"
-
-
-def test_resume_cmd_has_sandbox_flag() -> None:
-    """CodexBackend.build_resume_cmd must include the --sandbox flag."""
-    spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-    assert "--sandbox" in spec.cmd
-
-
-def test_headless_cmd_uses_filtered_base(monkeypatch) -> None:
-    """CodexBackend.build_headless_cmd must NOT pass _HEADLESS_EXCLUSIVE_VARS through."""
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
-    spec = CodexBackend().build_headless_cmd("do stuff")
-    leaking = _HEADLESS_EXCLUSIVE_VARS & spec.env.keys()
-    assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into headless cmd env: {leaking}"

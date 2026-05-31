@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, runtime_checkable
 
 from ._type_results_execution import CIRunScope
@@ -148,6 +149,9 @@ class MergeQueueWatcher(Protocol):
         not_in_queue_confirmation_cycles: int = 2,
         max_inconclusive_retries: int = 5,
         auto_merge_available: bool = True,
+        max_merge_group_drops: int = 0,
+        merge_group_drop_backoff: float = 60.0,
+        progress_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> dict[str, Any]: ...
 
     async def toggle(

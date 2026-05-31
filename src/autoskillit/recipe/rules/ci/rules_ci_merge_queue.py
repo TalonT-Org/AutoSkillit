@@ -141,3 +141,91 @@ def _check_wait_for_merge_queue_routing_conforms_to_expected_targets(
                 )
             )
     return findings
+
+
+# ---------------------------------------------------------------------------
+# dropped_merge_group_ci unguarded re-enqueue loop (I9)
+# ---------------------------------------------------------------------------
+
+
+@semantic_rule(
+    name="dropped-merge-group-ci-unguarded-reenqueue-loop",
+    description=(
+        "dropped_merge_group_ci routing must pass through a loop guard "
+        "before re-entering wait_for_merge_queue"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_dropped_merge_group_ci_reenqueue_guard(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    if not _recipe_has_mq_routing_step(ctx):
+        return []
+    findings: list[RuleFinding] = []
+    mq_steps_set = {n for n, s in ctx.recipe.steps.items() if s.tool == "wait_for_merge_queue"}
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "wait_for_merge_queue":
+            continue
+        if step.on_result is None or not step.on_result.conditions:
+            continue
+        max_drops = int(step.with_args.get("max_merge_group_drops", 0)) if step.with_args else 0
+        if max_drops >= 1:
+            continue
+        dmgci_target: str | None = None
+        for cond in step.on_result.conditions:
+            if cond.when and "dropped_merge_group_ci" in cond.when:
+                dmgci_target = cond.route
+                break
+        if dmgci_target is None:
+            continue
+        target_step = ctx.recipe.steps.get(dmgci_target)
+        if target_step is not None and target_step.tool == "run_python":
+            if target_step.on_result is not None:
+                guard_exits: set[str] = set()
+                for c in target_step.on_result.conditions or []:
+                    guard_exits.add(c.route)
+                if guard_exits - mq_steps_set:
+                    continue
+        visited_bfs: set[str] = set()
+        frontier: set[str] = {dmgci_target}
+        mq_reachable = False
+        while frontier:
+            frontier -= visited_bfs
+            if not frontier:
+                break
+            if frontier & mq_steps_set:
+                mq_reachable = True
+                break
+            visited_bfs |= frontier
+            next_frontier: set[str] = set()
+            for n in frontier:
+                ns = ctx.recipe.steps.get(n)
+                if ns is None:
+                    continue
+                if ns.on_success:
+                    next_frontier.add(ns.on_success)
+                if ns.on_failure:
+                    next_frontier.add(ns.on_failure)
+                if ns.on_result:
+                    for c in ns.on_result.conditions or []:
+                        next_frontier.add(c.route)
+                    for v in (ns.on_result.routes or {}).values():
+                        next_frontier.add(v)
+            frontier = next_frontier
+        if mq_reachable:
+            findings.append(
+                RuleFinding(
+                    rule="dropped-merge-group-ci-unguarded-reenqueue-loop",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step {step_name!r} routes dropped_merge_group_ci → "
+                        f"{dmgci_target!r} without a direct loop guard. The path "
+                        f"reaches wait_for_merge_queue, creating an unbounded "
+                        f"re-enqueue loop. Add a run_python guard step (e.g. "
+                        f"check_dropped_merge_group_ci_loop) between the "
+                        f"wait_for_merge_queue and diagnose_ci steps."
+                    ),
+                )
+            )
+    return findings

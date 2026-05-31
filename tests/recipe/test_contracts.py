@@ -976,6 +976,16 @@ def test_wait_for_ci_conclusion_allowed_values() -> None:
     assert {"success", "failure", "cancelled", "timed_out", "no_runs", "error"}.issubset(values)
 
 
+def test_diagnose_ci_no_failure_in_allowed_values() -> None:
+    """diagnose-ci contract must allow no_failure for failure_type and failure_subtype."""
+    manifest = load_bundled_manifest()
+    ci_outputs = manifest["skills"]["diagnose-ci"]["outputs"]
+    ft = next(o for o in ci_outputs if o["name"] == "failure_type")
+    fst = next(o for o in ci_outputs if o["name"] == "failure_subtype")
+    assert "no_failure" in ft["allowed_values"]
+    assert "no_failure" in fst["allowed_values"]
+
+
 # ---------------------------------------------------------------------------
 # Research recipe contract card tests
 # ---------------------------------------------------------------------------

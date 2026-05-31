@@ -1414,6 +1414,7 @@ steps:
       remote_url: ${{ context.remote_url }}
       timeout_seconds: 60
       poll_interval: 10
+      max_merge_group_drops: 1
     on_result:
     - when: ${{ result.pr_state }} == merged
       route: release_issue_success
@@ -1451,6 +1452,7 @@ steps:
       timeout_seconds: 900
       cwd: ${{ context.work_dir }}
       remote_url: ${{ context.remote_url }}
+      max_merge_group_drops: 1
     capture:
       queue_pr_state: ${{ result.pr_state }}
     on_result:
@@ -1617,6 +1619,7 @@ steps:
       target_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       timeout_seconds: '60'
+      max_merge_group_drops: '1'
     on_result:
     - when: ${{ result.pr_state }} == merged
       route: release_issue_success

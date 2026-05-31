@@ -145,6 +145,7 @@ The following files had merge conflicts that were automatically resolved.
 ```mermaid
 {diagram content}
 ```
+{## End Architecture Impact conditional}
 
 {If closing_issue is non-empty:}
 Closes #{closing_issue}
@@ -195,6 +196,7 @@ The following files had merge conflicts that were automatically resolved.
 ```mermaid
 {diagram content}
 ```
+{## End Architecture Impact conditional}
 
 {If closing_issue is non-empty:}
 Closes #{closing_issue}

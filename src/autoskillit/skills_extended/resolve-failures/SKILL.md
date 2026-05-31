@@ -186,6 +186,7 @@ Using `{local_result}` from Step 2 and `{failure_subtype}` from Step 2a, determi
 | PASS | `deterministic` | `ci_only_failure` |
 | PASS | `fixture` or `import` | `flake_suspected` |
 | PASS | `env` or `unknown` | `flake_suspected` |
+| PASS | `no_failure` | `ci_only_failure` |
 
 **Note on `already_green`:** This verdict is reserved for the `pre_resolve_rebase`
 re-entry path — when a sibling pipeline's fix has already landed on integration and

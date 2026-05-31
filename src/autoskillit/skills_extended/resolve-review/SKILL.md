@@ -142,7 +142,7 @@ If the file exists and contains entries:
    - `commit_id`: current HEAD commit SHA (from `gh pr view {pr_number} --json headRefOid -q .headRefOid`)
    - `comments[]` array where each entry has:
      - `path`: from the deferred entry
-     - `line`: from the deferred entry (if `line` is null, omit `line` and set `subject_type: "file"` for a file-level comment)
+     - `line`: from the deferred entry (if `line` is null, omit `line` for a file-level comment)
      - `side`: `"RIGHT"`
      - `body`:
        ```
@@ -170,7 +170,6 @@ If the file exists and contains entries:
        path: .path,
        line: (if .line then .line else null end),
        side: "RIGHT",
-       subject_type: (if .line then "line" else "file" end),
        body: ("**Observation from local review round \(.round):**\n\n\(.body)\n\n**Evidence:** \(.evidence)\n\n<!-- REVIEW-FLAG: severity=\(.severity) dimension=\(.dimension) -->")
      }) | map(if .line == null then del(.line) else . end)
    ')

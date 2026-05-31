@@ -42,7 +42,7 @@ remain hidden even after `open_kitchen`.
 | Tag | Meaning |
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 38 tools carry this tag. |
+| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 39 tools carry this tag. |
 | `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Additive — also carries `kitchen`. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
 | `ci` | Functional category: CI/merge-queue polling tools. Can be disabled as a subset. |
@@ -55,7 +55,7 @@ Server startup sequence:
 
 ```
 1. mcp.disable(tags={"kitchen"})
-   → hides 38 kitchen-tagged tools (including the 2 headless-tagged tools)
+   → hides 39 kitchen-tagged tools (including the 2 headless-tagged tools)
 
 2. mcp.disable(tags={subset}) for each entry in config.subsets.disabled
    → e.g. hides all github-tagged tools if "github" is disabled

@@ -23,12 +23,12 @@ AutoSkillit uses a three-tier tool visibility model:
 
 - **Free-range (4 tools)**: Always visible — `open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`
 - **Headless tools (2 tools)**: Revealed in headless sessions via `mcp.enable({'headless'})` — `test_check`, `unlock_agent_pack`
-- **Kitchen-tagged tools (38 tools total)**: Gated behind `open_kitchen` — `run_skill`,
+- **Kitchen-tagged tools (39 tools total)**: Gated behind `open_kitchen` — `run_skill`,
   `run_cmd`, `run_python`, `merge_worktree`, `clone_repo`, `push_to_remote`, and 32 more.
   Two kitchen tools (`test_check`, `unlock_agent_pack`) also carry the `headless` tag and are
   additionally pre-enabled in headless sessions.
 
-When you call `open_kitchen` (automatically done by `order`), all 38 kitchen-tagged tools become
+When you call `open_kitchen` (automatically done by `order`), all 39 kitchen-tagged tools become
 available for that session. This keeps normal Claude Code sessions clean — no pipeline tools
 cluttering the tool list.
 
@@ -60,7 +60,7 @@ AutoSkillit supports four session modes with different tool and skill visibility
 
 - **`$ claude` (plugin, no kitchen)**: Regular Claude Code session with the AutoSkillit plugin
   loaded. Sees 4 Free Range MCP tools (`open_kitchen`, `close_kitchen`, `disable_quota_guard`, `reload_session`) and Tier 1 skills only
-  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 38 kitchen-tagged MCP
+  (`open-kitchen`, `close-kitchen`). After calling `/open-kitchen`, all 39 kitchen-tagged MCP
   tools become available.
 
 - **`$ autoskillit cook`**: Interactive development session. Sees all three skill tiers

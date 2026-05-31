@@ -106,7 +106,7 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
 
 def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
-    from autoskillit.pipeline.tokens import canonical_step_name
+    from autoskillit.pipeline import canonical_step_name
 
     effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
     if not effective_oid:

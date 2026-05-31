@@ -159,10 +159,10 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # smoke_utils/_eval.py — eval resolved/manifest/scorecard/eval_context, agent-eval
     ("src/autoskillit/smoke_utils/_eval.py", 77),
     ("src/autoskillit/smoke_utils/_eval.py", 88),
-    ("src/autoskillit/smoke_utils/_eval.py", 195),
-    ("src/autoskillit/smoke_utils/_eval.py", 206),
-    ("src/autoskillit/smoke_utils/_eval.py", 284),
-    ("src/autoskillit/smoke_utils/_eval.py", 424),
+    ("src/autoskillit/smoke_utils/_eval.py", 223),
+    ("src/autoskillit/smoke_utils/_eval.py", 234),
+    ("src/autoskillit/smoke_utils/_eval.py", 312),
+    ("src/autoskillit/smoke_utils/_eval.py", 476),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)
     ("src/autoskillit/planner/consolidation.py", 333),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)

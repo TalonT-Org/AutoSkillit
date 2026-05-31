@@ -16,6 +16,7 @@ import pytest
 from tests._test_filter import (
     LAYER_CASCADE_AGGRESSIVE,
     LAYER_CASCADE_CONSERVATIVE,
+    MODULE_CASCADE_CONFIG,
     MODULE_CASCADE_CORE,
     MODULE_CASCADE_EXECUTION,
     MODULE_CASCADE_RECIPE,
@@ -242,6 +243,11 @@ def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
     return graph
 
 
+def _build_config_module_reverse_graph() -> dict[str, set[str]]:
+    """REQ-GUARD-001 (module level, config). Returns {stem: set[consuming_pkg]}."""
+    return _build_pkg_module_reverse_graph("config", _build_reexport_map("config"))
+
+
 class TestModuleCascadeCoreGuard:
     """REQ-GUARD-002: MODULE_CASCADE_CORE declared sets must be supersets of actual consumers."""
 
@@ -355,6 +361,43 @@ class TestModuleCascadeRecipeGuard:
         )
 
 
+class TestModuleCascadeConfigGuard:
+    """REQ-CONFIG-001: Validate MODULE_CASCADE_CONFIG against actual AST imports."""
+
+    def test_module_cascade_config_is_superset_of_ast_consumers(self) -> None:
+        graph = _build_config_module_reverse_graph()
+        violations: dict[str, dict[str, list[str]]] = {}
+        for stem, declared in MODULE_CASCADE_CONFIG.items():
+            actual = graph.get(stem, set())
+            declared_dirs = {d for d in declared if "/" not in d}
+            file_prefixes = {d.split("/", 1)[0] for d in declared if "/" in d}
+            covered = declared_dirs | file_prefixes
+            missing = actual - covered
+            if missing:
+                violations[stem] = {
+                    "declared": sorted(declared),
+                    "actual": sorted(actual),
+                    "missing": sorted(missing),
+                }
+        assert not violations, (
+            "MODULE_CASCADE_CONFIG entries are too narrow — update tests/_test_filter.py:\n"
+            + "\n".join(
+                f"  {stem}: add {v['missing']} (declared={v['declared']}, actual={v['actual']})"
+                for stem, v in sorted(violations.items())
+            )
+        )
+
+    def test_module_cascade_config_has_no_phantom_stems(self) -> None:
+        graph = _build_config_module_reverse_graph()
+        phantoms = [stem for stem in MODULE_CASCADE_CONFIG if not graph.get(stem)]
+        assert not phantoms, (
+            "MODULE_CASCADE_CONFIG contains stems with zero AST consumers — "
+            "the source file may have been renamed or deleted:\n"
+            f"  {sorted(phantoms)}\n"
+            "Remove the stale entry or rename it to match the current module."
+        )
+
+
 _TESTS_ROOT = Path(__file__).parent.parent
 
 
@@ -439,6 +482,89 @@ class TestModuleCascadeRecipeNarrowing:
         layer_dirs = {
             entry
             for entry in LAYER_CASCADE_CONSERVATIVE["recipe"]
+            if "/" not in entry and (_TESTS_ROOT / entry).is_dir()
+        }
+        for entry in layer_dirs:
+            assert any(entry in s for s in scope_strs), (
+                f"Mixed stems should fail-open; missing '{entry}'"
+            )
+
+
+class TestModuleCascadeConfigNarrowing:
+    """Validate that MODULE_CASCADE_CONFIG actually narrows scope in build_test_scope."""
+
+    def test_narrow_config_module_narrows_scope(self) -> None:
+        from tests._test_filter import FilterMode, build_test_scope
+
+        scope = build_test_scope(
+            changed_files={"src/autoskillit/config/_config_loader.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=_TESTS_ROOT,
+        )
+        assert not isinstance(scope, str)
+        assert any("config" in str(p) for p in scope)
+        layer_only = {"execution", "fleet", "pipeline", "workspace"}
+        dir_scope_names = {p.name for p in scope if p.is_dir()}
+        assert not (layer_only & dir_scope_names), (
+            f"_config_loader.py should narrow but got dirs: {dir_scope_names}"
+        )
+
+    def test_config_init_change_fails_open_to_layer_cascade(self) -> None:
+        from tests._test_filter import FilterMode, build_test_scope
+
+        scope = build_test_scope(
+            changed_files={"src/autoskillit/config/__init__.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=_TESTS_ROOT,
+        )
+        assert not isinstance(scope, str)
+        dir_scope_names = {p.name for p in scope if p.is_dir()}
+        assert "config" in dir_scope_names
+
+    def test_unmapped_config_stem_fails_open_to_layer_cascade(self) -> None:
+        from tests._test_filter import (
+            LAYER_CASCADE_CONSERVATIVE,
+            FilterMode,
+            build_test_scope,
+        )
+
+        scope = build_test_scope(
+            changed_files={"src/autoskillit/config/settings.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=_TESTS_ROOT,
+        )
+        assert not isinstance(scope, str)
+        scope_strs = {str(p) for p in scope}
+        layer_dirs = {
+            entry
+            for entry in LAYER_CASCADE_CONSERVATIVE["config"]
+            if "/" not in entry and (_TESTS_ROOT / entry).is_dir()
+        }
+        for entry in layer_dirs:
+            assert any(entry in s for s in scope_strs), (
+                f"Fail-open should include '{entry}' from LAYER_CASCADE"
+            )
+
+    def test_mixed_mapped_and_unmapped_config_stems_fail_open(self) -> None:
+        from tests._test_filter import (
+            LAYER_CASCADE_CONSERVATIVE,
+            FilterMode,
+            build_test_scope,
+        )
+
+        scope = build_test_scope(
+            changed_files={
+                "src/autoskillit/config/_config_loader.py",
+                "src/autoskillit/config/settings.py",
+            },
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=_TESTS_ROOT,
+        )
+        assert not isinstance(scope, str)
+        scope_strs = {str(p) for p in scope}
+        layer_dirs = {
+            entry
+            for entry in LAYER_CASCADE_CONSERVATIVE["config"]
             if "/" not in entry and (_TESTS_ROOT / entry).is_dir()
         }
         for entry in layer_dirs:

@@ -98,7 +98,8 @@ def test_orchestrator_session_required_env_hygiene_coverage() -> None:
     )
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
-    allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | {AGENT_BACKEND_ENV_VAR}
+    always_injected = {AGENT_BACKEND_ENV_VAR, "MCP_CONNECTION_NONBLOCKING"}
+    allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected
     uncovered = ORCHESTRATOR_SESSION_REQUIRED_ENV - allowed
     assert not uncovered, (
         f"Orchestrator required vars not in env hygiene chain: {uncovered}. "
@@ -115,11 +116,12 @@ def test_skill_session_required_env_hygiene_coverage() -> None:
     )
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
-    allowed = (
-        AUTOSKILLIT_PRIVATE_ENV_VARS
-        | _HEADLESS_EXCLUSIVE_VARS
-        | {AGENT_BACKEND_ENV_VAR, "AUTOSKILLIT_APPLICABLE_GUARDS"}
-    )
+    always_injected = {
+        AGENT_BACKEND_ENV_VAR,
+        "AUTOSKILLIT_APPLICABLE_GUARDS",
+        "MCP_CONNECTION_NONBLOCKING",
+    }
+    allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected
     uncovered = SKILL_SESSION_REQUIRED_ENV - allowed
     assert not uncovered, (
         f"Skill required vars not in env hygiene chain: {uncovered}. "

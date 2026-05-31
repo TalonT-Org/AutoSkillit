@@ -23,6 +23,7 @@ from autoskillit.core import (
     get_logger,
     truncate_text,
 )
+from autoskillit.core.io import atomic_write
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
 from autoskillit.fleet._expressions import _CAMPAIGN_REF_RE, _interpolate_campaign_refs
 from autoskillit.fleet._outcome import _checkpoint_to_dict, classify_dispatch_outcome
@@ -59,7 +60,7 @@ async def _dispatch_heartbeat(
     hb_path = dispatches_dir / f"dispatch-{dispatch_id}.heartbeat"
     try:
         hb_path.parent.mkdir(parents=True, exist_ok=True)
-        hb_path.write_text("{}")
+        atomic_write(hb_path, "{}")
     except OSError:
         logger.warning("dispatch_heartbeat_write_failed", heartbeat=str(hb_path), exc_info=True)
         yield None

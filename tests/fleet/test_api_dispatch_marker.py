@@ -9,7 +9,9 @@ from pathlib import Path
 import anyio
 import pytest
 
+from autoskillit.core import SkillResult
 from autoskillit.core._execution_marker import _touch_marker
+from autoskillit.core.types._type_enums import RetryReason
 from autoskillit.fleet._api import _run_dispatch
 from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher, _setup_dispatch
 
@@ -224,6 +226,17 @@ async def test_run_dispatch_heartbeat_mtime_is_fresh(tool_ctx, monkeypatch) -> N
         found = list(dispatches_dir.glob("dispatch-*.heartbeat"))
         if found:
             recorded_mtime.append(found[0].stat().st_mtime)
+        return SkillResult(
+            success=True,
+            result="ok",
+            session_id="",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
 
     monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", _record_mtime_dispatch)
 

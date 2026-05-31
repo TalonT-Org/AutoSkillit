@@ -290,6 +290,27 @@ def test_channel_b_jsonl_no_assistant_records(tmp_path) -> None:
     assert result.outcome == "no_sentinel"
 
 
+def test_extract_text_from_jsonl_excludes_subagent(tmp_path: Path) -> None:
+    """Subagent text blocks must not be extracted as parent session text."""
+    from autoskillit.fleet.result_parser import _extract_text_from_jsonl
+
+    parent_line = json.dumps(
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "parent result"}]}}
+    )
+    subagent_line = json.dumps(
+        {
+            "type": "assistant",
+            "subagent_type": "Explore",
+            "message": {"content": [{"type": "text", "text": "subagent text"}]},
+        }
+    )
+    f = tmp_path / "test.jsonl"
+    f.write_text(f"{parent_line}\n{subagent_line}\n")
+    result = _extract_text_from_jsonl(f)
+    assert "parent result" in result
+    assert "subagent text" not in result
+
+
 def test_extract_text_from_jsonl_ignores_thinking_blocks(tmp_path: Path) -> None:
     """Thinking blocks do not contribute to sentinel search text."""
     from autoskillit.fleet.result_parser import _extract_text_from_jsonl

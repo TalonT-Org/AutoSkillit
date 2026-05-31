@@ -12,6 +12,7 @@ import regex as re
 
 from autoskillit.core import ClaudeContentBlockType, get_logger
 from autoskillit.execution import _collapse_hr_split_delimiters
+from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
 logger = get_logger(__name__)
 
@@ -51,7 +52,7 @@ def _extract_text_from_jsonl(path: Path) -> str:
             continue
         if not isinstance(obj, dict):
             continue
-        if obj.get("type") != "assistant":
+        if not _is_parent_assistant_record(obj):
             continue
         msg = obj.get("message")
         if not isinstance(msg, dict):

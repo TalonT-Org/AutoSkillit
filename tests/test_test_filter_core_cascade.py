@@ -106,6 +106,7 @@ class TestModuleCascadeCore:
             "_type_constants_registries",
             "_type_exceptions",
             "_step_context",
+            "_execution_marker",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

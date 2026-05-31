@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.core import DispatchGateType, Severity, pkg_root
+from autoskillit.core import CaptureEntrySpec, DispatchGateType, Severity, pkg_root
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.io import (
     _parse_recipe,
@@ -306,6 +306,64 @@ def test_promote_to_main_campaign_in_list_campaign_recipes(tmp_path: Path):
     assert result.errors == []
     names = [r.name for r in result.items]
     assert "promote-to-main" in names
+
+
+def test_campaign_dispatch_capture_value_type_checked() -> None:
+    """dispatch-capture-type-matches-contract-optionality: string on optional field → ERROR."""
+    import dataclasses
+
+    path = pkg_root() / "recipes" / "campaigns" / "promote-to-main.yaml"
+    recipe = load_recipe(path)
+    project_dir = pkg_root() / "recipes"
+    available_recipes = frozenset(p.stem for p in project_dir.glob("*.yaml"))
+
+    # Build a modified recipe where pr_url uses value_type="string" (wrong type).
+    # The rule must emit an ERROR for this.
+    modified_dispatches = []
+    for d in recipe.dispatches:
+        if d.capture and "pr_url" in d.capture:
+            new_capture = dict(d.capture)
+            new_capture["pr_url"] = CaptureEntrySpec(
+                from_=d.capture["pr_url"].from_,
+                value_type="string",
+            )
+            modified_dispatches.append(dataclasses.replace(d, capture=new_capture))
+        else:
+            modified_dispatches.append(d)
+
+    wrong_recipe = dataclasses.replace(recipe, dispatches=modified_dispatches)
+    wrong_ctx = make_validation_context(
+        wrong_recipe,
+        available_recipes=available_recipes,
+        project_dir=project_dir,
+    )
+    wrong_findings = [
+        f
+        for f in run_semantic_rules(wrong_ctx)
+        if f.rule == "dispatch-capture-type-matches-contract-optionality"
+        and f.severity == Severity.ERROR
+    ]
+    assert wrong_findings, (
+        "Expected dispatch-capture-type-matches-contract-optionality ERROR "
+        "when pr_url uses value_type='string'"
+    )
+
+    # Original recipe (fixed with optional_string) must produce no ERROR.
+    fixed_ctx = make_validation_context(
+        recipe,
+        available_recipes=available_recipes,
+        project_dir=project_dir,
+    )
+    fixed_findings = [
+        f
+        for f in run_semantic_rules(fixed_ctx)
+        if f.rule == "dispatch-capture-type-matches-contract-optionality"
+        and f.severity == Severity.ERROR
+    ]
+    assert not fixed_findings, (
+        "promote-to-main.yaml must not trigger dispatch-capture-type-matches-contract-optionality "
+        "after the optional_string fix: " + "; ".join(f.message for f in fixed_findings)
+    )
 
 
 # ---------------------------------------------------------------------------

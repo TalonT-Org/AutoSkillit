@@ -1935,11 +1935,7 @@ def test_parse_agent_eval_manifests_rejects_untyped_criteria(tmp_path: Path) -> 
         json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
     )
     assert result["success"] == "false"
-    assert (
-        "criterion_type" in result["error"]
-        or "text" in result["error"]
-        or "type" in result["error"]
-    )
+    assert "'text' and 'type'" in result["error"]
 
 
 def test_parse_agent_eval_manifests_rejects_precision_only_canary(tmp_path: Path) -> None:

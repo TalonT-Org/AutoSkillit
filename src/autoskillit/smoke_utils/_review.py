@@ -37,6 +37,10 @@ def annotate_pr_diff(
         select_review_agents,
     )  # noqa: PLC0415
 
+    out = Path(output_dir)
+    if not out.is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
+
     try:
         local_rounds = int(local_review_rounds.strip()) if local_review_rounds.strip() else 0
     except ValueError:
@@ -88,9 +92,6 @@ def annotate_pr_diff(
             timeout=10,
         )
     head_sha = head_sha_result.stdout.strip() if head_sha_result.returncode == 0 else ""
-    out = Path(output_dir)
-    if not out.is_absolute():
-        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     out.mkdir(parents=True, exist_ok=True)
     annotated_path = out / f"annotated_diff_{pr_number}.txt"
     ranges_path = out / f"ranges_{pr_number}.json"

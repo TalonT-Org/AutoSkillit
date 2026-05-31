@@ -38,6 +38,9 @@ def compute_domain_partitions(
     from autoskillit.core import atomic_write  # noqa: PLC0415
     from autoskillit.execution import partition_files_by_domain  # noqa: PLC0415
 
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
+
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{base_branch}..{batch_branch}"],
         capture_output=True,
@@ -48,8 +51,6 @@ def compute_domain_partitions(
     )
     files = [f for f in result.stdout.strip().split("\n") if f]
     partitions = partition_files_by_domain(files)
-    if not Path(output_dir).is_absolute():
-        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     out_path = Path(output_dir) / "domain_partitions.json"
     atomic_write(out_path, json.dumps(partitions))
     return {"domain_partitions_path": str(out_path)}
@@ -66,6 +67,9 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
     from autoskillit.execution import parse_merge_queue_response  # noqa: PLC0415
+
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
 
     repo_info = subprocess.run(
         ["gh", "repo", "view", "--json", "owner,name"],
@@ -102,8 +106,6 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
         else:
             entries = parse_merge_queue_response(data)
 
-    if not Path(output_dir).is_absolute():
-        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     out_path = Path(output_dir) / "merge_queue_data.json"
     atomic_write(out_path, json.dumps(entries))
     return {"merge_queue_data_path": str(out_path)}

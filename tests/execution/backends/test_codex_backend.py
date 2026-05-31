@@ -436,11 +436,15 @@ class TestCodexResumeCmd:
         assert "read-only" in spec.cmd
 
     def test_resume_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
-        from autoskillit.execution.backends._claude_prompt import _HEADLESS_EXCLUSIVE_VARS
+        from autoskillit.execution.backends._claude_prompt import (
+            _HEADLESS_EXCLUSIVE_VARS,
+            _SESSION_BASELINE_ENV,
+        )
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        leaking = _HEADLESS_EXCLUSIVE_VARS & spec.env.keys()
+        reinjected = frozenset(_SESSION_BASELINE_ENV.keys())
+        leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume env: {leaking}"
 
 

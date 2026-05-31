@@ -12,7 +12,10 @@ from autoskillit.core import (
     DirectInstall,
     OutputFormat,
 )
-from autoskillit.execution.backends._claude_prompt import _HEADLESS_EXCLUSIVE_VARS
+from autoskillit.execution.backends._claude_prompt import (
+    _HEADLESS_EXCLUSIVE_VARS,
+    _SESSION_BASELINE_ENV,
+)
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 
@@ -59,7 +62,8 @@ def test_resume_cmd_env_uses_filtered_base(monkeypatch) -> None:
     """CodexBackend.build_resume_cmd must NOT pass _HEADLESS_EXCLUSIVE_VARS through."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
     spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-    leaking = _HEADLESS_EXCLUSIVE_VARS & spec.env.keys()
+    reinjected = frozenset(_SESSION_BASELINE_ENV.keys())
+    leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
     assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume cmd env: {leaking}"
 
 

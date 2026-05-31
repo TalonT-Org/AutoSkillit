@@ -1519,6 +1519,12 @@ def build_test_scope(
                                         " when only config/__init__.py changed)"
                                     )
                                 test_dirs.update(cascade_map["config"])  # fail-open
+                        elif stem in MODULE_CASCADE_CONFIG:
+                            test_dirs.update(MODULE_CASCADE_CONFIG[stem])
+                        else:
+                            test_dirs.update(
+                                cascade_map["config"]
+                            )  # fail-open: non-__init__ unmapped config stems
                     elif pkg and pkg in cascade_map:
                         test_dirs.update(cascade_map[pkg])
         except Exception:

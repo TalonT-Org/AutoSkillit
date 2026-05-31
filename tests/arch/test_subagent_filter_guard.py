@@ -43,6 +43,7 @@ def test_predicate_copies_are_structurally_complete() -> None:
     for path in [
         SRC / "execution" / "session" / "_session_model.py",
         SRC / "core" / "tool_sequence_analysis.py",
+        SRC / "fleet" / "result_parser.py",
     ]:
         source = path.read_text()
         tree = ast.parse(source)

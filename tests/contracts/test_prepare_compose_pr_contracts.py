@@ -104,16 +104,21 @@ def test_prepare_pr_skill_command_includes_issue_number() -> None:
 
 
 def test_prepare_pr_plan_summary_prohibits_nested_heading():
-    """Plan Summary placeholder must explicitly prohibit including the ## Summary heading."""
+    """Plan Summary placeholder must prohibit including the ## Summary heading.
+
+    Checks that a single sentence contains both the prohibition verb and the
+    heading reference — a proximity anchor that prevents false passes from
+    unrelated occurrences scattered across the file.
+    """
+    import regex as re
+
     text = PREPARE_PR.read_text()
-    assert "NOT include" in text and "## Summary" in text and "heading" in text, (
-        "prepare-pr/SKILL.md must explicitly state: do NOT include the ## Summary heading"
+    pattern = re.compile(
+        r"(?:NOT include|NEVER.*include).*## Summary.*heading"
+        r"|heading.*## Summary.*(?:NOT include|NEVER)",
+        re.IGNORECASE,
     )
-
-
-def test_prepare_pr_plan_summary_has_negative_example():
-    """Plan Summary section must have a NEVER instruction about the heading."""
-    text = PREPARE_PR.read_text()
-    assert "NEVER" in text and "## Summary" in text and "heading" in text, (
-        "prepare-pr/SKILL.md must contain a NEVER instruction about the ## Summary heading"
+    assert pattern.search(text), (
+        "prepare-pr/SKILL.md must contain a proximity-anchored prohibition: "
+        "'do NOT include the ## Summary heading' or 'NEVER include the ## Summary heading'"
     )

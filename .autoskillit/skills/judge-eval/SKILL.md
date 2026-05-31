@@ -51,3 +51,10 @@ When creating this skill, the judge must:
   "cross_variant_notes": "..."
 }
 ```
+
+## Criteria Type Handling
+
+Each criterion must have a `type` field:
+- `precision` — Verify the agent does NOT report a false positive. Empty output satisfies this.
+- `recall` — Verify the agent DOES find a specific issue. Empty output ALWAYS fails this — never apply vacuous satisfaction.
+- `recognition` — Verify the agent acknowledges or recognizes a pattern. Empty output fails this.

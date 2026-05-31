@@ -159,6 +159,8 @@ steps:
       pass_rate: "${{ result.pass_rate }}"
       total_runs: "${{ result.total_runs }}"
       passed_runs: "${{ result.passed_runs }}"
+      vacuous_passes: "${{ result.vacuous_passes }}"
+      effective_pass_rate: "${{ result.effective_pass_rate }}"
     on_success: done
     on_failure: escalate
     note: >-
@@ -171,4 +173,6 @@ steps:
     message: >-
       Agent evaluation complete. Pass rate: ${{ context.pass_rate }}
       (${{ context.passed_runs }}/${{ context.total_runs }}).
+      Vacuous passes: ${{ context.vacuous_passes }}.
+      Effective pass rate: ${{ context.effective_pass_rate }}.
       Scorecard: ${{ context.scorecard_path }}

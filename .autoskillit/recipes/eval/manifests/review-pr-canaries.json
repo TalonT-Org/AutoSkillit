@@ -1,0 +1,16 @@
+[
+  {
+    "id": "RP10",
+    "agent_name": "pr-review-auditor",
+    "prompt_template": "{diff}",
+    "prompt_vars": {"diff_file": ".autoskillit/recipes/eval/canaries/RP10-diff.txt"},
+    "reference_path": ".autoskillit/recipes/eval/canaries/RP10-reference.md",
+    "reference_type": "patch",
+    "gap_description": "Cross-artifact schema mismatch: TypedDict field file_path serialized as key file",
+    "detection_criteria": [
+      {"text": "Does NOT flag style issues in test helpers", "type": "precision"},
+      {"text": "Finds the file_path/file key mismatch", "type": "recall"},
+      {"text": "Does NOT flag intentional asymmetric error handling", "type": "precision"}
+    ]
+  }
+]

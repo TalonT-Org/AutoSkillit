@@ -1427,6 +1427,7 @@
       "description": "Run post-pipeline diagnostic analysis on session logs (no-CI path)",
       "tool": "run_skill",
       "model": "",
+      "stale_threshold": 2400,
       "optional": true,
       "skip_when_false": "inputs.post_run_diagnostics",
       "with": {
@@ -2337,6 +2338,7 @@
       "description": "Run post-pipeline diagnostic analysis on session logs (unconfirmed path)",
       "tool": "run_skill",
       "model": "",
+      "stale_threshold": 2400,
       "optional": true,
       "skip_when_false": "inputs.post_run_diagnostics",
       "with": {
@@ -2391,6 +2393,7 @@
       "description": "Run post-pipeline diagnostic analysis on session logs",
       "tool": "run_skill",
       "model": "",
+      "stale_threshold": 2400,
       "optional": true,
       "skip_when_false": "inputs.post_run_diagnostics",
       "with": {
@@ -2407,6 +2410,7 @@
       "description": "Run post-pipeline diagnostic analysis on session logs (error path)",
       "tool": "run_skill",
       "model": "",
+      "stale_threshold": 2400,
       "optional": true,
       "skip_when_false": "inputs.post_run_diagnostics",
       "with": {

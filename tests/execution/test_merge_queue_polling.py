@@ -975,6 +975,7 @@ class TestMergeGroupDropInternalReenqueue:
                 not_in_queue_confirmation_cycles=1,
             )
 
+        assert reenqueue_happened, "re-enqueue code path was never taken"
         assert result["success"] is True
         assert result["pr_state"] == "merged"
 

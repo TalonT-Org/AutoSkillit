@@ -14,7 +14,6 @@ SKILL_PATH = (
     / "compose-pr"
     / "SKILL.md"
 )
-SKILL_TEXT = SKILL_PATH.read_text()
 
 
 def test_closes_issue_outside_architecture_impact_block():
@@ -23,6 +22,7 @@ def test_closes_issue_outside_architecture_impact_block():
     If Closes # is inside the Architecture Impact conditional block, it gets
     omitted when no validated diagrams exist (the entire block is skipped).
     """
+    SKILL_TEXT = SKILL_PATH.read_text()
     end_marker = "{## End Architecture Impact conditional}"
     closes_pattern = "Closes #{closing_issue}"
     marker_positions = [i for i in range(len(SKILL_TEXT)) if SKILL_TEXT[i:].startswith(end_marker)]

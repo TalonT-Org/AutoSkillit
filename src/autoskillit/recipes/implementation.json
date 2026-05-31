@@ -1518,7 +1518,8 @@
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
         "timeout_seconds": 60,
-        "poll_interval": 10
+        "poll_interval": 10,
+        "max_merge_group_drops": 1
       },
       "on_result": [
         {
@@ -1567,7 +1568,8 @@
         "target_branch": "${{ inputs.base_branch }}",
         "timeout_seconds": 900,
         "cwd": "${{ context.work_dir }}",
-        "remote_url": "${{ context.remote_url }}"
+        "remote_url": "${{ context.remote_url }}",
+        "max_merge_group_drops": 1
       },
       "capture": {
         "queue_pr_state": "${{ result.pr_state }}"

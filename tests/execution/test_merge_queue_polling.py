@@ -731,3 +731,168 @@ class TestToggleAutoMergeConfirmation:
             await watcher._toggle_auto_merge("PR_node123")
 
         assert 2 not in sleep_durations
+
+
+class TestMergeGroupDropInternalReenqueue:
+    """Tests for internal re-enqueue on DROPPED_MERGE_GROUP_CI."""
+
+    @pytest.mark.anyio
+    async def test_wait_internally_reenqueues_on_first_dropped_merge_group_ci(self):
+        """With max_merge_group_drops=1, first drop triggers internal re-enqueue, then merges."""
+        import autoskillit.execution.merge_queue as _mq
+
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            if call_count == 2:
+                return _queue_state(
+                    in_queue=False,
+                    checks_state="SUCCESS",
+                    state="OPEN",
+                    mergeable="MERGEABLE",
+                    merge_state_status="CLEAN",
+                    auto_merge_present=False,
+                )
+            if call_count == 3:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            return _queue_state(merged=True)
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+
+        enqueue_calls: list[int] = []
+
+        async def _mock_enqueue(*a, **kw):
+            enqueue_calls.append(1)
+            return {"success": True, "pr_number": 42, "enrollment_method": "auto_merge"}
+
+        watcher.enqueue = _mock_enqueue  # type: ignore[method-assign]
+
+        with (
+            patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock),
+            patch.object(
+                _mq, "_query_merge_group_ci", new_callable=AsyncMock, return_value="FAILURE"
+            ),
+        ):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                max_merge_group_drops=1,
+                merge_group_drop_backoff=0.01,
+            )
+
+        assert result["success"] is True
+        assert result["pr_state"] == "merged"
+        assert len(enqueue_calls) == 1
+
+    @pytest.mark.anyio
+    async def test_wait_returns_on_second_dropped_merge_group_ci(self):
+        """With max_merge_group_drops=1, second consecutive drop surfaces to caller."""
+        import autoskillit.execution.merge_queue as _mq
+
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            if call_count in (2, 3):
+                return _queue_state(
+                    in_queue=False,
+                    checks_state="SUCCESS",
+                    state="OPEN",
+                    mergeable="MERGEABLE",
+                    merge_state_status="CLEAN",
+                    auto_merge_present=False,
+                )
+            if call_count == 4:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            return _queue_state(
+                in_queue=False,
+                checks_state="SUCCESS",
+                state="OPEN",
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                auto_merge_present=False,
+            )
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+
+        async def _mock_enqueue(*a, **kw):
+            return {"success": True, "pr_number": 42, "enrollment_method": "auto_merge"}
+
+        watcher.enqueue = _mock_enqueue  # type: ignore[method-assign]
+
+        with (
+            patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock),
+            patch.object(
+                _mq, "_query_merge_group_ci", new_callable=AsyncMock, return_value="FAILURE"
+            ),
+        ):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                max_merge_group_drops=1,
+                merge_group_drop_backoff=0.01,
+            )
+
+        assert result["success"] is False
+        assert result["pr_state"] == "dropped_merge_group_ci"
+        assert result["drop_count"] == 1
+
+    @pytest.mark.anyio
+    async def test_wait_returns_immediately_when_max_merge_group_drops_zero(self):
+        """Default max_merge_group_drops=0 returns immediately without calling enqueue."""
+        import autoskillit.execution.merge_queue as _mq
+
+        watcher = _make_watcher()
+        call_count = 0
+
+        async def _fetch(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _queue_state(in_queue=True, checks_state="SUCCESS")
+            return _queue_state(
+                in_queue=False,
+                checks_state="SUCCESS",
+                state="OPEN",
+                mergeable="MERGEABLE",
+                merge_state_status="CLEAN",
+                auto_merge_present=False,
+            )
+
+        watcher._fetch_pr_and_queue_state = _fetch  # type: ignore[method-assign]
+
+        enqueue_calls: list[int] = []
+
+        async def _mock_enqueue(*a, **kw):
+            enqueue_calls.append(1)
+            return {"success": True, "pr_number": 42, "enrollment_method": "auto_merge"}
+
+        watcher.enqueue = _mock_enqueue  # type: ignore[method-assign]
+
+        with (
+            patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock),
+            patch.object(
+                _mq, "_query_merge_group_ci", new_callable=AsyncMock, return_value="FAILURE"
+            ),
+        ):
+            result = await watcher.wait(
+                pr_number=42,
+                target_branch="main",
+                repo="owner/repo",
+                max_merge_group_drops=0,
+            )
+
+        assert result["success"] is False
+        assert result["pr_state"] == "dropped_merge_group_ci"
+        assert len(enqueue_calls) == 0

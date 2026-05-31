@@ -288,9 +288,6 @@ async def _session_log_monitor(
     # the JSONL already contains records (including completion markers) from the
     # prior session. Starting at the current file boundary ensures Phase 2 only
     # scans content written AFTER monitoring began.
-    #
-    # The two reads are in separate try/except blocks so that a transient
-    # stat() failure does not discard a correctly computed scan_pos.
     try:
         _initial_content = session_file.read_text(errors="replace")
         scan_pos = len(_initial_content)
@@ -300,6 +297,7 @@ async def _session_log_monitor(
             "session_log_phase2_init_read_failed",
             file=str(session_file),
             fallback_scan_pos=0,
+            exc_info=True,
         )
         scan_pos = 0
         last_size = 0

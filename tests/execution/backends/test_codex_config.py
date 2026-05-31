@@ -523,6 +523,18 @@ class TestSerializeTomlKeyQuoting:
         parsed = tomllib.loads(serialized)
         assert parsed == original
 
+    def test_round_trip_key_with_backslash(self):
+        original = {"section": {"path\\to\\file": "val"}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_key_with_dot_and_double_quote(self):
+        original = {"section": {'key.with"quote': "val"}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
 
 class TestExports:
     def test_ensure_codex_mcp_registered_in_codex_all(self):

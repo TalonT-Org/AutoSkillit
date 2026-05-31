@@ -1152,8 +1152,8 @@ class TestCodexBackendVersion:
 class TestCodexStubMethods:
     def test_validate_skill_content_returns_list(self) -> None:
         result = CodexBackend().validate_skill_content("some skill content")
-        assert isinstance(result, list)
+        assert result == []
 
     def test_list_plugins_returns_list(self) -> None:
         result = CodexBackend().list_plugins()
-        assert isinstance(result, list)
+        assert result == []

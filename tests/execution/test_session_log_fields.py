@@ -1356,6 +1356,32 @@ def test_flush_session_log_bracket_suffix_no_drift(tmp_path):
     assert len(drift) == 0
 
 
+def test_flush_session_log_genuine_drift_with_configured_model(tmp_path):
+    """When model_identifier differs from the dominant model in model_breakdown, a MODEL_DRIFT anomaly fires."""
+    _flush(
+        tmp_path,
+        session_id="genuine-drift-001",
+        proc_snapshots=None,
+        model_identifier="claude-opus-4-6",
+        token_usage={
+            "model_breakdown": {
+                "claude-sonnet-4-6": {"input_tokens": 20000, "output_tokens": 8000},
+                "claude-opus-4-6": {"input_tokens": 1000, "output_tokens": 200},
+            },
+        },
+    )
+    anomalies_path = tmp_path / "sessions" / "genuine-drift-001" / "anomalies.jsonl"
+    assert anomalies_path.exists(), "anomalies.jsonl must be written when drift is detected"
+    drift_entries = [
+        json.loads(line)
+        for line in anomalies_path.read_text().strip().splitlines()
+        if json.loads(line).get("kind") == "model_drift"
+    ]
+    assert len(drift_entries) == 1
+    assert drift_entries[0]["detail"]["configured_model"] == "claude-opus-4-6"
+    assert drift_entries[0]["detail"]["observed_model"] == "claude-sonnet-4-6"
+
+
 def test_flush_session_log_argmax_fallback_prefers_output_tokens(tmp_path):
     """When model_identifier is empty, flush_session_log uses output-token-weighted
     argmax, not total-token argmax."""

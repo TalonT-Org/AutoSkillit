@@ -754,8 +754,6 @@ def _write_ingredient_locks(
                 for key in unlock_keys:
                     if pipeline_id in li:
                         li[pipeline_id].pop(key, None)
-                for key in unlock_keys:
-                    li.get(pipeline_id, {}).pop(key, None)
                 if pipeline_id in ls:
                     ls[pipeline_id] = locked_steps if locked_steps is not None else {}
 

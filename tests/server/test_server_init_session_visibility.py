@@ -347,6 +347,102 @@ class TestSessionTypeVisibility:
         for name in GATED_TOOLS:
             assert name not in tool_names, f"{name} should be hidden after conftest reset"
 
+    @pytest.mark.anyio
+    async def test_orchestrator_headless_hides_fleet_tools(self, monkeypatch):
+        """Regression guard: fleet tools must NOT be visible in orchestrator+headless sessions."""
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
+        _apply_session_type_visibility()
+
+        visible = {t.name for t in await mcp.list_tools()}
+        assert visible.isdisjoint(FLEET_TOOLS), (
+            f"Fleet tools visible in orchestrator+headless: {visible & FLEET_TOOLS}"
+        )
+        assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
+            f"Fleet-dispatch visible in orchestrator+headless: {visible & FLEET_DISPATCH_TOOLS}"
+        )
+
+    @pytest.mark.anyio
+    async def test_orchestrator_interactive_hides_fleet_tools(self, monkeypatch):
+        """Regression guard: fleet tools must NOT be visible in orchestrator+interactive
+        sessions."""
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
+        _apply_session_type_visibility()
+
+        visible = {t.name for t in await mcp.list_tools()}
+        assert visible.isdisjoint(FLEET_TOOLS), (
+            f"Fleet tools visible in orchestrator+interactive: {visible & FLEET_TOOLS}"
+        )
+        assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
+            f"Fleet-dispatch visible in orchestrator+interactive: {visible & FLEET_DISPATCH_TOOLS}"
+        )
+
+    @pytest.mark.anyio
+    async def test_skill_headless_hides_fleet_tools(self, monkeypatch):
+        """Regression guard: fleet tools must NOT be visible in skill+headless sessions."""
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
+        _apply_session_type_visibility()
+
+        visible = {t.name for t in await mcp.list_tools()}
+        assert visible.isdisjoint(FLEET_TOOLS), (
+            f"Fleet tools visible in skill+headless: {visible & FLEET_TOOLS}"
+        )
+        assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
+            f"Fleet-dispatch tools visible in skill+headless: {visible & FLEET_DISPATCH_TOOLS}"
+        )
+
+    @pytest.mark.anyio
+    async def test_skill_interactive_hides_fleet_tools(self, monkeypatch):
+        """Regression guard: fleet tools must NOT be visible in skill+interactive sessions."""
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
+        _apply_session_type_visibility()
+
+        visible = {t.name for t in await mcp.list_tools()}
+        assert visible.isdisjoint(FLEET_TOOLS), (
+            f"Fleet tools visible in skill+interactive: {visible & FLEET_TOOLS}"
+        )
+        assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
+            f"Fleet-dispatch tools visible in skill+interactive: {visible & FLEET_DISPATCH_TOOLS}"
+        )
+
+    @pytest.mark.anyio
+    async def test_no_session_type_hides_fleet_tools(self, monkeypatch):
+        """Regression guard: fleet tools must NOT be visible when no session type is set."""
+        from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_MODE_ENV_VAR, FLEET_TOOLS
+        from autoskillit.server import _apply_session_type_visibility, mcp
+
+        monkeypatch.delenv("AUTOSKILLIT_SESSION_TYPE", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        monkeypatch.delenv(FLEET_MODE_ENV_VAR, raising=False)
+        _apply_session_type_visibility()
+
+        visible = {t.name for t in await mcp.list_tools()}
+        assert visible.isdisjoint(FLEET_TOOLS), (
+            f"Fleet tools visible with no session type: {visible & FLEET_TOOLS}"
+        )
+        assert visible.isdisjoint(FLEET_DISPATCH_TOOLS), (
+            f"Fleet-dispatch tools visible with no session type: {visible & FLEET_DISPATCH_TOOLS}"
+        )
+
 
 @pytest.mark.feature("fleet")
 class TestFleetAutoGateBoot:

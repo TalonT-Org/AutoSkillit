@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,9 @@ class LoadCache:
 
     def copy_result(self, result: Any) -> dict[str, Any]:
         """Return a shallow copy of result with list fields independently copied."""
+        if not isinstance(result, Mapping):
+            msg = f"copy_result expected a Mapping, got {type(result).__name__}"
+            raise TypeError(msg)
         r = dict(result)
         for list_key in (
             "suggestions",
@@ -70,19 +74,6 @@ class LoadCache:
     def clear(self) -> None:
         with self._lock:
             self._store.clear()
-
-    def keys(self):
-        with self._lock:
-            return list(self._store.keys())
-
-    def __bool__(self) -> bool:
-        return bool(self._store)
-
-    def __iter__(self):
-        return iter(list(self._store.keys()))
-
-    def __len__(self) -> int:
-        return len(self._store)
 
 
 _LOAD_CACHE = LoadCache()

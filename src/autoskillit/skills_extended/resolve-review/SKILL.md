@@ -490,6 +490,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | FastMCP tag hygiene | `test_transforms_hygiene.py` | Test fixtures touching `mcp._transforms` without using the canonical `ALL_VISIBILITY_TAGS` constant |
 | Watcher dispatch marker | `test_watcher_signal_consistency.py` | Process watchers that skip `_has_active_dispatch_marker()` check |
 | Write restriction enforcement | `test_write_restriction_coverage.py` | Skills with prose write restrictions (`never modify source`, `read-only`, `output dir`) lacking runtime `WriteBehaviorSpec` enforcement |
+| Subagent filter guard | `test_subagent_filter_guard.py` | NDJSON assistant-record consumers missing `_is_parent_assistant_record` or `_is_parent_assistant` predicate — subagent records contaminate parent metrics |
 
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing

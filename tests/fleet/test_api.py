@@ -312,60 +312,49 @@ class TestDispatchResultWrapper:
         assert result.per_dispatch_state_path.exists()
 
 
-class TestTouchDispatchMarker:
-    """Unit tests for _touch_dispatch_marker helper."""
+class TestTouchMarker:
+    """Unit tests for _touch_marker helper (core._execution_marker)."""
 
     @pytest.mark.anyio
-    async def test_touch_dispatch_marker_creates_heartbeat_loop(self, tmp_path: Path) -> None:
-        """Heartbeat loop refreshes mtime until trigger is set."""
+    async def test_touch_marker_creates_heartbeat_loop(self, tmp_path: Path) -> None:
+        """Heartbeat loop refreshes mtime until cancelled."""
         import os
 
-        from autoskillit.fleet._api import _touch_dispatch_marker
+        from autoskillit.core._execution_marker import _touch_marker
 
         marker = tmp_path / "test.marker"
         marker.touch()
-        os.utime(marker, (0, 0))  # Set to epoch 0 so any real touch shows as newer
+        os.utime(marker, (0, 0))
         original_mtime_ns = marker.stat().st_mtime_ns
 
-        trigger = anyio.Event()
-
-        async def _heartbeat_wrapper() -> None:
-            await _touch_dispatch_marker(marker, interval=0.05, trigger=trigger)
-
         async with anyio.create_task_group() as tg:
-            tg.start_soon(_heartbeat_wrapper)
-            # 1.0s gives ~20 heartbeat cycles; tolerates WSL2 CLOCK_REALTIME backward
-            # jumps of up to ~0.9s from NTP sync without causing a spurious failure.
+            tg.start_soon(_touch_marker, marker, 0.05)
             await anyio.sleep(1.0)
-            trigger.set()
+            tg.cancel_scope.cancel()
 
         new_mtime_ns = marker.stat().st_mtime_ns
         assert new_mtime_ns > original_mtime_ns, "marker mtime should have been refreshed"
 
     @pytest.mark.anyio
-    async def test_touch_dispatch_marker_oserror_does_not_propagate(self, tmp_path: Path) -> None:
+    async def test_touch_marker_oserror_does_not_propagate(self, tmp_path: Path) -> None:
         """OSError during touch logs but does not raise."""
-        from autoskillit.fleet._api import _touch_dispatch_marker
+        from autoskillit.core._execution_marker import _touch_marker
 
         subdir = tmp_path / "subdir"
         subdir.mkdir()
         marker_file = subdir / "test.marker"
-        marker_file.touch()  # create the file first
-        marker_file.chmod(0o000)  # make unwritable so touch() fails
-        trigger = anyio.Event()
-
-        async def _heartbeat_wrapper() -> None:
-            await _touch_dispatch_marker(marker_file, interval=0.05, trigger=trigger)
+        marker_file.touch()
+        marker_file.chmod(0o000)
 
         try:
             async with anyio.create_task_group() as tg:
-                tg.start_soon(_heartbeat_wrapper)
+                tg.start_soon(_touch_marker, marker_file, 0.05)
                 await anyio.sleep(0.12)
-                trigger.set()
+                tg.cancel_scope.cancel()
         except OSError:
-            pytest.fail("_touch_dispatch_marker should not propagate OSError")
+            pytest.fail("_touch_marker should not propagate OSError")
         finally:
-            marker_file.chmod(0o644)  # restore for cleanup
+            marker_file.chmod(0o644)
 
 
 class TestDispatchMarkerLifecycle:
@@ -514,11 +503,12 @@ class TestDispatchMarkerLifecycle:
 
         assert len(captured_json) == 1, "should have captured marker JSON"
         data = captured_json[0]
-        assert "dispatch_id" in data
+        assert "label" in data
         assert "orchestrator_pid" in data
         assert "session_id" in data
         assert isinstance(data["orchestrator_pid"], int)
         assert isinstance(data["session_id"], str)
+        assert data["label"] == "dispatch"
 
 
 class TestWriteDispatchToCampaignStateRefusal:

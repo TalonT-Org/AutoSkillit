@@ -18,7 +18,7 @@ from autoskillit.core.types import ChannelBStatus, TerminationReason
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _has_active_child_processes,
-    _has_active_dispatch_marker,
+    _has_active_execution_marker,
     _heartbeat,
     _session_log_monitor,
     run_managed_async,
@@ -750,19 +750,19 @@ class TestHeartbeatStreamParser:
                 )
 
 
-class TestHasActiveDispatchMarker:
-    """Unit tests for _has_active_dispatch_marker."""
+class TestHasActiveExecutionMarker:
+    """Unit tests for _has_active_execution_marker."""
 
     def test_dispatch_marker_nonexistent_dir_returns_false(self, tmp_path):
         """Nonexistent marker directory returns False without raising."""
-        result = _has_active_dispatch_marker(tmp_path / "nonexistent")
+        result = _has_active_execution_marker(tmp_path / "nonexistent")
         assert result is False
 
     def test_dispatch_marker_fresh_marker_returns_true(self, tmp_path):
         """A fresh marker file causes the function to return True."""
         marker = tmp_path / "dispatch-in-progress-sess1-abc.marker"
         marker.touch()
-        result = _has_active_dispatch_marker(tmp_path)
+        result = _has_active_execution_marker(tmp_path)
         assert result is True
 
     def test_dispatch_marker_expired_marker_returns_false(self, tmp_path):
@@ -772,15 +772,15 @@ class TestHasActiveDispatchMarker:
         old_time = time.time() - 120
 
         _os.utime(marker, (old_time, old_time))
-        result = _has_active_dispatch_marker(tmp_path, max_marker_age=60.0)
+        result = _has_active_execution_marker(tmp_path, max_marker_age=60.0)
         assert result is False
 
     def test_dispatch_marker_session_id_filters(self, tmp_path):
         """When session_id is provided, only markers matching that session are considered."""
         (tmp_path / "dispatch-in-progress-abc-001.marker").touch()
         (tmp_path / "dispatch-in-progress-xyz-002.marker").touch()
-        result_matching = _has_active_dispatch_marker(tmp_path, session_id="abc")
-        result_non_matching = _has_active_dispatch_marker(tmp_path, session_id="def")
+        result_matching = _has_active_execution_marker(tmp_path, session_id="abc")
+        result_non_matching = _has_active_execution_marker(tmp_path, session_id="def")
         assert result_matching is True
         assert result_non_matching is False
 
@@ -788,13 +788,13 @@ class TestHasActiveDispatchMarker:
         """session_id=None matches any dispatch-in-progress marker."""
         marker = tmp_path / "dispatch-in-progress-xyz-001.marker"
         marker.touch()
-        result = _has_active_dispatch_marker(tmp_path, session_id=None)
+        result = _has_active_execution_marker(tmp_path, session_id=None)
         assert result is True
 
     def test_dispatch_marker_no_logger_calls(self):
         """The function body contains no logger.* attribute access calls."""
 
-        source = inspect.getsource(_has_active_dispatch_marker)
+        source = inspect.getsource(_has_active_execution_marker)
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if (
@@ -802,4 +802,21 @@ class TestHasActiveDispatchMarker:
                 and isinstance(node.value, ast.Name)
                 and node.value.id == "logger"
             ):
-                pytest.fail(f"Found logger.{node.attr} in _has_active_dispatch_marker body")
+                pytest.fail(f"Found logger.{node.attr} in _has_active_execution_marker body")
+
+    @pytest.mark.parametrize(
+        "prefix",
+        ["dispatch-in-progress", "run-skill-in-progress"],
+    )
+    def test_execution_marker_matches_both_prefixes(self, tmp_path, prefix):
+        """Both dispatch-in-progress-* and run-skill-in-progress-* markers are matched."""
+        marker = tmp_path / f"{prefix}-sess1-step.marker"
+        marker.touch()
+        result = _has_active_execution_marker(tmp_path)
+        assert result is True, f"{prefix}-* marker not matched by *-in-progress-* glob pattern"
+
+    def test_wrong_session_id_gives_no_match(self, tmp_path):
+        """Marker for session-A does not match when globbing for session-B."""
+        (tmp_path / "run-skill-in-progress-session-A-step.marker").touch()
+        assert _has_active_execution_marker(tmp_path, session_id="session-B") is False
+        assert _has_active_execution_marker(tmp_path, session_id="session-A") is True

@@ -36,6 +36,7 @@ Coordinator skill that reads session logs from a pipeline run, groups them by st
 - Filter sessions.jsonl by kitchen_id to scope to this pipeline run
 - Spawn scanner subagents in parallel (one per step group)
 - Use model: "haiku" for scanner subagents
+- Cap each scanner's investigation budget: set `maxTurns` to the limit in the agent definition and include a wall-clock soft-deadline instruction in the scanner prompt (e.g. "complete your analysis within 15 minutes; report partial findings if you reach the limit")
 - Report "no issues found" clearly when the pipeline is clean
 - Issue all Task calls in a single message to maximize parallelism
 

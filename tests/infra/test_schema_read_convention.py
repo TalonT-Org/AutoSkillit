@@ -81,7 +81,9 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/planner/consolidation.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/planner/validation.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/execution/_recording_skills.py": "Informational manifest — never read back",
-    "src/autoskillit/fleet/_api.py": "Progress signal — written and deleted, never read back",
+    "src/autoskillit/core/_execution_marker.py": (
+        "Progress signal — written and deleted, never read back"
+    ),
     "src/autoskillit/execution/session_log.py": (
         "token_usage.json readers use dual-key fallback, not version-gated reading"
     ),

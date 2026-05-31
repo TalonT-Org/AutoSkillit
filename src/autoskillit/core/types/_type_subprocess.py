@@ -130,14 +130,14 @@ class SubprocessRunner(Protocol):
     Parameters
     ----------
     marker_dir : Path | None
-        Directory containing ``dispatch-in-progress-{session_id}-*.marker`` files.
-        When non-None, the session log monitor checks for active dispatch markers
+        Directory containing ``*-in-progress-{session_id}-*.marker`` files.
+        When non-None, the session log monitor checks for active execution markers
         before issuing stale-kill signals, suppressing kills while a fleet dispatch
-        is in progress. Default ``None`` (no suppression).
+        or run_skill call is in progress. Default ``None`` (no suppression).
     session_id : str | None
-        Caller's session identity, used to scope dispatch-marker glob patterns to
-        the originating fleet session. Threaded from fleet dispatch through headless
-        execution to ``_session_log_monitor``'s ``caller_session_id`` parameter.
+        Caller's session identity, used to scope execution-marker glob patterns to
+        the originating session. Threaded from fleet dispatch / run_skill through
+        headless execution to ``_session_log_monitor``'s ``caller_session_id`` parameter.
         Default ``None`` (match any marker).
     """
 

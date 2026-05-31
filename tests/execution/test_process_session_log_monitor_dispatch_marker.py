@@ -20,12 +20,12 @@ class TestStaleSuppressionDispatchMarker:
     Tests the following scenarios for dispatch marker stale suppression:
     - T1: Active marker (True→False via monkeypatch) suppresses stale, then fires
     - T2: Expired marker (mtime > 60s) does NOT suppress stale (real helper, no monkeypatch —
-      exercises the mtime-expiry threshold in _has_active_dispatch_marker directly)
+      exercises the mtime-expiry threshold in _has_active_execution_marker directly)
     - T3: No marker_dir (None) skips dispatch check entirely (regression guard)
     - T4: Bounded suppression fires after max_suppression_seconds
     - T5: Session-scoped matching — sessionA marker does not suppress sessionB
 
-    Monkeypatch target: autoskillit.execution.process._process_monitor._has_active_dispatch_marker
+    Monkeypatch target: autoskillit.execution.process._process_monitor._has_active_execution_marker
     Convention: caller_session_id= is the kwarg used at call sites.
     Note: T1, T4 monkeypatch the helper; T2, T5 use real marker files to test helper internals.
     """
@@ -43,7 +43,7 @@ class TestStaleSuppressionDispatchMarker:
             return call_count["n"] == 1
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             side_effect_fn,
         )
         with anyio.fail_after(5.0):
@@ -107,7 +107,7 @@ class TestStaleSuppressionDispatchMarker:
         session_file.write_text("")
         spawn_time = time.time() - 10
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             lambda marker_dir, session_id=None: True,
         )
         with anyio.fail_after(3.0):
@@ -197,7 +197,7 @@ class TestDispatchMarkerSuppression:
             fake_child_proc,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             fake_dispatch_marker,
         )
         with anyio.fail_after(5.0):
@@ -233,7 +233,7 @@ class TestDispatchMarkerSuppression:
             lambda pid: False,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             lambda marker_dir, session_id=None: True,
         )
         with structlog.testing.capture_logs() as logs:
@@ -285,7 +285,7 @@ class TestDispatchMarkerSuppression:
             fake_child_proc,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             fake_dispatch_marker,
         )
         with structlog.testing.capture_logs() as logs:
@@ -327,7 +327,7 @@ class TestDispatchMarkerSuppression:
             lambda pid: False,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             lambda marker_dir, session_id=None: True,
         )
         with structlog.testing.capture_logs() as logs:
@@ -352,7 +352,7 @@ class TestDispatchMarkerSuppression:
 
     @pytest.mark.anyio
     async def test_marker_dir_none_skips_dispatch_check(self, tmp_path, monkeypatch):
-        """When marker_dir is None (default), _has_active_dispatch_marker is never called."""
+        """When marker_dir is None (default), _has_active_execution_marker is never called."""
         session_file = tmp_path / "abc123.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
@@ -377,7 +377,7 @@ class TestDispatchMarkerSuppression:
             fake_child_proc,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_dispatch_marker",
+            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             track_dispatch_marker,
         )
         with anyio.fail_after(5.0):

@@ -944,6 +944,42 @@ class TestHasFailedDispatchReasonAware:
         assert has_failed_dispatch(sp) is True
 
 
+class TestHasCompletedDispatch:
+    def test_has_completed_dispatch_returns_true_for_success(self, tmp_path: Path) -> None:
+        """has_completed_dispatch returns True when the named dispatch has SUCCESS status."""
+        from autoskillit.fleet.state_recovery import has_completed_dispatch
+
+        sp = _state_path(tmp_path)
+        write_initial_state(
+            sp,
+            "cid",
+            "camp",
+            "/m.yaml",
+            [DispatchRecord(name="d1", status=DispatchStatus.SUCCESS)],
+        )
+        assert has_completed_dispatch(sp, "d1") is True
+
+    def test_has_completed_dispatch_returns_false_for_non_success(self, tmp_path: Path) -> None:
+        """has_completed_dispatch returns False for RESUMABLE, PENDING, FAILURE, etc."""
+        from autoskillit.fleet.state_recovery import has_completed_dispatch
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2", "d3"))
+        append_dispatch_record(
+            sp, DispatchRecord(name="d2", status=DispatchStatus.FAILURE, reason="task-failed")
+        )
+        assert has_completed_dispatch(sp, "d1") is False
+        assert has_completed_dispatch(sp, "d2") is False
+        assert has_completed_dispatch(sp, "d3") is False
+
+    def test_has_completed_dispatch_returns_false_for_missing_state(self, tmp_path: Path) -> None:
+        """has_completed_dispatch returns False when state file is missing (fail-open)."""
+        from autoskillit.fleet.state_recovery import has_completed_dispatch
+
+        sp = tmp_path / "nonexistent" / "state.json"
+        assert has_completed_dispatch(sp, "any-dispatch") is False
+
+
 class TestRetryReasonPropagation:
     def test_retry_reason_stored_in_dispatch_record(self, tmp_path: Path) -> None:
         sp = _state_path(tmp_path)

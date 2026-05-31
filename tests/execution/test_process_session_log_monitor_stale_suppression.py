@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import anyio
@@ -316,3 +317,86 @@ class TestStaleSuppressionBounded:
         assert elapsed >= 0.15, (
             f"elapsed {elapsed:.2f}s below 0.15s — suppression may not have fired"
         )
+
+
+class TestExecutionMarkerSuppression:
+    """Execution marker (run-skill-in-progress-*) suppression for _session_log_monitor.
+
+    Covers the run_skill MCP tool blind spot: markers named run-skill-in-progress-*
+    must suppress stale kills just like dispatch-in-progress-* markers.
+    """
+
+    @pytest.mark.anyio
+    async def test_execution_marker_suppression_bounded_by_max_suppression_seconds(self, tmp_path):
+        """Stale fires after max_suppression_seconds despite fresh run-skill marker.
+
+        Failing before implementation: run-skill-in-progress-* marker is invisible to
+        dispatch-in-progress-* glob, so STALE fires immediately (elapsed << max_suppression).
+        After fix: marker found, suppression active, fires only after max_suppression_seconds.
+        """
+        session_file = tmp_path / "abc123.jsonl"
+        session_file.write_text(
+            '{"type": "assistant", "message": {"role": "assistant", "content": "working"}}\n'
+        )
+        spawn_time = time.time() - 1
+
+        marker_dir = tmp_path / "marker_dir"
+        marker_dir.mkdir()
+        marker_path = marker_dir / "run-skill-in-progress-caller-session-step1.marker"
+        marker_path.write_text("{}")
+
+        max_suppression = 0.3
+
+        async def touch_marker() -> None:
+            for _ in range(200):
+                await anyio.sleep(0.02)
+                try:
+                    marker_path.touch()
+                except OSError:
+                    break
+
+        start = time.monotonic()
+        with anyio.fail_after(5.0):
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(touch_marker)
+                result = await _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    marker_dir=marker_dir,
+                    caller_session_id="caller-session",
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                    max_suppression_seconds=max_suppression,
+                )
+                tg.cancel_scope.cancel()
+
+        elapsed = time.monotonic() - start
+        assert result.status == ChannelBStatus.STALE
+        assert elapsed >= max_suppression, (
+            f"STALE fired after {elapsed:.3f}s, expected >= {max_suppression}s. "
+            "run-skill execution marker suppression not working — "
+            "marker may not be matched by the glob pattern."
+        )
+        assert elapsed < 5.0, (
+            f"STALE fired after {elapsed:.3f}s — expected prompt firing after "
+            f"max_suppression={max_suppression}s, not near the 5s timeout ceiling."
+        )
+
+
+class TestExecutionMarkerLifecycle:
+    @pytest.mark.anyio
+    async def test_execution_marker_lifecycle(self, tmp_path: Path) -> None:
+        from autoskillit.core._execution_marker import execution_marker
+
+        marker_dir = tmp_path / "markers"
+        marker_dir.mkdir()
+
+        async with execution_marker(marker_dir, "session-123", "run-skill") as path:
+            assert path is not None
+            matches = list(marker_dir.glob("run-skill-in-progress-session-123-*.marker"))
+            assert len(matches) == 1
+
+        remaining = list(marker_dir.glob("*-in-progress-*.marker"))
+        assert remaining == [], f"marker not cleaned up: {remaining}"

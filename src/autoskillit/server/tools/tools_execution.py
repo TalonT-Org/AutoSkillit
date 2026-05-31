@@ -671,39 +671,59 @@ async def run_skill(
             _sn_token = _current_step_name.set(_canonical_step_name(step_name))
             _oid_token = _current_order_id.set(effective_order_id)
 
+            from autoskillit.core import (  # noqa: PLC0415
+                claude_code_project_dir,
+                execution_marker,
+                find_caller_session_id,
+            )
+
+            _marker_dir: Path | None = None
+            try:
+                _marker_dir = claude_code_project_dir(str(tool_ctx.project_dir))
+            except OSError:
+                pass
+            _orchestrator_sid = find_caller_session_id(project_dir=tool_ctx.project_dir)
+
             _start = time.monotonic()
             try:
-                skill_result = await tool_ctx.executor.run(
-                    resolved_command,
-                    cwd,
-                    model=effective_model,
-                    add_dirs=skill_add_dirs,
-                    step_name=step_name,
-                    kitchen_id=tool_ctx.kitchen_id,
-                    order_id=effective_order_id,
-                    expected_output_patterns=expected_output_patterns,
-                    write_behavior=write_spec,
-                    stale_threshold=float(stale_threshold)
-                    if stale_threshold is not None
-                    else None,
-                    idle_output_timeout=float(idle_output_timeout)
-                    if idle_output_timeout is not None
-                    else None,
-                    completion_marker=invocation_marker,
-                    recipe_name=tool_ctx.recipe_name,
-                    recipe_content_hash=tool_ctx.recipe_content_hash,
-                    recipe_composite_hash=tool_ctx.recipe_composite_hash,
-                    recipe_version=tool_ctx.recipe_version,
-                    allowed_write_prefix=allowed_write_prefix,
-                    allowed_write_prefixes=allowed_write_prefixes,
-                    readonly_skill=is_read_only,
-                    write_watch_dirs=write_watch_dirs,
-                    provider_extras=provider_extras,
-                    profile_name=profile_name_out,
-                    provider_name=profile_name_out,
-                    backend_override=backend_override,
-                    resume_session_id=resume_session_id,
-                )
+                async with execution_marker(
+                    _marker_dir,
+                    _orchestrator_sid,
+                    "run-skill",
+                ):
+                    skill_result = await tool_ctx.executor.run(
+                        resolved_command,
+                        cwd,
+                        model=effective_model,
+                        add_dirs=skill_add_dirs,
+                        step_name=step_name,
+                        kitchen_id=tool_ctx.kitchen_id,
+                        order_id=effective_order_id,
+                        expected_output_patterns=expected_output_patterns,
+                        write_behavior=write_spec,
+                        stale_threshold=float(stale_threshold)
+                        if stale_threshold is not None
+                        else None,
+                        idle_output_timeout=float(idle_output_timeout)
+                        if idle_output_timeout is not None
+                        else None,
+                        completion_marker=invocation_marker,
+                        recipe_name=tool_ctx.recipe_name,
+                        recipe_content_hash=tool_ctx.recipe_content_hash,
+                        recipe_composite_hash=tool_ctx.recipe_composite_hash,
+                        recipe_version=tool_ctx.recipe_version,
+                        allowed_write_prefix=allowed_write_prefix,
+                        allowed_write_prefixes=allowed_write_prefixes,
+                        readonly_skill=is_read_only,
+                        write_watch_dirs=write_watch_dirs,
+                        provider_extras=provider_extras,
+                        profile_name=profile_name_out,
+                        provider_name=profile_name_out,
+                        backend_override=backend_override,
+                        resume_session_id=resume_session_id,
+                        marker_dir=_marker_dir,
+                        caller_session_id=_orchestrator_sid,
+                    )
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)
                     _clear_run_skill_state(tool_ctx.project_dir)

@@ -12,7 +12,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_dispatch_reaper.py` | Tests for `fleet._dispatch_reaper.reap_stale_dispatches` — orphan kill, dead pid, recycled pid, create_time fallback, dry-run, idempotency |
 | `test_api.py` | Tests for fleet._api module (Group J) |
 | `test_api_split_integrity.py` | Structural guard: fleet `_api.py` split — verifies new modules export expected symbols and public API surface is preserved |
-| `test_api_dispatch_marker.py` | Tests for _run_dispatch marker lifecycle and _touch_dispatch_marker heartbeat |
+| `test_api_dispatch_marker.py` | Tests for _run_dispatch marker lifecycle via execution_marker context manager |
 | `test_campaign_capture.py` | Tests for campaign capture extraction and ingredient interpolation (Group J) |
 | `test_capture_roundtrip.py` | Tests for prompt-extractor field name alignment — verifies sentinel examples use bare names matching `_extract_captures` expectations |
 | `test_checkpoint_bridge.py` | Tests for checkpoint_from_sidecar converting IssueSidecarEntry to SessionCheckpoint |

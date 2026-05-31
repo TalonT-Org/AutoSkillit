@@ -275,6 +275,19 @@ async def dispatch_food_truck(
         caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
         effective_name = dispatch_name or recipe
 
+        if campaign_state_path_str:
+            from autoskillit.fleet import find_completed_dispatch  # noqa: PLC0415
+
+            prior_record = find_completed_dispatch(Path(campaign_state_path_str), effective_name)
+            if prior_record is not None:
+                return DispatchCompleted(
+                    success=True,
+                    dispatch_status=DispatchStatus.SUCCESS,
+                    dispatch_id=prior_record.dispatch_id,
+                    dispatched_session_id=prior_record.dispatched_session_id,
+                    reason="prior dispatch already succeeded",
+                ).to_envelope()
+
         if skip_when:
             dispatches_dir = tool_ctx.temp_dir / "dispatches"
             accumulated_captures = read_all_campaign_captures(dispatches_dir, tool_ctx.kitchen_id)

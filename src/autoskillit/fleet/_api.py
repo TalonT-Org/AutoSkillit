@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import functools
-import os
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -23,7 +21,6 @@ from autoskillit.core import (
     claude_code_project_dir,
     get_logger,
     truncate_text,
-    write_versioned_json,
 )
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
 from autoskillit.fleet._expressions import _CAMPAIGN_REF_RE, _interpolate_campaign_refs
@@ -38,6 +35,7 @@ from autoskillit.fleet.state_types import (
 
 if TYPE_CHECKING:
     from autoskillit.fleet.sidecar import IssueSidecarEntry
+    from autoskillit.fleet.state import DispatchRecord, DispatchStateHandle
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
@@ -104,24 +102,6 @@ def _post_dispatch_cleanup(
             quota_refresher(tool_ctx.config.quota_guard),
             label="quota_post_dispatch_refresh",
         )
-
-
-async def _touch_dispatch_marker(
-    marker_path: Path, interval: float = 30.0, trigger: anyio.Event | None = None
-) -> None:
-    """Periodically touch marker_path to refresh mtime; runs until trigger is set."""
-    try:
-        marker_path.touch()
-    except OSError:
-        logger.warning("_touch_dispatch_marker: failed to touch %s", marker_path, exc_info=True)
-    while trigger is None or not trigger.is_set():
-        await anyio.sleep(interval)
-        try:
-            marker_path.touch()
-        except OSError:
-            logger.warning(
-                "_touch_dispatch_marker: failed to touch %s", marker_path, exc_info=True
-            )
 
 
 async def execute_dispatch(
@@ -230,6 +210,24 @@ async def execute_dispatch(
         )
     finally:
         lock.release()
+
+
+def _build_success_short_circuit(
+    record: DispatchRecord,
+    handle: DispatchStateHandle,
+) -> DispatchResult:
+    """Return a DispatchResult that mirrors a prior succeeded dispatch without re-launching."""
+    return DispatchResult(
+        outcome=DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id=record.dispatch_id,
+            dispatched_session_id=record.dispatched_session_id,
+            reason=record.reason,
+            token_usage=dict(record.token_usage),
+        ),
+        per_dispatch_state_path=handle.state_path,
+    )
 
 
 async def _run_dispatch(
@@ -361,28 +359,43 @@ async def _run_dispatch(
     dispatches_dir.mkdir(parents=True, exist_ok=True)
     campaign_id = tool_ctx.kitchen_id
 
+    recipe_snapshot = {
+        "recipe_name": recipe_obj.name,
+        "recipe_path": str(recipe_obj.path),
+        "recipe_version": recipe_obj.recipe_version or "",
+        "content_hash": recipe_obj.content_hash or "",
+        "effective_ingredients": dict(effective_ingredients),
+    }
     prior_session_chain: list[str] = []
     prior_dispatched_session_id = ""
     if resume_session_id and prior_dispatch_id:
-        handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
         try:
+            handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
             prior_state = read_state(handle.state_path)
             if prior_state:
                 for d in prior_state.dispatches:
                     if d.name == effective_name:
+                        if d.status == DispatchStatus.SUCCESS:
+                            logger.info(
+                                "resume_skipped_prior_success",
+                                dispatch_name=effective_name,
+                                prior_dispatch_id=prior_dispatch_id,
+                            )
+                            return _build_success_short_circuit(d, handle)
                         prior_session_chain = list(d.session_chain)
                         prior_dispatched_session_id = d.dispatched_session_id
                         break
         except (OSError, ValueError, KeyError, TypeError):
             logger.warning("failed to read prior session chain from state", exc_info=True)
+            handle = DispatchStateHandle.create_fresh(
+                dispatches_dir,
+                campaign_id,
+                effective_name,
+                "",
+                [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+                recipe_snapshot,
+            )
     else:
-        recipe_snapshot = {
-            "recipe_name": recipe_obj.name,
-            "recipe_path": str(recipe_obj.path),
-            "recipe_version": recipe_obj.recipe_version or "",
-            "content_hash": recipe_obj.content_hash or "",
-            "effective_ingredients": dict(effective_ingredients),
-        }
         handle = DispatchStateHandle.create_fresh(
             dispatches_dir,
             campaign_id,
@@ -572,71 +585,50 @@ async def _run_dispatch(
         )
 
     marker_dir: Path | None = None
-    marker_path: Path | None = None
     try:
         marker_dir = claude_code_project_dir(str(tool_ctx.project_dir))
     except OSError:
         pass
 
-    if marker_dir is not None:
-        marker_path = marker_dir / f"dispatch-in-progress-{caller_session_id}-{dispatch_id}.marker"
-        try:
-            write_versioned_json(
-                marker_path,
-                {
-                    "dispatch_id": dispatch_id,
-                    "orchestrator_pid": os.getpid(),
-                    "session_id": caller_session_id,
-                },
-                schema_version=1,
-            )
-        except OSError:
-            logger.warning("dispatch_marker_write_failed", marker=str(marker_path), exc_info=True)
-            marker_dir = None
-            marker_path = None
+    from autoskillit.core import execution_marker  # noqa: PLC0415
 
     _dispatch_completed_normally = False
-    _hb_trigger = anyio.Event()
     try:
-        async with anyio.create_task_group() as tg:
-            if marker_path is not None:
-                tg.start_soon(
-                    functools.partial(_touch_dispatch_marker, marker_path, trigger=_hb_trigger)
-                )
-            try:
-                skill_result = await tool_ctx.executor.dispatch_food_truck(
-                    orchestrator_prompt=prompt,
-                    cwd=str(tool_ctx.project_dir),
-                    completion_marker=completion_marker,
-                    prior_completion_markers=prior_completion_markers,
-                    resume_session_id=resume_session_id,
-                    resume_checkpoint=resume_checkpoint,
-                    kitchen_id=tool_ctx.kitchen_id,
-                    order_id=dispatch_id,
-                    campaign_id=campaign_id,
-                    dispatch_id=dispatch_id,
-                    caller_session_id=caller_session_id,
-                    project_dir=str(tool_ctx.project_dir),
-                    marker_dir=marker_dir,
-                    session_id=caller_session_id,
-                    timeout=resolved_timeout,
-                    idle_output_timeout=float(idle_output_timeout)
-                    if idle_output_timeout is not None
-                    else None,
-                    env_extras={
-                        "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
-                        "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
-                        "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
-                        "AUTOSKILLIT_SESSION_DEADLINE": str(started_at + resolved_timeout),
-                    },
-                    requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
-                    on_spawn=_on_spawn,
-                    sentinel_contract=sentinel_contract,
-                    resume_message=resume_message,
-                )
-            finally:
-                _hb_trigger.set()
-                tg.cancel_scope.cancel()
+        async with execution_marker(
+            marker_dir,
+            caller_session_id,
+            "dispatch",
+        ):
+            skill_result = await tool_ctx.executor.dispatch_food_truck(
+                orchestrator_prompt=prompt,
+                cwd=str(tool_ctx.project_dir),
+                completion_marker=completion_marker,
+                prior_completion_markers=prior_completion_markers,
+                resume_session_id=resume_session_id,
+                resume_checkpoint=resume_checkpoint,
+                kitchen_id=tool_ctx.kitchen_id,
+                order_id=dispatch_id,
+                campaign_id=campaign_id,
+                dispatch_id=dispatch_id,
+                caller_session_id=caller_session_id,
+                project_dir=str(tool_ctx.project_dir),
+                marker_dir=marker_dir,
+                session_id=caller_session_id,
+                timeout=resolved_timeout,
+                idle_output_timeout=float(idle_output_timeout)
+                if idle_output_timeout is not None
+                else None,
+                env_extras={
+                    "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
+                    "AUTOSKILLIT_CAMPAIGN_ID": campaign_id,
+                    "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
+                    "AUTOSKILLIT_SESSION_DEADLINE": str(started_at + resolved_timeout),
+                },
+                requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
+                on_spawn=_on_spawn,
+                sentinel_contract=sentinel_contract,
+                resume_message=resume_message,
+            )
 
         ended_at = time.time()
         _dispatch_completed_normally = True
@@ -659,13 +651,6 @@ async def _run_dispatch(
                 )
         raise
     finally:
-        if marker_path is not None:
-            try:
-                marker_path.unlink(missing_ok=True)
-            except OSError:
-                logger.warning(
-                    "dispatch_marker_unlink_failed", marker=str(marker_path), exc_info=True
-                )
         if not _dispatch_completed_normally:
             from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
 

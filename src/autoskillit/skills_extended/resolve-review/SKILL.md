@@ -532,6 +532,9 @@ to get the round number. If that file is absent, use `iteration = 0`.
 Read `{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json` if it
 exists. If absent, start with an empty array.
 
+**CRITICAL:** Do NOT output any prose status text between iterations. Collect all entries,
+deduplicate, then use a single Write tool call to persist the result.
+
 For each entry in `classification_map` with `verdict == "DISCUSS"` and `severity != "info"`,
 build an entry object:
 
@@ -730,6 +733,9 @@ After Step 6.5, save all REJECT-classified comments to a **stable, accumulating*
 Read `{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json` if it exists.
 If absent, start with an empty array.
 
+**CRITICAL:** Do NOT output any prose status text between iterations. Collect all entries,
+deduplicate, then use a single Write tool call to persist the result.
+
 For each entry in `classification_map` with `verdict == "REJECT"`, build an entry object.
 Use the entry's `comment_id` if present; otherwise use `"local_unknown_{index}"` as a
 synthetic identifier:
@@ -761,6 +767,9 @@ and has no native ID, use `"local_{iteration}_{index}"` as a synthetic identifie
 
 **When `mode=github`:** Save REJECT-classified comments with a timestamped filename
 (one-shot write, not accumulating).
+
+**CRITICAL:** Do NOT output any prose status text. Collect all entries and use a single
+Write tool call to persist the result.
 
 For each entry in `classification_map` with `verdict == "REJECT"`, build an entry object:
 

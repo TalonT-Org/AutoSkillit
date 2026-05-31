@@ -27,7 +27,14 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
     sys.stdout.flush()
     # Small delay to ensure file ctime > spawn_time recorded in run_managed_async
     time.sleep(0.1)
-    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+    jsonl_path = os.path.join(session_dir, "session.jsonl")
+    with open(jsonl_path, "w") as f:
+        init = {"type": "assistant", "message": {"role": "assistant",
+                "content": "working..."}}
+        f.write(json.dumps(init) + "\\n")
+        f.flush()
+    time.sleep(0.15)
+    with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
@@ -50,7 +57,14 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
     session_dir = sys.argv[1]
     os.makedirs(session_dir, exist_ok=True)
     time.sleep(0.1)
-    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+    jsonl_path = os.path.join(session_dir, "session.jsonl")
+    with open(jsonl_path, "w") as f:
+        init = {"type": "assistant", "message": {"role": "assistant",
+                "content": "working..."}}
+        f.write(json.dumps(init) + "\\n")
+        f.flush()
+    time.sleep(0.15)
+    with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
@@ -73,7 +87,14 @@ CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
     sys.stdout.flush()
     # Small delay to ensure file ctime > spawn_time recorded in run_managed_async
     time.sleep(0.1)
-    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+    jsonl_path = os.path.join(session_dir, "session.jsonl")
+    with open(jsonl_path, "w") as f:
+        init = {"type": "assistant", "message": {"role": "assistant",
+                "content": "working..."}}
+        f.write(json.dumps(init) + "\\n")
+        f.flush()
+    time.sleep(0.15)
+    with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
@@ -99,7 +120,14 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
     sys.stdout.flush()
     # Small delay ensures file ctime > spawn_time recorded in run_managed_async
     time.sleep(0.1)
-    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+    jsonl_path = os.path.join(session_dir, "session.jsonl")
+    with open(jsonl_path, "w") as f:
+        init = {"type": "assistant", "message": {"role": "assistant",
+                "content": "working..."}}
+        f.write(json.dumps(init) + "\\n")
+        f.flush()
+    time.sleep(0.15)
+    with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
@@ -571,13 +599,21 @@ CHANNEL_B_SUB_SKILL_COLLISION_SCRIPT = textwrap.dedent("""\
     sys.stdout.write(json.dumps({"type": "system", "session_id": "session"}) + "\\n")
     sys.stdout.flush()
     time.sleep(0.1)
-    with open(os.path.join(session_dir, "session.jsonl"), "w") as f:
+    jsonl_path = os.path.join(session_dir, "session.jsonl")
+    with open(jsonl_path, "w") as f:
+        init = {"type": "assistant", "message": {"role": "assistant",
+                "content": "working..."}}
+        f.write(json.dumps(init) + "\\n")
+        f.flush()
+    time.sleep(0.15)
+    with open(jsonl_path, "a") as f:
         # Sub-skill emits static marker — should NOT trigger completion
         sub_skill_record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(sub_skill_record) + "\\n")
         f.flush()
-        time.sleep(0.3)
+    time.sleep(0.3)
+    with open(jsonl_path, "a") as f:
         # Parent emits its unique marker — SHOULD trigger completion
         parent_record = {"type": "assistant", "message": {"role": "assistant",
                   "content": unique_marker}}

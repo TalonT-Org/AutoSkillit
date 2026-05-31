@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import anyio
@@ -153,3 +154,91 @@ async def test_marker_not_written_when_cwd_unavailable(
 
     assert len(tool_ctx.executor.dispatch_calls) == 1
     assert list(tmp_path.rglob("*.marker")) == []
+
+
+@pytest.mark.anyio
+async def test_run_dispatch_writes_heartbeat_file(tool_ctx, monkeypatch) -> None:
+    _setup_dispatch(tool_ctx, monkeypatch)
+    dispatches_dir = tool_ctx.temp_dir / "dispatches"
+
+    await _run_dispatch(
+        tool_ctx=tool_ctx,
+        recipe="test-recipe",
+        task="t",
+        ingredients=None,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=lambda **kw: "prompt",
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+    )
+
+    remaining = list(dispatches_dir.glob("dispatch-*.heartbeat"))
+    assert remaining == [], (
+        f"Heartbeat file should be deleted after normal completion: {remaining}"
+    )
+
+
+@pytest.mark.anyio
+async def test_run_dispatch_heartbeat_exists_during_execution(tool_ctx, monkeypatch) -> None:
+    _setup_dispatch(tool_ctx, monkeypatch)
+    dispatches_dir = tool_ctx.temp_dir / "dispatches"
+    heartbeat_files_during: list[list[Path]] = []
+
+    async def _asserting_dispatch(**_kw):
+        found = list(dispatches_dir.glob("dispatch-*.heartbeat"))
+        heartbeat_files_during.append(found)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", _asserting_dispatch)
+
+    with pytest.raises(asyncio.CancelledError):
+        await _run_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **kw: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+    assert len(heartbeat_files_during) == 1
+    assert len(heartbeat_files_during[0]) == 1, (
+        f"Expected 1 heartbeat file during dispatch, found {heartbeat_files_during[0]}"
+    )
+
+    remaining = list(dispatches_dir.glob("dispatch-*.heartbeat"))
+    assert remaining == [], f"Heartbeat file should be deleted after CancelledError: {remaining}"
+
+
+@pytest.mark.anyio
+async def test_run_dispatch_heartbeat_mtime_is_fresh(tool_ctx, monkeypatch) -> None:
+    _setup_dispatch(tool_ctx, monkeypatch)
+    dispatches_dir = tool_ctx.temp_dir / "dispatches"
+    recorded_mtime: list[float] = []
+
+    async def _record_mtime_dispatch(**_kw):
+        found = list(dispatches_dir.glob("dispatch-*.heartbeat"))
+        if found:
+            recorded_mtime.append(found[0].stat().st_mtime)
+
+    monkeypatch.setattr(tool_ctx.executor, "dispatch_food_truck", _record_mtime_dispatch)
+
+    before = time.time()
+    await _run_dispatch(
+        tool_ctx=tool_ctx,
+        recipe="test-recipe",
+        task="t",
+        ingredients=None,
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=lambda **kw: "prompt",
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+    )
+
+    assert len(recorded_mtime) == 1
+    assert recorded_mtime[0] >= before - 1.0, "Heartbeat mtime should be recent at dispatch start"

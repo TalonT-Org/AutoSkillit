@@ -254,6 +254,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
                 own_campaign_id=ctx.kitchen_id,
                 min_reap_age_seconds=60.0,
                 reaper_dispatch_id=os.environ.get("AUTOSKILLIT_DISPATCH_ID", ""),
+                heartbeat_grace_seconds=90.0,
             )
         except Exception:
             logger.warning("fleet_auto_gate_boot_reap_failed", exc_info=True)
@@ -384,6 +385,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
                 own_campaign_id=_own_campaign_id,
                 min_reap_age_seconds=60.0,
                 reaper_dispatch_id=os.environ.get("AUTOSKILLIT_DISPATCH_ID", ""),
+                heartbeat_grace_seconds=90.0,
             )
         except Exception:
             logger.warning("food_truck_auto_gate_boot_reap_failed", exc_info=True)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -419,6 +420,7 @@ class TestReap:
             own_campaign_id=None,
             min_reap_age_seconds=60.0,
             reaper_dispatch_id="",
+            heartbeat_grace_seconds=90.0,
         )
 
     def test_reap_writes_tombstone_to_victim_session_log_dir(self, tmp_path: Path) -> None:
@@ -714,3 +716,134 @@ class TestReap:
         assert 11111 not in killed_pids, "dispatch-a should be skipped (own campaign sp1)"
         assert 22222 not in killed_pids, "dispatch-b should be skipped (own campaign sp2)"
         assert 33333 in killed_pids, "dispatch-c from campaign-2 should be reaped"
+
+    def test_reap_skips_cross_campaign_dispatch_with_fresh_heartbeat(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatch_id="dispatch-c",
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_boot_id=BOOT_ID,
+        )
+        hb_path = tmp_path / "dispatch-dispatch-c.heartbeat"
+        hb_path.write_text("{}")
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
+        ):
+            from autoskillit.fleet import reap_stale_dispatches
+
+            reap_stale_dispatches(sp, own_campaign_id="campaign-1", heartbeat_grace_seconds=90.0)
+
+        mock_kill.assert_not_called()
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+
+    def test_reap_kills_cross_campaign_dispatch_with_stale_heartbeat(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatch_id="dispatch-c",
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_boot_id=BOOT_ID,
+        )
+        hb_path = tmp_path / "dispatch-dispatch-c.heartbeat"
+        hb_path.write_text("{}")
+        stale_mtime = time.time() - 200.0
+        import os
+
+        os.utime(hb_path, (stale_mtime, stale_mtime))
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
+        ):
+            from autoskillit.fleet import reap_stale_dispatches
+
+            reap_stale_dispatches(sp, own_campaign_id="campaign-1", heartbeat_grace_seconds=90.0)
+
+        mock_kill.assert_called_once_with(12345)
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].reason == "reaped_orphan"
+
+    def test_reap_kills_cross_campaign_dispatch_with_no_heartbeat(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatch_id="dispatch-c",
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_boot_id=BOOT_ID,
+        )
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
+        ):
+            from autoskillit.fleet import reap_stale_dispatches
+
+            reap_stale_dispatches(sp, own_campaign_id="campaign-1", heartbeat_grace_seconds=90.0)
+
+        mock_kill.assert_called_once_with(12345)
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].reason == "reaped_orphan"
+
+    def test_reap_skips_heartbeat_with_configurable_grace_period(self, tmp_path: Path) -> None:
+        sp = _make_running_state(
+            tmp_path,
+            dispatch_id="dispatch-c",
+            dispatched_pid=12345,
+            dispatched_starttime_ticks=1000,
+            dispatched_boot_id=BOOT_ID,
+        )
+        hb_path = tmp_path / "dispatch-dispatch-c.heartbeat"
+        hb_path.write_text("{}")
+        import os
+
+        mtime_200s_ago = time.time() - 200.0
+        os.utime(hb_path, (mtime_200s_ago, mtime_200s_ago))
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=1000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill,
+        ):
+            from autoskillit.fleet import reap_stale_dispatches
+
+            reap_stale_dispatches(sp, own_campaign_id="campaign-1", heartbeat_grace_seconds=300.0)
+
+        mock_kill.assert_not_called()
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+
+        sp2 = _make_running_state(
+            tmp_path / "sub",
+            dispatch_id="dispatch-d",
+            dispatched_pid=99999,
+            dispatched_starttime_ticks=2000,
+            dispatched_boot_id=BOOT_ID,
+        )
+        hb_path2 = (tmp_path / "sub") / "dispatch-dispatch-d.heartbeat"
+        hb_path2.write_text("{}")
+        os.utime(hb_path2, (mtime_200s_ago, mtime_200s_ago))
+
+        with (
+            patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=True),
+            patch("autoskillit.fleet._dispatch_reaper.read_starttime_ticks", return_value=2000),
+            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=BOOT_ID),
+            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree") as mock_kill2,
+        ):
+            reap_stale_dispatches(sp2, own_campaign_id="campaign-1", heartbeat_grace_seconds=120.0)
+
+        mock_kill2.assert_called_once_with(99999)

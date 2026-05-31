@@ -15,9 +15,8 @@ if _HOOKS_DIR not in sys.path:
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     command_verb,
-    extract_interpreter_write_path,
+    extract_interpreter_write_paths,
     extract_redirect_targets,
-    has_interpreter_write,
     is_gh_command,
     tokenize_command_segments,
 )
@@ -250,20 +249,39 @@ def main() -> None:
     if tool_name == "Bash" or "run_cmd" in tool_name:
         command = tool_input.get("command", "") or tool_input.get("cmd", "")
 
-        interp_path = extract_interpreter_write_path(command)
-        if interp_path is not None:
-            if not _within_any_prefix(interp_path):
+        interp_paths = extract_interpreter_write_paths(command)
+        if interp_paths is not None:
+            if not interp_paths:
                 _deny(
                     f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                    f"Only writes to {display_prefix} are permitted."
+                    f"Interpreter-mediated file writes are not permitted."
                 )
                 return
-        elif has_interpreter_write(command):
-            _deny(
-                f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
-                f"Interpreter-mediated file writes are not permitted."
-            )
-            return
+
+            cwd = os.environ.get("AUTOSKILLIT_CWD", "")
+            if cwd and not os.path.isabs(cwd):
+                cwd = ""
+
+            resolved: list[str] = []
+            for p in interp_paths:
+                if os.path.isabs(p):
+                    resolved.append(p)
+                elif cwd:
+                    resolved.append(os.path.join(cwd, p))
+                else:
+                    _deny(
+                        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                        f"Interpreter-mediated file writes are not permitted."
+                    )
+                    return
+
+            for rp in resolved:
+                if not _within_any_prefix(rp):
+                    _deny(
+                        f"Write/Edit/apply_patch blocked: {WRITE_GUARD_DENY_TRIGGER}. "
+                        f"Only writes to {display_prefix} are permitted."
+                    )
+                    return
 
         targets = _extract_bash_write_targets(command)
         if targets is None:

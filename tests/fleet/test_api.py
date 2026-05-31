@@ -317,7 +317,7 @@ class TestTouchMarker:
 
     @pytest.mark.anyio
     async def test_touch_marker_creates_heartbeat_loop(self, tmp_path: Path) -> None:
-        """Heartbeat loop refreshes mtime until trigger is set."""
+        """Heartbeat loop refreshes mtime until cancelled."""
         import os
 
         from autoskillit.core._execution_marker import _touch_marker
@@ -327,15 +327,10 @@ class TestTouchMarker:
         os.utime(marker, (0, 0))
         original_mtime_ns = marker.stat().st_mtime_ns
 
-        trigger = anyio.Event()
-
-        async def _heartbeat_wrapper() -> None:
-            await _touch_marker(marker, interval=0.05, trigger=trigger)
-
         async with anyio.create_task_group() as tg:
-            tg.start_soon(_heartbeat_wrapper)
+            tg.start_soon(_touch_marker, marker, 0.05)
             await anyio.sleep(1.0)
-            trigger.set()
+            tg.cancel_scope.cancel()
 
         new_mtime_ns = marker.stat().st_mtime_ns
         assert new_mtime_ns > original_mtime_ns, "marker mtime should have been refreshed"
@@ -350,16 +345,12 @@ class TestTouchMarker:
         marker_file = subdir / "test.marker"
         marker_file.touch()
         marker_file.chmod(0o000)
-        trigger = anyio.Event()
-
-        async def _heartbeat_wrapper() -> None:
-            await _touch_marker(marker_file, interval=0.05, trigger=trigger)
 
         try:
             async with anyio.create_task_group() as tg:
-                tg.start_soon(_heartbeat_wrapper)
+                tg.start_soon(_touch_marker, marker_file, 0.05)
                 await anyio.sleep(0.12)
-                trigger.set()
+                tg.cancel_scope.cancel()
         except OSError:
             pytest.fail("_touch_marker should not propagate OSError")
         finally:

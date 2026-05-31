@@ -112,14 +112,12 @@ async def test_heartbeat_refreshes_mtime(tmp_path: Path) -> None:
     marker_path.write_text("{}")
     initial_mtime = marker_path.stat().st_mtime
 
-    trigger = anyio.Event()
-
     async with anyio.create_task_group() as tg:
-        tg.start_soon(_touch_marker, marker_path, 0.05, trigger)
+        tg.start_soon(_touch_marker, marker_path, 0.05)
 
         async def _stop():
             await anyio.sleep(2.1)
-            trigger.set()
+            tg.cancel_scope.cancel()
 
         tg.start_soon(_stop)
 

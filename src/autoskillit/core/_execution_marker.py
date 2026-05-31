@@ -8,6 +8,7 @@ violating layer constraints.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from collections.abc import AsyncGenerator
@@ -68,15 +69,24 @@ async def execution_marker(
         yield None
         return
 
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(_touch_marker, marker_path, heartbeat_interval)
-        try:
-            yield marker_path
-        finally:
-            tg.cancel_scope.cancel()
+    hb_task: asyncio.Task[None] | None = None
+    try:
+        hb_task = asyncio.get_running_loop().create_task(
+            _touch_marker(marker_path, heartbeat_interval)
+        )
+        yield marker_path
+    finally:
+        if hb_task is not None:
+            hb_task.cancel()
             try:
-                marker_path.unlink(missing_ok=True)
-            except OSError:
-                logger.warning(
-                    "execution_marker_unlink_failed", marker=str(marker_path), exc_info=True
-                )
+                await hb_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.warning("execution_marker: heartbeat failed", exc_info=True)
+        try:
+            marker_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning(
+                "execution_marker_unlink_failed", marker=str(marker_path), exc_info=True
+            )

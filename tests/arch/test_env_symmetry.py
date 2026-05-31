@@ -19,6 +19,7 @@ _REQUIRED_IN_BOTH: frozenset[str] = frozenset(
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
 
 
 def test_skill_and_food_truck_share_required_env_vars() -> None:

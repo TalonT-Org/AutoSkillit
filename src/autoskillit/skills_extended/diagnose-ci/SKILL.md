@@ -111,6 +111,7 @@ Analyze the log output to classify `failure_type` as one of:
 - `type_check` — mypy, pyright, or TypeScript type errors
 - `env` — missing environment variables, secrets, or infrastructure issues
 - `unknown` — cannot determine from logs
+- `no_failure` — all CI jobs passing; no failure detected
 
 #### Step 4a: Subtype Classification
 
@@ -125,6 +126,7 @@ After determining `failure_type`, classify `failure_subtype` using the following
 | `environ`, missing `ENV_VAR`, `KeyError.*environ` | `env` |
 | Assertion error with stable stack trace (same file/line across runs) | `deterministic` |
 | No pattern matched | `unknown` |
+| All CI jobs passing / no failure detected | `no_failure` |
 
 **Guidance for `resolve-failures`:** Include a supplementary "Suggested Starting Verdict" field in the
 Recommended Fix Approach section that maps the subtype to an initial verdict for `resolve-failures` to
@@ -141,7 +143,7 @@ local test result):
 
 Determine `is_fixable`:
 - `true` for `test`, `lint`, `build`, `type_check`
-- `false` for `env`, `unknown`
+- `false` for `env`, `unknown`, `no_failure`
 
 ### Step 5: Write Diagnosis Report
 
@@ -187,8 +189,8 @@ Emit these tokens on their own lines at the end of your response:
 
 ```
 diagnosis_path = /absolute/path/to/{{AUTOSKILLIT_TEMP}}/diagnose-ci/diagnosis_{timestamp}.md
-failure_type = test|lint|build|type_check|env|unknown
-failure_subtype = flaky|timing_race|deterministic|fixture|import|env|unknown
+failure_type = test|lint|build|type_check|env|unknown|no_failure
+failure_subtype = flaky|timing_race|deterministic|fixture|import|env|unknown|no_failure
 is_fixable = true|false
 ```
 

@@ -28,6 +28,7 @@ def test_judge_eval_categories_include_eval() -> None:
     """Frontmatter categories includes eval."""
     source = _SKILL_FILE.read_text()
     parts = source.split("---", 2)
+    assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"
     fm = yaml.safe_load(parts[1])
     assert "eval" in fm.get("categories", [])
 

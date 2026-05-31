@@ -16,7 +16,7 @@ from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import (
-    _pipeline_tracker_dir,
+    _scan_tracker_gaps,
     resolve_log_dir,
     write_telemetry_clear_marker,
 )
@@ -135,20 +135,9 @@ async def get_pipeline_report(clear: bool = False) -> str:
                 except Exception:
                     logger.debug("write_telemetry_clear_marker failed", exc_info=True)
             result_dict: dict = {"total_failures": len(failures), "failures": failures}
-            tracker_dir = _pipeline_tracker_dir(_get_ctx().project_dir)
-            if tracker_dir.is_dir():
-                gaps: list[dict] = []
-                for tf in tracker_dir.glob("*.json"):
-                    try:
-                        tracker_data = json.loads(tf.read_text())
-                        pid = tracker_data.get("pipeline_id", tf.stem)
-                        for sname, sdata in tracker_data.get("steps", {}).items():
-                            if sdata.get("status") == "pending":
-                                gaps.append({"pipeline_id": pid, "step": sname})
-                    except (json.JSONDecodeError, OSError):
-                        pass
-                if gaps:
-                    result_dict["step_completion_gaps"] = gaps
+            gaps = _scan_tracker_gaps(_get_ctx().project_dir)
+            if gaps:
+                result_dict["step_completion_gaps"] = gaps
             return json.dumps(result_dict)
         except Exception as exc:
             logger.error("get_pipeline_report unhandled exception", exc_info=True)

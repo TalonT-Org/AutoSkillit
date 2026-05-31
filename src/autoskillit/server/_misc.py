@@ -74,6 +74,26 @@ def _pipeline_tracker_path(project_dir: Path, pipeline_id: str) -> Path:
     return _pipeline_tracker_dir(project_dir) / f"{pipeline_id}.json"
 
 
+def _scan_tracker_gaps(project_dir: Path) -> list[dict[str, str]]:
+    """Return pending-step gap entries across all tracker files."""
+    import json
+
+    tracker_dir = _pipeline_tracker_dir(project_dir)
+    if not tracker_dir.is_dir():
+        return []
+    gaps: list[dict[str, str]] = []
+    for tf in tracker_dir.glob("*.json"):
+        try:
+            tracker_data = json.loads(tf.read_text())
+            pid = tracker_data.get("pipeline_id", tf.stem)
+            for sname, sdata in tracker_data.get("steps", {}).items():
+                if sdata.get("status") == "pending":
+                    gaps.append({"pipeline_id": pid, "step": sname})
+        except (json.JSONDecodeError, OSError):
+            pass
+    return gaps
+
+
 def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
     """Return all lines between start_delim and end_delim (exclusive).
 

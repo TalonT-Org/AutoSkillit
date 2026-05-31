@@ -2237,6 +2237,7 @@ skills:
     - name: pr_body_path
       type: file_path
     expected_output_patterns:
+    - "pr_url[ \\t]*=[ \\t]*(\\S+)?"
     - "verdict[ \\t]*=[ \\t]*(created|dry_run|preflight_failed)"
     pattern_examples:
     - "pr_url = https://github.com/org/repo/pull/42\nverdict = created\ncategory_summary = 14 fixes, 3 features\n%%ORDER_UP%%"

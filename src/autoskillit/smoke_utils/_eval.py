@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import regex as re
+
 from autoskillit.smoke_utils._helpers import _load_json, try_load_json
 
 
@@ -377,8 +379,9 @@ def build_agent_eval_context(
     )
 
 
-VACUOUS_SIGNALS = frozenset(
-    {"empty", "no findings", "vacuously", "no output", "trivially satisfied"}
+_VACUOUS_SIGNAL_RE = re.compile(
+    r"\b(?:empty|no\s+findings|vacuously|no\s+output|trivially\s+satisfied)\b",
+    re.IGNORECASE,
 )
 
 
@@ -387,8 +390,8 @@ def _is_vacuous_pass(verdict_entry: dict) -> bool:
         return False
     for c in verdict_entry.get("criteria", []):
         if c.get("result") == "PASS":
-            evidence = (c.get("evidence") or "").lower()
-            if any(signal in evidence for signal in VACUOUS_SIGNALS):
+            evidence = c.get("evidence") or ""
+            if _VACUOUS_SIGNAL_RE.search(evidence):
                 return True
     return False
 

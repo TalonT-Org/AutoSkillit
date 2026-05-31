@@ -221,6 +221,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "configure_fleet",  # simple config snapshot dict
         "configure_order",  # simple config snapshot dict
         "lock_ingredients",  # simple success/error result
+        "record_pipeline_step",  # structured init/status result
     }
 )
 

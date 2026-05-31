@@ -41,6 +41,7 @@ from autoskillit.server._misc import (
     _build_hook_diagnostic_warning,
     _hook_config_overlay_path,
     _hook_config_path,
+    _pipeline_tracker_dir,
     _prime_quota_cache,
     _quota_refresh_loop,
     resolve_log_dir,
@@ -276,6 +277,14 @@ def _close_kitchen_handler() -> None:
         overlay_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
+    tracker_dir = _pipeline_tracker_dir(ctx.project_dir)
+    try:
+        if tracker_dir.is_dir():
+            import shutil
+
+            shutil.rmtree(tracker_dir, ignore_errors=True)
+    except OSError:
+        logger.warning("pipeline_tracker_remove_failed", path=str(tracker_dir))
     review_gate_path = ctx.project_dir / ".autoskillit" / "temp" / "review_gate_state.json"
     try:
         try:

@@ -228,6 +228,7 @@ _ADVISORY_HOOKS: frozenset[str] = frozenset(
         "guards/recipe_write_advisor.py",
         "guards/grep_pattern_lint_guard.py",
         "guards/mcp_health_advisor.py",
+        "guards/pipeline_step_guard.py",
     }
 )
 

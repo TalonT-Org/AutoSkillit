@@ -15,7 +15,11 @@ from autoskillit.core import atomic_write, get_logger
 from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
-from autoskillit.server._misc import resolve_log_dir, write_telemetry_clear_marker
+from autoskillit.server._misc import (
+    _scan_tracker_gaps,
+    resolve_log_dir,
+    write_telemetry_clear_marker,
+)
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
@@ -130,12 +134,11 @@ async def get_pipeline_report(clear: bool = False) -> str:
                     write_telemetry_clear_marker(_get_log_root())
                 except Exception:
                     logger.debug("write_telemetry_clear_marker failed", exc_info=True)
-            return json.dumps(
-                {
-                    "total_failures": len(failures),
-                    "failures": failures,
-                }
-            )
+            result_dict: dict = {"total_failures": len(failures), "failures": failures}
+            gaps = _scan_tracker_gaps(_get_ctx().project_dir)
+            if gaps:
+                result_dict["step_completion_gaps"] = gaps
+            return json.dumps(result_dict)
         except Exception as exc:
             logger.error("get_pipeline_report unhandled exception", exc_info=True)
             return json.dumps(

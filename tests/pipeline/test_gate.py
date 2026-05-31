@@ -57,6 +57,7 @@ def test_gated_tools_contains_expected_names():
         "bootstrap_clone",
         "claim_and_resolve_issue",
         "create_and_publish_branch",
+        "record_pipeline_step",
     }
     assert GATED_TOOLS == expected
 

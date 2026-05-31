@@ -16,6 +16,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `skill_orchestration_guard.py` | Blocks `run_skill`/`run_cmd`/`run_python` from L1 skill sessions |
 | `mcp_health_advisor.py` | Detects MCP server disconnection (dead PID); non-blocking advisory |
 | `open_kitchen_guard.py` | Blocks `open_kitchen` from headless sessions; writes kitchen marker |
+| `pipeline_step_guard.py` | Advisory unmet-dependency warning for `run_skill`; server-side `_check_pipeline_deps` is primary enforcer |
 | `planner_result_naming_guard.py` | Blocks Write/Edit with non-canonical planner result filenames (e.g. `P1-A1-WP2a_result.json`); denies with correction hint |
 | `planner_gh_discovery_guard.py` | Blocks GitHub issue/PR listing in planner sessions |
 | `artifact_download_guard.py` | Blocks `gh run download` and `gh release download` without `--dir` flag |

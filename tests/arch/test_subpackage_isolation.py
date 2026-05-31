@@ -853,12 +853,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 20,
         "core/types": 27,
         "cli": 21,
-        "hooks": 11,
+        "hooks": 12,
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
         "recipe/rules": 35,
-        "server/tools": 23,  # _auto_overrides.py + _cancellation_shield.py
-        "hooks/guards": 25,  # +1: background_exec_guard.py for ADR-0001 runtime enforcement
+        "server/tools": 24,  # _auto_overrides.py + _cancellation_shield.py
+        "hooks/guards": 26,  # +1: background_exec_guard.py for ADR-0001 runtime enforcement
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

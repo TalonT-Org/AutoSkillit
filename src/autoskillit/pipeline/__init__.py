@@ -37,7 +37,7 @@ from autoskillit.pipeline.pr_gates import (
 )
 from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 from autoskillit.pipeline.timings import DefaultTimingLog, TimingEntry
-from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry
+from autoskillit.pipeline.tokens import DefaultTokenLog, TokenEntry, canonical_step_name
 
 __all__ = [
     # branch_guard
@@ -56,6 +56,7 @@ __all__ = [
     # tokens
     "DefaultTokenLog",
     "TokenEntry",
+    "canonical_step_name",
     # gate
     "DefaultGateState",
     "GATED_TOOLS",

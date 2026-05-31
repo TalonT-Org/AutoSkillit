@@ -35,7 +35,11 @@ from autoskillit.server._guards import (
     _require_orchestrator_or_higher,
     _validate_skill_command,
 )
-from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV, _hook_config_overlay_path
+from autoskillit.server._misc import (
+    SCENARIO_STEP_NAME_ENV,
+    _hook_config_overlay_path,
+    _pipeline_tracker_path,
+)
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -98,6 +102,44 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
                     }
                 )
     return None
+
+
+def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
+    """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
+    from autoskillit.pipeline import canonical_step_name
+
+    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+    if not effective_oid:
+        return None
+    from autoskillit.server import _get_ctx
+
+    ctx = _get_ctx()
+    tracker_path = _pipeline_tracker_path(ctx.project_dir, effective_oid)
+    if not tracker_path.exists():
+        return None
+    try:
+        tracker = json.loads(tracker_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    canonical = canonical_step_name(step_name)
+    deps = tracker.get("dependencies", {}).get(canonical, [])
+    if not deps:
+        return None
+    steps = tracker.get("steps", {})
+    unmet = [d for d in deps if steps.get(d, {}).get("status") not in ("complete", "skipped")]
+    if not unmet:
+        return None
+    dep_status = {d: steps.get(d, {}).get("status", "unknown") for d in unmet}
+    return json.dumps(
+        {
+            "success": False,
+            "is_error": True,
+            "error": (
+                f"DEPENDENCY UNMET: Step '{step_name}' requires {unmet} to complete first. "
+                f"Pipeline '{effective_oid}': {dep_status}."
+            ),
+        }
+    )
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -377,6 +419,12 @@ async def run_skill(
         and (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None
     ):
         return _lock_denial
+    if (
+        step_name
+        and not resume_session_id
+        and (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None
+    ):
+        return _dep_denial
     try:
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx

@@ -352,6 +352,7 @@ _SERVER_TOOL_MODULES = [
     "autoskillit.server.tools.tools_agents",
     "autoskillit.server.tools.tools_config",
     "autoskillit.server.tools.tools_kitchen",
+    "autoskillit.server.tools.tools_pipeline_tracker",
 ]
 
 _FRAMEWORK_PARAMS = frozenset({"ctx"})

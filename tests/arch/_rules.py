@@ -94,6 +94,8 @@ _PRINT_EXEMPT = frozenset(
         "skill_cmd_guard.py",
         "skill_command_guard.py",
         "_dispatch.py",
+        "pipeline_step_guard.py",
+        "pipeline_step_post_hook.py",
     }
 )
 

@@ -1484,32 +1484,36 @@ class TestFalseSuccessInfraWritesBypass:
         assert sr.subtype == "zero_writes"
         assert sr.needs_retry is True
 
-    def test_normalized_subtype_upgrade_respects_write_gate(self) -> None:
-        """missing_completion_marker upgrade with zero impl writes → zero_writes."""
+    def test_conditional_mode_with_matching_expected_when_fails(self) -> None:
+        """conditional mode + expected_when matches result + zero impl writes → zero_writes."""
         stdout = (
             _tool_use_ndjson("Read", file_path="/a/b.py")
             + "\n"
-            + _success_result_json("worktree_path = /tmp/wt\nsome output")
+            + _success_result_json("worktree_path = /tmp/wt\nsome output\n%%ORDER_UP%%")
         )
         result = SubprocessResult(
-            returncode=1,
+            returncode=0,
             stdout=stdout,
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
-            session_id="sess-upgrade-1",
+            session_id="sess-cond-1",
             channel_b_session_id="",
         )
         sr = _build_skill_result(
             result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=(r"worktree_path[ \t]*=[ \t]*/.+",),
-            write_behavior=WriteBehaviorSpec(mode="always"),
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"worktree_path[ \t]*=[ \t]*/.+",),
+            ),
             fs_writes_detected=True,
             backend=ClaudeCodeBackend(),
         )
         assert sr.success is False
         assert sr.subtype == "zero_writes"
+        assert sr.needs_retry is True
 
     def test_stale_recovery_with_zero_impl_writes_fails(self) -> None:
         """Stale recovery + fs_writes_detected but zero impl writes → zero_writes."""

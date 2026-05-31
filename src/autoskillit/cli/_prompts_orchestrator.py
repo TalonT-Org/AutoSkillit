@@ -216,16 +216,20 @@ CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):
     if defined, fall through to on_failure otherwise.
   - If lifespan_started is false, fall through to on_failure — no progress was made.
 - When run_skill returns "needs_retry: true" AND "retry_reason: early_stop":
-  - If "has_progress_evidence" is true in the result AND the step defines on_context_limit:
-    the model made progress (wrote files or created a worktree) but stopped before emitting
-    the completion marker. Partial progress exists on disk. Follow on_context_limit.
-  - If "has_progress_evidence" is false OR the step has no on_context_limit: fall through
+  - Determine the progress signal: if "completion_required" is true in the result, use
+    "has_implementation_progress"; otherwise use "has_progress_evidence".
+  - If the progress signal is true AND the step defines on_context_limit:
+    the model made progress but stopped before emitting the completion marker.
+    Partial progress exists on disk. Follow on_context_limit.
+  - If the progress signal is false OR the step has no on_context_limit: fall through
     to on_failure — no recoverable progress evidence.
 - When run_skill returns "needs_retry: true" AND "retry_reason: zero_writes":
-  - If "has_progress_evidence" is true in the result AND the step defines on_context_limit:
+  - Determine the progress signal: if "completion_required" is true in the result, use
+    "has_implementation_progress"; otherwise use "has_progress_evidence".
+  - If the progress signal is true AND the step defines on_context_limit:
     the model made filesystem contact but made no Write/Edit tool calls (may have committed
     via CLI). Partial progress may exist on disk. Follow on_context_limit.
-  - If "has_progress_evidence" is false OR the step has no on_context_limit: fall through
+  - If the progress signal is false OR the step has no on_context_limit: fall through
     to on_failure — no recoverable progress evidence.
 - When run_skill returns "needs_retry: true" AND "retry_reason: contract_recovery":
   - The model ran to completion and wrote artifacts but the structured output tokens

@@ -107,6 +107,33 @@ def test_completion_required_blocks_normalized_subtype_upgrade():
     assert sr.success is False
 
 
+def test_worktree_only_session_with_stdout_write_heuristic_and_completion_required_fails():
+    truncated_line = (
+        '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","id":"t1"'
+    )
+    result_text = "worktree_path = /tmp/worktrees/impl-foo\nbranch_name = impl/foo"
+    result_record = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": result_text,
+            "session_id": "s1",
+        }
+    )
+    stdout = truncated_line + "\n" + result_record
+    proc_result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+    sr = _build_skill_result(
+        proc_result,
+        completion_marker="%%ORDER_UP::abc123%%",
+        expected_output_patterns=[r"worktree_path[ \t]*=[ \t]*/.+"],
+        write_behavior=WriteBehaviorSpec(mode="always"),
+        completion_required=True,
+        backend=ClaudeCodeBackend(),
+    )
+    assert sr.success is False
+
+
 def test_completion_required_false_preserves_existing_behavior():
     result_text = "worktree_path = /tmp/worktrees/impl-foo\nbranch_name = impl/foo"
     stdout = json.dumps(

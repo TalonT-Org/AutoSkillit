@@ -619,6 +619,8 @@ class TestSkillResult:
             "git_writes_detected",
             "file_changes_count",
             "has_progress_evidence",
+            "has_implementation_progress",
+            "completion_required",
             "infra_exit_category",
             "api_retry_count",
             "api_retry_last_error",

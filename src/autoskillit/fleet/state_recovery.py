@@ -30,6 +30,7 @@ MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 __all__ = [
     "classify_stale_dispatch",
     "derive_orchestrator_resume_spec",
+    "find_completed_dispatch",
     "find_dispatch_for_issue",
     "has_blocking_dispatch",
     "has_completed_dispatch",
@@ -122,17 +123,26 @@ def has_completed_dispatch(state_path: Path, dispatch_name: str) -> bool:
 
     Returns False when the file is missing or corrupted (fail-open).
     """
+    return find_completed_dispatch(state_path, dispatch_name) is not None
+
+
+def find_completed_dispatch(state_path: Path, dispatch_name: str) -> DispatchRecord | None:
+    """Return the DispatchRecord if the named dispatch has SUCCESS status.
+
+    Returns None when the file is missing, corrupted, or no matching SUCCESS
+    record exists (fail-open).
+    """
     from autoskillit.fleet.state import read_state  # noqa: PLC0415
 
     if not state_path.exists():
-        return False
+        return None
     state = read_state(state_path)
     if state is None:
-        return False
+        return None
     for d in state.dispatches:
-        if d.name == dispatch_name:
-            return d.status == DispatchStatus.SUCCESS
-    return False
+        if d.name == dispatch_name and d.status == DispatchStatus.SUCCESS:
+            return d
+    return None
 
 
 def _is_abandon_kill_metadata(retry_reason: str, infra_exit_category: str) -> bool:

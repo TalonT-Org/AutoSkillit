@@ -63,6 +63,7 @@ from .state import (
 from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
+    find_completed_dispatch,
     find_dispatch_for_issue,
     has_blocking_dispatch,
     has_completed_dispatch,
@@ -126,6 +127,7 @@ __all__ = [
     "GateRecordResult",
     "append_dispatch_record",
     "build_protected_campaign_ids",
+    "find_completed_dispatch",
     "has_blocking_dispatch",
     "has_completed_dispatch",
     "has_failed_dispatch",

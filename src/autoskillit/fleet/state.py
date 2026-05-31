@@ -25,6 +25,7 @@ from autoskillit.core import (
 )
 from autoskillit.fleet.state_gates import record_gate_outcome
 from autoskillit.fleet.state_recovery import (
+    find_completed_dispatch,
     has_blocking_dispatch,
     has_completed_dispatch,
     has_failed_dispatch,
@@ -57,6 +58,7 @@ __all__ = [
     # re-exported from state_gates
     "record_gate_outcome",
     # re-exported from state_recovery
+    "find_completed_dispatch",
     "has_blocking_dispatch",
     "has_completed_dispatch",
     "has_failed_dispatch",

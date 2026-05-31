@@ -101,17 +101,20 @@ class TestIngredientLockGuardFailOpen:
         monkeypatch.chdir(tmp_path)
         code, stdout = _run("")
         assert code == 0
+        assert stdout.strip() == ""
 
     def test_ingredient_lock_guard_fail_open_invalid_json(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         code, stdout = _run("not json")
         assert code == 0
+        assert stdout.strip() == ""
 
     def test_ingredient_lock_guard_fail_open_missing_overlay(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         event = json.dumps({"tool_input": {"step_name": "investigate", "order_id": ""}})
         code, stdout = _run(event)
         assert code == 0
+        assert stdout.strip() == ""
 
 
 class TestIngredientLockGuardPipelineScoped:

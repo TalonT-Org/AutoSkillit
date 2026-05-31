@@ -145,3 +145,30 @@ def test_manifest_pattern_matches_real_file(pattern: str) -> None:
         f"Manifest pattern {pattern!r} matches no tracked files — it may be stale "
         "or misspelled. Remove it from .autoskillit/test-filter-manifest.yaml."
     )
+
+
+def _all_manifest_paths() -> list[tuple[str, str]]:
+    """Return (pattern, entry) pairs for all manifest directory/file entries."""
+    manifest = load_manifest(_MANIFEST_PATH)
+    pairs = []
+    for pattern, entries in manifest.items():
+        if isinstance(entries, list):
+            for entry in entries:
+                pairs.append((pattern, entry))
+        elif isinstance(entries, str):
+            pairs.append((pattern, entries))
+    return pairs
+
+
+@pytest.mark.parametrize("pattern,entry", _all_manifest_paths())
+def test_manifest_entry_path_exists(pattern: str, entry: str) -> None:
+    """Every test path listed in a manifest entry must exist under tests/.
+
+    Catches typos (e.g., 'planer/' instead of 'planner/') and stale
+    references after test directory renames. Handles both directory entries
+    (e.g., 'planner/') and file-level entries (e.g., 'workspace/test_skills.py').
+    """
+    target = _REPO_ROOT / "tests" / entry.rstrip("/")
+    assert target.exists(), (
+        f"Manifest entry for {pattern!r} references {entry!r} but {target} does not exist."
+    )

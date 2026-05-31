@@ -117,8 +117,8 @@ class TestTieredAlwaysRun:
             assert d in dir_names, f"fail-open: {d} must be present for empty changeset"
 
     def test_unconditional_files_constants_have_correct_counts(self) -> None:
-        """_INFRA_UNCONDITIONAL_FILES has 6 entries; _HOOKS_UNCONDITIONAL_FILES has 3 entries."""
-        assert len(_INFRA_UNCONDITIONAL_FILES) == 6
+        """_INFRA_UNCONDITIONAL_FILES has 7 entries; _HOOKS_UNCONDITIONAL_FILES has 3 entries."""
+        assert len(_INFRA_UNCONDITIONAL_FILES) == 7
         assert len(_HOOKS_UNCONDITIONAL_FILES) == 3
 
     def test_infra_unconditional_files_resolve_under_infra_dir(self, tmp_path: Path) -> None:

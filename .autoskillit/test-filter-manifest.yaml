@@ -63,12 +63,15 @@ src/autoskillit/recipe/block_budgets.yaml:
 src/autoskillit/skills/*/SKILL.md:
   - skills/
   - contracts/
+  - workspace/
 
 src/autoskillit/skills_extended/*/SKILL.md:
   - skills/
   - contracts/
   - recipe/
   - skills_extended/
+  - workspace/
+  - planner/
 
 src/autoskillit/config/defaults.yaml:
   - config/
@@ -78,6 +81,7 @@ src/autoskillit/config/defaults.yaml:
 
 src/autoskillit/hooks/registry.sha256:
   - infra/
+  - hooks/
 
 src/autoskillit/.claude-plugin/plugin.json:
   - contracts/
@@ -92,6 +96,7 @@ src/autoskillit/agents/**:
   - server/
   - arch/
   - contracts/
+  - planner/
 
 .github/workflows/*.yml:
   - infra/
@@ -123,6 +128,7 @@ README.md:
 
 src/autoskillit/assets/**/*:
   - assets/
+  - contracts/
 
 tests/recipe/fixtures/*:
   - recipe/

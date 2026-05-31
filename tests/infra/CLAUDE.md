@@ -32,6 +32,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_guard_coverage.py` | Structural test: destructive tools have PreToolUse hook coverage |
 | `test_skill_orchestration_guard.py` | Tests for skill_orchestration_guard.py PreToolUse hook |
 | `test_manifest_completeness.py` | Manifest completeness and orphan detection tests for the test-filter manifest |
+| `test_manifest_directory_completeness.py` | Manifest directory completeness: validates each manifest pattern's test directory list includes all dependent test directories |
 | `test_mcp_health_advisor.py` | Tests for mcp_health_advisor PreToolUse hook |
 | `test_open_kitchen_guard.py` | Phase 2 tests: open_kitchen_guard PreToolUse hook |
 | `test_planner_gh_discovery_guard.py` | Tests for the planner_gh_discovery_guard PreToolUse hook |

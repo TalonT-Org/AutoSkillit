@@ -13,6 +13,10 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestGetTokenSummaryMcpResponses:
+    @pytest.fixture(autouse=True)
+    def _fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_includes_mcp_responses_section(self, tool_ctx_kitchen_open):
         """get_token_summary returns an mcp_responses key with per-tool data."""

@@ -262,6 +262,59 @@ def test_gated_tools_call_require_enabled_first() -> None:
     )
 
 
+def test_fleet_tools_call_require_fleet() -> None:
+    """Every tool in FLEET_TOOLS (except batch_cleanup_clones) must call
+    _require_fleet() before any non-guard await/return in its function body."""
+    from autoskillit.core.types._type_constants_registries import FLEET_TOOLS
+
+    FLEET_GUARD_EXEMPT = {"batch_cleanup_clones"}
+    GUARD_FUNCS = {
+        "_require_enabled",
+        "_require_fleet",
+        "_require_orchestrator_or_higher",
+        "_require_orchestrator_exact",
+    }
+
+    server_dir = SRC_ROOT / "server"
+    violations: list[str] = []
+
+    for py_file in list(server_dir.glob("*.py")) + list((server_dir / "tools").glob("*.py")):
+        src = py_file.read_text()
+        tree = ast.parse(src)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name not in FLEET_TOOLS - FLEET_GUARD_EXEMPT:
+                    continue
+                if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
+                    continue
+
+                require_idx: int | None = None
+                action_idx: int | None = None
+
+                for i, stmt in enumerate(node.body):
+                    if require_idx is None and _has_call_to(stmt, "_require_fleet"):
+                        require_idx = i
+                    if (
+                        action_idx is None
+                        and _has_await_or_return(stmt)
+                        and not any(_has_call_to(stmt, g) for g in GUARD_FUNCS)
+                    ):
+                        action_idx = i
+
+                if require_idx is None:
+                    violations.append(f"{node.name}: _require_fleet() never called")
+                elif action_idx is not None and require_idx > action_idx:
+                    violations.append(
+                        f"{node.name}: _require_fleet() called at stmt {require_idx} "
+                        f"but await/return found at stmt {action_idx} first"
+                    )
+
+    assert not violations, (
+        "Fleet tools must call _require_fleet() before any non-guard await/return:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
 def test_ungated_tools_do_not_call_require_enabled() -> None:
     """No function named in UNGATED_TOOLS may call _require_enabled()."""
     import inspect

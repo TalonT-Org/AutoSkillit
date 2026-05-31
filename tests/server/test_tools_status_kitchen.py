@@ -161,6 +161,10 @@ class TestKitchenStatus:
 class TestGetPipelineReport:
     """get_pipeline_report is a gated tool that returns accumulated failures."""
 
+    @pytest.fixture(autouse=True)
+    def _fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):
         """get_pipeline_report returns gate_error when kitchen gate is closed."""
@@ -199,6 +203,15 @@ class TestGetPipelineReport:
         result2 = json.loads(await get_pipeline_report())
         assert result2["total_failures"] == 0
 
+    @pytest.mark.feature("fleet")
+    @pytest.mark.anyio
+    async def test_get_pipeline_report_fleet_guard_denies_orchestrator(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        result = json.loads(await get_pipeline_report())
+        assert result["subtype"] == "headless_error"
+
     @pytest.mark.anyio
     async def test_get_pipeline_report_awaits_startup_ready(
         self, tool_ctx_kitchen_open, monkeypatch
@@ -232,6 +245,10 @@ def test_check_quota_absent_from_mcp_registry(tool_ctx):
 
 class TestTelemetryRecoveryData:
     """MCP status tools return data populated via load_from_log_dir recovery."""
+
+    @pytest.fixture(autouse=True)
+    def _fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
     def _write_token_session(
         self, log_root: Path, dir_name: str, step_name: str, input_tokens: int

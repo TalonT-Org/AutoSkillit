@@ -696,7 +696,6 @@ class CodexBackend:
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
-        resume_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         if env_extras:
             resume_extras.update(env_extras)
         resume_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX

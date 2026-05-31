@@ -1575,9 +1575,8 @@ class TestModelAliasDriftIntegration:
         )
         anomalies_path = tmp_path / "sessions" / "alias-no-drift-001" / "anomalies.jsonl"
         lines = anomalies_path.read_text().strip().splitlines() if anomalies_path.exists() else []
-        drift = [
-            json.loads(line) for line in lines if json.loads(line).get("kind") == "model_drift"
-        ]
+        parsed = [json.loads(line) for line in lines]
+        drift = [p for p in parsed if p.get("kind") == "model_drift"]
         assert len(drift) == 0
 
     def test_profile_name_recorded_in_sessions_jsonl(self, tmp_path):
@@ -1626,9 +1625,8 @@ class TestModelAliasDriftIntegration:
         )
         anomalies_path = tmp_path / "sessions" / "profile-non-anthropic-001" / "anomalies.jsonl"
         lines = anomalies_path.read_text().strip().splitlines() if anomalies_path.exists() else []
-        drift = [
-            json.loads(line) for line in lines if json.loads(line).get("kind") == "model_drift"
-        ]
+        parsed = [json.loads(line) for line in lines]
+        drift = [p for p in parsed if p.get("kind") == "model_drift"]
         assert len(drift) == 0
 
     def test_rss_startup_artifact_suppressed_through_flush(self, tmp_path):

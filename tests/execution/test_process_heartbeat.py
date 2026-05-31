@@ -516,24 +516,40 @@ class TestOrphanedToolResultDetection:
         spawn_time = time.time() - 1
 
         session_file = log_dir / "sess_orphaned.jsonl"
-        session_file.write_text(
-            json.dumps({"type": "assistant", "message": {"content": "working..."}})
-            + "\n"
-            + json.dumps({"type": "user", "message": {"content": [{"type": "tool_result"}]}})
-            + "\n"
-        )
+        session_file.write_text("")
 
-        result = await _session_log_monitor(
-            log_dir,
-            "%%AUTOSKILLIT_COMPLETE%%",
-            stale_threshold=0.15,
-            spawn_time=spawn_time,
-            _phase1_poll=0.01,
-            _phase2_poll=0.04,
-        )
+        async def append_records():
+            await anyio.sleep(0.05)
+            with session_file.open("a") as f:
+                f.write(
+                    json.dumps({"type": "assistant", "message": {"content": "working..."}})
+                    + "\n"
+                    + json.dumps(
+                        {"type": "user", "message": {"content": [{"type": "tool_result"}]}}
+                    )
+                    + "\n"
+                )
 
-        assert result.status == ChannelBStatus.STALE
-        assert result.orphaned_tool_result is True
+        result_box: list = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    log_dir,
+                    "%%AUTOSKILLIT_COMPLETE%%",
+                    stale_threshold=0.3,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.04,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_records)
+
+        assert result_box[0].status == ChannelBStatus.STALE
+        assert result_box[0].orphaned_tool_result is True
 
     @pytest.mark.anyio
     async def test_no_false_positive_when_last_record_is_assistant(self, tmp_path):
@@ -545,24 +561,38 @@ class TestOrphanedToolResultDetection:
         spawn_time = time.time() - 1
 
         session_file = log_dir / "sess_assistant.jsonl"
-        session_file.write_text(
-            json.dumps({"type": "user", "message": {"content": "do something"}})
-            + "\n"
-            + json.dumps({"type": "assistant", "message": {"content": "thinking..."}})
-            + "\n"
-        )
+        session_file.write_text("")
 
-        result = await _session_log_monitor(
-            log_dir,
-            "%%AUTOSKILLIT_COMPLETE%%",
-            stale_threshold=0.15,
-            spawn_time=spawn_time,
-            _phase1_poll=0.01,
-            _phase2_poll=0.04,
-        )
+        async def append_records():
+            await anyio.sleep(0.05)
+            with session_file.open("a") as f:
+                f.write(
+                    json.dumps({"type": "user", "message": {"content": "do something"}})
+                    + "\n"
+                    + json.dumps({"type": "assistant", "message": {"content": "thinking..."}})
+                    + "\n"
+                )
 
-        assert result.status == ChannelBStatus.STALE
-        assert result.orphaned_tool_result is False
+        result_box: list = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    log_dir,
+                    "%%AUTOSKILLIT_COMPLETE%%",
+                    stale_threshold=0.3,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.04,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_records)
+
+        assert result_box[0].status == ChannelBStatus.STALE
+        assert result_box[0].orphaned_tool_result is False
 
     @pytest.mark.anyio
     async def test_orphaned_false_on_completion(self, tmp_path):
@@ -574,29 +604,43 @@ class TestOrphanedToolResultDetection:
         spawn_time = time.time() - 1
 
         session_file = log_dir / "sess_complete.jsonl"
-        session_file.write_text(
-            json.dumps({"type": "user", "message": {"content": "do something"}})
-            + "\n"
-            + json.dumps(
-                {
-                    "type": "assistant",
-                    "message": {"content": "done\n%%AUTOSKILLIT_COMPLETE%%"},
-                }
+        session_file.write_text("")
+
+        async def append_records():
+            await anyio.sleep(0.05)
+            with session_file.open("a") as f:
+                f.write(
+                    json.dumps({"type": "user", "message": {"content": "do something"}})
+                    + "\n"
+                    + json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {"content": "done\n%%AUTOSKILLIT_COMPLETE%%"},
+                        }
+                    )
+                    + "\n"
+                )
+
+        result_box: list = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    log_dir,
+                    "%%AUTOSKILLIT_COMPLETE%%",
+                    stale_threshold=5.0,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.04,
+                )
             )
-            + "\n"
-        )
 
-        result = await _session_log_monitor(
-            log_dir,
-            "%%AUTOSKILLIT_COMPLETE%%",
-            stale_threshold=5.0,
-            spawn_time=spawn_time,
-            _phase1_poll=0.01,
-            _phase2_poll=0.04,
-        )
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_records)
 
-        assert result.status == ChannelBStatus.COMPLETION
-        assert result.orphaned_tool_result is False
+        assert result_box[0].status == ChannelBStatus.COMPLETION
+        assert result_box[0].orphaned_tool_result is False
 
 
 class TestHeartbeatStreamParser:

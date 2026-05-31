@@ -7,6 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.server.tools._execution_helpers import (
+    _PATH_LIKE_ARGS,
+    resolve_relative_path_args,
+)
 from autoskillit.server.tools.tools_execution import run_python
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -51,24 +55,24 @@ async def test_run_python_output_readable_from_run_skill_cwd(tool_ctx_kitchen_op
     assert Path(diagnosis_path).is_absolute(), "Returned path must be absolute"
 
 
-@pytest.mark.anyio
-async def test_run_python_callable_cwd_arg_not_hijacked(tool_ctx_kitchen_open, tmp_path):
-    """Callable's own args remain intact when work_dir is passed as a tool-level param."""
+def test_run_python_callable_cwd_arg_not_hijacked(tmp_path):
+    """Tool-level work_dir must not consume or overwrite a callable's own cwd arg in args."""
     work_dir = tmp_path / "work"
     work_dir.mkdir()
-    output_dir = str(tmp_path / "output")
+    callable_cwd = str(tmp_path / "callable_cwd")
 
-    result_json = await run_python(
-        callable="autoskillit.smoke_utils.diagnose_merge_gate",
-        args={
-            "test_stdout": "FAILED test_bar",
-            "test_stderr": "",
-            "output_dir": output_dir,
-        },
-        work_dir=str(work_dir),
+    args: dict[str, object] = {"cwd": callable_cwd, "output_dir": ".autoskillit/temp/test"}
+    resolved = resolve_relative_path_args(args, str(work_dir))
+
+    assert "cwd" not in _PATH_LIKE_ARGS, (
+        "cwd must not be in _PATH_LIKE_ARGS — it is a callable-level arg, not path-anchored"
     )
-    result = json.loads(result_json)
-    assert result["success"] is True
+    assert resolved["cwd"] == callable_cwd, (
+        f"Callable's cwd arg was mutated: {resolved['cwd']!r} != {callable_cwd!r}"
+    )
+    assert resolved["output_dir"] == str(work_dir / ".autoskillit/temp/test"), (
+        "Relative output_dir must be anchored to work_dir"
+    )
 
 
 @pytest.mark.anyio

@@ -90,6 +90,24 @@ class NoPositiveSignal(ClassifierInconclusive):
     """No positive gate matched — counts against the inconclusive budget."""
 
 
+@dataclass(frozen=True, slots=True)
+class EnqueueReady:
+    """Proof token: possession guarantees mergeability was validated."""
+
+    pr_node_id: str
+
+
+def validate_enqueue_ready(state: PRFetchState) -> EnqueueReady | None:
+    """Validate PRFetchState is safe for enqueue. Returns None if not ready."""
+    if state["merged"]:
+        return None
+    if state["state"] == "CLOSED":
+        return None
+    if state["mergeable"] in ("CONFLICTING", "UNKNOWN"):
+        return None
+    return EnqueueReady(pr_node_id=state["pr_node_id"])
+
+
 def _is_positive_stall(state: PRFetchState) -> bool:
     """True when auto-merge is enabled and merge_state_status is CLEAN or HAS_HOOKS."""
     return state["auto_merge_enabled_at"] is not None and state["merge_state_status"] in {

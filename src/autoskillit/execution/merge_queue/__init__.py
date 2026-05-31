@@ -24,6 +24,7 @@ from autoskillit.execution.merge_queue._merge_queue_classifier import (
     CIStillRunning,
     ClassificationResult,  # noqa: F401 — re-export for callers
     ClassifierInconclusive,  # noqa: F401 — re-export for callers
+    EnqueueReady,
     NoPositiveSignal,
     PRFetchState,
     _classify_pr_state,
@@ -31,6 +32,7 @@ from autoskillit.execution.merge_queue._merge_queue_classifier import (
     _is_positive_dropped_healthy,  # noqa: F401 — re-export for callers
     _is_positive_dropped_merge_group_ci,  # noqa: F401 — re-export for callers
     _is_positive_stall,  # noqa: F401 — re-export for callers
+    validate_enqueue_ready,
 )
 from autoskillit.execution.merge_queue._merge_queue_group_ci import (
     _MUTATION_DISABLE_AUTO_MERGE,
@@ -268,10 +270,18 @@ class DefaultMergeQueueWatcher:
                         backoff=backoff,
                     )
                     try:
-                        await self._toggle_auto_merge(
-                            state["pr_node_id"],
-                            auto_merge_available=auto_merge_available,
-                        )
+                        stall_ready = validate_enqueue_ready(state)
+                        if stall_ready is not None:
+                            await self._toggle_auto_merge(
+                                stall_ready,
+                                auto_merge_available=auto_merge_available,
+                            )
+                        else:
+                            logger.warning(
+                                "stall_toggle_skipped_not_enqueue_ready",
+                                pr_number=pr_number,
+                                mergeable=state["mergeable"],
+                            )
                     except Exception:
                         logger.warning("toggle_auto_merge failed", exc_info=True)
                     stall_retries_attempted += 1
@@ -426,34 +436,39 @@ class DefaultMergeQueueWatcher:
             state = await self._fetch_pr_and_queue_state(
                 pr_number, owner, repo_name, target_branch
             )
-            await self._toggle_auto_merge(state["pr_node_id"])
+            ready = validate_enqueue_ready(state)
+            if ready is None:
+                return {
+                    "success": False,
+                    "error": (
+                        f"PR #{pr_number} not ready for toggle: "
+                        f"mergeable={state['mergeable']}, state={state['state']}"
+                    ),
+                }
+            await self._toggle_auto_merge(ready)
             return {"success": True, "pr_number": pr_number}
         except Exception as exc:
             logger.warning("toggle_auto_merge failed", exc_info=True)
             return {"success": False, "error": f"toggle failed: {exc}"}
 
-    async def _enqueue_direct(self, pr_node_id: str) -> None:
+    async def _enqueue_direct(self, ready: EnqueueReady) -> None:
         """Enqueue a PR directly via the enqueuePullRequest GraphQL mutation."""
-        if not pr_node_id:
-            raise ValueError("pr_node_id must be a non-empty string")
         resp = await self._ensure_client().post(
             _GRAPHQL_ENDPOINT,
-            json={"query": _MUTATION_ENQUEUE_PR, "variables": {"prId": pr_node_id}},
+            json={"query": _MUTATION_ENQUEUE_PR, "variables": {"prId": ready.pr_node_id}},
         )
         resp.raise_for_status()
         body = resp.json()
         if "errors" in body:
             raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
 
-    async def _enable_auto_merge_direct(self, pr_node_id: str) -> None:
+    async def _enable_auto_merge_direct(self, ready: EnqueueReady) -> None:
         """Enable auto-merge for a PR via the enablePullRequestAutoMerge mutation."""
-        if not pr_node_id:
-            raise ValueError("pr_node_id must be a non-empty string")
         resp = await self._ensure_client().post(
             _GRAPHQL_ENDPOINT,
             json={
                 "query": _MUTATION_ENABLE_AUTO_MERGE,
-                "variables": {"prId": pr_node_id, "mergeMethod": "SQUASH"},
+                "variables": {"prId": ready.pr_node_id, "mergeMethod": "SQUASH"},
             },
         )
         resp.raise_for_status()
@@ -485,12 +500,42 @@ class DefaultMergeQueueWatcher:
             state = await self._fetch_pr_and_queue_state(
                 pr_number, owner, repo_name, target_branch
             )
-            pr_node_id = state["pr_node_id"]
+            max_wait = 90
+            poll_interval = 5.0
+            waited = 0.0
+            ready = validate_enqueue_ready(state)
+            while ready is None and waited < max_wait:
+                if state["merged"] or state["state"] == "CLOSED":
+                    break
+                if state["mergeable"] not in ("UNKNOWN", "CONFLICTING"):
+                    break
+                logger.info(
+                    "enqueue_mergeability_poll",
+                    pr_number=pr_number,
+                    mergeable=state["mergeable"],
+                    waited=waited,
+                )
+                await asyncio.sleep(poll_interval)
+                waited += poll_interval
+                state = await self._fetch_pr_and_queue_state(
+                    pr_number, owner, repo_name, target_branch
+                )
+                ready = validate_enqueue_ready(state)
+
+            if ready is None:
+                return {
+                    "success": False,
+                    "error": (
+                        f"PR #{pr_number} not enqueue-ready: "
+                        f"mergeable={state['mergeable']}, state={state['state']}"
+                    ),
+                }
+
             if auto_merge_available:
-                await self._enable_auto_merge_direct(pr_node_id)
+                await self._enable_auto_merge_direct(ready)
                 enrollment_method = "auto_merge"
             else:
-                await self._enqueue_direct(pr_node_id)
+                await self._enqueue_direct(ready)
                 enrollment_method = "direct_enqueue"
             return {
                 "success": True,
@@ -502,25 +547,23 @@ class DefaultMergeQueueWatcher:
             return {"success": False, "error": f"enqueue failed: {exc}"}
 
     async def _toggle_auto_merge(
-        self, pr_node_id: str, *, auto_merge_available: bool = True
+        self, ready: EnqueueReady, *, auto_merge_available: bool = True
     ) -> None:
         """Re-enroll a PR: toggle disable/re-enable or enqueuePullRequest directly."""
-        if not pr_node_id:
-            raise ValueError("pr_node_id must be a non-empty string")
         if not auto_merge_available:
-            await self._enqueue_direct(pr_node_id)
+            await self._enqueue_direct(ready)
             return
         disable_payload = {
             "query": _MUTATION_DISABLE_AUTO_MERGE,
-            "variables": {"prId": pr_node_id},
+            "variables": {"prId": ready.pr_node_id},
         }
         resp = await self._ensure_client().post(_GRAPHQL_ENDPOINT, json=disable_payload)
         resp.raise_for_status()
         body = resp.json()
         if "errors" in body:
             raise RuntimeError(f"GraphQL mutation error: {body['errors']}")
-        await self._confirm_disable(pr_node_id)
-        await self._enable_auto_merge_direct(pr_node_id)
+        await self._confirm_disable(ready.pr_node_id)
+        await self._enable_auto_merge_direct(ready)
 
     async def _confirm_disable(self, pr_node_id: str) -> None:
         """Poll until auto-merge disable is confirmed or timeout (best-effort)."""

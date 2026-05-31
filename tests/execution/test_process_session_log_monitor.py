@@ -729,7 +729,7 @@ class TestResumeBoundary:
                 await _session_log_monitor(
                     log_dir,
                     marker,
-                    stale_threshold=30,
+                    stale_threshold=5,
                     spawn_time=spawn_time,
                     _phase1_poll=0.01,
                     _phase2_poll=0.05,

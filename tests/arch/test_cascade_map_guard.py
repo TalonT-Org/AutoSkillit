@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from tests._test_filter import (
+    _IMPORT_GUARD_TRANSITIVE_OVERRIDES,
     LAYER_CASCADE_AGGRESSIVE,
     LAYER_CASCADE_CONSERVATIVE,
     MODULE_CASCADE_CONFIG,
@@ -693,15 +694,20 @@ class TestFileLevelCascadeImportGuard:
     """REQ-GUARD-006: File-level entries must actually import their cascade package."""
 
     def test_file_level_entries_import_their_cascade_package(self) -> None:
-        """Every dir/file.py entry in a cascade frozenset must import autoskillit.{pkg}."""
+        """Every dir/file.py entry in a cascade frozenset must import autoskillit.{pkg},
+        unless listed in _IMPORT_GUARD_TRANSITIVE_OVERRIDES (transitive dependencies
+        through deferred imports in recipe source modules)."""
         tests_dir = Path(__file__).parent.parent
         violations: list[str] = []
 
         for pkg, entries in LAYER_CASCADE_CONSERVATIVE.items():
+            transitive_exempt = _IMPORT_GUARD_TRANSITIVE_OVERRIDES.get(pkg, frozenset())
             for entry in entries:
                 if "/" not in entry:
                     continue
                 if entry in _FIXTURE_MEDIATED_ENTRIES.get(pkg, frozenset()):
+                    continue
+                if entry in transitive_exempt:
                     continue
                 test_file = tests_dir / entry
                 if not test_file.exists():
@@ -729,6 +735,22 @@ class TestFileLevelCascadeImportGuard:
         assert not violations, (
             "File-level cascade entries that do not import their package:\n"
             + "\n".join(f"  {v}" for v in sorted(violations))
+        )
+
+    def test_transitive_overrides_are_valid(self) -> None:
+        """Every _IMPORT_GUARD_TRANSITIVE_OVERRIDES entry must exist and be in its cascade."""
+        tests_root = Path(__file__).parent.parent
+        violations: list[str] = []
+        for pkg, overrides in _IMPORT_GUARD_TRANSITIVE_OVERRIDES.items():
+            cascade_set = LAYER_CASCADE_CONSERVATIVE.get(pkg, frozenset())
+            for entry in sorted(overrides):
+                if entry not in cascade_set:
+                    violations.append(f"{pkg}: {entry} in overrides but not in cascade")
+                if not (tests_root / entry).is_file():
+                    violations.append(f"{pkg}: {entry} does not exist on disk")
+        assert not violations, (
+            "_IMPORT_GUARD_TRANSITIVE_OVERRIDES entries must exist and be in their cascade:\n"
+            + "\n".join(f"  {v}" for v in violations)
         )
 
 

@@ -212,6 +212,7 @@ async def test_lifespan_launches_codex_registration_for_codex_backend():
 
     mock_ctx = MagicMock()
     mock_ctx.backend.name = "codex"
+    mock_ctx.backend.capabilities.mcp_config_capable = True
     mock_ctx.runner = MagicMock()
 
     reg_mock = AsyncMock()
@@ -235,6 +236,7 @@ async def test_lifespan_skips_codex_registration_for_non_codex_backend():
 
     mock_ctx = MagicMock()
     mock_ctx.backend.name = "claude-code"
+    mock_ctx.backend.capabilities.mcp_config_capable = False
     mock_ctx.runner = MagicMock()
 
     reg_mock = AsyncMock()

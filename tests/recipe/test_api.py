@@ -289,8 +289,8 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
 
     api_mod.load_and_validate("myrecipe", tmp_path)
 
-    assert cache_snap, "cache was never populated"
-    cache_key = next(iter(cache_snap.keys()))
+    assert cache_snap._store, "cache was never populated"
+    cache_key = next(iter(cache_snap._store.keys()))
 
     # Verify each result-affecting param has a corresponding position in the cache key
     param_to_key_index: dict[str, int] = {

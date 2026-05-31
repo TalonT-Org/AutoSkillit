@@ -100,12 +100,14 @@ def _structlog_to_null():
     methods on known proxies so tests that call configure_logging() don't
     leak cached production loggers into subsequent tests.
     """
+    import logging as _logging
+
     import structlog
     import structlog.testing
 
     structlog.configure(
         cache_logger_on_first_use=False,
-        wrapper_class=structlog.BoundLogger,
+        wrapper_class=structlog.make_filtering_bound_logger(_logging.DEBUG),
     )
     for proxy in _structlog_proxies:
         proxy.__dict__.pop("bind", None)

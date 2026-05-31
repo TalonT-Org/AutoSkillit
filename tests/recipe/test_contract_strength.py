@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
 import regex as re
 
 from autoskillit.recipe._contracts_manifest import get_skill_contract, load_bundled_manifest
+
+pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
 def test_write_always_skills_with_completion_required_have_marker_pattern():

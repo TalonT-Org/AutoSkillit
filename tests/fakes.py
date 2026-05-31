@@ -84,6 +84,7 @@ class ExecutorCall:
     allowed_write_prefix: str = ""
     allowed_write_prefixes: tuple[str, ...] = ()
     readonly_skill: bool = False
+    completion_required: bool = False
     write_watch_dirs: tuple[Any, ...] = ()
     provider_extras: Mapping[str, str] | None = None
     profile_name: str = ""
@@ -185,6 +186,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
         readonly_skill: bool = False,
+        completion_required: bool = False,
         write_watch_dirs: Sequence[Any] = (),
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
@@ -220,6 +222,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 allowed_write_prefix=allowed_write_prefix,
                 allowed_write_prefixes=allowed_write_prefixes,
                 readonly_skill=readonly_skill,
+                completion_required=completion_required,
                 write_watch_dirs=tuple(write_watch_dirs),
                 provider_extras=provider_extras,
                 profile_name=profile_name,

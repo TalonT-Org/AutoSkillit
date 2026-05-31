@@ -21,6 +21,7 @@ def test_execution_shard_all():
     from autoskillit.core.types._type_protocols_execution import __all__
 
     assert set(__all__) == {
+        "CompletionRequiredResolver",
         "InputContractResolver",
         "TestRunner",
         "HeadlessExecutor",

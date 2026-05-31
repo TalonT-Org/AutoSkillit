@@ -368,6 +368,34 @@ class SkillResult:
             evidence=WriteEvidence.none_observed(),
         )
 
+    @classmethod
+    def cancelled(
+        cls,
+        skill_command: str = "",
+        session_id: str = "",
+        order_id: str = "",
+    ) -> SkillResult:
+        """Construct a SkillResult for transport-level CancelledError.
+
+        Produces a retriable result with needs_retry=True and
+        retry_reason=RetryReason.CANCELLED so the orchestrator can route
+        via on_failure (cancellation is not a context-limit event).
+        """
+        return cls(
+            success=False,
+            result=f"CancelledError: transport teardown | skill_command={skill_command!r}",
+            session_id=session_id,
+            subtype="cancelled",
+            is_error=True,
+            exit_code=-1,
+            needs_retry=True,
+            retry_reason=RetryReason.CANCELLED,
+            stderr="",
+            kill_reason=KillReason.EXCEPTION,
+            order_id=order_id,
+            evidence=WriteEvidence.none_observed(),
+        )
+
     @property
     def outcome(self) -> SessionOutcome:
         """Classify this result as SUCCEEDED, RETRIABLE, or FAILED.

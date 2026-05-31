@@ -297,3 +297,32 @@ class TestDispatchFoodTruckExecution:
         )
 
         assert tool_ctx.config.quota_guard.cache_path in invalidate_calls
+
+    @pytest.mark.anyio
+    async def test_dispatch_food_truck_returns_structured_result_on_cancelled_error(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ) -> None:
+        """dispatch_food_truck returns a fleet error envelope on asyncio.CancelledError.
+
+        This is the secondary gap test: CancelledError escaping execute_dispatch must be
+        caught at the MCP tool boundary and returned as a structured JSON response rather
+        than propagating to the MCP transport and dropping the session.
+        """
+        import autoskillit.fleet as _fleet_mod
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        # Bypass fleet-session gate — test focuses on the CancelledError path, not the gate
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_fleet_dispatch._require_fleet",
+            lambda _name: None,
+        )
+        # execute_dispatch is dynamically imported inside the function; patch the module attr
+        monkeypatch.setattr(
+            _fleet_mod,
+            "execute_dispatch",
+            AsyncMock(side_effect=asyncio.CancelledError()),
+        )
+
+        result_json = await dispatch_food_truck(recipe="test-recipe", task="test task")
+        data = json.loads(result_json)
+        assert data["success"] is False

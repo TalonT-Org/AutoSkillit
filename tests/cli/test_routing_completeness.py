@@ -16,9 +16,12 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 # Reasons excluded from orchestrator-prompt routing check:
 # - NONE: not a retry scenario, no routing needed
 # - BUDGET_EXHAUSTED: caps other reasons; orchestrator never sees it directly
+# - CANCELLED: transport-level event; tool handler converts to structured result at the boundary,
+#   orchestrator sees success=False + subtype="cancelled" and routes via on_failure
 _ROUTING_EXCLUDED = {
     RetryReason.NONE,
     RetryReason.BUDGET_EXHAUSTED,
+    RetryReason.CANCELLED,
 }
 
 # Routing contract: RetryReason → (expected_route_keyword, evidence_condition_keyword_or_None)

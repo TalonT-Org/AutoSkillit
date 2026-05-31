@@ -61,8 +61,30 @@ def test_retry_reason_values():
         RetryReason.THINKING_STALL,
         RetryReason.IDLE_STALL,
         RetryReason.RATE_LIMITED,
+        RetryReason.CANCELLED,
     }
     assert RetryReason.NONE.value == "none"
+
+
+def test_retry_reason_has_cancelled_variant():
+    """RetryReason.CANCELLED exists with the correct string value."""
+    assert RetryReason.CANCELLED == "cancelled"
+
+
+def test_skill_result_cancelled_factory():
+    """SkillResult.cancelled() produces a correctly shaped retriable result."""
+    from autoskillit.core.types import KillReason
+
+    result = SkillResult.cancelled(skill_command="/test-skill", order_id="oid-123")
+    assert result.success is False
+    assert result.subtype == "cancelled"
+    assert result.needs_retry is True
+    assert result.retry_reason == RetryReason.CANCELLED
+    assert result.kill_reason == KillReason.EXCEPTION
+    assert result.is_error is True
+    assert result.exit_code == -1
+    assert result.order_id == "oid-123"
+    assert "/test-skill" in result.result
 
 
 def test_merge_failed_step_values():

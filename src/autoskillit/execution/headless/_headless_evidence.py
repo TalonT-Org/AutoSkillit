@@ -183,6 +183,7 @@ def _stdout_mentions_write_tools(stdout: str) -> bool:
                 and '"subagent_type"' not in line
                 and '"tool_use"' in line
                 and ('"Write"' in line or '"Edit"' in line)
+                and not line.endswith("}}")
             ):
                 return True
             continue

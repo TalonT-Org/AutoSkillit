@@ -61,30 +61,16 @@ _PRE_MERGE_CYCLE_RECIPES = ["implementation", "implementation-groups", "remediat
 
 @pytest.mark.parametrize("recipe_name", _PRE_MERGE_CYCLE_RECIPES)
 def test_pre_merge_test_fix_cycle_has_guard(recipe_name: str) -> None:
-    """fix/assess on_result routes must pass through a check_loop_iteration guard."""
+    """test.on_failure must route through a check_loop_iteration guard."""
     recipe = load_recipe(_resolve_recipe_path(recipe_name))
     test_step = recipe.steps["test"]
-    fix_step_name = test_step.on_failure
-    assert fix_step_name is not None
-    fix_step = recipe.steps[fix_step_name]
-    assert fix_step.on_result is not None
-    direct_to_test = [c.route for c in fix_step.on_result.conditions if c.route == "test"]
-    assert direct_to_test == [], (
-        f"{recipe_name}: {fix_step_name} must not route directly to 'test' — "
-        "use a check_loop_iteration guard step"
+    guard_name = test_step.on_failure
+    assert guard_name is not None
+    assert guard_name.startswith("check_") and "loop" in guard_name, (
+        f"{recipe_name}: test.on_failure must route to a check_*_loop guard step, "
+        f"got: {guard_name!r}"
     )
-    guard_route = next(
-        (
-            c.route
-            for c in fix_step.on_result.conditions
-            if c.route and c.route.startswith("check_") and "loop" in c.route
-        ),
-        None,
-    )
-    assert guard_route is not None, (
-        f"{recipe_name}: {fix_step_name} must route to a check_*_loop guard step"
-    )
-    guard_step = recipe.steps[guard_route]
+    guard_step = recipe.steps[guard_name]
     assert guard_step.tool == "run_python"
     assert guard_step.with_args.get("callable") == "autoskillit.smoke_utils.check_loop_iteration"
     assert guard_step.on_result is not None
@@ -92,26 +78,27 @@ def test_pre_merge_test_fix_cycle_has_guard(recipe_name: str) -> None:
         c.route for c in guard_step.on_result.conditions if c.when and "max_exceeded" in c.when
     ]
     assert any(r != "test" for r in exceeded_routes), (
-        f"{recipe_name}: {guard_route} max_exceeded must route outside the cycle"
+        f"{recipe_name}: {guard_name} max_exceeded must route outside the cycle"
     )
 
 
 @pytest.mark.parametrize("recipe_name", _PRE_MERGE_CYCLE_RECIPES)
-def test_pre_merge_fix_on_context_limit_routes_through_guard(recipe_name: str) -> None:
-    """fix/assess on_context_limit must route through the loop guard, not directly to test."""
+def test_pre_merge_fix_on_context_limit_routes_to_test(recipe_name: str) -> None:
+    """fix/assess on_context_limit must route to test (verify before guard)."""
     recipe = load_recipe(_resolve_recipe_path(recipe_name))
     test_step = recipe.steps["test"]
-    fix_step_name = test_step.on_failure
+    guard_name = test_step.on_failure
+    assert guard_name is not None
+    guard_step = recipe.steps[guard_name]
+    fix_step_name = next(
+        (c.route for c in guard_step.on_result.conditions if c.when is None),
+        None,
+    )
     assert fix_step_name is not None
     fix_step = recipe.steps[fix_step_name]
-    assert fix_step.on_context_limit != "test", (
-        f"{recipe_name}: {fix_step_name}.on_context_limit must not route directly to 'test' — "
-        "use a check_loop_iteration guard step"
-    )
-    guard = fix_step.on_context_limit
-    assert guard is not None and guard.startswith("check_") and "loop" in guard, (
-        f"{recipe_name}: {fix_step_name}.on_context_limit must route to a check_*_loop guard, "
-        f"got: {fix_step.on_context_limit!r}"
+    assert fix_step.on_context_limit == "test", (
+        f"{recipe_name}: {fix_step_name}.on_context_limit must route to 'test' for "
+        f"verify-before-guard ordering, got: {fix_step.on_context_limit!r}"
     )
 
 

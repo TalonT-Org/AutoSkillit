@@ -9,6 +9,19 @@ from autoskillit.recipe.validator import run_semantic_rules
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
+def _get_routing_targets(step) -> set[str]:
+    targets: set[str] = set()
+    if step.on_success:
+        targets.add(step.on_success)
+    if step.on_failure:
+        targets.add(step.on_failure)
+    if step.on_result:
+        for cond in step.on_result.conditions:
+            if cond.route:
+                targets.add(cond.route)
+    return targets
+
+
 class TestRecipeIntegrationPredicateRouting:
     """Integration tests: bundled recipes with predicate on_result validate correctly."""
 
@@ -196,6 +209,9 @@ class TestLoopBudgetSeparation:
         assert "test_fix_max_retries" in recipe.ingredients
         assert recipe.ingredients["test_fix_max_retries"].default == "3"
         assert recipe.ingredients["test_fix_max_retries"].hidden is True
+        assert "merge_test_fix_max_retries" in recipe.ingredients
+        assert recipe.ingredients["merge_test_fix_max_retries"].default == "3"
+        assert recipe.ingredients["merge_test_fix_max_retries"].hidden is True
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
     def test_guard_steps_use_ingredients(self, recipe_name: str) -> None:
@@ -214,3 +230,47 @@ class TestLoopBudgetSeparation:
         )
         test_fix_guard = recipe.steps["check_test_fix_loop"]
         assert test_fix_guard.with_args["max_iterations"] == "${{ inputs.test_fix_max_retries }}"
+        merge_test_fix_guard = recipe.steps["check_merge_test_fix_loop"]
+        assert (
+            merge_test_fix_guard.with_args["max_iterations"]
+            == "${{ inputs.merge_test_fix_max_retries }}"
+        )
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_merge_test_fix_loop_uses_separate_counter(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        step = recipe.steps["check_merge_test_fix_loop"]
+        assert step.with_args["current_iteration"] == "${{ context.merge_test_fix_loop_count }}"
+        assert "merge_test_fix_loop_count" in step.capture
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_test_fix_loop_not_reachable_from_merge_gate_path(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        steps = recipe.steps
+        merge_guard = steps["check_merge_test_fix_loop"]
+        merge_guard_targets = _get_routing_targets(merge_guard)
+        assert "test" not in merge_guard_targets, (
+            f"check_merge_test_fix_loop routes to shared 'test': {merge_guard_targets}"
+        )
+        assert "merge_gate_test" in steps, "merge_gate_test step missing"
+        mgt = steps["merge_gate_test"]
+        assert mgt.on_failure != "check_test_fix_loop", (
+            "merge_gate_test.on_failure must not be check_test_fix_loop"
+        )
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_merge_gate_assess_routes_through_merge_fix_guard(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        if "merge_gate_assess" not in recipe.steps:
+            pytest.skip(f"{recipe_name}: no merge_gate_assess step")
+        targets = _get_routing_targets(recipe.steps["merge_gate_assess"])
+        assert "merge_gate_test" in targets, (
+            f"merge_gate_assess does not route to merge_gate_test; targets={targets}"
+        )
+        assert "check_test_fix_loop" not in targets, (
+            f"merge_gate_assess must not route to check_test_fix_loop; targets={targets}"
+        )
+        mgt_failure = recipe.steps["merge_gate_test"].on_failure
+        assert mgt_failure == "check_merge_test_fix_loop", (
+            f"merge_gate_test.on_failure should be check_merge_test_fix_loop, got {mgt_failure}"
+        )

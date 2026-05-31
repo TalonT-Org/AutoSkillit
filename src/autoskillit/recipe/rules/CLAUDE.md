@@ -42,6 +42,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_remediation.py` | audit-impl remediation_path capture routing rules |
 | `rules_recipe.py` | Sub-recipe reference validity and `with_args` hygiene |
 | `rules_route_gate.py` | Route gate shared-stop detection; fallback and primary path convergence |
+| `rules_loop_counter.py` | Loop counter scope isolation: cross-path sharing and guard-before-verify detection |
 | `rules_loop_progress.py` | Loop progress tracking: run_skill steps in cycles must capture declared outputs |
 | `rules_skill_content.py` | Undefined bash placeholder detection in SKILL.md |
 | `rules_skills.py` | `skill_command` resolvability rules |

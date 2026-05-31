@@ -724,7 +724,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
             ensuring run_skill steps inside routing cycles capture declared outputs,
             bringing the rules/ count to 31.
             rules_phoropter_adjacency.py adds phoropter phase-order and step-interleaving
-            semantic validation rules, bringing the count to 50. Exempt at 50 files.
+            semantic validation rules, bringing the count to 50.
+            rules_loop_counter.py adds loop-counter-cross-path-sharing and
+            loop-guard-before-verify semantic rules, bringing the count to 51.
+            Decomposition into campaign/, ci/, dataflow/, graph/ subdirectories moved
+            files out of rules/, bringing the rules/ count to 35.
+            Exempt at 51 files.
           execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
             focused single-concern modules (_process_io, _process_kill, _process_race,
             etc.) that cannot be merged without re-introducing the coupling they isolate.
@@ -851,7 +856,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 11,
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
-        "recipe/rules": 34,
+        "recipe/rules": 35,
         "server/tools": 22,  # _auto_overrides.py added for shared _build_auto_overrides() factory
         "hooks/guards": 23,  # artifact_download_guard.py added for gh run/release download guard
     }

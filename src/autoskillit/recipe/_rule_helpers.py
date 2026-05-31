@@ -182,6 +182,13 @@ def _is_loop_guard_step(step_name: str, ctx: ValidationContext) -> bool:
     return callable_str == "autoskillit.smoke_utils.check_loop_iteration"
 
 
+def _build_graph_without_nodes(
+    graph: dict[str, set[str]], remove: set[str] | frozenset[str]
+) -> dict[str, set[str]]:
+    """Return graph copy with specified nodes removed from keys and successor sets."""
+    return {k: v - remove for k, v in graph.items() if k not in remove}
+
+
 def push_reachable(
     graph: dict[str, set[str]],
     start: str,

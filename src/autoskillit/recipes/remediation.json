@@ -84,6 +84,11 @@
       "description": "Maximum iterations of the pre-merge test → fix → test cycle.",
       "hidden": true
     },
+    "merge_test_fix_max_retries": {
+      "default": "3",
+      "description": "Maximum iterations of the merge-gate test → fix → test cycle.",
+      "hidden": true
+    },
     "adversarial_review_level": {
       "description": "Controls adversarial review depth in make-plan. \"auto\" estimates complexity and gates agents accordingly. \"full\" always runs all 3 agents. \"none\" skips adversarial review entirely.",
       "default": "auto",
@@ -390,7 +395,7 @@
         "worktree_path": "${{ context.implementation_ref }}"
       },
       "on_success": "audit_impl",
-      "on_failure": "assess"
+      "on_failure": "check_test_fix_loop"
     },
     "check_merge_fix_loop": {
       "tool": "run_python",
@@ -429,8 +434,8 @@
         "merge_gate_diagnosis_path": "${{ result.diagnosis_path }}",
         "merge_gate_ci_conclusion": "${{ result.ci_conclusion }}"
       },
-      "on_success": "assess",
-      "on_failure": "assess",
+      "on_success": "merge_gate_assess",
+      "on_failure": "merge_gate_assess",
       "optional_context_refs": [
         "merge_test_stdout",
         "merge_test_stderr"
@@ -631,15 +636,15 @@
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
-          "route": "check_test_fix_loop"
+          "route": "test"
         },
         {
           "when": "${{ result.verdict }} == 'already_green'",
-          "route": "check_test_fix_loop"
+          "route": "test"
         },
         {
           "when": "${{ result.verdict }} == 'flake_suspected'",
-          "route": "check_test_fix_loop"
+          "route": "test"
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
@@ -650,8 +655,8 @@
           "route": "release_issue_failure"
         }
       ],
-      "on_context_limit": "check_test_fix_loop",
-      "on_rate_limit": "check_test_fix_loop",
+      "on_context_limit": "test",
+      "on_rate_limit": "test",
       "on_failure": "release_issue_failure",
       "on_exhausted": "release_issue_failure",
       "optional_context_refs": [
@@ -675,14 +680,92 @@
           "route": "release_issue_failure"
         },
         {
-          "route": "test"
+          "route": "assess"
         }
       ],
       "on_failure": "release_issue_failure",
       "optional_context_refs": [
         "test_fix_loop_count"
       ],
-      "note": "Guards the pre-merge test → fix → test cycle. Caps at test_fix_max_retries iterations (default 3). Prevents unbounded looping when assess repeatedly reports real_fix/already_green/flake_suspected but tests keep failing."
+      "note": "Guards the pre-merge test → assess → test cycle. Caps at test_fix_max_retries iterations (default 3). Counter increments after test failure, so the last fix attempt always gets verified before the budget is exhausted."
+    },
+    "merge_gate_assess": {
+      "tool": "run_skill",
+      "model": "",
+      "with": {
+        "skill_command": "/autoskillit:resolve-failures ${{ context.worktree_path }} ${{ context.plan_path }} ${{ inputs.base_branch }} ${{ context.merge_gate_ci_conclusion }} - ${{ context.merge_gate_diagnosis_path }}",
+        "cwd": "${{ context.worktree_path }}",
+        "step_name": "merge_gate_assess",
+        "output_dir": "."
+      },
+      "capture": {
+        "verdict": "${{ result.verdict }}",
+        "fixes_applied": "${{ result.fixes_applied }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == 'real_fix'",
+          "route": "merge_gate_test"
+        },
+        {
+          "when": "${{ result.verdict }} == 'already_green'",
+          "route": "merge_gate_test"
+        },
+        {
+          "when": "${{ result.verdict }} == 'flake_suspected'",
+          "route": "merge_gate_test"
+        },
+        {
+          "when": "${{ result.verdict }} == 'ci_only_failure'",
+          "route": "release_issue_failure"
+        },
+        {
+          "when": "${{ result.verdict }} == 'no_test_infrastructure'",
+          "route": "release_issue_failure"
+        }
+      ],
+      "on_context_limit": "merge_gate_test",
+      "on_rate_limit": "merge_gate_test",
+      "on_failure": "release_issue_failure",
+      "on_exhausted": "release_issue_failure",
+      "optional_context_refs": [
+        "merge_gate_ci_conclusion",
+        "merge_gate_diagnosis_path"
+      ],
+      "note": "Merge-gate-path variant of assess. Uses a separate counter (merge_test_fix_loop_count) so merge-gate retries do not drain the pre-merge test fix budget."
+    },
+    "merge_gate_test": {
+      "tool": "test_check",
+      "with": {
+        "worktree_path": "${{ context.implementation_ref }}"
+      },
+      "on_success": "audit_impl",
+      "on_failure": "check_merge_test_fix_loop"
+    },
+    "check_merge_test_fix_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.merge_test_fix_loop_count }}",
+        "max_iterations": "${{ inputs.merge_test_fix_max_retries }}"
+      },
+      "capture": {
+        "merge_test_fix_loop_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "merge_gate_assess"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "merge_test_fix_loop_count"
+      ],
+      "note": "Merge-gate test fix iteration guard. Uses merge_test_fix_loop_count (independent of test_fix_loop_count) to prevent merge-gate retries from consuming the pre-merge fix budget."
     },
     "rebase_conflict_fix": {
       "tool": "run_skill",

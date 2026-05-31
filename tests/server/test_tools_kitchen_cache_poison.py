@@ -12,7 +12,6 @@ import pytest
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 
-@pytest.mark.anyio
 async def test_open_kitchen_ingredients_only_does_not_poison_load_recipe(
     tool_ctx_kitchen_open,
     monkeypatch,

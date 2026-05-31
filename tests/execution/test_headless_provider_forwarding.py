@@ -1004,5 +1004,11 @@ def test_headless_executor_protocol_includes_marker_dir_params() -> None:
     from autoskillit.core.types import HeadlessExecutor
 
     sig = inspect.signature(HeadlessExecutor.run)
+    assert "marker_dir" in sig.parameters, (
+        "marker_dir missing from HeadlessExecutor.run() signature"
+    )
+    assert "caller_session_id" in sig.parameters, (
+        "caller_session_id missing from HeadlessExecutor.run() signature"
+    )
     assert sig.parameters["marker_dir"].default is None
     assert sig.parameters["caller_session_id"].default is None

@@ -214,3 +214,151 @@ class TestSessionChainContinuity:
         assert mismatch_logs, f"Expected session_id_continuity_mismatch warning, got: {logs}"
         assert mismatch_logs[0]["resume_session_id"] == "original-session-id"
         assert mismatch_logs[0]["returned_session_id"] == "returned-different-session"
+
+
+class TestResumeSuccessGuard:
+    @pytest.mark.anyio
+    async def test_resume_rejected_when_prior_dispatch_succeeded(self, tool_ctx, monkeypatch):
+        """_run_dispatch returns cached SUCCESS when prior dispatch already succeeded."""
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.fleet._api import execute_dispatch
+        from autoskillit.fleet.state_types import DispatchCompleted
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        prior_id = "prior-dispatch-succeeded"
+        state_path = dispatches_dir / f"{prior_id}.json"
+        write_initial_state(
+            state_path,
+            tool_ctx.kitchen_id,
+            "camp",
+            "",
+            [
+                DispatchRecord(
+                    name="test-recipe",
+                    status=DispatchStatus.SUCCESS,
+                    dispatch_id="completed-dispatch-id",
+                    dispatched_session_id="completed-session-id",
+                    reason="completed_clean",
+                )
+            ],
+        )
+
+        result = await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id="some-session-id",
+            prior_dispatch_id=prior_id,
+        )
+
+        assert isinstance(result.outcome, DispatchCompleted)
+        assert result.outcome.success is True
+        assert result.outcome.dispatch_status == DispatchStatus.SUCCESS
+        assert len(tool_ctx.executor.dispatch_calls) == 0
+
+    @pytest.mark.anyio
+    async def test_resume_proceeds_when_prior_dispatch_resumable(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """_run_dispatch proceeds normally when prior dispatch is RESUMABLE."""
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.fleet._api import execute_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        jsonl_file = tmp_path / "session.jsonl"
+        jsonl_file.touch()
+        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        prior_id = "prior-dispatch-resumable"
+        state_path = dispatches_dir / f"{prior_id}.json"
+        write_initial_state(
+            state_path,
+            tool_ctx.kitchen_id,
+            "camp",
+            "",
+            [
+                DispatchRecord(
+                    name="test-recipe",
+                    status=DispatchStatus.RESUMABLE,
+                    dispatched_session_id="resumable-session-id",
+                )
+            ],
+        )
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id="resumable-session-id",
+            prior_dispatch_id=prior_id,
+        )
+
+        assert len(tool_ctx.executor.dispatch_calls) == 1
+
+    @pytest.mark.anyio
+    async def test_resume_proceeds_when_prior_dispatch_not_in_state(
+        self, tool_ctx, monkeypatch, tmp_path
+    ):
+        """_run_dispatch proceeds when prior state has no matching dispatch (fail-open)."""
+        from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
+        from autoskillit.fleet._api import execute_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        jsonl_file = tmp_path / "session.jsonl"
+        jsonl_file.touch()
+        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        dispatches_dir = tool_ctx.temp_dir / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        prior_id = "prior-dispatch-other-name"
+        state_path = dispatches_dir / f"{prior_id}.json"
+        write_initial_state(
+            state_path,
+            tool_ctx.kitchen_id,
+            "camp",
+            "",
+            [DispatchRecord(name="other-recipe", status=DispatchStatus.SUCCESS)],
+        )
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id="some-session-id",
+            prior_dispatch_id=prior_id,
+        )
+
+        assert len(tool_ctx.executor.dispatch_calls) == 1

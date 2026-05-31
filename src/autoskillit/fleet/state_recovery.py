@@ -32,6 +32,7 @@ __all__ = [
     "derive_orchestrator_resume_spec",
     "find_dispatch_for_issue",
     "has_blocking_dispatch",
+    "has_completed_dispatch",
     "has_failed_dispatch",
     "resume_campaign_from_state",
 ]
@@ -113,6 +114,24 @@ def has_blocking_dispatch(state_path: Path) -> bool:
             return True
         if d.status == DispatchStatus.FAILURE and d.reason not in _INFRASTRUCTURE_FAILURE_REASONS:
             return True
+    return False
+
+
+def has_completed_dispatch(state_path: Path, dispatch_name: str) -> bool:
+    """Return True if the named dispatch already has SUCCESS status.
+
+    Returns False when the file is missing or corrupted (fail-open).
+    """
+    from autoskillit.fleet.state import read_state  # noqa: PLC0415
+
+    if not state_path.exists():
+        return False
+    state = read_state(state_path)
+    if state is None:
+        return False
+    for d in state.dispatches:
+        if d.name == dispatch_name:
+            return d.status == DispatchStatus.SUCCESS
     return False
 
 

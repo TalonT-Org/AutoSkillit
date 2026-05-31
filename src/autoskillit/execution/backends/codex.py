@@ -258,12 +258,13 @@ def _validate_codex_config() -> list[str]:
         logger.warning("codex_doctor_unavailable", exc_info=True)
         return []
 
-    if result.returncode != 0:
-        logger.warning("codex_doctor_nonzero_exit", returncode=result.returncode)
+    if getattr(result, "returncode", -1) != 0:
+        logger.warning("codex_doctor_nonzero_exit", returncode=getattr(result, "returncode", None))
         return []
 
+    stdout = getattr(result, "stdout", None) or ""
     try:
-        doc = json.loads(result.stdout)
+        doc = json.loads(stdout)
     except json.JSONDecodeError:
         logger.warning("codex_doctor_json_parse_failed")
         return []

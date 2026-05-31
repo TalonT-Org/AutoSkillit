@@ -77,3 +77,49 @@ async def test_run_python_absolute_output_dir_unchanged_by_work_dir(
     assert result["success"] is True
     expected_file = Path(abs_output) / "diagnosis.md"
     assert expected_file.exists(), "Absolute output_dir must be used unchanged"
+
+
+@pytest.mark.anyio
+async def test_run_python_rejects_relative_work_dir(tool_ctx_kitchen_open):
+    result_json = await run_python(
+        callable="autoskillit.smoke_utils.diagnose_merge_gate",
+        args={"test_stdout": "x", "test_stderr": "", "output_dir": "out"},
+        work_dir="relative/work",
+    )
+    result = json.loads(result_json)
+    assert result["success"] is False
+    assert "absolute" in result["error"]
+
+
+@pytest.mark.anyio
+async def test_run_python_rejects_relative_output_dir_without_work_dir(tool_ctx_kitchen_open):
+    result_json = await run_python(
+        callable="autoskillit.smoke_utils.diagnose_merge_gate",
+        args={"test_stdout": "x", "test_stderr": "", "output_dir": ".autoskillit/temp/test"},
+        work_dir="",
+    )
+    result = json.loads(result_json)
+    assert result["success"] is False
+    assert "work_dir" in result["error"]
+
+
+@pytest.mark.anyio
+async def test_run_python_annotate_pr_diff_relative_output_dir(tool_ctx_kitchen_open, tmp_path):
+    """run_python anchors annotate_pr_diff's relative output_dir to work_dir."""
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    (work_dir / ".git").mkdir()
+
+    result_json = await run_python(
+        callable="autoskillit.smoke_utils.diagnose_merge_gate",
+        args={
+            "test_stdout": "FAILED test_foo",
+            "test_stderr": "",
+            "output_dir": ".autoskillit/temp/review-pr",
+        },
+        work_dir=str(work_dir),
+    )
+    result = json.loads(result_json)
+    assert result["success"] is True
+    expected = work_dir / ".autoskillit/temp/review-pr"
+    assert expected.exists()

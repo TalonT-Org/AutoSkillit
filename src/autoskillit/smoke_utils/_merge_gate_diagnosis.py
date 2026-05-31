@@ -44,8 +44,8 @@ def diagnose_merge_gate(
     subtype = _classify_subtype(test_stdout, test_stderr)
     failed_tests = _extract_failed_tests(test_stdout, test_stderr)
 
-    if not output_dir:
-        raise ValueError("output_dir is required — pass via run_python work_dir anchoring")
+    if not output_dir or not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     out_path = Path(output_dir) / "diagnosis.md"
 
     failed_section = "\n".join(f"- {t}" for t in failed_tests) if failed_tests else "- none"

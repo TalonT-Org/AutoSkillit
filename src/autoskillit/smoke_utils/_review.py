@@ -89,6 +89,8 @@ def annotate_pr_diff(
         )
     head_sha = head_sha_result.stdout.strip() if head_sha_result.returncode == 0 else ""
     out = Path(output_dir)
+    if not out.is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     out.mkdir(parents=True, exist_ok=True)
     annotated_path = out / f"annotated_diff_{pr_number}.txt"
     ranges_path = out / f"ranges_{pr_number}.json"
@@ -253,7 +255,7 @@ def check_loop_with_progress(
 
 def enrich_diff_context(
     pr_number: str,
-    work_dir: str,
+    project_dir: str,
     context_lines: str = "50",
 ) -> dict[str, str]:
     """Fill empty code_region fields in the review-pr diff_context handoff.
@@ -266,8 +268,10 @@ def enrich_diff_context(
     from autoskillit.core import atomic_write  # noqa: PLC0415
     from autoskillit.execution import extract_code_region  # noqa: PLC0415
 
+    if not Path(project_dir).is_absolute():
+        raise ValueError(f"project_dir must be absolute, got {project_dir!r}")
     ctx_lines = int(context_lines) if context_lines else 50
-    temp_dir = Path(work_dir) / ".autoskillit" / "temp"
+    temp_dir = Path(project_dir) / ".autoskillit" / "temp"
     handoff_path = temp_dir / "review-pr" / f"diff_context_{pr_number}.json"
 
     if not handoff_path.exists():

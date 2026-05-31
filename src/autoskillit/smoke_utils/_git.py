@@ -12,6 +12,8 @@ def check_bug_report_non_empty(workspace: str) -> dict[str, str]:
     Called by run_python from the check_summary step in smoke-test.yaml.
     The workspace argument is the root directory initialised by the setup step.
     """
+    if not Path(workspace).is_absolute():
+        raise ValueError(f"workspace must be absolute, got {workspace!r}")
     report = Path(workspace) / "bug_report.json"
     if not report.exists():
         return {"non_empty": "false"}
@@ -46,6 +48,8 @@ def compute_domain_partitions(
     )
     files = [f for f in result.stdout.strip().split("\n") if f]
     partitions = partition_files_by_domain(files)
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     out_path = Path(output_dir) / "domain_partitions.json"
     atomic_write(out_path, json.dumps(partitions))
     return {"domain_partitions_path": str(out_path)}
@@ -98,6 +102,8 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
         else:
             entries = parse_merge_queue_response(data)
 
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     out_path = Path(output_dir) / "merge_queue_data.json"
     atomic_write(out_path, json.dumps(entries))
     return {"merge_queue_data_path": str(out_path)}

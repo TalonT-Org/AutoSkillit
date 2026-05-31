@@ -480,6 +480,9 @@ async def write_telemetry_files(
 
             tool_ctx = _get_ctx()
             out = Path(output_dir)
+            if not out.is_absolute():
+                msg = f"output_dir must be absolute, got {output_dir!r}"
+                return json.dumps({"success": False, "error": msg})
             out.mkdir(parents=True, exist_ok=True)
 
             token_steps = _merge_wall_clock_seconds(

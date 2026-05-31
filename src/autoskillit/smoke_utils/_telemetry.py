@@ -118,6 +118,8 @@ def consolidate_health_reports(*, diagnostics_log_dir: str, kitchen_id: str) -> 
     Writes a JSON report file to {diagnostics_log_dir}/health-reports/ when running
     inside a food truck dispatch, persisting the report outside the clone filesystem.
     """
+    if not Path(diagnostics_log_dir).is_absolute():
+        raise ValueError(f"diagnostics_log_dir must be absolute, got {diagnostics_log_dir!r}")
     reports_dir = Path(diagnostics_log_dir) / "health-reports"
     if not reports_dir.is_dir():
         return {"summary": "No health reports directory found. No diagnostics to consolidate."}

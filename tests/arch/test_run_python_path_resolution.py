@@ -34,8 +34,8 @@ _EXPLICITLY_EXCLUDED: dict[str, str] = {
         "always absolute; git worktree paths are inherently absolute by design "
         "and are never passed as relative paths to run_python steps"
     ),
-    "work_dir": (
-        "enrich_diff_context receives work_dir as the anchor/base directory itself "
+    "project_dir": (
+        "enrich_diff_context receives project_dir as the anchor/base directory itself "
         "for constructing temp_dir; resolving it against itself would be circular"
     ),
     "log_dir": (

@@ -15,7 +15,21 @@ logger = get_logger(__name__)
 
 _RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout", "work_dir"})
 
-_PATH_LIKE_ARGS: frozenset[str] = frozenset({"output_dir"})
+_PATH_LIKE_ARGS: frozenset[str] = frozenset({"output_dir", "workspace", "diagnostics_log_dir"})
+
+
+def validate_path_arg_anchoring(args: dict[str, object] | None, work_dir: str) -> str | None:
+    """Return error message if args contain relative path-like values without work_dir."""
+    if not args:
+        return None
+    for key in _PATH_LIKE_ARGS:
+        val = args.get(key)
+        if isinstance(val, str) and val and not Path(val).is_absolute() and not work_dir:
+            return (
+                f"run_python: arg '{key}' is a relative path ({val!r}) "
+                f"but work_dir was not provided — pass work_dir to anchor it"
+            )
+    return None
 
 
 def resolve_relative_path_args(args: dict[str, object], work_dir: str) -> dict[str, object]:

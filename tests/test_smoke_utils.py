@@ -912,7 +912,7 @@ def test_enrich_diff_context_fills_empty_code_regions(tmp_path: Path) -> None:
             {"path": "src/app.py", "line": 42, "severity": "critical", "code_region": ""},
         ],
     )
-    result = enrich_diff_context(pr_number="123", work_dir=str(tmp_path))
+    result = enrich_diff_context(pr_number="123", project_dir=str(tmp_path))
     assert result["enriched"] == "true"
     assert result["enriched_count"] == "1"
 
@@ -936,7 +936,7 @@ def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> 
             {"path": "src/app.py", "line": 40, "severity": "warning", "code_region": ""},
         ],
     )
-    result = enrich_diff_context(pr_number="123", work_dir=str(tmp_path))
+    result = enrich_diff_context(pr_number="123", project_dir=str(tmp_path))
     assert result["enriched"] == "true"
     assert result["enriched_count"] == "1"
 
@@ -949,7 +949,7 @@ def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> 
 # T_EDC3
 def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
     """enrich_diff_context returns gracefully when handoff file does not exist."""
-    result = enrich_diff_context(pr_number="999", work_dir=str(tmp_path))
+    result = enrich_diff_context(pr_number="999", project_dir=str(tmp_path))
     assert result["enriched"] == "false"
     assert result["reason"] == "handoff_not_found"
 
@@ -2411,3 +2411,42 @@ def test_smoke_utils_callable_resolvable_via_importlib(name: str) -> None:
     mod = importlib.import_module("autoskillit.smoke_utils")
     attr = getattr(mod, name)
     assert callable(attr)
+
+
+# ---------------------------------------------------------------------------
+# Callable-level absoluteness guards
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "callable_name,minimal_args",
+    [
+        ("annotate_pr_diff", {"pr_number": "1", "cwd": "/tmp/repo"}),
+        ("parse_eval_manifests", {"canary_manifest": "{}", "variant_manifest": "{}"}),
+        ("parse_agent_eval_manifests", {"canary_manifest": "{}", "variant_manifest": "{}"}),
+        ("compute_domain_partitions", {"batch_branch": "b", "base_branch": "main", "cwd": "/tmp"}),
+        ("fetch_merge_queue_data", {"base_branch": "main", "cwd": "/tmp"}),
+        ("diagnose_merge_gate", {"test_stdout": "FAILED x", "test_stderr": ""}),
+    ],
+)
+def test_callable_rejects_relative_output_dir(callable_name: str, minimal_args: dict) -> None:
+    from autoskillit import smoke_utils
+
+    func = getattr(smoke_utils, callable_name)
+    with pytest.raises(ValueError, match="absolute"):
+        func(**minimal_args, output_dir=".autoskillit/temp/test")
+
+
+def test_enrich_diff_context_rejects_relative_project_dir() -> None:
+    with pytest.raises(ValueError, match="absolute"):
+        enrich_diff_context(pr_number="1", project_dir="relative/path")
+
+
+def test_check_bug_report_non_empty_rejects_relative_workspace() -> None:
+    with pytest.raises(ValueError, match="absolute"):
+        check_bug_report_non_empty(workspace="relative/path")
+
+
+def test_consolidate_health_reports_rejects_relative_log_dir() -> None:
+    with pytest.raises(ValueError, match="absolute"):
+        consolidate_health_reports(diagnostics_log_dir="relative/path", kitchen_id="test")

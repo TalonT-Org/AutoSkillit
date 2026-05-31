@@ -39,6 +39,7 @@ def test_judge_eval_skill_handles_criteria_types() -> None:
     Specifically, type: 'recall' criteria must fail on empty output.
     """
     source = _SKILL_FILE.read_text()
-    assert "type" in source, "SKILL.md must reference the 'type' field on criteria"
-    assert "recall" in source, "SKILL.md must mention 'recall' criterion type"
-    assert "empty" in source.lower(), "SKILL.md must address empty output behavior"
+    assert "`type` field" in source, "SKILL.md must reference the 'type' field on criteria"
+    assert "`recall`" in source, "SKILL.md must mention 'recall' criterion type"
+    assert "`precision`" in source, "SKILL.md must mention 'precision' criterion type"
+    assert "empty output" in source.lower(), "SKILL.md must address empty output behavior"

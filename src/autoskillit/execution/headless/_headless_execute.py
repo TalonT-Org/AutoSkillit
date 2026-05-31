@@ -559,7 +559,7 @@ async def _execute_claude_headless(
                 max_sessions=ctx.config.linux_tracing.max_sessions,
                 model_identifier=model_identifier,
                 profile_name=profile_name,
-                is_resume="--resume" in spec.cmd,
+                is_resume=spec.is_resume,
                 codex_log_path=_codex_log,
             )
         except Exception:

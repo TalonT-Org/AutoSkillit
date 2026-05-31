@@ -397,6 +397,7 @@ class ClaudeCodeBackend:
             cmd=partial.cmd,
             env=build_agent_env(base=interactive_base, extras=merged, required=required_env),
             origin=partial.origin,
+            is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
         )
 
     def build_resume_cmd(
@@ -429,7 +430,7 @@ class ClaudeCodeBackend:
             merged.update(env_extras)
         env = dict(build_agent_env(base={}, extras=merged))
         env.update(_HEADLESS_ENV_HARDENING)
-        return CmdSpec(cmd=tuple(cmd), env=env)
+        return CmdSpec(cmd=tuple(cmd), env=env, is_resume=True)
 
     def build_skill_session_cmd(
         self,
@@ -603,7 +604,7 @@ class ClaudeCodeBackend:
         if resume_session_id:
             cmd += [ClaudeFlags.RESUME, resume_session_id]
 
-        return CmdSpec(cmd=tuple(cmd), env=spec.env)
+        return CmdSpec(cmd=tuple(cmd), env=spec.env, is_resume=bool(resume_session_id))
 
     def build_food_truck_cmd(
         self,
@@ -694,7 +695,7 @@ class ClaudeCodeBackend:
         if resume_session_id:
             cmd += [ClaudeFlags.RESUME, resume_session_id]
 
-        return CmdSpec(cmd=tuple(cmd), env=spec.env)
+        return CmdSpec(cmd=tuple(cmd), env=spec.env, is_resume=bool(resume_session_id))
 
     def validate_session_layout(self, session_dir: Path) -> list[str]:
         errors: list[str] = []

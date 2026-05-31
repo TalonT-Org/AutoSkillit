@@ -387,11 +387,21 @@ async def open_kitchen(
             if handler_err is not None:
                 return handler_err
 
-            try:
-                await ctx.enable_components(tags={"kitchen"})
-            except Exception as exc:
-                logger.warning("open_kitchen_failure", stage="enable_components", exc_info=True)
-                return _kitchen_failure_envelope(exc, stage="enable_components")
+            _kctx_pre = _get_ctx()
+            _skip_notify = (
+                _kctx_pre.backend is not None
+                and not _kctx_pre.backend.capabilities.supports_tool_list_changed
+            )
+            if _skip_notify:
+                logger.debug("open_kitchen_skip_enable", reason="pre-revealed at startup")
+            else:
+                try:
+                    await ctx.enable_components(tags={"kitchen"})
+                except Exception as exc:
+                    logger.warning(
+                        "open_kitchen_failure", stage="enable_components", exc_info=True
+                    )
+                    return _kitchen_failure_envelope(exc, stage="enable_components")
 
             try:
                 _kctx = _get_ctx()

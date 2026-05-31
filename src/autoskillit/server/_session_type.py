@@ -7,8 +7,10 @@ sub-package __init__ files.
 from __future__ import annotations
 
 import os
+from typing import assert_never
 
 from autoskillit.core import (
+    AGENT_BACKEND_CODEX,
     CATEGORY_TAGS,
     FEATURE_REGISTRY,
     FLEET_DISPATCH_MODE,
@@ -16,6 +18,7 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
+    MCP_CLIENT_BACKEND_ENV_VAR,
     SessionType,
     get_logger,
 )
@@ -35,40 +38,52 @@ def _apply_session_type_visibility() -> None:
     Session-type dispatch only — feature gate suppression is handled at lifespan
     time by _fleet_auto_gate_boot (fleet sessions) and _redisable_subsets
     (open_kitchen sessions) where the full config pipeline is available.
+
+    Non-notification backends (e.g. Codex) do not process notifications/tools/list_changed
+    so kitchen tools are pre-revealed at startup when AUTOSKILLIT_MCP_CLIENT_BACKEND=codex.
     """
     from autoskillit.server import mcp
 
     _session = _resolve_session_type()
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
+    _mcp_client_backend = os.environ.get(MCP_CLIENT_BACKEND_ENV_VAR, "")
 
-    if _session is SessionType.FLEET:
-        fleet_tags = _collect_fleet_tool_tags()
-        if fleet_tags:
-            mcp.enable(tags=set(fleet_tags))
-        if os.environ.get(FLEET_MODE_ENV_VAR) == FLEET_DISPATCH_MODE:
-            mcp.enable(tags={"fleet-dispatch"})
-    elif _session is SessionType.ORCHESTRATOR and _headless:
-        tool_tags = os.environ.get(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "")
-        if tool_tags:
-            mcp.enable(tags={"kitchen-core"})
-            for pack in tool_tags.split(","):
-                pack = pack.strip()
-                if not pack:
-                    continue
-                if pack not in CATEGORY_TAGS:
-                    logger.warning(
-                        "Unknown pack %r in AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"
-                        " — skipping mcp.enable(); valid packs: %s",
-                        pack,
-                        ", ".join(sorted(CATEGORY_TAGS)),
-                    )
-                    continue
-                mcp.enable(tags={pack})
-        else:
+    match _session:
+        case SessionType.FLEET:
+            fleet_tags = _collect_fleet_tool_tags()
+            if fleet_tags:
+                mcp.enable(tags=set(fleet_tags))
+            if os.environ.get(FLEET_MODE_ENV_VAR) == FLEET_DISPATCH_MODE:
+                mcp.enable(tags={"fleet-dispatch"})
+        case SessionType.ORCHESTRATOR if _headless:
+            tool_tags = os.environ.get(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "")
+            if tool_tags:
+                mcp.enable(tags={"kitchen-core"})
+                for pack in tool_tags.split(","):
+                    pack = pack.strip()
+                    if not pack:
+                        continue
+                    if pack not in CATEGORY_TAGS:
+                        logger.warning(
+                            "Unknown pack %r in AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"
+                            " — skipping mcp.enable(); valid packs: %s",
+                            pack,
+                            ", ".join(sorted(CATEGORY_TAGS)),
+                        )
+                        continue
+                    mcp.enable(tags={pack})
+            else:
+                mcp.enable(tags={"kitchen"})
+        case SessionType.SKILL if _headless:
+            mcp.enable(tags={"headless"})
+            if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) == "1":
+                mcp.enable(tags={"kitchen-core"})
+        case SessionType.ORCHESTRATOR | SessionType.SKILL if (
+            _mcp_client_backend == AGENT_BACKEND_CODEX
+        ):
             mcp.enable(tags={"kitchen"})
-    elif _session is SessionType.SKILL and _headless:
-        mcp.enable(tags={"headless"})
-        if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) == "1":
-            mcp.enable(tags={"kitchen-core"})
-    # ORCHESTRATOR+interactive and SKILL+interactive: no pre-reveal.
-    # Cook unlocks via open_kitchen (orchestrator) or stays minimal (skill session).
+            mcp.enable(tags={"plan-review"})
+        case SessionType.ORCHESTRATOR | SessionType.SKILL:
+            pass
+        case _ as unreachable:
+            assert_never(unreachable)

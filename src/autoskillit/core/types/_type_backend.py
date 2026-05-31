@@ -62,6 +62,8 @@ class BackendCapabilities:
     supports_context_exhaustion_detection: bool = field(default=False)
     # True when backend supports project-local --add-dir skill discovery
     project_local_skills_capable: bool = field(default=False)
+    # False triggers pre-reveal kitchen at startup instead of notification-driven reveal
+    supports_tool_list_changed: bool = field(default=True)
     # SKILL.md front-matter fields required by this backend
     required_skill_fields: frozenset[str] = field(default_factory=frozenset)
     # Files that must be copied into the session directory at launch
@@ -97,6 +99,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     triage_capable=True,
     supports_context_exhaustion_detection=True,
     project_local_skills_capable=True,
+    supports_tool_list_changed=True,
     required_skill_fields=frozenset({"name", "description"}),
     required_session_files=frozenset(),
     session_dir_symlinks=frozenset(),
@@ -128,6 +131,7 @@ class CmdSpec:
     env: Mapping[str, str]
     cwd: str = ""
     origin: CmdOrigin | None = None
+    is_resume: bool = False
 
 
 @dataclass(frozen=True, slots=True)

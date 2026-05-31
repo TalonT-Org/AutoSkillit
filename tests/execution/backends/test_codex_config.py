@@ -219,7 +219,10 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env_vars": ["AUTOSKILLIT_HEADLESS"],
+                    "env_vars": [
+                        "AUTOSKILLIT_HEADLESS",
+                        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
+                    ],
                 }
             }
         }
@@ -233,6 +236,7 @@ class TestIsAutoskillitRegistered:
                     "env_vars": [
                         "AUTOSKILLIT_HEADLESS",
                         "AUTOSKILLIT_HEADLESS_AUTO_GATE",
+                        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
                     ],
                 }
             }
@@ -244,7 +248,10 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env_vars": ["AUTOSKILLIT_HEADLESS"],
+                    "env_vars": [
+                        "AUTOSKILLIT_HEADLESS",
+                        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
+                    ],
                     "extra_field": 42,
                 }
             }
@@ -439,7 +446,11 @@ class TestConfigEnvBoundary:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env_vars": ["AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_HEADLESS_AUTO_GATE"],
+                    "env_vars": [
+                        "AUTOSKILLIT_HEADLESS",
+                        "AUTOSKILLIT_HEADLESS_AUTO_GATE",
+                        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
+                    ],
                 }
             }
         }

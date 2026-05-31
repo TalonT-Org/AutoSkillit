@@ -10,6 +10,7 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
+    MCP_CLIENT_BACKEND_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     BackendCapabilities,
@@ -318,6 +319,7 @@ class TestCodexBackendProtocol:
             ("skill_injection_capable", True),
             ("mcp_config_capable", True),
             ("food_truck_capable", True),
+            ("supports_tool_list_changed", False),
         ],
     )
     def test_capability_flag(self, attr: str, expected: bool) -> None:
@@ -952,6 +954,10 @@ class TestCodexBuildFoodTruckCmd:
 
 
 class TestCodexEnsurePreLaunchConfigValidation:
+    @pytest.fixture(autouse=True)
+    def _clean_backend_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(MCP_CLIENT_BACKEND_ENV_VAR, raising=False)
+
     def test_ensure_pre_launch_returns_error_on_config_load_failure(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

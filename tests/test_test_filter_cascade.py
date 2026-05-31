@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests._test_filter import FilterMode, build_test_scope
+from tests._test_filter import LAYER_CASCADE_CONSERVATIVE, FilterMode, build_test_scope
 
 
 class TestCascadeNewEntries:
@@ -331,3 +331,84 @@ class TestServerFleetCascadeNarrowing:
         result_names = {p.name for p in result}
         for fname in _FLEET_SERVER_FILE_LEVEL_ENTRIES:
             assert fname in result_names, f"fleet/{fname} must appear in server cascade"
+
+
+_PIPELINE_EXECUTION_FILE_ENTRIES = [
+    "test_backend_dispatch.py",
+    "test_boundary_pty_dispatch.py",
+    "test_flush_provider_integration.py",
+    "test_headless_add_dirs.py",
+    "test_headless_backend_mixing.py",
+    "test_headless_backend_override.py",
+    "test_headless_backend_resolution.py",
+    "test_headless_core.py",
+    "test_headless_dispatch.py",
+    "test_headless_env_injection.py",
+    "test_headless_env_scrub.py",
+    "test_headless_path_validation.py",
+    "test_headless_provider_fallback.py",
+    "test_headless_provider_forwarding.py",
+    "test_headless_result.py",
+    "test_headless_result_write_reconciliation.py",
+    "test_headless_synthesis.py",
+    "test_idle_output_env.py",
+    "test_planner_write_isolation.py",
+    "test_session_log_flush.py",
+    "test_write_evidence.py",
+    "test_zero_write_detection.py",
+]
+
+
+class TestPipelineCascadeNarrowing:
+    """pipeline cascade targets only specific execution/ test files, not the full directory."""
+
+    def test_pipeline_cascade_excludes_execution_directory(self) -> None:
+        """The pipeline cascade must NOT include 'execution' as a bare directory entry."""
+        pipeline_entries = LAYER_CASCADE_CONSERVATIVE["pipeline"]
+        assert "execution" not in pipeline_entries, (
+            "'execution' must not be a bare directory entry in the pipeline cascade"
+        )
+
+    def test_pipeline_cascade_includes_execution_file_entries(self) -> None:
+        """The pipeline cascade must include at least 20 execution/ file-level entries."""
+        pipeline_entries = LAYER_CASCADE_CONSERVATIVE["pipeline"]
+        execution_entries = [e for e in pipeline_entries if e.startswith("execution/")]
+        assert len(execution_entries) >= 20, (
+            f"pipeline cascade must include ≥20 execution/ file-level entries, "
+            f"got {len(execution_entries)}"
+        )
+
+    def test_pipeline_cascade_preserves_pipeline_directory(self) -> None:
+        """The pipeline cascade must preserve 'pipeline' as a bare directory entry,
+        maintaining the AGGRESSIVE <= CONSERVATIVE invariant."""
+        pipeline_entries = LAYER_CASCADE_CONSERVATIVE["pipeline"]
+        assert "pipeline" in pipeline_entries, (
+            "'pipeline' directory must remain in the pipeline cascade "
+            "to preserve the AGGRESSIVE <= CONSERVATIVE invariant"
+        )
+
+    def test_pipeline_change_selects_file_not_dir(self, tmp_path: Path) -> None:
+        """Changing a pipeline source file selects specific execution/ files, not the directory."""
+        tests_root = tmp_path / "tests"
+        execution_dir = tests_root / "execution"
+        execution_dir.mkdir(parents=True, exist_ok=True)
+        for fname in _PIPELINE_EXECUTION_FILE_ENTRIES:
+            (execution_dir / fname).touch()
+        pipeline_dir = tests_root / "pipeline"
+        pipeline_dir.mkdir(parents=True, exist_ok=True)
+        (pipeline_dir / "test_gate.py").touch()
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/pipeline/gate.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None, "pipeline source change should not force a full run"
+        result_names = {p.name for p in result}
+        assert "execution" not in result_names, (
+            "'execution' directory must NOT appear in pipeline cascade result"
+        )
+        for fname in _PIPELINE_EXECUTION_FILE_ENTRIES[:5]:
+            assert fname in result_names, (
+                f"execution/{fname} must appear in pipeline cascade result"
+            )

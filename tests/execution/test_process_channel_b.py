@@ -65,7 +65,7 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    time.sleep(0.15)
+    time.sleep(2.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -197,16 +197,17 @@ class TestChannelBDrainWait:
         """Channel B fires; Channel A never fires; drain times out and process is killed.
 
         Sequence (fast poll params):
-          t=0.10s  script writes %%ORDER_UP%% to session JSONL
-          t=0.16s  Channel B fires → drain wait starts with 0.5s timeout
-          t=0.66s  drain times out (script never wrote to stdout)
-          t=0.66s  process killed with empty stdout
+          t=0.10s  script creates session JSONL with initial content
+          t=2.10s  script writes %%ORDER_UP%% to session JSONL
+          t~2.15s  Channel B fires → drain wait starts with 0.5s timeout
+          t~2.65s  drain times out (script never wrote to stdout)
+          t~2.65s  process killed with empty stdout
+
+        The 2.0s gap between file creation and marker write ensures Phase 1 discovers
+        the JSONL file before the marker arrives, preventing a race where Phase 2
+        initializes scan_pos past the marker under xdist -n 4 event loop saturation.
 
         timeout=300s: guards against the outer wall-clock expiring under xdist -n 4 load.
-        _watch_session_log waits up to _session_id_timeout (default 1.0s, tests pass 0.01s)
-        for stdout_session_id_ready before Phase 1 starts;
-        under CI load both the preamble and Phase 1 polls can overrun, so the outer
-        timeout must exceed _session_id_timeout + _phase1_timeout (30s default) + drain (0.5s) = 31.5s.
         _phase1_timeout=400: must exceed outer timeout (300s) so that Phase 1 never fires
         first with STALE when subprocess startup is slow under WSL2 + xdist load; the
         outer 300s guard cancels all tasks before Phase 1 can timeout independently.

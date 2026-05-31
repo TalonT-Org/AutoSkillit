@@ -476,6 +476,30 @@ def test_annotate_pr_diff_captures_both_paths(recipe_name: str) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups", "merge-prs"],
+)
+def test_annotate_pr_diff_captures_head_sha(recipe_name: str) -> None:
+    """The annotate_pr_diff step must capture head_sha for freshness tracking."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    annotate_steps = [
+        (name, step)
+        for name, step in recipe.steps.items()
+        if step.tool == "run_python"
+        and step.with_args.get("callable", "") == "autoskillit.smoke_utils.annotate_pr_diff"
+    ]
+    assert annotate_steps, f"No annotate_pr_diff step found in {recipe_name}.yaml"
+    for step_name, step in annotate_steps:
+        assert step.capture is not None, (
+            f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' has no capture block"
+        )
+        assert "pr_head_sha" in step.capture or "head_sha" in step.capture, (
+            f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' must capture "
+            f"pr_head_sha (or head_sha) for SHA-freshness validation"
+        )
+
+
 class TestRunModeIngredient:
     """REQ-INGREDIENT-001 through REQ-INGREDIENT-005: run_mode ingredient in multi-issue recipes."""  # noqa: E501
 

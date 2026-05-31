@@ -2371,6 +2371,8 @@ callable_contracts:
       type: file_path
     - name: review_mode
       type: str
+    - name: head_sha
+      type: str
   autoskillit.smoke_utils.compute_domain_partitions:
     inputs:
     - name: batch_branch

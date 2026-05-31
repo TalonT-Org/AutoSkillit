@@ -132,3 +132,23 @@ def test_annotate_pr_diff_callable_contract_has_valid_lines_path() -> None:
     assert "valid_lines_path" in names, (
         "annotate_pr_diff contract must have a valid_lines_path output entry"
     )
+
+
+def test_review_pr_skill_validates_sha_freshness() -> None:
+    """SKILL.md Step 2.7 must compare embedded SHA against live headRefOid."""
+    skill_md = _SKILL_MD.read_text()
+    assert "headRefOid" in skill_md or "_head_sha" in skill_md, (
+        "Step 2.7 must validate SHA freshness, not just file existence"
+    )
+
+
+def test_annotate_pr_diff_callable_contract_has_head_sha() -> None:
+    """annotate_pr_diff contract must declare head_sha as an output."""
+    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    outputs = (
+        raw.get("callable_contracts", {})
+        .get("autoskillit.smoke_utils.annotate_pr_diff", {})
+        .get("outputs", [])
+    )
+    names = [o["name"] for o in outputs]
+    assert "head_sha" in names, "annotate_pr_diff contract must declare head_sha output"

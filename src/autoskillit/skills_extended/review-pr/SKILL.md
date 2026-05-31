@@ -194,28 +194,40 @@ Save the diff to `{{AUTOSKILLIT_TEMP}}/review-pr/diff_{pr_number}.txt`. (relativ
 
 ### Step 2.7: Deterministic Diff Annotation
 
-Read pre-computed annotated diff and hunk ranges from disk when available:
+Read pre-computed annotated diff and hunk ranges from disk when available, but only if the
+cached metadata is fresh (i.e., the embedded `_head_sha` matches the PR's current HEAD commit).
+Stale metadata from a previous loop iteration is discarded to prevent posting inline comments
+with wrong line numbers after a force-push.
 
 ```bash
 ANNOTATED_DIFF=""
 VALID_LINE_RANGES="{}"
 VALID_DIFF_LINES=""
-if [ -n "${annotated_diff_path:-}" ] && [ -f "$annotated_diff_path" ]; then
-    ANNOTATED_DIFF="$(cat "$annotated_diff_path")"
-fi
-if [ -n "${hunk_ranges_path:-}" ] && [ -f "$hunk_ranges_path" ]; then
-    VALID_LINE_RANGES="$(cat "$hunk_ranges_path")"
-fi
-if [ -n "${valid_lines_path:-}" ] && [ -f "$valid_lines_path" ]; then
-    VALID_DIFF_LINES="$(cat "$valid_lines_path")"
+if [ -n "${diff_metrics_path:-}" ] && [ -f "$diff_metrics_path" ]; then
+    cached_sha=$(python3 -c "import json; d=json.load(open('$diff_metrics_path')); print(d.get('_head_sha',''))" 2>/dev/null || echo "")
+    live_sha=$(gh pr view "${pr_number}" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
+
+    if [ -n "$cached_sha" ] && [ -n "$live_sha" ] && [ "$cached_sha" = "$live_sha" ]; then
+        if [ -n "${annotated_diff_path:-}" ] && [ -f "$annotated_diff_path" ]; then
+            ANNOTATED_DIFF="$(tail -n +2 "$annotated_diff_path")"
+        fi
+        if [ -n "${hunk_ranges_path:-}" ] && [ -f "$hunk_ranges_path" ]; then
+            VALID_LINE_RANGES="$(cat "$hunk_ranges_path")"
+        fi
+        if [ -n "${valid_lines_path:-}" ] && [ -f "$valid_lines_path" ]; then
+            VALID_DIFF_LINES="$(cat "$valid_lines_path")"
+        fi
+    else
+        unset annotated_diff_path hunk_ranges_path valid_lines_path diff_metrics_path
+    fi
 fi
 ```
 
 `VALID_DIFF_LINES` is a JSON mapping `{filepath: [line_numbers]}` containing the exact set of
 new-file line numbers present in the diff. When available, Step 4 uses set-membership for
 validation instead of hunk-span interval checking. `VALID_LINE_RANGES` is a JSON mapping file
-paths to valid hunk line ranges used as fallback. If all paths are absent, leave variables
-empty (no filtering).
+paths to valid hunk line ranges used as fallback. If all paths are absent or the SHA check
+fails, leave variables empty (no filtering).
 
 ### Step 2.5: Deletion Context Pre-Computation
 

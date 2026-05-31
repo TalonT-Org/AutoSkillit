@@ -302,3 +302,47 @@ def test_rectify_sequential_revision_pattern(rectify_text: str) -> None:
     im_section = rectify_text[im_idx:rt_idx].lower()
     assert "revis" in fa_section, "Foundation Audit step must include revision instruction"
     assert "revis" in im_section, "Interface Mapping step must include revision instruction"
+
+
+def test_make_plan_adversarial_steps_contain_continuation_protocol(make_plan_text: str) -> None:
+    """Each adversarial step in make-plan must include SendMessage continuation protocol."""
+    planning_idx = make_plan_text.find("## Planning Steps")
+    assert planning_idx != -1
+    step6_idx = make_plan_text.find("**Foundation Audit", planning_idx)
+    step7_idx = make_plan_text.find("**Interface Mapping", planning_idx)
+    step8_idx = make_plan_text.find("**Registry Trace", planning_idx)
+    step9_idx = make_plan_text.find("**Plan Revision", planning_idx)
+    assert all(i != -1 for i in (step6_idx, step7_idx, step8_idx, step9_idx))
+
+    for label, start, end in [
+        ("Step 6 (Foundation Audit)", step6_idx, step7_idx),
+        ("Step 7 (Interface Mapping)", step7_idx, step8_idx),
+        ("Step 8 (Registry Trace)", step8_idx, step9_idx),
+    ]:
+        section = make_plan_text[start:end].lower()
+        assert "sendmessage" in section, f"{label} must mention SendMessage"
+        assert "summary" in section, f"{label} must mention required summary field"
+        assert "continuation" in section, f"{label} must mention continuation"
+
+
+def test_rectify_adversarial_steps_contain_continuation_protocol(rectify_text: str) -> None:
+    """Each adversarial step in rectify must include SendMessage continuation protocol."""
+    workflow_idx = rectify_text.find("## Rectify Workflow")
+    assert workflow_idx != -1
+    fa_idx = rectify_text.find("Foundation Audit", workflow_idx)
+    im_idx = rectify_text.find("Interface Mapping", workflow_idx)
+    rt_idx = rectify_text.find("Registry Trace", workflow_idx)
+    assert all(i != -1 for i in (fa_idx, im_idx, rt_idx))
+
+    next_heading = rectify_text.find("\n## ", rt_idx)
+    rt_end = next_heading if next_heading != -1 else len(rectify_text)
+
+    for label, start, end in [
+        ("Step 5 (Foundation Audit)", fa_idx, im_idx),
+        ("Step 6 (Interface Mapping)", im_idx, rt_idx),
+        ("Step 7 (Registry Trace)", rt_idx, rt_end),
+    ]:
+        section = rectify_text[start:end].lower()
+        assert "sendmessage" in section, f"{label} must mention SendMessage"
+        assert "summary" in section, f"{label} must mention required summary field"
+        assert "continuation" in section, f"{label} must mention continuation"

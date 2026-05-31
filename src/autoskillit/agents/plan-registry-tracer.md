@@ -3,7 +3,7 @@ name: plan-registry-tracer
 description: "Registry and artifact auditor for implementation plans. Finds every file referencing a renamed or added symbol via grep and LSP, and checks if the plan updates it. Use when reviewing a draft plan before finalization."
 tools: [Read, Grep, Glob, Bash, LSP]
 model: sonnet
-maxTurns: 40
+maxTurns: 80
 color: green
 ---
 

@@ -176,6 +176,13 @@ Spawn 1 Foundation Auditor via `Agent(subagent_type="autoskillit:plan-foundation
 
 The Foundation Auditor performs step-by-step control-flow analysis: enumerates functions, draws control flow with scope levels, builds reachability tables, audits guard coverage, and applies exploit-first verification. It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
 
+**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+- `to`: the `agentId` from the continuation hint
+- `message`: `"Finalize your analysis and provide your complete findings report."`
+- `summary`: `"Continue plan review subagent to finalize findings"`
+
+The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
+
 After reading the agent's findings, revise the draft plan by incorporating all valid findings (real gaps, not hypotheticals) before proceeding to Step 6.
 
 ### Step 6: Interface Mapping
@@ -188,6 +195,13 @@ The Interface Mapper traces variable SET/READ points with full hop-by-hop proven
 
 **RULES FOR APPLYING INTERFACE MAPPING FINDINGS:** When the interface mapper identifies the correct variable for a step, apply the correction to ALL fields that consume that variable — cwd, skill_command arguments, branch references, SHA captures, output paths. Do not split the correct variable across some fields while leaving other fields on the wrong variable.
 
+**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+- `to`: the `agentId` from the continuation hint
+- `message`: `"Finalize your analysis and provide your complete findings report."`
+- `summary`: `"Continue plan review subagent to finalize findings"`
+
+The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
+
 After reading the agent's findings, revise the draft plan by incorporating all valid findings before proceeding to Step 7.
 
 ### Step 7: Registry Trace
@@ -199,6 +213,13 @@ Spawn 1 Registry Tracer via `Agent(subagent_type="autoskillit:plan-registry-trac
 The Registry Tracer uses three-layer tracing (LSP primary, tree-sitter structural, grep fallback) to find every file referencing symbols the plan touches. It checks participation in registry-sync patterns (RETIRED NAME SETS, RE-EXPORT CHAINS, TOOL REGISTRIES, RULE REGISTRATION, DUAL-COPY CONSTANTS, IMPORT LAYER CONSTRAINTS, TYPED ALIASES, DERIVED ARTIFACTS), then performs a two-layer completeness check (source-code layer vs. test/fixture layer). It must NOT suggest scope expansion — only identify gaps in what the plan already claims to do.
 
 **RULES FOR APPLYING REGISTRY TRACE FINDINGS:** Verify BOTH fixture/test completeness AND registry completeness before finalizing. A plan that addresses only one interpretation of a rename (manifest-focused OR workspace-focused) and misses the cross-cutting update is incomplete. Apply the two-family check: if references appear in only one layer (source-code or test/fixture), perform targeted follow-up searches in the other layer before concluding.
+
+**SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
+- `to`: the `agentId` from the continuation hint
+- `message`: `"Finalize your analysis and provide your complete findings report."`
+- `summary`: `"Continue plan review subagent to finalize findings"`
+
+The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 
 After reading the agent's findings, apply all valid findings. The plan is now fully reviewed and ready for file write.
 

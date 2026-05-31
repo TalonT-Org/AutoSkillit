@@ -8,7 +8,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 |------|---------|
 | `__init__.py` | empty |
 | `conftest.py` | Skill test fixtures |
-| `test_adversarial_review_contracts.py` | Contract tests verifying adversarial review agents exist in make-plan and rectify SKILL.md files |
+| `test_adversarial_review_contracts.py` | Contract tests verifying adversarial review agents, maxTurns sufficiency, and SendMessage continuation protocol in make-plan and rectify SKILL.md files |
 | `test_analyze_prs_contracts.py` | Contract tests for analyze-prs SKILL.md batch branch naming convention |
 | `test_arch_lens_context_path.py` | Tests that all arch-lens skills have ## Arguments section and context_path handling |
 | `test_audit_arch_preflight_contracts.py` | Audit-arch skill preflight contract tests |

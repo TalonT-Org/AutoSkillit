@@ -612,8 +612,12 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "workspace",
             "recipe",
-            "fleet",
-            "server",
+            # Server file-level entries (5 of ~52 import autoskillit.workspace):
+            "server/test_factory.py",
+            "server/test_tools_clone.py",
+            "server/test_tools_execution_routing.py",
+            "server/test_run_skill_add_dirs.py",
+            "server/test_tools_workspace.py",
             "cli",
             "skills",
             "_llm_triage",

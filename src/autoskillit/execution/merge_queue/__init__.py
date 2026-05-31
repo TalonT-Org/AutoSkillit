@@ -308,13 +308,21 @@ class DefaultMergeQueueWatcher:
                         max_merge_group_drops=max_merge_group_drops,
                     )
                     await asyncio.sleep(merge_group_drop_backoff)
-                    await self.enqueue(
+                    enqueue_result = await self.enqueue(
                         pr_number,
                         target_branch,
                         repo,
                         cwd,
                         auto_merge_available=auto_merge_available,
                     )
+                    if not enqueue_result.get("success", False):
+                        result = _make_result(
+                            False,
+                            PRState.DROPPED_MERGE_GROUP_CI,
+                            f"re-enqueue failed: {enqueue_result.get('error', 'unknown')}",
+                        )
+                        result["drop_count"] = drop_count
+                        return result
                     deadline = time.monotonic() + timeout_seconds
                     not_in_queue_cycles = 0
                     ever_enrolled = True

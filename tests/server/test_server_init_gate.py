@@ -66,6 +66,24 @@ class TestKitchenVisibility:
 
         mock_ctx.disable_components.assert_called_once_with(tags={"kitchen-core"})
 
+    @pytest.mark.anyio
+    async def test_tool_list_changes_after_enable_within_session(self):
+        """Tool list visible to a client changes when kitchen tags are enabled mid-session."""  # noqa: E501
+        from fastmcp.client import Client
+
+        from autoskillit.pipeline.gate import GATED_TOOLS
+        from autoskillit.server import mcp
+
+        async with Client(mcp) as client:
+            tools_before = {t.name for t in await client.list_tools()}
+            assert not (tools_before & GATED_TOOLS), "Kitchen tools should be hidden before enable"
+
+            mcp.enable(tags={"kitchen"})
+
+            tools_after = {t.name for t in await client.list_tools()}
+            new_tools = tools_after - tools_before
+            assert new_tools, "Enabling kitchen tags should make new tools visible"
+
 
 class TestGatedToolAccess:
     """Prompt-gated tool access: tools disabled by default, user-only activation."""

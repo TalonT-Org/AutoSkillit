@@ -468,6 +468,8 @@ classified `REJECT` with `category: "arch_violation"`.
 | Boot step symmetry | `test_boot_step_symmetry.py` | Both boot functions must call all required boot steps in the right order |
 | BackendCapabilities consumed | `test_capability_consumption.py` | Every `BackendCapabilities` field must have a production consumer — unused capability fields are prohibited |
 | BackendCapabilities documented | `test_capability_docstrings.py` | `BackendCapabilities` class and every field must have docstrings |
+| Env var symmetry | `test_env_symmetry.py` | `build_skill_session_cmd` and `build_food_truck_cmd` must both set required base env vars; `AGENT_BACKEND_ENV_VAR` must appear in food_truck |
+| No NotImplementedError in backends | `test_no_not_implemented.py` | Registered backend classes must not raise `NotImplementedError` — `CodingAgentBackend` is a Protocol, not an ABC |
 | Channel B timeout floor | `test_channel_b_timeout_guard.py` | Channel B calls with `timeout` below `TimeoutTier.CHANNEL_B` minimum |
 | Clone network timeouts | `test_clone_timeouts.py` | `subprocess.run()` with git network subcommands (clone/fetch/pull/push/ls-remote) in `clone.py` without `timeout=` |
 | Dispatch timeout resolver | `test_dispatch_timeout_guard.py` | `_run_dispatch` using hardcoded timeout instead of `resolve_dispatch_timeout()` |

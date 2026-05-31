@@ -16,7 +16,7 @@ _SUCCESS_RE = re.compile(r'"success"\s*:\s*(true|false)')
 
 
 def _predecessors_bfs(step_graph: dict[str, set[str]], start: str) -> set[str]:
-    """Return all steps that can reach *start* by following edges forward."""
+    """Return all ancestors of *start* — steps from which *start* is reachable."""
     reverse: dict[str, set[str]] = defaultdict(set)
     for src, dsts in step_graph.items():
         for dst in dsts:

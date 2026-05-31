@@ -142,6 +142,34 @@ def parse_agent_eval_manifests(
         if "prompt_template" not in canary:
             return {"success": "false", "error": f"Canary {canary_id} missing prompt_template"}
 
+        criteria = canary.get("detection_criteria", [])
+        if not criteria:
+            return {"success": "false", "error": f"Canary {canary_id} has no detection_criteria"}
+
+        for i, c in enumerate(criteria):
+            if not isinstance(c, dict) or "type" not in c or "text" not in c:
+                return {
+                    "success": "false",
+                    "error": (
+                        f"Canary {canary_id} criterion {i} must have 'text' and 'type' fields"
+                    ),
+                }
+            if c["type"] not in ("precision", "recall", "recognition"):
+                return {
+                    "success": "false",
+                    "error": (f"Canary {canary_id} criterion {i} has invalid type '{c['type']}'"),
+                }
+
+        types_present = {c["type"] for c in criteria}
+        if "recall" not in types_present:
+            return {
+                "success": "false",
+                "error": (
+                    f"Canary {canary_id} has no recall criterion — "
+                    "add at least one type: 'recall' criterion"
+                ),
+            }
+
         canary_dir = eval_run_dir / canary_id
         canary_dir.mkdir(parents=True, exist_ok=True)
 
@@ -349,6 +377,22 @@ def build_agent_eval_context(
     )
 
 
+VACUOUS_SIGNALS = frozenset(
+    {"empty", "no findings", "vacuously", "no output", "trivially satisfied"}
+)
+
+
+def _is_vacuous_pass(verdict_entry: dict) -> bool:
+    if verdict_entry.get("overall") != "PASS":
+        return False
+    for c in verdict_entry.get("criteria", []):
+        if c.get("result") == "PASS":
+            evidence = (c.get("evidence") or "").lower()
+            if any(signal in evidence for signal in VACUOUS_SIGNALS):
+                return True
+    return False
+
+
 def compile_eval_scorecard(
     eval_run_dir: str,
     canary_manifest: str,
@@ -379,6 +423,7 @@ def compile_eval_scorecard(
         return {"success": "false", "error": "Empty canary or variant manifest"}
     total_runs = len(canary_ids) * len(variant_ids)
     passed_runs = 0
+    vacuous_passes = 0
 
     canary_results: dict[str, dict[str, str]] = {}
     variant_summary: dict[str, dict[str, int]] = {
@@ -398,22 +443,29 @@ def compile_eval_scorecard(
         for variant in variants:
             vid = variant["id"]
             if verdict_data and verdict_data.get("verdicts", {}).get(vid) is not None:
-                overall = verdict_data["verdicts"][vid].get("overall", "FAIL")
+                verdict_entry = verdict_data["verdicts"][vid]
+                overall = verdict_entry.get("overall", "FAIL")
             else:
+                verdict_entry = {}
                 overall = "FAIL"
             canary_results[cid][vid] = overall
             if overall == "PASS":
                 passed_runs += 1
                 variant_summary[vid]["pass"] += 1
+                if _is_vacuous_pass(verdict_entry):
+                    vacuous_passes += 1
             else:
                 variant_summary[vid]["fail"] += 1
 
     pass_rate = passed_runs / total_runs if total_runs > 0 else 0.0
+    effective_pass_rate = (passed_runs - vacuous_passes) / total_runs if total_runs > 0 else 0.0
 
     scorecard = {
         "pass_rate": pass_rate,
         "total_runs": total_runs,
         "passed_runs": passed_runs,
+        "vacuous_passes": vacuous_passes,
+        "effective_pass_rate": effective_pass_rate,
         "canary_results": canary_results,
         "variant_summary": {
             vid: {"pass": s["pass"], "fail": s["fail"]} for vid, s in variant_summary.items()
@@ -461,4 +513,6 @@ def compile_eval_scorecard(
         "pass_rate": str(pass_rate),
         "total_runs": str(total_runs),
         "passed_runs": str(passed_runs),
+        "vacuous_passes": str(vacuous_passes),
+        "effective_pass_rate": str(effective_pass_rate),
     }

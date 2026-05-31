@@ -1590,6 +1590,108 @@ def test_compile_eval_scorecard_empty_run_dir(tmp_path: Path) -> None:
     assert result["total_runs"] == "4"
 
 
+# T_CES5
+def test_compile_eval_scorecard_flags_vacuous_pass(tmp_path: Path) -> None:
+    """A PASS verdict with vacuous evidence signals is flagged with vacuous_passes > 0."""
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    canary_dir = eval_run_dir / "c1"
+    canary_dir.mkdir(parents=True)
+    (canary_dir / "verdict.json").write_text(
+        json.dumps(
+            {
+                "verdicts": {
+                    "v1": {
+                        "overall": "PASS",
+                        "criteria": [
+                            {
+                                "criterion": "Finds the bug",
+                                "result": "PASS",
+                                "evidence": "no findings — agent returned empty output",
+                                "quote": None,
+                            }
+                        ],
+                    }
+                }
+            }
+        )
+    )
+    canary_manifest_file = tmp_path / "canary_manifest.json"
+    variant_manifest_file = tmp_path / "variant_manifest.json"
+    canary_manifest_file.write_text(json.dumps([{"id": "c1"}]))
+    variant_manifest_file.write_text(json.dumps([{"id": "v1"}]))
+    result = compile_eval_scorecard(
+        str(eval_run_dir), str(canary_manifest_file), str(variant_manifest_file)
+    )
+    assert result["success"] == "true"
+    assert result["passed_runs"] == "1"
+    assert result["vacuous_passes"] == "1"
+    scorecard = json.loads(Path(result["scorecard_path"]).read_text())
+    assert scorecard["vacuous_passes"] == 1
+
+
+# T_CES6
+def test_compile_eval_scorecard_vacuous_lowers_pass_rate(tmp_path: Path) -> None:
+    """effective_pass_rate < pass_rate when vacuous passes exist."""
+    eval_run_dir = tmp_path / "eval_run"
+    eval_run_dir.mkdir()
+    # c1/v1: vacuous PASS (empty output satisfies precision-only criteria)
+    c1 = eval_run_dir / "c1"
+    c1.mkdir(parents=True)
+    (c1 / "verdict.json").write_text(
+        json.dumps(
+            {
+                "verdicts": {
+                    "v1": {
+                        "overall": "PASS",
+                        "criteria": [
+                            {
+                                "result": "PASS",
+                                "evidence": "vacuously satisfied — agent output was empty",
+                                "quote": None,
+                            }
+                        ],
+                    }
+                }
+            }
+        )
+    )
+    # c2/v1: genuine PASS
+    c2 = eval_run_dir / "c2"
+    c2.mkdir(parents=True)
+    (c2 / "verdict.json").write_text(
+        json.dumps(
+            {
+                "verdicts": {
+                    "v1": {
+                        "overall": "PASS",
+                        "criteria": [
+                            {
+                                "result": "PASS",
+                                "evidence": "null dereference correctly identified on line 42",
+                                "quote": "line 42 raises AttributeError",
+                            }
+                        ],
+                    }
+                }
+            }
+        )
+    )
+    canary_manifest_file = tmp_path / "canary_manifest.json"
+    variant_manifest_file = tmp_path / "variant_manifest.json"
+    canary_manifest_file.write_text(json.dumps([{"id": "c1"}, {"id": "c2"}]))
+    variant_manifest_file.write_text(json.dumps([{"id": "v1"}]))
+    result = compile_eval_scorecard(
+        str(eval_run_dir), str(canary_manifest_file), str(variant_manifest_file)
+    )
+    assert result["success"] == "true"
+    assert result["passed_runs"] == "2"
+    assert result["vacuous_passes"] == "1"
+    pass_rate = float(result["pass_rate"])
+    effective_pass_rate = float(result["effective_pass_rate"])
+    assert effective_pass_rate < pass_rate
+
+
 # ---------------------------------------------------------------------------
 # T_PAEM1–T_PAEM9: parse_agent_eval_manifests tests
 # ---------------------------------------------------------------------------
@@ -1608,7 +1710,7 @@ def test_parse_agent_eval_manifests_creates_directory_tree(tmp_path: Path) -> No
             "reference_path": str(prompt_file),
             "reference_type": "patch",
             "gap_description": "False positive on style",
-            "detection_criteria": ["Does not flag style issues"],
+            "detection_criteria": [{"text": "Does not flag style issues", "type": "recall"}],
         }
     ]
     variant_manifest = [
@@ -1636,7 +1738,7 @@ def test_parse_agent_eval_manifests_resolves_file_vars(tmp_path: Path) -> None:
             "prompt_vars": {"diff_content_file": str(diff_file), "dimension": "bugs"},
             "reference_path": str(diff_file),
             "reference_type": "patch",
-            "detection_criteria": ["Finds the bug"],
+            "detection_criteria": [{"text": "Finds the bug", "type": "recall"}],
         }
     ]
     variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
@@ -1662,7 +1764,7 @@ def test_parse_agent_eval_manifests_writes_manifest_index(tmp_path: Path) -> Non
             "prompt_vars": {},
             "reference_path": "/ref",
             "reference_type": "patch",
-            "detection_criteria": ["test"],
+            "detection_criteria": [{"text": "test", "type": "recall"}],
         }
     ]
     variant_manifest = [
@@ -1689,7 +1791,7 @@ def test_parse_agent_eval_manifests_unreadable_file_var(tmp_path: Path) -> None:
             "prompt_vars": {"content_file": "/nonexistent/file.txt"},
             "reference_path": "/ref",
             "reference_type": "patch",
-            "detection_criteria": ["test"],
+            "detection_criteria": [{"text": "test", "type": "recall"}],
         }
     ]
     variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
@@ -1709,7 +1811,7 @@ def test_parse_agent_eval_manifests_missing_prompt_template(tmp_path: Path) -> N
             "prompt_vars": {},
             "reference_path": "/ref",
             "reference_type": "patch",
-            "detection_criteria": ["test"],
+            "detection_criteria": [{"text": "test", "type": "recall"}],
         }
     ]
     variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
@@ -1729,7 +1831,7 @@ def test_parse_agent_eval_manifests_resolved_has_variant_agent_files(tmp_path: P
             "prompt_vars": {},
             "reference_path": "/ref",
             "reference_type": "patch",
-            "detection_criteria": ["test"],
+            "detection_criteria": [{"text": "test", "type": "recall"}],
         }
     ]
     variant_manifest = [
@@ -1756,7 +1858,7 @@ def test_parse_agent_eval_manifests_missing_agent_name(tmp_path: Path) -> None:
             "prompt_vars": {},
             "reference_path": "/ref",
             "reference_type": "patch",
-            "detection_criteria": ["test"],
+            "detection_criteria": [{"text": "test", "type": "recall"}],
         }
     ]
     variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
@@ -1777,7 +1879,7 @@ def test_parse_agent_eval_manifests_template_var_not_resolved(tmp_path: Path) ->
             "prompt_vars": {"other": "value"},
             "reference_path": "/ref",
             "reference_type": "patch",
-            "detection_criteria": ["test"],
+            "detection_criteria": [{"text": "test", "type": "recall"}],
         }
     ]
     variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
@@ -1800,7 +1902,7 @@ def test_parse_agent_eval_manifests_file_var_collision(tmp_path: Path) -> None:
             "prompt_vars": {"content": "direct", "content_file": str(diff_file)},
             "reference_path": "/ref",
             "reference_type": "patch",
-            "detection_criteria": ["test"],
+            "detection_criteria": [{"text": "test", "type": "recall"}],
         }
     ]
     variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
@@ -1809,6 +1911,102 @@ def test_parse_agent_eval_manifests_file_var_collision(tmp_path: Path) -> None:
     )
     assert result["success"] == "false"
     assert "collision" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Criteria taxonomy tests: parse_agent_eval_manifests schema enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_parse_agent_eval_manifests_rejects_untyped_criteria(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "test",
+            "prompt_vars": {},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": ["plain string without type"],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "false"
+    assert (
+        "criterion_type" in result["error"]
+        or "text" in result["error"]
+        or "type" in result["error"]
+    )
+
+
+def test_parse_agent_eval_manifests_rejects_precision_only_canary(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "test",
+            "prompt_vars": {},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": [
+                {"text": "Does not flag style issues", "type": "precision"},
+                {"text": "Does not flag whitespace", "type": "precision"},
+            ],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "false"
+    assert "recall" in result["error"].lower()
+
+
+def test_parse_agent_eval_manifests_accepts_balanced_criteria(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "test",
+            "prompt_vars": {},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": [
+                {"text": "Finds the bug", "type": "recall"},
+                {"text": "Does not flag style issues", "type": "precision"},
+            ],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "true"
+
+
+def test_parse_agent_eval_manifests_accepts_recall_only(tmp_path: Path) -> None:
+    canary_manifest = [
+        {
+            "id": "RA1",
+            "agent_name": "test-agent",
+            "prompt_template": "test",
+            "prompt_vars": {},
+            "reference_path": "/ref",
+            "reference_type": "patch",
+            "detection_criteria": [
+                {"text": "Finds the bug", "type": "recall"},
+                {"text": "Identifies the affected module", "type": "recall"},
+            ],
+        }
+    ]
+    variant_manifest = [{"id": "v1", "label": "V1", "agent_file": "/v1.md"}]
+    result = parse_agent_eval_manifests(
+        json.dumps(canary_manifest), json.dumps(variant_manifest), str(tmp_path)
+    )
+    assert result["success"] == "true"
 
 
 # ---------------------------------------------------------------------------
@@ -1828,7 +2026,7 @@ def test_build_agent_eval_context_writes_eval_context(tmp_path: Path) -> None:
                 "id": "RA1",
                 "agent_name": "pr-review-auditor",
                 "gap_description": "False positive on style",
-                "detection_criteria": ["Does not flag style"],
+                "detection_criteria": [{"text": "Does not flag style", "type": "recall"}],
                 "reference_path": "/path/to/diff.patch",
                 "reference_type": "patch",
                 "variants": {"baseline": {"label": "Baseline", "agent_file": "/baseline.md"}},
@@ -1864,7 +2062,7 @@ def test_build_agent_eval_context_handles_null_output(tmp_path: Path) -> None:
                 "id": "RA1",
                 "agent_name": "test-agent",
                 "gap_description": "test",
-                "detection_criteria": ["test"],
+                "detection_criteria": [{"text": "test", "type": "recall"}],
                 "reference_path": "/ref",
                 "reference_type": "patch",
                 "variants": {"v1": {"label": "V1", "agent_file": "/v1.md"}},
@@ -1894,7 +2092,7 @@ def test_build_agent_eval_context_uses_agent_name_as_subject(tmp_path: Path) -> 
                 "id": "RA1",
                 "agent_name": "review-intent-validator",
                 "gap_description": "test",
-                "detection_criteria": ["test"],
+                "detection_criteria": [{"text": "test", "type": "recall"}],
                 "reference_path": "/ref",
                 "reference_type": "patch",
                 "variants": {},
@@ -1935,7 +2133,7 @@ def test_build_agent_eval_context_missing_reference_path(tmp_path: Path) -> None
                 "id": "RA1",
                 "agent_name": "test-agent",
                 "gap_description": "test",
-                "detection_criteria": ["test"],
+                "detection_criteria": [{"text": "test", "type": "recall"}],
                 "variants": {},
             }
         )
@@ -1961,7 +2159,7 @@ def test_build_agent_eval_context_default_reference_type_is_patch(tmp_path: Path
                 "id": "RA1",
                 "agent_name": "test-agent",
                 "gap_description": "test",
-                "detection_criteria": ["test"],
+                "detection_criteria": [{"text": "test", "type": "recall"}],
                 "reference_path": "/ref",
                 "variants": {},
             }

@@ -13,6 +13,10 @@ Bundled agent definition markdown files that serve as both **plugin agents**
 | `plan-registry-tracer.md` | Adversarial agent: registry/artifact auditor — LSP + tree-sitter + grep symbol tracing |
 | `wp-elaborator.md` | Pipeline agent: work-package elaboration — codebase analysis and structured JSON output |
 | `pipeline-health-scanner.md` | Pipeline agent: session log scanner — reads session data, investigates anomalies, reports with adversarial validation |
+| `pr-review-auditor-baseline.md` | PR review agent: baseline control variant for agent-eval |
+| `pr-review-auditor-v1-precision.md` | PR review agent: precision-focused with 5-step verification checklist |
+| `pr-review-auditor-v2-contrastive.md` | PR review agent: junior/senior contrastive framing |
+| `pr-review-auditor-v3-simulation.md` | PR review agent: simulation-first with inconclusive fallback |
 
 ## Layout
 
@@ -64,4 +68,6 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 `subagent_type: "autoskillit:{name}"` and does NOT need MCP resource access via
 `unlock_agent_pack`, only step 1 is required. Steps 2–5 exist for the
 `agent://{pack}/{name}` resource path and can be skipped for packless agents.
-Current packless agents: `wp-elaborator`, `pipeline-health-scanner`, `audit-impl-slice-auditor`.
+Current packless agents: `wp-elaborator`, `pipeline-health-scanner`, `audit-impl-slice-auditor`,
+`pr-review-auditor-baseline`, `pr-review-auditor-v1-precision`, `pr-review-auditor-v2-contrastive`,
+`pr-review-auditor-v3-simulation`.

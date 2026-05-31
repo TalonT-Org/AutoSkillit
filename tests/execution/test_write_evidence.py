@@ -431,3 +431,129 @@ class TestPlannerSkillEndToEnd:
             write_behavior=WriteBehaviorSpec(mode="always"),
         )
         assert sr.evidence.fs_writes_detected is True
+
+
+class TestLateCreatedDirectoryDetection:
+    """write_watch_dirs detects writes in directories created during the session (T-WE-FS-FN)."""
+
+    @pytest.mark.anyio
+    async def test_late_created_dir_write_detected(self, tmp_path: Path, minimal_ctx) -> None:
+        """Directory that didn't exist at session start but is created with files must be detected.
+
+        T-WE-FS-FN: fails under old code (missing key → None → skip comparison);
+        passes under new code (missing dir → {} → comparison fires).
+        """
+        from autoskillit.execution.headless import run_headless_core
+        from tests.execution.conftest import _success_session_json
+
+        watch_dir = tmp_path / "output"
+        # watch_dir does NOT exist at session start
+
+        async def mock_runner(cmd, **kwargs):
+            if cmd[0] == "git":
+                return _make_result(returncode=1, stdout="")
+            watch_dir.mkdir(parents=True)
+            (watch_dir / "result.json").write_text('{"done": true}')
+            return _make_result(returncode=0, stdout=_success_session_json("done"))
+
+        minimal_ctx.runner = mock_runner
+        minimal_ctx.backend = _mock_backend()
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        result = await run_headless_core(
+            "/autoskillit:test-skill",
+            str(proj),
+            minimal_ctx,
+            write_watch_dirs=[watch_dir],
+        )
+        assert result.evidence.fs_writes_detected is True, (
+            "fs_writes_detected must be True when session creates a nonexistent watch directory"
+        )
+
+
+class TestSentinelDisambiguation:
+    """Sentinel disambiguation: None (OSError) vs {} (missing dir) (T-WE-FS-SENTINEL)."""
+
+    @pytest.mark.anyio
+    async def test_oserror_pre_scan_skips_comparison(self, tmp_path: Path, minimal_ctx) -> None:
+        """OSError pre-scan → None sentinel → comparison skipped → fs_writes_detected=False."""
+        from unittest.mock import patch
+
+        from autoskillit.execution.headless import run_headless_core
+        from autoskillit.execution.headless._headless_helpers import (
+            _stat_snapshot as _real_snap,
+        )
+        from tests.execution.conftest import _success_session_json
+
+        watch_dir = tmp_path / "output"
+        watch_dir.mkdir()
+
+        call_count: list[int] = [0]
+
+        def _mock_snap(d):
+            call_count[0] += 1
+            if call_count[0] == 1 and d == watch_dir:
+                raise OSError("simulated scan failure")
+            return _real_snap(d)
+
+        async def mock_runner(cmd, **kwargs):
+            if cmd[0] == "git":
+                return _make_result(returncode=1, stdout="")
+            (watch_dir / "new_file.json").write_text("{}")
+            return _make_result(returncode=0, stdout=_success_session_json("done"))
+
+        minimal_ctx.runner = mock_runner
+        minimal_ctx.backend = _mock_backend()
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        with patch("autoskillit.execution.headless._headless_execute._stat_snapshot", _mock_snap):
+            result = await run_headless_core(
+                "/autoskillit:test-skill",
+                str(proj),
+                minimal_ctx,
+                write_watch_dirs=[watch_dir],
+            )
+
+        assert result.evidence.fs_writes_detected is False, (
+            "OSError in pre-scan must not produce a false positive — comparison must be skipped"
+        )
+
+    @pytest.mark.anyio
+    async def test_missing_dir_pre_scan_empty_dict_sentinel_detects_new_files(
+        self, tmp_path: Path, minimal_ctx
+    ) -> None:
+        """Missing dir at pre-scan → {} sentinel → comparison fires → fs_writes_detected=True.
+
+        Contrast with OSError (None sentinel) which skips comparison.
+        T-WE-FS-SENTINEL: fails under old code (missing key → None → skip);
+        passes under new code ({} → comparison fires).
+        """
+        from autoskillit.execution.headless import run_headless_core
+        from tests.execution.conftest import _success_session_json
+
+        watch_dir = tmp_path / "output"
+        # watch_dir does NOT exist at session start
+
+        async def mock_runner(cmd, **kwargs):
+            if cmd[0] == "git":
+                return _make_result(returncode=1, stdout="")
+            watch_dir.mkdir(parents=True)
+            (watch_dir / "result.json").write_text('{"done": true}')
+            return _make_result(returncode=0, stdout=_success_session_json("done"))
+
+        minimal_ctx.runner = mock_runner
+        minimal_ctx.backend = _mock_backend()
+        proj = tmp_path / "proj"
+        proj.mkdir()
+
+        result = await run_headless_core(
+            "/autoskillit:test-skill",
+            str(proj),
+            minimal_ctx,
+            write_watch_dirs=[watch_dir],
+        )
+        assert result.evidence.fs_writes_detected is True, (
+            "Missing dir at pre-scan must detect new files created by the session"
+        )

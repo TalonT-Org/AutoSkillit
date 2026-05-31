@@ -742,7 +742,7 @@ class TestTempDirSnapshot:
 
 
 class TestGitWritesClonePath:
-    """Integration tests: clone-path git write detection reaches _detect_branch_divergence."""
+    """Unit tests: `_detect_branch_divergence` standalone (not the production call path)."""
 
     def test_git_writes_detected_on_clone_path(self, tmp_path: Path) -> None:
         """Clone path (main checkout) with commits ahead of origin returns True."""
@@ -935,6 +935,58 @@ class TestGitWritesDetection:
             "write_behavior is conditional and pattern matches"
         )
         assert sr.subtype != "zero_writes"
+
+
+class TestSessionScopedGitDetection:
+    """Integration tests: session-scoped git write detection (T-ZW-GIT-FP)."""
+
+    @pytest.mark.anyio
+    async def test_git_writes_false_positive_on_predivergd_branch(
+        self, tmp_path: Path, minimal_ctx
+    ) -> None:
+        """Pre-diverged branch + zero-commit session must NOT set git_writes_detected=True.
+
+        T-ZW-GIT-FP: fails under _detect_branch_divergence (global state);
+        passes under _detect_session_git_writes (session-scoped delta).
+        """
+        import subprocess
+
+        from autoskillit.execution.headless import run_headless_core
+        from tests.execution.conftest import _mock_backend, _success_session_json
+
+        repo = tmp_path / "repo"
+        bare = tmp_path / "bare.git"
+
+        subprocess.run(["git", "init", str(bare), "--bare"], check=True, capture_output=True)
+        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        for cmd in [
+            ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
+            ["git", "-C", str(repo), "config", "user.name", "Test"],
+            ["git", "-C", str(repo), "remote", "add", "origin", str(bare)],
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "init"],
+            ["git", "-C", str(repo), "push", "origin", "HEAD:main"],
+            ["git", "-C", str(repo), "branch", "--set-upstream-to=origin/main"],
+            # Pre-existing divergence: 1 commit ahead of origin BEFORE the session starts
+            ["git", "-C", str(repo), "commit", "--allow-empty", "-m", "pre-session-commit"],
+        ]:
+            subprocess.run(cmd, check=True, capture_output=True)
+
+        async def mock_runner(cmd, **kwargs):
+            if cmd[0] == "git":
+                return _make_result(returncode=1, stdout="")
+            return _make_result(returncode=0, stdout=_success_session_json("done"))
+
+        minimal_ctx.runner = mock_runner
+        minimal_ctx.backend = _mock_backend()
+
+        result = await run_headless_core(
+            "/autoskillit:test-skill",
+            str(repo),
+            minimal_ctx,
+        )
+        assert result.evidence.git_writes_detected is False, (
+            "git_writes_detected must be False when the branch divergence pre-dates the session"
+        )
 
 
 class TestWriteExpectedWhenPatternSync:

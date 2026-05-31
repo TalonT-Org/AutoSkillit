@@ -141,7 +141,7 @@ skills:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: conditional
     write_expected_when:
     - "conflict_report_path[ \\t]*=[ \\t]*/.+"
@@ -199,7 +199,7 @@ skills:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
     completion_required: true
   implement-worktree-no-merge:
@@ -216,7 +216,7 @@ skills:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
     completion_required: true
   investigate:
@@ -338,7 +338,7 @@ skills:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: conditional
     write_expected_when:
     - "phases_implemented[ \\t]*=[ \\t]*[1-9][0-9]*"
@@ -1438,7 +1438,7 @@ skills:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/research-20260101-120000\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/research-20260101-120000\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
     completion_required: true
 

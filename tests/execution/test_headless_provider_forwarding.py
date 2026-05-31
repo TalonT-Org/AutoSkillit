@@ -929,3 +929,80 @@ async def test_execute_claude_headless_stream_parser_receives_completion_marker(
     )
 
     backend.stream_parser.assert_called_once_with(completion_marker="%%TEST_MARKER%%")
+
+
+@pytest.mark.anyio
+async def test_run_headless_core_forwards_marker_dir_and_caller_session_id(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    """run_headless_core passes marker_dir + caller_session_id to _execute_claude_headless."""
+    from autoskillit.core import CmdSpec
+    from autoskillit.execution.headless import run_headless_core
+
+    execute_kwargs: dict = {}
+    marker_dir = tmp_path / "markers"
+    marker_dir.mkdir()
+
+    backend = _mock_backend()
+    backend.build_skill_session_cmd.return_value = CmdSpec(
+        cmd=("claude", "--print", "test"), env={}
+    )
+    minimal_ctx.backend = backend
+
+    async def fake_execute(spec, cwd, ctx, **kwargs):  # noqa: ARG001
+        execute_kwargs.update(kwargs)
+        return _STUB_RESULT
+
+    monkeypatch.setattr("autoskillit.execution.headless._execute_claude_headless", fake_execute)
+
+    await run_headless_core(
+        "/autoskillit:probe",
+        str(tmp_path),
+        minimal_ctx,
+        marker_dir=marker_dir,
+        caller_session_id="orchestrator-session-abc",
+    )
+
+    assert execute_kwargs.get("marker_dir") == marker_dir
+    assert execute_kwargs.get("session_id") == "orchestrator-session-abc"
+
+
+@pytest.mark.anyio
+async def test_default_executor_run_forwards_marker_dir_and_caller_session_id(
+    minimal_ctx, tmp_path, monkeypatch
+) -> None:
+    """DefaultHeadlessExecutor.run() passes marker_dir + caller_session_id to run_headless_core."""
+    import autoskillit.execution.headless as _headless_mod
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    captured: dict = {}
+    marker_dir = tmp_path / "markers"
+    marker_dir.mkdir()
+
+    async def fake_core(skill_command, cwd, ctx, **kwargs):  # noqa: ARG001
+        captured.update(kwargs)
+        return _STUB_RESULT
+
+    monkeypatch.setattr(_headless_mod, "run_headless_core", fake_core)
+
+    executor = DefaultHeadlessExecutor(minimal_ctx)
+    await executor.run(
+        "/autoskillit:probe",
+        str(tmp_path),
+        marker_dir=marker_dir,
+        caller_session_id="orchestrator-session-xyz",
+    )
+
+    assert captured.get("marker_dir") == marker_dir
+    assert captured.get("caller_session_id") == "orchestrator-session-xyz"
+
+
+def test_headless_executor_protocol_includes_marker_dir_params() -> None:
+    """HeadlessExecutor.run() Protocol includes marker_dir and caller_session_id."""
+    import inspect
+
+    from autoskillit.core.types import HeadlessExecutor
+
+    sig = inspect.signature(HeadlessExecutor.run)
+    assert sig.parameters["marker_dir"].default is None
+    assert sig.parameters["caller_session_id"].default is None

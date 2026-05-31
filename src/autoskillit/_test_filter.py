@@ -1,6 +1,6 @@
-"""Test filter manifest: glob-to-test-directory mapping for non-Python files.
+"""Test filter manifest: glob-to-test-directory mapping.
 
-Loads ``.autoskillit/test-filter-manifest.yaml`` and resolves changed non-Python
+Loads ``.autoskillit/test-filter-manifest.yaml`` and resolves changed
 file paths to the minimal set of test directories that must run.
 """
 
@@ -36,14 +36,14 @@ def apply_manifest(
     changed_files: list[str],
     manifest: dict[str, list[str]],
 ) -> set[str] | None:
-    """Resolve changed non-Python files to test directories via the manifest.
+    """Resolve changed files to test directories via the manifest.
 
     For each manifest entry, compiles the glob pattern using pathspec's
     gitwildmatch and checks whether any changed file matches. Collects the
     union of all matched test directories.
 
     Args:
-        changed_files: Repo-relative paths of changed non-Python files.
+        changed_files: Repo-relative paths of changed files.
         manifest: Output of ``load_manifest()``.
 
     Returns:

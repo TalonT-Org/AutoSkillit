@@ -1341,7 +1341,10 @@ def build_test_scope(
             else:
                 return FullRunReason.UNMAPPED_FILE
         elif f.endswith(".py"):
-            return FullRunReason.UNMAPPED_FILE
+            manifest_dirs = apply_manifest({f}, manifest)
+            if manifest_dirs is None:
+                return FullRunReason.UNMAPPED_FILE
+            test_dirs.update(manifest_dirs)
         else:
             manifest_dirs = apply_manifest({f}, manifest)
             if manifest_dirs is None:

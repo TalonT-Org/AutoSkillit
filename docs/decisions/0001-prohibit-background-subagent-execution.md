@@ -49,6 +49,16 @@ The compliance test `test_no_background_subagent_in_spawning_skills` in
 indicators and asserts the prohibition string is present. This test runs as part of
 `task test-all` and `task test-check`.
 
+## Runtime Enforcement
+
+The `background_exec_guard.py` PreToolUse hook intercepts Bash and Agent tool calls
+in headless skill sessions. If `run_in_background: true` is present in the tool input,
+the hook denies the call with a message referencing this ADR. This converts the prose
+prohibition into a structural invariant that no model can bypass.
+
+Registered in `HOOK_REGISTRY` with `session_scope="headless_only"` and matcher
+`Bash|Agent`. Test coverage in `tests/infra/test_background_exec_guard.py`.
+
 ## Scope
 
 Applies to 77 SKILL.md files. Listed by group:

@@ -98,6 +98,8 @@ _INFRA_UNCONDITIONAL_FILES: frozenset[str] = frozenset(
         "test_filter_activation.py",
         "test_schema_version_convention.py",
         "test_release_sanity.py",
+        "test_background_exec_guard.py",
+        "test_adr_runtime_guard_coverage.py",
     }
 )
 

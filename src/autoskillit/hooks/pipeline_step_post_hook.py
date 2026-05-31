@@ -19,12 +19,15 @@ _SUFFIX_RE = __import__("re").compile(r"-\d+$")
 
 def _atomic_write(path: Path, content: str) -> None:
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".tmp_")
+    closed = False
     try:
         os.write(fd, content.encode("utf-8"))
         os.close(fd)
+        closed = True
         os.replace(tmp, path)
     except OSError:
-        os.close(fd)
+        if not closed:
+            os.close(fd)
         os.unlink(tmp)
         raise
 
@@ -82,9 +85,10 @@ def main() -> None:
             sys.exit(0)
         tracker = json.loads(tracker_path.read_text())
         steps = tracker.get("steps", {})
-        if canonical in steps:
-            steps[canonical]["status"] = "complete"
-            steps[canonical]["completed_at"] = datetime.now(UTC).isoformat()
+        if canonical not in steps:
+            sys.exit(0)
+        steps[canonical]["status"] = "complete"
+        steps[canonical]["completed_at"] = datetime.now(UTC).isoformat()
         tracker["steps"] = steps
         _atomic_write(tracker_path, json.dumps(tracker))
 

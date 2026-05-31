@@ -168,6 +168,10 @@ def _check_process_staleness() -> bool:
 def _clear_stale_caches() -> None:
     """Clear all lru_cache helpers and the load cache when staleness is detected."""
     global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
+    from autoskillit.recipe._skill_helpers import (  # noqa: PLC0415
+        _get_bundled_skill_names,
+        _get_skill_category_map,
+    )
     from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
     from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
         load_ml_sub_area_folding,
@@ -177,5 +181,7 @@ def _clear_stale_caches() -> None:
     _block_budgets.cache_clear()
     load_bundled_manifest.cache_clear()
     load_ml_sub_area_folding.cache_clear()
+    _get_bundled_skill_names.cache_clear()
+    _get_skill_category_map.cache_clear()
     _LOAD_CACHE.clear()
     _STALENESS_CACHES_CLEARED = True

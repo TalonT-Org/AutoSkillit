@@ -20,6 +20,8 @@ def _clear_skill_helper_caches():
         _get_skill_category_map,
     )
 
+    _get_bundled_skill_names.cache_clear()
+    _get_skill_category_map.cache_clear()
     yield
     _get_bundled_skill_names.cache_clear()
     _get_skill_category_map.cache_clear()

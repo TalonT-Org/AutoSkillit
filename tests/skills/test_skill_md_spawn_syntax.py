@@ -15,6 +15,8 @@ _AMBIGUOUS_PATTERNS = [
     re.compile(r'\(\s*`?model:\s*"?sonnet"?\s*`?\s*\)'),
     # "Task tool subagent" phrasing
     re.compile(r"\bTask\s+tool\s+subagent"),
+    # "Use `model: "sonnet"`" directive — old ALWAYS-block phrasing
+    re.compile(r'Use\s+`model:\s*"sonnet"'),
 ]
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent

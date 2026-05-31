@@ -45,7 +45,7 @@ def test_skill_and_food_truck_share_required_env_vars() -> None:
 
 
 @pytest.mark.xfail(
-    reason="AGENT_BACKEND_ENV_VAR not yet added to build_food_truck_cmd",
+    reason="#3385: AUTOSKILLIT_AGENT_BACKEND not yet added to build_food_truck_cmd",
     strict=True,
 )
 def test_agent_backend_env_var_in_food_truck(monkeypatch: pytest.MonkeyPatch) -> None:

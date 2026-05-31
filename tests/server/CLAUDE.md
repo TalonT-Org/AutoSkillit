@@ -91,6 +91,8 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_kitchen_visibility.py` | Tests for tools_kitchen.py: visibility, component management, sous-chef, redisable_subsets |
 | `test_lock_ingredients.py` | Tests for the lock_ingredients MCP tool and _write_ingredient_locks helper |
 | `test_run_skill_locks.py` | Tests for server-side ingredient lock enforcement in run_skill (incl. resume exemption) |
+| `test_pipeline_tracker.py` | Tests for record_pipeline_step MCP tool — init, status, gaps, and get_pipeline_report tracker integration |
+| `test_run_skill_pipeline_deps.py` | Tests for _check_pipeline_deps server-side pipeline dependency enforcement in run_skill |
 | `test_no_path_cwd_in_tools.py` | Regression guard: Path.cwd() must not appear in server tool handlers |
 | `test_open_kitchen_staleness.py` | Tests for ProcessStaleError propagation through open_kitchen — failure envelope with staleness context |
 | `test_open_kitchen_deferred_recall.py` | Tests for active_recipe_steps assignment in the _is_deferred_recall=True path |

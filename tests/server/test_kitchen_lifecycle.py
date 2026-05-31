@@ -59,3 +59,31 @@ async def test_kitchen_open_close_lifecycle(monkeypatch, tmp_path):
     # drain the cancelled task from the event loop
     await asyncio.sleep(0)
     assert task.cancelled() or task.done()
+
+
+async def test_close_kitchen_removes_tracker_dir(monkeypatch, tmp_path):
+    """Tracker directory is removed by close_kitchen handler."""
+    monkeypatch.chdir(tmp_path)
+
+    ctx = make_context(
+        AutomationConfig(),
+        runner=None,
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        project_dir=tmp_path,
+    )
+    monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
+
+    tracker_dir = tmp_path / ".autoskillit" / "temp" / "pipeline_tracker"
+    tracker_dir.mkdir(parents=True)
+    (tracker_dir / "AB.json").write_text('{"pipeline_id": "AB", "steps": {}}')
+
+    with (
+        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
+        patch("autoskillit.core.register_active_kitchen"),
+        patch("autoskillit.core.unregister_active_kitchen"),
+    ):
+        await _open_kitchen_handler()
+        _close_kitchen_handler()
+
+    assert not tracker_dir.exists()

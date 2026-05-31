@@ -167,6 +167,7 @@ to directory-level cascade — no error is raised. Refresh cadence:
 tests/
 ├── CLAUDE.md                            # Universal test guidelines (this file)
 ├── __init__.py
+├── _arch_constraint_discovery.py        # Discover arch constraint tests by docstring convention for catalog staleness guards
 ├── _helpers.py
 ├── _subprocess_ready.py
 ├── _test_filter.py                      # Test filter manifest: glob-to-test-directory mapping

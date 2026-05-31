@@ -1,4 +1,4 @@
-"""Guards against orchestrator anti-patterns re-emerging in bundled recipes."""
+"""Structural guard: orchestrator anti-patterns must not re-emerge in bundled recipes."""
 
 from __future__ import annotations
 

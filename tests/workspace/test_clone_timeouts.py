@@ -1,4 +1,4 @@
-"""Static analysis: git network commands in clone.py must have timeouts."""
+"""Structural guard: git network commands in clone.py must have timeouts."""
 
 from __future__ import annotations
 

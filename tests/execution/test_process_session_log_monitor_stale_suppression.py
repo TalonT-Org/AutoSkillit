@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import anyio
@@ -378,3 +379,20 @@ class TestExecutionMarkerSuppression:
             "run-skill execution marker suppression not working — "
             "marker may not be matched by the glob pattern."
         )
+
+
+class TestExecutionMarkerLifecycle:
+    @pytest.mark.anyio
+    async def test_execution_marker_lifecycle(self, tmp_path: Path) -> None:
+        from autoskillit.core._execution_marker import execution_marker
+
+        marker_dir = tmp_path / "markers"
+        marker_dir.mkdir()
+
+        async with execution_marker(marker_dir, "session-123", "run-skill") as path:
+            assert path is not None
+            matches = list(marker_dir.glob("run-skill-in-progress-session-123-*.marker"))
+            assert len(matches) == 1
+
+        remaining = list(marker_dir.glob("*-in-progress-*.marker"))
+        assert remaining == [], f"marker not cleaned up: {remaining}"

@@ -168,6 +168,9 @@ def _check_dropped_merge_group_ci_reenqueue_guard(
             continue
         if step.on_result is None or not step.on_result.conditions:
             continue
+        max_drops = int(step.with_args.get("max_merge_group_drops", 0)) if step.with_args else 0
+        if max_drops >= 1:
+            continue
         dmgci_target: str | None = None
         for cond in step.on_result.conditions:
             if cond.when and "dropped_merge_group_ci" in cond.when:

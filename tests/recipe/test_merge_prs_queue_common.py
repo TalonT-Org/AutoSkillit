@@ -880,12 +880,18 @@ class TestMergePrsPreEnqueueCiGate:
 
 def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_recipe) -> None:
     """unbounded-cycle must fire ERROR for the dropped_merge_group_ci → diagnose_ci path
-    which has no direct guard step, even though sibling branches (ejected, dropped_healthy)
-    do have guards (check_eject_limit, check_dropped_healthy_loop)."""
+    when max_merge_group_drops is absent (no watcher-internal guard)."""
+    import copy
+
     from autoskillit.core.types import Severity
     from autoskillit.recipe.validator import run_semantic_rules
 
-    findings = run_semantic_rules(any_recipe)
+    recipe = copy.deepcopy(any_recipe)
+    for step in recipe.steps.values():
+        if step.tool == "wait_for_merge_queue" and step.with_args:
+            step.with_args.pop("max_merge_group_drops", None)
+
+    findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     dmgci_findings = [
         f
@@ -894,6 +900,6 @@ def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_r
     ]
     assert dmgci_findings, (
         f"unbounded-cycle must fire ERROR for unguarded dropped_merge_group_ci branch in "
-        f"{any_recipe.name}; got no such finding among: "
+        f"{recipe.name}; got no such finding among: "
         f"{[(f.step_name, f.severity, f.message[:80]) for f in cycle_findings]}"
     )

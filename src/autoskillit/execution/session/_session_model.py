@@ -385,7 +385,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 raw_status = obj.get("api_error_status")
                 if isinstance(raw_status, int):
                     acc.api_error_status = raw_status
-            elif _is_parent_assistant_record(obj):
+            elif record_type == "assistant" and not obj.get("subagent_type"):
                 msg = obj.get("message")
                 if isinstance(msg, dict):
                     content = msg.get("content", "")

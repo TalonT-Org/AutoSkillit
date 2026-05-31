@@ -283,44 +283,17 @@ class TestRecipeCascadeNarrowing:
         assert "hooks" not in path_names, "recipe layer must not include the entire hooks/ dir"
 
 
-_WORKSPACE_RECIPE_FILE_ENTRIES = [
-    "test_contracts.py",
-    "test_rules_skill_content.py",
-    "test_api.py",
-    "test_api_cache_isolation.py",
-    "test_bem_wrapper_structure.py",
-    "test_bundled_recipes_dispatch_ready.py",
-    "test_bundled_recipes_general.py",
-    "test_callable_contracts.py",
-    "test_contracts_block_fingerprint.py",
-    "test_contract_verdict_output_required.py",
-    "test_deep_staleness.py",
-    "test_diagnose_ci_subtype_output.py",
-    "test_hidden_ingredients.py",
-    "test_io_discovery.py",
-    "test_issue_url_pipeline.py",
-    "test_planner_contracts.py",
-    "test_recipe_temp_substitution.py",
-    "test_repository.py",
-    "test_research_campaign.py",
-    "test_rules_contracts.py",
-    "test_rules_dataflow_handoff.py",
-    "test_rules_skill_routing.py",
-    "test_rules_skills.py",
-    "test_rules_tools.py",
-    "test_skill_contract_completeness.py",
-    "test_skill_emit_consistency.py",
-    "test_skip_guard_deferral.py",
-    "test_staleness_cache.py",
-    "test_sub_recipe_loading.py",
-    "test_sub_recipe_validation.py",
-]
+_WORKSPACE_RECIPE_FILE_ENTRIES = sorted(
+    e.removeprefix("recipe/")
+    for e in LAYER_CASCADE_CONSERVATIVE["workspace"]
+    if e.startswith("recipe/")
+)
 
-_PLANNER_RECIPE_FILE_ENTRIES = [
-    "test_rules_contracts.py",
-    "test_contracts.py",
-    "test_planner_recipe.py",
-]
+_PLANNER_RECIPE_FILE_ENTRIES = sorted(
+    e.removeprefix("recipe/")
+    for e in LAYER_CASCADE_CONSERVATIVE["planner"]
+    if e.startswith("recipe/")
+)
 
 
 class TestWorkspacePlannerCascadeNarrowing:

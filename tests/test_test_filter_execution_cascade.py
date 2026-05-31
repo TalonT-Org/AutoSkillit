@@ -272,10 +272,10 @@ class TestBuildTestScopeExecutionCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        assert "cli" not in dir_names
-        assert "fleet" not in dir_names
-        assert "test_session_launch.py" in dir_names
-        assert "test_result_parser.py" in dir_names
+        assert "cli" not in dir_names  # full cli/ dir must not be a scope item
+        assert "fleet" not in dir_names  # full fleet/ dir must not be a scope item
+        assert (tests_root / "cli" / "test_session_launch.py") in result
+        assert (tests_root / "fleet" / "test_result_parser.py") in result
         assert "execution" in dir_names
         assert "server" in dir_names
 

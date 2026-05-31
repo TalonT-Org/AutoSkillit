@@ -1835,7 +1835,8 @@
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
-        "timeout_seconds": "60"
+        "timeout_seconds": "60",
+        "max_merge_group_drops": "1"
       },
       "on_result": [
         {

@@ -65,6 +65,7 @@ from .state_recovery import (
     derive_orchestrator_resume_spec,
     find_dispatch_for_issue,
     has_blocking_dispatch,
+    has_completed_dispatch,
 )
 from .state_types import (
     _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
@@ -126,6 +127,7 @@ __all__ = [
     "append_dispatch_record",
     "build_protected_campaign_ids",
     "has_blocking_dispatch",
+    "has_completed_dispatch",
     "has_failed_dispatch",
     "record_gate_outcome",
     "mark_dispatch_interrupted",

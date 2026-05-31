@@ -35,6 +35,7 @@ from autoskillit.fleet.state_types import (
 
 if TYPE_CHECKING:
     from autoskillit.fleet.sidecar import IssueSidecarEntry
+    from autoskillit.fleet.state import DispatchRecord, DispatchStateHandle
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
@@ -211,6 +212,24 @@ async def execute_dispatch(
         lock.release()
 
 
+def _build_success_short_circuit(
+    record: DispatchRecord,
+    handle: DispatchStateHandle,
+) -> DispatchResult:
+    """Return a DispatchResult that mirrors a prior succeeded dispatch without re-launching."""
+    return DispatchResult(
+        outcome=DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id=record.dispatch_id,
+            dispatched_session_id=record.dispatched_session_id,
+            reason=record.reason,
+            token_usage=dict(record.token_usage),
+        ),
+        per_dispatch_state_path=handle.state_path,
+    )
+
+
 async def _run_dispatch(
     tool_ctx: ToolContext,
     recipe: str,
@@ -349,6 +368,13 @@ async def _run_dispatch(
             if prior_state:
                 for d in prior_state.dispatches:
                     if d.name == effective_name:
+                        if d.status == DispatchStatus.SUCCESS:
+                            logger.info(
+                                "resume_skipped_prior_success",
+                                dispatch_name=effective_name,
+                                prior_dispatch_id=prior_dispatch_id,
+                            )
+                            return _build_success_short_circuit(d, handle)
                         prior_session_chain = list(d.session_chain)
                         prior_dispatched_session_id = d.dispatched_session_id
                         break

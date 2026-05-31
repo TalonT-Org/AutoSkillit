@@ -8,6 +8,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 |------|---------|
 | `__init__.py` | Package marker (no imports) |
 | `ask_user_question_guard.py` | Blocks `AskUserQuestion` before kitchen is open |
+| `background_exec_guard.py` | Blocks `run_in_background=true` on Bash/Agent calls in headless skill sessions (ADR-0001) |
 | `branch_protection_guard.py` | Blocks merge/push targeting protected branches |
 | `fleet_dispatch_guard.py` | Blocks `dispatch_food_truck` from headless sessions (prevents L3->L3 recursion) |
 | `generated_file_write_guard.py` | Blocks Write/Edit to machine-generated files (`hooks.json`, `settings.json`) |
@@ -48,6 +49,7 @@ defense-in-depth measure against privilege escalation:
 | `skill_command_guard.py` | Unexpected runtime error (not JSON parse) | Unknown failure mode = deny rather than risk executing an unvalidated command |
 | `open_kitchen_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not gain kitchen access |
 | `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
+| `background_exec_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not bypass `run_in_background` prohibition |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier (valid input, unrecognized value) = fail-closed.
 

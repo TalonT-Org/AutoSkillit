@@ -63,6 +63,7 @@ class HookDef:
 # grep_pattern_lint_guard               | not-applicable
 # mcp_health_advisor                     | degraded
 # skill_orchestration_guard              | works-as-is
+# background_exec_guard                  | works-as-is
 # fleet_dispatch_guard (+ resume_own.)   | works-as-is
 # pretty_output_hook                     | works-as-is
 # token_summary_hook (+ quota_post)       | works-as-is
@@ -173,6 +174,11 @@ HOOK_REGISTRY: list[HookDef] = [
         session_scope="headless_only",
     ),
     HookDef(  # codex: works-as-is
+        matcher=r"Bash|Agent",
+        scripts=["guards/background_exec_guard.py"],
+        session_scope="headless_only",
+    ),
+    HookDef(  # codex: works-as-is
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
         scripts=[
             "guards/fleet_dispatch_guard.py",
@@ -269,6 +275,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "planner_result_naming_guard.py",
         "artifact_download_guard.py",
         "ingredient_lock_guard.py",  # NEW (#3357)
+        "background_exec_guard.py",
     }
 )
 

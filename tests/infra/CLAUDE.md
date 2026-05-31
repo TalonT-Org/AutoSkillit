@@ -10,6 +10,8 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `_pretty_output_helpers.py` | Shared helpers for pretty_output hook tests |
 | `_token_summary_helpers.py` | Shared helpers for token_summary_appender hook tests |
 | `conftest.py` | FormatterCoverageDef NamedTuple and _FORMATTER_COVERAGE_REGISTRY — maps all 11 _FORMATTERS dispatch keys to TypedDict + frozenset pairs for meta-test enforcement |
+| `test_adr_runtime_guard_coverage.py` | Meta-test: ADR-to-guard mapping completeness — every constrained ADR has a registered runtime guard |
+| `test_background_exec_guard.py` | Tests for background_exec_guard.py PreToolUse hook — blocks run_in_background=true in skill sessions |
 | `test_artifact_download_guard.py` | Tests for the artifact_download_guard PreToolUse hook |
 | `test_anyio_infra.py` | REQ-DEP-001 through REQ-DEP-004: anyio declared as direct dependency |
 | `test_ask_user_question_guard.py` | Tests for the ask_user_question_guard PreToolUse hook |

@@ -1606,6 +1606,31 @@ class TestModelAliasDriftIntegration:
         )
         assert tu["profile_name"] == "minimax"
 
+    def test_no_false_drift_with_profile_routed_non_anthropic(self, tmp_path):
+        """flush_session_log with profile-routed non-Anthropic model produces zero MODEL_DRIFT."""
+        _flush(
+            tmp_path,
+            session_id="profile-non-anthropic-001",
+            proc_snapshots=None,
+            model_identifier="opus",
+            profile_name="minimax",
+            token_usage={
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "model_breakdown": {
+                    "MiniMax-M2.7": {"input_tokens": 1000, "output_tokens": 500},
+                },
+            },
+        )
+        anomalies_path = tmp_path / "sessions" / "profile-non-anthropic-001" / "anomalies.jsonl"
+        lines = anomalies_path.read_text().strip().splitlines() if anomalies_path.exists() else []
+        drift = [
+            json.loads(line) for line in lines if json.loads(line).get("kind") == "model_drift"
+        ]
+        assert len(drift) == 0
+
     def test_rss_startup_artifact_suppressed_through_flush(self, tmp_path):
         """5MB startup RSS → 270MB working set should produce no RSS_GROWTH via flush."""
         snaps = [

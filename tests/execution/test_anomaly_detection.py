@@ -510,10 +510,31 @@ def test_normalize_model_id_strips_context_window_suffix():
     assert normalize_model_id("claude-sonnet-4-6-20250514[200k]") == "claude-sonnet-4-6"
 
 
-def test_detect_model_drift_includes_profile_name():
-    anomalies = detect_model_drift("sonnet", "claude-opus-4-6", profile_name="minimax")
+def test_detect_model_drift_suppressed_when_profile_routed():
+    """Profile-routed sessions with non-Anthropic observed model suppress MODEL_DRIFT."""
+    anomalies = detect_model_drift("opus", "MiniMax-M2.7", profile_name="minimax")
+    assert anomalies == []
+
+
+def test_detect_model_drift_fires_when_profile_routes_to_anthropic():
+    """Profile-routed session with Anthropic observed model (full ID) still detects drift."""
+    anomalies = detect_model_drift("sonnet", "claude-opus-4-6", profile_name="alt-anthropic")
     assert len(anomalies) == 1
-    assert anomalies[0]["detail"]["profile_name"] == "minimax"
+    assert anomalies[0]["detail"]["profile_name"] == "alt-anthropic"
+    assert anomalies[0]["detail"]["configured_model"] == "sonnet"
+    assert anomalies[0]["detail"]["observed_model"] == "claude-opus-4-6"
+
+
+def test_detect_model_drift_fires_when_profile_and_observed_is_anthropic_alias():
+    """Profile-routed session with Anthropic observed model (short alias) still detects drift."""
+    anomalies = detect_model_drift("sonnet", "opus", profile_name="my-profile")
+    assert len(anomalies) == 1
+
+
+def test_detect_model_drift_no_drift_when_profile_and_models_match():
+    """Profile-routed session where models happen to match — no anomaly."""
+    anomalies = detect_model_drift("sonnet", "claude-sonnet-4-6", profile_name="some-profile")
+    assert anomalies == []
 
 
 def test_rss_growth_startup_artifact_suppressed():

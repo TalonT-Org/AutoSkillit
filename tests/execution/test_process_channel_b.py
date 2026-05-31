@@ -380,10 +380,9 @@ class TestChannelBFullPipelineAdjudication:
         - timeout=180s: guards against the outer wall-clock expiring under xdist -n 4 load.
           _phase1_timeout=360 must exceed outer timeout so Phase 1 never fires STALE before
           the outer guard when subprocess startup is slow under WSL2 + xdist load.
-        - _session_id_timeout=0.5s: Script writes system record to stdout immediately;
-          the session ID is extracted from the heartbeat reader before Phase 1 starts.
-          0.5s is generous for session ID extraction while ensuring Phase 1 starts before
-          the JSONL marker is written (at t~0.25s from subprocess start).
+        - _session_id_timeout=0.5s: the script writes the JSONL marker at t~0.25s from
+          subprocess start. 0.5s is generous for session ID extraction (from stdout)
+          while ensuring Phase 1 starts before the marker arrives.
         """
         from autoskillit.execution.headless import _build_skill_result
 

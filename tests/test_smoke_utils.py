@@ -2085,6 +2085,16 @@ def test_diagnose_merge_gate_returns_ci_conclusion_failure(tmp_path: object) -> 
     assert Path(result["diagnosis_path"]).exists()
 
 
+def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
+    """diagnose_merge_gate must raise ValueError when output_dir is empty."""
+    import pytest
+
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    with pytest.raises(ValueError, match="output_dir is required"):
+        diagnose_merge_gate(test_stdout="FAILED test_foo", test_stderr="")
+
+
 # ---------------------------------------------------------------------------
 # T_FACADE_1–T_FACADE_2: smoke_utils package facade verification
 # ---------------------------------------------------------------------------

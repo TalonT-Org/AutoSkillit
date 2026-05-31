@@ -45,7 +45,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
         }
     ),
     "run_cmd": frozenset({"cmd", "cwd", "timeout", "step_name"}),
-    "run_python": frozenset({"callable", "args", "timeout"}),
+    "run_python": frozenset({"callable", "args", "timeout", "work_dir"}),
     # --- Workspace tools ---
     "test_check": frozenset({"worktree_path", "step_name"}),
     "merge_worktree": frozenset({"worktree_path", "base_branch", "step_name"}),

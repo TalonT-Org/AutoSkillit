@@ -6,13 +6,26 @@ import asyncio
 import json
 import types
 import typing
+from pathlib import Path
 
 from autoskillit.core import get_logger
 
 logger = get_logger(__name__)
 
 
-_RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout"})
+_RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout", "work_dir"})
+
+_PATH_LIKE_ARGS: frozenset[str] = frozenset({"output_dir"})
+
+
+def resolve_relative_path_args(args: dict[str, object], work_dir: str) -> dict[str, object]:
+    """Anchor relative path arguments to work_dir."""
+    resolved = dict(args)
+    for key in _PATH_LIKE_ARGS:
+        val = resolved.get(key)
+        if isinstance(val, str) and val and not Path(val).is_absolute():
+            resolved[key] = str(Path(work_dir) / val)
+    return resolved
 
 
 def _coerce_scalar(val: object, annotation: object) -> object:

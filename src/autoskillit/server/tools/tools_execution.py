@@ -189,6 +189,7 @@ async def run_python(
     callable: str,
     args: dict[str, object] | None = None,
     timeout: int = 30,
+    work_dir: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
     """Call a Python function directly by dotted module path.
@@ -205,6 +206,8 @@ async def run_python(
         callable: Dotted path to the function (e.g. "mypackage.module.function").
         args: Keyword arguments to pass to the function.
         timeout: Max seconds before aborting the call (default 30).
+        work_dir: When set, relative path-like args (output_dir, etc.) are
+            anchored to this directory before the callable is invoked.
 
     Never raises.
     """
@@ -224,9 +227,13 @@ async def run_python(
             )
             from autoskillit.server.tools._execution_helpers import (
                 _import_and_call,  # noqa: PLC0415
+                resolve_relative_path_args,  # noqa: PLC0415
             )
 
-            result = await _import_and_call(callable, args=args, timeout=float(timeout))
+            resolved_args = args
+            if work_dir:
+                resolved_args = resolve_relative_path_args(args or {}, work_dir)
+            result = await _import_and_call(callable, args=resolved_args, timeout=float(timeout))
             if not result.get("success"):
                 await _notify(
                     ctx,

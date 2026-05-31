@@ -387,6 +387,7 @@ steps:
       test_stdout: ${{ context.merge_test_stdout }}
       test_stderr: ${{ context.merge_test_stderr }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate'
+      work_dir: ${{ context.work_dir }}
     capture:
       merge_gate_diagnosis_path: ${{ result.diagnosis_path }}
       merge_gate_ci_conclusion: ${{ result.ci_conclusion }}
@@ -906,6 +907,7 @@ steps:
       base_branch: ${{ inputs.base_branch }}
       local_review_rounds: ${{ inputs.local_review_rounds }}
       current_iteration: ${{ context.review_loop_count }}
+      work_dir: ${{ context.work_dir }}
     capture:
       annotated_diff_path: ${{ result.annotated_diff_path }}
       hunk_ranges_path: ${{ result.hunk_ranges_path }}

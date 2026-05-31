@@ -44,10 +44,9 @@ def diagnose_merge_gate(
     subtype = _classify_subtype(test_stdout, test_stderr)
     failed_tests = _extract_failed_tests(test_stdout, test_stderr)
 
-    if output_dir:
-        out_path = Path(output_dir) / "diagnosis.md"
-    else:
-        out_path = Path(".autoskillit") / "temp" / "diagnose-merge-gate" / "diagnosis.md"
+    if not output_dir:
+        raise ValueError("output_dir is required — pass via run_python work_dir anchoring")
+    out_path = Path(output_dir) / "diagnosis.md"
 
     failed_section = "\n".join(f"- {t}" for t in failed_tests) if failed_tests else "- none"
     log_excerpt = test_stdout.strip() or test_stderr.strip() or "(no output captured)"

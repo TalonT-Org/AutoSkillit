@@ -18,7 +18,7 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 def _get_provided_args(with_args: dict) -> set[str]:
     _nested = with_args.get("args")
     nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()
-    top_level_args = set(with_args.keys()) - {"callable", "timeout", "args"}
+    top_level_args = set(with_args.keys()) - {"callable", "timeout", "args", "work_dir"}
     return nested_args | top_level_args
 
 
@@ -28,7 +28,7 @@ def _get_args_values(with_args: dict) -> dict[str, object]:
     if isinstance(_nested, dict):
         result.update(_nested)
     for key, val in with_args.items():
-        if key not in {"callable", "timeout", "args"}:
+        if key not in {"callable", "timeout", "args", "work_dir"}:
             result[key] = val
     return result
 

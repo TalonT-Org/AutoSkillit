@@ -1027,3 +1027,26 @@ def test_recipe_all_stop_steps_have_sentinel_instructions(recipe_name: str) -> N
                 f"{recipe_name}.yaml step '{step_name}' must instruct "
                 f"L3 sentinel emission in its message"
             )
+
+
+@pytest.mark.parametrize(
+    "recipe_yaml",
+    sorted(builtin_recipes_dir().glob("*.yaml")),
+    ids=lambda p: p.stem,
+)
+def test_run_python_steps_with_relative_output_dir_have_work_dir(recipe_yaml: Path) -> None:
+    """Every run_python step that passes a relative output_dir must also pass work_dir."""
+    recipe = load_recipe(recipe_yaml)
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        output_dir = step.with_args.get("output_dir", "")
+        if not output_dir or not isinstance(output_dir, str):
+            continue
+        # {{AUTOSKILLIT_TEMP}} expands to a relative string; treat it as relative
+        is_relative = not output_dir.startswith("/") or "{{AUTOSKILLIT_TEMP}}" in output_dir
+        if is_relative:
+            assert "work_dir" in step.with_args, (
+                f"{recipe_yaml.name} step '{step_name}': run_python step has relative "
+                f"output_dir={output_dir!r} but no work_dir"
+            )

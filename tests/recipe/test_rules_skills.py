@@ -12,6 +12,19 @@ from autoskillit.recipe.schema import Recipe, RecipeStep
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
+@pytest.fixture(autouse=True)
+def _clear_skill_helper_caches():
+    """Clear lru_cache on skill helpers between tests."""
+    from autoskillit.recipe._skill_helpers import (
+        _get_bundled_skill_names,
+        _get_skill_category_map,
+    )
+
+    yield
+    _get_bundled_skill_names.cache_clear()
+    _get_skill_category_map.cache_clear()
+
+
 def _make_recipe(skill_command: str) -> Recipe:
     """Minimal recipe factory for unknown-skill-command rule tests."""
     return Recipe(
@@ -81,16 +94,28 @@ def test_non_skill_step_not_checked() -> None:
     assert not unknown, "run_cmd steps must not trigger unknown-skill-command"
 
 
-def test_get_bundled_skill_names_is_not_lru_cached() -> None:
-    """_get_bundled_skill_names must not use @lru_cache (Composition Root fix)."""
-    import autoskillit.recipe.rules.rules_skills as mod
+def test_get_bundled_skill_names_is_lru_cached() -> None:
+    """_get_bundled_skill_names uses @lru_cache for call-site memoization."""
+    from autoskillit.recipe._skill_helpers import (
+        _get_bundled_skill_names,
+        _get_skill_category_map,
+    )
 
-    assert not hasattr(mod._get_bundled_skill_names, "cache_clear"), (
-        "_get_bundled_skill_names must not be lru_cache-decorated"
+    assert hasattr(_get_bundled_skill_names, "cache_clear"), (
+        "_get_bundled_skill_names must be lru_cache-decorated"
     )
-    assert not hasattr(mod._get_skill_category_map, "cache_clear"), (
-        "_get_skill_category_map must not be lru_cache-decorated"
+    assert hasattr(_get_skill_category_map, "cache_clear"), (
+        "_get_skill_category_map must be lru_cache-decorated"
     )
+
+
+def test_lru_cache_returns_same_object() -> None:
+    """Repeated calls without lister return the exact same cached object."""
+    from autoskillit.recipe._skill_helpers import _get_bundled_skill_names
+
+    result1 = _get_bundled_skill_names()
+    result2 = _get_bundled_skill_names()
+    assert result1 is result2
 
 
 def test_bundled_skill_names_not_computed_at_import_v2() -> None:

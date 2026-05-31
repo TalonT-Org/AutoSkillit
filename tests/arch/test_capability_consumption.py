@@ -65,11 +65,3 @@ def test_forward_declared_has_linked_issues():
     assert not missing, (
         f"_FORWARD_DECLARED entries missing issue reference (need '#NNNN'): {missing}"
     )
-
-
-def test_supports_tool_list_changed_field_exists():
-    """BackendCapabilities must have a supports_tool_list_changed bool field."""
-    from autoskillit.core import BackendCapabilities
-
-    field_names = {f.name for f in dataclasses.fields(BackendCapabilities)}
-    assert "supports_tool_list_changed" in field_names

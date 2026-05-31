@@ -146,9 +146,18 @@ def _normalize_capture_spec(
         if isinstance(val, CaptureEntrySpec):
             result[key] = val
         elif isinstance(val, dict):
-            from_ = val.get("from", "")
+            from_ = val.get("from")
+            if not isinstance(from_, str) or not from_:
+                logger.warning("capture_spec_malformed_longform", capture_name=key, raw=val)
+                continue
             type_ = val.get("type", "string")
             if type_ not in CAPTURE_VALID_VALUE_TYPES:
+                logger.warning(
+                    "capture_spec_unknown_type",
+                    capture_name=key,
+                    type_value=type_,
+                    fallback="string",
+                )
                 type_ = "string"
             result[key] = CaptureEntrySpec(from_=from_, value_type=type_)  # type: ignore[arg-type]
         else:

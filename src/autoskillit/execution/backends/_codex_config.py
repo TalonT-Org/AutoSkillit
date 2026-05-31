@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import re as _re
 from pathlib import Path
 from typing import Any
+
+import regex as _re
 
 from autoskillit.core import (
     HEADLESS_AUTO_GATE_ENV_VAR,

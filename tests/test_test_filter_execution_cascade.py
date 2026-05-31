@@ -44,7 +44,6 @@ def test_all_entries_present() -> None:
         "recording",
         "github",
         "remote_resolver",
-        "session",
         "quota",
         "session_log",
         "linux_tracing",
@@ -255,6 +254,45 @@ class TestBuildTestScopeExecutionCascade:
         assert "test_pretty_output_hook_infra.py" in path_names, (
             "execution layer fallthrough must include infra/test_pretty_output_hook_infra.py"
         )
+
+    def test_session_subpkg_uses_narrowed_cli_fleet(self, tmp_path: Path) -> None:
+        """execution/session/ change → specific cli/fleet test files, NOT full dirs."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        for f in [
+            "cli/test_session_launch.py",
+            "cli/test_order_resume.py",
+            "fleet/test_result_parser.py",
+            "fleet/test_dispatch_outcome_classifier.py",
+        ]:
+            (tests_root / f).touch()
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/session/_session_state.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert "cli" not in dir_names  # full cli/ dir must not be a scope item
+        assert "fleet" not in dir_names  # full fleet/ dir must not be a scope item
+        assert (tests_root / "cli" / "test_session_launch.py") in result
+        assert (tests_root / "fleet" / "test_result_parser.py") in result
+        assert "execution" in dir_names
+        assert "server" in dir_names
+
+    def test_session_subpkg_excludes_unrelated_cli_fleet(self, tmp_path: Path) -> None:
+        """execution/session/ change must NOT include unrelated cli/fleet tests."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        (tests_root / "cli" / "test_doctor.py").touch()
+        (tests_root / "fleet" / "test_api.py").touch()
+        result = build_test_scope(
+            changed_files={"src/autoskillit/execution/session/_session_state.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        result_names = {p.name for p in result}
+        assert "test_doctor.py" not in result_names
+        assert "test_api.py" not in result_names
 
 
 class TestClosureExecutionNarrowCascade:
@@ -476,3 +514,8 @@ def test_headless_and_process_in_subpkg_cascade() -> None:
     """
     assert "headless" in SUBPKG_CASCADE_EXECUTION, "headless must have explicit cascade entry"
     assert "process" in SUBPKG_CASCADE_EXECUTION, "process must have explicit cascade entry"
+
+
+def test_session_in_subpkg_cascade() -> None:
+    """session must be in SUBPKG_CASCADE_EXECUTION (subpackage, not bare module)."""
+    assert "session" in SUBPKG_CASCADE_EXECUTION

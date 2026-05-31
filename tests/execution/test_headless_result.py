@@ -1514,7 +1514,9 @@ class TestFalseSuccessInfraWritesBypass:
     def test_stale_recovery_with_zero_impl_writes_fails(self) -> None:
         """Stale recovery + fs_writes_detected but zero impl writes → zero_writes."""
         stdout = (
-            _tool_use_ndjson("Read", file_path="/a/b.py") + "\n" + _success_result_json("done")
+            _tool_use_ndjson("Read", file_path="/a/b.py")
+            + "\n"
+            + _success_result_json("Implementation complete.\n%%ORDER_UP%%")
         )
         result = SubprocessResult(
             returncode=-1,
@@ -1527,7 +1529,7 @@ class TestFalseSuccessInfraWritesBypass:
         )
         sr = _build_skill_result(
             result,
-            completion_marker="done",
+            completion_marker="%%ORDER_UP%%",
             write_behavior=WriteBehaviorSpec(mode="always"),
             fs_writes_detected=True,
             backend=ClaudeCodeBackend(),
@@ -1538,7 +1540,9 @@ class TestFalseSuccessInfraWritesBypass:
     def test_idle_stall_recovery_with_zero_impl_writes_fails(self) -> None:
         """Idle-stall recovery + fs_writes_detected but zero impl writes → zero_writes."""
         stdout = (
-            _tool_use_ndjson("Read", file_path="/a/b.py") + "\n" + _success_result_json("done")
+            _tool_use_ndjson("Read", file_path="/a/b.py")
+            + "\n"
+            + _success_result_json("Implementation complete.\n%%ORDER_UP%%")
         )
         result = SubprocessResult(
             returncode=-1,
@@ -1551,7 +1555,7 @@ class TestFalseSuccessInfraWritesBypass:
         )
         sr = _build_skill_result(
             result,
-            completion_marker="done",
+            completion_marker="%%ORDER_UP%%",
             write_behavior=WriteBehaviorSpec(mode="always"),
             fs_writes_detected=True,
             backend=ClaudeCodeBackend(),

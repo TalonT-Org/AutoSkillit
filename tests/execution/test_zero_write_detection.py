@@ -639,9 +639,10 @@ class TestFilesystemWriteDetection:
         )
         assert sr.evidence.write_call_count == 0
 
-    def test_fs_writes_detected_suppresses_zero_writes_gate(self) -> None:
-        """When fs_writes_detected=True, zero_writes gate must NOT fire
-        even when write_call_count == 0."""
+    def test_fs_writes_detected_without_impl_evidence_demoted(self) -> None:
+        """When fs_writes_detected=True but write_call_count==0 and
+        file_changes_count==0, the zero_writes gate fires —
+        infrastructure-only writes do not satisfy implementation evidence."""
         stdout = _ndjson_with_tool_uses(["Bash"])
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
@@ -650,8 +651,8 @@ class TestFilesystemWriteDetection:
             fs_writes_detected=True,
             backend=ClaudeCodeBackend(),
         )
-        assert sr.success is True
-        assert sr.subtype != "zero_writes"
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
         assert sr.evidence.fs_writes_detected is True
 
     def test_fs_writes_detected_enables_contract_recovery(self) -> None:
@@ -888,9 +889,10 @@ class TestGitWritesStateMatrix:
 class TestGitWritesDetection:
     """Git-level write detection suppresses zero_writes false positives."""
 
-    def test_git_writes_detected_suppresses_zero_writes_gate(self) -> None:
-        """When git_writes_detected=True, zero_writes gate must NOT fire
-        even when write_call_count == 0."""
+    def test_git_writes_detected_without_impl_evidence_demoted(self) -> None:
+        """When git_writes_detected=True but write_call_count==0 and
+        file_changes_count==0, the zero_writes gate fires —
+        infrastructure-only writes do not satisfy implementation evidence."""
         stdout = _ndjson_with_tool_uses(["Read", "Grep"])
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
@@ -899,8 +901,8 @@ class TestGitWritesDetection:
             git_writes_detected=True,
             backend=ClaudeCodeBackend(),
         )
-        assert sr.success is True
-        assert sr.subtype != "zero_writes"
+        assert sr.success is False
+        assert sr.subtype == "zero_writes"
         assert sr.evidence.git_writes_detected is True
 
     def test_git_writes_detected_false_still_allows_gate(self) -> None:
@@ -917,8 +919,9 @@ class TestGitWritesDetection:
         assert sr.success is False
         assert sr.subtype == "zero_writes"
 
-    def test_git_writes_detected_suppresses_conditional_zero_writes(self) -> None:
-        """Conditional skill, zero writes, git_writes_detected=True → success preserved."""
+    def test_git_writes_detected_conditional_no_pattern_match_not_demoted(self) -> None:
+        """Conditional skill, zero writes, git_writes_detected=True, pattern NOT in
+        output → writes not expected → success preserved regardless of git_writes."""
         stdout = _ndjson_with_tool_uses(["Read", "Grep"])
         sr = _build_skill_result(
             _make_result(returncode=0, stdout=stdout),
@@ -931,8 +934,7 @@ class TestGitWritesDetection:
             backend=ClaudeCodeBackend(),
         )
         assert sr.success is True, (
-            "git_writes_detected=True must suppress zero_writes gate even when "
-            "write_behavior is conditional and pattern matches"
+            "Conditional mode with no pattern match → writes not expected → success preserved"
         )
         assert sr.subtype != "zero_writes"
 

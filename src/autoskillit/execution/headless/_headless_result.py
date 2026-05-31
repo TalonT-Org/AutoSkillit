@@ -219,16 +219,23 @@ def _build_skill_result(
                 if (
                     _stale_success_sr.success
                     and write_behavior is not None
-                    and write_behavior.mode in ("always", "conditional")
                     and not stale_evidence.has_implementation_evidence
                 ):
-                    _stale_success_sr = dataclasses.replace(
-                        _stale_success_sr,
-                        success=False,
-                        subtype="zero_writes",
-                        needs_retry=True,
-                        retry_reason=RetryReason.ZERO_WRITES,
+                    _stale_write_expected = write_behavior.mode == "always" or (
+                        write_behavior.mode == "conditional"
+                        and write_behavior.expected_when
+                        and _check_expected_patterns(
+                            _stale_success_sr.result, write_behavior.expected_when
+                        )
                     )
+                    if _stale_write_expected:
+                        _stale_success_sr = dataclasses.replace(
+                            _stale_success_sr,
+                            success=False,
+                            subtype="zero_writes",
+                            needs_retry=True,
+                            retry_reason=RetryReason.ZERO_WRITES,
+                        )
                 return _stale_success_sr
         # No valid result in stdout — fall through to original stale response
         _stale_is_rate_limited = has_rate_limit_signal(stale_session, result)
@@ -314,16 +321,23 @@ def _build_skill_result(
                 if (
                     _idle_success_sr.success
                     and write_behavior is not None
-                    and write_behavior.mode in ("always", "conditional")
                     and not idle_evidence.has_implementation_evidence
                 ):
-                    _idle_success_sr = dataclasses.replace(
-                        _idle_success_sr,
-                        success=False,
-                        subtype="zero_writes",
-                        needs_retry=True,
-                        retry_reason=RetryReason.ZERO_WRITES,
+                    _idle_write_expected = write_behavior.mode == "always" or (
+                        write_behavior.mode == "conditional"
+                        and write_behavior.expected_when
+                        and _check_expected_patterns(
+                            _idle_success_sr.result, write_behavior.expected_when
+                        )
                     )
+                    if _idle_write_expected:
+                        _idle_success_sr = dataclasses.replace(
+                            _idle_success_sr,
+                            success=False,
+                            subtype="zero_writes",
+                            needs_retry=True,
+                            retry_reason=RetryReason.ZERO_WRITES,
+                        )
                 return _idle_success_sr
         _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
         _idle_is_api_error = idle_session.api_retry_exhausted or (
@@ -589,7 +603,7 @@ def _build_skill_result(
     if (
         success
         and write_behavior is not None
-        and write_behavior.mode in ("always", "conditional")
+        and write_behavior.mode == "always"
         and not evidence.has_implementation_evidence
     ):
         normalized_subtype = "zero_writes"

@@ -388,6 +388,11 @@ SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
     ),
 }
 
+MODULE_CASCADE_CONFIG: dict[str, frozenset[str]] = {
+    "_config_loader": frozenset({"config", "cli"}),
+    "ingredient_defaults": frozenset({"config", "recipe"}),
+}
+
 MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     # --- Narrowest: recipe/ only (no out-of-recipe importers) ---
     "rules_actions": frozenset({"recipe"}),
@@ -1390,6 +1395,14 @@ def build_test_scope(
                     test_dirs.update(MODULE_CASCADE_RECIPE[stem])
                 else:
                     test_dirs.update(cascade_map["recipe"])  # fail-open
+            elif pkg == "config" and mode == FilterMode.CONSERVATIVE:
+                stem = Path(f).stem
+                if stem in MODULE_CASCADE_CONFIG:
+                    test_dirs.update(MODULE_CASCADE_CONFIG[stem])
+                else:
+                    test_dirs.update(
+                        cascade_map["config"]
+                    )  # fail-open: __init__, settings, _config_dataclasses, etc.
             elif pkg and pkg in cascade_map:
                 test_dirs.update(cascade_map[pkg])
             else:
@@ -1507,6 +1520,33 @@ def build_test_scope(
                             test_dirs.update(MODULE_CASCADE_RECIPE[stem])
                         else:
                             test_dirs.update(cascade_map["recipe"])  # fail-open
+                    elif pkg == "config" and mode == FilterMode.CONSERVATIVE:
+                        stem = Path(f).stem
+                        if stem == "__init__":
+                            config_cause_stems = {
+                                Path(c).stem
+                                for c in changed_src_py
+                                if _file_to_package(c) == "config" and Path(c).stem != "__init__"
+                            }
+                            if config_cause_stems and all(
+                                s in MODULE_CASCADE_CONFIG for s in config_cause_stems
+                            ):
+                                for s in config_cause_stems:
+                                    test_dirs.update(MODULE_CASCADE_CONFIG[s])
+                            else:
+                                if not config_cause_stems:
+                                    logging.getLogger(__name__).debug(  # noqa: TID251
+                                        "config/__init__ backtrace: no non-init config cause stems"
+                                        " — failing open to full config cascade (expected behavior"
+                                        " when only config/__init__.py changed)"
+                                    )
+                                test_dirs.update(cascade_map["config"])  # fail-open
+                        elif stem in MODULE_CASCADE_CONFIG:
+                            test_dirs.update(MODULE_CASCADE_CONFIG[stem])
+                        else:
+                            test_dirs.update(
+                                cascade_map["config"]
+                            )  # fail-open: non-__init__ unmapped config stems
                     elif pkg and pkg in cascade_map:
                         test_dirs.update(cascade_map[pkg])
         except Exception:

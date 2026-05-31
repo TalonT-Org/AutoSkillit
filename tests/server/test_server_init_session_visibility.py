@@ -456,8 +456,8 @@ class TestSessionTypeVisibility:
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        assert GATED_TOOLS & tool_names, (
-            "At least one kitchen tool should be visible for codex non-notification backend"
+        assert GATED_TOOLS.issubset(tool_names), (
+            "All kitchen tools should be visible for codex non-notification backend"
         )
 
     @pytest.mark.anyio
@@ -1486,6 +1486,9 @@ class TestSkillAutoGateBoot:
                     await _skill_auto_gate_boot(ctx)
 
         assert ctx.gate.enabled is True, "Gate should be open for non-notification backend"
+        assert ctx.kitchen_id is not None, "kitchen_id should be set by pre-reveal path"
+        assert ctx.active_recipe_packs == frozenset()
+        assert ctx.active_recipe_steps == {}
 
     @pytest.mark.anyio
     async def test_codex_non_headless_pre_reveal_suppresses_disabled_subset(

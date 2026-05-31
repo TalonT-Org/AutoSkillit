@@ -9,6 +9,7 @@ import shutil
 import time
 from pathlib import Path
 
+import anyio
 import regex as re
 import structlog
 from fastmcp import Context
@@ -750,7 +751,8 @@ async def run_skill(
             order_id=order_id,
         ).to_json()
     except asyncio.CancelledError:
-        logger.warning("run_skill cancelled", exc_info=True)
+        with anyio.CancelScope(shield=True):
+            logger.warning("run_skill cancelled", exc_info=True)
         _cmd = locals().get("resolved_command", skill_command)
         _oid = locals().get("effective_order_id", order_id)
         return SkillResult.cancelled(

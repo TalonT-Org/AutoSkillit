@@ -1374,12 +1374,11 @@ def test_flush_session_log_genuine_drift_with_configured_model(tmp_path):
     )
     anomalies_path = tmp_path / "sessions" / "genuine-drift-001" / "anomalies.jsonl"
     assert anomalies_path.exists(), "anomalies.jsonl must be written when drift is detected"
-    drift_entries = [
-        json.loads(line)
-        for line in anomalies_path.read_text().strip().splitlines()
-        if json.loads(line).get("kind") == "model_drift"
-    ]
-    assert len(drift_entries) == 1
+    all_entries = [json.loads(line) for line in anomalies_path.read_text().strip().splitlines()]
+    drift_entries = [e for e in all_entries if e.get("kind") == "model_drift"]
+    assert len(drift_entries) == 1, (
+        f"expected 1 model_drift entry, got {len(drift_entries)}: {drift_entries}"
+    )
     assert drift_entries[0]["detail"]["configured_model"] == "claude-opus-4-6"
     assert drift_entries[0]["detail"]["observed_model"] == "claude-sonnet-4-6"
 

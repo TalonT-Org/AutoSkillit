@@ -25,14 +25,26 @@ ARCH_CONSTRAINT_PREFIXES: tuple[str, ...] = (
 
 def discover_constraint_tests() -> dict[str, Path]:
     """Return {filename: path} for all test files whose module docstring
-    starts with a recognized constraint prefix."""
+    starts with a recognized constraint prefix.
+
+    Uses basename as key for catalog lookup compatibility.  If two files
+    share a basename, the one with the longer (deeper) relative path wins
+    so the collision is deterministic and logged via ValueError.
+    """
     results: dict[str, Path] = {}
     for test_file in sorted(TESTS_ROOT.rglob("test_*.py")):
         try:
             tree = ast.parse(test_file.read_text())
-        except SyntaxError:
+        except (SyntaxError, UnicodeDecodeError, OSError):
             continue
         docstring = ast.get_docstring(tree)
         if docstring and docstring.startswith(ARCH_CONSTRAINT_PREFIXES):
-            results[test_file.name] = test_file
+            name = test_file.name
+            if name in results and results[name] != test_file:
+                raise ValueError(
+                    f"Basename collision: {name} found at both "
+                    f"{results[name].relative_to(TESTS_ROOT)} and "
+                    f"{test_file.relative_to(TESTS_ROOT)}"
+                )
+            results[name] = test_file
     return results

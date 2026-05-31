@@ -271,6 +271,31 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
             logger.warning("fleet_auto_gate_boot_label_recovery_failed", exc_info=True)
 
 
+async def _pre_reveal_kitchen(ctx: Any) -> None:
+    """Pre-reveal kitchen for non-notification backends (no tools/list_changed support)."""
+    from autoskillit.core import (  # noqa: PLC0415
+        _collect_disabled_feature_tags,
+        register_active_kitchen,
+    )
+    from autoskillit.server import mcp as _mcp  # noqa: PLC0415
+    from autoskillit.server._misc import _prime_quota_cache  # noqa: PLC0415
+    from autoskillit.server.tools.tools_kitchen import _write_hook_config  # noqa: PLC0415
+
+    ctx.kitchen_id = resolve_kitchen_id()
+    ctx.active_recipe_packs = frozenset()
+    ctx.active_recipe_features = frozenset()
+    ctx.active_recipe_steps = {}
+    if ctx.gate is not None:
+        ctx.gate.enable()
+    for subset in ctx.config.subsets.disabled:
+        _mcp.disable(tags={subset})
+    for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):
+        _mcp.disable(tags={tag})
+    register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
+    _write_hook_config()
+    await _prime_quota_cache()
+
+
 async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     """Auto-open gate for headless food truck (ORCHESTRATOR) sessions.
 
@@ -293,24 +318,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     if os.environ.get(HEADLESS_ENV_VAR) != "1":
         if ctx.backend is not None and not ctx.backend.capabilities.supports_tool_list_changed:
-            from autoskillit.core import _collect_disabled_feature_tags  # noqa: PLC0415
-            from autoskillit.server import mcp as _mcp  # noqa: PLC0415
-
-            ctx.kitchen_id = resolve_kitchen_id()
-            ctx.active_recipe_packs = frozenset()
-            ctx.active_recipe_features = frozenset()
-            ctx.active_recipe_steps = {}
-            if ctx.gate is not None:
-                ctx.gate.enable()
-            for subset in ctx.config.subsets.disabled:
-                _mcp.disable(tags={subset})
-            for tag in _collect_disabled_feature_tags(
-                ctx.config.features, experimental_enabled=False
-            ):
-                _mcp.disable(tags={tag})
-            register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
-            _write_hook_config()
-            await _prime_quota_cache()
+            await _pre_reveal_kitchen(ctx)
         return
     _raw_tags = os.environ.get(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "")
     if not _raw_tags:
@@ -433,29 +441,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
 
     if os.environ.get(HEADLESS_ENV_VAR) != "1":
         if ctx.backend is not None and not ctx.backend.capabilities.supports_tool_list_changed:
-            from autoskillit.core import (  # noqa: PLC0415
-                _collect_disabled_feature_tags,
-                register_active_kitchen,
-            )
-            from autoskillit.server import mcp as _mcp  # noqa: PLC0415
-            from autoskillit.server._misc import _prime_quota_cache  # noqa: PLC0415
-            from autoskillit.server.tools.tools_kitchen import _write_hook_config  # noqa: PLC0415
-
-            ctx.kitchen_id = resolve_kitchen_id()
-            ctx.active_recipe_packs = frozenset()
-            ctx.active_recipe_features = frozenset()
-            ctx.active_recipe_steps = {}
-            if ctx.gate is not None:
-                ctx.gate.enable()
-            for subset in ctx.config.subsets.disabled:
-                _mcp.disable(tags={subset})
-            for tag in _collect_disabled_feature_tags(
-                ctx.config.features, experimental_enabled=False
-            ):
-                _mcp.disable(tags={tag})
-            register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
-            _write_hook_config()
-            await _prime_quota_cache()
+            await _pre_reveal_kitchen(ctx)
         return
     if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) != "1":
         return

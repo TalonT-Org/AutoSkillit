@@ -433,7 +433,11 @@ def detect_model_drift(
     anomalies: list[dict[str, object]] = []
     if not configured_model or not observed_model:
         return anomalies
-    if profile_name and _is_non_anthropic(normalize_model_id(observed_model)):
+    if (
+        profile_name
+        and _is_non_anthropic(normalize_model_id(observed_model))
+        and _is_non_anthropic(normalize_model_id(configured_model))
+    ):
         return anomalies
     norm_cfg = normalize_model_id(configured_model)
     norm_obs = normalize_model_id(observed_model)

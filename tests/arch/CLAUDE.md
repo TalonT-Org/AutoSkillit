@@ -64,6 +64,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_regex_import.py` | Structural guard: src/ must use `import regex as re`, not bare `import re` (hooks/ exempt) |
 | `test_registry.py` | Symbolic rule registry tests (RuleDescriptor, RULES, Violation) |
 | `test_registry_key_casing.py` | Architectural invariant tests for registry key casing |
+| `test_run_python_path_resolution.py` | Architectural invariants for run_python path resolution: no smoke_utils fallback paths, _PATH_LIKE_ARGS registry completeness |
 | `test_size_markers.py` | Enforce pytestmark size markers on in-scope test files |
 | `test_startup_budget.py` | Startup budget enforcement (REQ-STARTUP-001): serve() critical path must not contain subprocess calls |
 | `test_subpackage_isolation.py` | IL-1/IL-2/IL-3 sub-package isolation, __all__ completeness, size/file-count constraints |

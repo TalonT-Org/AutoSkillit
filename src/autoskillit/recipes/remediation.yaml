@@ -424,6 +424,7 @@ steps:
       test_stdout: ${{ context.merge_test_stdout }}
       test_stderr: ${{ context.merge_test_stderr }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate'
+      work_dir: ${{ context.work_dir }}
     capture:
       merge_gate_diagnosis_path: ${{ result.diagnosis_path }}
       merge_gate_ci_conclusion: ${{ result.ci_conclusion }}
@@ -1008,12 +1009,14 @@ steps:
       base_branch: ${{ inputs.base_branch }}
       local_review_rounds: ${{ inputs.local_review_rounds }}
       current_iteration: ${{ context.review_loop_count }}
+      work_dir: ${{ context.work_dir }}
     capture:
       annotated_diff_path: ${{ result.annotated_diff_path }}
       hunk_ranges_path: ${{ result.hunk_ranges_path }}
       valid_lines_path: ${{ result.valid_lines_path }}
       diff_metrics_path: ${{ result.diff_metrics_path }}
       review_mode: ${{ result.review_mode }}
+      pr_head_sha: ${{ result.head_sha }}
     on_success: review_pr
     on_failure: review_pr
     optional: true
@@ -1032,7 +1035,7 @@ steps:
         }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{
         context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }}
         diff_metrics_path=${{ context.diff_metrics_path
-        }} mode=${{ context.review_mode }}
+        }} mode=${{ context.review_mode }} pr_head_sha=${{ context.pr_head_sha }}
       cwd: ${{ context.work_dir }}
       step_name: review_pr
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr'
@@ -1105,8 +1108,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.review_path_rebase
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_review
@@ -1634,8 +1638,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.queue_ejected_fix
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_queue_fix
@@ -1837,8 +1842,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.direct_merge_conflict_fix
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_direct_fix
@@ -1941,8 +1947,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.immediate_merge_conflict_fix
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_immediate_fix
@@ -2067,8 +2074,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.review_path_rebase
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: check_ci_rebase_loop

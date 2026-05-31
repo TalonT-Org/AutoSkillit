@@ -156,7 +156,8 @@
         "callable": "autoskillit.smoke_utils.fetch_merge_queue_data",
         "base_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/merge-prs"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/merge-prs",
+        "work_dir": "${{ context.work_dir }}"
       },
       "capture": {
         "merge_queue_data_path": "${{ result.merge_queue_data_path }}"
@@ -1307,7 +1308,8 @@
         "batch_branch": "${{ context.batch_branch }}",
         "base_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/open-integration-pr"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/open-integration-pr",
+        "work_dir": "${{ context.work_dir }}"
       },
       "capture": {
         "domain_partitions_path": "${{ result.domain_partitions_path }}"
@@ -1436,13 +1438,15 @@
         "pr_number": "${{ context.review_pr_number }}",
         "cwd": "${{ context.work_dir }}",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr",
-        "local_review_rounds": "0"
+        "local_review_rounds": "0",
+        "work_dir": "${{ context.work_dir }}"
       },
       "capture": {
         "annotated_diff_path": "${{ result.annotated_diff_path }}",
         "hunk_ranges_path": "${{ result.hunk_ranges_path }}",
         "valid_lines_path": "${{ result.valid_lines_path }}",
-        "diff_metrics_path": "${{ result.diff_metrics_path }}"
+        "diff_metrics_path": "${{ result.diff_metrics_path }}",
+        "pr_head_sha": "${{ result.head_sha }}"
       },
       "on_success": "review_pr_integration",
       "on_failure": "review_pr_integration",
@@ -1452,7 +1456,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:review-pr ${{ context.batch_branch }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }} diff_metrics_path=${{ context.diff_metrics_path }}",
+        "skill_command": "/autoskillit:review-pr ${{ context.batch_branch }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }} diff_metrics_path=${{ context.diff_metrics_path }} pr_head_sha=${{ context.pr_head_sha }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "review_pr_integration",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr"
@@ -1525,8 +1529,10 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.review_path_rebase",
-        "work_dir": "${{ context.work_dir }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_result": [
         {

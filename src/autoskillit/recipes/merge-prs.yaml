@@ -211,6 +211,7 @@ steps:
       base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/merge-prs'
+      work_dir: ${{ context.work_dir }}
     capture:
       merge_queue_data_path: ${{ result.merge_queue_data_path }}
     on_success: analyze_prs
@@ -1289,6 +1290,7 @@ steps:
       base_branch: ${{ inputs.base_branch }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/open-integration-pr'
+      work_dir: ${{ context.work_dir }}
     capture:
       domain_partitions_path: ${{ result.domain_partitions_path }}
     on_success: open_integration_pr
@@ -1419,11 +1421,13 @@ steps:
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr'
       local_review_rounds: '0'
+      work_dir: ${{ context.work_dir }}
     capture:
       annotated_diff_path: ${{ result.annotated_diff_path }}
       hunk_ranges_path: ${{ result.hunk_ranges_path }}
       valid_lines_path: ${{ result.valid_lines_path }}
       diff_metrics_path: ${{ result.diff_metrics_path }}
+      pr_head_sha: ${{ result.head_sha }}
     on_success: review_pr_integration
     on_failure: review_pr_integration
     note: 'Pre-computes annotated diff and hunk ranges for review-pr server-side (where
@@ -1440,7 +1444,7 @@ steps:
         }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{
         context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }}
         diff_metrics_path=${{ context.diff_metrics_path
-        }}
+        }} pr_head_sha=${{ context.pr_head_sha }}
       cwd: ${{ context.work_dir }}
       step_name: review_pr_integration
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr'
@@ -1503,8 +1507,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.review_path_rebase
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_review_integration

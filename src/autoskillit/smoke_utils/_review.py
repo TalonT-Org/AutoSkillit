@@ -71,12 +71,29 @@ def annotate_pr_diff(
             timeout=60,
         )
     diff = result.stdout
+    if review_mode == "github":
+        head_sha_result = subprocess.run(
+            ["gh", "pr", "view", str(pr_number), "--json", "headRefOid", "-q", ".headRefOid"],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=30,
+        )
+    else:
+        head_sha_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=10,
+        )
+    head_sha = head_sha_result.stdout.strip() if head_sha_result.returncode == 0 else ""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     annotated_path = out / f"annotated_diff_{pr_number}.txt"
     ranges_path = out / f"ranges_{pr_number}.json"
     valid_lines_path = out / f"valid_lines_{pr_number}.json"
-    atomic_write(annotated_path, annotate_diff(diff))
+    atomic_write(annotated_path, f"# sha: {head_sha}\n{annotate_diff(diff)}")
     atomic_write(ranges_path, json.dumps(parse_hunk_ranges(diff)))
     atomic_write(valid_lines_path, json.dumps(extract_valid_lines(diff)))
     metrics = compute_diff_metrics(diff)
@@ -88,6 +105,7 @@ def annotate_pr_diff(
         file_threshold=file_thresh,
     )
     metrics_data = {
+        "_head_sha": head_sha,
         "added_lines": metrics.added_lines,
         "removed_lines": metrics.removed_lines,
         "changed_files": metrics.changed_files,
@@ -97,6 +115,7 @@ def annotate_pr_diff(
     metrics_path = out / f"metrics_{pr_number}.json"
     atomic_write(metrics_path, json.dumps(metrics_data))
     return {
+        "head_sha": head_sha,
         "review_mode": review_mode,
         "annotated_diff_path": str(annotated_path),
         "hunk_ranges_path": str(ranges_path),

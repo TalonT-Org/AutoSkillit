@@ -1002,9 +1002,9 @@ def test_annotate_pr_diff_local_mode_uses_git_diff(mock_run, tmp_path: Path) -> 
         current_iteration="0",
         base_branch="main",
     )
-    args = mock_run.call_args[0][0]
+    args = mock_run.call_args_list[0][0][0]
     assert args[:3] == ["git", "diff", "main...HEAD"]
-    mock_run.assert_called_once()
+    assert mock_run.call_count == 2
 
 
 @patch("subprocess.run")
@@ -1019,8 +1019,8 @@ def test_annotate_pr_diff_github_mode_uses_gh_pr_diff(mock_run, tmp_path: Path) 
         current_iteration="2",
         base_branch="",
     )
-    mock_run.assert_called_once()
-    args = mock_run.call_args[0][0]
+    assert mock_run.call_count == 2
+    args = mock_run.call_args_list[0][0][0]
     assert args[:3] == ["gh", "pr", "diff"]
 
 
@@ -1068,7 +1068,7 @@ def test_annotate_pr_diff_local_mode_empty_base_branch_falls_back_to_github(
         base_branch="",
     )
     assert result["review_mode"] == "github"
-    args = mock_run.call_args[0][0]
+    args = mock_run.call_args_list[0][0][0]
     assert args[:3] == ["gh", "pr", "diff"]
 
 
@@ -1131,6 +1131,63 @@ def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path
     content = json.loads(vl_path.read_text())
     expected = extract_valid_lines(_DIFF_OUTPUT)
     assert content == expected
+
+
+# ─── SHA embedding tests (T_SHA_1–T_SHA_4) ──────────────────────────────────
+
+_SHA = "abc1234567890"
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_embeds_head_sha_in_metrics(mock_run, tmp_path: Path) -> None:
+    """T_SHA_1: metrics_{pr}.json must include _head_sha field."""
+    mock_run.side_effect = [
+        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
+        subprocess.CompletedProcess([], 0, _SHA, ""),
+    ]
+    annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
+    metrics = json.loads((tmp_path / "metrics_999.json").read_text())
+    assert "_head_sha" in metrics
+    assert len(metrics["_head_sha"]) >= 7
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_embeds_sha_header_in_diff_text(mock_run, tmp_path: Path) -> None:
+    """T_SHA_2: annotated_diff_{pr}.txt first line must be # sha: {sha}."""
+    mock_run.side_effect = [
+        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
+        subprocess.CompletedProcess([], 0, _SHA, ""),
+    ]
+    annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
+    first_line = (tmp_path / "annotated_diff_999.txt").read_text().split("\n")[0]
+    assert first_line.startswith("# sha:")
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_returns_head_sha(mock_run, tmp_path: Path) -> None:
+    """T_SHA_3: Return dict must include head_sha for downstream capture."""
+    mock_run.side_effect = [
+        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
+        subprocess.CompletedProcess([], 0, _SHA, ""),
+    ]
+    result = annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
+    assert "head_sha" in result
+    assert len(result["head_sha"]) >= 7
+
+
+@patch("subprocess.run")
+def test_annotate_pr_diff_valid_lines_flat_schema(mock_run, tmp_path: Path) -> None:
+    """T_SHA_4: valid_lines_{pr}.json must be a flat {filepath: [lines]} dict, not wrapped."""
+    mock_run.side_effect = [
+        subprocess.CompletedProcess([], 0, _DIFF_OUTPUT, ""),
+        subprocess.CompletedProcess([], 0, _SHA, ""),
+    ]
+    annotate_pr_diff(pr_number="999", cwd=str(tmp_path), output_dir=str(tmp_path))
+    data = json.loads((tmp_path / "valid_lines_999.json").read_text())
+    assert "_head_sha" not in data, (
+        "valid_lines must not contain _head_sha — breaks SKILL.md Step 4"
+    )
+    assert all(isinstance(v, list) for v in data.values()), "values must be lists of line numbers"
 
 
 # ---------------------------------------------------------------------------
@@ -2083,6 +2140,14 @@ def test_diagnose_merge_gate_returns_ci_conclusion_failure(tmp_path: object) -> 
     )
     assert result["ci_conclusion"] == "failure"
     assert Path(result["diagnosis_path"]).exists()
+
+
+def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
+    """diagnose_merge_gate must raise ValueError when output_dir is empty."""
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    with pytest.raises(ValueError, match="output_dir is required"):
+        diagnose_merge_gate(test_stdout="FAILED test_foo", test_stderr="")
 
 
 # ---------------------------------------------------------------------------

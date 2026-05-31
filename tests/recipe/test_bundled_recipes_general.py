@@ -476,6 +476,30 @@ def test_annotate_pr_diff_captures_both_paths(recipe_name: str) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups", "merge-prs"],
+)
+def test_annotate_pr_diff_captures_head_sha(recipe_name: str) -> None:
+    """The annotate_pr_diff step must capture head_sha for freshness tracking."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    annotate_steps = [
+        (name, step)
+        for name, step in recipe.steps.items()
+        if step.tool == "run_python"
+        and step.with_args.get("callable", "") == "autoskillit.smoke_utils.annotate_pr_diff"
+    ]
+    assert annotate_steps, f"No annotate_pr_diff step found in {recipe_name}.yaml"
+    for step_name, step in annotate_steps:
+        assert step.capture is not None, (
+            f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' has no capture block"
+        )
+        assert "pr_head_sha" in step.capture or "head_sha" in step.capture, (
+            f"{recipe_name}.yaml: annotate_pr_diff step '{step_name}' must capture "
+            f"pr_head_sha (or head_sha) for SHA-freshness validation"
+        )
+
+
 class TestRunModeIngredient:
     """REQ-INGREDIENT-001 through REQ-INGREDIENT-005: run_mode ingredient in multi-issue recipes."""  # noqa: E501
 
@@ -1026,4 +1050,32 @@ def test_recipe_all_stop_steps_have_sentinel_instructions(recipe_name: str) -> N
             assert "sentinel" in step.message.lower(), (
                 f"{recipe_name}.yaml step '{step_name}' must instruct "
                 f"L3 sentinel emission in its message"
+            )
+
+
+@pytest.mark.parametrize(
+    "recipe_yaml",
+    sorted(builtin_recipes_dir().glob("*.yaml")),
+    ids=lambda p: p.stem,
+)
+def test_run_python_steps_with_relative_output_dir_have_work_dir(recipe_yaml: Path) -> None:
+    """Every run_python step that passes a relative output_dir must also pass work_dir."""
+    recipe = load_recipe(recipe_yaml)
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        output_dir = step.with_args.get("output_dir", "")
+        if not output_dir or not isinstance(output_dir, str):
+            continue
+        # Only flag explicit template placeholders and literal relative paths.
+        # Context variable refs (${{ context.* }}) resolve at runtime and may be
+        # absolute — do not flag them.
+        is_context_ref = output_dir.startswith("${{")
+        is_relative = not is_context_ref and (
+            not output_dir.startswith("/") or "{{AUTOSKILLIT_TEMP}}" in output_dir
+        )
+        if is_relative:
+            assert "work_dir" in step.with_args, (
+                f"{recipe_yaml.name} step '{step_name}': run_python step has relative "
+                f"output_dir={output_dir!r} but no work_dir"
             )

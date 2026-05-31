@@ -46,6 +46,7 @@ from autoskillit.server._misc import (
     _quota_refresh_loop,
     resolve_log_dir,
     resolve_provider,
+    strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -55,7 +56,6 @@ logger = get_logger(__name__)
 _PR_CREATE_RECIPES: frozenset[str] = frozenset(
     {"merge-prs", "implementation", "implementation-groups", "remediation"}
 )
-_INGREDIENTS_ONLY_EXCLUDE = frozenset({"content", "orchestration_rules", "stop_step_semantics"})
 
 
 def _kitchen_failure_envelope(
@@ -579,7 +579,7 @@ async def open_kitchen(
             result["version"] = __version__
 
             if ingredients_only:
-                result = {k: v for k, v in result.items() if k not in _INGREDIENTS_ONLY_EXCLUDE}
+                result = strip_ingredients_only_keys(result)
 
             if "ingredients_table" not in result or not result["ingredients_table"]:
                 result["ingredients_table"] = None

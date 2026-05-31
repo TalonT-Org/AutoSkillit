@@ -49,7 +49,7 @@ class LoadCache:
         with self._lock:
             return self._store.get(key)
 
-    def copy_result(self, result: dict[str, Any]) -> dict[str, Any]:
+    def copy_result(self, result: Any) -> dict[str, Any]:
         """Return a shallow copy of result with list fields independently copied."""
         r = dict(result)
         for list_key in (

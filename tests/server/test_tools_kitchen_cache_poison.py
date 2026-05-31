@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 
 @pytest.mark.anyio

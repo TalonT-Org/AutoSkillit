@@ -548,4 +548,4 @@ def load_and_validate(
         )
         _api_cache._LOAD_CACHE.put(cache_key, entry)
 
-    return result
+    return cast(LoadRecipeResult, _api_cache._LOAD_CACHE.copy_result(result))

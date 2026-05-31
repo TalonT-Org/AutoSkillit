@@ -209,6 +209,14 @@ async def _apply_triage_gate(
     )
 
 
+_INGREDIENTS_ONLY_EXCLUDE = frozenset({"content", "orchestration_rules", "stop_step_semantics"})
+
+
+def strip_ingredients_only_keys(result: Any) -> dict[str, Any]:
+    """Return a copy of result with content/orchestration keys excluded."""
+    return {k: v for k, v in result.items() if k not in _INGREDIENTS_ONLY_EXCLUDE}
+
+
 async def resolve_repo_from_remote(cwd: str, hint: str | None = None) -> str:
     """Return 'owner/repo' from git remote URL, or '' on failure.
 

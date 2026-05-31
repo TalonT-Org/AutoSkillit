@@ -14,14 +14,16 @@ from autoskillit.core import get_logger, temp_dir_display_str
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
-from autoskillit.server._misc import _apply_triage_gate, resolve_log_dir
+from autoskillit.server._misc import (
+    _apply_triage_gate,
+    resolve_log_dir,
+    strip_ingredients_only_keys,
+)
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
-
-_INGREDIENTS_ONLY_EXCLUDE = frozenset({"content", "orchestration_rules", "stop_step_semantics"})
 
 
 @mcp.tool(
@@ -223,7 +225,7 @@ async def load_recipe(
             recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             if ingredients_only:
-                result = {k: v for k, v in result.items() if k not in _INGREDIENTS_ONLY_EXCLUDE}
+                result = strip_ingredients_only_keys(result)
             return json.dumps(result)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)

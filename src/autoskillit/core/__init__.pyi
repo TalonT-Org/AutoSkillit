@@ -203,7 +203,6 @@ from .types import BackendEventKind as BackendEventKind
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import CampaignProtector as CampaignProtector
-from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import CanonicalTokenUsage as CanonicalTokenUsage
 from .types import CaptureEntrySpec as CaptureEntrySpec
 from .types import CaptureValueType as CaptureValueType
@@ -226,6 +225,7 @@ from .types import CmdOrigin as CmdOrigin
 from .types import CmdSpec as CmdSpec
 from .types import CodexEventData as CodexEventData
 from .types import CodingAgentBackend as CodingAgentBackend
+from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ContaminationOutcome as ContaminationOutcome
 from .types import DatabaseReader as DatabaseReader
 from .types import DirectInstall as DirectInstall

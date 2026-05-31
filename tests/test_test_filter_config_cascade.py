@@ -195,7 +195,8 @@ class TestClosureConfigNarrowCascade:
         assert result is not None
         dir_names = {p.name for p in result}
         assert "config" in dir_names
-        assert "execution" in dir_names or "server" in dir_names
+        for pkg in ["execution", "fleet", "pipeline", "workspace", "server", "cli"]:
+            assert pkg in dir_names, f"fail-open cascade should include {pkg}"
 
     def test_init_closure_only_init_fails_open(self, tmp_path: Path) -> None:
         tests_root = self._make_config_layout(

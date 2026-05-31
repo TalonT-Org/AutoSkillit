@@ -138,6 +138,7 @@ FREE_RANGE_TOOLS: frozenset[str] = frozenset(
         "reload_session",
         "configure_fleet",
         "configure_order",
+        "lock_ingredients",  # NEW (#3357)
     }
 )
 

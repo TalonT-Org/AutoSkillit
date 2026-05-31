@@ -205,8 +205,8 @@ def test_kitchen_tagged_tool_count_is_38() -> None:
 
 
 def test_free_range_tool_count_is_17() -> None:
-    assert _count_free_range_tools() == 17, (
-        f"Expected 17 free-range tools; found {_count_free_range_tools()}"
+    assert _count_free_range_tools() == 18, (
+        f"Expected 18 free-range tools; found {_count_free_range_tools()}"
     )
 
 
@@ -294,8 +294,8 @@ def _assert_doc_states_number(doc: Path, label: str, expected: int) -> None:
         DOCS_DIR / "execution" / "tool-access.md",
     ],
 )
-def test_docs_state_55_mcp_tools(doc_path: Path) -> None:
-    _assert_doc_states_number(doc_path, "MCP tools", 55)
+def test_docs_state_56_mcp_tools(doc_path: Path) -> None:
+    _assert_doc_states_number(doc_path, "MCP tools", 56)
 
 
 @pytest.mark.parametrize(

@@ -81,6 +81,7 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/skill_cmd_guard.py",
             "guards/quota_guard.py",
             "guards/skill_command_guard.py",
+            "guards/ingredient_lock_guard.py",  # NEW (#3357)
         ],
     ),
     HookDef(  # codex: works-as-is
@@ -173,7 +174,11 @@ HOOK_REGISTRY: list[HookDef] = [
     ),
     HookDef(  # codex: works-as-is
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
-        scripts=["guards/fleet_dispatch_guard.py", "guards/resume_ownership_guard.py"],
+        scripts=[
+            "guards/fleet_dispatch_guard.py",
+            "guards/resume_ownership_guard.py",
+            "guards/ingredient_lock_guard.py",
+        ],
     ),
     HookDef(  # codex: works-as-is
         event_type="PostToolUse",
@@ -263,6 +268,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "resume_ownership_guard.py",
         "planner_result_naming_guard.py",
         "artifact_download_guard.py",
+        "ingredient_lock_guard.py",  # NEW (#3357)
     }
 )
 

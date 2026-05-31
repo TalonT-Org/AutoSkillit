@@ -20,6 +20,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `artifact_download_guard.py` | Blocks `gh run download` and `gh release download` without `--dir` flag |
 | `pr_create_guard.py` | Blocks `gh pr create` via `run_cmd` when kitchen is open |
 | `quota_guard.py` | Blocks `run_skill` when quota threshold exceeded; fails open on missing cache |
+| `ingredient_lock_guard.py` | Blocks `run_skill` for steps locked by `lock_ingredients`; supplemental to server-side enforcement |
 | `recipe_write_advisor.py` | Non-blocking advisory for recipe YAML writes |
 | `remove_clone_guard.py` | Blocks `remove_clone` if branch has unpushed commits |
 | `review_loop_gate.py` | Blocks `wait_for_ci`/`enqueue_pr` until `check_review_loop` is called |

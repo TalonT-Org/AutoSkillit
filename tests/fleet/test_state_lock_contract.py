@@ -41,6 +41,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "workspace/clone_registry.py",
         "fleet/state.py",
         "planner/merge.py",
+        "server/tools/tools_kitchen.py",  # _write_ingredient_locks: atomic flock overlay write
     }
 )
 

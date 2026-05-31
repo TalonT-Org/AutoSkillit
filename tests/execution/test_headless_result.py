@@ -834,6 +834,34 @@ def test_stdout_mentions_write_tools_unit(stdout: str, expected: bool) -> None:
     assert _stdout_mentions_write_tools(stdout) is expected
 
 
+def test_stdout_mentions_write_tools_excludes_subagent() -> None:
+    """Subagent Write/Edit calls must not trigger write evidence detection."""
+    subagent = json.dumps(
+        {
+            "type": "assistant",
+            "subagent_type": "Explore",
+            "message": {
+                "model": "claude-sonnet-4-6",
+                "content": [
+                    {"type": "tool_use", "name": "Write", "input": {"file_path": "/a.py"}}
+                ],
+            },
+        }
+    )
+    assert _stdout_mentions_write_tools(subagent) is False
+
+
+def test_stdout_mentions_write_tools_truncated_subagent_excluded() -> None:
+    """Truncated subagent lines with subagent_type must not trigger write evidence."""
+    truncated = (
+        '{"type":"assistant","subagent_type":"Explore",'
+        '"message":{"model":"claude-sonnet-4-6",'
+        '"content":[{"type":"tool_use","name":"Write",'
+        '"input":{"file_path":"/a.py"'
+    )
+    assert _stdout_mentions_write_tools(truncated) is False
+
+
 class TestWriteEvidenceCrossCheck:
     def test_cross_check_logs_mismatch(self) -> None:
         result_line = _success_result_json()

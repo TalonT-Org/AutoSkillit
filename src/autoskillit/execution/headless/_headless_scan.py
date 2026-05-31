@@ -3,7 +3,7 @@
 Extracted from headless.py to keep that module below the 1100-line
 architectural limit (REQ-CNST-010-E2).
 
-IL-1 module (execution/). No autoskillit imports — stdlib only.
+IL-1 module (execution/). Imports session._session_model for record discrimination.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ import json
 import os
 
 import regex as re
+
+from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
 _WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
 _BASH_TOOL_NAME: str = "Bash"
@@ -44,7 +46,7 @@ def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
             obj = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if not isinstance(obj, dict) or obj.get("type") != "assistant":
+        if not isinstance(obj, dict) or not _is_parent_assistant_record(obj):
             continue
         msg = obj.get("message")
         if not isinstance(msg, dict):

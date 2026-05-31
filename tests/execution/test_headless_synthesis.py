@@ -301,6 +301,27 @@ class TestScanJsonlWritePaths:
         line = _make_tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
         assert _scan_jsonl_write_paths(line, "relative/path") == []
 
+    def test_scan_jsonl_write_paths_excludes_subagent(self):
+        """Subagent Write/Edit calls must not produce write-path warnings."""
+        subagent = json.dumps(
+            {
+                "type": "assistant",
+                "subagent_type": "general-purpose",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "Write",
+                            "input": {"file_path": "/outside/path.py", "content": "x"},
+                        }
+                    ],
+                },
+            }
+        )
+        result = _scan_jsonl_write_paths(subagent, self.CWD)
+        assert result == []
+
 
 class TestBuildSkillResultWritePathWarnings:
     def test_write_path_warnings_empty_for_clean_session(self):

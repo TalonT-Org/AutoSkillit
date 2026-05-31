@@ -223,6 +223,22 @@ class ClaudeSessionResult:
         return bool(self.tool_uses)
 
 
+def _is_parent_assistant_record(obj: dict[str, Any]) -> bool:
+    """True only for parent-session assistant records.
+
+    Excludes subagent records (identified by top-level subagent_type field)
+    and <synthetic> bookkeeping turns.
+    """
+    if obj.get("type") != "assistant":
+        return False
+    if obj.get("subagent_type"):
+        return False
+    msg = obj.get("message")
+    if isinstance(msg, dict) and msg.get("model") == "<synthetic>":
+        return False
+    return True
+
+
 def extract_token_usage(stdout: str) -> dict[str, Any] | None:
     """Extract token usage from Claude CLI NDJSON output.
 
@@ -249,7 +265,7 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
             continue
 
         record_type = obj.get("type")
-        if record_type == "assistant":
+        if _is_parent_assistant_record(obj):
             msg = obj.get("message")
             if not isinstance(msg, dict):
                 continue
@@ -369,7 +385,7 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 raw_status = obj.get("api_error_status")
                 if isinstance(raw_status, int):
                     acc.api_error_status = raw_status
-            elif record_type == "assistant":
+            elif _is_parent_assistant_record(obj):
                 msg = obj.get("message")
                 if isinstance(msg, dict):
                     content = msg.get("content", "")

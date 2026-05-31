@@ -299,6 +299,27 @@ def _assistant_ndjson(
     )
 
 
+def _subagent_assistant_ndjson(
+    model: str = "claude-sonnet-4-6",
+    subagent_type: str = "Explore",
+    output_tokens: int = 10000,
+    input_tokens: int = 500,
+) -> str:
+    """Build a subagent assistant NDJSON line with subagent_type marker."""
+    return json.dumps(
+        {
+            "type": "assistant",
+            "subagent_type": subagent_type,
+            "task_description": f"Subagent task ({subagent_type})",
+            "message": {
+                "model": model,
+                "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+                "content": [{"type": "text", "text": "subagent response"}],
+            },
+        }
+    )
+
+
 def _flush(tmp_path: Path, **overrides) -> None:
     from autoskillit.core.types._type_results import ProviderOutcome
     from autoskillit.core.types._type_results_execution import (

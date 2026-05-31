@@ -1,6 +1,6 @@
 """Unified execution marker protocol for stale-detector suppression.
 
-Async context manager that writes a ``*-in-progress-{session_id}-{label}.marker``
+Async context manager that writes a ``{label}-in-progress-{session_id}-{uuid}.marker``
 file, heartbeats its mtime, and deletes it on exit.  Lives in ``core/`` (IL-0) so
 both ``fleet/_api.py`` (IL-2) and ``server/tools/`` (IL-3) can import it without
 violating layer constraints.
@@ -8,8 +8,8 @@ violating layer constraints.
 
 from __future__ import annotations
 
-import asyncio
 import os
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,12 +22,12 @@ from .logging import get_logger
 logger = get_logger(__name__)
 
 
-async def _touch_marker(marker_path: Path, interval: float, trigger: anyio.Event | None) -> None:
+async def _touch_marker(marker_path: Path, interval: float) -> None:
     try:
         marker_path.touch()
     except OSError:
         logger.warning("execution_marker: touch failed %s", marker_path, exc_info=True)
-    while trigger is None or not trigger.is_set():
+    while True:
         await anyio.sleep(interval)
         try:
             marker_path.touch()
@@ -52,7 +52,7 @@ async def execution_marker(
         yield None
         return
 
-    marker_path = marker_dir / f"{label}-in-progress-{session_id}-{label}.marker"
+    marker_path = marker_dir / f"{label}-in-progress-{session_id}-{uuid.uuid4().hex[:8]}.marker"
     try:
         write_versioned_json(
             marker_path,
@@ -68,24 +68,15 @@ async def execution_marker(
         yield None
         return
 
-    hb_task: asyncio.Task[None] | None = None
-    trigger = anyio.Event()
-    try:
-        hb_task = asyncio.get_running_loop().create_task(
-            _touch_marker(marker_path, heartbeat_interval, trigger)
-        )
-        yield marker_path
-    finally:
-        trigger.set()
-        if hb_task is not None:
-            hb_task.cancel()
-            try:
-                await hb_task
-            except (asyncio.CancelledError, Exception):
-                pass
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_touch_marker, marker_path, heartbeat_interval)
         try:
-            marker_path.unlink(missing_ok=True)
-        except OSError:
-            logger.warning(
-                "execution_marker_unlink_failed", marker=str(marker_path), exc_info=True
-            )
+            yield marker_path
+        finally:
+            tg.cancel_scope.cancel()
+            try:
+                marker_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning(
+                    "execution_marker_unlink_failed", marker=str(marker_path), exc_info=True
+                )

@@ -19,6 +19,7 @@ from autoskillit.core import (
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
+    MCP_CLIENT_BACKEND_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     RESUME_SESSION_BASELINE_KEYS,
     SESSION_TYPE_ORCHESTRATOR,
@@ -312,6 +313,7 @@ class CodexBackend:
             triage_capable=False,
             supports_context_exhaustion_detection=False,
             project_local_skills_capable=False,
+            supports_tool_list_changed=False,
             required_skill_fields=frozenset({"name", "description"}),
             required_session_files=frozenset({"config.toml"}),
             session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
@@ -728,6 +730,7 @@ class CodexBackend:
         return []
 
     def ensure_pre_launch(self) -> list[str]:
+        os.environ[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         try:
             ensure_codex_mcp_registered()
         except Exception as exc:

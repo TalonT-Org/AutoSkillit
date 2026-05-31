@@ -10,6 +10,7 @@ import regex as _re
 from autoskillit.core import (
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
+    MCP_CLIENT_BACKEND_ENV_VAR,
     ReadResult,
     atomic_write,
     get_logger,
@@ -202,6 +203,8 @@ def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bo
         return False
     if headless_auto_gate and HEADLESS_AUTO_GATE_ENV_VAR not in env_vars:
         return False
+    if MCP_CLIENT_BACKEND_ENV_VAR not in env_vars:
+        return False
     return True
 
 
@@ -217,6 +220,7 @@ def ensure_codex_mcp_registered(
     env_vars: list[str] = [HEADLESS_ENV_VAR]
     if headless_auto_gate:
         env_vars.append(HEADLESS_AUTO_GATE_ENV_VAR)
+    env_vars.append(MCP_CLIENT_BACKEND_ENV_VAR)
     entry: dict[str, Any] = {
         "command": "autoskillit",
         "env_vars": env_vars,

@@ -335,24 +335,39 @@ class TestSessionLogMonitorSessionId:
         session_uuid = "d9adcc78-3098-4c3e-8720-ddcf3da35fff"
         jsonl_file = tmp_path / f"{session_uuid}.jsonl"
         jsonl_file.write_text(
-            json.dumps(
-                {
-                    "type": "assistant",
-                    "message": {"content": "done\n\nCOMPLETION_MARKER"},
-                }
+            json.dumps({"type": "assistant", "message": {"content": "initial"}}) + "\n"
+        )
+
+        async def append_marker():
+            await anyio.sleep(0.2)
+            with jsonl_file.open("a") as f:
+                f.write(
+                    json.dumps(
+                        {"type": "assistant", "message": {"content": "done\n\nCOMPLETION_MARKER"}}
+                    )
+                    + "\n"
+                )
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    tmp_path,
+                    "COMPLETION_MARKER",
+                    stale_threshold=10.0,
+                    spawn_time=time.time() - 1,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                )
             )
-            + "\n"
-        )
 
-        result = await _session_log_monitor(
-            tmp_path,
-            "COMPLETION_MARKER",
-            stale_threshold=10.0,
-            spawn_time=time.time() - 1,
-        )
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_marker)
 
-        assert result.status == ChannelBStatus.COMPLETION
-        assert result.session_id == session_uuid
+        assert result_box[0].status == ChannelBStatus.COMPLETION
+        assert result_box[0].session_id == session_uuid
 
     @pytest.mark.anyio
     async def test_session_log_monitor_returns_session_id_on_stale(self, tmp_path):
@@ -407,15 +422,36 @@ class TestSessionLogMonitorSessionId:
         session_uuid = "enum-check-session"
         jsonl_file = tmp_path / f"{session_uuid}.jsonl"
         jsonl_file.write_text(
-            json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}}) + "\n"
+            json.dumps({"type": "assistant", "message": {"content": "initial"}}) + "\n"
         )
-        result = await _session_log_monitor(
-            tmp_path,
-            "MARKER",
-            stale_threshold=10.0,
-            spawn_time=time.time() - 1,
-        )
-        assert isinstance(result.status, ChannelBStatus)
+
+        async def append_marker():
+            await anyio.sleep(0.2)
+            with jsonl_file.open("a") as f:
+                f.write(
+                    json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}})
+                    + "\n"
+                )
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    tmp_path,
+                    "MARKER",
+                    stale_threshold=10.0,
+                    spawn_time=time.time() - 1,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_marker)
+
+        assert isinstance(result_box[0].status, ChannelBStatus)
 
 
 class TestWatchSessionLogSessionId:
@@ -476,28 +512,48 @@ class TestSessionIdBasedSelection:
         session_a = "session-aaa-target"
         session_b = "session-bbb-newer"
 
-        # Create session A first
+        # Create session A first with non-marker content
         file_a = tmp_path / f"{session_a}.jsonl"
         file_a.write_text(
-            json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}}) + "\n"
+            json.dumps({"type": "assistant", "message": {"content": "initial"}}) + "\n"
         )
 
         # Create session B slightly later (newer by ctime)
         await anyio.sleep(0.05)
         file_b = tmp_path / f"{session_b}.jsonl"
         file_b.write_text(
-            json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}}) + "\n"
+            json.dumps({"type": "assistant", "message": {"content": "initial"}}) + "\n"
         )
 
-        result = await _session_log_monitor(
-            tmp_path,
-            "MARKER",
-            stale_threshold=10.0,
-            spawn_time=time.time() - 2,
-            expected_session_id=session_a,
-        )
-        assert result.status == ChannelBStatus.COMPLETION
-        assert result.session_id == session_a
+        async def append_marker():
+            await anyio.sleep(0.2)
+            with file_a.open("a") as f:
+                f.write(
+                    json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}})
+                    + "\n"
+                )
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    tmp_path,
+                    "MARKER",
+                    stale_threshold=10.0,
+                    spawn_time=time.time() - 2,
+                    expected_session_id=session_a,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_marker)
+
+        assert result_box[0].status == ChannelBStatus.COMPLETION
+        assert result_box[0].session_id == session_a
 
     @pytest.mark.anyio
     async def test_session_id_falls_back_to_recency_when_no_match(self, tmp_path):
@@ -507,18 +563,38 @@ class TestSessionIdBasedSelection:
         session_b = "session-bbb-only"
         file_b = tmp_path / f"{session_b}.jsonl"
         file_b.write_text(
-            json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}}) + "\n"
+            json.dumps({"type": "assistant", "message": {"content": "initial"}}) + "\n"
         )
 
-        result = await _session_log_monitor(
-            tmp_path,
-            "MARKER",
-            stale_threshold=10.0,
-            spawn_time=time.time() - 2,
-            expected_session_id="nonexistent-session-id",
-        )
-        assert result.status == ChannelBStatus.COMPLETION
-        assert result.session_id == session_b
+        async def append_marker():
+            await anyio.sleep(0.2)
+            with file_b.open("a") as f:
+                f.write(
+                    json.dumps({"type": "assistant", "message": {"content": "done\n\nMARKER"}})
+                    + "\n"
+                )
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor():
+            result_box.append(
+                await _session_log_monitor(
+                    tmp_path,
+                    "MARKER",
+                    stale_threshold=10.0,
+                    spawn_time=time.time() - 2,
+                    expected_session_id="nonexistent-session-id",
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_marker)
+
+        assert result_box[0].status == ChannelBStatus.COMPLETION
+        assert result_box[0].session_id == session_b
 
 
 class TestSessionLogMonitorDirMissing:

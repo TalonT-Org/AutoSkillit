@@ -16,13 +16,14 @@ SCRIPT = (
 )
 
 
-def _run(stdin_data: str, env: dict | None = None) -> tuple[int, str]:
+def _run(stdin_data: str, env: dict | None = None, cwd: Path | None = None) -> tuple[int, str]:
     result = subprocess.run(
         [sys.executable, str(SCRIPT)],
         input=stdin_data,
         capture_output=True,
         text=True,
         env=env,
+        cwd=cwd,
     )
     return result.returncode, result.stdout
 
@@ -203,7 +204,7 @@ class TestIngredientLockGuardPipelineScoped:
             }
         )
 
-        code, stdout = _run(event, env={"AUTOSKILLIT_DISPATCH_ID": "pipeline-x"})
+        code, stdout = _run(event, env={"AUTOSKILLIT_DISPATCH_ID": "pipeline-x"}, cwd=tmp_path)
         assert code == 0
         decision = json.loads(stdout)
         assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"

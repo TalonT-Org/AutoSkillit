@@ -740,7 +740,20 @@ def _write_ingredient_locks(
                 pipeline_ls.update(locked_steps)
                 ls[pipeline_id] = pipeline_ls
 
-            if unlock_keys:
+            if unlock_keys is not None:
+                # Rebuild locked_steps from remaining locked_ingredients (active_steps
+                # unavailable here, so rebuild dict is based on ingredient presence).
+                # When locked_steps is None: clear ls[pipeline_id] if no remaining ingredients.
+                if locked_steps is None:
+                    if pipeline_id in li and li[pipeline_id]:
+                        # Rebuild from remaining ingredients (all set to False since we
+                        # don't have step-level truthiness here)
+                        ls[pipeline_id] = {k: False for k in li[pipeline_id]}
+                    else:
+                        ls[pipeline_id] = {}
+                for key in unlock_keys:
+                    if pipeline_id in li:
+                        li[pipeline_id].pop(key, None)
                 for key in unlock_keys:
                     li.get(pipeline_id, {}).pop(key, None)
                 if pipeline_id in ls:
@@ -750,6 +763,58 @@ def _write_ingredient_locks(
             return True, existing
         finally:
             pass  # flock released on file close
+
+
+def _compute_locked_steps(active_steps: dict, locked: dict[str, str]) -> dict[str, bool]:
+    """Compute locked_steps from active_recipe_steps and locked ingredients dict.
+
+    For each step with a skip_when_false ingredient that is in the locked dict,
+    compute the truthiness of the locked value and return a steps dict.
+    """
+    locked_steps: dict[str, bool] = {}
+    for step_name, step_obj in active_steps.items():
+        swf = (
+            getattr(step_obj, "skip_when_false", None)
+            if hasattr(step_obj, "skip_when_false")
+            else None
+        )
+        if swf:
+            ingredient_name = swf.removeprefix("inputs.")
+            if ingredient_name in locked:
+                val = locked[ingredient_name]
+                is_truthy = val.lower() not in ("false", "0", "no", "off", "")
+                locked_steps[step_name] = is_truthy
+    return locked_steps
+
+
+def _compute_unlocked_steps(
+    active_steps: dict, current_pipeline_li: dict[str, str]
+) -> dict[str, bool]:
+    """Compute unlocked_steps from active_recipe_steps and remaining ingredients.
+
+    For each step with a skip_when_false ingredient present in current_pipeline_li,
+    compute the truthiness of the remaining ingredient value.
+    """
+    unlocked_steps: dict[str, bool] = {}
+    for step_name, step_obj in active_steps.items():
+        swf = (
+            getattr(step_obj, "skip_when_false", None)
+            if hasattr(step_obj, "skip_when_false")
+            else None
+        )
+        if swf:
+            ingredient_name = swf.removeprefix("inputs.")
+            if ingredient_name in current_pipeline_li:
+                val = current_pipeline_li[ingredient_name]
+                is_truthy = val.lower() not in ("false", "0", "no", "off", "")
+                unlocked_steps[step_name] = is_truthy
+    return unlocked_steps
+
+
+def _apply_unlock_keys(current_pipeline_li: dict[str, str], unlock_keys: list[str]) -> None:
+    """Remove unlock keys from the current pipeline ingredients dict in-place."""
+    for key in unlock_keys:
+        current_pipeline_li.pop(key, None)
 
 
 @mcp.tool(
@@ -812,23 +877,7 @@ async def lock_ingredients(
             )
 
         # Resolve locked_steps from active_recipe_steps
-        locked_steps: dict[str, bool] = {}
         active_steps = getattr(ctx, "active_recipe_steps", None) or {}
-        for step_name, step_obj in active_steps.items():
-            swf = (
-                getattr(step_obj, "skip_when_false", None)
-                if hasattr(step_obj, "skip_when_false")
-                else None
-            )
-            if swf:
-                # Strip "inputs." prefix if present
-                ingredient_name = swf.removeprefix("inputs.")
-                if locked and ingredient_name in locked:
-                    val = locked[ingredient_name]
-                    is_truthy = val.lower() not in ("false", "0", "no", "off", "")
-                    locked_steps[step_name] = is_truthy
-                elif locked is None and unlock:
-                    pass  # unlock path rebuilds below
 
         # Handle unlock: rebuild locked_steps from remaining locked_ingredients
         existing = {}
@@ -844,33 +893,27 @@ async def lock_ingredients(
 
         # Remove unlock keys from current state
         if unlock:
-            for key in unlock:
-                current_pipeline_li.pop(key, None)
+            _apply_unlock_keys(current_pipeline_li, unlock)
 
         # Merge new locked values
         if locked:
             current_pipeline_li.update(locked)
 
-        # Rebuild locked_steps for this pipeline
-        unlocked_steps: dict[str, bool] = {}
-        for step_name, step_obj in active_steps.items():
-            swf = (
-                getattr(step_obj, "skip_when_false", None)
-                if hasattr(step_obj, "skip_when_false")
-                else None
-            )
-            if swf:
-                ingredient_name = swf.removeprefix("inputs.")
-                if ingredient_name in current_pipeline_li:
-                    val = current_pipeline_li[ingredient_name]
-                    is_truthy = val.lower() not in ("false", "0", "no", "off", "")
-                    unlocked_steps[step_name] = is_truthy
+        # Rebuild locked_steps for this pipeline based on remaining ingredients
+        unlocked_steps = _compute_unlocked_steps(active_steps, current_pipeline_li)
+
+        # When unlock empties current_pipeline_li, pass None for locked_steps to signal
+        # a full clear (ls[pipeline_id] = {}) rather than skipping the update.
+        write_locked_steps: dict[str, bool] | None = unlocked_steps
+        if unlock and not current_pipeline_li:
+            write_locked_steps = None  # signal full clear to _write_ingredient_locks
 
         success, updated = _write_ingredient_locks(
             ctx.project_dir,
             effective_pipeline_id,
             current_pipeline_li if (locked or unlock) else None,
-            unlocked_steps,
+            write_locked_steps,
+            unlock if unlock else None,
         )
 
         return json.dumps(

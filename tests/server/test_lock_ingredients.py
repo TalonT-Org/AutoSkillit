@@ -171,7 +171,7 @@ class TestLockIngredientsHeadlessDenial:
                 result = json.loads(await lock_ingredients(locked={"investigate": "false"}))
 
         assert result["success"] is False
-        assert "headless" in result["error"].lower()
+        assert "skill" in result["result"].lower()
 
 
 class TestUnlockRebuildsLockedSteps:

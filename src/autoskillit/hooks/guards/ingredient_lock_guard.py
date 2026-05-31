@@ -63,7 +63,7 @@ def main() -> None:
             f"Locked ingredients for pipeline '{deny_pipeline}': {locked_ingredients}. "
             f"Call lock_ingredients(unlock=[...]) to release."
         )
-        print(
+        sys.stdout.write(
             json.dumps(
                 {
                     "hookSpecificOutput": {

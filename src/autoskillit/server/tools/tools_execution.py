@@ -359,10 +359,12 @@ async def run_skill(
                 "error": f"run_skill: cwd does not exist: {cwd}",
             }
         )
-    if step_name and not resume_session_id:
-        _lock_denial = _check_ingredient_locks(step_name, order_id)
-        if _lock_denial is not None:
-            return _lock_denial
+    if (
+        step_name
+        and not resume_session_id
+        and (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None
+    ):
+        return _lock_denial
     try:
         _sn_token = _oid_token = None
         from autoskillit.server import _get_ctx

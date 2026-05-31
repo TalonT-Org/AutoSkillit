@@ -17,9 +17,20 @@ from tests.infra._pretty_output_helpers import (
     _wrap_plain_str_for_claude_code,
 )
 from tests.infra.conftest import (
-    _FORMATTER_COVERAGE_REGISTRY,
     FormatterCoverageDef,
+    _get_formatter_coverage_registry,
 )
+
+
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    if "tool_name" in metafunc.fixturenames and "entry" in metafunc.fixturenames:
+        registry = _get_formatter_coverage_registry()
+        metafunc.parametrize(
+            "tool_name,entry",
+            list(registry.items()),
+            ids=list(registry),
+        )
+
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -100,7 +111,9 @@ def test_formatter_coverage_contract():
 def test_all_formatters_have_coverage_contracts():
     """Every dedicated formatter must have a registered field coverage contract."""
     from autoskillit.hooks.formatters.pretty_output_hook import _FORMATTERS
-    from tests.infra.conftest import _FORMATTER_COVERAGE_REGISTRY
+    from tests.infra.conftest import _get_formatter_coverage_registry
+
+    _FORMATTER_COVERAGE_REGISTRY = _get_formatter_coverage_registry()
 
     uncovered = set(_FORMATTERS.keys()) - set(_FORMATTER_COVERAGE_REGISTRY.keys())
     assert uncovered == set(), (
@@ -112,7 +125,9 @@ def test_all_formatters_have_coverage_contracts():
 
 def test_coverage_registry_entries_are_valid():
     """Every registry entry's frozensets must exactly cover its TypedDict annotations."""
-    from tests.infra.conftest import _FORMATTER_COVERAGE_REGISTRY
+    from tests.infra.conftest import _get_formatter_coverage_registry
+
+    _FORMATTER_COVERAGE_REGISTRY = _get_formatter_coverage_registry()
 
     for name, entry in _FORMATTER_COVERAGE_REGISTRY.items():
         import typing
@@ -257,11 +272,6 @@ def test_typeddict_covers_to_json_keys() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "tool_name,entry",
-    list(_FORMATTER_COVERAGE_REGISTRY.items()),
-    ids=list(_FORMATTER_COVERAGE_REGISTRY),
-)
 def test_typeddict_covers_json_producer_keys(tool_name: str, entry: FormatterCoverageDef) -> None:
     """Each formatter with a json_producer must have TypedDict keys covering all JSON keys.
 
@@ -279,4 +289,26 @@ def test_typeddict_covers_json_producer_keys(tool_name: str, entry: FormatterCov
     assert not missing, (
         f"{tool_name}: json_producer keys absent from TypedDict: {sorted(missing)}. "
         "Add them to the TypedDict in server/tools/_types.py."
+    )
+
+
+def test_conftest_import_does_not_load_server():
+    """Importing the infra conftest must not trigger the 57 MB server import chain."""
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import tests.infra.conftest; import sys; "
+            "assert 'autoskillit.server' not in sys.modules, "
+            "'server loaded at conftest import time'",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(__import__("pathlib").Path(__file__).resolve().parents[2]),
+    )
+    assert result.returncode == 0, (
+        f"Importing tests.infra.conftest triggered autoskillit.server import:\n{result.stderr}"
     )

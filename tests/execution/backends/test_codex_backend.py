@@ -436,7 +436,7 @@ class TestCodexResumeCmd:
         assert "read-only" in spec.cmd
 
     def test_resume_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
-        from autoskillit.execution.backends._claude_prompt import (
+        from autoskillit.execution.commands import (
             _HEADLESS_EXCLUSIVE_VARS,
             _SESSION_BASELINE_ENV,
         )
@@ -450,7 +450,7 @@ class TestCodexResumeCmd:
 
 class TestCodexHeadlessCmdEnv:
     def test_headless_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
-        from autoskillit.execution.backends._claude_prompt import _HEADLESS_EXCLUSIVE_VARS
+        from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_headless_cmd("do stuff")

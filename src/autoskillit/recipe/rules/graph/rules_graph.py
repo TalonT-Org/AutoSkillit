@@ -6,7 +6,7 @@ from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
-_STRUCTURAL_ON_RESULT_TOOLS = {"run_python", "wait_for_ci"}
+_STRUCTURAL_ON_RESULT_TOOLS = {"run_python", "wait_for_ci", "wait_for_merge_queue"}
 
 
 @semantic_rule(
@@ -44,26 +44,71 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                 reported_cycles.add(cycle_key)
                 cycle_set = set(cycle_steps)
 
-                has_on_result_exit = False
-                for s in cycle_steps:
-                    if s not in recipe.steps:
-                        continue
-                    step = recipe.steps[s]
-                    if step.tool not in _STRUCTURAL_ON_RESULT_TOOLS or step.on_result is None:
-                        continue
-                    targets: set[str] = set()
-                    if step.on_result.conditions:
-                        targets = {c.route for c in step.on_result.conditions}
-                    elif step.on_result.routes:
-                        targets = set(step.on_result.routes.values())
-                    routes_out = targets - cycle_set
-                    if routes_out:
-                        has_on_result_exit = True
-                        break
+                structural_steps = [
+                    s
+                    for s in cycle_steps
+                    if s in recipe.steps
+                    and recipe.steps[s].tool in _STRUCTURAL_ON_RESULT_TOOLS
+                    and recipe.steps[s].on_result is not None
+                ]
+                if structural_steps:
+                    unguarded_branches: list[str] = []
+                    all_bounded = True
+                    for s in structural_steps:
+                        step = recipe.steps[s]
+                        on_result = step.on_result
+                        assert on_result is not None  # guaranteed by list comprehension filter
+                        conditions = on_result.conditions or []
+                        routes_map = on_result.routes or {}
+                        branch_items: list[tuple[str | None, str]] = []
+                        if conditions:
+                            branch_items = [(c.when, c.route) for c in conditions]
+                        elif routes_map:
+                            branch_items = [(k, v) for k, v in routes_map.items()]
+                        for label, target in branch_items:
+                            if target not in cycle_set:
+                                continue
+                            target_step = recipe.steps.get(target)
+                            if (
+                                target_step is not None
+                                and target_step.tool in _STRUCTURAL_ON_RESULT_TOOLS
+                                and target_step.on_result is not None
+                            ):
+                                guard_targets: set[str] = set()
+                                if target_step.on_result.conditions:
+                                    guard_targets = {
+                                        c.route for c in target_step.on_result.conditions
+                                    }
+                                elif target_step.on_result.routes:
+                                    guard_targets = set(target_step.on_result.routes.values())
+                                if guard_targets - cycle_set:
+                                    continue
+                            branch_desc = label if label else "(default)"
+                            unguarded_branches.append(f"{s}[{branch_desc}]→{target}")
+                            all_bounded = False
 
-                if has_on_result_exit:
-                    rec_stack.discard(node)
-                    return
+                    if all_bounded:
+                        rec_stack.discard(node)
+                        return
+
+                    if unguarded_branches:
+                        findings.append(
+                            RuleFinding(
+                                rule="unbounded-cycle",
+                                severity=Severity.ERROR,
+                                step_name=node,
+                                message=(
+                                    f"Routing cycle detected: {' → '.join(cycle_steps)} → "
+                                    f"{neighbor}. Unguarded re-entering branch(es): "
+                                    f"{', '.join(unguarded_branches)}. Each re-entering "
+                                    f"on_result branch must route through a direct guard "
+                                    f"step (run_python/wait_for_ci with an on_result exit "
+                                    f"outside the cycle) before re-entering the cycle."
+                                ),
+                            )
+                        )
+                        rec_stack.discard(node)
+                        return
 
                 has_retry_exit = any(
                     recipe.steps[s].retries > 0

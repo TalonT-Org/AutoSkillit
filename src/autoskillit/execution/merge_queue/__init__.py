@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import random  # noqa: F401 — re-exported for test monkeypatching (_mq.random.uniform)
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, assert_never, cast
 
@@ -114,6 +114,9 @@ class DefaultMergeQueueWatcher:
         not_in_queue_confirmation_cycles: int = 2,
         max_inconclusive_retries: int = 5,
         auto_merge_available: bool = True,
+        max_merge_group_drops: int = 0,
+        merge_group_drop_backoff: float = 60.0,
+        progress_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> dict[str, Any]:
         """Poll until PR is merged, ejected, stalled, dropped, or timeout expires.
 
@@ -137,6 +140,8 @@ class DefaultMergeQueueWatcher:
         merge_group_ci_cache: str | None = None
         pending_ejection: PRState | None = None
         pending_reason: str = ""
+        drop_count: int = 0
+        last_progress_time: float = time.monotonic()
 
         def _make_result(
             success: bool, pr_state: PRState, reason: str, ejection_cause: str = ""
@@ -152,6 +157,13 @@ class DefaultMergeQueueWatcher:
             return result
 
         while time.monotonic() < deadline:
+            if progress_callback and (time.monotonic() - last_progress_time) >= 60:
+                await progress_callback(
+                    f"Polling merge queue for PR #{pr_number} "
+                    f"({int(deadline - time.monotonic())}s remaining)"
+                )
+                last_progress_time = time.monotonic()
+
             try:
                 state = await self._fetch_pr_and_queue_state(
                     pr_number, owner, repo_name, target_branch
@@ -287,7 +299,31 @@ class DefaultMergeQueueWatcher:
                 return _make_result(False, PRState.DROPPED_HEALTHY, classification.reason)
 
             elif classification.terminal == PRState.DROPPED_MERGE_GROUP_CI:
-                return _make_result(False, PRState.DROPPED_MERGE_GROUP_CI, classification.reason)
+                if drop_count < max_merge_group_drops:
+                    drop_count += 1
+                    logger.info(
+                        "merge_group_drop_internal_reenqueue",
+                        pr_number=pr_number,
+                        drop_count=drop_count,
+                        max_merge_group_drops=max_merge_group_drops,
+                    )
+                    await asyncio.sleep(merge_group_drop_backoff)
+                    await self.enqueue(
+                        pr_number,
+                        target_branch,
+                        repo,
+                        cwd,
+                        auto_merge_available=auto_merge_available,
+                    )
+                    deadline = time.monotonic() + timeout_seconds
+                    not_in_queue_cycles = 0
+                    ever_enrolled = True
+                    was_in_queue = False
+                    merge_group_ci_cache = None
+                    continue
+                result = _make_result(False, PRState.DROPPED_MERGE_GROUP_CI, classification.reason)
+                result["drop_count"] = drop_count
+                return result
 
             elif classification.terminal == PRState.NOT_ENROLLED:
                 return _make_result(False, PRState.NOT_ENROLLED, classification.reason)

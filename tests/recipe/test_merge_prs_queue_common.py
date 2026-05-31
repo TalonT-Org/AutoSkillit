@@ -871,3 +871,29 @@ class TestMergePrsPreEnqueueCiGate:
         assert step.on_failure == "verify_queue_enrollment", (
             f"reenter_queue.on_failure must be 'verify_queue_enrollment', got: {step.on_failure!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# unbounded-cycle per-branch detection — dropped_merge_group_ci
+# ---------------------------------------------------------------------------
+
+
+def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_recipe) -> None:
+    """unbounded-cycle must fire ERROR for the dropped_merge_group_ci → diagnose_ci path
+    which has no direct guard step, even though sibling branches (ejected, dropped_healthy)
+    do have guards (check_eject_limit, check_dropped_healthy_loop)."""
+    from autoskillit.core.types import Severity
+    from autoskillit.recipe.validator import run_semantic_rules
+
+    findings = run_semantic_rules(any_recipe)
+    cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
+    dmgci_findings = [
+        f
+        for f in cycle_findings
+        if f.severity == Severity.ERROR and "dropped_merge_group_ci" in f.message
+    ]
+    assert dmgci_findings, (
+        f"unbounded-cycle must fire ERROR for unguarded dropped_merge_group_ci branch in "
+        f"{any_recipe.name}; got no such finding among: "
+        f"{[(f.step_name, f.severity, f.message[:80]) for f in cycle_findings]}"
+    )

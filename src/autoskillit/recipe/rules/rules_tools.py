@@ -125,6 +125,8 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "not_in_queue_confirmation_cycles",
             "max_inconclusive_retries",
             "auto_merge_available",
+            "max_merge_group_drops",
+            "merge_group_drop_backoff",
             "step_name",
         }
     ),

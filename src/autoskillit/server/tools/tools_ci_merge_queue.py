@@ -187,6 +187,8 @@ async def wait_for_merge_queue(
     not_in_queue_confirmation_cycles: int = 2,
     max_inconclusive_retries: int = 5,
     auto_merge_available: bool = True,
+    max_merge_group_drops: int = 0,
+    merge_group_drop_backoff: float = 60.0,
     step_name: str = "",
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -284,6 +286,9 @@ async def wait_for_merge_queue(
                     not_in_queue_confirmation_cycles=not_in_queue_confirmation_cycles,
                     max_inconclusive_retries=max_inconclusive_retries,
                     auto_merge_available=auto_merge_available,
+                    max_merge_group_drops=max_merge_group_drops,
+                    merge_group_drop_backoff=merge_group_drop_backoff,
+                    progress_callback=lambda msg: ctx.info(msg),
                 )
                 return json.dumps(result)
             except Exception as exc:

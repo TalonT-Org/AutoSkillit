@@ -553,7 +553,11 @@ class InMemoryCIWatcher(CIWatcher):
 
 
 class InMemoryMergeQueueWatcher(MergeQueueWatcher):
-    """In-memory test double for :class:`MergeQueueWatcher`."""
+    """In-memory test double for :class:`MergeQueueWatcher`.
+
+    Result precedence for wait(): (1) _wait_results_queue.popleft() if non-empty,
+    (2) _resolve_side_effect(wait_side_effect) if set, (3) self._wait_result.
+    """
 
     def __init__(
         self,
@@ -578,6 +582,7 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
         self.wait_side_effect: Any | None = None
         self.toggle_side_effect: Any | None = None
         self.enqueue_side_effect: Any | None = None
+        self._wait_results_queue: deque[dict[str, Any]] = deque()
 
     async def wait(
         self,
@@ -592,6 +597,9 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
         not_in_queue_confirmation_cycles: int = 2,
         max_inconclusive_retries: int = 5,
         auto_merge_available: bool = True,
+        max_merge_group_drops: int = 0,
+        merge_group_drop_backoff: float = 60.0,
+        progress_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> dict[str, Any]:
         self.wait_calls.append(
             {
@@ -602,8 +610,12 @@ class InMemoryMergeQueueWatcher(MergeQueueWatcher):
                 "timeout_seconds": timeout_seconds,
                 "poll_interval": poll_interval,
                 "auto_merge_available": auto_merge_available,
+                "max_merge_group_drops": max_merge_group_drops,
+                "merge_group_drop_backoff": merge_group_drop_backoff,
             }
         )
+        if self._wait_results_queue:
+            return self._wait_results_queue.popleft()
         if self.wait_side_effect is not None:
             return _resolve_side_effect(self.wait_side_effect)
         return self._wait_result

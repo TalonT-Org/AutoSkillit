@@ -26,18 +26,12 @@ F = TypeVar("F", bound=Callable[..., Any])
 def _cancellation_shield(
     result_type: Literal["fleet_error", "run_cmd", "run_python", "generic"] = "generic",
 ) -> Callable[[F], F]:
-    """Decorator that catches asyncio.CancelledError at the MCP tool boundary.
-
-    Apply BELOW @mcp.tool() and ABOVE @track_response_size() so FastMCP
-    invokes this wrapper as the outermost layer after @mcp.tool() registration.
-
-    Uses anyio.CancelScope(shield=True) for response construction to prevent
-    re-cancellation while building the structured return value.
+    """Apply BELOW @mcp.tool() and ABOVE @track_response_size().
 
     result_type controls the response schema:
     - "fleet_error": fleet_error() envelope (dispatch_food_truck, record_gate_dispatch)
     - "run_cmd": {"success": False, "exit_code": -1, "stdout": "", "stderr": ...}
-    - "run_python": same as run_cmd
+    - "run_python": {"success": False, "exit_code": -1, "stdout": "", "stderr": ...}
     - "generic" (default): {"success": False, "error": "cancelled", "subtype": "cancelled"}
     """
 
@@ -48,7 +42,10 @@ def _cancellation_shield(
                 return await fn(*args, **kwargs)
             except asyncio.CancelledError:
                 with anyio.CancelScope(shield=True):
-                    logger.warning("mcp_tool_cancelled", tool=fn.__name__)
+                    try:
+                        logger.warning("mcp_tool_cancelled", tool=fn.__name__)
+                    except Exception:
+                        pass
                     return _build_cancellation_response(result_type)
 
         return wrapper  # type: ignore[return-value]

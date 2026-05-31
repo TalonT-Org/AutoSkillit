@@ -66,7 +66,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_skill_transition_boundaries.py` | Contract tests for anti-confirmation instructions at SKILL.md transition boundaries |
 | `test_skill_yaml_validation.py` | Contract: YAML workflow examples embedded in SKILL.md files must be valid recipes |
 | `test_skill_format_compliance.py` | Universal contract: all bundled SKILL.md files have valid frontmatter |
-| `test_sous_chef_parameter_forwarding.py` | Architectural contract: sous-chef SKILL.md must instruct the LLM to forward recipe step parameters (output_dir, stale_threshold, idle_output_timeout) to run_skill |
+| `test_sous_chef_parameter_forwarding.py` | Architectural contract: sous-chef SKILL.md must instruct the LLM to forward recipe step parameters (output_dir, stale_threshold, idle_output_timeout, step_provider) to run_skill |
 | `test_sous_chef_quota_protocol.py` | Contract test: sous-chef SKILL.md must contain QUOTA WAIT PROTOCOL section |
 | `test_sous_chef_routing.py` | Contract tests for the CONTEXT LIMIT ROUTING section in sous-chef SKILL.md |
 | `test_sous_chef_scheduling.py` | Contract tests for the PARALLEL STEP SCHEDULING section in sous-chef SKILL.md |

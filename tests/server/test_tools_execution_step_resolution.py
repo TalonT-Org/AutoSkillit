@@ -211,3 +211,107 @@ async def test_run_skill_auto_fills_relative_output_dir_from_recipe(
     expected = str(tmp_path / ".autoskillit" / "temp") + "/"
     assert executor.calls[0].allowed_write_prefix == expected
     assert executor.calls[0].allowed_write_prefixes == (expected,)
+
+
+@pytest.mark.anyio
+async def test_run_skill_resolves_step_provider_from_recipe_step(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """step_provider auto-filled from RecipeStep.provider when caller omits it."""
+    from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+
+    step = RecipeStep(name="run_canaries", provider="minimax")
+    tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+
+    captured_kwargs: dict = {}
+
+    def spy(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+
+    monkeypatch.setattr("autoskillit.server._guards._resolve_provider_profile", spy)
+
+    await run_skill(
+        "/eval-agent --agent-name test",
+        str(tmp_path),
+        step_name="run_canaries",
+        step_provider="",
+    )
+
+    assert captured_kwargs["step_provider"] == "minimax"
+
+
+@pytest.mark.anyio
+async def test_run_skill_llm_step_provider_overrides_recipe_step(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """Explicit caller step_provider must not be overridden by recipe step."""
+    from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+
+    step = RecipeStep(name="run_canaries", provider="minimax")
+    tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+
+    captured_kwargs: dict = {}
+
+    def spy(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return ("bedrock", {"AWS_REGION": "us-east-1"})
+
+    monkeypatch.setattr("autoskillit.server._guards._resolve_provider_profile", spy)
+
+    await run_skill(
+        "/eval-agent --agent-name test",
+        str(tmp_path),
+        step_name="run_canaries",
+        step_provider="bedrock",
+    )
+
+    assert captured_kwargs["step_provider"] == "bedrock"
+
+
+@pytest.mark.anyio
+async def test_run_skill_logs_warning_when_step_provider_resolved_from_recipe(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """Server-side step_provider resolution must log for observability."""
+    import structlog.testing
+
+    from autoskillit.recipe.schema import RecipeStep
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+
+    step = RecipeStep(name="run_canaries", provider="minimax")
+    tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+    )
+
+    with structlog.testing.capture_logs() as cap:
+        await run_skill(
+            "/eval-agent --agent-name test",
+            str(tmp_path),
+            step_name="run_canaries",
+            step_provider="",
+        )
+
+    resolved_events = [e for e in cap if e.get("event") == "step_provider_resolved_from_recipe"]
+    assert len(resolved_events) == 1
+    assert resolved_events[0]["step"] == "run_canaries"
+    assert resolved_events[0]["provider"] == "minimax"

@@ -18,6 +18,7 @@ from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
+    CODEX_INTERACTIVE_REQUIRED_ENV,
     KITCHEN_SESSION_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
@@ -371,9 +372,10 @@ class CodexBackend:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = self.env_policy().build_env(
-            filtered_base, extras=dict(env_extras) if env_extras else None
-        )
+        headless_extras: dict[str, str] = {MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX}
+        if env_extras:
+            headless_extras.update(env_extras)
+        env = self.env_policy().build_env(filtered_base, extras=headless_extras)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_skill_session_cmd(
@@ -449,6 +451,7 @@ class CodexBackend:
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
             "AUTOSKILLIT_APPLICABLE_GUARDS": " ".join(sorted(self.capabilities.applicable_guards)),
             "MCP_CONNECTION_NONBLOCKING": "0",
         }
@@ -484,7 +487,9 @@ class CodexBackend:
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(
-            filtered_base, extras=extras, required=SKILL_SESSION_REQUIRED_ENV
+            filtered_base,
+            extras=extras,
+            required=SKILL_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
         cmd: list[str] = [
@@ -557,6 +562,7 @@ class CodexBackend:
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
             "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
             "MCP_CONNECTION_NONBLOCKING": "0",
         }
@@ -583,7 +589,9 @@ class CodexBackend:
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(
-            filtered_base, extras=extras, required=ORCHESTRATOR_SESSION_REQUIRED_ENV
+            filtered_base,
+            extras=extras,
+            required=ORCHESTRATOR_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
         cmd: list[str] = [
@@ -645,9 +653,13 @@ class CodexBackend:
             builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
         base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
+        merged_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         if add_dirs:
             merged_extras.setdefault("CODEX_HOME", str(add_dirs[0]))
-        env = CodexEnvPolicy().build_env(base_env, extras=merged_extras, required=required_env)
+        effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
+        env = CodexEnvPolicy().build_env(
+            base_env, extras=merged_extras, required=effective_required
+        )
         partial = builder.build()
         return CmdSpec(
             cmd=partial.cmd,
@@ -677,10 +689,13 @@ class CodexBackend:
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        resume_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         if env_extras:
             resume_extras.update(env_extras)
         env = self.env_policy().build_env(
-            filtered_base, extras=resume_extras, required=RESUME_SESSION_BASELINE_KEYS
+            filtered_base,
+            extras=resume_extras,
+            required=RESUME_SESSION_BASELINE_KEYS | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
         return CmdSpec(cmd=tuple(cmd), env=env, is_resume=True)
 

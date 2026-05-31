@@ -8,9 +8,8 @@ from typing import Any
 import regex as _re
 
 from autoskillit.core import (
+    CODEX_MCP_ENV_FORWARD_VARS,
     HEADLESS_AUTO_GATE_ENV_VAR,
-    HEADLESS_ENV_VAR,
-    MCP_CLIENT_BACKEND_ENV_VAR,
     ReadResult,
     atomic_write,
     get_logger,
@@ -199,13 +198,10 @@ def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bo
     env_vars = entry.get("env_vars", [])
     if not isinstance(env_vars, list):
         return False
-    if HEADLESS_ENV_VAR not in env_vars:
-        return False
-    if headless_auto_gate and HEADLESS_AUTO_GATE_ENV_VAR not in env_vars:
-        return False
-    if MCP_CLIENT_BACKEND_ENV_VAR not in env_vars:
-        return False
-    return True
+    required = CODEX_MCP_ENV_FORWARD_VARS
+    if not headless_auto_gate:
+        required = required - {HEADLESS_AUTO_GATE_ENV_VAR}
+    return required.issubset(env_vars)
 
 
 def ensure_codex_mcp_registered(
@@ -217,10 +213,10 @@ def ensure_codex_mcp_registered(
     if config_path is None:
         config_path = Path.home() / ".codex" / "config.toml"
     result = _read_codex_config(config_path)
-    env_vars: list[str] = [HEADLESS_ENV_VAR]
-    if headless_auto_gate:
-        env_vars.append(HEADLESS_AUTO_GATE_ENV_VAR)
-    env_vars.append(MCP_CLIENT_BACKEND_ENV_VAR)
+    base = CODEX_MCP_ENV_FORWARD_VARS
+    if not headless_auto_gate:
+        base = base - {HEADLESS_AUTO_GATE_ENV_VAR}
+    env_vars: list[str] = sorted(base)
     entry: dict[str, Any] = {
         "command": "autoskillit",
         "env_vars": env_vars,

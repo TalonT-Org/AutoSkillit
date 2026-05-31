@@ -72,6 +72,23 @@ def test_no_unrecognized_claude_code_vars_pass_through() -> None:
         )
 
 
+def test_codex_mcp_env_forward_vars_parity_with_config_toml(tmp_path) -> None:
+    """Every CODEX_MCP_ENV_FORWARD_VARS member must appear in config.toml env_vars."""
+    import tomllib
+
+    from autoskillit.core.types._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS
+    from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
+
+    config_path = tmp_path / "config.toml"
+    ensure_codex_mcp_registered(config_path=config_path, headless_auto_gate=True)
+    data = tomllib.loads(config_path.read_bytes().decode())
+    env_vars = frozenset(data["mcp_servers"]["autoskillit"]["env_vars"])
+    missing = CODEX_MCP_ENV_FORWARD_VARS - env_vars
+    assert not missing, (
+        f"CODEX_MCP_ENV_FORWARD_VARS members missing from config.toml env_vars: {missing}"
+    )
+
+
 def test_ensure_codex_mcp_registered_includes_mcp_client_backend(tmp_path) -> None:
     """ensure_codex_mcp_registered must write MCP_CLIENT_BACKEND_ENV_VAR to env_vars."""
     import tomllib

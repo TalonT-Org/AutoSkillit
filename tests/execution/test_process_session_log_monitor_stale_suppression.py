@@ -379,6 +379,10 @@ class TestExecutionMarkerSuppression:
             "run-skill execution marker suppression not working — "
             "marker may not be matched by the glob pattern."
         )
+        assert elapsed < 5.0, (
+            f"STALE fired after {elapsed:.3f}s — expected prompt firing after "
+            f"max_suppression={max_suppression}s, not near the 5s timeout ceiling."
+        )
 
 
 class TestExecutionMarkerLifecycle:

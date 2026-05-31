@@ -467,7 +467,7 @@ parallel run of the same step reports under the same canonical step name.
 
 ---
 
-## PARAMETER FORWARDING — output_dir, stale_threshold, idle_output_timeout
+## PARAMETER FORWARDING — output_dir, stale_threshold, idle_output_timeout, step_provider
 
 When a recipe step's `with:` block contains `output_dir`, you MUST pass it as the
 `output_dir` parameter of `run_skill`. This controls the write guard — omitting it
@@ -476,11 +476,18 @@ causes the session to write to the wrong directory.
 When a recipe step has a top-level `stale_threshold` or `idle_output_timeout` field,
 pass it as the corresponding `run_skill` parameter. These control session kill thresholds.
 
+When a recipe step has a top-level `provider` field, pass the value as the
+`step_provider` parameter of `run_skill`. This controls which LLM provider
+(e.g., Minimax, Bedrock) the session uses. Omitting it causes the session to
+fall back to the default Anthropic provider, silently ignoring the recipe's
+declared provider.
+
 **Example:**
 ```yaml
 implement:
   tool: run_skill
   stale_threshold: 2400
+  provider: minimax
   with:
     skill_command: "/implement ..."
     cwd: "${{ context.work_dir }}"
@@ -488,7 +495,7 @@ implement:
     output_dir: "${{ context.work_dir }}/${{ context.autoskillit_temp }}"
 ```
 
-Call: `run_skill(skill_command=..., cwd=..., step_name="implement", output_dir="...", stale_threshold=2400)`
+Call: `run_skill(skill_command=..., cwd=..., step_name="implement", output_dir="...", stale_threshold=2400, step_provider="minimax")`
 
 This provides defense-in-depth: the server resolves parameters server-side, AND the LLM is instructed to forward them.
 

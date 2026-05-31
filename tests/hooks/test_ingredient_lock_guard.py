@@ -211,3 +211,62 @@ class TestIngredientLockGuardPipelineScoped:
         assert code == 0
         decision = json.loads(stdout)
         assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+class TestIngredientLockGuardEmptyStepName:
+    """Hook guard stays fail-open for empty step_name — defers to server-side resolution."""
+
+    def test_ingredient_lock_guard_allows_empty_step_name_when_locks_active(
+        self, tmp_path, monkeypatch
+    ):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+
+        overlay = temp_dir / ".hook_config_overlay.json"
+        overlay.write_text(
+            json.dumps(
+                {
+                    "locked_steps": {"": {"investigate": False}},
+                    "locked_ingredients": {"": {"investigate": "false"}},
+                }
+            )
+        )
+
+        monkeypatch.chdir(tmp_path)
+
+        event = json.dumps(
+            {
+                "tool_input": {
+                    "step_name": "",
+                    "order_id": "",
+                }
+            }
+        )
+
+        code, stdout = _run(event)
+        assert code == 0
+        assert stdout.strip() == ""
+
+    def test_ingredient_lock_guard_allows_empty_step_name_when_no_locks(
+        self, tmp_path, monkeypatch
+    ):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+
+        overlay = temp_dir / ".hook_config_overlay.json"
+        overlay.write_text(json.dumps({"locked_steps": {}}))
+
+        monkeypatch.chdir(tmp_path)
+
+        event = json.dumps(
+            {
+                "tool_input": {
+                    "step_name": "",
+                    "order_id": "",
+                }
+            }
+        )
+
+        code, stdout = _run(event)
+        assert code == 0
+        assert stdout.strip() == ""

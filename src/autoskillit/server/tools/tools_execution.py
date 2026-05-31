@@ -51,6 +51,8 @@ _PURE_SLEEP_RE = re.compile(
     r"|sleep\s+(?P<sh_secs>\d+(?:\.\d+)?))$"
 )
 
+INGREDIENT_LOCK_DENY_PREFIX = "INGREDIENT LOCK ENFORCED"
+
 
 def _is_absolute_path(path: str) -> bool:
     """Return True if path is an absolute filesystem path."""
@@ -81,7 +83,7 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
                     "success": False,
                     "is_error": True,
                     "error": (
-                        f"INGREDIENT LOCK ENFORCED: Step '{step_name}' is locked out. "
+                        f"{INGREDIENT_LOCK_DENY_PREFIX}: Step '{step_name}' is locked out. "
                         f"Locked ingredients for pipeline '{effective_oid}': {ingredient_info}. "
                         f"Call lock_ingredients(unlock=[...]) to release."
                     ),
@@ -95,7 +97,7 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
                         "success": False,
                         "is_error": True,
                         "error": (
-                            f"INGREDIENT LOCK ENFORCED: Step '{step_name}' is locked out "
+                            f"{INGREDIENT_LOCK_DENY_PREFIX}: Step '{step_name}' is locked out "
                             f"by pipeline '{pid}'. Pass order_id to scope the check, "
                             f"or call lock_ingredients(unlock=[...]) to release."
                         ),
@@ -140,6 +142,54 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
             ),
         }
     )
+
+
+def _resolve_step_name_from_recipe(
+    skill_command: str,
+    active_recipe_steps: dict[str, object],
+) -> tuple[str, bool]:
+    """Resolve step_name from active_recipe_steps by matching skill_command prefix.
+
+    Returns (step_name, is_ambiguous):
+    - (name, False) when exactly one recipe step matches
+    - ("", True) when multiple steps match (ambiguous)
+    - ("", False) when no steps match
+    """
+    cmd_prefix = skill_command.split()[0] if skill_command.strip() else ""
+    if not cmd_prefix:
+        return ("", False)
+    matches: list[str] = []
+    for step_key, step_obj in active_recipe_steps.items():
+        with_args = getattr(step_obj, "with_args", None)
+        if not isinstance(with_args, dict):
+            continue
+        step_sc = with_args.get("skill_command", "")
+        if step_sc and step_sc.split()[0] == cmd_prefix:
+            matches.append(step_key)
+    if len(matches) == 1:
+        return (matches[0], False)
+    return ("", len(matches) > 1)
+
+
+def _has_active_locks(order_id: str) -> bool:
+    """Return True if any ingredient locks are actively denying steps."""
+    from autoskillit.server import _get_ctx
+
+    ctx = _get_ctx()
+    overlay_path = _hook_config_overlay_path(ctx.project_dir)
+    if not overlay_path.exists():
+        return False
+    try:
+        overlay = json.loads(overlay_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return False
+    locked_steps = overlay.get("locked_steps", {})
+    if not locked_steps:
+        return False
+    effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+    if effective_oid:
+        return any(v is False for v in locked_steps.get(effective_oid, {}).values())
+    return any(v is False for steps in locked_steps.values() for v in steps.values())
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -431,6 +481,36 @@ async def run_skill(
 
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
+
+        if not step_name and not resume_session_id and tool_ctx.active_recipe_steps:
+            _resolved, _ambiguous = _resolve_step_name_from_recipe(
+                skill_command, tool_ctx.active_recipe_steps
+            )
+            if _resolved:
+                step_name = _resolved
+                logger.warning(
+                    "step_name_resolved_from_recipe",
+                    step=step_name,
+                    command=skill_command[:80],
+                )
+                if (_lock_denial := _check_ingredient_locks(step_name, order_id)) is not None:
+                    return _lock_denial
+                if (_dep_denial := _check_pipeline_deps(step_name, order_id)) is not None:
+                    return _dep_denial
+            elif not _ambiguous and _has_active_locks(order_id):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "is_error": True,
+                        "error": (
+                            f"{INGREDIENT_LOCK_DENY_PREFIX}: step_name is empty and could "
+                            "not be resolved from the recipe. Cannot verify lock "
+                            "status. Pass step_name explicitly or call "
+                            "lock_ingredients(unlock=[...]) to release all locks."
+                        ),
+                    }
+                )
+
         with structlog.contextvars.bound_contextvars(tool="run_skill", cwd=cwd):
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
             await _notify(

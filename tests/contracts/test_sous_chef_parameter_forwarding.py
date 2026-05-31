@@ -29,3 +29,15 @@ def test_sous_chef_skill_md_mentions_step_provider():
         "The LLM must be instructed to forward step_provider from recipe "
         "step provider: fields to run_skill."
     )
+
+
+def test_sous_chef_skill_md_mentions_step_name():
+    """Sous-chef SKILL.md must instruct the LLM to forward step_name."""
+    skill_md = (
+        Path(__file__).parents[2] / "src/autoskillit/skills/sous-chef/SKILL.md"
+    ).read_text()
+    assert "step_name" in skill_md, (
+        "sous-chef SKILL.md does not mention step_name. "
+        "The LLM must be instructed to forward step_name from recipe "
+        "step with: blocks to run_skill for lock enforcement."
+    )

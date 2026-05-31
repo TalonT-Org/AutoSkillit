@@ -706,11 +706,15 @@ async def disable_quota_guard() -> str:
 def _write_ingredient_locks(
     project_dir: Path,
     pipeline_id: str,
-    locked_ingredients: dict[str, str] | None,
-    locked_steps: dict[str, bool] | None,
-    unlock_keys: list[str] | None = None,
+    new_locked: dict[str, str] | None,
+    unlock_keys: list[str] | None,
+    active_steps: dict,
 ) -> tuple[bool, dict]:
-    """Atomically update ingredient locks in the overlay with flock serialization."""
+    """Atomically read-modify-write ingredient locks under flock.
+
+    All state reads and merges happen inside the flock to prevent concurrent
+    callers from overwriting each other's updates.
+    """
     overlay_path = _hook_config_overlay_path(project_dir)
     lock_path = overlay_path.with_suffix(".lock")
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
@@ -728,61 +732,26 @@ def _write_ingredient_locks(
                     pass
 
             li = existing.setdefault("locked_ingredients", {})
+            current_pipeline_li = dict(li.get(pipeline_id, {}))
+
+            if unlock_keys:
+                _apply_unlock_keys(current_pipeline_li, unlock_keys)
+
+            if new_locked:
+                current_pipeline_li.update(new_locked)
+
+            if new_locked or unlock_keys:
+                li[pipeline_id] = current_pipeline_li
+
+            unlocked_steps = _compute_unlocked_steps(active_steps, current_pipeline_li)
             ls = existing.setdefault("locked_steps", {})
-
-            if locked_ingredients is not None:
-                pipeline_li = li.setdefault(pipeline_id, {})
-                pipeline_li.update(locked_ingredients)
-                li[pipeline_id] = pipeline_li
-
-            if locked_steps is not None:
-                pipeline_ls = ls.setdefault(pipeline_id, {})
-                pipeline_ls.update(locked_steps)
-                ls[pipeline_id] = pipeline_ls
-
-            if unlock_keys is not None:
-                # Rebuild locked_steps from remaining locked_ingredients (active_steps
-                # unavailable here, so rebuild dict is based on ingredient presence).
-                # When locked_steps is None: clear ls[pipeline_id] if no remaining ingredients.
-                if locked_steps is None:
-                    if pipeline_id in li and li[pipeline_id]:
-                        # Rebuild from remaining ingredients (all set to False since we
-                        # don't have step-level truthiness here)
-                        ls[pipeline_id] = {k: False for k in li[pipeline_id]}
-                    else:
-                        ls[pipeline_id] = {}
-                for key in unlock_keys:
-                    if pipeline_id in li:
-                        li[pipeline_id].pop(key, None)
-                if pipeline_id in ls:
-                    ls[pipeline_id] = locked_steps if locked_steps is not None else {}
+            if new_locked or unlock_keys:
+                ls[pipeline_id] = unlocked_steps
 
             atomic_write(overlay_path, json.dumps(existing))
             return True, existing
         finally:
-            pass  # flock released on file close
-
-
-def _compute_locked_steps(active_steps: dict, locked: dict[str, str]) -> dict[str, bool]:
-    """Compute locked_steps from active_recipe_steps and locked ingredients dict.
-
-    For each step with a skip_when_false ingredient that is in the locked dict,
-    compute the truthiness of the locked value and return a steps dict.
-    """
-    locked_steps: dict[str, bool] = {}
-    for step_name, step_obj in active_steps.items():
-        swf = (
-            getattr(step_obj, "skip_when_false", None)
-            if hasattr(step_obj, "skip_when_false")
-            else None
-        )
-        if swf:
-            ingredient_name = swf.removeprefix("inputs.")
-            if ingredient_name in locked:
-                val = locked[ingredient_name]
-                is_truthy = val.lower() not in ("false", "0", "no", "off", "")
-                locked_steps[step_name] = is_truthy
-    return locked_steps
+            pass
 
 
 def _compute_unlocked_steps(
@@ -874,44 +843,14 @@ async def lock_ingredients(
                 }
             )
 
-        # Resolve locked_steps from active_recipe_steps
         active_steps = getattr(ctx, "active_recipe_steps", None) or {}
-
-        # Handle unlock: rebuild locked_steps from remaining locked_ingredients
-        existing = {}
-        overlay_path = _hook_config_overlay_path(ctx.project_dir)
-        if overlay_path.exists():
-            try:
-                existing = json.loads(overlay_path.read_text())
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        li = existing.get("locked_ingredients", {})
-        current_pipeline_li = dict(li.get(effective_pipeline_id, {}))
-
-        # Remove unlock keys from current state
-        if unlock:
-            _apply_unlock_keys(current_pipeline_li, unlock)
-
-        # Merge new locked values
-        if locked:
-            current_pipeline_li.update(locked)
-
-        # Rebuild locked_steps for this pipeline based on remaining ingredients
-        unlocked_steps = _compute_unlocked_steps(active_steps, current_pipeline_li)
-
-        # When unlock empties current_pipeline_li, pass None for locked_steps to signal
-        # a full clear (ls[pipeline_id] = {}) rather than skipping the update.
-        write_locked_steps: dict[str, bool] | None = unlocked_steps
-        if unlock and not current_pipeline_li:
-            write_locked_steps = None  # signal full clear to _write_ingredient_locks
 
         success, updated = _write_ingredient_locks(
             ctx.project_dir,
             effective_pipeline_id,
-            current_pipeline_li if (locked or unlock) else None,
-            write_locked_steps,
-            unlock if unlock else None,
+            locked,
+            unlock,
+            active_steps,
         )
 
         return json.dumps(

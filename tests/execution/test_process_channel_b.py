@@ -130,9 +130,8 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    # Delay must exceed _phase1_poll (1.0s in test) so Phase 2 initializes
-    # before the marker is written. Phase 1 discovers the file, Phase 2 sets
-    # scan_pos from discovery boundary, then the marker arrives as new content.
+    # Delay must exceed session_id_timeout + Phase 1 poll so Phase 2 initializes
+    # scan_pos from discovery boundary before the marker arrives.
     time.sleep(2.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",

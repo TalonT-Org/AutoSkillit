@@ -215,6 +215,8 @@ class TestExtractInterpreterWritePathsMulti:
         result = extract_interpreter_write_paths(cmd)
         assert result is not None
         assert len(result) == 2
+        assert "/clone/a.txt" in result
+        assert "/clone/b.txt" in result
 
     def test_partial_dynamic_denies_all(self):
         cmd = "python3 -c \"open('/clone/a.txt', 'w').write('x'); open(var, 'w').write('y')\""

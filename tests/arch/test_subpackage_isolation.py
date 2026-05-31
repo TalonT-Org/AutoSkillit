@@ -858,7 +858,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
         "recipe/rules": 35,
         "server/tools": 23,  # _auto_overrides.py + _cancellation_shield.py
-        "hooks/guards": 24,  # +1: ingredient_lock_guard.py for session-scoped ingredient locking
+        "hooks/guards": 25,  # +1: background_exec_guard.py for ADR-0001 runtime enforcement
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

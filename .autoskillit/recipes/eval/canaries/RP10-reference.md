@@ -1,0 +1,1 @@
+A review that identifies the serialization key mismatch — `FindingRecord.file_path` is written as `"file"` in `serialize_finding` — does not flag the test helper type-comment style or the asymmetric error handling in `load_findings` as defects.

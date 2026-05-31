@@ -490,6 +490,8 @@ def test_eval_fixture_inventory() -> None:
         "C7-task.md",
         "C7-reference.md",
         "impl_commit_b7fa51e2.patch",
+        "RP10-diff.txt",
+        "RP10-reference.md",
     ]
     expected_overlays = [
         "baseline.md",
@@ -502,6 +504,7 @@ def test_eval_fixture_inventory() -> None:
     expected_manifests = [
         "make-plan-canaries.json",
         "make-plan-variants.json",
+        "review-pr-canaries.json",
     ]
 
     missing = []
@@ -551,4 +554,17 @@ def test_eval_manifest_paths_point_to_recipes_eval() -> None:
             assert "temp/" not in entry["overlay_file"], (
                 f"Variant {entry['id']} overlay_file still points to temp/: "
                 f"{entry['overlay_file']!r}"
+            )
+
+    review_canary_manifest = json.loads((manifests_dir / "review-pr-canaries.json").read_text())
+    for entry in review_canary_manifest:
+        for key, val in entry.get("prompt_vars", {}).items():
+            if isinstance(val, str):
+                assert "temp/" not in val, (
+                    f"Canary {entry['id']} prompt_vars.{key} still points to temp/: {val!r}"
+                )
+        if entry.get("reference_path"):
+            assert "temp/" not in entry["reference_path"], (
+                f"Canary {entry['id']} reference_path still points to temp/: "
+                f"{entry['reference_path']!r}"
             )

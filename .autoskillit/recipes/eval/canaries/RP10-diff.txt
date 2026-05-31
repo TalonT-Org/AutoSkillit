@@ -1,0 +1,56 @@
+diff --git a/src/autoskillit/pipeline/finding_serializer.py b/src/autoskillit/pipeline/finding_serializer.py
+new file mode 100644
+--- /dev/null
++++ b/src/autoskillit/pipeline/finding_serializer.py
+@@ -0,0 +1,51 @@
+[L1]+from __future__ import annotations
+[L2]+
+[L3]+import json
+[L4]+import logging
+[L5]+from pathlib import Path
+[L6]+from typing import TypedDict
+[L7]+
+[L8]+
+[L9]+logger = logging.getLogger(__name__)
+[L10]+
+[L11]+
+[L12]+class FindingRecord(TypedDict):
+[L13]+    file_path: str
+[L14]+    severity: str
+[L15]+    message: str
+[L16]+    line: int
+[L17]+
+[L18]+
+[L19]+def serialize_finding(f: FindingRecord) -> dict[str, object]:
+[L20]+    return {
+[L21]+        "file": f["file_path"],
+[L22]+        "severity": f["severity"],
+[L23]+        "message": f["message"],
+[L24]+        "line": f["line"],
+[L25]+    }
+[L26]+
+[L27]+
+[L28]+def write_findings(findings: list[FindingRecord], output: Path) -> None:
+[L29]+    data = [serialize_finding(f) for f in findings]
+[L30]+    output.write_text(json.dumps(data, indent=2))
+[L31]+
+[L32]+
+[L33]+def load_findings(path: Path) -> list[FindingRecord]:
+[L34]+    try:
+[L35]+        raw = json.loads(path.read_text())
+[L36]+    except OSError:
+[L37]+        return []
+[L38]+    for entry in raw:
+[L39]+        if "file_path" not in entry:
+[L40]+            raise KeyError(f"Missing required field 'file_path' in entry")
+[L41]+    return raw
+[L42]+
+[L43]+
+[L44]+def _make_test_finding(
+[L45]+    path="test.py",  # type: str
+[L46]+    sev="warning",  # type: str
+[L47]+    msg="test issue",  # type: str
+[L48]+    ln=1,  # type: int
+[L49]+) -> FindingRecord:
+[L50]+    r = FindingRecord(file_path=path, severity=sev, message=msg, line=ln)
+[L51]+    return r

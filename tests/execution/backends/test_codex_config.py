@@ -323,6 +323,22 @@ class TestEnsureCodexMcpRegistered:
         assert config["mcp_servers"]["other"]["args"] == ["--stdio"]
         assert "autoskillit" in config["mcp_servers"]
 
+    def test_preserves_foreign_sections_with_dotted_keys(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('[tui]\n"gpt-5.5" = 4\n')
+        ensure_codex_mcp_registered(config_path=p)
+        data = _read_codex_config(p).data
+        assert data["tui"]["gpt-5.5"] == 4
+
+    def test_preserves_nested_sections_with_special_keys(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('[notice]\nmodel_migrations = {"gpt-5.3-codex" = "gpt-5.4"}\n')
+        ensure_codex_mcp_registered(config_path=p)
+        data = _read_codex_config(p).data
+        assert data["notice"]["model_migrations"]["gpt-5.3-codex"] == "gpt-5.4"
+
 
 class TestReadResultDiscrimination:
     def test_read_missing_file_returns_missing_variant(self, tmp_path):
@@ -453,6 +469,68 @@ class TestConfigEnvBoundary:
                 }
             }
         }
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+
+class TestSerializeTomlKeyQuoting:
+    def test_round_trip_key_with_dot(self):
+        original = {"tui": {"model_availability_nux": {"gpt-5.5": 1}}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_key_with_multiple_dots(self):
+        original = {"notice": {"model_migrations": {"gpt-5.3-codex": "gpt-5.4"}}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_key_with_space(self):
+        original = {"section": {"key with space": "val"}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_key_with_equals(self):
+        original = {"section": {"key=val": "val"}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_inline_table_key_with_dot(self):
+        original = {"sec": {"scalar": 1, "sub": {"gpt-5.5": "val"}}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_aot_entry_key_with_dot(self):
+        original = {"hooks": [{"gpt-5.5": "val"}]}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_section_header_key_with_dot(self):
+        original = {"parent": {"child.name": {"key": "val"}}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_aot_entry_inline_table_with_dotted_inner_key(self):
+        original = {"hooks": [{"options": {"gpt-5.5": "val"}, "event": "test"}]}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_key_with_backslash(self):
+        original = {"section": {"path\\to\\file": "val"}}
+        serialized = _serialize_toml(original)
+        parsed = tomllib.loads(serialized)
+        assert parsed == original
+
+    def test_round_trip_key_with_dot_and_double_quote(self):
+        original = {"section": {'key.with"quote': "val"}}
         serialized = _serialize_toml(original)
         parsed = tomllib.loads(serialized)
         assert parsed == original

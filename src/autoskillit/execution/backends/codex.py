@@ -242,6 +242,49 @@ class CodexSessionLocator:
         return result
 
 
+def _validate_codex_config() -> list[str]:
+    """Run codex doctor --json and check config.load status."""
+    try:
+        result = subprocess.run(
+            ["codex", "doctor", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("codex_doctor_timeout")
+        return []
+    except OSError:
+        logger.warning("codex_doctor_unavailable", exc_info=True)
+        return []
+
+    if getattr(result, "returncode", -1) != 0:
+        logger.warning("codex_doctor_nonzero_exit", returncode=getattr(result, "returncode", None))
+        return []
+
+    stdout = getattr(result, "stdout", None) or ""
+    try:
+        doc = json.loads(stdout)
+    except json.JSONDecodeError:
+        logger.warning("codex_doctor_json_parse_failed")
+        return []
+
+    checks = doc.get("checks", {})
+    config_check = checks.get("config.load", {})
+    status = config_check.get("status")
+
+    if status is not None and status != "ok":
+        summary = config_check.get("summary", "unknown config error")
+        remediation = config_check.get("remediation", "")
+        parts = [f"Codex config validation failed: {summary}"]
+        if remediation:
+            parts.append(f"Remediation: {remediation}")
+        parts.append("Run 'codex doctor' for full diagnostics.")
+        return [" ".join(parts)]
+
+    return []
+
+
 @dataclass(frozen=True, slots=True)
 class CodexBackend:
     @property
@@ -676,4 +719,5 @@ class CodexBackend:
         except Exception as exc:
             logger.warning("codex_mcp_registration_failed", exc_info=True)
             return [f"Failed to ensure MCP registration: {exc}"]
-        return []
+
+        return _validate_codex_config()

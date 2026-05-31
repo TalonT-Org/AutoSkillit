@@ -919,6 +919,150 @@ class TestCodexBuildFoodTruckCmd:
         assert "--json" in spec.cmd
 
 
+class TestCodexEnsurePreLaunchConfigValidation:
+    def test_ensure_pre_launch_returns_error_on_config_load_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        doctor_output = (
+            '{"checks": {"config.load": {"status": "error",'
+            ' "summary": "invalid type: map, expected u32",'
+            ' "remediation": "Delete [tui] section"}}}'
+        )
+
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout=doctor_output)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        errors = CodexBackend().ensure_pre_launch()
+        assert errors
+        combined = " ".join(errors)
+        assert "invalid type: map, expected u32" in combined
+        assert "Delete [tui] section" in combined
+
+    def test_ensure_pre_launch_returns_empty_on_config_load_ok(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        doctor_output = '{"checks": {"config.load": {"status": "ok"}}}'
+
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout=doctor_output)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        assert CodexBackend().ensure_pre_launch() == []
+
+    def test_ensure_pre_launch_returns_empty_on_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(cmd, **kwargs):
+            raise subprocess.TimeoutExpired(cmd, 20)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        assert CodexBackend().ensure_pre_launch() == []
+
+    def test_ensure_pre_launch_returns_empty_on_oserror(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(cmd, **kwargs):
+            raise FileNotFoundError("codex not found")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        assert CodexBackend().ensure_pre_launch() == []
+
+    def test_ensure_pre_launch_codex_doctor_runs_after_mcp_registration(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        call_order: list[str] = []
+
+        def fake_register(**kw):
+            call_order.append("register")
+            return False
+
+        def fake_run(cmd, **kwargs):
+            call_order.append("doctor")
+            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
+
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered", fake_register
+        )
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        CodexBackend().ensure_pre_launch()
+        assert call_order == ["register", "doctor"]
+
+    def test_ensure_pre_launch_returns_empty_on_nonzero_returncode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 1, stdout="error output")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        assert CodexBackend().ensure_pre_launch() == []
+
+    def test_ensure_pre_launch_returns_empty_on_malformed_json(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout="not json")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        assert CodexBackend().ensure_pre_launch() == []
+
+    def test_ensure_pre_launch_returns_empty_on_missing_config_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        assert CodexBackend().ensure_pre_launch() == []
+
+    def test_ensure_pre_launch_integration_registration_succeeds_then_validates(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        fake_home = tmp_path / "fakehome"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout='{"checks": {"config.load": {"status": "error", "summary": "bad config"}}}',
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        errors = CodexBackend().ensure_pre_launch()
+        assert errors
+        assert "bad config" in " ".join(errors)
+
+
 class TestCodexBackendVersion:
     def test_version_returns_stripped_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def fake_run(cmd, *, capture_output, text, timeout):

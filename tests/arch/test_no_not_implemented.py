@@ -32,7 +32,7 @@ def test_no_not_implemented_error_in_registered_backends() -> None:
                 isinstance(exc, ast.Call)
                 and isinstance(exc.func, ast.Name)
                 and exc.func.id == "NotImplementedError"
-            ):
+            ) or (isinstance(exc, ast.Name) and exc.id == "NotImplementedError"):
                 violations.append(f"{name}:{node.lineno}")
 
     assert not violations, (

@@ -26,6 +26,7 @@ def test_skill_and_food_truck_share_required_env_vars() -> None:
     from autoskillit.core.types._type_plugin_source import DirectInstall
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
         skill_spec = backend.build_skill_session_cmd(
@@ -56,6 +57,7 @@ def test_agent_backend_env_var_in_food_truck(monkeypatch: pytest.MonkeyPatch) ->
     # Ensure clean environment - remove any residual AGENT_BACKEND_ENV_VAR from host
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
 
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
         food_truck_spec = backend.build_food_truck_cmd(

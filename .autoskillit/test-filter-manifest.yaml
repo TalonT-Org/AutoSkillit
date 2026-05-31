@@ -68,7 +68,18 @@ src/autoskillit/skills/*/SKILL.md:
 src/autoskillit/skills_extended/*/SKILL.md:
   - skills/
   - contracts/
-  - recipe/
+  - recipe/test_skill_worktree_patterns.py
+  - recipe/test_plan_visualization_step.py
+  - recipe/test_diagnose_ci_subtype_output.py
+  - recipe/test_contracts.py
+  - recipe/test_silent_type_flows.py
+  - recipe/test_skill_emit_consistency.py
+  - recipe/test_diagnostic_steps.py
+  - recipe/test_bundled_recipes_general.py
+  - recipe/test_rules_skill_content.py
+  - recipe/test_rules_contracts.py
+  - recipe/test_rules_skills.py
+  - recipe/test_rules_dedup.py
   - skills_extended/
   - workspace/
   - planner/

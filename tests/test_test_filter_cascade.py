@@ -15,12 +15,22 @@ class TestCascadeNewEntries:
     @pytest.mark.parametrize(
         "filepath,mode,items_to_create,expected_in_result",
         [
-            # Conservative: planner only touches its own tests
+            # Conservative: planner only touches its own tests + specific recipe files
             (
                 "src/autoskillit/planner/__init__.py",
                 FilterMode.CONSERVATIVE,
-                ["planner"],
-                ["planner"],
+                [
+                    "planner",
+                    "recipe/test_rules_contracts.py",
+                    "recipe/test_contracts.py",
+                    "recipe/test_planner_recipe.py",
+                ],
+                [
+                    "planner",
+                    "test_rules_contracts.py",
+                    "test_contracts.py",
+                    "test_planner_recipe.py",
+                ],
             ),
             # Conservative: _llm_triage cascades into server + direct test file
             (
@@ -92,7 +102,10 @@ class TestCascadeNewEntries:
         tests_root = tmp_path / "tests"
         tests_root.mkdir(parents=True, exist_ok=True)
         for item in items_to_create:
-            if item.endswith(".py"):
+            if "/" in item:
+                (tests_root / item).parent.mkdir(parents=True, exist_ok=True)
+                (tests_root / item).touch()
+            elif item.endswith(".py"):
                 (tests_root / item).touch()
             else:
                 (tests_root / item).mkdir(parents=True, exist_ok=True)
@@ -263,6 +276,105 @@ class TestRecipeCascadeNarrowing:
             "recipe layer must include hooks/test_recipe_contract_freshness.py"
         )
         assert "hooks" not in path_names, "recipe layer must not include the entire hooks/ dir"
+
+
+_WORKSPACE_RECIPE_FILE_ENTRIES = [
+    "test_contracts.py",
+    "test_rules_skill_content.py",
+    "test_api.py",
+    "test_api_cache_isolation.py",
+    "test_bem_wrapper_structure.py",
+    "test_bundled_recipes_dispatch_ready.py",
+    "test_bundled_recipes_general.py",
+    "test_callable_contracts.py",
+    "test_contracts_block_fingerprint.py",
+    "test_contract_verdict_output_required.py",
+    "test_deep_staleness.py",
+    "test_diagnose_ci_subtype_output.py",
+    "test_hidden_ingredients.py",
+    "test_io_discovery.py",
+    "test_issue_url_pipeline.py",
+    "test_planner_contracts.py",
+    "test_recipe_temp_substitution.py",
+    "test_repository.py",
+    "test_research_campaign.py",
+    "test_rules_contracts.py",
+    "test_rules_dataflow_handoff.py",
+    "test_rules_skill_routing.py",
+    "test_rules_skills.py",
+    "test_rules_tools.py",
+    "test_skill_contract_completeness.py",
+    "test_skill_emit_consistency.py",
+    "test_skip_guard_deferral.py",
+    "test_staleness_cache.py",
+    "test_sub_recipe_loading.py",
+    "test_sub_recipe_validation.py",
+]
+
+_PLANNER_RECIPE_FILE_ENTRIES = [
+    "test_rules_contracts.py",
+    "test_contracts.py",
+    "test_planner_recipe.py",
+]
+
+
+class TestWorkspacePlannerCascadeNarrowing:
+    """REQ-FILT-003: workspace/planner cascade uses file-level recipe entries, not directory."""
+
+    def test_workspace_cascade_recipe_file_level_only(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        recipe_dir = tests_root / "recipe"
+        recipe_dir.mkdir(parents=True, exist_ok=True)
+        for fname in _WORKSPACE_RECIPE_FILE_ENTRIES:
+            (recipe_dir / fname).touch()
+        (recipe_dir / "test_unrelated.py").touch()
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/workspace/skills.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        result_names = {p.name for p in result}
+        for fname in _WORKSPACE_RECIPE_FILE_ENTRIES:
+            assert fname in result_names, f"{fname!r} missing from workspace cascade result"
+        assert "test_unrelated.py" not in result_names
+
+    def test_planner_cascade_recipe_file_level_only(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        recipe_dir = tests_root / "recipe"
+        recipe_dir.mkdir(parents=True, exist_ok=True)
+        for fname in _PLANNER_RECIPE_FILE_ENTRIES:
+            (recipe_dir / fname).touch()
+        (recipe_dir / "test_unrelated.py").touch()
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/planner/validator.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        result_names = {p.name for p in result}
+        for fname in _PLANNER_RECIPE_FILE_ENTRIES:
+            assert fname in result_names, f"{fname!r} missing from planner cascade result"
+        assert "test_unrelated.py" not in result_names
+
+    def test_planner_cascade_no_full_recipe_directory(self, tmp_path: Path) -> None:
+        """planner change must NOT include the full recipe/ directory."""
+        tests_root = tmp_path / "tests"
+        recipe_dir = tests_root / "recipe"
+        recipe_dir.mkdir(parents=True, exist_ok=True)
+        (recipe_dir / "test_planner_recipe.py").touch()
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/planner/validator.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        assert not any(
+            "/recipe/" in str(p) and p.name != "test_planner_recipe.py" for p in result
+        ), f"planner cascade must not include the full recipe/ directory; got {result}"
 
 
 def test_session_log_cascade_targets_hooks_quota_check() -> None:

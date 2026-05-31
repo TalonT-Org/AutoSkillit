@@ -660,7 +660,40 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "workspace": frozenset(
         {
             "workspace",
-            "recipe",
+            # recipe direct-import entries (import autoskillit.workspace at AST level):
+            "recipe/test_contracts.py",
+            "recipe/test_rules_skill_content.py",
+            # recipe transitive entries (exercise workspace via deferred imports in
+            # recipe/_api.py, _api_listing.py, _skill_helpers.py, _contracts_staleness.py,
+            # rules/rules_skills.py, rules/rules_skill_content.py):
+            "recipe/test_api.py",
+            "recipe/test_api_cache_isolation.py",
+            "recipe/test_bem_wrapper_structure.py",
+            "recipe/test_bundled_recipes_dispatch_ready.py",
+            "recipe/test_bundled_recipes_general.py",
+            "recipe/test_callable_contracts.py",
+            "recipe/test_contracts_block_fingerprint.py",
+            "recipe/test_contract_verdict_output_required.py",
+            "recipe/test_deep_staleness.py",
+            "recipe/test_diagnose_ci_subtype_output.py",
+            "recipe/test_hidden_ingredients.py",
+            "recipe/test_io_discovery.py",
+            "recipe/test_issue_url_pipeline.py",
+            "recipe/test_planner_contracts.py",
+            "recipe/test_recipe_temp_substitution.py",
+            "recipe/test_repository.py",
+            "recipe/test_research_campaign.py",
+            "recipe/test_rules_contracts.py",
+            "recipe/test_rules_dataflow_handoff.py",
+            "recipe/test_rules_skill_routing.py",
+            "recipe/test_rules_skills.py",
+            "recipe/test_rules_tools.py",
+            "recipe/test_skill_contract_completeness.py",
+            "recipe/test_skill_emit_consistency.py",
+            "recipe/test_skip_guard_deferral.py",
+            "recipe/test_staleness_cache.py",
+            "recipe/test_sub_recipe_loading.py",
+            "recipe/test_sub_recipe_validation.py",
             # Server file-level entries:
             "server/test_factory.py",
             "server/test_tools_clone.py",
@@ -790,11 +823,70 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     # Standalone modules (not subpackage directories)
     # L1
     "report": frozenset({"report", "skills_extended"}),
-    "planner": frozenset({"planner", "recipe"}),
+    "planner": frozenset(
+        {
+            "planner",
+            # recipe file-level entries — exercise planner via _check_result_field_drift
+            # in rules/rules_contracts.py (deferred import of PHASE_REQUIRED_KEYS):
+            "recipe/test_rules_contracts.py",
+            "recipe/test_contracts.py",
+            "recipe/test_planner_recipe.py",
+        }
+    ),
     "_llm_triage": frozenset({"test_llm_triage.py", "server"}),
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
     "smoke_utils": frozenset({"test_smoke_utils.py", "recipe", "smoke_utils"}),
     "version": frozenset({"test_version.py", "server", "cli"}),
+}
+
+# ---------------------------------------------------------------------------
+# Transitive override registry for REQ-GUARD-006
+# ---------------------------------------------------------------------------
+# Entries in LAYER_CASCADE_CONSERVATIVE whose test files do NOT import the
+# cascade package directly at AST level — they are transitively reachable via
+# deferred imports in recipe source modules (e.g. recipe/_api.py ->
+# autoskillit.workspace.DefaultSkillResolver).  These are exempt from the
+# direct-import check in test_file_level_entries_import_their_cascade_package.
+_IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
+    "workspace": frozenset(
+        {
+            "recipe/test_api.py",
+            "recipe/test_api_cache_isolation.py",
+            "recipe/test_bem_wrapper_structure.py",
+            "recipe/test_bundled_recipes_dispatch_ready.py",
+            "recipe/test_bundled_recipes_general.py",
+            "recipe/test_callable_contracts.py",
+            "recipe/test_contracts_block_fingerprint.py",
+            "recipe/test_contract_verdict_output_required.py",
+            "recipe/test_deep_staleness.py",
+            "recipe/test_diagnose_ci_subtype_output.py",
+            "recipe/test_hidden_ingredients.py",
+            "recipe/test_io_discovery.py",
+            "recipe/test_issue_url_pipeline.py",
+            "recipe/test_planner_contracts.py",
+            "recipe/test_recipe_temp_substitution.py",
+            "recipe/test_repository.py",
+            "recipe/test_research_campaign.py",
+            "recipe/test_rules_contracts.py",
+            "recipe/test_rules_dataflow_handoff.py",
+            "recipe/test_rules_skill_routing.py",
+            "recipe/test_rules_skills.py",
+            "recipe/test_rules_tools.py",
+            "recipe/test_skill_contract_completeness.py",
+            "recipe/test_skill_emit_consistency.py",
+            "recipe/test_skip_guard_deferral.py",
+            "recipe/test_staleness_cache.py",
+            "recipe/test_sub_recipe_loading.py",
+            "recipe/test_sub_recipe_validation.py",
+        }
+    ),
+    "planner": frozenset(
+        {
+            "recipe/test_rules_contracts.py",
+            "recipe/test_contracts.py",
+            "recipe/test_planner_recipe.py",
+        }
+    ),
 }
 
 LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {

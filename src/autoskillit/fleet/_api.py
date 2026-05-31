@@ -18,12 +18,12 @@ from autoskillit.core import (
     ProcessStaleError,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
+    atomic_write,
     claude_code_log_path,
     claude_code_project_dir,
     get_logger,
     truncate_text,
 )
-from autoskillit.core.io import atomic_write
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
 from autoskillit.fleet._expressions import _CAMPAIGN_REF_RE, _interpolate_campaign_refs
 from autoskillit.fleet._outcome import _checkpoint_to_dict, classify_dispatch_outcome

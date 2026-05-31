@@ -40,7 +40,7 @@ branch already checked out.
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-review/`
+- Create files outside `{{AUTOSKILLIT_TEMP}}/resolve-review/` — never write to `/tmp`, `/var/tmp`, or any system scratch directory. All intermediate and scratch files belong in `{{AUTOSKILLIT_TEMP}}/resolve-review/`
 - Merge, push, or call `merge_worktree`
 - Fix issues beyond the explicit scope of the reviewer's comments
 - Exceed 3 fix-and-retest iterations
@@ -529,45 +529,33 @@ persistent local file for later posting when mode switches to `github`.
 Read the `iteration` field from `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
 to get the round number. If that file is absent, use `iteration = 0`.
 
-```python
-import json, pathlib
+Read `{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json` if it
+exists. If absent, start with an empty array.
 
-deferred_file = pathlib.Path("{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json")
+For each entry in `classification_map` with `verdict == "DISCUSS"` and `severity != "info"`,
+build an entry object:
 
-# Load existing entries if file exists
-existing = []
-if deferred_file.exists():
-    existing = json.loads(deferred_file.read_text())
-
-# Build new entries from classification_map (DISCUSS only, info-severity excluded)
-discuss_entries = []
-for c in classification_map.values():
-    if c.get("verdict") != "DISCUSS":
-        continue
-    if c.get("severity") == "info":
-        continue
-    entry = {
-        "round": iteration_number,
-        "path": c.get("path"),
-        "line": c.get("line"),
-        "body": c.get("body"),
-        "evidence": c.get("evidence", ""),
-        "severity": c["severity"],
-        "dimension": c.get("dimension", "unknown"),
-        "verdict": "DISCUSS",
-        "category": c.get("category", "design_decision"),
-    }
-    discuss_entries.append(entry)
-
-# Deduplicate: skip if (path, line, body) already in existing
-seen = {(e["path"], e["line"], e["body"]) for e in existing}
-new_entries = [e for e in discuss_entries if (e["path"], e["line"], e["body"]) not in seen]
-
-# Write atomically
-all_entries = existing + new_entries
-deferred_file.write_text(json.dumps(all_entries, indent=2))
-print(f"Accumulated {len(new_entries)} new DISCUSS findings ({len(all_entries)} total)")
+```json
+{
+  "round": "<iteration_number from local_findings>",
+  "path": "<path from classification_map entry>",
+  "line": "<line from classification_map entry>",
+  "body": "<body from classification_map entry>",
+  "evidence": "<evidence from classification_map entry, default empty string>",
+  "severity": "<severity from classification_map entry>",
+  "dimension": "<dimension from classification_map entry, default 'unknown'>",
+  "verdict": "DISCUSS",
+  "category": "<category from classification_map entry, default 'design_decision'>"
+}
 ```
+
+Deduplicate: skip any entry where `(path, line, body)` already exists in the loaded array.
+
+Append new entries to the loaded array and use the **Write tool** to save the result to
+`{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json` as
+pretty-printed JSON (indent 2).
+
+Log: `"Accumulated N new DISCUSS findings (M total)"`.
 
 Info-severity findings are acknowledged in the current round via Step 6.5's INFO reply template and are not carried forward to deferred observations. Only genuine DISCUSS verdicts from Step 3.5 sub-agent validation — representing findings that require a human design decision — are accumulated.
 
@@ -739,76 +727,62 @@ Track:
 After Step 6.5, save all REJECT-classified comments to a **stable, accumulating** JSON file
 (without timestamp — the same file is reused across local rounds):
 
-```python
-import json, pathlib
+Read `{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json` if it exists.
+If absent, start with an empty array.
 
-reject_file = pathlib.Path("{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json")
+For each entry in `classification_map` with `verdict == "REJECT"`, build an entry object.
+Use the entry's `comment_id` if present; otherwise use `"local_unknown_{index}"` as a
+synthetic identifier:
 
-# Load existing entries if file exists
-existing = []
-if reject_file.exists():
-    existing = json.loads(reject_file.read_text())
-
-# Build new entries — use synthetic comment_id for local-mode findings
-# Format: "local_{iteration}_{index}" derived from iteration in local_findings + index
-reject_entries = []
-for idx, c in enumerate(classification_map.values()):
-    if c.get("verdict") != "REJECT":
-        continue
-    # Build synthetic comment_id from local finding source
-    comment_id = c.get("comment_id", f"local_unknown_{idx}")
-    entry = {
-        "comment_id": comment_id,
-        "path": c.get("path"),
-        "line": c.get("line"),
-        "body": c.get("body"),
-        "evidence": c.get("evidence", ""),
-        "category": c.get("category", "other"),
-        "pr_number": ${PR_NUMBER},
-        "feature_branch": "${feature_branch}",
-    }
-    reject_entries.append(entry)
-
-# Deduplicate: skip if (path, line, body) already in existing
-seen = {(e["path"], e["line"], e["body"]) for e in existing}
-new_entries = [e for e in reject_entries if (e["path"], e["line"], e["body"]) not in seen]
-
-# Write atomically
-all_entries = existing + new_entries
-reject_file.write_text(json.dumps(all_entries, indent=2))
-print(f"Accumulated {len(new_entries)} new REJECT patterns ({len(all_entries)} total)")
+```json
+{
+  "comment_id": "<comment_id or synthetic 'local_unknown_{index}'>",
+  "path": "<path from classification_map entry>",
+  "line": "<line from classification_map entry>",
+  "body": "<body from classification_map entry>",
+  "evidence": "<evidence from classification_map entry, default empty string>",
+  "category": "<category from classification_map entry, default 'other'>",
+  "pr_number": "<PR_NUMBER>",
+  "feature_branch": "<feature_branch>"
+}
 ```
+
+Deduplicate: skip any entry where `(path, line, body)` already exists in the loaded array.
+
+Append new entries to the loaded array and use the **Write tool** to save the result to
+`{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json` as pretty-printed
+JSON (indent 2).
+
+Log: `"Accumulated N new REJECT patterns (M total)"`.
 
 **Note:** In local mode, `comment_id` may not be a GitHub database ID. Use whatever ID
 is in the classification_map entry. If the finding came from `local_findings_{pr_number}.json`
 and has no native ID, use `"local_{iteration}_{index}"` as a synthetic identifier.
 
-**When `mode=github`:** Execute the following current behavior (timestamped, one-shot write).
+**When `mode=github`:** Save REJECT-classified comments with a timestamped filename
+(one-shot write, not accumulating).
 
-```bash
-ts=$(date +%Y%m%d-%H%M%S)
-python3 -c "
-import json, pathlib
-reject_entries = [
-    {
-        'comment_id': c['comment_id'],
-        'path': c['path'],
-        'line': c['line'],
-        'body': c['body'],
-        'evidence': c['evidence'],
-        'category': c['category'],
-        'pr_number': ${PR_NUMBER},
-        'feature_branch': '${feature_branch}',
-    }
-    for c in classification_map.values()
-    if c['verdict'] == 'REJECT'
-]
-pathlib.Path('{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}_${ts}.json').write_text(
-    json.dumps(reject_entries, indent=2)
-)
-print(f'Saved {len(reject_entries)} reject patterns')
-"
+For each entry in `classification_map` with `verdict == "REJECT"`, build an entry object:
+
+```json
+{
+  "comment_id": "<comment_id from classification_map entry>",
+  "path": "<path from classification_map entry>",
+  "line": "<line from classification_map entry>",
+  "body": "<body from classification_map entry>",
+  "evidence": "<evidence from classification_map entry>",
+  "category": "<category from classification_map entry>",
+  "pr_number": "<PR_NUMBER>",
+  "feature_branch": "<feature_branch>"
+}
 ```
+
+Use the **Write tool** to save the array to
+`{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}_${YYYYMMDD-HHMMSS}.json`
+as pretty-printed JSON (indent 2). Generate the timestamp suffix using
+`date +%Y%m%d-%H%M%S` in a Bash call before writing.
+
+Log: `"Saved N reject patterns"`.
 
 ### Step 7: Report
 

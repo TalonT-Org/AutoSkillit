@@ -80,6 +80,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_helpers_exports.py` | Asserts shared test helpers export required symbols (strip_markdown_code_regions) |
 | `test_session_type_exhaustive.py` | AST guard: _apply_session_type_visibility must use exhaustive match/assert_never dispatch |
 | `test_notification_fallback_coverage.py` | AST guard: every ctx.enable_components call in server/tools/ must have a non-notification fallback or be in an exempt session-scoped unlock function |
+| `test_cmd_spec_resume_no_string_match.py` | AST guard: no `"--resume" in <expr>` patterns in production code — use CmdSpec.is_resume instead |
 
 ## Architecture Notes
 

@@ -192,3 +192,14 @@ def test_no_autoskillit_imports():
         stripped = line.strip()
         if stripped.startswith("from autoskillit") or stripped.startswith("import autoskillit"):
             pytest.fail(f"IL-0 violation: {stripped}")
+
+
+def test_cmd_spec_has_is_resume_bool_field():
+    """CmdSpec.is_resume is a bool field (typed and present)."""
+    import typing
+
+    from autoskillit.core import CmdSpec
+
+    hints = typing.get_type_hints(CmdSpec)
+    assert "is_resume" in hints, "CmdSpec must have an is_resume field"
+    assert hints["is_resume"] is bool

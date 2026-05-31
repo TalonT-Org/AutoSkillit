@@ -359,11 +359,18 @@ async def _run_dispatch(
     dispatches_dir.mkdir(parents=True, exist_ok=True)
     campaign_id = tool_ctx.kitchen_id
 
+    recipe_snapshot = {
+        "recipe_name": recipe_obj.name,
+        "recipe_path": str(recipe_obj.path),
+        "recipe_version": recipe_obj.recipe_version or "",
+        "content_hash": recipe_obj.content_hash or "",
+        "effective_ingredients": dict(effective_ingredients),
+    }
     prior_session_chain: list[str] = []
     prior_dispatched_session_id = ""
     if resume_session_id and prior_dispatch_id:
-        handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
         try:
+            handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
             prior_state = read_state(handle.state_path)
             if prior_state:
                 for d in prior_state.dispatches:
@@ -380,14 +387,15 @@ async def _run_dispatch(
                         break
         except (OSError, ValueError, KeyError, TypeError):
             logger.warning("failed to read prior session chain from state", exc_info=True)
+            handle = DispatchStateHandle.create_fresh(
+                dispatches_dir,
+                campaign_id,
+                effective_name,
+                "",
+                [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+                recipe_snapshot,
+            )
     else:
-        recipe_snapshot = {
-            "recipe_name": recipe_obj.name,
-            "recipe_path": str(recipe_obj.path),
-            "recipe_version": recipe_obj.recipe_version or "",
-            "content_hash": recipe_obj.content_hash or "",
-            "effective_ingredients": dict(effective_ingredients),
-        }
         handle = DispatchStateHandle.create_fresh(
             dispatches_dir,
             campaign_id,

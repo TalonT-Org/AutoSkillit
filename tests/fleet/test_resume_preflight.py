@@ -362,3 +362,36 @@ class TestResumeSuccessGuard:
         )
 
         assert len(tool_ctx.executor.dispatch_calls) == 1
+
+    @pytest.mark.anyio
+    async def test_resume_proceeds_when_prior_state_missing(self, tool_ctx, monkeypatch, tmp_path):
+        """_run_dispatch proceeds when prior state file does not exist (fail-open)."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        jsonl_file = tmp_path / "session.jsonl"
+        jsonl_file.touch()
+        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        prior_id = "prior-dispatch-nonexistent"
+
+        await execute_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="t",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **_: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+            resume_session_id="some-session-id",
+            prior_dispatch_id=prior_id,
+        )
+
+        assert len(tool_ctx.executor.dispatch_calls) == 1

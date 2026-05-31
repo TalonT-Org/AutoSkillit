@@ -97,3 +97,32 @@ def test_eval_agent_error_handling_writes_json():
     source = _SKILL_FILE.read_text()
     assert '"success": false' in source or '"success":false' in source
     assert "error" in source.lower()
+
+
+def test_agent_eval_recipe_staging_includes_canary_id():
+    """Recipe staging path formula includes {canary_id} in all 4 locations."""
+    content = _RECIPE_FILE.read_text()
+    assert "{canary_id}.md" in content, (
+        "agent-eval.yaml staging path must include {canary_id} for parallel canary safety"
+    )
+    occurrences = content.count("{canary_id}")
+    assert occurrences >= 4, (
+        f"Expected {{canary_id}} in at least 4 locations "
+        f"(kitchen rule + stage + invoke + cleanup), found {occurrences}"
+    )
+
+
+def test_agents_gitignore_covers_eval_staging():
+    """src/autoskillit/agents/.gitignore suppresses eval staging file noise."""
+    gitignore_path = _PROJECT_ROOT / "src" / "autoskillit" / "agents" / ".gitignore"
+    assert gitignore_path.is_file(), "src/autoskillit/agents/.gitignore must exist"
+    content = gitignore_path.read_text()
+    assert "*-eval-*" in content, ".gitignore must cover eval staging files"
+
+
+def test_agent_eval_recipe_no_read_only_claim():
+    """Recipe description does not claim read-only (staging is write-delete)."""
+    content = _RECIPE_FILE.read_text()
+    assert "read-only" not in content.lower(), (
+        "agent-eval.yaml must not claim 'read-only' — staging involves writes and deletes"
+    )

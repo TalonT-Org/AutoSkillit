@@ -59,7 +59,7 @@ incorporate the issue content as additional strategic context.
 - Proceed past a checkpoint without user response
 
 **ALWAYS:**
-- Use `model: "sonnet"` for all Task tool subagent calls
+- Spawn all subagents via `Agent(model="sonnet")`
 - Initialize code-index via `set_project_path` before exploration (Phase 1)
 - Ask the user before moving to the next phase
 - Generate at least one diagram per direction explored
@@ -202,7 +202,7 @@ From the user's description, extract:
 
 For each direction, launch targeted analysis:
 
-**Subagent: Codebase Fit Analysis** (`model: "sonnet"`)
+**Subagent: Codebase Fit Analysis** via `Agent(model="sonnet")`
 - Where in the architecture would this connect?
 - What existing protocols, abstractions, or extension points support it?
 - What would need to change to accommodate it?

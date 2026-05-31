@@ -309,7 +309,7 @@ in parallel. Do NOT iterate through dimensions across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Each subagent (model: sonnet) receives only the PR diff content (not the full codebase) and
+Each subagent via `Agent(model="sonnet")` receives only the PR diff content (not the full codebase) and
 returns findings in JSON format:
 
 ```json

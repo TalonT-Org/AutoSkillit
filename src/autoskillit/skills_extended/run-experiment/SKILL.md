@@ -98,7 +98,7 @@ Before running the experiment:
 3. If `--adjust` flag is set, read previous results from
    `{{AUTOSKILLIT_TEMP}}/run-experiment/` and identify what went wrong.
 
-Launch subagents (model: "sonnet") if needed to investigate the experiment
+Launch subagents via `Agent(model="sonnet")` if needed to investigate the experiment
 setup, resolve dependencies, or research how to use specific tools mentioned
 in the plan.
 

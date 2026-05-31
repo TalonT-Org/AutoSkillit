@@ -102,7 +102,7 @@ If no candidates remain after filtering, emit the result block immediately and e
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Process up to 8 candidates in parallel using subagents (`model: "sonnet"`).
+Process up to 8 candidates in parallel using subagents via `Agent(model="sonnet")`.
 For each candidate:
 
 #### 5a. Fetch Full Content

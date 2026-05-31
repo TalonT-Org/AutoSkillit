@@ -71,7 +71,7 @@ hooks:
   direction X" — most changes are genuinely NEUTRAL to most directions
 
 **ALWAYS:**
-- Use `model: "sonnet"` for all Task tool subagent calls
+- Spawn all subagents via `Agent(model="sonnet")`
 - Initialize code-index via `set_project_path` before exploration (Step 0.5)
 - Parse the `---compass-data---` block before launching any analysis subagents
 - Provide specific file-level evidence for every non-NEUTRAL assessment

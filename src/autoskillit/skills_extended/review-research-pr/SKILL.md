@@ -134,7 +134,7 @@ validation. `VALID_LINE_RANGES` is used as fallback for interval checking.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn parallel subagents (Task tool, model: sonnet) for each research audit dimension.
+Spawn parallel subagents via `Agent(model="sonnet")` for each research audit dimension.
 Each subagent receives only the PR diff content (not the full codebase) and returns
 findings in JSON format:
 

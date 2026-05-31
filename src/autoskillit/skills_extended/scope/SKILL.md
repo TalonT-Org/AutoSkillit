@@ -73,7 +73,7 @@ text is supplementary context.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch subagents via the Task tool (model: "sonnet") to explore in parallel.
+Launch subagents via `Agent(model="sonnet")` to explore in parallel.
 You **must launch at least 5 subagents**. Select from the suggested menu below,
 define entirely custom subagents, or use any combination. The menu is a guide,
 not a mandate — you are free to skip entries that are not relevant and substitute

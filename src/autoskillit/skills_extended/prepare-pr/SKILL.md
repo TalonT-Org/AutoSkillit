@@ -95,7 +95,7 @@ Read all plan files and extract the first `# ` heading line from each, strip the
 and strip any trailing `— PART [A-Z] ONLY` suffix.
 
 - **Single plan:** Use the heading directly as `task_title`.
-- **Multiple plans:** Spawn a subagent (Task tool, model: sonnet) with all extracted
+- **Multiple plans:** Spawn a subagent via `Agent(model="sonnet")` with all extracted
   headings. Instruct it to synthesize a single concise PR title (under 70 characters).
 
 **PR Title Prefix (derived from run_name):**
@@ -133,7 +133,7 @@ Store as separate lists: `new_files` (added, ★) and `modified_files` (modified
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn a subagent (Task tool, model: sonnet) with the list of changed file paths and the
+Spawn a subagent via `Agent(model="sonnet")` with the list of changed file paths and the
 following lens menu:
 
 ```

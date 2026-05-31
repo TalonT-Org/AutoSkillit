@@ -126,7 +126,7 @@ branch_name = ${BRANCH_NAME}
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Before implementing anything, launch subagents (model: "sonnet") to understand
+Before implementing anything, launch subagents via `Agent(model="sonnet")` to understand
 the codebase context needed for the experiment. The following are **minimum
 required** — launch as many additional subagents as needed.
 

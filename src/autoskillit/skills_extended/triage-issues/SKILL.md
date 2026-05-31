@@ -89,7 +89,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 
 Before codebase analysis, run `issue-splitter` for every open issue to detect mixed-concern issues and expand the working set.
 
-Launch up to 8 subagents in parallel (`model: "sonnet"`), one per issue. Each subagent invokes:
+Launch up to 8 subagents in parallel via `Agent(model="sonnet")`, one per issue. Each subagent invokes:
 
 ```
 /autoskillit:issue-splitter --issue {N} --repo {owner/repo} [--no-label if --no-label was passed] [--dry-run if --dry-run was passed]

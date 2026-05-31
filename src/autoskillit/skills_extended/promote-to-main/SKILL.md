@@ -170,7 +170,7 @@ EOF
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn three parallel Task subagents (model: sonnet) to validate promotion readiness.
+Spawn three parallel subagents via `Agent(model="sonnet")` to validate promotion readiness.
 All three must pass before analysis proceeds. If any fails, report the failure clearly
 and exit 1. Do NOT create a PR when pre-flight fails.
 
@@ -236,7 +236,7 @@ treat as a warning (non-blocking) and note it in the report.
 
 ### Phase 2: Change Inventory (parallel subagents)
 
-Spawn four parallel Task subagents (model: sonnet).
+Spawn four parallel subagents via `Agent(model="sonnet")`.
 
 #### Subagent 2A: Commit Categorization
 
@@ -360,7 +360,7 @@ Using ONLY classDef styles from the mermaid skill (no invented colors).
 
 #### Step 3.1: Select Arch-Lens Lenses
 
-Spawn a Task subagent (model: sonnet) with the `changed_files` list and this lens menu:
+Spawn a subagent via `Agent(model="sonnet")` with the `changed_files` list and this lens menu:
 
 ```
 c4-container, concurrency, data-lineage, deployment, development,
@@ -429,7 +429,7 @@ new/modified nodes, add to `validated_diagrams`. Otherwise discard.
 
 #### Step 4.1: Release Notes Synthesis
 
-Spawn one Task subagent (model: sonnet) with results from Phase 2 ONLY (no domain
+Spawn one subagent via `Agent(model="sonnet")` with results from Phase 2 ONLY (no domain
 analysis or quality assessment data).
 
 The subagent receives:

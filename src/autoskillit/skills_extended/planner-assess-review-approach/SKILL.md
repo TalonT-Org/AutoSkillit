@@ -67,7 +67,7 @@ established conventions. This context informs whether a WP is "following establi
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn 1–2 subagents (model: "sonnet") to evaluate WPs in parallel batches. For each WP,
+Spawn 1–2 subagents via `Agent(model="sonnet")` to evaluate WPs in parallel batches. For each WP,
 evaluate against these signals:
 
 **Benefit signals (recommend: true):**

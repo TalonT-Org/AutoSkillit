@@ -112,7 +112,7 @@ Detect and read inputs:
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch subagents (model: "sonnet") to assess feasibility. The following are
+Launch subagents via `Agent(model="sonnet")` to assess feasibility. The following are
 **minimum required** — launch as many additional subagents as needed to fill
 information gaps and produce the best possible experiment plan.
 

@@ -369,9 +369,9 @@ class CodexBackend:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        if env_extras:
-            filtered_base.update(env_extras)
-        env = self.env_policy().build_env(filtered_base)
+        env = self.env_policy().build_env(
+            filtered_base, extras=dict(env_extras) if env_extras else None
+        )
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_skill_session_cmd(

@@ -910,6 +910,18 @@ def test_unbounded_cycle_suppressed_when_dropped_merge_group_ci_has_guard(any_re
     from autoskillit.core.types import Severity
     from autoskillit.recipe.validator import run_semantic_rules
 
+    mq_steps_with_guard = [
+        s
+        for s in any_recipe.steps.values()
+        if s.tool == "wait_for_merge_queue"
+        and s.with_args
+        and int(s.with_args.get("max_merge_group_drops", 0)) >= 1
+    ]
+    assert mq_steps_with_guard, (
+        f"Precondition: {any_recipe.name} must have at least one wait_for_merge_queue step "
+        f"with max_merge_group_drops >= 1 for this test to be meaningful"
+    )
+
     findings = run_semantic_rules(any_recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
     dmgci_error_findings = [
@@ -951,6 +963,18 @@ def test_dropped_merge_group_ci_reenqueue_guard_fires_without_guard(any_recipe) 
 def test_dropped_merge_group_ci_reenqueue_guard_suppressed_with_guard(any_recipe) -> None:
     """Semantic rule I9 must NOT fire when max_merge_group_drops >= 1."""
     from autoskillit.recipe.validator import run_semantic_rules
+
+    mq_steps_with_guard = [
+        s
+        for s in any_recipe.steps.values()
+        if s.tool == "wait_for_merge_queue"
+        and s.with_args
+        and int(s.with_args.get("max_merge_group_drops", 0)) >= 1
+    ]
+    assert mq_steps_with_guard, (
+        f"Precondition: {any_recipe.name} must have at least one wait_for_merge_queue step "
+        f"with max_merge_group_drops >= 1 for this test to be meaningful"
+    )
 
     findings = run_semantic_rules(any_recipe)
     i9_findings = [

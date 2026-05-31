@@ -680,6 +680,8 @@ def test_error_code_in_codex_raw_dict() -> None:
 
 
 def test_error_code_empty_when_no_failure() -> None:
-    line = json.dumps({"type": "turn.completed", "usage": {"input_tokens": 100}})
+    line = json.dumps(
+        {"type": "turn.completed", "usage": {"input_tokens": 100, "output_tokens": 50}}
+    )
     result = CodexResultParser().parse_stdout(line)
     assert result.raw["error_code"] == ""

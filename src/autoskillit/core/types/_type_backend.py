@@ -62,7 +62,7 @@ class BackendCapabilities:
     supports_context_exhaustion_detection: bool = field(default=False)
     # True when backend supports project-local --add-dir skill discovery
     project_local_skills_capable: bool = field(default=False)
-    # True when MCP client processes notifications/tools/list_changed to reveal kitchen tools
+    # False triggers pre-reveal kitchen at startup instead of notification-driven reveal
     supports_tool_list_changed: bool = field(default=True)
     # SKILL.md front-matter fields required by this backend
     required_skill_fields: frozenset[str] = field(default_factory=frozenset)

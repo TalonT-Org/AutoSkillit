@@ -81,11 +81,9 @@ def _apply_session_type_visibility() -> None:
         case SessionType.ORCHESTRATOR | SessionType.SKILL if (
             _mcp_client_backend == AGENT_BACKEND_CODEX
         ):
-            # Non-notification backend: pre-reveal kitchen + plan-review at startup
             mcp.enable(tags={"kitchen"})
             mcp.enable(tags={"plan-review"})
         case SessionType.ORCHESTRATOR | SessionType.SKILL:
-            # Interactive session with notification support: open_kitchen handles reveal
             pass
         case _ as unreachable:
             assert_never(unreachable)

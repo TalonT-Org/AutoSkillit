@@ -14,9 +14,6 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-# Functions that call ctx.enable_components but are exempt from requiring a
-# _skip_notify guard because they are session-scoped unlocks where startup
-# pre-reveal already covers non-notification clients.
 _EXEMPT_FUNCTIONS: frozenset[str] = frozenset({"unlock_agent_pack"})
 
 # The guard variable name that signals a non-notification fallback.

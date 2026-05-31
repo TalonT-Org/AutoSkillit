@@ -274,7 +274,6 @@ def test_no_retired_agent_name_has_a_live_file():
         )
 
 
-# T15: plan-review resources are pre-revealed at startup for non-notification backends
 @pytest.mark.anyio
 async def test_plan_review_pre_revealed_for_non_notification_backend(monkeypatch):
     """For codex (non-notification) backend, plan-review resources are visible at startup

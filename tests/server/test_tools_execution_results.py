@@ -761,6 +761,7 @@ async def test_run_skill_returns_structured_result_on_cancelled_error(
     assert data["subtype"] == "cancelled"
     assert data["needs_retry"] is True
     assert data["retry_reason"] == "cancelled"
+    assert "cancelled" in data["result"].lower()
 
 
 class TestCwdExistenceValidation:

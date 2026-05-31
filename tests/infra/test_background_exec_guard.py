@@ -24,13 +24,17 @@ def _run_guard(
     from autoskillit.hooks.guards.background_exec_guard import main
 
     stdin_content = raw_stdin if raw_stdin is not None else json.dumps(event)
-    env_updates: dict[str, str] = {}
+    env_snapshot = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_SESSION_TYPE")
+    }
     if headless:
-        env_updates["AUTOSKILLIT_HEADLESS"] = "1"
+        env_snapshot["AUTOSKILLIT_HEADLESS"] = "1"
     if session_type is not None:
-        env_updates["AUTOSKILLIT_SESSION_TYPE"] = session_type
+        env_snapshot["AUTOSKILLIT_SESSION_TYPE"] = session_type
     with (
-        patch.dict(os.environ, env_updates, clear=False),
+        patch.dict(os.environ, env_snapshot, clear=True),
         patch("sys.stdin", io.StringIO(stdin_content)),
     ):
         buf = io.StringIO()

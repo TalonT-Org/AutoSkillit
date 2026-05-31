@@ -203,6 +203,7 @@ from .types import BackendEventKind as BackendEventKind
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import CampaignProtector as CampaignProtector
+from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import CanonicalTokenUsage as CanonicalTokenUsage
 from .types import CaptureEntrySpec as CaptureEntrySpec
 from .types import CaptureValueType as CaptureValueType

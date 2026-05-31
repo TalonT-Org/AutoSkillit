@@ -693,6 +693,10 @@ async def run_skill(
             is_read_only = bool(
                 tool_ctx.read_only_resolver and tool_ctx.read_only_resolver(skill_command)
             )
+            completion_required = bool(
+                tool_ctx.completion_required_resolver
+                and tool_ctx.completion_required_resolver(skill_command)
+            )
             allowed_write_prefix = ""
             allowed_write_prefixes: tuple[str, ...] = ()
             if write_watch_dirs:
@@ -850,6 +854,7 @@ async def run_skill(
                         allowed_write_prefix=allowed_write_prefix,
                         allowed_write_prefixes=allowed_write_prefixes,
                         readonly_skill=is_read_only,
+                        completion_required=completion_required,
                         write_watch_dirs=write_watch_dirs,
                         provider_extras=provider_extras,
                         profile_name=profile_name_out,

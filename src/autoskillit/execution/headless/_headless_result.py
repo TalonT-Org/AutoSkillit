@@ -148,6 +148,7 @@ def _build_skill_result(
     fs_writes_detected: bool = False,
     git_writes_detected: bool = False,
     prior_completion_markers: Sequence[str] | None = None,
+    completion_required: bool = False,
     *,
     provider_used: str = "",
     supports_claude_format_stdout: bool = True,
@@ -199,6 +200,8 @@ def _build_skill_result(
                 TerminationReason.COMPLETED,
                 completion_marker=completion_marker,
                 channel_confirmation=result.channel_confirmation,
+                expected_output_patterns=expected_output_patterns,
+                completion_required=completion_required,
             )
             if success:
                 logger.warning(
@@ -301,6 +304,8 @@ def _build_skill_result(
                 TerminationReason.COMPLETED,
                 completion_marker=completion_marker,
                 channel_confirmation=result.channel_confirmation,
+                expected_output_patterns=expected_output_patterns,
+                completion_required=completion_required,
             )
             if success:
                 logger.warning(
@@ -539,6 +544,7 @@ def _build_skill_result(
         expected_output_patterns=expected_output_patterns,
         prior_completion_markers=prior_completion_markers,
         exit_code_is_terminal=exit_code_is_terminal,
+        completion_required=completion_required,
     )
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
@@ -590,6 +596,7 @@ def _build_skill_result(
 
     if (
         normalized_subtype == "missing_completion_marker"
+        and not completion_required
         and expected_output_patterns
         and infra_category == InfraExitCategory.COMPLETED
         and _check_expected_patterns(session.result.strip(), expected_output_patterns)

@@ -60,6 +60,7 @@ def _compute_retry(
     prior_completion_markers: Sequence[str] | None = None,
     expected_output_patterns: Sequence[str] = (),
     exit_code_is_terminal: bool = False,
+    completion_required: bool = False,
 ) -> tuple[bool, RetryReason]:
     """Compute whether the session result warrants a retry.
 
@@ -143,11 +144,12 @@ def _compute_retry(
                     if expected_output_patterns and _check_expected_patterns(
                         session.result.strip(), expected_output_patterns
                     ):
-                        logger.debug(
-                            "early_stop_suppressed_by_patterns",
-                            pattern_count=len(expected_output_patterns),
-                        )
-                        return False, RetryReason.NONE
+                        if not completion_required:
+                            logger.debug(
+                                "early_stop_suppressed_by_patterns",
+                                pattern_count=len(expected_output_patterns),
+                            )
+                            return False, RetryReason.NONE
                     skill_tool_calls = [t for t in session.tool_uses if t.get("name") == "Skill"]
                     logger.debug(
                         "compute_retry_early_stop",

@@ -34,6 +34,7 @@ def _compute_success(
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
     expected_output_patterns: Sequence[str] = (),
     prior_completion_markers: Sequence[str] | None = None,
+    completion_required: bool = False,
 ) -> bool:
     """Cross-validate all signals to determine unambiguous success/failure.
 
@@ -92,7 +93,11 @@ def _compute_success(
             ):
                 return False
             content_ok = _check_session_content(
-                session, completion_marker, expected_output_patterns, prior_completion_markers
+                session,
+                completion_marker,
+                expected_output_patterns,
+                prior_completion_markers,
+                completion_required=completion_required,
             )
             logger.debug(
                 "compute_success_termination",
@@ -121,7 +126,10 @@ def _compute_success(
                     and completion_marker in session.result
                 ):
                     content_ok = _check_session_content(
-                        session, completion_marker, expected_output_patterns
+                        session,
+                        completion_marker,
+                        expected_output_patterns,
+                        completion_required=completion_required,
                     )
                     logger.debug(
                         "compute_success_natural_exit_post_completion_kill",
@@ -131,7 +139,11 @@ def _compute_success(
                     return content_ok
                 return False
             content_ok = _check_session_content(
-                session, completion_marker, expected_output_patterns, prior_completion_markers
+                session,
+                completion_marker,
+                expected_output_patterns,
+                prior_completion_markers,
+                completion_required=completion_required,
             )
             logger.debug(
                 "compute_success_termination",
@@ -154,6 +166,7 @@ def _compute_outcome(
     expected_output_patterns: Sequence[str] = (),
     prior_completion_markers: Sequence[str] | None = None,
     exit_code_is_terminal: bool = False,
+    completion_required: bool = False,
 ) -> tuple[SessionOutcome, RetryReason]:
     """Compose _compute_success and _compute_retry into a (SessionOutcome, RetryReason) pair.
 
@@ -168,6 +181,7 @@ def _compute_outcome(
         channel_confirmation,
         expected_output_patterns,
         prior_completion_markers,
+        completion_required=completion_required,
     )
     needs_retry, retry_reason = _compute_retry(
         session,
@@ -177,6 +191,7 @@ def _compute_outcome(
         completion_marker,
         prior_completion_markers,
         expected_output_patterns,
+        completion_required=completion_required,
         exit_code_is_terminal=exit_code_is_terminal,
     )
 

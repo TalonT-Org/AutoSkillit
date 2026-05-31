@@ -10,6 +10,7 @@ from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
 from ._type_results import InputSpec, SkillResult, TestResult, ValidatedAddDir, WriteBehaviorSpec
 
 __all__ = [
+    "CompletionRequiredResolver",
     "InputContractResolver",
     "TestRunner",
     "HeadlessExecutor",
@@ -57,6 +58,7 @@ class HeadlessExecutor(Protocol):
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
         readonly_skill: bool = False,
+        completion_required: bool = False,
         write_watch_dirs: Sequence[Path] = (),
         provider_extras: Mapping[str, str] | None = None,
         profile_name: str = "",
@@ -120,6 +122,13 @@ class WriteExpectedResolver(Protocol):
     """Protocol for resolving write-expectation metadata from skill contracts."""
 
     def __call__(self, skill_command: str) -> WriteBehaviorSpec: ...
+
+
+@runtime_checkable
+class CompletionRequiredResolver(Protocol):
+    """Protocol for resolving whether a skill requires the completion marker."""
+
+    def __call__(self, skill_command: str) -> bool: ...
 
 
 @runtime_checkable

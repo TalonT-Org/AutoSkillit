@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 SKILL_MD = (
     Path(__file__).parents[2] / "src/autoskillit/skills_extended/open-integration-pr/SKILL.md"
@@ -86,7 +87,7 @@ def test_skill_skips_empty_domains(skill_text: str) -> None:
 
 def test_open_integration_pr_contract_has_domain_partitions_path() -> None:
     """C-OIP-1: open-integration-pr contract must declare domain_partitions_path input."""
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     inputs = raw.get("skills", {}).get("open-integration-pr", {}).get("inputs", [])
     names = [inp["name"] for inp in inputs]
     assert "domain_partitions_path" in names, (

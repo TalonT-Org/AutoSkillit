@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 VERSION_BUMP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "version-bump.yml"
@@ -19,7 +19,7 @@ RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 
 def _load(path: Path) -> dict:
-    return yaml.safe_load(path.read_text())
+    return load_yaml(path)
 
 
 def _uv_version_pins(workflow: dict) -> list[str]:
@@ -114,7 +114,7 @@ class TestVersionBumpWorkflow:
 
     def test_uv_version_consistent_with_tests_yml(self):
         """uv version pin must match the pin used in tests.yml."""
-        tests_wf = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text())
+        tests_wf = load_yaml(REPO_ROOT / ".github" / "workflows" / "tests.yml")
         bump_wf = _load(VERSION_BUMP_WORKFLOW)
         tests_pins = _uv_version_pins(tests_wf)
         bump_pins = _uv_version_pins(bump_wf)
@@ -295,7 +295,7 @@ class TestPatchBumpDevelopWorkflow:
         assert all(p for p in pins)
 
     def test_uv_version_consistent_with_tests_yml(self):
-        tests_wf = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text())
+        tests_wf = load_yaml(REPO_ROOT / ".github" / "workflows" / "tests.yml")
         bump_wf = _load(PATCH_BUMP_DEVELOP_WORKFLOW)
         tests_pins = _uv_version_pins(tests_wf)
         bump_pins = _uv_version_pins(bump_wf)
@@ -432,7 +432,7 @@ class TestReleaseWorkflow:
         assert all(p for p in pins)
 
     def test_uv_version_consistent_with_tests_yml(self):
-        tests_wf = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "tests.yml").read_text())
+        tests_wf = load_yaml(REPO_ROOT / ".github" / "workflows" / "tests.yml")
         release_wf = _load(RELEASE_WORKFLOW)
         tests_pins = _uv_version_pins(tests_wf)
         release_pins = _uv_version_pins(release_wf)

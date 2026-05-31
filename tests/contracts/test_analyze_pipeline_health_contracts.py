@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.execution.session._session_content import _check_expected_patterns
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -17,7 +17,7 @@ def _load_contract() -> dict:
 
     contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
     assert contracts_path.is_file(), f"skill_contracts.yaml not found at {contracts_path}"
-    raw = yaml.safe_load(contracts_path.read_text()) or {}
+    raw = load_yaml(contracts_path) or {}
     return raw.get("skills", {}).get("analyze-pipeline-health", {})
 
 

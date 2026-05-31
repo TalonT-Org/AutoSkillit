@@ -10,9 +10,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
 from autoskillit.core import SKILL_TOOLS
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
@@ -23,7 +23,7 @@ _RECIPE_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "rec
 
 @pytest.fixture(scope="module")
 def planner_yaml() -> dict:
-    return yaml.safe_load((_RECIPE_DIR / "planner.yaml").read_text())
+    return load_yaml(_RECIPE_DIR / "planner.yaml")
 
 
 _ALL_BUNDLED_RECIPE_PATHS = sorted(builtin_recipes_dir().glob("*.yaml"))

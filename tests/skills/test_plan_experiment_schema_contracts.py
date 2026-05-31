@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from autoskillit.core.io import load_yaml
+
 
 def _repo_root() -> Path:
     return Path(__file__).parent.parent.parent
@@ -85,10 +87,8 @@ def test_research_recipe_passes_revision_guidance_to_plan_experiment():
 
 def test_skill_contracts_plan_experiment_has_revision_guidance_input():
     """skill_contracts.yaml must register revision_guidance as optional (required: false) input."""
-    import yaml
-
     contracts_path = _repo_root() / "src/autoskillit/recipe/skill_contracts.yaml"
-    raw = yaml.safe_load(contracts_path.read_text())
+    raw = load_yaml(contracts_path)
     pe = raw.get("skills", {}).get("plan-experiment", {})
     inputs = {inp["name"]: inp for inp in pe.get("inputs", [])}
     assert "revision_guidance" in inputs, (

@@ -11,7 +11,8 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = REPO_ROOT / "src" / "autoskillit"
@@ -151,7 +152,7 @@ def _count_hooks_by_event() -> dict[str, int]:
 
 
 def _quota_thresholds_default() -> tuple[float, float]:
-    data = yaml.safe_load(_read(SRC_DIR / "config" / "defaults.yaml"))
+    data = load_yaml(SRC_DIR / "config" / "defaults.yaml")
     quota = data.get("quota_guard")
     assert quota is not None, "quota_guard key missing from config/defaults.yaml"
     short = quota.get("short_window_threshold")

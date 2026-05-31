@@ -120,11 +120,10 @@ def test_planner_init_captures_planner_dir(planner_recipe):
 
 
 def test_planner_steps_use_context_planner_dir():
-    import yaml
-
+    from autoskillit.core.io import load_yaml
     from autoskillit.recipe.io import builtin_recipes_dir
 
-    raw = yaml.safe_load((builtin_recipes_dir() / "planner.yaml").read_text())
+    raw = load_yaml(builtin_recipes_dir() / "planner.yaml")
     raw_steps = raw.get("steps", {})
     for step_name, step_dict in raw_steps.items():
         step_str = str(step_dict)

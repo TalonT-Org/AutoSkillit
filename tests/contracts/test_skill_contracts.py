@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.execution.session._session_content import _check_expected_patterns
 
 _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
@@ -16,7 +16,7 @@ _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_cont
 
 @pytest.fixture(scope="module")
 def skills() -> dict:
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     return raw.get("skills", {})
 
 
@@ -135,7 +135,7 @@ def test_review_design_experiment_type_output_has_allowed_values() -> None:
     Without this constraint, invalid values (e.g. 'controlled') can propagate
     silently through capture and downstream recipe steps.
     """
-    contracts = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    contracts = load_yaml(_CONTRACTS_YAML)
     review_design = contracts["skills"]["review-design"]
     outputs = {o["name"]: o for o in review_design["outputs"]}
     et_output = outputs.get("experiment_type")
@@ -171,9 +171,7 @@ def test_all_exp_lens_skills_have_contracts(skills):
 
 
 _EXP_LENS_SKILLS: Final[list[str]] = sorted(
-    name
-    for name in yaml.safe_load(_CONTRACTS_YAML.read_text()).get("skills", {})
-    if name.startswith("exp-lens-")
+    name for name in load_yaml(_CONTRACTS_YAML).get("skills", {}) if name.startswith("exp-lens-")
 )
 
 
@@ -244,7 +242,7 @@ def test_infrastructure_missing_verdict_present_in_contract() -> None:
     The no_test_infrastructure verdict is emitted when test_check detects that
     the worktree lacks test infrastructure (no Taskfile, command not in PATH).
     """
-    contracts = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    contracts = load_yaml(_CONTRACTS_YAML)
     rf = contracts["skills"]["resolve-failures"]
     outputs = {o["name"]: o for o in rf["outputs"]}
     verdict_output = outputs.get("verdict")
@@ -314,7 +312,7 @@ def test_skill_contracts_allowed_values_covers_recipe_routes() -> None:
         "implementation-groups.yaml",
         "merge-prs.yaml",
     ]
-    contracts = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    contracts = load_yaml(_CONTRACTS_YAML)
     verdict_output = next(
         (o for o in contracts["skills"]["review-pr"].get("outputs", []) if o["name"] == "verdict"),
         None,

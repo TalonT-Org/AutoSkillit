@@ -3,10 +3,10 @@
 from pathlib import Path
 
 import pytest
-import yaml
 
 import autoskillit.config
 from autoskillit.config import AutomationConfig, load_config
+from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
@@ -42,8 +42,7 @@ class TestPlanConfigDefaultsYaml:
         """T1.4: defaults.yaml plan.adversarial_review_level == 'auto'."""
         pkg_root = Path(autoskillit.config.__file__).parent
         defaults_file = pkg_root / "defaults.yaml"
-        with open(defaults_file) as f:
-            data = yaml.safe_load(f)
+        data = load_yaml(defaults_file)
         assert data["plan"]["adversarial_review_level"] == "auto"
 
 

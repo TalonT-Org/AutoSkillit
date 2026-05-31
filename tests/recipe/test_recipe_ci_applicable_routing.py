@@ -10,8 +10,8 @@ from __future__ import annotations
 import re
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir
 
 from .conftest import (
@@ -30,8 +30,7 @@ RECIPE_FILES = sorted(builtin_recipes_dir().glob("*.yaml"))
 
 @pytest.fixture(params=RECIPE_FILES, ids=lambda p: p.stem)
 def recipe_data(request):
-    with open(request.param) as f:
-        return request.param.stem, yaml.safe_load(f)
+    return request.param.stem, load_yaml(request.param)
 
 
 def _find_ci_event_capture_steps(steps: dict) -> list[tuple[str, dict]]:
@@ -122,8 +121,7 @@ def test_merge_prs_routes_around_ci_wait_when_not_applicable(recipe_data) -> Non
 def test_impl_recipes_route_around_ci_wait_when_not_applicable(recipe_name) -> None:
     """implementation/implementation-groups/remediation must have ci_applicable routing."""
     recipe_path = builtin_recipes_dir() / f"{recipe_name}.yaml"
-    with open(recipe_path) as f:
-        data = yaml.safe_load(f)
+    data = load_yaml(recipe_path)
     steps = data.get("steps") or {}
     assert "route_ci_applicable" in steps, f"{recipe_name} must have route_ci_applicable step"
     route_step = steps["route_ci_applicable"]

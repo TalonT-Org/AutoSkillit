@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import re
 
-import yaml
-
 from autoskillit.core import pkg_root
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe._skill_placeholder_parser import (
     extract_bash_blocks,
     extract_bash_placeholders,
@@ -49,7 +48,7 @@ def test_make_campaign_no_undefined_placeholders() -> None:
 
 def test_make_campaign_skill_contract_registered() -> None:
     """make-campaign has a skill_contracts.yaml entry with campaign_path file_path output."""
-    raw = yaml.safe_load(_CONTRACTS_PATH.read_text())
+    raw = load_yaml(_CONTRACTS_PATH)
     skills = raw.get("skills", {}) if isinstance(raw, dict) else {}
 
     assert "make-campaign" in skills, "make-campaign must be registered in skill_contracts.yaml"

@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 
 def _skill_md_text() -> str:
@@ -394,7 +395,7 @@ def test_bem_contract_pattern_example_includes_new_tokens() -> None:
         / "recipe"
         / "skill_contracts.yaml"
     )
-    raw = yaml.safe_load(contracts_yaml.read_text())
+    raw = load_yaml(contracts_yaml)
     skills = raw.get("skills", {})
     example = skills["build-execution-map"]["pattern_examples"][0]
     assert "has_deferred" in example

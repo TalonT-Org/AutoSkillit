@@ -105,7 +105,7 @@ def test_review_pr_own_pr_comment_retry():
 def test_contract_yamls_include_approved_with_comments() -> None:
     """All 3 contract YAML files must include approved_with_comments in
     expected_output_patterns and pattern_examples for the review-pr contract."""
-    import yaml
+    from autoskillit.core.io import load_yaml
 
     contracts_dir = (
         Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes" / "contracts"
@@ -116,7 +116,7 @@ def test_contract_yamls_include_approved_with_comments() -> None:
         contracts_dir / "implementation-groups.yaml",
     ]
     for contract_path in contract_files:
-        data = yaml.safe_load(contract_path.read_text())
+        data = load_yaml(contract_path)
         review_pr = data.get("skills", {}).get("review-pr", {})
         patterns = review_pr.get("expected_output_patterns", [])
         examples = review_pr.get("pattern_examples", [])

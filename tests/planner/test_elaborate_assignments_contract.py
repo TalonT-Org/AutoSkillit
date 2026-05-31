@@ -3,7 +3,8 @@
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 pytestmark = [
     pytest.mark.layer("planner"),
@@ -22,7 +23,7 @@ SKILL_MD_PATH = (
 
 @pytest.fixture(scope="module")
 def contracts() -> dict:
-    return yaml.safe_load(CONTRACTS_PATH.read_text())
+    return load_yaml(CONTRACTS_PATH)
 
 
 @pytest.fixture(scope="module")

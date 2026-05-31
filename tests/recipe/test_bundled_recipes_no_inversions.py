@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
@@ -31,7 +31,7 @@ def test_bundled_recipe_has_no_capture_inversions(recipe_path):
 def test_diagnose_ci_skill_command_uses_captured_ci_event(recipe_path):
     """No skill_command step may pass a hardcoded trigger event as a positional.
     All /autoskillit:diagnose-ci invocations must thread ${{ context.ci_event }}."""
-    recipe = yaml.safe_load(recipe_path.read_text())
+    recipe = load_yaml(recipe_path)
     for step_name, step in recipe.get("steps", {}).items():
         cmd = step.get("skill_command") or step.get("with", {}).get("skill_command", "")
         if "diagnose-ci" in cmd:

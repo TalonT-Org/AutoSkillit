@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.core.types import Severity
 from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.contracts import (
@@ -73,7 +73,7 @@ def test_bundled_recipe_dispatch_ready(recipe_name: str) -> None:
 @pytest.mark.parametrize("contract_name", _CONTRACT_STEMS)
 def test_contract_card_fresh(contract_name: str) -> None:
     contract_path = _CONTRACTS_DIR / f"{contract_name}.yaml"
-    contract = yaml.safe_load(contract_path.read_text())
+    contract = load_yaml(contract_path)
     assert isinstance(contract, dict), f"Malformed: expected dict, got {type(contract)}"
     stale = check_contract_staleness(contract)
     assert stale == [], f"Contract '{contract_name}' is stale: {stale}"
@@ -85,7 +85,7 @@ def test_contract_covers_all_recipe_steps(contract_name: str) -> None:
     if not recipe_path.exists():
         pytest.skip(f"No recipe YAML for contract '{contract_name}'")
     contract_path = _CONTRACTS_DIR / f"{contract_name}.yaml"
-    contract = yaml.safe_load(contract_path.read_text())
+    contract = load_yaml(contract_path)
     recipe = load_recipe(recipe_path)
 
     contract_steps = {entry["step"] for entry in contract.get("dataflow", [])}

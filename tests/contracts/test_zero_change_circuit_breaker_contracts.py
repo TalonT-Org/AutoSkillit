@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -13,7 +14,7 @@ RECIPES_DIR = Path(__file__).parents[2] / "src" / "autoskillit" / "recipes"
 
 
 def _load(name: str) -> dict:
-    return yaml.safe_load((RECIPES_DIR / f"{name}.yaml").read_text())
+    return load_yaml(RECIPES_DIR / f"{name}.yaml")
 
 
 def test_implementation_recipe_has_change_check_after_implement() -> None:

@@ -4,7 +4,8 @@ ci_event derivation."""
 from __future__ import annotations
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -18,8 +19,7 @@ RECIPE_FILES = [
 @pytest.mark.parametrize("recipe_path", RECIPE_FILES)
 def test_ci_watch_step_has_event_parameter(recipe_path: str) -> None:
     """Primary ci_watch steps must pass event: to prevent branch-event mismatch."""
-    with open(recipe_path) as f:
-        recipe = yaml.safe_load(f)
+    recipe = load_yaml(recipe_path)
     steps = recipe["steps"]
     assert "ci_watch" in steps, f"{recipe_path}: no ci_watch step found"
     ci_watch = steps["ci_watch"]
@@ -33,8 +33,7 @@ def test_ci_watch_step_has_event_parameter(recipe_path: str) -> None:
 @pytest.mark.parametrize("recipe_path", RECIPE_FILES)
 def test_check_repo_ci_event_step_exists_before_ci_watch(recipe_path: str) -> None:
     """Each recipe must have a check_repo_ci_event step that routes to ci_watch."""
-    with open(recipe_path) as f:
-        recipe = yaml.safe_load(f)
+    recipe = load_yaml(recipe_path)
     steps = recipe["steps"]
     assert "check_repo_ci_event" in steps, (
         f"{recipe_path}: missing check_repo_ci_event step. "

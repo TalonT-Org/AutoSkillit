@@ -7,10 +7,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
 
 from autoskillit import cli
 from autoskillit.cli import _generate_config_yaml
+from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -59,7 +59,7 @@ class TestCLIInit:
         cli.init(test_command="pytest -v")
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         assert config_path.is_file()
-        data = yaml.safe_load(config_path.read_text())
+        data = load_yaml(config_path)
         assert data["test_check"]["command"] == ["pytest", "-v"]
         assert data["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
 
@@ -72,7 +72,7 @@ class TestCLIInit:
         with patch("autoskillit.cli.app._prompt_test_command", return_value=["npm", "test"]):
             cli.init()
         config_path = tmp_path / ".autoskillit" / "config.yaml"
-        data = yaml.safe_load(config_path.read_text())
+        data = load_yaml(config_path)
         assert data["test_check"]["command"] == ["npm", "test"]
 
     # CL6
@@ -120,7 +120,7 @@ class TestCLIInit:
 
         cli.init(test_command="pytest -v", force=True)
 
-        data = yaml.safe_load(config_path.read_text())
+        data = load_yaml(config_path)
         assert data["test_check"]["command"] == ["pytest", "-v"]
 
     def test_generate_config_yaml_contains_test_command(self) -> None:
@@ -138,7 +138,7 @@ class TestCLIInit:
     def test_generate_config_yaml_uncommented_parts_are_valid(self) -> None:
         """The uncommented portion of generated YAML parses as valid config."""
         yaml_str = _generate_config_yaml(["task", "test-all"])
-        parsed = yaml.safe_load(yaml_str)
+        parsed = load_yaml(yaml_str)
         assert parsed["test_check"]["command"] == ["task", "test-all"]
         assert parsed["safety"]["reset_guard_marker"] == ".autoskillit-workspace"
 
@@ -147,7 +147,7 @@ class TestCLIInit:
         yaml_str = _generate_config_yaml(["task", "test-check"])
         # Strip comment lines, then parse with YAML to inspect keys and values only
         active_lines = [ln for ln in yaml_str.splitlines() if not ln.lstrip().startswith("#")]
-        parsed = yaml.safe_load("\n".join(active_lines)) or {}
+        parsed = load_yaml("\n".join(active_lines)) or {}
 
         def _collect_strings(obj: object) -> list[str]:
             if isinstance(obj, dict):
@@ -189,7 +189,7 @@ class TestCLIInit:
 
         cli.init(test_command="npm test", force=True)
 
-        data = yaml.safe_load((config_dir / "config.yaml").read_text())
+        data = load_yaml(config_dir / "config.yaml")
         assert data["test_check"]["command"] == ["npm", "test"]
 
     def test_init_idempotent_rerun(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -639,8 +639,6 @@ def test_init_proceeds_with_correct_phrase(
 # SS-INIT-5
 def test_init_bypass_logged_to_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """When bypass is accepted, .state.yaml records the bypass with a timestamp."""
-    import yaml as _yaml
-
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
@@ -648,7 +646,7 @@ def test_init_bypass_logged_to_config(tmp_path: Path, monkeypatch: pytest.Monkey
     with patch("builtins.input", side_effect=[phrase, "pytest -v", ""]) as mock_input:
         cli.init()
     assert mock_input.call_count == 3
-    state = _yaml.safe_load((tmp_path / ".autoskillit" / ".state.yaml").read_text())
+    state = load_yaml(tmp_path / ".autoskillit" / ".state.yaml")
     bypass_value = state.get("safety", {}).get("secret_scan_bypass_accepted")
     assert bypass_value is not None, "bypass_accepted timestamp must be persisted in .state.yaml"
 
@@ -684,8 +682,6 @@ def test_bypass_log_writes_to_state_file_not_config(
 
     config.yaml is schema-validated; .state.yaml holds internal operational state only.
     """
-    import yaml as _yaml
-
     from autoskillit.cli._init_helpers import _log_secret_scan_bypass
 
     _log_secret_scan_bypass(tmp_path)
@@ -694,12 +690,12 @@ def test_bypass_log_writes_to_state_file_not_config(
     config_path = tmp_path / ".autoskillit" / "config.yaml"
 
     assert state_path.is_file(), ".state.yaml must be created by _log_secret_scan_bypass"
-    state_data = _yaml.safe_load(state_path.read_text())
+    state_data = load_yaml(state_path)
     assert state_data.get("safety", {}).get("secret_scan_bypass_accepted") is not None
 
     # config.yaml must NOT have the bypass key (either no file or no key)
     if config_path.is_file():
-        config_data = _yaml.safe_load(config_path.read_text()) or {}
+        config_data = load_yaml(config_path) or {}
         assert "secret_scan_bypass_accepted" not in config_data.get("safety", {}), (
             "config.yaml must not contain secret_scan_bypass_accepted"
         )

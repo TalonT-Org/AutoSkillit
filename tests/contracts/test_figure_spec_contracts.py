@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from autoskillit.core import PRODUCER_SCHEMA_FIELDS, REQUIRED_CONSUMER_FIELDS, FigureSpec
+from autoskillit.core.io import load_yaml
 from autoskillit.core.paths import pkg_root
 
 _VIS_LENS_DIR = pkg_root() / "skills_extended"
@@ -39,7 +40,7 @@ def _figure_spec_blocks_in(skill_md: Path) -> list[tuple[str, str]]:
 def _field_names_from_yaml_block(block_text: str) -> frozenset[str]:
     """Parse field names from a figure-spec YAML block (top-level scalar keys only)."""
     try:
-        parsed = yaml.safe_load(block_text)
+        parsed = load_yaml(block_text)
     except yaml.YAMLError:
         return frozenset()
     if not isinstance(parsed, dict):

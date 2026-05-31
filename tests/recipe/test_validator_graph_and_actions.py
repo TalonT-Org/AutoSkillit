@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import _parse_recipe
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
@@ -224,7 +224,7 @@ def test_validate_recipe_catches_rectify_with_missing_investigation_path_capture
     return an error — confirming the enforcement layer works for the new context variable.
     """
     recipe = _parse_recipe(
-        yaml.safe_load(
+        load_yaml(
             """\
 name: test-missing-capture
 description: Recipe with investigate→rectify but no capture block

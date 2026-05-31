@@ -7,9 +7,9 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
 import autoskillit.workspace.skills as _skills_mod
+from autoskillit.core.io import load_yaml
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
@@ -287,7 +287,7 @@ class TestSkillResolver:
                 if fm_match is None:
                     failures.append(f"  {skill_name}: no YAML frontmatter found")
                     continue
-                data = yaml.safe_load(fm_match.group(1))
+                data = load_yaml(fm_match.group(1))
                 if not isinstance(data, dict) or "name" not in data:
                     failures.append(f"  {skill_name}: frontmatter missing 'name' field")
                     continue

@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     classify_step_arg_style,
@@ -238,7 +238,7 @@ def test_generate_recipe_card(tmp_path: Path) -> None:
 
     contract_path = recipes_dir / "contracts" / "test-pipeline.yaml"
     assert contract_path.exists()
-    contract = yaml.safe_load(contract_path.read_text())
+    contract = load_yaml(contract_path)
     assert "bundled_manifest_version" in contract
     assert "skill_hashes" in contract
     assert "skills" in contract
@@ -621,7 +621,7 @@ def test_pipeline_summary_contract_declared() -> None:
     from autoskillit.core.paths import pkg_root
 
     contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
-    contracts = yaml.safe_load(contracts_path.read_text())
+    contracts = load_yaml(contracts_path)
     assert "pipeline-summary" in contracts["skills"]
     skill = contracts["skills"]["pipeline-summary"]
     required_inputs = [i["name"] for i in skill["inputs"] if i.get("required", False)]
@@ -1074,7 +1074,7 @@ def test_all_bundled_contract_cards_have_source_hash():
     recipes_dir = builtin_recipes_dir()
     missing_hash = []
     for card_path in sorted((recipes_dir / "contracts").glob("*.yaml")):
-        card = yaml.safe_load(card_path.read_text())
+        card = load_yaml(card_path)
         if "recipe_source_hash" not in card:
             missing_hash.append(card_path.stem)
     assert not missing_hash, f"Contract cards without recipe_source_hash: {missing_hash}"
@@ -1083,7 +1083,6 @@ def test_all_bundled_contract_cards_have_source_hash():
 @pytest.mark.medium
 def test_all_bundled_contract_cards_are_fresh():
     """Contract card content must match what generate_recipe_card would produce now."""
-    from autoskillit.core.io import load_yaml
     from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
     recipes_dir = builtin_recipes_dir()
@@ -1112,7 +1111,6 @@ def test_all_bundled_contract_cards_are_fresh():
 
 def test_generate_recipe_card_embeds_source_hash(tmp_path: Path) -> None:
     """generate_recipe_card must embed a recipe_source_hash in the card."""
-    from autoskillit.core.io import load_yaml
     from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
     recipes_dir = tmp_path / "recipes"

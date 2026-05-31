@@ -9,8 +9,8 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.workspace.session_skills import (
     _SKILLS_SUBDIR,
     CODEX_SKILLS_SUBDIR,
@@ -60,7 +60,7 @@ def test_provider_injects_disable_model_invocation_for_tier2() -> None:
     content = provider.get_skill_content("open-kitchen", gated=True)
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match, "Content must have YAML frontmatter"
-    fm = yaml.safe_load(fm_match.group(1))
+    fm = load_yaml(fm_match.group(1))
     assert fm.get("disable-model-invocation") is True
 
 
@@ -73,7 +73,7 @@ def test_provider_does_not_inject_for_cook_session() -> None:
     content = provider.get_skill_content("mermaid", gated=False)
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match, "Content must have YAML frontmatter"
-    fm = yaml.safe_load(fm_match.group(1))
+    fm = load_yaml(fm_match.group(1))
     assert fm.get("disable-model-invocation") is not True
 
 
@@ -203,7 +203,7 @@ def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
     content = mermaid_md.read_text()
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match
-    fm = yaml.safe_load(fm_match.group(1))
+    fm = load_yaml(fm_match.group(1))
     assert "disable-model-invocation" not in fm or fm.get("disable-model-invocation") is not True
 
 
@@ -232,7 +232,7 @@ def test_activate_with_deps_materialises_absent_skill(
     content = mermaid_md.read_text()
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match
-    fm = yaml.safe_load(fm_match.group(1))
+    fm = load_yaml(fm_match.group(1))
     assert "disable-model-invocation" not in fm or fm.get("disable-model-invocation") is not True
 
 
@@ -268,7 +268,7 @@ def test_activate_with_deps_already_present_removes_flag(
     updated = mermaid_md.read_text()
     fm_match = re.match(r"^---\n(.*?)\n---", updated, re.DOTALL)
     assert fm_match
-    fm = yaml.safe_load(fm_match.group(1))
+    fm = load_yaml(fm_match.group(1))
     assert "disable-model-invocation" not in fm or fm.get("disable-model-invocation") is not True
 
 

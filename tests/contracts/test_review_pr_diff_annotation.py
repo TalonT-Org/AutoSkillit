@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
 _SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/review-pr/SKILL.md"
@@ -12,7 +12,7 @@ _SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/review-
 
 def test_review_pr_contract_has_annotated_diff_path() -> None:
     """C-RPR-1a: review-pr contract must declare annotated_diff_path input."""
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     inputs = raw.get("skills", {}).get("review-pr", {}).get("inputs", [])
     names = [inp["name"] for inp in inputs]
     assert "annotated_diff_path" in names, (
@@ -22,7 +22,7 @@ def test_review_pr_contract_has_annotated_diff_path() -> None:
 
 def test_review_pr_contract_has_hunk_ranges_path() -> None:
     """C-RPR-1b: review-pr contract must declare hunk_ranges_path input."""
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     inputs = raw.get("skills", {}).get("review-pr", {}).get("inputs", [])
     names = [inp["name"] for inp in inputs]
     assert "hunk_ranges_path" in names, (
@@ -74,7 +74,7 @@ def test_review_pr_skill_reads_hunk_ranges_from_file() -> None:
 
 def test_review_pr_contract_has_diff_metrics_path() -> None:
     """annotate_pr_diff callable contract must declare diff_metrics_path output."""
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     outputs = (
         raw.get("callable_contracts", {})
         .get("autoskillit.smoke_utils.annotate_pr_diff", {})
@@ -96,7 +96,7 @@ def test_review_pr_skill_reads_diff_metrics_from_file() -> None:
 
 def test_review_research_pr_hunk_ranges_in_contract() -> None:
     """review-research-pr contract must declare hunk_ranges_path input."""
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     inputs = raw.get("skills", {}).get("review-research-pr", {}).get("inputs", [])
     names = [inp["name"] for inp in inputs]
     assert "hunk_ranges_path" in names, (
@@ -106,7 +106,7 @@ def test_review_research_pr_hunk_ranges_in_contract() -> None:
 
 def test_review_skills_valid_lines_in_contract() -> None:
     """review-pr and review-research-pr contracts must declare valid_lines_path input."""
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     for skill_name in ("review-pr", "review-research-pr"):
         inputs = raw.get("skills", {}).get(skill_name, {}).get("inputs", [])
         names = [inp["name"] for inp in inputs]
@@ -122,7 +122,7 @@ def test_review_skills_valid_lines_in_contract() -> None:
 
 def test_annotate_pr_diff_callable_contract_has_valid_lines_path() -> None:
     """annotate_pr_diff callable contract must declare valid_lines_path output."""
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     outputs = (
         raw.get("callable_contracts", {})
         .get("autoskillit.smoke_utils.annotate_pr_diff", {})
@@ -144,7 +144,7 @@ def test_review_pr_skill_validates_sha_freshness() -> None:
 
 def test_annotate_pr_diff_callable_contract_has_head_sha() -> None:
     """annotate_pr_diff contract must declare head_sha as an output."""
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     outputs = (
         raw.get("callable_contracts", {})
         .get("autoskillit.smoke_utils.annotate_pr_diff", {})

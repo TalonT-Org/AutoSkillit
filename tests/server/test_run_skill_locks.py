@@ -277,3 +277,173 @@ class TestRunSkillAllowsResumeOfLockedStep:
             )
         )
         assert "INGREDIENT LOCK" not in result.get("error", "")
+
+
+class TestRunSkillResolvesStepNameFromRecipe:
+    """Auto-resolution of step_name from recipe when LLM omits it."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_resolves_step_name_from_recipe_and_denies_locked_step(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        overlay = temp_dir / ".hook_config_overlay.json"
+        overlay.write_text(
+            json.dumps(
+                {
+                    "locked_steps": {"": {"investigate": False}},
+                    "locked_ingredients": {"": {"investigate": "false"}},
+                }
+            )
+        )
+
+        step = _make_step_mock("inputs.investigate")
+        step.with_args = {"skill_command": "/autoskillit:investigate ${{ inputs.target }}"}
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.active_recipe_steps = {"investigate": step}
+
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:investigate some-error",
+                str(tmp_path),
+                step_name="",
+                order_id="",
+            )
+        )
+
+        assert result["success"] is False
+        assert "INGREDIENT LOCK" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_run_skill_allows_empty_step_name_when_ambiguous_match(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        overlay = temp_dir / ".hook_config_overlay.json"
+        overlay.write_text(
+            json.dumps(
+                {
+                    "locked_steps": {"": {"assess": False}},
+                    "locked_ingredients": {"": {"assess": "false"}},
+                }
+            )
+        )
+
+        step_a = _make_step_mock("inputs.assess")
+        step_a.with_args = {"skill_command": "/autoskillit:resolve-failures ..."}
+        step_b = _make_step_mock(None)
+        step_b.with_args = {"skill_command": "/autoskillit:resolve-failures ..."}
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.active_recipe_steps = {
+            "assess": step_a,
+            "merge_gate_assess": step_b,
+        }
+
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:resolve-failures target",
+                str(tmp_path),
+                step_name="",
+                order_id="",
+            )
+        )
+        assert "INGREDIENT LOCK" not in result.get("error", "")
+
+    @pytest.mark.anyio
+    async def test_run_skill_denies_unresolvable_step_name_when_locks_active(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        overlay = temp_dir / ".hook_config_overlay.json"
+        overlay.write_text(
+            json.dumps(
+                {
+                    "locked_steps": {"": {"investigate": False}},
+                    "locked_ingredients": {"": {"investigate": "false"}},
+                }
+            )
+        )
+
+        step = _make_step_mock("inputs.investigate")
+        step.with_args = {"skill_command": "/autoskillit:investigate ..."}
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.active_recipe_steps = {"investigate": step}
+
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:unknown-skill target",
+                str(tmp_path),
+                step_name="",
+                order_id="",
+            )
+        )
+
+        assert result["success"] is False
+        assert "step_name is empty and could not be resolved" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_run_skill_allows_empty_step_name_when_no_recipe(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.active_recipe_steps = None
+
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:investigate target",
+                str(tmp_path),
+                step_name="",
+                order_id="",
+            )
+        )
+        assert "INGREDIENT LOCK" not in result.get("error", "")
+
+    @pytest.mark.anyio
+    async def test_run_skill_allows_empty_step_name_when_no_active_denials(
+        self, tool_ctx_kitchen_open, tmp_path
+    ):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        overlay = temp_dir / ".hook_config_overlay.json"
+        overlay.write_text(
+            json.dumps(
+                {
+                    "locked_steps": {"": {"investigate": True}},
+                    "locked_ingredients": {},
+                }
+            )
+        )
+
+        step = _make_step_mock("inputs.investigate")
+        step.with_args = {"skill_command": "/autoskillit:other-skill ..."}
+
+        tool_ctx_kitchen_open.project_dir = tmp_path
+        tool_ctx_kitchen_open.active_recipe_steps = {"investigate": step}
+
+        result = json.loads(
+            await run_skill(
+                "/autoskillit:unknown-skill target",
+                str(tmp_path),
+                step_name="",
+                order_id="",
+            )
+        )
+        assert "INGREDIENT LOCK" not in result.get("error", "")

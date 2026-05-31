@@ -84,3 +84,15 @@ def test_quota_post_budget_exceeded_trigger_sync():
         f"QUOTA_POST_BUDGET_EXCEEDED_TRIGGER mismatch: "
         f"core={QUOTA_POST_BUDGET_EXCEEDED_TRIGGER!r} vs quota_post_hook={_HOOK!r}"
     )
+
+
+def test_ingredient_lock_deny_trigger_sync():
+    """INGREDIENT_LOCK_DENY_TRIGGER must be identical in server and hook guard."""
+    from autoskillit.hooks.guards.ingredient_lock_guard import INGREDIENT_LOCK_DENY_TRIGGER
+    from autoskillit.server.tools.tools_execution import INGREDIENT_LOCK_DENY_PREFIX
+
+    assert INGREDIENT_LOCK_DENY_PREFIX == INGREDIENT_LOCK_DENY_TRIGGER, (
+        f"Ingredient lock deny trigger mismatch: "
+        f"server={INGREDIENT_LOCK_DENY_PREFIX!r} vs "
+        f"hook={INGREDIENT_LOCK_DENY_TRIGGER!r}"
+    )

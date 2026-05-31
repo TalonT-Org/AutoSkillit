@@ -467,7 +467,12 @@ parallel run of the same step reports under the same canonical step name.
 
 ---
 
-## PARAMETER FORWARDING — output_dir, stale_threshold, idle_output_timeout, step_provider
+## PARAMETER FORWARDING — step_name, output_dir, stale_threshold, idle_output_timeout, step_provider
+
+When a recipe step's `with:` block contains `step_name`, you MUST pass it as the
+`step_name` parameter of `run_skill`. This enables ingredient lock enforcement,
+pipeline dependency checks, and all per-step parameter auto-fills. Omitting it
+degrades enforcement and may cause the call to be denied when locks are active.
 
 When a recipe step's `with:` block contains `output_dir`, you MUST pass it as the
 `output_dir` parameter of `run_skill`. This controls the write guard — omitting it

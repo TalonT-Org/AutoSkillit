@@ -160,7 +160,7 @@ class DefaultMergeQueueWatcher:
             if progress_callback and (time.monotonic() - last_progress_time) >= 60:
                 await progress_callback(
                     f"Polling merge queue for PR #{pr_number} "
-                    f"({int(deadline - time.monotonic())}s remaining)"
+                    f"({max(0, int(deadline - time.monotonic()))}s remaining)"
                 )
                 last_progress_time = time.monotonic()
 

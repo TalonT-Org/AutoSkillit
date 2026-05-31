@@ -1068,7 +1068,7 @@ def test_annotate_pr_diff_local_mode_empty_base_branch_falls_back_to_github(
         base_branch="",
     )
     assert result["review_mode"] == "github"
-    args = mock_run.call_args[0][0]
+    args = mock_run.call_args_list[0][0][0]
     assert args[:3] == ["gh", "pr", "diff"]
 
 

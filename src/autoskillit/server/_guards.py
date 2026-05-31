@@ -48,10 +48,8 @@ def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
 
     try:
         st = session_type()
-    except ValueError:
-        return headless_error_result(
-            f"{tool_name}: invalid AUTOSKILLIT_SESSION_TYPE in environment." if tool_name else None
-        )
+    except ValueError as e:
+        return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
     if st in (SessionType.ORCHESTRATOR, SessionType.FLEET):
         return None
 
@@ -76,10 +74,8 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
 
     try:
         st = session_type()
-    except ValueError:
-        return headless_error_result(
-            f"{tool_name}: invalid AUTOSKILLIT_SESSION_TYPE in environment." if tool_name else None
-        )
+    except ValueError as e:
+        return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
     if st is SessionType.ORCHESTRATOR:
         return None
 
@@ -109,10 +105,8 @@ def _require_fleet(tool_name: str = "") -> str | None:
     """
     try:
         st = session_type()
-    except ValueError:
-        return headless_error_result(
-            f"{tool_name}: invalid AUTOSKILLIT_SESSION_TYPE in environment." if tool_name else None
-        )
+    except ValueError as e:
+        return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
     if st is SessionType.FLEET:
         return None
 

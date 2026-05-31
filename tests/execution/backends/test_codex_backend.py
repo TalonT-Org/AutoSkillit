@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
 
@@ -1163,3 +1164,139 @@ class TestCodexStubMethods:
     def test_list_plugins_returns_list(self) -> None:
         result = CodexBackend().list_plugins()
         assert result == []
+
+
+class TestCodexForwardVarsInjection:
+    """Every CODEX_MCP_ENV_FORWARD_VARS member must appear in cmd-builder output."""
+
+    SKILL_BASE: dict[str, object] = {
+        "skill_command": "/test-skill",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "model": None,
+        "plugin_source": None,
+        "output_format": OutputFormat.JSON,
+    }
+    FOOD_TRUCK_BASE: dict[str, object] = {
+        "orchestrator_prompt": "dispatch the work",
+        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+    }
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+
+    @pytest.mark.parametrize(
+        "var",
+        sorted(
+            __import__(
+                "autoskillit.core.types._type_constants_env",
+                fromlist=["CODEX_MCP_ENV_FORWARD_VARS"],
+            ).CODEX_MCP_ENV_FORWARD_VARS
+        ),
+    )
+    def test_skill_session_has_forward_var(self, var: str) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
+        assert var in spec.env, f"{var} missing from build_skill_session_cmd env"
+
+    @pytest.mark.parametrize(
+        "var",
+        sorted(
+            __import__(
+                "autoskillit.core.types._type_constants_env",
+                fromlist=["CODEX_MCP_ENV_FORWARD_VARS"],
+            ).CODEX_MCP_ENV_FORWARD_VARS
+        ),
+    )
+    def test_food_truck_has_forward_var(self, var: str) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        assert var in spec.env, f"{var} missing from build_food_truck_cmd env"
+
+    def test_headless_has_mcp_client_backend(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert MCP_CLIENT_BACKEND_ENV_VAR in spec.env
+        assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == "codex"
+
+    def test_interactive_has_mcp_client_backend(self) -> None:
+        spec = CodexBackend().build_interactive_cmd()
+        assert MCP_CLIENT_BACKEND_ENV_VAR in spec.env
+        assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == "codex"
+
+    def test_resume_has_mcp_client_backend(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="go")
+        assert MCP_CLIENT_BACKEND_ENV_VAR in spec.env
+        assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == "codex"
+
+
+class TestCodexMcpClientBackendRequired:
+    """build_env required= gate catches missing MCP_CLIENT_BACKEND_ENV_VAR."""
+
+    SKILL_BASE: dict[str, object] = {
+        "skill_command": "/test-skill",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "model": None,
+        "plugin_source": None,
+        "output_format": OutputFormat.JSON,
+    }
+    FOOD_TRUCK_BASE: dict[str, object] = {
+        "orchestrator_prompt": "dispatch the work",
+        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+    }
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+
+    def test_skill_session_mcp_backend_value(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
+        assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == AGENT_BACKEND_CODEX
+
+    def test_food_truck_mcp_backend_value(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == AGENT_BACKEND_CODEX
+
+    def test_skill_session_mcp_backend_overrides_parent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "wrong")
+        spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
+        assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == AGENT_BACKEND_CODEX
+
+    def test_food_truck_mcp_backend_overrides_parent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "wrong")
+        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == AGENT_BACKEND_CODEX
+
+    @pytest.fixture()
+    def _strip_mcp_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        original = CodexEnvPolicy.build_env
+
+        def _strip_mcp_key(
+            self_policy: CodexEnvPolicy,
+            base: Mapping[str, str],
+            *,
+            extras: Mapping[str, str] | None = None,
+            required: frozenset[str] | None = None,
+        ) -> dict[str, str]:
+            if extras is not None:
+                extras = {k: v for k, v in extras.items() if k != MCP_CLIENT_BACKEND_ENV_VAR}
+            return original(self_policy, base, extras=extras, required=required)
+
+        monkeypatch.setattr(CodexEnvPolicy, "build_env", _strip_mcp_key)
+
+    def test_skill_session_raises_without_mcp_client_backend(self, _strip_mcp_env: None) -> None:
+        with pytest.raises(ValueError, match="MCP_CLIENT_BACKEND"):
+            CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
+
+    def test_food_truck_raises_without_mcp_client_backend(self, _strip_mcp_env: None) -> None:
+        with pytest.raises(ValueError, match="MCP_CLIENT_BACKEND"):
+            CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)

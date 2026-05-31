@@ -589,3 +589,40 @@ class TestExports:
                     assert name not in ("toml", "tomli", "tomlkit"), (
                         f"Third-party TOML import found: {name}"
                     )
+
+
+class TestIsRegisteredRequiresAllForwardVars:
+    """_is_autoskillit_registered must require every CODEX_MCP_ENV_FORWARD_VARS member."""
+
+    def _full_config(self, env_vars: list[str]) -> dict:
+        return {"mcp_servers": {"autoskillit": {"command": "autoskillit", "env_vars": env_vars}}}
+
+    def test_all_forward_vars_present_is_registered(self) -> None:
+        from autoskillit.core.types._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS
+
+        config = self._full_config(sorted(CODEX_MCP_ENV_FORWARD_VARS))
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
+
+    @pytest.mark.parametrize(
+        "removed_var",
+        sorted(
+            __import__(
+                "autoskillit.core.types._type_constants_env",
+                fromlist=["CODEX_MCP_ENV_FORWARD_VARS"],
+            ).CODEX_MCP_ENV_FORWARD_VARS
+            - {
+                __import__(
+                    "autoskillit.core.types._type_constants_env",
+                    fromlist=["HEADLESS_AUTO_GATE_ENV_VAR"],
+                ).HEADLESS_AUTO_GATE_ENV_VAR
+            }
+        ),
+    )
+    def test_removing_required_var_returns_false(self, removed_var: str) -> None:
+        from autoskillit.core.types._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS
+
+        remaining = sorted(CODEX_MCP_ENV_FORWARD_VARS - {removed_var})
+        config = self._full_config(remaining)
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False, (
+            f"Removing {removed_var} should make registration invalid"
+        )

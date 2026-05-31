@@ -26,6 +26,11 @@ from tests.conftest import _make_result
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+@pytest.fixture(autouse=True)
+def _fleet_session(monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
+
 def _make_failure_record(**overrides: object) -> FailureRecord:
     defaults = dict(
         timestamp="2026-02-24T16:00:00Z",
@@ -198,6 +203,15 @@ class TestGetPipelineReport:
         assert result["total_failures"] == 1
         result2 = json.loads(await get_pipeline_report())
         assert result2["total_failures"] == 0
+
+    @pytest.mark.feature("fleet")
+    @pytest.mark.anyio
+    async def test_get_pipeline_report_fleet_guard_denies_orchestrator(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        result = json.loads(await get_pipeline_report())
+        assert result["subtype"] == "headless_error"
 
     @pytest.mark.anyio
     async def test_get_pipeline_report_awaits_startup_ready(

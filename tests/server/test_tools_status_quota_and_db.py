@@ -19,6 +19,19 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 class TestGetQuotaEvents:
+    @pytest.fixture(autouse=True)
+    def _fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
+    @pytest.mark.feature("fleet")
+    @pytest.mark.anyio
+    async def test_get_quota_events_fleet_guard_denies_orchestrator(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        result = json.loads(await get_quota_events())
+        assert result["subtype"] == "headless_error"
+
     @pytest.mark.anyio
     async def test_returns_events_from_jsonl(self, tool_ctx_kitchen_open, tmp_path, monkeypatch):
         events = [

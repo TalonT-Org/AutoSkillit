@@ -14,7 +14,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import atomic_write, get_logger
 from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
+from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir, write_telemetry_clear_marker
 from autoskillit.server._notify import _notify, track_response_size
 
@@ -98,6 +98,8 @@ async def get_pipeline_report(clear: bool = False) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if (fleet_gate := _require_fleet("get_pipeline_report")) is not None:
+        return fleet_gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
         try:
@@ -180,6 +182,8 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if (fleet_gate := _require_fleet("get_token_summary")) is not None:
+        return fleet_gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_token_summary"):
         try:
@@ -242,6 +246,8 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if (fleet_gate := _require_fleet("get_timing_summary")) is not None:
+        return fleet_gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_timing_summary"):
         try:
@@ -401,6 +407,8 @@ async def get_quota_events(n: int = 50) -> str:
     """
     if (gate := _require_enabled()) is not None:
         return gate
+    if (fleet_gate := _require_fleet("get_quota_events")) is not None:
+        return fleet_gate
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_quota_events"):
         try:

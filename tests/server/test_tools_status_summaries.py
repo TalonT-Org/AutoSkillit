@@ -18,6 +18,11 @@ from autoskillit.server.tools.tools_status import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+@pytest.fixture(autouse=True)
+def _fleet_session(monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
+
 class TestGetTokenSummary:
     """get_token_summary is a gated tool that returns accumulated token usage."""
 
@@ -28,6 +33,15 @@ class TestGetTokenSummary:
         result = json.loads(await get_token_summary())
         assert result.get("success") is False
         assert result.get("subtype") == "gate_error"
+
+    @pytest.mark.feature("fleet")
+    @pytest.mark.anyio
+    async def test_get_token_summary_fleet_guard_denies_orchestrator(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        result = json.loads(await get_token_summary())
+        assert result["subtype"] == "headless_error"
 
     @pytest.mark.anyio
     async def test_returns_empty_steps_initially(self, tool_ctx_kitchen_open):
@@ -190,6 +204,15 @@ class TestGetTimingSummary:
         result = json.loads(await get_timing_summary())
         assert result.get("success") is False
         assert result.get("subtype") == "gate_error"
+
+    @pytest.mark.feature("fleet")
+    @pytest.mark.anyio
+    async def test_get_timing_summary_fleet_guard_denies_orchestrator(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+        result = json.loads(await get_timing_summary())
+        assert result["subtype"] == "headless_error"
 
     @pytest.mark.anyio
     async def test_returns_empty_steps_initially(self, tool_ctx_kitchen_open):

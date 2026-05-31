@@ -276,6 +276,14 @@ def _close_kitchen_handler() -> None:
         overlay_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
+    tracker_dir = ctx.project_dir / ".autoskillit" / "temp" / "pipeline_tracker"
+    try:
+        if tracker_dir.is_dir():
+            import shutil
+
+            shutil.rmtree(tracker_dir, ignore_errors=True)
+    except OSError:
+        logger.warning("pipeline_tracker_remove_failed", path=str(tracker_dir))
     review_gate_path = ctx.project_dir / ".autoskillit" / "temp" / "review_gate_state.json"
     try:
         try:

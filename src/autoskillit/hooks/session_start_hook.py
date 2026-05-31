@@ -62,6 +62,23 @@ def main() -> None:
     except Exception:
         pass  # SessionStart hooks that raise break session start for the user
 
+    try:
+        _tracker_dir = Path.cwd() / ".autoskillit" / "temp" / "pipeline_tracker"
+        if _tracker_dir.is_dir():
+            for _tp in _tracker_dir.glob("*.json"):
+                try:
+                    _td = json.loads(_tp.read_text(encoding="utf-8"))
+                    _init_at = datetime.fromisoformat(_td["initialized_at"])
+                    if (datetime.now(UTC) - _init_at).total_seconds() >= 24 * 3600:
+                        _tp.unlink()
+                except Exception:
+                    try:
+                        _tp.unlink()
+                    except OSError:
+                        pass
+    except Exception:
+        pass
+
     transcript_path = data.get("transcript_path", "")
     if not transcript_path:
         sys.exit(0)

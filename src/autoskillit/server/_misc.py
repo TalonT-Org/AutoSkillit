@@ -63,6 +63,17 @@ def _hook_config_overlay_path(project_root: Path) -> Path:
     return project_root.joinpath(*_HOOK_DIR_COMPONENTS, _HOOK_CONFIG_OVERLAY_FILENAME)
 
 
+_PIPELINE_TRACKER_DIR_COMPONENTS: tuple[str, ...] = (".autoskillit", "temp", "pipeline_tracker")
+
+
+def _pipeline_tracker_dir(project_dir: Path) -> Path:
+    return project_dir.joinpath(*_PIPELINE_TRACKER_DIR_COMPONENTS)
+
+
+def _pipeline_tracker_path(project_dir: Path, pipeline_id: str) -> Path:
+    return _pipeline_tracker_dir(project_dir) / f"{pipeline_id}.json"
+
+
 def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
     """Return all lines between start_delim and end_delim (exclusive).
 

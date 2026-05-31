@@ -104,6 +104,7 @@ class TestToolRegistration:
             "unlock_agent_pack",
             "configure_fleet",
             "configure_order",
+            "record_pipeline_step",
             "lock_ingredients",
         }
         assert expected == tool_names

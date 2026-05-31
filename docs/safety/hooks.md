@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 21 Claude Code hook scripts: 16 PreToolUse, 4 PostToolUse,
+AutoSkillit registers 23 Claude Code hook scripts: 17 PreToolUse, 5 PostToolUse,
 and 1 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (16)
+## PreToolUse hooks (17)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -115,7 +115,14 @@ invariant: after a `changes_requested` verdict the orchestrator must call
 `run_python` with `callable='autoskillit.smoke_utils.check_review_loop'`
 before proceeding to CI/merge steps.
 
-## PostToolUse hooks (4)
+### `pipeline_step_guard.py`
+**Guarded tool:** `run_skill`
+Non-blocking advisory: emits `additionalContext` warning when a step has unmet
+dependencies. Permission is always `allow` — the server-side `_check_pipeline_deps`
+in `run_skill` is the primary enforcer. Fails open on missing tracker or
+malformed input.
+
+## PostToolUse hooks (5)
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools
@@ -142,6 +149,13 @@ the gate and records the PR number; `%%REVIEW_GATE::CLEAR%%` removes the
 state file. When `run_python` calls `check_review_loop`, marks
 `check_review_loop_called: True` in the state so `review_loop_gate.py` will
 unblock `wait_for_ci`/`enqueue_pr`.
+
+### `pipeline_step_post_hook.py`
+**Guarded tool:** `run_skill`
+After a successful `run_skill`, auto-marks the step as `complete` in the
+pipeline tracker file. Appends a progress banner via `updatedMCPToolOutput`.
+Uses `AUTOSKILLIT_DISPATCH_ID` env fallback for `order_id` resolution to
+handle fleet-dispatched pipelines. Fails open on missing tracker or errors.
 
 ## SessionStart hook (1)
 

@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (18 tool modules).
+MCP `@mcp.tool()` handlers registered on import (19 tool modules).
 
 ## Files
 
@@ -29,6 +29,7 @@ MCP `@mcp.tool()` handlers registered on import (18 tool modules).
 | `tools_pr_ops.py` | `get_pr_reviews`, `bulk_close_issues` |
 | `tools_recipe.py` | `load_recipe`, `list_recipes`, `validate_recipe`, `migrate_recipe` |
 | `tools_status.py` | `kitchen_status`, `get_pipeline_report`, `get_token_summary`, `get_timing_summary`, `analyze_tool_sequences`, `get_quota_events`, `write_telemetry_files`, `read_db` |
+| `tools_pipeline_tracker.py` | `record_pipeline_step` (pipeline step tracker init/status) |
 | `tools_workspace.py` | `test_check`, `reset_test_dir`, `reset_workspace` |
 
 ## Test Files

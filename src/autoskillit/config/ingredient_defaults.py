@@ -75,6 +75,7 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "get_timing_summary",
             "get_quota_events",
             "analyze_tool_sequences",
+            "record_pipeline_step",
         ),
     ),
     ("Fleet", FLEET_MENU_TOOLS),

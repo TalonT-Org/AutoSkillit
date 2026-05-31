@@ -83,6 +83,7 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/quota_guard.py",
             "guards/skill_command_guard.py",
             "guards/ingredient_lock_guard.py",  # NEW (#3357)
+            "guards/pipeline_step_guard.py",
         ],
     ),
     HookDef(  # codex: works-as-is
@@ -194,7 +195,7 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(  # codex: works-as-is
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__run_skill.*",
-        scripts=["token_summary_hook.py", "quota_post_hook.py"],
+        scripts=["token_summary_hook.py", "quota_post_hook.py", "pipeline_step_post_hook.py"],
     ),
     HookDef(  # codex: works-as-is
         event_type="PostToolUse",
@@ -276,6 +277,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "artifact_download_guard.py",
         "ingredient_lock_guard.py",  # NEW (#3357)
         "background_exec_guard.py",
+        "pipeline_step_guard.py",
     }
 )
 

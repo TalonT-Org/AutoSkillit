@@ -784,6 +784,7 @@ class TestMergeGroupDropInternalReenqueue:
                 repo="owner/repo",
                 max_merge_group_drops=1,
                 merge_group_drop_backoff=0.01,
+                not_in_queue_confirmation_cycles=1,
             )
 
         assert result["success"] is True

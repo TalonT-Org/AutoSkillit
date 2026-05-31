@@ -288,7 +288,7 @@ async def wait_for_merge_queue(
                     auto_merge_available=auto_merge_available,
                     max_merge_group_drops=max_merge_group_drops,
                     merge_group_drop_backoff=merge_group_drop_backoff,
-                    progress_callback=lambda msg: ctx.info(msg),
+                    progress_callback=lambda msg: _notify(ctx, "info", msg, __name__),
                 )
                 return json.dumps(result)
             except Exception as exc:

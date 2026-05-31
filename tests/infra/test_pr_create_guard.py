@@ -332,6 +332,15 @@ class TestOrchestratorSessionExemption:
         )
         assert _is_denied(out), "Missing session type must be denied"
 
+    def test_order_display_label_is_not_exempt(self, tmp_path):
+        out = _run_guard(
+            "gh pr create --base main --head feat",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            session_type="order",
+        )
+        assert _is_denied(out), "CLI display label 'order' must not be exempt from guard"
+
 
 # ---------------------------------------------------------------------------
 # Interactive kitchen exemption via recipe authorization

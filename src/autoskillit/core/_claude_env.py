@@ -109,6 +109,18 @@ def build_agent_env(
     out.update(IDE_ENV_ALWAYS_EXTRAS)
     if extras:
         out.update(extras)
+    _session_type_raw = out.get("AUTOSKILLIT_SESSION_TYPE")
+    if _session_type_raw:
+        from .types._type_enums import SessionType
+
+        try:
+            SessionType(_session_type_raw)
+        except ValueError:
+            valid = ", ".join(m.value for m in SessionType)
+            raise ValueError(
+                f"AUTOSKILLIT_SESSION_TYPE={_session_type_raw!r} is not a valid SessionType. "
+                f"Valid values: {valid}"
+            ) from None
     if required is not None:
         missing = required - frozenset(out.keys())
         if missing:

@@ -53,3 +53,21 @@ def test_fleet_session_env_to_dict_returns_dict_str_str() -> None:
     d = spec.to_dict()
     assert isinstance(d, dict)
     assert all(isinstance(k, str) and isinstance(v, str) for k, v in d.items())
+
+
+def test_fleet_session_env_rejects_invalid_session_type() -> None:
+    with pytest.raises(ValueError, match="SessionType"):
+        FleetSessionEnv(
+            session_type="bogus",
+            fleet_mode="dispatch",
+            project_dir="/tmp/test",
+        )
+
+
+def test_fleet_session_env_rejects_cli_display_label() -> None:
+    with pytest.raises(ValueError, match="SessionType"):
+        FleetSessionEnv(
+            session_type="order",
+            fleet_mode="dispatch",
+            project_dir="/tmp/test",
+        )

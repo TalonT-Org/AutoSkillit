@@ -600,7 +600,33 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "pipeline": frozenset(
         {
             "pipeline",
-            "execution",
+            # execution/ — direct pipeline importers (8 files):
+            "execution/test_clone_guard.py",
+            "execution/test_headless_core.py",
+            "execution/test_headless_path_validation.py",
+            "execution/test_headless_provider_forwarding.py",
+            "execution/test_headless_result.py",
+            "execution/test_headless_result_write_reconciliation.py",
+            "execution/test_planner_write_isolation.py",
+            "execution/test_session_log_flush.py",
+            # execution/ — fixture-mediated pipeline dependents (15 files):
+            # These use minimal_ctx or tool_ctx fixtures which import
+            # autoskillit.pipeline at call time. Validated by REQ-GUARD-007.
+            "execution/test_backend_dispatch.py",
+            "execution/test_boundary_pty_dispatch.py",
+            "execution/test_flush_provider_integration.py",
+            "execution/test_headless_add_dirs.py",
+            "execution/test_headless_backend_mixing.py",
+            "execution/test_headless_backend_override.py",
+            "execution/test_headless_backend_resolution.py",
+            "execution/test_headless_dispatch.py",
+            "execution/test_headless_env_injection.py",
+            "execution/test_headless_env_scrub.py",
+            "execution/test_headless_provider_fallback.py",
+            "execution/test_headless_synthesis.py",
+            "execution/test_idle_output_env.py",
+            "execution/test_write_evidence.py",
+            "execution/test_zero_write_detection.py",
             "server",
             "infra",
             "cli",

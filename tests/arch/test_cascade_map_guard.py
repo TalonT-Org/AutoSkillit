@@ -6,6 +6,7 @@ reverse import graph.  Zero runtime cost — pure static analysis.
 from __future__ import annotations
 
 import ast
+import re
 import warnings
 from collections import defaultdict
 from pathlib import Path
@@ -539,6 +540,29 @@ class TestFileLevelCascadeDriftGuard:
         )
 
 
+_FIXTURE_MEDIATED_ENTRIES: dict[str, frozenset[str]] = {
+    "pipeline": frozenset(
+        {
+            "execution/test_backend_dispatch.py",
+            "execution/test_boundary_pty_dispatch.py",
+            "execution/test_flush_provider_integration.py",
+            "execution/test_headless_add_dirs.py",
+            "execution/test_headless_backend_mixing.py",
+            "execution/test_headless_backend_override.py",
+            "execution/test_headless_backend_resolution.py",
+            "execution/test_headless_dispatch.py",
+            "execution/test_headless_env_injection.py",
+            "execution/test_headless_env_scrub.py",
+            "execution/test_headless_provider_fallback.py",
+            "execution/test_headless_synthesis.py",
+            "execution/test_idle_output_env.py",
+            "execution/test_write_evidence.py",
+            "execution/test_zero_write_detection.py",
+        }
+    ),
+}
+
+
 class TestFileLevelCascadeImportGuard:
     """REQ-GUARD-006: File-level entries must actually import their cascade package."""
 
@@ -550,6 +574,8 @@ class TestFileLevelCascadeImportGuard:
         for pkg, entries in LAYER_CASCADE_CONSERVATIVE.items():
             for entry in entries:
                 if "/" not in entry:
+                    continue
+                if entry in _FIXTURE_MEDIATED_ENTRIES.get(pkg, frozenset()):
                     continue
                 test_file = tests_dir / entry
                 if not test_file.exists():
@@ -577,6 +603,55 @@ class TestFileLevelCascadeImportGuard:
         assert not violations, (
             "File-level cascade entries that do not import their package:\n"
             + "\n".join(f"  {v}" for v in sorted(violations))
+        )
+
+
+_PIPELINE_FIXTURES = frozenset(
+    {
+        "minimal_ctx",
+        "tool_ctx",
+        "tool_ctx_kitchen_open",
+        "tool_ctx_marketplace",
+    }
+)
+
+
+class TestFixtureCascadeDriftGuard:
+    """REQ-GUARD-007: File-level cascade entries must cover fixture-mediated importers.
+
+    Complements REQ-GUARD-005 (AST import check) by detecting test files that
+    depend on a cascade package through conftest fixtures rather than direct imports.
+    Uses a declarative fixture list because some fixtures (e.g. tool_ctx) depend
+    on pipeline indirectly through make_context(), which AST scanning cannot detect.
+    """
+
+    def test_fixture_dependent_execution_tests_in_pipeline_cascade(self) -> None:
+        """Every execution/ test using a pipeline fixture must be in pipeline cascade."""
+        tests_root = Path(__file__).parent.parent
+        execution_dir = tests_root / "execution"
+
+        pipeline_entries = LAYER_CASCADE_CONSERVATIVE["pipeline"]
+        if "execution" in pipeline_entries:
+            return
+
+        declared_files = {
+            e.split("/", 1)[1] for e in pipeline_entries if e.startswith("execution/")
+        }
+
+        missing: list[str] = []
+        for test_file in sorted(execution_dir.glob("test_*.py")):
+            source = test_file.read_text(encoding="utf-8")
+            for fixture in _PIPELINE_FIXTURES:
+                if re.search(rf"\bdef\s+test_\w+\([^)]*\b{fixture}\b", source):
+                    if test_file.name not in declared_files:
+                        missing.append(f"execution/{test_file.name} (uses {fixture})")
+                    break
+
+        assert not missing, (
+            "Execution test files use fixtures that import autoskillit.pipeline "
+            "but are not in LAYER_CASCADE_CONSERVATIVE['pipeline']:\n"
+            + "\n".join(f"  {m}" for m in missing)
+            + "\nAdd the missing file-level entries to tests/_test_filter.py."
         )
 
 

@@ -51,6 +51,8 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                     and recipe.steps[s].tool in _STRUCTURAL_ON_RESULT_TOOLS
                     and recipe.steps[s].on_result is not None
                 ]
+                _BRANCH_AWARE_TOOLS = {"wait_for_ci", "wait_for_merge_queue"}
+
                 if structural_steps:
                     unguarded_branches: list[str] = []
                     all_bounded = True
@@ -65,6 +67,9 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                             branch_items = [(c.when, c.route) for c in conditions]
                         elif routes_map:
                             branch_items = [(k, v) for k, v in routes_map.items()]
+                        has_own_exit = any(t not in cycle_set for _, t in branch_items)
+                        if has_own_exit and step.tool not in _BRANCH_AWARE_TOOLS:
+                            continue
                         for label, target in branch_items:
                             if target not in cycle_set:
                                 continue

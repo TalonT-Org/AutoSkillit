@@ -444,7 +444,7 @@ class TestSessionLogMonitorSessionId:
             tg.start_soon(run_monitor)
             tg.start_soon(append_marker)
 
-        assert isinstance(result_box[0].status, ChannelBStatus)
+        assert result_box[0].status == ChannelBStatus.COMPLETION
 
 
 class TestWatchSessionLogSessionId:

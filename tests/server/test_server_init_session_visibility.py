@@ -446,7 +446,12 @@ class TestSessionTypeVisibility:
     @pytest.mark.anyio
     async def test_codex_non_notification_backend_gets_kitchen_pre_reveal(self, monkeypatch):
         """Non-notification backend (codex) gets kitchen tools pre-revealed at startup."""
-        from autoskillit.core import GATED_TOOLS, MCP_CLIENT_BACKEND_ENV_VAR
+        from autoskillit.core import (
+            FLEET_DISPATCH_TOOLS,
+            FLEET_TOOLS,
+            GATED_TOOLS,
+            MCP_CLIENT_BACKEND_ENV_VAR,
+        )
         from autoskillit.server import _apply_session_type_visibility, mcp
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
@@ -456,8 +461,9 @@ class TestSessionTypeVisibility:
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
-        assert GATED_TOOLS.issubset(tool_names), (
-            "All kitchen tools should be visible for codex non-notification backend"
+        kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+        assert kitchen_gated.issubset(tool_names), (
+            "All kitchen-tagged gated tools should be visible for codex non-notification backend"
         )
 
     @pytest.mark.anyio

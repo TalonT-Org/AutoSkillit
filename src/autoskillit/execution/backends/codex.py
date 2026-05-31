@@ -372,9 +372,10 @@ class CodexBackend:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        headless_extras: dict[str, str] = {MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX}
+        headless_extras: dict[str, str] = {}
         if env_extras:
             headless_extras.update(env_extras)
+        headless_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         env = self.env_policy().build_env(filtered_base, extras=headless_extras)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
@@ -689,9 +690,9 @@ class CodexBackend:
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
-        resume_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         if env_extras:
             resume_extras.update(env_extras)
+        resume_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         env = self.env_policy().build_env(
             filtered_base,
             extras=resume_extras,

@@ -1065,6 +1065,7 @@ class TestFoodTruckAutoGateBoot:
             own_campaign_id="my-campaign-1",
             min_reap_age_seconds=60.0,
             reaper_dispatch_id="my-ft-dispatch",
+            heartbeat_grace_seconds=90.0,
         )
 
     @pytest.mark.anyio
@@ -1116,6 +1117,7 @@ class TestFoodTruckAutoGateBoot:
             own_campaign_id="my-campaign-2",
             min_reap_age_seconds=60.0,
             reaper_dispatch_id="",
+            heartbeat_grace_seconds=90.0,
         )
 
 

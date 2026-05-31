@@ -92,6 +92,25 @@ def _mark_dead_pid(
         logger.info("reap: [MARKED]      %s  pid=%d  (process dead)", name, pid)
 
 
+def _is_dispatch_heartbeating(
+    dispatches_dir: Path,
+    dispatch_id: str,
+    heartbeat_grace_seconds: float = 90.0,
+) -> bool:
+    """Return True if the dispatch has a fresh heartbeat file.
+
+    A fresh heartbeat means the file exists and its mtime is within
+    ``heartbeat_grace_seconds`` of the current time, indicating the dispatch
+    is actively executing.
+    """
+    hb_path = dispatches_dir / f"dispatch-{dispatch_id}.heartbeat"
+    try:
+        mtime = hb_path.stat().st_mtime
+        return time.time() - mtime <= heartbeat_grace_seconds
+    except OSError:
+        return False
+
+
 def reap_stale_dispatches(
     state_path: Path,
     *,
@@ -100,6 +119,7 @@ def reap_stale_dispatches(
     own_campaign_id: str | None = None,
     min_reap_age_seconds: float = 60.0,
     reaper_dispatch_id: str = "",
+    heartbeat_grace_seconds: float = 90.0,
 ) -> None:
     """Reap stale RUNNING dispatches with PID-recycling-safe identity checks.
 
@@ -223,6 +243,15 @@ def reap_stale_dispatches(
                 identity_confirmed = False
 
             if identity_confirmed:
+                if _is_dispatch_heartbeating(
+                    state_path.parent, dispatch.dispatch_id, heartbeat_grace_seconds
+                ):
+                    logger.info(
+                        "reap: [SKIPPED]     %s  dispatch_id=%s  (dispatch heartbeat active)",
+                        name,
+                        dispatch.dispatch_id,
+                    )
+                    continue
                 if dry_run:
                     logger.info(
                         "reap: [WOULD KILL]  %s  pid=%d  (orphan, identity match)", name, pid
@@ -257,6 +286,7 @@ async def reap_stale_dispatches_async(
     own_campaign_id: str | None = None,
     min_reap_age_seconds: float = 60.0,
     reaper_dispatch_id: str = "",
+    heartbeat_grace_seconds: float = 90.0,
 ) -> None:
     import functools  # noqa: PLC0415
 
@@ -271,5 +301,6 @@ async def reap_stale_dispatches_async(
                 own_campaign_id=own_campaign_id,
                 min_reap_age_seconds=min_reap_age_seconds,
                 reaper_dispatch_id=reaper_dispatch_id,
+                heartbeat_grace_seconds=heartbeat_grace_seconds,
             ),
         )

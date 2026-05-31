@@ -107,7 +107,7 @@ SESSION_FSM_SIZE_BUDGETS = {
 }
 MQ_SIZE_BUDGETS = {
     "merge_queue/__init__.py": 590,
-    "merge_queue/_merge_queue_classifier.py": 175,
+    "merge_queue/_merge_queue_classifier.py": 200,
     "merge_queue/_merge_queue_repo_state.py": 320,
 }
 

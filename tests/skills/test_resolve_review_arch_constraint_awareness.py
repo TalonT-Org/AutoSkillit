@@ -10,6 +10,22 @@ import pytest
 
 from tests._arch_constraint_discovery import discover_constraint_tests
 
+_CATALOG_HEADING = "architectural constraint catalog — consult before classifying accept"
+
+
+def _extract_catalog_section(skill_text: str) -> str:
+    """Extract the catalog section up to the next markdown heading or rule."""
+    catalog_idx = skill_text.lower().find(_CATALOG_HEADING)
+    if catalog_idx == -1:
+        pytest.fail("Architectural Constraint Catalog section not found in SKILL.md")
+    end_idx = len(skill_text)
+    for delimiter in ("\n## ", "\n---"):
+        pos = skill_text.find(delimiter, catalog_idx + len(_CATALOG_HEADING))
+        if pos != -1 and pos < end_idx:
+            end_idx = pos
+    return skill_text[catalog_idx:end_idx]
+
+
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
     / "src"
@@ -168,13 +184,7 @@ def test_never_block_prohibits_ignoring_arch_constraints(skill_text):
 
 def test_catalog_forward_references_valid(skill_text):
     """Every test file cited in the catalog must actually exist in tests/."""
-    catalog_idx = skill_text.lower().find(
-        "architectural constraint catalog — consult before classifying accept"
-    )
-    if catalog_idx == -1:
-        pytest.fail("Architectural Constraint Catalog section not found in SKILL.md")
-    catalog_section = skill_text[catalog_idx : catalog_idx + 6000]
-    # Build a set of ALL test filenames across the entire test tree
+    catalog_section = _extract_catalog_section(skill_text)
     all_test_files = {f.name for f in Path(__file__).parent.parent.rglob("test_*.py")}
     referenced_files = set(re.findall(r"`(test_\w+\.py)`", catalog_section))
     for ref in referenced_files:
@@ -188,11 +198,7 @@ def test_catalog_reverse_coverage(skill_text):
     referenced in the Architectural Constraint Catalog."""
     all_constraints = discover_constraint_tests()
     catalogable = {name for name in all_constraints if name not in _CATALOG_EXCLUSIONS}
-    catalog_idx = skill_text.lower().find(
-        "architectural constraint catalog — consult before classifying accept"
-    )
-    assert catalog_idx != -1
-    catalog_section = skill_text[catalog_idx : catalog_idx + 6000]
+    catalog_section = _extract_catalog_section(skill_text)
     missing = {name for name in catalogable if name not in catalog_section}
     assert missing == set(), (
         f"Constraint tests not in catalog: {sorted(missing)}. "

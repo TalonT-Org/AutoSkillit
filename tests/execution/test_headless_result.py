@@ -1564,7 +1564,11 @@ class TestFalseSuccessInfraWritesBypass:
         assert sr.subtype == "zero_writes"
 
     def test_conditional_mode_upgrade_path_with_zero_impl_writes_fails(self) -> None:
-        """Conditional mode upgrade with zero impl writes → zero_writes."""
+        """Conditional mode upgrade with zero impl writes → zero_writes.
+
+        The expected_when pattern matches the result, so writes ARE expected.
+        With zero implementation evidence, the gate fires.
+        """
         stdout = (
             _tool_use_ndjson("Read", file_path="/a/b.py")
             + "\n"
@@ -1583,7 +1587,10 @@ class TestFalseSuccessInfraWritesBypass:
             result,
             completion_marker="%%ORDER_UP%%",
             expected_output_patterns=(r"worktree_path[ \t]*=[ \t]*/.+",),
-            write_behavior=WriteBehaviorSpec(mode="conditional", expected_when=("committed",)),
+            write_behavior=WriteBehaviorSpec(
+                mode="conditional",
+                expected_when=(r"worktree_path[ \t]*=[ \t]*/.+",),
+            ),
             fs_writes_detected=True,
             backend=ClaudeCodeBackend(),
         )

@@ -83,6 +83,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_zero_change_circuit_breaker_contracts.py` | Contract tests: zero-change circuit breaker in implementation/remediation recipes |
 | `test_fetch_issue_mock_contracts.py` | Contract test: all fetch_issue mock return values must include a 'state' field |
 | `test_review_pr_severity_calibration.py` | Contract test: review-pr SKILL.md must contain severity calibration examples and grouping rule |
+| `test_resolve_review_no_inline_python.py` | Contract: resolve-review SKILL.md must not contain python3 -c invocations or ```python blocks with .write_text() |
 | `test_dry_walkthrough_transformation_extent.py` | Contract test: dry-walkthrough SKILL.md Step 2 must check transformation extent/scope |
 | `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 

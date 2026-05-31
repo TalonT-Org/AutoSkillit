@@ -80,11 +80,11 @@ Controls whether the tool succeeds when called (independent of visibility):
 
 ### Registry Constants
 
-The canonical tool sets are in `core/types/_type_constants.py`:
+The canonical tool sets are in `core/types/_type_constants_registries.py`:
 
 - `GATED_TOOLS` — all tools that call `_require_enabled()` (validated by arch test)
 - `UNGATED_TOOLS` = `FREE_RANGE_TOOLS` — tools with no gating at all
 - `HEADLESS_TOOLS` — `{"test_check"}` — kitchen-tagged but not application-gated
 - `FLEET_TOOLS` — fleet-session-only tools
-- `FLEET_DISPATCH_TOOLS` — fleet-dispatch-mode tools (always tag-visible, application-gated)
+- `FLEET_DISPATCH_TOOLS` — fleet-dispatch-mode tools (hidden at startup, application-gated)
 - `ALL_VISIBILITY_TAGS` — `{"kitchen", "headless", "fleet", "fleet-dispatch", "kitchen-core", "plan-review"}`

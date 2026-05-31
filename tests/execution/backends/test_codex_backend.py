@@ -220,7 +220,8 @@ class TestCodexBackendCommands:
         )
         assert spec.env.get("FOO") == "bar"
 
-    def test_build_resume_cmd_env_includes_os_environ(self) -> None:
+    def test_build_resume_cmd_env_uses_filtered_base(self, monkeypatch) -> None:
+        monkeypatch.setenv("PATH", "/usr/bin")
         spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
         assert "PATH" in spec.env
 
@@ -393,7 +394,16 @@ class TestCodexHeadlessCmd:
 class TestCodexResumeCmd:
     def test_positional_structure(self) -> None:
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        assert spec.cmd == ("codex", "exec", "--json", "resume", "abc123", "continue")
+        assert spec.cmd == (
+            "codex",
+            "exec",
+            "--json",
+            "--sandbox",
+            "read-only",
+            "resume",
+            "abc123",
+            "continue",
+        )
 
     def test_empty_session_id_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
@@ -402,11 +412,6 @@ class TestCodexResumeCmd:
     def test_whitespace_session_id_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
             CodexBackend().build_resume_cmd(resume_session_id="   ", prompt="continue")
-
-    def test_no_sandbox_flag_in_resume(self) -> None:
-        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        assert "--sandbox" not in spec.cmd
-        assert "workspace-write" not in spec.cmd
 
     def test_no_approval_flag_in_resume(self) -> None:
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
@@ -424,6 +429,29 @@ class TestCodexResumeCmd:
             output_format=OutputFormat.STREAM_JSON,
         )
         assert "--json" not in spec.cmd
+
+    def test_resume_cmd_includes_sandbox_flag(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        assert "--sandbox" in spec.cmd
+        assert "read-only" in spec.cmd
+
+    def test_resume_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
+        from autoskillit.execution.backends._claude_prompt import _HEADLESS_EXCLUSIVE_VARS
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        leaking = _HEADLESS_EXCLUSIVE_VARS & spec.env.keys()
+        assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume env: {leaking}"
+
+
+class TestCodexHeadlessCmdEnv:
+    def test_headless_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
+        from autoskillit.execution.backends._claude_prompt import _HEADLESS_EXCLUSIVE_VARS
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        leaking = _HEADLESS_EXCLUSIVE_VARS & spec.env.keys()
+        assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into headless env: {leaking}"
 
 
 class TestCodexBuildSkillSessionCmd:
@@ -1115,3 +1143,13 @@ class TestCodexBackendVersion:
         result = CodexBackend().version()
         assert captured_cmd == ["codex", "--version"]
         assert result == "v1"
+
+
+class TestCodexStubMethods:
+    def test_validate_skill_content_returns_list(self) -> None:
+        result = CodexBackend().validate_skill_content("some skill content")
+        assert isinstance(result, list)
+
+    def test_list_plugins_returns_list(self) -> None:
+        result = CodexBackend().list_plugins()
+        assert isinstance(result, list)

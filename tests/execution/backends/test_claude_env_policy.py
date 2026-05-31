@@ -37,3 +37,11 @@ class TestClaudeEnvPolicy:
         policy = ClaudeEnvPolicy()
         with pytest.raises((FrozenInstanceError, TypeError)):
             policy.some_attr = "value"  # type: ignore[misc]
+
+    def test_build_env_forwards_extras(self) -> None:
+        result = ClaudeEnvPolicy().build_env({}, extras={"FOO": "bar"})
+        assert result.get("FOO") == "bar"
+
+    def test_build_env_raises_on_missing_required(self) -> None:
+        with pytest.raises(ValueError, match="MISSING_KEY"):
+            ClaudeEnvPolicy().build_env({}, required=frozenset({"MISSING_KEY"}))

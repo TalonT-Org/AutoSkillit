@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.core import ClaudeFlags, DirectInstall, OutputFormat
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.commands import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
@@ -42,8 +43,26 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
+        lambda: CodexBackend().build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        ),
+        lambda: CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="L3 orchestrator",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        ),
     ],
-    ids=["interactive", "skill_headless", "headless_resume", "food_truck"],
+    ids=[
+        "interactive",
+        "skill_headless",
+        "headless_resume",
+        "food_truck",
+        "codex_skill",
+        "codex_food_truck",
+    ],
 )
 def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None:
     """Every session command builder must produce env with MAX_MCP_OUTPUT_TOKENS."""
@@ -71,8 +90,26 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
             cwd="/tmp",
             completion_marker="%%DONE%%",
         ),
+        lambda: CodexBackend().build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        ),
+        lambda: CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="L3 orchestrator",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        ),
     ],
-    ids=["interactive", "skill_headless", "headless_resume", "food_truck"],
+    ids=[
+        "interactive",
+        "skill_headless",
+        "headless_resume",
+        "food_truck",
+        "codex_skill",
+        "codex_food_truck",
+    ],
 )
 def test_all_session_builders_inject_mcp_connection_nonblocking(builder_call) -> None:
     """Every session command builder must produce env with MCP_CONNECTION_NONBLOCKING=0."""

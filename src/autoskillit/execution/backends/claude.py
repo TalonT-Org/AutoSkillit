@@ -16,8 +16,10 @@ from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     CONTEXT_EXHAUSTION_MARKER,
     KITCHEN_SESSION_ID_ENV_VAR,
+    ORCHESTRATOR_SESSION_REQUIRED_ENV,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
+    SKILL_SESSION_REQUIRED_ENV,
     AgentSessionResult,
     BackendCapabilities,
     BackendEventKind,
@@ -83,7 +85,7 @@ class ClaudeEnvPolicy:
         extras: Mapping[str, str] | None = None,
         required: frozenset[str] | None = None,
     ) -> dict[str, str]:
-        return dict(build_agent_env(base=base_env))
+        return dict(build_agent_env(base=base_env, extras=extras, required=required))
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,11 +298,12 @@ class ClaudeCodeBackend:
         model: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         base: Mapping[str, str] | None = None,
+        required: frozenset[str] | None = None,
     ) -> CmdSpec:
         cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
         if model:
             cmd += [ClaudeFlags.MODEL, model]
-        env = dict(build_agent_env(base=base, extras=env_extras))
+        env = dict(build_agent_env(base=base, extras=env_extras, required=required))
         env.update(_HEADLESS_ENV_HARDENING)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
@@ -579,7 +582,13 @@ class ClaudeCodeBackend:
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        spec = self.build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
+        spec = self.build_headless_cmd(
+            prompt,
+            model=model,
+            env_extras=extras,
+            base=filtered_base,
+            required=SKILL_SESSION_REQUIRED_ENV,
+        )
         cmd: list[str] = [*spec.cmd]
         match plugin_source:
             case DirectInstall(plugin_dir=p):
@@ -643,6 +652,7 @@ class ClaudeCodeBackend:
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
             "MCP_CONNECTION_NONBLOCKING": "0",
+            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
         }
         if exit_after_stop_delay_ms > 0:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
@@ -665,7 +675,13 @@ class ClaudeCodeBackend:
                     extras[k] = v
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        spec = self.build_headless_cmd(prompt, model=model, env_extras=extras, base=filtered_base)
+        spec = self.build_headless_cmd(
+            prompt,
+            model=model,
+            env_extras=extras,
+            base=filtered_base,
+            required=ORCHESTRATOR_SESSION_REQUIRED_ENV,
+        )
 
         cmd: list[str] = [*spec.cmd]
         match plugin_source:

@@ -66,7 +66,7 @@ def test_session_type_invalid_raises_value_error(monkeypatch):
 def test_cli_display_labels_are_not_valid_session_type_members(display_label):
     from autoskillit.core import SessionType
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="is not a valid SessionType"):
         SessionType(display_label)
 
 

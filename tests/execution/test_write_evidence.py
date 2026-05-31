@@ -489,11 +489,12 @@ class TestSentinelDisambiguation:
         watch_dir = tmp_path / "output"
         watch_dir.mkdir()
 
-        call_count: list[int] = [0]
+        raised = False
 
         def _mock_snap(d):
-            call_count[0] += 1
-            if call_count[0] == 1 and d == watch_dir:
+            nonlocal raised
+            if not raised and d == watch_dir:
+                raised = True
                 raise OSError("simulated scan failure")
             return _real_snap(d)
 

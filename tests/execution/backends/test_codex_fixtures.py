@@ -237,3 +237,4 @@ class TestCodexFixturesParseWithBackend:
         acc = _scan_codex_ndjson(text)
         assert acc.success is False
         assert acc.error_message
+        assert acc.error_code == "rate_limit_exceeded"

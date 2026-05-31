@@ -150,33 +150,11 @@ def _adapt_codex_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
 
 
 def _make_codex_parse_stdout() -> object:
-    """Return a _parse_stdout replacement that delegates to CodexResultParser.
-
-    Simulates Phase C wiring: parses Codex NDJSON via CodexResultParser,
-    adapts via _adapt_codex_result, and extracts error codes from turn.failed
-    events into session.errors for API error detection.
-
-    The ``backend`` parameter is accepted for signature compatibility with
-    _parse_stdout (called as ``_parse_stdout(stdout, backend=backend)`` inside
-    _build_skill_result) but is intentionally ignored — this monkeypatch
-    unconditionally routes through CodexResultParser.
-    """
+    """Return a _parse_stdout replacement that delegates to CodexResultParser."""
 
     def _patched(stdout: str, backend: object) -> ClaudeSessionResult:  # noqa: ARG001
         agent_result = CodexBackend().result_parser().parse_stdout(stdout)
-        session = _adapt_codex_result(agent_result)
-        for line in stdout.strip().splitlines():
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if obj.get("type") == "turn.failed":
-                error = obj.get("error", {})
-                if isinstance(error, dict):
-                    code = error.get("code", "")
-                    if code:
-                        session.errors.append(code)
-        return session
+        return _adapt_codex_result(agent_result)
 
     return _patched  # type: ignore[return-value]
 

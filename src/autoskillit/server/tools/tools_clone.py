@@ -22,11 +22,13 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import clone_registry
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("clone_repo")
 async def clone_repo(
     source_dir: str,
@@ -124,6 +126,7 @@ async def clone_repo(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("remove_clone")
 async def remove_clone(
     clone_path: str,
@@ -177,6 +180,7 @@ async def remove_clone(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("push_to_remote")
 async def push_to_remote(
     clone_path: str,
@@ -286,6 +290,7 @@ async def push_to_remote(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("register_clone_status")
 async def register_clone_status(
     clone_path: str,
@@ -373,6 +378,7 @@ async def register_clone_status(
 
 
 @mcp.tool(tags={"autoskillit", "clone", "fleet"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("batch_cleanup_clones")
 async def batch_cleanup_clones(
     registry_path: str = "",
@@ -486,6 +492,7 @@ def _require_clone_success(clone_result: CloneResult, source_dir: str) -> str | 
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "clone"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("bootstrap_clone")
 async def bootstrap_clone(
     source_dir: str,

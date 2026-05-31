@@ -17,6 +17,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 _BRANCH_DATE_FORMAT = "%Y%m%d"
 
@@ -35,6 +36,7 @@ logger = get_logger(__name__)
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("merge_worktree")
 async def merge_worktree(
     worktree_path: str,
@@ -107,6 +109,7 @@ async def merge_worktree(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("classify_fix")
 async def classify_fix(
     worktree_path: str,
@@ -258,6 +261,7 @@ async def classify_fix(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("create_unique_branch")
 async def create_unique_branch(
     slug: str = "",
@@ -355,6 +359,7 @@ async def create_unique_branch(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("check_pr_mergeable")
 async def check_pr_mergeable(
     pr_number: int,
@@ -490,6 +495,7 @@ async def _resolve_and_create_branch(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("create_and_publish_branch")
 async def create_and_publish_branch(
     issue_slug: str,

@@ -17,6 +17,7 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _apply_triage_gate, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,7 @@ logger = get_logger(__name__)
     tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield()
 @track_response_size("list_recipes")
 async def list_recipes() -> str:
     """List available recipes from .autoskillit/recipes/.
@@ -65,6 +67,7 @@ async def list_recipes() -> str:
     annotations={"readOnlyHint": True},
     meta={"anthropic/maxResultSizeChars": 100_000},
 )
+@_cancellation_shield()
 @track_response_size("load_recipe")
 async def load_recipe(
     name: str, overrides: dict[str, str] | None = None, ingredients_only: bool = False
@@ -228,6 +231,7 @@ async def load_recipe(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("validate_recipe")
 async def validate_recipe(script_path: str) -> str:
     """Validate a recipe YAML file against the recipe schema.
@@ -271,6 +275,7 @@ async def validate_recipe(script_path: str) -> str:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("migrate_recipe")
 async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
     """Apply pending migration notes to a recipe file.

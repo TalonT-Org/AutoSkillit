@@ -8,6 +8,7 @@ from fastmcp.exceptions import ResourceError
 
 from autoskillit.core import AGENT_PACK_REGISTRY, get_logger, pkg_root
 from autoskillit.server import mcp
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -37,6 +38,7 @@ def list_plan_review_agents() -> str:
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield()
 async def unlock_agent_pack(pack_name: str, ctx: Context = CurrentContext()) -> str:
     """Unlock bundled agent definitions for this session.
 

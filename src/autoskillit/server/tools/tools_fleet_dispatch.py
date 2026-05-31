@@ -21,6 +21,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -125,6 +126,7 @@ def _get_food_truck_prompt_builder() -> Callable[..., str]:
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield(result_type="fleet_error")
 @track_response_size("dispatch_food_truck")
 async def dispatch_food_truck(
     recipe: str,
@@ -388,6 +390,7 @@ async def dispatch_food_truck(
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield(result_type="fleet_error")
 @track_response_size("record_gate_dispatch")
 async def record_gate_dispatch(
     dispatch_name: str,

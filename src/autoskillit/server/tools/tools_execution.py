@@ -37,6 +37,7 @@ from autoskillit.server._guards import (
 from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV, _hook_config_overlay_path
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -99,6 +100,7 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield(result_type="run_cmd")
 @track_response_size("run_cmd")
 async def run_cmd(
     cmd: str,
@@ -180,6 +182,7 @@ async def run_cmd(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield(result_type="run_python")
 @track_response_size("run_python")
 async def run_python(
     callable: str,
@@ -267,6 +270,7 @@ def _compute_write_prefixes(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("run_skill")
 async def run_skill(
     skill_command: str,
@@ -745,9 +749,14 @@ async def run_skill(
             skill_command=skill_command,
             order_id=order_id,
         ).to_json()
-    except BaseException:
+    except asyncio.CancelledError:
         logger.warning("run_skill cancelled", exc_info=True)
-        raise
+        _cmd = locals().get("resolved_command", skill_command)
+        _oid = locals().get("effective_order_id", order_id)
+        return SkillResult.cancelled(
+            skill_command=_cmd,  # type: ignore[arg-type]
+            order_id=_oid,  # type: ignore[arg-type]
+        ).to_json()
     finally:
         if _sn_token is not None:
             _current_step_name.reset(_sn_token)  # type: ignore[possibly-undefined]

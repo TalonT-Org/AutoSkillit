@@ -17,6 +17,7 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import condense_test_output
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -24,6 +25,7 @@ logger = get_logger(__name__)
 @mcp.tool(
     tags={"autoskillit", "kitchen", "kitchen-core", "headless"}, annotations={"readOnlyHint": True}
 )
+@_cancellation_shield()
 # No _require_enabled() — headless skill sessions need test_check without opening kitchen.
 # The kitchen tag governs visibility only; the headless tag provides access in SKILL sessions.
 @track_response_size("test_check")
@@ -127,6 +129,7 @@ async def test_check(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("reset_test_dir")
 async def reset_test_dir(
     test_dir: str,
@@ -212,6 +215,7 @@ async def reset_test_dir(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("reset_workspace")
 async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str:
     """Runs a configured reset command then deletes directory contents,

@@ -38,7 +38,7 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD ${PYTEST_TEST_PATHS:-tests/} -q --tb=short -n 4 -m "not smoke and not canary" ${PYTEST_IGNORE_PATHS:-} --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD ${PYTEST_TEST_PATHS:-tests/} -q --tb=short -n 4 --dist worksteal -m "not smoke and not canary" ${PYTEST_IGNORE_PATHS:-} --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e
@@ -67,7 +67,7 @@ tasks:
 
         set -o pipefail
         set +e
-        $PYTEST_CMD ${PYTEST_TEST_PATHS:-tests/} -q --tb=short -n 4 -m "not smoke and not canary" ${PYTEST_IGNORE_PATHS:-} --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        $PYTEST_CMD ${PYTEST_TEST_PATHS:-tests/} -q --tb=short -n 4 --dist worksteal -m "not smoke and not canary" ${PYTEST_IGNORE_PATHS:-} --disable-warnings -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
         PYTEST_EXIT=$?
         set +o pipefail
         set -e
@@ -114,7 +114,7 @@ tasks:
 
         set +e
         $PYTEST_CMD tests/ -q --tb=short \
-          -n 4 \
+          -n 4 --dist worksteal \
           -m "not smoke and not canary" \
           --disable-warnings \
           -o "addopts=" \
@@ -434,3 +434,41 @@ tasks:
         $PYTHON scripts/benchmark-testmon.py \
           --mode="${TESTMON_BENCH_MODE:-compare}" \
           ${TESTMON_CHANGED_FILES:+--changed-files="$TESTMON_CHANGED_FILES"}
+
+  cleanup-shm:
+    desc: "Clean stale /dev/shm pytest and headless session dirs (age-gated, safe for concurrent worktrees)"
+    preconditions:
+      - sh: '[ "$(uname -s)" = "Linux" ]'
+        msg: "cleanup-shm requires Linux (/dev/shm)"
+    cmds:
+      - |
+        echo "Cleaning stale /dev/shm directories..."
+
+        # pytest-tmp dirs older than 2 hours
+        PYTEST_COUNT=$(find /dev/shm -maxdepth 1 -name 'pytest-tmp-*' -mmin +120 -type d 2>/dev/null | wc -l)
+        if [ "$PYTEST_COUNT" -gt 0 ]; then
+          find /dev/shm -maxdepth 1 -name 'pytest-tmp-*' -mmin +120 -type d -exec rm -rf {} +
+          echo "  Removed $PYTEST_COUNT stale pytest-tmp dirs (>2h old)"
+        else
+          echo "  No stale pytest-tmp dirs found"
+        fi
+
+        # pytest-cache dirs older than 2 hours
+        CACHE_COUNT=$(find /dev/shm -maxdepth 1 -name 'pytest-cache-*' -mmin +120 -type d 2>/dev/null | wc -l)
+        if [ "$CACHE_COUNT" -gt 0 ]; then
+          find /dev/shm -maxdepth 1 -name 'pytest-cache-*' -mmin +120 -type d -exec rm -rf {} +
+          echo "  Removed $CACHE_COUNT stale pytest-cache dirs (>2h old)"
+        else
+          echo "  No stale pytest-cache dirs found"
+        fi
+
+        # headless session dirs older than 4 hours
+        HEADLESS_COUNT=$(find /dev/shm/autoskillit-sessions -maxdepth 1 -name 'headless-*' -mmin +240 -type d 2>/dev/null | wc -l)
+        if [ "$HEADLESS_COUNT" -gt 0 ]; then
+          find /dev/shm/autoskillit-sessions -maxdepth 1 -name 'headless-*' -mmin +240 -type d -exec rm -rf {} +
+          echo "  Removed $HEADLESS_COUNT stale headless session dirs (>4h old)"
+        else
+          echo "  No stale headless session dirs found"
+        fi
+
+        echo "Done."

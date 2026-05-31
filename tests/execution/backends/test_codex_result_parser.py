@@ -96,6 +96,7 @@ class TestScanCodexNdjson:
         assert acc.last_usage is None
         assert acc.success is False
         assert acc.error_message == ""
+        assert acc.error_code == ""
 
     def test_scan_thread_started_populates_session_id(self) -> None:
         acc = _scan_codex_ndjson(_thread_started_line("t1"))
@@ -273,9 +274,8 @@ class TestCodexResultParserStdout:
         assert len(raw["mcp_tool_calls"]) == 1
         assert raw["mcp_tool_calls"][0]["tool_name"] == "mcp_tool"
         assert raw["file_changes"] == ["/path/file.py"]
+        assert raw["error_code"] == ""
 
-
-class TestCodexResultParserEvents:
     def test_parse_result_completion_events_yield_success(self) -> None:
         parser = CodexResultParser()
         events = [
@@ -666,3 +666,20 @@ class TestCodexResultParserContextExhaustion:
         ndjson = _turn_failed_code_line("rate_limit_exceeded", "Rate limit exceeded.")
         result = CodexResultParser().parse_stdout(ndjson)
         assert "context_length_exceeded" not in result.error
+
+
+def test_error_code_in_codex_raw_dict() -> None:
+    line = json.dumps(
+        {
+            "type": "turn.failed",
+            "error": {"message": "Token limit", "code": "context_length_exceeded"},
+        }
+    )
+    result = CodexResultParser().parse_stdout(line)
+    assert result.raw["error_code"] == "context_length_exceeded"
+
+
+def test_error_code_empty_when_no_failure() -> None:
+    line = json.dumps({"type": "turn.completed", "usage": {"input_tokens": 100}})
+    result = CodexResultParser().parse_stdout(line)
+    assert result.raw["error_code"] == ""

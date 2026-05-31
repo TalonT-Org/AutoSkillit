@@ -31,6 +31,7 @@ class _CodexParseAccumulator:
     saw_failure: bool = False
     success: bool = False
     error_message: str = ""
+    error_code: str = ""
 
 
 def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
@@ -80,6 +81,7 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
             if isinstance(error, dict):
                 error_msg = error.get("message", "")
                 error_code = error.get("code", "")
+                acc.error_code = error_code
                 if error_code and error_code not in error_msg:
                     acc.error_message = f"{error_msg} [{error_code}]" if error_msg else error_code
                 else:
@@ -149,6 +151,7 @@ class CodexResultParser:
                 "command_executions": acc.command_executions,
                 "mcp_tool_calls": acc.mcp_tool_calls,
                 "file_changes": acc.file_changes,
+                "error_code": acc.error_code,
             },
         )
 

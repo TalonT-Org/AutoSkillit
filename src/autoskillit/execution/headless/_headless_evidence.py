@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
+    CODEX_CONTEXT_EXHAUSTION_MARKER,
     AgentSessionResult,
     CliSubtype,
     FailureRecord,
@@ -78,6 +79,11 @@ def _apply_budget_guard(
     return sr
 
 
+_CODEX_ERROR_CODE_API_STATUS: dict[str, int] = {
+    "rate_limit_exceeded": 429,
+}
+
+
 def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult:
     raw = agent_result.raw
 
@@ -87,14 +93,23 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
     subtype = CliSubtype.from_cli(raw.get("subtype", "unknown"))
     stop_reasons: list[str] = raw.get("stop_reasons", [])
 
+    error_code: str = raw.get("error_code", "")
+
     error_subtypes = {
         CliSubtype.ERROR_DURING_EXECUTION,
         CliSubtype.ERROR_MAX_TURNS,
         CliSubtype.UNKNOWN,
     }
-    jsonl_context_exhausted = subtype in error_subtypes and "context_length_exceeded" in (
-        agent_result.error or ""
+    jsonl_context_exhausted = subtype in error_subtypes and (
+        error_code == CODEX_CONTEXT_EXHAUSTION_MARKER
+        or CODEX_CONTEXT_EXHAUSTION_MARKER in (agent_result.error or "")
     )
+
+    errors: list[str] = []
+    if agent_result.error:
+        errors.append(agent_result.error)
+
+    api_error_status: int | None = _CODEX_ERROR_CODE_API_STATUS.get(error_code) or None
 
     token_usage = raw.get("canonical_token_usage") or raw.get("token_usage")
 
@@ -113,6 +128,7 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         is_error=is_error,
         result=result_text,
         session_id=session_id,
+        errors=errors,
         token_usage=token_usage,
         assistant_messages=assistant_messages,
         tool_uses=tool_uses,
@@ -120,6 +136,7 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         stop_reasons=stop_reasons,
         has_thinking_only_turn=False,
         seen_block_types=frozenset(),
+        api_error_status=api_error_status,
     )
 
 

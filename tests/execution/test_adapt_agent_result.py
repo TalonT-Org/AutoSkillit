@@ -304,7 +304,7 @@ def test_full_round_trip_all_fields() -> None:
     assert result.is_error is False
     assert result.result == "final output"
     assert result.session_id == "sess-abc"
-    assert result.errors == []
+    assert result.errors == ["some warning"]
     assert result.token_usage == {"input": 200, "output": 50}
     assert result.assistant_messages == ["I updated the file."]
     assert result.tool_uses == [
@@ -336,6 +336,63 @@ def test_rate_limit_code_field_not_context_exhausted() -> None:
         )
     )
     assert result.jsonl_context_exhausted is False
+
+
+def test_errors_populated_from_agent_error() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(error="Rate limit exceeded. [rate_limit_exceeded]")
+    )
+    assert result.errors == ["Rate limit exceeded. [rate_limit_exceeded]"]
+
+
+def test_context_exhaustion_via_structured_error_code() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_during_execution", "error_code": "context_length_exceeded"},
+            error="",
+        )
+    )
+    assert result.jsonl_context_exhausted is True
+
+
+def test_api_error_status_from_rate_limit_code() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_during_execution", "error_code": "rate_limit_exceeded"},
+            error="Rate limit exceeded",
+        )
+    )
+    assert result.api_error_status == 429
+
+
+def test_api_error_status_none_for_non_rate_limit_code() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_during_execution", "error_code": "server_error"},
+            error="Internal server error",
+        )
+    )
+    assert result.api_error_status is None
+
+
+def test_classify_infra_exit_rate_limited_via_adapted_error_code() -> None:
+    adapted = _adapt_agent_result(
+        _make_agent_result(
+            raw={"subtype": "error_during_execution", "error_code": "rate_limit_exceeded"},
+            error="Rate limit exceeded",
+        )
+    )
+    subprocess_result = SubprocessResult(
+        returncode=1,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=1,
+        session_id="",
+        channel_b_session_id="",
+    )
+    exit_category = classify_infra_exit(adapted, subprocess_result)
+    assert exit_category == InfraExitCategory.RATE_LIMITED
 
 
 class TestAdaptAgentResultFilePathKey:

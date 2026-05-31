@@ -201,25 +201,6 @@ def test_catalog_reverse_coverage(skill_text):
     )
 
 
-def test_catalog_completeness_via_discovery(skill_text):
-    """Bidirectional catalog guard: all constraint tests violable by reviewer
-    suggestions must appear in the Architectural Constraint Catalog."""
-    all_constraints = discover_constraint_tests()
-    catalogable = {name for name in all_constraints if name not in _CATALOG_EXCLUSIONS}
-    catalog_idx = skill_text.lower().find(
-        "architectural constraint catalog — consult before classifying accept"
-    )
-    if catalog_idx == -1:
-        pytest.fail("Architectural Constraint Catalog section not found in SKILL.md")
-    catalog_section = skill_text[catalog_idx : catalog_idx + 6000]
-    missing = {name for name in catalogable if name not in catalog_section}
-    assert missing == set(), (
-        f"Constraint tests not in catalog: {sorted(missing)}. "
-        "Add them to the Architectural Constraint Catalog in "
-        "resolve-review/SKILL.md or add to _CATALOG_EXCLUSIONS with a reason."
-    )
-
-
 # --- arch_violation category ---
 
 

@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._arch_constraint_discovery import discover_constraint_tests
+
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
     / "src"
@@ -19,12 +21,65 @@ SKILL_PATH = (
 
 ARCH_DIR = Path(__file__).parent.parent / "arch"
 
+# Tests whose constraints cannot be violated by reviewer suggestions
+# (they guard test infrastructure, CI config, or test file structure).
+_CATALOG_EXCLUSIONS: frozenset[str] = frozenset(
+    {
+        # Test-infrastructure guards (guard test file splits, not production code):
+        "test_headless_split.py",
+        "test_doctor_split.py",
+        "test_update_checks_split.py",
+        "test_tools_kitchen_gate_split.py",
+        "test_tools_dispatch_split.py",
+        "test_tools_git_split.py",
+        "test_api_split_integrity.py",
+        # CI/infra guards (not violable by code review suggestions):
+        "test_ci_dev_config.py",
+        "test_session_type_exemption_enforcement.py",
+        "test_session_scope_enforcement.py",
+        "test_skill_exemption_enforcement.py",
+        # The catalog guard itself:
+        "test_resolve_review_arch_constraint_awareness.py",
+        # SKILL.md content guards (guard skill prose structure, not production code;
+        # reviewer suggestions don't change SKILL.md structure):
+        "test_audit_impl_diff_discipline.py",
+        "test_conflict_resolution_guards.py",
+        "test_deletion_regression_guards.py",
+        "test_open_research_pr_decomposition.py",
+        "test_resolve_design_review_contracts.py",
+        "test_resolve_review_intent_validation.py",
+        "test_resolve_review_token_optimizations.py",
+        "test_review_pr_inline_comment_guards.py",
+        # Execution/server test-infrastructure guards:
+        "test_conftest_import_guard.py",
+        "test_flush_completeness_guard.py",
+        "test_smoke_recipe_scope_guard.py",
+        # Internal structural guards (guard conftest/env patterns, not production code):
+        "test_conftest_env_coverage.py",
+        "test_make_context_env_boundary.py",
+        "test_command_guard_completeness.py",
+        "test_interactive_subprocess_contracts.py",
+    }
+)
+
 
 @pytest.fixture(scope="module")
 def skill_text():
     if not SKILL_PATH.exists():
         pytest.fail(f"SKILL.md not found at {SKILL_PATH}")
     return SKILL_PATH.read_text()
+
+
+# --- Discovery utility self-test ---
+
+
+def test_discovery_finds_known_constraints():
+    """Constraint discovery must find tests from multiple directories."""
+    discovered = discover_constraint_tests()
+    # These three are in different directories (arch/, workspace/, recipe/)
+    assert "test_regex_import.py" in discovered, "test_regex_import.py not found"
+    assert "test_clone_timeouts.py" in discovered, "test_clone_timeouts.py not found"
+    assert "test_anti_pattern_guards.py" in discovered, "test_anti_pattern_guards.py not found"
 
 
 # --- Catalog presence ---
@@ -36,25 +91,6 @@ def test_arch_constraint_catalog_section_exists(skill_text):
         "resolve-review SKILL.md must contain an 'Architectural Constraint Catalog' "
         "section for intent validation subagents"
     )
-
-
-# --- Catalog references key arch tests ---
-
-
-def test_catalog_references_key_constraint_tests(skill_text):
-    """The catalog must reference the most commonly violated constraint
-    enforcement test filenames — from tests/arch/ and tests/recipe/."""
-    key_test_files = [
-        "test_regex_import.py",  # tests/arch/
-        "test_ast_rules.py",  # tests/arch/
-        "test_dataclass_slots.py",  # tests/arch/
-        "test_layer_enforcement.py",  # tests/arch/
-        "test_anti_pattern_guards.py",  # tests/recipe/
-    ]
-    for test_file in key_test_files:
-        assert test_file in skill_text, (
-            f"Architectural Constraint Catalog must reference {test_file} by name"
-        )
 
 
 # --- REJECT criteria include arch violation ---
@@ -75,7 +111,7 @@ def test_reject_criteria_includes_arch_violation(skill_text):
     ), (
         "Classification criteria prose for REJECT must include language about "
         "architecturally prohibited changes (locally correct but violating "
-        "project-wide constraints enforced by tests/arch/)"
+        "project-wide constraints enforced by tests)"
     )
 
 
@@ -131,53 +167,57 @@ def test_never_block_prohibits_ignoring_arch_constraints(skill_text):
 
 
 def test_catalog_forward_references_valid(skill_text):
-    """Every arch test file referenced in the catalog must actually exist
-    in tests/arch/ or tests/recipe/."""
-    catalog_idx = skill_text.lower().find("architectural constraint catalog")
+    """Every test file cited in the catalog must actually exist in tests/."""
+    catalog_idx = skill_text.lower().find(
+        "architectural constraint catalog — consult before classifying accept"
+    )
     if catalog_idx == -1:
         pytest.fail("Architectural Constraint Catalog section not found in SKILL.md")
-    catalog_section = skill_text[catalog_idx : catalog_idx + 3000]
-    if not ARCH_DIR.is_dir():
-        pytest.fail(f"tests/arch/ not found at {ARCH_DIR}")
-    arch_test_files = {f.name for f in ARCH_DIR.glob("test_*.py")}
-    recipe_test_dir = ARCH_DIR.parent / "recipe"
-    recipe_test_files = (
-        {f.name for f in recipe_test_dir.glob("test_*.py")} if recipe_test_dir.exists() else set()
-    )
-    all_test_files = arch_test_files | recipe_test_files
+    catalog_section = skill_text[catalog_idx : catalog_idx + 6000]
+    # Build a set of ALL test filenames across the entire test tree
+    all_test_files = {f.name for f in Path(__file__).parent.parent.rglob("test_*.py")}
     referenced_files = set(re.findall(r"`(test_\w+\.py)`", catalog_section))
     for ref in referenced_files:
         assert ref in all_test_files, (
-            f"Catalog references {ref} but it does not exist in tests/arch/ or tests/recipe/"
+            f"Catalog references {ref} but it does not exist anywhere in tests/"
         )
 
 
 def test_catalog_reverse_coverage(skill_text):
-    """High-risk arch test files must be referenced in the catalog.
-    When a new arch test is added that enforces a constraint violable by
-    reviewer suggestions, this test ensures the catalog is updated."""
-    high_risk_test_files = {
-        "test_regex_import.py",
-        "test_ast_rules.py",
-        "test_dataclass_slots.py",
-        "test_layer_enforcement.py",
-        "test_never_raises_contracts.py",
-        "test_no_backend_name_bypass.py",
-        "test_subpackage_isolation.py",
-        "test_anyio_migration.py",
-        "test_python_no_hardcoded_temp.py",
-        "test_skill_result_construction_guard.py",
-        "test_anti_pattern_guards.py",
-    }
-    for test_file in high_risk_test_files:
-        arch_path = ARCH_DIR / test_file
-        recipe_path = ARCH_DIR.parent / "recipe" / test_file
-        if not arch_path.exists() and not recipe_path.exists():
-            continue
-        assert test_file in skill_text, (
-            f"High-risk arch test {test_file} exists but is not referenced "
-            f"in the Architectural Constraint Catalog. Update the catalog."
-        )
+    """Every discoverable constraint test (minus exclusions) must be
+    referenced in the Architectural Constraint Catalog."""
+    all_constraints = discover_constraint_tests()
+    catalogable = {name for name in all_constraints if name not in _CATALOG_EXCLUSIONS}
+    catalog_idx = skill_text.lower().find(
+        "architectural constraint catalog — consult before classifying accept"
+    )
+    assert catalog_idx != -1
+    catalog_section = skill_text[catalog_idx : catalog_idx + 6000]
+    missing = {name for name in catalogable if name not in catalog_section}
+    assert missing == set(), (
+        f"Constraint tests not in catalog: {sorted(missing)}. "
+        "Add them to the Architectural Constraint Catalog in "
+        "resolve-review/SKILL.md or add to _CATALOG_EXCLUSIONS with a reason."
+    )
+
+
+def test_catalog_completeness_via_discovery(skill_text):
+    """Bidirectional catalog guard: all constraint tests violable by reviewer
+    suggestions must appear in the Architectural Constraint Catalog."""
+    all_constraints = discover_constraint_tests()
+    catalogable = {name for name in all_constraints if name not in _CATALOG_EXCLUSIONS}
+    catalog_idx = skill_text.lower().find(
+        "architectural constraint catalog — consult before classifying accept"
+    )
+    if catalog_idx == -1:
+        pytest.fail("Architectural Constraint Catalog section not found in SKILL.md")
+    catalog_section = skill_text[catalog_idx : catalog_idx + 6000]
+    missing = {name for name in catalogable if name not in catalog_section}
+    assert missing == set(), (
+        f"Constraint tests not in catalog: {sorted(missing)}. "
+        "Add them to the Architectural Constraint Catalog in "
+        "resolve-review/SKILL.md or add to _CATALOG_EXCLUSIONS with a reason."
+    )
 
 
 # --- arch_violation category ---

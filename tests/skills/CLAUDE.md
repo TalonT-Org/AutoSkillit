@@ -40,7 +40,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_resolve_failures_ci_aware.py` | Contract guards for resolve-failures CI-awareness: verdict decision tree |
 | `test_resolve_failures_guards.py` | Guards for resolve-failures SKILL.md: polling-cascade and output-bloat fixes |
 | `test_resolve_research_review_guards.py` | Behavioral guards for resolve-research-review/SKILL.md |
-| `test_resolve_review_arch_constraint_awareness.py` | Structural guard: resolve-review SKILL.md must contain an architectural constraint catalog for intent validation subagents |
+| `test_resolve_review_arch_constraint_awareness.py` | Structural guard: resolve-review SKILL.md architectural constraint catalog completeness via docstring-convention discovery |
 | `test_resolve_review_guards.py` | Guards for resolve-review SKILL.md: blind git add prevention |
 | `test_resolve_review_diff_context_consumption.py` | Guards: resolve-review loads and uses diff_context handoff file from review-pr |
 | `test_resolve_review_diff_hunk_preference.py` | Guards: resolve-review Step 3.5 prefers diff_hunk over source file reads |

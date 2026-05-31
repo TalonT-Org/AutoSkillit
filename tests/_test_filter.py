@@ -46,6 +46,7 @@ BUCKET_A_PATTERNS: frozenset[str] = frozenset(
     {
         "tests/conftest.py",
         "tests/_helpers.py",
+        "tests/_arch_constraint_discovery.py",
         "tests/arch/_helpers.py",
         "tests/arch/_rules.py",
         "pyproject.toml",

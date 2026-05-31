@@ -409,7 +409,7 @@ the Task tool (`model: "sonnet"`).
 - `ACCEPT` — the reviewer identified a real issue; a code fix is warranted
 - `REJECT` — the reviewer is factually wrong (misread a guard, misunderstood an API,
   failed to recognize an intentional design pattern), OR the proposed change violates
-  a project-wide architectural constraint enforced by `tests/arch/` or `tests/recipe/`
+  a project-wide architectural constraint enforced by any test in the suite
   (see Architectural Constraint Catalog below — use category `arch_violation`);
   do NOT change the code
 - `DISCUSS` — the comment raises a valid design question that requires a human decision;
@@ -443,15 +443,17 @@ fall back to reading the file at `±30 lines` from the flagged line.
 
 **Architectural Constraint Catalog — consult before classifying ACCEPT:**
 
-The following project-wide constraints are enforced exclusively by pytest tests in
-`tests/arch/` and `tests/recipe/`. They are NOT caught by pre-commit. A suggestion
-that violates any of these must be classified `REJECT` with `category: "arch_violation"`.
+The following project-wide constraints are enforced by pytest tests across the test suite
+(primarily `tests/arch/`, `tests/recipe/`, `tests/workspace/`, and `tests/server/`).
+They are NOT caught by pre-commit. A suggestion that violates any of these must be
+classified `REJECT` with `category: "arch_violation"`.
 
 | Constraint | Enforced by | What is prohibited |
 |---|---|---|
 | Regex import | `test_regex_import.py` | `import re` or `from re import` in `src/` outside `hooks/` and `core/` — must use `import regex as re` |
 | Atomic writes | `test_ast_rules.py` (REQ-AST-002) | `.write_text()` / `.write_bytes()` in `src/` — must use `_atomic_write()` |
 | No print | `test_ast_rules.py` (ARCH-001) | `print()` in production `src/` code |
+| No StrEnum-to-string compare | `test_ast_rules.py` (ARCH-010) | Comparing StrEnum fields to raw string literals |
 | Dataclass slots | `test_dataclass_slots.py` | `dataclass(frozen=True)` decorator without `slots=True` |
 | Import layer ordering | `test_layer_enforcement.py` | Importing from a higher IL layer (e.g., IL-2 recipe/ imported by IL-0 core/) |
 | Anyio migration | `test_anyio_migration.py` | `asyncio.sleep`, `asyncio.Event`, `asyncio.to_thread` in `execution/process.py` |
@@ -461,7 +463,31 @@ that violates any of these must be classified `REJECT` with `category: "arch_vio
 | No hardcoded temp paths | `test_python_no_hardcoded_temp.py` | Literal `{{AUTOSKILLIT_TEMP}}` path string in Python outside whitelist |
 | SkillResult kill_reason | `test_skill_result_construction_guard.py` | `SkillResult()` without `kill_reason=` kwarg |
 | Never-raises contracts | `test_never_raises_contracts.py` | `mcp.tool()` handlers without top-level `try/except` and "Never raises" docstring |
-| No StrEnum-to-string compare | `test_ast_rules.py` (ARCH-010) | Comparing StrEnum fields to raw string literals |
+| ClaudeFlags isolation | `test_backend_flag_isolation.py` | `ClaudeFlags` referenced in `_session_launch.py` — backend flags belong in backend layer only |
+| Boot step symmetry | `test_boot_step_symmetry.py` | Both boot functions must call all required boot steps in the right order |
+| BackendCapabilities consumed | `test_capability_consumption.py` | Every `BackendCapabilities` field must have a production consumer — unused capability fields are prohibited |
+| BackendCapabilities documented | `test_capability_docstrings.py` | `BackendCapabilities` class and every field must have docstrings |
+| Channel B timeout floor | `test_channel_b_timeout_guard.py` | Channel B calls with `timeout` below `TimeoutTier.CHANNEL_B` minimum |
+| Clone network timeouts | `test_clone_timeouts.py` | `subprocess.run()` with git network subcommands (clone/fetch/pull/push/ls-remote) in `clone.py` without `timeout=` |
+| Dispatch timeout resolver | `test_dispatch_timeout_guard.py` | `_run_dispatch` using hardcoded timeout instead of `resolve_dispatch_timeout()` |
+| Doctor read-only | `test_doctor_readonly.py` | `run_doctor()` performing filesystem writes (REQ-DOCTOR-READONLY) |
+| No requestId dedup in flush | `test_flush_no_rid_guard.py` | Inline `seen_request_ids` dedup in `session_log.py` or `tool_sequence_analysis.py` — dedup is pre-applied |
+| GFM table rendering | `test_gfm_rendering_guard.py` | GFM table rendering bypassing `_render_gfm_table()` — all table output must route through it |
+| CLI prompts via timed_prompt | `test_input_tty_contracts.py` | `input()` calls in `src/autoskillit/cli/` not routed through `timed_prompt()` |
+| Interactive ordering gate | `test_interactive_ordering_gate.py` | Interactive launch sites that skip `assert_interactive_ordering()` before `_session_launch` |
+| Kitchen guard scoping | `test_kitchen_guard_scoping.py` | `any_kitchen_open()` call sites not passing `project_path` — must use scoped check |
+| Model identity contract | `test_model_identity_contract.py` | `detect_model_drift()` using raw string comparison instead of `normalize_model_id()` and `_models_match()` |
+| No error-dict returns | `test_no_error_dict_return.py` | `load_and_validate()` returning `{"error": ...}` dict — errors must propagate via exceptions |
+| No inline requestId dedup | `test_no_inline_jsonl_request_id_dedup.py` | `seen_request_ids` variable in `session_log.py` or `tool_sequence_analysis.py` |
+| No Path.cwd() in server tools | `test_no_path_cwd_in_tools.py` | `Path.cwd()` in server tool handlers — use injected project path instead |
+| No raw SIGTERM handler | `test_no_raw_signal_handler.py` | `signal.signal(SIGTERM, ...)` in `cli/app.py` — must use `anyio.open_signal_receiver` |
+| PTY coherence | `test_pty_coherence.py` | Dispatch paths that allocate PTY without respecting dispatch-type `pty_override=False` |
+| Registry key casing | `test_registry_key_casing.py` | Uppercase keys in `FEATURE_REGISTRY`, `RETIRED_FEATURES`, or `PACK_REGISTRY` |
+| Turn ID resolution | `test_resolve_turn_id_guard.py` | Direct `request_id` dict `.get()` outside `_resolve_turn_id()` — all turn ID resolution must go through the single resolver |
+| No hardcoded @-mentions in SKILL.md | `test_skills.py` | `@word` tokens at word-boundary in SKILL.md prose — includes Python decorator examples (`@dataclass`, `@mcp`); use prose descriptions or remove the `@` prefix |
+| FastMCP tag hygiene | `test_transforms_hygiene.py` | Test fixtures touching `mcp._transforms` without using the canonical `ALL_VISIBILITY_TAGS` constant |
+| Watcher dispatch marker | `test_watcher_signal_consistency.py` | Process watchers that skip `_has_active_dispatch_marker()` check |
+| Write restriction enforcement | `test_write_restriction_coverage.py` | Skills with prose write restrictions (`never modify source`, `read-only`, `output dir`) lacking runtime `WriteBehaviorSpec` enforcement |
 
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing

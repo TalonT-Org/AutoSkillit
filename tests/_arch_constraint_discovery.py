@@ -1,0 +1,38 @@
+"""Discover architectural constraint tests by module docstring convention.
+
+Tests that enforce project-wide invariants follow a docstring prefix convention:
+their module docstring starts with one of ARCH_CONSTRAINT_PREFIXES. This module
+provides a discovery function used by staleness guards to validate catalog
+completeness without hardcoded file lists.
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+TESTS_ROOT = Path(__file__).parent
+
+ARCH_CONSTRAINT_PREFIXES: tuple[str, ...] = (
+    "Architectural invariant",
+    "Architectural guard",
+    "Architectural enforcement",
+    "Structural guard",
+    "Structural enforcement",
+    "AST guard",
+)
+
+
+def discover_constraint_tests() -> dict[str, Path]:
+    """Return {filename: path} for all test files whose module docstring
+    starts with a recognized constraint prefix."""
+    results: dict[str, Path] = {}
+    for test_file in sorted(TESTS_ROOT.rglob("test_*.py")):
+        try:
+            tree = ast.parse(test_file.read_text())
+        except SyntaxError:
+            continue
+        docstring = ast.get_docstring(tree)
+        if docstring and docstring.startswith(ARCH_CONSTRAINT_PREFIXES):
+            results[test_file.name] = test_file
+    return results

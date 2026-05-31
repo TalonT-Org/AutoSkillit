@@ -1,4 +1,4 @@
-"""Tests for skill resolution hierarchy."""
+"""Structural guard: skill resolution hierarchy and @-mention enforcement."""
 
 from __future__ import annotations
 

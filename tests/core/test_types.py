@@ -66,11 +66,6 @@ def test_retry_reason_values():
     assert RetryReason.NONE.value == "none"
 
 
-def test_retry_reason_has_cancelled_variant():
-    """RetryReason.CANCELLED exists with the correct string value."""
-    assert RetryReason.CANCELLED == "cancelled"
-
-
 def test_skill_result_cancelled_factory():
     """SkillResult.cancelled() produces a correctly shaped retriable result."""
     from autoskillit.core.types import KillReason

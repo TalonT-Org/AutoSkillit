@@ -11,6 +11,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 class TestCheckMcpServerRegisteredCodexBranch:
     def test_ok_when_valid_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import autoskillit.execution as _exec_mod
+        from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR
 
         monkeypatch.setattr(
             _exec_mod,
@@ -20,10 +21,9 @@ class TestCheckMcpServerRegisteredCodexBranch:
                     "mcp_servers": {
                         "autoskillit": {
                             "command": "autoskillit",
-                            "env_vars": [
-                                "AUTOSKILLIT_HEADLESS",
-                                "AUTOSKILLIT_MCP_CLIENT_BACKEND",
-                            ],
+                            "env_vars": sorted(
+                                CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR}
+                            ),
                         }
                     }
                 }

@@ -16,6 +16,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_ast_rules.py` | Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-009) |
 | `test_backend_flag_isolation.py` | AST guard: ClaudeFlags must not appear in _session_launch.py — backend-specific flags belong inside each backend's build_interactive_cmd() |
 | `test_backend_coherence.py` | Architectural tests for backend coherence enforcement |
+| `test_canonical_constant_consumption.py` | Architectural invariant: every *_ENV_FORWARD_VARS constant must have a production consumer |
 | `test_capability_consumption.py` | Architectural invariant: every BackendCapabilities field must be consumed in production |
 | `test_capability_docstrings.py` | Architectural invariant: BackendCapabilities must have class and field documentation |
 | `test_no_backend_name_bypass.py` | Architectural invariant: backend-specific behavior must use capability fields, not name comparisons |

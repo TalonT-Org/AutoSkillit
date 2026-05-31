@@ -168,15 +168,19 @@ class TestCheckMcpServerRegisteredCodexBackend:
     ) -> None:
         """backend='codex' with valid registration returns OK."""
         from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
-        from autoskillit.core import Severity
+        from autoskillit.core import (
+            CODEX_MCP_ENV_FORWARD_VARS,
+            HEADLESS_AUTO_GATE_ENV_VAR,
+            Severity,
+        )
 
         codex_dir = tmp_path / ".codex"
         codex_dir.mkdir()
+        env_vars_str = ", ".join(
+            f'"{v}"' for v in sorted(CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR})
+        )
         (codex_dir / "config.toml").write_text(
-            "[mcp_servers.autoskillit]\n"
-            'command = "autoskillit"\n'
-            'env_vars = ["AUTOSKILLIT_HEADLESS",'
-            ' "AUTOSKILLIT_MCP_CLIENT_BACKEND"]\n'
+            f'[mcp_servers.autoskillit]\ncommand = "autoskillit"\nenv_vars = [{env_vars_str}]\n'
         )
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         result = _check_mcp_server_registered(backend="codex")

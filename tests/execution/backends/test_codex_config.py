@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR
 from autoskillit.execution.backends import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_config import (
     _is_autoskillit_registered,
@@ -219,10 +220,7 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env_vars": [
-                        "AUTOSKILLIT_HEADLESS",
-                        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
-                    ],
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR}),
                 }
             }
         }
@@ -233,11 +231,7 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env_vars": [
-                        "AUTOSKILLIT_HEADLESS",
-                        "AUTOSKILLIT_HEADLESS_AUTO_GATE",
-                        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
-                    ],
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
                 }
             }
         }
@@ -248,15 +242,28 @@ class TestIsAutoskillitRegistered:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env_vars": [
-                        "AUTOSKILLIT_HEADLESS",
-                        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
-                    ],
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR}),
                     "extra_field": 42,
                 }
             }
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
+
+    def test_missing_one_canonical_var_returns_false(self):
+        """Removing any single var from the canonical set must cause registration failure."""
+        for var in CODEX_MCP_ENV_FORWARD_VARS:
+            incomplete = sorted(CODEX_MCP_ENV_FORWARD_VARS - {var})
+            config = {
+                "mcp_servers": {
+                    "autoskillit": {
+                        "command": "autoskillit",
+                        "env_vars": incomplete,
+                    }
+                }
+            }
+            assert _is_autoskillit_registered(config, headless_auto_gate=True) is False, (
+                f"Should reject config missing {var}"
+            )
 
 
 class TestEnsureCodexMcpRegistered:
@@ -446,11 +453,7 @@ class TestConfigEnvBoundary:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "env_vars": [
-                        "AUTOSKILLIT_HEADLESS",
-                        "AUTOSKILLIT_HEADLESS_AUTO_GATE",
-                        "AUTOSKILLIT_MCP_CLIENT_BACKEND",
-                    ],
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
                 }
             }
         }

@@ -19,8 +19,11 @@ from autoskillit.core import (
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
+    ORCHESTRATOR_SESSION_REQUIRED_ENV,
+    RESUME_SESSION_BASELINE_KEYS,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
+    SKILL_SESSION_REQUIRED_ENV,
     BackendCapabilities,
     BareResume,
     ClaudeDirectoryConventions,
@@ -40,6 +43,7 @@ from autoskillit.core import (
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
+    _SESSION_BASELINE_ENV,
     _compose_resume_prompt,
     _ensure_skill_prefix,
     _inject_completion_directive,
@@ -364,10 +368,10 @@ class CodexBackend:
         for d in add_dirs:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
-        base: dict[str, str] = dict(os.environ)
-        if env_extras:
-            base.update(env_extras)
-        env = self.env_policy().build_env(base)
+        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+        env = self.env_policy().build_env(
+            filtered_base, extras=dict(env_extras) if env_extras else None
+        )
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def build_skill_session_cmd(
@@ -444,6 +448,7 @@ class CodexBackend:
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
             "AUTOSKILLIT_APPLICABLE_GUARDS": " ".join(sorted(self.capabilities.applicable_guards)),
+            "MCP_CONNECTION_NONBLOCKING": "0",
         }
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name
@@ -476,7 +481,9 @@ class CodexBackend:
             extras["CODEX_HOME"] = add_dirs[0].path
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = CodexEnvPolicy().build_env(filtered_base, extras=extras)
+        env = CodexEnvPolicy().build_env(
+            filtered_base, extras=extras, required=SKILL_SESSION_REQUIRED_ENV
+        )
 
         cmd: list[str] = [
             "codex",
@@ -547,6 +554,9 @@ class CodexBackend:
             "AUTOSKILLIT_HEADLESS": "1",
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
             "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
+            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
+            "MCP_CONNECTION_NONBLOCKING": "0",
         }
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name
@@ -570,7 +580,9 @@ class CodexBackend:
                     extras[k] = v
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = CodexEnvPolicy().build_env(filtered_base, extras=extras)
+        env = CodexEnvPolicy().build_env(
+            filtered_base, extras=extras, required=ORCHESTRATOR_SESSION_REQUIRED_ENV
+        )
 
         cmd: list[str] = [
             "codex",
@@ -652,13 +664,17 @@ class CodexBackend:
         cmd: list[str] = ["codex", "exec"]
         if output_format == OutputFormat.JSON:
             cmd.append(CodexFlags.JSON)
+        cmd.extend([CodexFlags.SANDBOX, "read-only"])
         cmd.append(CodexFlags.RESUME_SUBCOMMAND)
         cmd.append(resume_session_id)
         cmd.append(prompt)
-        base: dict[str, str] = dict(os.environ)
+        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
+        resume_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
         if env_extras:
-            base.update(env_extras)
-        env = self.env_policy().build_env(base)
+            resume_extras.update(env_extras)
+        env = self.env_policy().build_env(
+            filtered_base, extras=resume_extras, required=RESUME_SESSION_BASELINE_KEYS
+        )
         return CmdSpec(cmd=tuple(cmd), env=env)
 
     def validate_session_layout(self, session_dir: Path) -> list[str]:
@@ -689,9 +705,7 @@ class CodexBackend:
         return errors
 
     def validate_skill_content(self, content: str) -> list[str]:
-        raise NotImplementedError(
-            f"{self.__class__.__name__}.validate_skill_content not yet implemented"
-        )
+        return []
 
     def version(self) -> str:
         try:
@@ -711,7 +725,7 @@ class CodexBackend:
             return ""
 
     def list_plugins(self) -> list[dict[str, Any]]:
-        raise NotImplementedError(f"{self.__class__.__name__}.list_plugins not yet implemented")
+        return []
 
     def ensure_pre_launch(self) -> list[str]:
         try:

@@ -87,3 +87,43 @@ def test_unknown_claude_code_var_is_caught() -> None:
     assert not covered, (
         f"{var} should NOT be covered — the guard test must catch unclassified vars"
     )
+
+
+def test_orchestrator_session_required_env_hygiene_coverage() -> None:
+    """Every ORCHESTRATOR_SESSION_REQUIRED_ENV var is accounted for in the env hygiene chain."""
+    from autoskillit.core import (
+        AGENT_BACKEND_ENV_VAR,
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        ORCHESTRATOR_SESSION_REQUIRED_ENV,
+    )
+    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+
+    always_injected = {AGENT_BACKEND_ENV_VAR, "MCP_CONNECTION_NONBLOCKING"}
+    allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected
+    uncovered = ORCHESTRATOR_SESSION_REQUIRED_ENV - allowed
+    assert not uncovered, (
+        f"Orchestrator required vars not in env hygiene chain: {uncovered}. "
+        "Add to AUTOSKILLIT_PRIVATE_ENV_VARS, _HEADLESS_EXCLUSIVE_VARS, or inject via extras."
+    )
+
+
+def test_skill_session_required_env_hygiene_coverage() -> None:
+    """Every SKILL_SESSION_REQUIRED_ENV var is accounted for in the env hygiene chain."""
+    from autoskillit.core import (
+        AGENT_BACKEND_ENV_VAR,
+        AUTOSKILLIT_PRIVATE_ENV_VARS,
+        SKILL_SESSION_REQUIRED_ENV,
+    )
+    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+
+    always_injected = {
+        AGENT_BACKEND_ENV_VAR,
+        "AUTOSKILLIT_APPLICABLE_GUARDS",
+        "MCP_CONNECTION_NONBLOCKING",
+    }
+    allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected
+    uncovered = SKILL_SESSION_REQUIRED_ENV - allowed
+    assert not uncovered, (
+        f"Skill required vars not in env hygiene chain: {uncovered}. "
+        "Add to AUTOSKILLIT_PRIVATE_ENV_VARS, _HEADLESS_EXCLUSIVE_VARS, or inject via extras."
+    )

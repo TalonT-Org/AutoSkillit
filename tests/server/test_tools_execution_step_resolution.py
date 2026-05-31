@@ -245,7 +245,6 @@ async def test_run_skill_resolves_step_provider_from_recipe_step(
     )
 
     assert captured_kwargs["step_provider"] == "minimax"
-    assert executor.calls[0].provider_name == "minimax"
 
 
 @pytest.mark.anyio

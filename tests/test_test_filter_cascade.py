@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from tests._test_filter import LAYER_CASCADE_CONSERVATIVE, FilterMode, build_test_scope
+from tests._test_filter import (
+    LAYER_CASCADE_CONSERVATIVE,
+    FilterMode,
+    build_test_scope,
+    load_manifest,
+)
 
 
 class TestCascadeNewEntries:
@@ -375,6 +380,25 @@ class TestWorkspacePlannerCascadeNarrowing:
         assert not any(
             "/recipe/" in str(p) and p.name != "test_planner_recipe.py" for p in result
         ), f"planner cascade must not include the full recipe/ directory; got {result}"
+
+    def test_skills_extended_skill_md_recipe_file_level(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        recipe_dir = tests_root / "recipe"
+        recipe_dir.mkdir(parents=True, exist_ok=True)
+        (recipe_dir / "test_rules_skill_content.py").touch()
+        (recipe_dir / "test_unrelated.py").touch()
+
+        manifest = load_manifest(Path(__file__).parent.parent)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/skills_extended/make-plan/SKILL.md"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+            manifest=manifest,
+        )
+        assert result is not None
+        result_names = {p.name for p in result}
+        assert "test_rules_skill_content.py" in result_names
+        assert "test_unrelated.py" not in result_names
 
 
 def test_session_log_cascade_targets_hooks_quota_check() -> None:

@@ -2144,8 +2144,6 @@ def test_diagnose_merge_gate_returns_ci_conclusion_failure(tmp_path: object) -> 
 
 def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
     """diagnose_merge_gate must raise ValueError when output_dir is empty."""
-    import pytest
-
     from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 
     with pytest.raises(ValueError, match="output_dir is required"):

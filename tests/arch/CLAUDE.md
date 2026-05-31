@@ -79,6 +79,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_model_identity_contract.py` | AST guard: detect_model_drift must use normalize_model_id and _models_match — raw alias/full-ID comparison is a false-positive source |
 | `test_helpers_exports.py` | Asserts shared test helpers export required symbols (strip_markdown_code_regions) |
 | `test_session_type_exhaustive.py` | AST guard: _apply_session_type_visibility must use exhaustive match/assert_never dispatch |
+| `test_notification_fallback_coverage.py` | AST guard: every ctx.enable_components call in server/tools/ must have a non-notification fallback or be in an exempt session-scoped unlock function |
 
 ## Architecture Notes
 

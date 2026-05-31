@@ -233,6 +233,20 @@ def test_done_already_done_stop_exists(recipe) -> None:
     assert '"already_done"' in step.message
 
 
+def test_register_clone_no_changes_routes_to_diagnostic(recipe) -> None:
+    """register_clone_no_changes must route to run_diagnostic_no_changes."""
+    assert "register_clone_no_changes" in recipe.steps
+    step = recipe.steps["register_clone_no_changes"]
+    assert step.on_success == "run_diagnostic_no_changes"
+
+
+def test_register_clone_already_done_routes_to_diagnostic(recipe) -> None:
+    """register_clone_already_done must route to run_diagnostic_already_done."""
+    assert "register_clone_already_done" in recipe.steps
+    step = recipe.steps["register_clone_already_done"]
+    assert step.on_success == "run_diagnostic_already_done"
+
+
 def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
     """register_clone_unconfirmed must route toward done_unconfirmed."""
     step = recipe.steps["register_clone_unconfirmed"]

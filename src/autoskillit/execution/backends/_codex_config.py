@@ -45,10 +45,21 @@ def _format_toml_value(v: Any) -> str:
 _BARE_KEY_RE = _re.compile(r"^[A-Za-z0-9_-]+$")
 
 
+_CONTROL_CHAR_MAP = {
+    "\b": "\\b",
+    "\t": "\\t",
+    "\n": "\\n",
+    "\f": "\\f",
+    "\r": "\\r",
+}
+
+
 def _quote_key(k: str) -> str:
     if _BARE_KEY_RE.match(k):
         return k
     escaped = k.replace("\\", "\\\\").replace('"', '\\"')
+    for ch, seq in _CONTROL_CHAR_MAP.items():
+        escaped = escaped.replace(ch, seq)
     return f'"{escaped}"'
 
 

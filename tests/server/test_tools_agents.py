@@ -432,6 +432,27 @@ def test_pipeline_health_scanner_agent_exists():
     )
 
 
+# DIAG_C7: plan-registry-tracer maxTurns >= 80
+def test_plan_registry_tracer_max_turns_sufficient() -> None:
+    """plan-registry-tracer.md maxTurns must be >= 80."""
+    import yaml
+
+    from autoskillit.core import pkg_root
+
+    agent_path = pkg_root() / "agents" / "plan-registry-tracer.md"
+    assert agent_path.is_file(), f"plan-registry-tracer.md not found at {agent_path}"
+    content = agent_path.read_text()
+
+    parts = content.split("---", 2)
+    assert len(parts) >= 3, "plan-registry-tracer.md must have YAML frontmatter"
+    frontmatter = yaml.safe_load(parts[1]) or {}
+    max_turns = frontmatter.get("maxTurns")
+    assert max_turns is not None and max_turns >= 80, (
+        f"plan-registry-tracer maxTurns must be >= 80 (got {max_turns}); "
+        "80 minimum: tracer needs > 40 turns for multi-pass LSP + tree-sitter + grep analysis"
+    )
+
+
 # DIAG_C10: all agent definitions have structured output contracts
 AGENTS_WITHOUT_STRUCTURED_OUTPUT: frozenset[str] = frozenset()
 

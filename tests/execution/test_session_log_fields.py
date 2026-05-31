@@ -1264,7 +1264,8 @@ def test_primary_model_identifier_parent_wins_on_output_tokens():
 
 def test_primary_model_identifier_argmax_returns_subagent_when_dominant():
     """Raw argmax returns subagent model when subagent output_tokens exceed parent.
-    This is expected — flush_session_log bypasses argmax when model_identifier is available."""
+    This is the value flush_session_log uses as the observed model for drift detection —
+    model_identifier does not override it."""
     from autoskillit.execution.session_log import _primary_model_identifier
 
     token_usage = {
@@ -1309,8 +1310,10 @@ def test_flush_session_log_configured_model_written_to_token_usage(tmp_path):
 
 
 def test_flush_session_log_no_false_drift_with_configured_model(tmp_path):
-    """When model_identifier is provided, drift detection compares it against itself,
-    NOT against argmax. No false positive drift anomaly."""
+    """When model_identifier matches the dominant model in model_breakdown, no drift anomaly fires.
+
+    The configured and API-observed models genuinely agree.
+    """
     _flush(
         tmp_path,
         session_id="no-false-drift-001",
@@ -1318,8 +1321,7 @@ def test_flush_session_log_no_false_drift_with_configured_model(tmp_path):
         model_identifier="claude-opus-4-6",
         token_usage={
             "model_breakdown": {
-                "claude-sonnet-4-6": {"input_tokens": 20000, "output_tokens": 8000},
-                "claude-opus-4-6": {"input_tokens": 5000, "output_tokens": 2000},
+                "claude-opus-4-6": {"input_tokens": 20000, "output_tokens": 8000},
             },
         },
     )

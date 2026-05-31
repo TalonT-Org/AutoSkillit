@@ -312,6 +312,97 @@ def test_session_type_visibility_uses_known_tags():
     )
 
 
+def test_startup_disables_all_visibility_tags():
+    """server/__init__.py must disable ALL_VISIBILITY_TAGS via a for-loop, not hardcoded calls.
+
+    Structural invariant: the startup disable block must iterate over ALL_VISIBILITY_TAGS
+    (directly or via sorted()) so that any new tag added to the constant is automatically
+    disabled. Standalone hardcoded mcp.disable(tags={<literal>}) calls at module level are
+    forbidden — they would silently bypass future tags.
+    """
+    server_init = _SRC_ROOT / "server" / "__init__.py"
+    source = server_init.read_text()
+    tree = ast.parse(source, filename=str(server_init))
+
+    canonical_loop_found = False
+    standalone_literal_disables = []
+
+    for node in tree.body:
+        if isinstance(node, ast.For):
+            iter_node = node.iter
+            uses_all_visibility_tags = (
+                isinstance(iter_node, ast.Name) and iter_node.id == "ALL_VISIBILITY_TAGS"
+            ) or (
+                isinstance(iter_node, ast.Call)
+                and isinstance(iter_node.func, ast.Name)
+                and iter_node.func.id == "sorted"
+                and len(iter_node.args) == 1
+                and isinstance(iter_node.args[0], ast.Name)
+                and iter_node.args[0].id == "ALL_VISIBILITY_TAGS"
+            )
+            if not uses_all_visibility_tags:
+                continue
+
+            loop_var = node.target.id if isinstance(node.target, ast.Name) else None
+            if loop_var is None:
+                continue
+
+            for stmt in node.body:
+                if not isinstance(stmt, ast.Expr):
+                    continue
+                call = stmt.value
+                if not (
+                    isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "disable"
+                ):
+                    continue
+                for kw in call.keywords:
+                    if kw.arg != "tags":
+                        continue
+                    if (
+                        isinstance(kw.value, ast.Set)
+                        and len(kw.value.elts) == 1
+                        and isinstance(kw.value.elts[0], ast.Name)
+                        and kw.value.elts[0].id == loop_var
+                    ):
+                        canonical_loop_found = True
+
+        elif isinstance(node, ast.Expr):
+            call = node.value
+            if not (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "disable"
+            ):
+                continue
+            for kw in call.keywords:
+                if kw.arg != "tags":
+                    continue
+                if isinstance(kw.value, ast.Set):
+                    tag_vals = {
+                        elt.value
+                        for elt in kw.value.elts
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                    }
+                    if tag_vals:
+                        standalone_literal_disables.append(
+                            f"line {node.lineno}: mcp.disable(tags={sorted(tag_vals)})"
+                        )
+
+    assert canonical_loop_found, (
+        "server/__init__.py must have a top-level for-loop over ALL_VISIBILITY_TAGS "
+        "whose body calls mcp.disable(tags={<loop_var>}). "
+        "Replace manual per-tag mcp.disable() calls with: "
+        "for tag in sorted(ALL_VISIBILITY_TAGS): mcp.disable(tags={tag})"
+    )
+    assert not standalone_literal_disables, (
+        "server/__init__.py must not have standalone mcp.disable(tags={<literal>}) calls "
+        "at module level — they bypass future ALL_VISIBILITY_TAGS additions:\n"
+        + "\n".join(f"  {d}" for d in standalone_literal_disables)
+    )
+
+
 def test_tool_decorators_enforce_tag_partition():
     """No @mcp.tool() decorator may carry both 'kitchen' and 'fleet'/'fleet-dispatch'."""
     tools_dir = _SRC_ROOT / "server" / "tools"

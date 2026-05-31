@@ -294,11 +294,14 @@ async def _session_log_monitor(
     try:
         _initial_content = session_file.read_text(errors="replace")
         scan_pos = len(_initial_content)
+        last_size = len(_initial_content.encode("utf-8"))
     except OSError:
+        logger.warning(
+            "session_log_phase2_init_read_failed",
+            file=str(session_file),
+            fallback_scan_pos=0,
+        )
         scan_pos = 0
-    try:
-        last_size = session_file.stat().st_size
-    except OSError:
         last_size = 0
     last_change = _time.monotonic()
     logger.debug(

@@ -316,6 +316,7 @@ def test_full_round_trip_all_fields() -> None:
     assert result.stop_reasons == ["end_turn"]
     assert result.has_thinking_only_turn is False
     assert result.seen_block_types == frozenset()
+    assert result.api_error_status is None
 
 
 def test_context_exhaustion_from_code_field() -> None:

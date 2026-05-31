@@ -21,6 +21,8 @@ from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
+_INGREDIENTS_ONLY_EXCLUDE = frozenset({"content", "orchestration_rules", "stop_step_semantics"})
+
 
 @mcp.tool(
     tags={"autoskillit", "kitchen-core", "fleet-dispatch"},
@@ -221,9 +223,7 @@ async def load_recipe(
             recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             if ingredients_only:
-                result.pop("content", None)
-                result.pop("orchestration_rules", None)
-                result.pop("stop_step_semantics", None)
+                result = {k: v for k, v in result.items() if k not in _INGREDIENTS_ONLY_EXCLUDE}
             return json.dumps(result)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)

@@ -12,7 +12,7 @@ def test_deep_staleness_detects_rule_file_changes(tmp_path, monkeypatch):
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)

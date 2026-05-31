@@ -11,6 +11,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_analysis_public_api.py` | Tests for the recipe analysis public API surface |
 | `test_anti_pattern_guards.py` | Guards for anti-patterns in recipe definitions |
 | `test_api.py` | Tests for recipe/_api.py orchestration API |
+| `test_api_cache_isolation.py` | Cache isolation tests: copy-on-read contract for LoadCache — prevents aliasing bugs where callers mutate returned results and corrupt cached entries |
 | `test_api_split.py` | Structural guard for recipe API split |
 | `test_audit_trail_artifacts.py` | Tests for audit/ directory creation and artifact copy in create_worktree.sh |
 | `test_audit_trail_format_doc.py` | Tests for audit-trail-format.md documentation |

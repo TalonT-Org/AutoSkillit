@@ -55,6 +55,7 @@ logger = get_logger(__name__)
 _PR_CREATE_RECIPES: frozenset[str] = frozenset(
     {"merge-prs", "implementation", "implementation-groups", "remediation"}
 )
+_INGREDIENTS_ONLY_EXCLUDE = frozenset({"content", "orchestration_rules", "stop_step_semantics"})
 
 
 def _kitchen_failure_envelope(
@@ -578,9 +579,7 @@ async def open_kitchen(
             result["version"] = __version__
 
             if ingredients_only:
-                result.pop("content", None)
-                result.pop("orchestration_rules", None)
-                result.pop("stop_step_semantics", None)
+                result = {k: v for k, v in result.items() if k not in _INGREDIENTS_ONLY_EXCLUDE}
 
             if "ingredients_table" not in result or not result["ingredients_table"]:
                 result["ingredients_table"] = None

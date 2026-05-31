@@ -10,7 +10,7 @@ import json
 import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from autoskillit.core import (
     ProcessStaleError,
@@ -29,6 +29,7 @@ from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe._api_cache import (  # noqa: F401
     _LOAD_CACHE,
     _STALENESS_CACHES_CLEARED,
+    LoadCache,
     _check_process_staleness,
     _clear_stale_caches,
     _compute_registry_hash,
@@ -246,8 +247,7 @@ def load_and_validate(
         _user_method_traditions_hash,
     )
 
-    with _api_cache._LOAD_CACHE_LOCK:
-        cached = _api_cache._LOAD_CACHE.get(cache_key)
+    cached = _api_cache._LOAD_CACHE.get(cache_key)
 
     from autoskillit.recipe import registry as _registry  # noqa: PLC0415
 
@@ -270,7 +270,7 @@ def load_and_validate(
             and rs == cached.recipe_size
         ):
             logger.debug("load_recipe_cache_hit", recipe=name)
-            return cached.result
+            return cast(LoadRecipeResult, _api_cache._LOAD_CACHE.copy_result(cached.result))
 
     t0 = time.perf_counter()
 
@@ -546,7 +546,6 @@ def load_and_validate(
             rule_registry_hash=_rule_hash,
             result=result,
         )
-        with _api_cache._LOAD_CACHE_LOCK:
-            _api_cache._LOAD_CACHE[cache_key] = entry
+        _api_cache._LOAD_CACHE.put(cache_key, entry)
 
     return result

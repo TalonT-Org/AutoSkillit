@@ -1475,7 +1475,7 @@ def build_test_scope(
         else:
             direct_test_files.add(str(tests_root / "docs" / "test_doc_counts.py"))
 
-        # REQ-TIER-003: 7 infra + 3 hooks structural files always; full infra dir only on trigger
+        # REQ-TIER-003: 9 infra + 3 hooks structural files always; full infra dir only on trigger
         for fname in _INFRA_UNCONDITIONAL_FILES:
             direct_test_files.add(str(tests_root / "infra" / fname))
         for fname in _HOOKS_UNCONDITIONAL_FILES:

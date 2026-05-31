@@ -307,11 +307,7 @@ def flush_session_log(
         )
 
     effective_model_id = model_identifier or _primary_model_identifier(token_usage)
-    _observed = (
-        model_identifier
-        if model_identifier
-        else (_primary_model_identifier(token_usage) if token_usage else "")
-    )
+    _observed = _primary_model_identifier(token_usage) if token_usage else ""
     anomalies.extend(detect_model_drift(model_identifier, _observed, profile_name=profile_name))
 
     # Write anomalies.jsonl (only if anomalies exist)

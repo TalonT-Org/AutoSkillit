@@ -1264,7 +1264,8 @@ def test_primary_model_identifier_parent_wins_on_output_tokens():
 
 def test_primary_model_identifier_argmax_returns_subagent_when_dominant():
     """Raw argmax returns subagent model when subagent output_tokens exceed parent.
-    This is expected — flush_session_log bypasses argmax when model_identifier is available."""
+    This is the value flush_session_log uses as the observed model for drift detection —
+    model_identifier does not override it."""
     from autoskillit.execution.session_log import _primary_model_identifier
 
     token_usage = {
@@ -1309,8 +1310,10 @@ def test_flush_session_log_configured_model_written_to_token_usage(tmp_path):
 
 
 def test_flush_session_log_no_false_drift_with_configured_model(tmp_path):
-    """When model_identifier is provided, drift detection compares it against itself,
-    NOT against argmax. No false positive drift anomaly."""
+    """When model_identifier matches the dominant model in model_breakdown, no drift anomaly fires.
+
+    The configured and API-observed models genuinely agree.
+    """
     _flush(
         tmp_path,
         session_id="no-false-drift-001",
@@ -1318,8 +1321,7 @@ def test_flush_session_log_no_false_drift_with_configured_model(tmp_path):
         model_identifier="claude-opus-4-6",
         token_usage={
             "model_breakdown": {
-                "claude-sonnet-4-6": {"input_tokens": 20000, "output_tokens": 8000},
-                "claude-opus-4-6": {"input_tokens": 5000, "output_tokens": 2000},
+                "claude-opus-4-6": {"input_tokens": 20000, "output_tokens": 8000},
             },
         },
     )
@@ -1354,6 +1356,31 @@ def test_flush_session_log_bracket_suffix_no_drift(tmp_path):
         lines = anomalies_path.read_text().strip().splitlines()
         drift = [json.loads(ln) for ln in lines if json.loads(ln).get("kind") == "model_drift"]
     assert len(drift) == 0
+
+
+def test_flush_session_log_genuine_drift_with_configured_model(tmp_path):
+    """When model_identifier differs from the dominant model in model_breakdown, a MODEL_DRIFT anomaly fires."""
+    _flush(
+        tmp_path,
+        session_id="genuine-drift-001",
+        proc_snapshots=None,
+        model_identifier="claude-opus-4-6",
+        token_usage={
+            "model_breakdown": {
+                "claude-sonnet-4-6": {"input_tokens": 20000, "output_tokens": 8000},
+                "claude-opus-4-6": {"input_tokens": 1000, "output_tokens": 200},
+            },
+        },
+    )
+    anomalies_path = tmp_path / "sessions" / "genuine-drift-001" / "anomalies.jsonl"
+    assert anomalies_path.exists(), "anomalies.jsonl must be written when drift is detected"
+    all_entries = [json.loads(line) for line in anomalies_path.read_text().strip().splitlines()]
+    drift_entries = [e for e in all_entries if e.get("kind") == "model_drift"]
+    assert len(drift_entries) == 1, (
+        f"expected 1 model_drift entry, got {len(drift_entries)}: {drift_entries}"
+    )
+    assert drift_entries[0]["detail"]["configured_model"] == "claude-opus-4-6"
+    assert drift_entries[0]["detail"]["observed_model"] == "claude-sonnet-4-6"
 
 
 def test_flush_session_log_argmax_fallback_prefers_output_tokens(tmp_path):

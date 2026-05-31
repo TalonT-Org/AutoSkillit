@@ -24,9 +24,11 @@ def main() -> None:
         sys.exit(0)
 
     # Headless: resolve session type, fail-closed to skill session
-    session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "").lower()
+    raw_session_type = os.environ.get("AUTOSKILLIT_SESSION_TYPE", "")
+    session_type = raw_session_type.lower()
     if session_type in ("orchestrator", "fleet"):
         sys.exit(0)  # permitted tiers
+    _unrecognized_tier = bool(session_type) and session_type != "skill"
 
     tool_input = data.get("tool_input")
     if not isinstance(tool_input, dict):
@@ -39,6 +41,11 @@ def main() -> None:
             "Use foreground execution — multiple tool calls in a single message "
             "execute concurrently."
         )
+        if _unrecognized_tier:
+            denial_reason += (
+                f" (AUTOSKILLIT_SESSION_TYPE={raw_session_type!r} is not a recognized tier;"
+                " expected: orchestrator, fleet, or skill)"
+            )
         payload = json.dumps(
             {
                 "hookSpecificOutput": {

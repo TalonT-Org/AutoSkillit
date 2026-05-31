@@ -46,6 +46,7 @@ from autoskillit.server._misc import (
     _quota_refresh_loop,
     resolve_log_dir,
     resolve_provider,
+    strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -578,9 +579,7 @@ async def open_kitchen(
             result["version"] = __version__
 
             if ingredients_only:
-                result.pop("content", None)
-                result.pop("orchestration_rules", None)
-                result.pop("stop_step_semantics", None)
+                result = strip_ingredients_only_keys(result)
 
             if "ingredients_table" not in result or not result["ingredients_table"]:
                 result["ingredients_table"] = None

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ _STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe/rules",)
 _DEEP_MTIME_BASELINE: int | None = None
 
 
-@_dc
+@_dc(frozen=True, slots=True)
 class _LoadCacheEntry:
     recipe_path: Path
     recipe_mtime: int
@@ -34,8 +35,48 @@ class _LoadCacheEntry:
     result: Any  # LoadRecipeResult but avoiding circular import
 
 
-_LOAD_CACHE: dict[tuple, _LoadCacheEntry] = {}
-_LOAD_CACHE_LOCK = threading.Lock()
+class LoadCache:
+    """Thread-safe recipe cache with copy-on-read guarantee.
+
+    Encapsulates the lock internally so callers cannot bypass it.
+    Provides copy_result() for aliasing-safe access to cached dicts.
+    """
+
+    def __init__(self) -> None:
+        self._store: dict[tuple, _LoadCacheEntry] = {}
+        self._lock = threading.Lock()
+
+    def get(self, key: tuple) -> _LoadCacheEntry | None:
+        with self._lock:
+            return self._store.get(key)
+
+    def copy_result(self, result: Any) -> dict[str, Any]:
+        """Return a shallow copy of result with list fields independently copied."""
+        if not isinstance(result, Mapping):
+            msg = f"copy_result expected a Mapping, got {type(result).__name__}"
+            raise TypeError(msg)
+        r = dict(result)
+        for list_key in (
+            "suggestions",
+            "kitchen_rules",
+            "requires_packs",
+            "requires_features",
+            "deferred_guards",
+        ):
+            if list_key in r:
+                r[list_key] = list(r[list_key])
+        return r
+
+    def put(self, key: tuple, entry: _LoadCacheEntry) -> None:
+        with self._lock:
+            self._store[key] = entry
+
+    def clear(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+_LOAD_CACHE = LoadCache()
 
 
 def _path_mtime_ns(path: Path) -> int:
@@ -136,6 +177,5 @@ def _clear_stale_caches() -> None:
     _block_budgets.cache_clear()
     load_bundled_manifest.cache_clear()
     load_ml_sub_area_folding.cache_clear()
-    with _LOAD_CACHE_LOCK:
-        _LOAD_CACHE.clear()
+    _LOAD_CACHE.clear()
     _STALENESS_CACHES_CLEARED = True

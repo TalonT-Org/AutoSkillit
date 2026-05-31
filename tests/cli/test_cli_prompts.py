@@ -230,7 +230,7 @@ def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch,
     from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 
     project_dir = pkg_root().parent.parent
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(
         "autoskillit.config.resolve_ingredient_defaults",
         lambda _: {"base_branch": "develop"},

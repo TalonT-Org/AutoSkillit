@@ -151,7 +151,7 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -178,7 +178,7 @@ def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, mo
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -206,7 +206,7 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -233,7 +233,7 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -280,7 +280,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
     # Find all params NOT in the metadata-only allowlist
     result_affecting_params = all_params - RESULT_METADATA_ONLY_PARAMS
 
-    cache_snap: dict = {}
+    cache_snap = cache_mod.LoadCache()
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_snap)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
@@ -289,8 +289,8 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
 
     api_mod.load_and_validate("myrecipe", tmp_path)
 
-    assert cache_snap, "cache was never populated"
-    cache_key = next(iter(cache_snap.keys()))
+    assert cache_snap._store, "cache was never populated"
+    cache_key = next(iter(cache_snap._store.keys()))
 
     # Verify each result-affecting param has a corresponding position in the cache key
     param_to_key_index: dict[str, int] = {
@@ -346,7 +346,7 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -884,7 +884,7 @@ def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkey
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -914,7 +914,7 @@ def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -940,7 +940,7 @@ def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -975,7 +975,7 @@ def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, m
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
     monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
@@ -1009,7 +1009,7 @@ def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import ProcessStaleError
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
@@ -1040,7 +1040,7 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import RecipeNotFoundError
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
 
@@ -1057,7 +1057,7 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     from autoskillit.recipe.methodology_venue_appendix import load_ml_sub_area_folding
     from autoskillit.recipe.rules.rules_blocks import _block_budgets
 
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     _block_budgets()
     load_bundled_manifest()

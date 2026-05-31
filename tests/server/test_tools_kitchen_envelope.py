@@ -364,7 +364,7 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
 
     project_dir = pkg_root().parent.parent
     monkeypatch.chdir(project_dir)
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
         lambda _: {"base_branch": "develop"},
@@ -460,7 +460,7 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
 
     project_dir = pkg_root().parent.parent
     monkeypatch.chdir(project_dir)
-    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", {})
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
         lambda _: {

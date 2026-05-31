@@ -326,3 +326,4 @@ class TestDispatchFoodTruckExecution:
         result_json = await dispatch_food_truck(recipe="test-recipe", task="test task")
         data = json.loads(result_json)
         assert data["success"] is False
+        assert "cancelled" in data["user_visible_message"].lower()

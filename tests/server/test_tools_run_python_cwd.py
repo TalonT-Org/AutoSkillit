@@ -34,22 +34,6 @@ async def test_run_python_resolves_relative_output_dir_against_work_dir(
     assert result["success"] is True, f"Expected success, got: {result}"
     expected = work_dir / output_rel / "diagnosis.md"
     assert expected.exists(), f"File should be at {expected}, not under server CWD"
-
-
-@pytest.mark.anyio
-async def test_run_python_output_readable_from_run_skill_cwd(tool_ctx_kitchen_open, tmp_path):
-    """File path returned by run_python must be accessible from the recipe's work_dir."""
-    work_dir = tmp_path / "work"
-    work_dir.mkdir()
-    output_rel = ".autoskillit/temp/diagnose-test"
-
-    result_json = await run_python(
-        callable="autoskillit.smoke_utils.diagnose_merge_gate",
-        args={"test_stdout": "FAILED test_foo", "test_stderr": "", "output_dir": output_rel},
-        work_dir=str(work_dir),
-    )
-    result = json.loads(result_json)
-    assert result["success"] is True
     diagnosis_path = result["result"]["diagnosis_path"]
     assert Path(diagnosis_path).exists(), "run_skill must be able to read this file"
     assert Path(diagnosis_path).is_absolute(), "Returned path must be absolute"

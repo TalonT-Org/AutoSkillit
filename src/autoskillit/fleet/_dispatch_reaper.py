@@ -95,17 +95,18 @@ def _mark_dead_pid(
 def _is_dispatch_heartbeating(
     dispatches_dir: Path,
     dispatch_id: str,
-    grace_seconds: float = 90.0,
+    heartbeat_grace_seconds: float = 90.0,
 ) -> bool:
     """Return True if the dispatch has a fresh heartbeat file.
 
-    A fresh heartbeat means the file exists and its mtime is within ``grace_seconds``
-    of the current time, indicating the dispatch is actively executing.
+    A fresh heartbeat means the file exists and its mtime is within
+    ``heartbeat_grace_seconds`` of the current time, indicating the dispatch
+    is actively executing.
     """
     hb_path = dispatches_dir / f"dispatch-{dispatch_id}.heartbeat"
     try:
         mtime = hb_path.stat().st_mtime
-        return time.time() - mtime <= grace_seconds
+        return time.time() - mtime <= heartbeat_grace_seconds
     except OSError:
         return False
 

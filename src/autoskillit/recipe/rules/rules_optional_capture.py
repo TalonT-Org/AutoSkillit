@@ -6,6 +6,7 @@ import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._contracts_types import RESULT_CAPTURE_RE, SkillContract
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
@@ -87,6 +88,74 @@ def _has_guard_for_key(
             to_visit.append(step.on_success)
 
     return False
+
+
+def _identify_optional_output_fields(contract: SkillContract) -> set[str]:
+    """Return output field names whose contract patterns allow an empty value.
+
+    Cross-references ``contract.outputs`` names with ``expected_output_patterns``:
+    a field is considered optional when its pattern contains a fully-optional capture
+    group ``(...)? `` at the end (same check as ``_has_optional_capture_group``).
+    Patterns that don't start with a recognized output name are skipped.
+    """
+    output_names = {o.name for o in contract.outputs}
+    optional: set[str] = set()
+    for pattern in contract.expected_output_patterns:
+        if not re.search(r"\((?!\?:)[^)]+\)\?$", pattern):
+            continue
+        m = re.match(r"^([\w-]+)", pattern)
+        if m and m.group(1) in output_names:
+            optional.add(m.group(1))
+    return optional
+
+
+@semantic_rule(
+    name="capture-type-matches-contract-optionality",
+    description=(
+        "Flag run_skill steps whose capture value_type='string' but the skill contract "
+        "allows an empty value for that field (optional capture group in pattern)."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_capture_type_matches_contract_optionality(ctx: ValidationContext) -> list[RuleFinding]:
+    """Detect shorthand string captures on fields that skill contracts allow to be empty."""
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        name = resolve_skill_name(skill_cmd)
+        if not name:
+            continue
+        contract = get_skill_contract(name, manifest)
+        if not contract:
+            continue
+        optional_fields = _identify_optional_output_fields(contract)
+        if not optional_fields or not step.capture:
+            continue
+        for cap_key, cap_entry in step.capture.items():
+            m = RESULT_CAPTURE_RE.match(cap_entry.from_.strip())
+            if not m:
+                continue
+            field_name = m.group(1)
+            if field_name in optional_fields and cap_entry.value_type == "string":
+                findings.append(
+                    RuleFinding(
+                        rule="capture-type-matches-contract-optionality",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' capture key '{cap_key}' captures field "
+                            f"'{field_name}' with value_type='string' but skill '{name}' "
+                            f"contract allows empty values for this field. "
+                            f"Use 'type: optional_string'."
+                        ),
+                    )
+                )
+
+    return findings
 
 
 @semantic_rule(

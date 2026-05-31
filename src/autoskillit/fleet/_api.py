@@ -115,7 +115,7 @@ async def execute_dispatch(
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
     cache_invalidator: Callable[[str], None] | None = None,
-    capture: dict[str, str] | None = None,
+    capture: dict[str, str | dict[str, str]] | None = None,
     resume_session_id: str | None = None,
     resume_checkpoint: SessionCheckpoint | None = None,
     idle_output_timeout: int | None = None,

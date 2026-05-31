@@ -7,15 +7,23 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import Severity, get_logger, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._contracts_types import RESULT_CAPTURE_RE
 from autoskillit.recipe._rule_helpers import (
     _extract_sentinel_fields,
     _is_failure_sentinel_value,
     _load_dispatch_target,
     extract_sentinel_json_blocks,
 )
+from autoskillit.recipe.contracts import (
+    get_skill_contract,
+    load_bundled_manifest,
+    resolve_skill_name,
+)
+from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.rules.rules_optional_capture import _identify_optional_output_fields
 from autoskillit.recipe.schema import RecipeKind
 
 if TYPE_CHECKING:
@@ -206,4 +214,91 @@ def _check_dispatch_capture_field_in_all_sentinels(
                         ),
                     )
                 )
+    return findings
+
+
+@semantic_rule(
+    name="dispatch-capture-type-matches-contract-optionality",
+    description=(
+        "Flag campaign dispatches whose capture value_type='string' but the target "
+        "recipe's skill contract allows an empty value for that field."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_dispatch_capture_type_matches_contract_optionality(
+    ctx: ValidationContext,
+) -> list[RuleFinding]:
+    """Detect string captures on fields that target-recipe skill contracts allow to be empty."""
+    if ctx.recipe.kind != RecipeKind.CAMPAIGN:
+        return []
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+
+    for d in ctx.recipe.dispatches:
+        if not d.capture:
+            continue
+
+        target = _load_dispatch_target(d, ctx.project_dir)
+        if target is None:
+            info = find_recipe_by_name(d.recipe, pkg_root())
+            if info is not None:
+                try:
+                    target = load_recipe(info.path)
+                except Exception:
+                    logger.debug(
+                        "dispatch_target_load_failed_fallback", recipe=d.recipe, exc_info=True
+                    )
+            if target is None:
+                findings.append(
+                    RuleFinding(
+                        rule="dispatch-capture-type-matches-contract-optionality",
+                        severity=Severity.WARNING,
+                        step_name="(top-level)",
+                        message=(
+                            f"Cannot verify capture type compatibility for dispatch "
+                            f"{d.name!r} — target recipe {d.recipe!r} could not be loaded."
+                        ),
+                    )
+                )
+                continue
+
+        # Collect all skill contracts from run_skill steps in the target recipe
+        contracts = []
+        for step in target.steps.values():
+            if step.tool != "run_skill":
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            name = resolve_skill_name(skill_cmd)
+            if not name:
+                continue
+            contract = get_skill_contract(name, manifest)
+            if contract is not None:
+                contracts.append(contract)
+
+        if not contracts:
+            continue
+
+        for cap_key, cap_entry in d.capture.items():
+            m = RESULT_CAPTURE_RE.match(cap_entry.from_.strip())
+            if not m:
+                continue
+            field_name = m.group(1)
+            for contract in contracts:
+                optional_fields = _identify_optional_output_fields(contract)
+                if field_name in optional_fields and cap_entry.value_type == "string":
+                    findings.append(
+                        RuleFinding(
+                            rule="dispatch-capture-type-matches-contract-optionality",
+                            severity=Severity.ERROR,
+                            step_name="(top-level)",
+                            message=(
+                                f"Dispatch {d.name!r} capture key {cap_key!r} captures "
+                                f"field '{field_name}' with value_type='string' but target "
+                                f"recipe {d.recipe!r} skill contract allows empty values "
+                                f"for this field. Use 'type: optional_string'."
+                            ),
+                        )
+                    )
+                    break  # one finding per cap_key is enough
+
     return findings

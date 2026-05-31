@@ -134,7 +134,7 @@ async def dispatch_food_truck(
     ingredients: dict[str, str] | None = None,
     dispatch_name: str | None = None,
     timeout_sec: int | None = None,
-    capture: dict[str, str] | None = None,
+    capture: dict[str, str | dict[str, str]] | None = None,
     resume_session_id: str | None = None,
     resume_checkpoint: dict[str, object] | None = None,
     idle_output_timeout: int | None = None,

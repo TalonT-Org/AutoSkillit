@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.core import (
+    CAPTURE_VALID_VALUE_TYPES,
     CaptureEntrySpec,
     CaptureValueTypeError,
     get_logger,
@@ -76,6 +77,8 @@ def _validate_capture_value(key: str, value: str, declared_type: str) -> None:
                 declared_type=declared_type,
                 reason=f"url value must start with http://, https://, or file://: {value!r}",
             )
+    elif declared_type == "optional_string":
+        return
 
 
 def _extract_captures(
@@ -127,19 +130,27 @@ def _extract_captures(
 
 
 def _normalize_capture_spec(
-    capture: Mapping[str, str | CaptureEntrySpec] | None,
+    capture: Mapping[str, str | dict[str, str] | CaptureEntrySpec] | None,
 ) -> dict[str, CaptureEntrySpec] | None:
-    """Convert YAML-format ``dict[str, str]`` capture spec to ``dict[str, CaptureEntrySpec]``.
+    """Convert YAML-format capture spec to ``dict[str, CaptureEntrySpec]``.
 
-    The recipe YAML uses shorthand capture entries: ``{key: "${{ result.field }}"}``.
-    This converts them to the typed ``CaptureEntrySpec`` format used internally.
-    Already-typed ``CaptureEntrySpec`` values are passed through unchanged.
+    Accepts three value forms:
+    - ``CaptureEntrySpec`` — passed through unchanged.
+    - ``dict`` with ``from`` and optional ``type`` — long-form with explicit value_type.
+    - ``str`` — shorthand; defaults to ``value_type="string"``.
     """
     if capture is None:
         return None
-    return {
-        key: val
-        if isinstance(val, CaptureEntrySpec)
-        else CaptureEntrySpec(from_=val, value_type="string")
-        for key, val in capture.items()
-    }
+    result: dict[str, CaptureEntrySpec] = {}
+    for key, val in capture.items():
+        if isinstance(val, CaptureEntrySpec):
+            result[key] = val
+        elif isinstance(val, dict):
+            from_ = val.get("from", "")
+            type_ = val.get("type", "string")
+            if type_ not in CAPTURE_VALID_VALUE_TYPES:
+                type_ = "string"
+            result[key] = CaptureEntrySpec(from_=from_, value_type=type_)  # type: ignore[arg-type]
+        else:
+            result[key] = CaptureEntrySpec(from_=str(val), value_type="string")
+    return result

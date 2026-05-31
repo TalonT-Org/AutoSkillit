@@ -172,3 +172,33 @@ def test_implementation_yaml_no_diagnostic_after_guard_added() -> None:
         "expected 0 optional-capture-requires-guard findings on implementation.yaml, got "
         + "; ".join(f"[{f.step_name}]: {f.message}" for f in guard_findings)
     )
+
+
+def test_identify_optional_output_fields_extracts_from_contract() -> None:
+    """_identify_optional_output_fields returns field names whose patterns allow empty values."""
+    from autoskillit.recipe._contracts_types import SkillContract, SkillOutput
+    from autoskillit.recipe.rules.rules_optional_capture import _identify_optional_output_fields
+
+    # Pattern with optional group matching a known output name — field is optional
+    contract = SkillContract(
+        inputs=[],
+        outputs=[SkillOutput(name="pr_url", type="string")],
+        expected_output_patterns=[r"pr_url[ \t]*=[ \t]*(https://github\.com/.*/pull/\d+)?"],
+    )
+    assert _identify_optional_output_fields(contract) == {"pr_url"}
+
+    # Pattern without optional group — field is mandatory, not returned
+    contract_mandatory = SkillContract(
+        inputs=[],
+        outputs=[SkillOutput(name="pr_url", type="string")],
+        expected_output_patterns=[r"pr_url[ \t]*=[ \t]*https://github\.com/.+"],
+    )
+    assert _identify_optional_output_fields(contract_mandatory) == set()
+
+    # Pattern whose leading identifier does not match any output name — skipped
+    contract_no_match = SkillContract(
+        inputs=[],
+        outputs=[SkillOutput(name="category_summary", type="string")],
+        expected_output_patterns=[r"pr_url[ \t]*=[ \t]*(https://github\.com/.*/pull/\d+)?"],
+    )
+    assert _identify_optional_output_fields(contract_no_match) == set()

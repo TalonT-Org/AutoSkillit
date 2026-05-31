@@ -877,3 +877,52 @@ def test_captures_from_prior_session_invisible_with_different_campaign_id(tmp_pa
 
     result = read_all_campaign_captures(dispatches_dir, "kitchen-uuid-B")
     assert result == {}  # orphaned — this is the bug we're preventing
+
+
+# ---------------------------------------------------------------------------
+# String value_type, normalization, and optional_string tests (1a, 1b, 1c, 1f)
+# ---------------------------------------------------------------------------
+
+
+def test_string_type_rejects_empty_value():
+    """_validate_capture_value with value_type='string' must reject empty string."""
+    from autoskillit.core import CaptureValueTypeError
+    from autoskillit.fleet._capture import _validate_capture_value
+
+    with pytest.raises(CaptureValueTypeError) as exc_info:
+        _validate_capture_value("pr_url", "", "string")
+    assert exc_info.value.declared_type == "string"
+    assert exc_info.value.key == "pr_url"
+    assert "non-empty" in str(exc_info.value)
+
+
+def test_normalize_capture_spec_shorthand_defaults_to_string():
+    """Shorthand string values in _normalize_capture_spec produce value_type='string'."""
+    from autoskillit.fleet._capture import _normalize_capture_spec
+
+    result = _normalize_capture_spec({"pr_url": "${{ result.pr_url }}"})
+    assert result is not None
+    assert result["pr_url"].from_ == "${{ result.pr_url }}"
+    assert result["pr_url"].value_type == "string"
+
+
+def test_shorthand_capture_with_empty_value_from_optional_contract_raises():
+    """End-to-end: shorthand capture normalized to string raises on empty payload value."""
+    from autoskillit.core import CaptureValueTypeError
+    from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
+
+    normalized = _normalize_capture_spec({"pr_url": "${{ result.pr_url }}"})
+    assert normalized is not None
+
+    with pytest.raises(CaptureValueTypeError) as exc_info:
+        _extract_captures(normalized, {"pr_url": ""})
+    assert exc_info.value.declared_type == "string"
+    assert exc_info.value.key == "pr_url"
+
+
+def test_optional_string_explicitly_accepted():
+    """_validate_capture_value with value_type='optional_string' must accept empty string."""
+    from autoskillit.fleet._capture import _validate_capture_value
+
+    # Must not raise — optional_string permits empty values
+    _validate_capture_value("pr_url", "", "optional_string")

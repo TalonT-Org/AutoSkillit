@@ -529,6 +529,7 @@ def test_research_campaign_run_review_capture():
     assert d.name == "run-review"
     assert set(d.capture.keys()) == {"pr_url", "report_path_after_finalize"}
     assert d.capture["pr_url"].from_ == "${{ result.pr_url }}"
+    assert d.capture["pr_url"].value_type == "optional_string"
     assert (
         d.capture["report_path_after_finalize"].from_ == "${{ result.report_path_after_finalize }}"
     )

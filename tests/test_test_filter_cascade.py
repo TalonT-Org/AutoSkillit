@@ -336,6 +336,7 @@ class TestServerFleetCascadeNarrowing:
 _PIPELINE_EXECUTION_FILE_ENTRIES = [
     "test_backend_dispatch.py",
     "test_boundary_pty_dispatch.py",
+    "test_clone_guard.py",
     "test_flush_provider_integration.py",
     "test_headless_add_dirs.py",
     "test_headless_backend_mixing.py",
@@ -370,11 +371,11 @@ class TestPipelineCascadeNarrowing:
         )
 
     def test_pipeline_cascade_includes_execution_file_entries(self) -> None:
-        """The pipeline cascade must include at least 20 execution/ file-level entries."""
+        """The pipeline cascade must include all entries from _PIPELINE_EXECUTION_FILE_ENTRIES."""
         pipeline_entries = LAYER_CASCADE_CONSERVATIVE["pipeline"]
         execution_entries = [e for e in pipeline_entries if e.startswith("execution/")]
-        assert len(execution_entries) >= 20, (
-            f"pipeline cascade must include ≥20 execution/ file-level entries, "
+        assert len(execution_entries) >= len(_PIPELINE_EXECUTION_FILE_ENTRIES), (
+            f"pipeline cascade must include >={len(_PIPELINE_EXECUTION_FILE_ENTRIES)} execution/ file-level entries, "
             f"got {len(execution_entries)}"
         )
 

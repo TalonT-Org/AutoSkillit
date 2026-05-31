@@ -26,6 +26,11 @@ from tests.conftest import _make_result
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+@pytest.fixture(autouse=True)
+def _fleet_session(monkeypatch):
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
+
 def _make_failure_record(**overrides: object) -> FailureRecord:
     defaults = dict(
         timestamp="2026-02-24T16:00:00Z",
@@ -161,10 +166,6 @@ class TestKitchenStatus:
 class TestGetPipelineReport:
     """get_pipeline_report is a gated tool that returns accumulated failures."""
 
-    @pytest.fixture(autouse=True)
-    def _fleet_session(self, monkeypatch):
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-
     @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):
         """get_pipeline_report returns gate_error when kitchen gate is closed."""
@@ -245,10 +246,6 @@ def test_check_quota_absent_from_mcp_registry(tool_ctx):
 
 class TestTelemetryRecoveryData:
     """MCP status tools return data populated via load_from_log_dir recovery."""
-
-    @pytest.fixture(autouse=True)
-    def _fleet_session(self, monkeypatch):
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
     def _write_token_session(
         self, log_root: Path, dir_name: str, step_name: str, input_tokens: int

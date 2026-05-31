@@ -324,7 +324,7 @@ def test_startup_disables_all_visibility_tags():
     source = server_init.read_text()
     tree = ast.parse(source, filename=str(server_init))
 
-    canonical_loop_found = False
+    canonical_loop_count = 0
     standalone_literal_disables = []
 
     for node in tree.body:
@@ -366,7 +366,7 @@ def test_startup_disables_all_visibility_tags():
                         and isinstance(kw.value.elts[0], ast.Name)
                         and kw.value.elts[0].id == loop_var
                     ):
-                        canonical_loop_found = True
+                        canonical_loop_count += 1
 
         elif isinstance(node, ast.Expr):
             call = node.value
@@ -390,9 +390,10 @@ def test_startup_disables_all_visibility_tags():
                             f"line {node.lineno}: mcp.disable(tags={sorted(tag_vals)})"
                         )
 
-    assert canonical_loop_found, (
-        "server/__init__.py must have a top-level for-loop over ALL_VISIBILITY_TAGS "
+    assert canonical_loop_count == 1, (
+        "server/__init__.py must have exactly one top-level for-loop over ALL_VISIBILITY_TAGS "
         "whose body calls mcp.disable(tags={<loop_var>}). "
+        f"Found {canonical_loop_count}. "
         "Replace manual per-tag mcp.disable() calls with: "
         "for tag in sorted(ALL_VISIBILITY_TAGS): mcp.disable(tags={tag})"
     )

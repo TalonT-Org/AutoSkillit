@@ -1276,9 +1276,8 @@ class TestCodexMcpClientBackendRequired:
         spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
         assert spec.env[MCP_CLIENT_BACKEND_ENV_VAR] == AGENT_BACKEND_CODEX
 
-    def test_skill_session_raises_without_mcp_client_backend(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    @pytest.fixture()
+    def _strip_mcp_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         original = CodexEnvPolicy.build_env
 
         def _strip_mcp_key(
@@ -1293,25 +1292,11 @@ class TestCodexMcpClientBackendRequired:
             return original(self_policy, base, extras=extras, required=required)
 
         monkeypatch.setattr(CodexEnvPolicy, "build_env", _strip_mcp_key)
+
+    def test_skill_session_raises_without_mcp_client_backend(self, _strip_mcp_env: None) -> None:
         with pytest.raises(ValueError, match="MCP_CLIENT_BACKEND"):
             CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
 
-    def test_food_truck_raises_without_mcp_client_backend(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        original = CodexEnvPolicy.build_env
-
-        def _strip_mcp_key(
-            self_policy: CodexEnvPolicy,
-            base: Mapping[str, str],
-            *,
-            extras: Mapping[str, str] | None = None,
-            required: frozenset[str] | None = None,
-        ) -> dict[str, str]:
-            if extras is not None:
-                extras = {k: v for k, v in extras.items() if k != MCP_CLIENT_BACKEND_ENV_VAR}
-            return original(self_policy, base, extras=extras, required=required)
-
-        monkeypatch.setattr(CodexEnvPolicy, "build_env", _strip_mcp_key)
+    def test_food_truck_raises_without_mcp_client_backend(self, _strip_mcp_env: None) -> None:
         with pytest.raises(ValueError, match="MCP_CLIENT_BACKEND"):
             CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)

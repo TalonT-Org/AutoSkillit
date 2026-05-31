@@ -46,6 +46,7 @@ def _mock_backend(
     backend.build_resume_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "emit marker", "--resume", "test-session"),
         env={},
+        is_resume=True,
     )
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "test-skill"),

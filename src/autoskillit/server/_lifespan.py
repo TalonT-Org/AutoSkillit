@@ -568,16 +568,17 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         bg_tasks.append(create_background_task(_cleanup_stale_loop(), label="cleanup_stale"))
         _boot_ctx = _get_ctx_or_none()
 
-        if _boot_ctx is not None:
-            from autoskillit.core import AGENT_BACKEND_CODEX  # noqa: PLC0415
-
-            if getattr(_boot_ctx.backend, "name", None) == AGENT_BACKEND_CODEX:
-                bg_tasks.append(
-                    create_background_task(
-                        _run_codex_mcp_registration_async(),
-                        label="codex_mcp_registration",
-                    )
+        if (
+            _boot_ctx is not None
+            and _boot_ctx.backend is not None
+            and _boot_ctx.backend.capabilities.mcp_config_capable
+        ):
+            bg_tasks.append(
+                create_background_task(
+                    _run_codex_mcp_registration_async(),
+                    label="codex_mcp_registration",
                 )
+            )
 
         from autoskillit.core import session_type as _resolve_session_type
 

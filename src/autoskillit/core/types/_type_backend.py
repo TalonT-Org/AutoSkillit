@@ -131,6 +131,7 @@ class CmdSpec:
     env: Mapping[str, str]
     cwd: str = ""
     origin: CmdOrigin | None = None
+    is_resume: bool = False
 
 
 @dataclass(frozen=True, slots=True)

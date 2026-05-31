@@ -503,7 +503,7 @@ class CodexBackend:
             cmd.append(resume_session_id)
         cmd.append(prompt)
 
-        return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd)
+        return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd, is_resume=bool(resume_session_id))
 
     def build_food_truck_cmd(
         self,
@@ -604,7 +604,7 @@ class CodexBackend:
             cmd.append(resume_session_id)
         cmd.append(prompt)
 
-        return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd)
+        return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd, is_resume=bool(resume_session_id))
 
     def build_interactive_cmd(
         self,
@@ -649,7 +649,12 @@ class CodexBackend:
             merged_extras.setdefault("CODEX_HOME", str(add_dirs[0]))
         env = CodexEnvPolicy().build_env(base_env, extras=merged_extras, required=required_env)
         partial = builder.build()
-        return CmdSpec(cmd=partial.cmd, env=env, origin=partial.origin)
+        return CmdSpec(
+            cmd=partial.cmd,
+            env=env,
+            origin=partial.origin,
+            is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
+        )
 
     def build_resume_cmd(
         self,
@@ -677,7 +682,7 @@ class CodexBackend:
         env = self.env_policy().build_env(
             filtered_base, extras=resume_extras, required=RESUME_SESSION_BASELINE_KEYS
         )
-        return CmdSpec(cmd=tuple(cmd), env=env)
+        return CmdSpec(cmd=tuple(cmd), env=env, is_resume=True)
 
     def validate_session_layout(self, session_dir: Path) -> list[str]:
         errors: list[str] = []

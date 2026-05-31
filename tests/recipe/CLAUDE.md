@@ -38,6 +38,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_cmd_rpc_merge.py` | Tests for recipe/_cmd_rpc_merge.py — base branch fetch discipline and fetch error classification |
 | `test_cmd_rpc_null_safety.py` | Null safety tests for _cmd_rpc callables |
 | `test_contract_verdict_output_required.py` | Contract: verdict output is required in recipe step |
+| `test_contract_strength.py` | Contract strength validation — structural guards against weak contracts (optional patterns, completion_required consistency) |
 | `test_contracts.py` | Contract tests for recipe schema and recipe step contracts |
 | `test_contracts_block_fingerprint.py` | Tests for block fingerprint contract |
 | `test_create_worktree_script.py` | Tests for create_worktree.sh script |

@@ -847,6 +847,16 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
 # deferred imports in recipe source modules (e.g. recipe/_api.py ->
 # autoskillit.workspace.DefaultSkillResolver).  These are exempt from the
 # direct-import check in test_file_level_entries_import_their_cascade_package.
+#
+# COUPLING: each set here is a strict subset of the corresponding
+# LAYER_CASCADE_CONSERVATIVE entry — only the recipe/* transitive entries.
+# Excluded from "workspace": the two direct-import entries
+# ("recipe/test_contracts.py", "recipe/test_rules_skill_content.py") and all
+# non-recipe entries ("workspace", "fleet", "server", "cli", "skills",
+# "_llm_triage").  When adding a new transitive recipe/* entry to
+# LAYER_CASCADE_CONSERVATIVE["workspace"] or ["planner"], add it here too —
+# otherwise test_file_level_entries_import_their_cascade_package will
+# incorrectly require a direct AST import from those test files.
 _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
     "workspace": frozenset(
         {

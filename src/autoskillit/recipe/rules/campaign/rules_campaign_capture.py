@@ -12,6 +12,7 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._contracts_types import RESULT_CAPTURE_RE
 from autoskillit.recipe._rule_helpers import (
     _extract_sentinel_fields,
+    _identify_optional_output_fields,
     _is_failure_sentinel_value,
     _load_dispatch_target,
     extract_sentinel_json_blocks,
@@ -23,7 +24,6 @@ from autoskillit.recipe.contracts import (
 )
 from autoskillit.recipe.io import find_recipe_by_name, load_recipe
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.rules.rules_optional_capture import _identify_optional_output_fields
 from autoskillit.recipe.schema import RecipeKind
 
 if TYPE_CHECKING:

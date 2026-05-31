@@ -14,6 +14,7 @@ from autoskillit.core import get_logger
 from autoskillit.recipe._analysis import ValidationContext
 
 if TYPE_CHECKING:
+    from autoskillit.recipe._contracts_types import SkillContract
     from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeStep
 
 logger = get_logger(__name__)
@@ -214,3 +215,22 @@ def push_reachable(
         for succ in graph.get(name, set()):
             queue.append((succ, hops + 1))
     return False, None
+
+
+def _identify_optional_output_fields(contract: SkillContract) -> set[str]:
+    """Return output field names whose contract patterns allow an empty value.
+
+    Cross-references ``contract.outputs`` names with ``expected_output_patterns``:
+    a field is considered optional when its pattern contains a fully-optional capture
+    group ``(...)? `` at the end (same check as ``_has_optional_capture_group``).
+    Patterns that don't start with a recognized output name are skipped.
+    """
+    output_names = {o.name for o in contract.outputs}
+    optional: set[str] = set()
+    for pattern in contract.expected_output_patterns:
+        if not re.search(r"\((?!\?:)[^)]+\)\?$", pattern):
+            continue
+        m = re.match(r"^([\w-]+)", pattern)
+        if m and m.group(1) in output_names:
+            optional.add(m.group(1))
+    return optional

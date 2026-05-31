@@ -6,7 +6,10 @@ import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._contracts_types import RESULT_CAPTURE_RE, SkillContract
+from autoskillit.recipe._contracts_types import RESULT_CAPTURE_RE
+from autoskillit.recipe._rule_helpers import (
+    _identify_optional_output_fields as _identify_optional_output_fields,
+)
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
@@ -88,25 +91,6 @@ def _has_guard_for_key(
             to_visit.append(step.on_success)
 
     return False
-
-
-def _identify_optional_output_fields(contract: SkillContract) -> set[str]:
-    """Return output field names whose contract patterns allow an empty value.
-
-    Cross-references ``contract.outputs`` names with ``expected_output_patterns``:
-    a field is considered optional when its pattern contains a fully-optional capture
-    group ``(...)? `` at the end (same check as ``_has_optional_capture_group``).
-    Patterns that don't start with a recognized output name are skipped.
-    """
-    output_names = {o.name for o in contract.outputs}
-    optional: set[str] = set()
-    for pattern in contract.expected_output_patterns:
-        if not re.search(r"\((?!\?:)[^)]+\)\?$", pattern):
-            continue
-        m = re.match(r"^([\w-]+)", pattern)
-        if m and m.group(1) in output_names:
-            optional.add(m.group(1))
-    return optional
 
 
 @semantic_rule(

@@ -834,6 +834,9 @@ async def test_stale_NOT_fired_when_execution_marker_active(tmp_path):
         f"Monitor returned early: stale fired with active run-skill execution marker. "
         f"Status: {monitor_status}"
     )
+    assert monitor_status == [], (
+        f"Monitor emitted a status despite not returning: {monitor_status}"
+    )
 
 
 @pytest.mark.anyio

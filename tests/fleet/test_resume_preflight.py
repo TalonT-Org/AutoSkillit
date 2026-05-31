@@ -263,6 +263,9 @@ class TestResumeSuccessGuard:
         assert isinstance(result.outcome, DispatchCompleted)
         assert result.outcome.success is True
         assert result.outcome.dispatch_status == DispatchStatus.SUCCESS
+        assert result.outcome.dispatch_id == "completed-dispatch-id"
+        assert result.outcome.dispatched_session_id == "completed-session-id"
+        assert result.outcome.reason == "completed_clean"
         assert len(tool_ctx.executor.dispatch_calls) == 0
 
     @pytest.mark.anyio

@@ -68,9 +68,9 @@ def test_deep_mode_not_default(deep_mode_section: str) -> None:
 
 
 def test_deep_mode_subagents_use_sonnet(deep_mode_section: str) -> None:
-    """Deep mode section must specify that subagents use model: sonnet."""
-    assert 'model: "sonnet"' in deep_mode_section, (
-        "Deep Analysis Mode section must specify 'model: \"sonnet\"' for all subagents"
+    """Deep mode section must specify that subagents use Agent(model="sonnet")."""
+    assert 'Agent(model="sonnet")' in deep_mode_section, (
+        "Deep Analysis Mode section must specify 'Agent(model=\"sonnet\")' for all subagents"
     )
 
 

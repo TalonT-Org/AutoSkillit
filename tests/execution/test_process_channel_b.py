@@ -33,7 +33,9 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    time.sleep(0.15)
+    # Delay must exceed session_id_timeout + Phase 1 poll so Phase 2 initializes
+    # scan_pos from discovery boundary before the marker arrives.
+    time.sleep(1.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -93,7 +95,9 @@ CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    time.sleep(0.15)
+    # Delay must exceed _session_id_timeout + Phase 1 poll so the monitor
+    # discovers the file and initializes Phase 2 before the marker arrives.
+    time.sleep(1.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -126,7 +130,10 @@ PROCESS_EXIT_THEN_CHANNEL_B_FIRES_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    time.sleep(0.15)
+    # Delay must exceed _phase1_poll (1.0s in test) so Phase 2 initializes
+    # before the marker is written. Phase 1 discovers the file, Phase 2 sets
+    # scan_pos from discovery boundary, then the marker arrives as new content.
+    time.sleep(2.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -269,11 +276,8 @@ class TestChannelBDrainWait:
         natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
         so shorten grace window to reduce total test time and avoid asyncio-waitpid
         thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
-        _session_id_timeout=30.0: increased from 0.5s → 3.0s → 30.0s — under
-        heavy xdist load the event loop may not schedule the monitor coroutine
-        before the timeout expires, preventing Phase 1 from starting and causing
-        a spurious timed_out result; 30.0s gives adequate headroom within the
-        pytest.mark.timeout(150) outer guard.
+        _session_id_timeout=0.01: script never writes stdout, so session ID timeout
+        should expire immediately to let Phase 1 start before the marker is written.
         """
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -290,7 +294,7 @@ class TestChannelBDrainWait:
             natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
-            _session_id_timeout=30.0,
+            _session_id_timeout=0.01,
             _phase1_timeout=250,
         )
 
@@ -377,9 +381,10 @@ class TestChannelBFullPipelineAdjudication:
         - timeout=180s: guards against the outer wall-clock expiring under xdist -n 4 load.
           _phase1_timeout=360 must exceed outer timeout so Phase 1 never fires STALE before
           the outer guard when subprocess startup is slow under WSL2 + xdist load.
-        - _session_id_timeout=5.0s: Python startup under WSL2 + xdist -n 4 heavy load
-          can take several seconds; generous timeout prevents session monitor from missing
-          the session ID and failing to watch the JSONL file.
+        - _session_id_timeout=0.5s: Script writes system record to stdout immediately;
+          the session ID is extracted from the heartbeat reader before Phase 1 starts.
+          0.5s is generous for session ID extraction while ensuring Phase 1 starts before
+          the JSONL marker is written (at t~0.25s from subprocess start).
         """
         from autoskillit.execution.headless import _build_skill_result
 
@@ -400,7 +405,7 @@ class TestChannelBFullPipelineAdjudication:
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
-            _session_id_timeout=5.0,
+            _session_id_timeout=0.5,
         )
         skill_result = _build_skill_result(
             result,
@@ -504,24 +509,12 @@ class TestPostExitDrainWindow:
     @pytest.mark.timeout(180)
     @pytest.mark.anyio
     async def test_drain_window_allows_channel_b_to_deposit(self, tmp_path):
-        """Process exits before Phase 1 polls; drain window lets Channel B detect marker.
+        """Process exits after writing marker; drain window lets Channel B detect it.
 
-        Uses _phase1_poll=1.0 to guarantee the process exits (~100ms) before the
-        first Phase 1 poll fires. The drain window (completion_drain_timeout=30.0)
-        gives the session monitor enough time to complete its poll and detect the
-        marker in the JSONL file, producing CHANNEL_B confirmation.
+        The script writes initial content, waits for Phase 1 to discover the file,
+        then writes the marker and exits. The drain window gives Channel B time to
+        complete its Phase 2 poll and detect the marker, producing CHANNEL_B confirmation.
 
-        Timing rationale for completion_drain_timeout=30.0:
-        - Before channel_b_ready can be set, _watch_session_log must:
-            1. Wait up to _session_id_timeout for stdout_session_id_ready (default 1.0s, tests pass 0.01s)
-            2. Sleep _phase1_poll=1.0s before Phase 1's first check
-            3. Sleep _phase2_poll=0.05s before Phase 2's first check
-          Total minimum: ~2.05s under normal conditions.
-        - Under xdist -n 4 load, asyncio.sleep() can overrun significantly.
-          With 10x jitter on Phase 1 alone (1.0s → 10s) the total exceeds 5.0s.
-          30.0s provides ~15x headroom against Phase 1 jitter alone.
-        - The test does NOT take 30s: channel_b_ready is set within ~2s normally
-          and move_on_after exits as soon as the event fires.
         timeout=120 / _phase1_timeout=250: _phase1_timeout must exceed the outer timeout
         so Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
         """
@@ -538,7 +531,7 @@ class TestPostExitDrainWindow:
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=60.0,
             _phase1_timeout=250,
-            _phase1_poll=1.0,
+            _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
             _session_id_timeout=0.01,
@@ -605,7 +598,9 @@ CHANNEL_B_SUB_SKILL_COLLISION_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    time.sleep(0.15)
+    # Delay must exceed session_id_timeout + Phase 1 poll so Phase 2 initializes
+    # scan_pos from discovery boundary before sub-skill marker arrives.
+    time.sleep(1.0)
     with open(jsonl_path, "a") as f:
         # Sub-skill emits static marker — should NOT trigger completion
         sub_skill_record = {"type": "assistant", "message": {"role": "assistant",
@@ -638,9 +633,9 @@ class TestChannelBSubSkillCollision:
 
         timeout=300s / _phase1_timeout=600: _phase1_timeout must exceed the outer timeout so
         Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
-        _session_id_timeout=5.0 gives the stdout reader enough headroom under
-        heavy parallel load so Channel B monitoring always starts before the
-        JSONL markers are written.
+        _session_id_timeout=0.5: script writes system record to stdout immediately;
+        0.5s is generous for session ID extraction while ensuring Phase 1 starts
+        before the JSONL markers are written.
 
         Timeouts are set at 3x the isolation baseline (~14s) to absorb event-loop
         slowdowns under 4-worker xdist load on WSL2, where anyio.sleep() can run
@@ -663,7 +658,7 @@ class TestChannelBSubSkillCollision:
             _phase1_poll=0.05,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
-            _session_id_timeout=5.0,
+            _session_id_timeout=0.5,
         )
 
         assert result.termination == TerminationReason.COMPLETED

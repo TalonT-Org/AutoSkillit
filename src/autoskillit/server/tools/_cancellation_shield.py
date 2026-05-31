@@ -42,10 +42,7 @@ def _cancellation_shield(
                 return await fn(*args, **kwargs)
             except asyncio.CancelledError:
                 with anyio.CancelScope(shield=True):
-                    try:
-                        logger.warning("mcp_tool_cancelled", tool=fn.__name__)
-                    except Exception:
-                        pass
+                    logger.warning("mcp_tool_cancelled", tool=fn.__name__)
                     return _build_cancellation_response(result_type)
 
         return wrapper  # type: ignore[return-value]

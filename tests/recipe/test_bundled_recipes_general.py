@@ -947,7 +947,13 @@ def _dispatchable_recipe_names() -> list[str]:
 
 
 def test_recipe_step_shorthand_capture_parses_to_capture_entry_spec() -> None:
-    """Shorthand capture values must load as CaptureEntrySpec with value_type='string'."""
+    """Shorthand captures default to value_type='string' and are valid for mandatory fields.
+
+    Shorthand syntax (``key: "${{ result.field }}"``) is still permitted for fields
+    whose skill contract output patterns do NOT have an optional group. For optional
+    fields, the ``capture-type-matches-contract-optionality`` semantic rule blocks
+    recipe loading at validation time, enforcing 'type: optional_string'.
+    """
     from autoskillit.core import CaptureEntrySpec
 
     recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
@@ -957,6 +963,57 @@ def test_recipe_step_shorthand_capture_parses_to_capture_entry_spec() -> None:
     assert isinstance(value, CaptureEntrySpec)
     assert value.value_type == "string"
     assert "${{ result." in value.from_
+
+
+def test_optional_output_with_string_capture_type_flagged() -> None:
+    """No bundled recipe may capture an optional-output field with value_type='string'.
+
+    For each capture entry whose skill contract output pattern has an optional group,
+    value_type must not be 'string'. Shorthand captures default to 'string' and will
+    be caught by the capture-type-matches-contract-optionality semantic rule at load time.
+    """
+    from autoskillit.recipe._contracts_types import RESULT_CAPTURE_RE
+    from autoskillit.recipe.rules.rules_optional_capture import _identify_optional_output_fields
+
+    manifest = load_bundled_manifest()
+    violations: list[str] = []
+
+    for recipe_file in builtin_recipes_dir().glob("*.yaml"):
+        recipe = load_recipe(recipe_file)
+        for step_name, step in recipe.steps.items():
+            if step.tool != "run_skill" or not step.capture:
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            name = resolve_skill_name(skill_cmd)
+            if not name:
+                continue
+            contract = manifest.get("skills", {}).get(name)
+            if contract is None:
+                continue
+            from autoskillit.recipe.contracts import get_skill_contract
+
+            c = get_skill_contract(name, manifest)
+            if c is None:
+                continue
+            optional_fields = _identify_optional_output_fields(c)
+            if not optional_fields:
+                continue
+            for cap_key, cap_entry in step.capture.items():
+                m = RESULT_CAPTURE_RE.match(cap_entry.from_.strip())
+                if not m:
+                    continue
+                field_name = m.group(1)
+                if field_name in optional_fields and cap_entry.value_type == "string":
+                    violations.append(
+                        f"{recipe_file.name}::{step_name}::{cap_key} captures optional "
+                        f"field '{field_name}' with value_type='string'"
+                    )
+
+    assert not violations, (
+        "Bundled recipes have shorthand captures on optional-output fields. "
+        "Use 'type: optional_string' in the capture spec:\n"
+        + "\n".join(f"  - {v}" for v in violations)
+    )
 
 
 @pytest.mark.parametrize("recipe_name", _dispatchable_recipe_names())

@@ -38,9 +38,15 @@
         "output_dir": "{{AUTOSKILLIT_TEMP}}/promote-to-main"
       },
       "capture": {
-        "pr_url": "${{ result.pr_url }}",
+        "pr_url": {
+          "from": "${{ result.pr_url }}",
+          "type": "optional_string"
+        },
         "verdict": "${{ result.verdict }}",
-        "category_summary": "${{ result.category_summary }}"
+        "category_summary": {
+          "from": "${{ result.category_summary }}",
+          "type": "optional_string"
+        }
       },
       "on_result": [
         {

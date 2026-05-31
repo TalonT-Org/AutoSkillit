@@ -909,7 +909,10 @@
         "output_dir": "."
       },
       "capture": {
-        "pr_url": "${{ result.pr_url }}"
+        "pr_url": {
+          "from": "${{ result.pr_url }}",
+          "type": "optional_string"
+        }
       },
       "on_success": "guard_pr_url",
       "on_failure": "escalate_stop"

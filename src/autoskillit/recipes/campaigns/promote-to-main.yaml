@@ -101,7 +101,9 @@ dispatches:
       base_branch: "${{ inputs.base_branch }}"
       source_dir: "${{ inputs.source_dir }}"
     capture:
-      pr_url: "${{ result.pr_url }}"
+      pr_url:
+        from: "${{ result.pr_url }}"
+        type: optional_string
       verdict: "${{ result.verdict }}"
     depends_on:
       - implement-findings

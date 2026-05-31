@@ -86,6 +86,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_session_type_exhaustive.py` | AST guard: _apply_session_type_visibility must use exhaustive match/assert_never dispatch |
 | `test_notification_fallback_coverage.py` | AST guard: every ctx.enable_components call in server/tools/ must have a non-notification fallback or be in an exempt session-scoped unlock function |
 | `test_cmd_spec_resume_no_string_match.py` | AST guard: no `"--resume" in <expr>` patterns in production code — use CmdSpec.is_resume instead |
+| `test_subagent_filter_guard.py` | AST guard: all assistant-record NDJSON processing sites must use _is_parent_assistant_record or _is_parent_assistant predicate |
 
 ## Architecture Notes
 

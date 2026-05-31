@@ -29,6 +29,17 @@ class L3ParseResult:
     source: Literal["stdout", "assistant_messages_jsonl", "additional_jsonl", "sidecar"]
 
 
+def _is_parent_assistant_record(obj: dict) -> bool:
+    if obj.get("type") != "assistant":
+        return False
+    if obj.get("subagent_type"):
+        return False
+    msg = obj.get("message")
+    if isinstance(msg, dict) and msg.get("model") == "<synthetic>":
+        return False
+    return True
+
+
 def _extract_text_from_jsonl(path: Path) -> str:
     """Read a Claude Code session JSONL and extract assistant text blocks.
 
@@ -51,7 +62,7 @@ def _extract_text_from_jsonl(path: Path) -> str:
             continue
         if not isinstance(obj, dict):
             continue
-        if obj.get("type") != "assistant":
+        if not _is_parent_assistant_record(obj):
             continue
         msg = obj.get("message")
         if not isinstance(msg, dict):

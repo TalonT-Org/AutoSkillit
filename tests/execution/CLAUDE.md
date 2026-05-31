@@ -65,6 +65,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_normalize_subtype.py` | Unit tests for ClaudeSessionResult.normalize_subtype() normalization gate |
 | `test_on_spawn_timing.py` | Tests for on_pid_resolved callback timing in run_managed_async (Group J) |
 | `test_output_format_contract.py` | Contract tests binding output format to data availability |
+| `test_parent_record_predicate.py` | Unit tests for _is_parent_assistant_record predicate — subagent/synthetic exclusion |
 | `test_planner_write_isolation.py` | Integration tests for planner session write isolation via clone guard |
 | `test_pr_analysis.py` | Tests for execution/pr_analysis.py |
 | `test_process_channel_b.py` | Integration tests for Channel B drain-race and COMPLETED pipeline adjudication |

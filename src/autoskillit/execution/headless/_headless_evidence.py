@@ -20,7 +20,10 @@ from autoskillit.core import (
     WriteEvidence,
     get_logger,
 )
-from autoskillit.execution.session._session_model import ClaudeSessionResult
+from autoskillit.execution.session._session_model import (
+    ClaudeSessionResult,
+    _is_parent_assistant_record,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import AuditLog, CodingAgentBackend, GitHubApiLog
@@ -178,12 +181,13 @@ def _stdout_mentions_write_tools(stdout: str) -> bool:
             # Truncated line: check if it looks like an assistant record with a write tool name.
             if (
                 (line.startswith('{"type":"assistant"') or line.startswith('{"type": "assistant"'))
+                and '"subagent_type"' not in line
                 and '"tool_use"' in line
                 and ('"Write"' in line or '"Edit"' in line)
             ):
                 return True
             continue
-        if obj.get("type") != "assistant":
+        if not _is_parent_assistant_record(obj):
             continue
         for block in obj.get("message", {}).get("content", []):
             if (

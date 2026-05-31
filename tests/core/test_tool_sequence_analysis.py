@@ -546,6 +546,38 @@ class TestIterMergedAssistantTurns:
         assert len(turns) == 1
         assert turns[0].request_id == "turn-0"
 
+    def test_excludes_subagent_turns(self) -> None:
+        parent = self._make_record(rid="p1", tools=["Read"])
+        subagent = json.dumps(
+            {
+                "type": "assistant",
+                "subagent_type": "Explore",
+                "message": {
+                    "id": "s1",
+                    "content": [{"type": "tool_use", "name": "Grep"}],
+                },
+            }
+        )
+        turns = self._parse(parent, subagent)
+        assert len(turns) == 1
+        assert turns[0].tool_names == ("Read",)
+
+    def test_excludes_synthetic_turns(self) -> None:
+        parent = self._make_record(rid="p1", tools=["Read"])
+        synthetic = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "id": "syn1",
+                    "model": "<synthetic>",
+                    "content": [{"type": "tool_use", "name": "Bash"}],
+                },
+            }
+        )
+        turns = self._parse(parent, synthetic)
+        assert len(turns) == 1
+        assert turns[0].tool_names == ("Read",)
+
     def test_merged_turns_preserve_first_timestamp_monotonicity(self) -> None:
         """Multi-record turns with non-monotonic chunk timestamps use first ts only."""
         mid = "mid-mono"

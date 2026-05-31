@@ -1262,10 +1262,9 @@ def test_primary_model_identifier_parent_wins_on_output_tokens():
     assert result == "claude-opus-4-6"
 
 
-def test_primary_model_identifier_argmax_returns_subagent_when_dominant():
-    """Raw argmax returns subagent model when subagent output_tokens exceed parent.
-    This is the value flush_session_log uses as the observed model for drift detection —
-    model_identifier does not override it."""
+def test_primary_model_identifier_argmax_parent_only():
+    """After subagent filtering, model_breakdown contains only parent models.
+    Argmax returns the parent model with the highest output_tokens."""
     from autoskillit.execution.session_log import _primary_model_identifier
 
     token_usage = {
@@ -1274,14 +1273,57 @@ def test_primary_model_identifier_argmax_returns_subagent_when_dominant():
                 "input_tokens": 50000,
                 "output_tokens": 8000,
             },
-            "claude-sonnet-4-6": {
-                "input_tokens": 200000,
-                "output_tokens": 25000,
-            },
         }
     }
     result = _primary_model_identifier(token_usage)
-    assert result == "claude-sonnet-4-6"
+    assert result == "claude-opus-4-6"
+
+
+def test_no_false_drift_with_subagent_dominant_output():
+    """End-to-end: opus parent + sonnet subagent stream -> no MODEL_DRIFT anomaly."""
+    from autoskillit.execution.anomaly_detection import detect_model_drift
+    from autoskillit.execution.session import extract_token_usage
+    from autoskillit.execution.session_log import _primary_model_identifier
+
+    parent_lines = [
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-opus-4-6",
+                    "usage": {"input_tokens": 1000, "output_tokens": 5000},
+                },
+            }
+        ),
+    ] * 10
+    subagent_lines = [
+        json.dumps(
+            {
+                "type": "assistant",
+                "subagent_type": "Explore",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {"input_tokens": 500, "output_tokens": 10000},
+                },
+            }
+        ),
+    ] * 20
+    result_line = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "done",
+            "session_id": "test",
+            "errors": [],
+        }
+    )
+    stdout = "\n".join(parent_lines + subagent_lines + [result_line])
+    token_usage = extract_token_usage(stdout)
+    observed = _primary_model_identifier(token_usage)
+    assert observed == "claude-opus-4-6"
+    anomalies = detect_model_drift("claude-opus-4-6[1m]", observed)
+    assert anomalies == []
 
 
 def test_flush_session_log_configured_model_written_to_token_usage(tmp_path):

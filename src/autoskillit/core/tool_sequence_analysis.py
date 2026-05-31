@@ -67,6 +67,17 @@ def _resolve_turn_id(rec: dict[str, object]) -> str:
     return ""
 
 
+def _is_parent_assistant(rec: dict[str, object]) -> bool:
+    if rec.get("type") != "assistant":
+        return False
+    if rec.get("subagent_type"):
+        return False
+    msg = rec.get("message")
+    if isinstance(msg, dict) and msg.get("model") == "<synthetic>":
+        return False
+    return True
+
+
 def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Iterator[AssistantTurn]:
     """Yield one AssistantTurn per logical assistant turn, merging across records.
 
@@ -92,7 +103,7 @@ def iter_merged_assistant_turns(text: str, *, cap: int = _TOOL_USE_CAP) -> Itera
             rec = json.loads(raw_line)
         except json.JSONDecodeError:
             continue
-        if not isinstance(rec, dict) or rec.get("type") != "assistant":
+        if not isinstance(rec, dict) or not _is_parent_assistant(rec):
             continue
 
         rid = _resolve_turn_id(rec)

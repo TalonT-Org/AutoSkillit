@@ -1011,3 +1011,129 @@ def test_assistant_ndjson_uses_canonical_keys():
     assert "cache_read_input_tokens" not in usage
     assert usage["cache_write_tokens"] == 10
     assert usage["cache_read_tokens"] == 5
+
+
+class TestSubagentExclusion:
+    """Regression tests: subagent records must not contaminate parent metrics."""
+
+    def test_extract_token_usage_excludes_subagent_records(self):
+        """Subagent assistant records must not contaminate model_breakdown."""
+        parent = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-opus-4-6",
+                    "usage": {"input_tokens": 100, "output_tokens": 8000},
+                },
+            }
+        )
+        subagent = json.dumps(
+            {
+                "type": "assistant",
+                "subagent_type": "Explore",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "usage": {"input_tokens": 200, "output_tokens": 20000},
+                },
+            }
+        )
+        synthetic = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "<synthetic>",
+                    "usage": {"input_tokens": 0, "output_tokens": 0},
+                },
+            }
+        )
+        stdout = f"{parent}\n{subagent}\n{synthetic}\n"
+        result = extract_token_usage(stdout)
+        assert result is not None
+        mb = result["model_breakdown"]
+        assert "claude-opus-4-6" in mb
+        assert "claude-sonnet-4-6" not in mb
+        assert "<synthetic>" not in mb
+        assert result["turn_count"] == 1
+
+    def test_parse_session_result_excludes_subagent_tool_uses(self):
+        """Subagent tool uses must not appear in parent session's tool_uses."""
+        parent = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-opus-4-6",
+                    "content": [{"type": "text", "text": "hello"}],
+                    "usage": {"input_tokens": 100, "output_tokens": 100},
+                },
+            }
+        )
+        subagent = json.dumps(
+            {
+                "type": "assistant",
+                "subagent_type": "Explore",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "x",
+                            "name": "Read",
+                            "input": {"file_path": "/a"},
+                        }
+                    ],
+                    "usage": {"input_tokens": 50, "output_tokens": 50},
+                },
+            }
+        )
+        result_rec = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "abc",
+                "errors": [],
+            }
+        )
+        stdout = f"{parent}\n{subagent}\n{result_rec}\n"
+        result = parse_session_result(stdout)
+        assert len(result.tool_uses) == 0
+
+    def test_parse_session_result_excludes_subagent_assistant_messages(self):
+        """Subagent text must not appear in parent session's assistant_messages."""
+        parent = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "model": "claude-opus-4-6",
+                    "content": [{"type": "text", "text": "parent says hello"}],
+                    "usage": {"input_tokens": 100, "output_tokens": 100},
+                },
+            }
+        )
+        subagent = json.dumps(
+            {
+                "type": "assistant",
+                "subagent_type": "general-purpose",
+                "message": {
+                    "model": "claude-sonnet-4-6",
+                    "content": [{"type": "text", "text": "subagent says goodbye"}],
+                    "usage": {"input_tokens": 50, "output_tokens": 50},
+                },
+            }
+        )
+        result_rec = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "abc",
+                "errors": [],
+            }
+        )
+        stdout = f"{parent}\n{subagent}\n{result_rec}\n"
+        result = parse_session_result(stdout)
+        assert len(result.assistant_messages) == 1
+        assert "parent says hello" in result.assistant_messages[0]
+        assert "subagent says goodbye" not in " ".join(result.assistant_messages)

@@ -299,16 +299,6 @@ MODULE_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
             "workspace/test_clone_ci_contract.py",
         }
     ),
-    "session": frozenset(
-        {
-            "cli",
-            "execution",
-            "fleet",
-            "server",
-            "migration/test_engine.py",
-            "test_llm_triage.py",
-        }
-    ),
     "quota": frozenset({"execution", "server", "cli/test_doctor.py"}),
     "session_log": frozenset(
         {
@@ -368,6 +358,34 @@ SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
         }
     ),
     "backends": frozenset({"execution", "integration"}),
+    "session": frozenset(
+        {
+            "execution",
+            "server",
+            "migration/test_engine.py",
+            "test_llm_triage.py",
+            "cli/test_session_launch.py",
+            "cli/test_order_resume.py",
+            "cli/test_cook_ide_isolation.py",
+            "cli/test_cook_env_scrub.py",
+            "cli/test_terminal.py",
+            "cli/test_fleet_session.py",
+            "cli/test_reload_loop.py",
+            "fleet/test_result_parser.py",
+            "fleet/test_dispatch_outcome_classifier.py",
+            "fleet/test_dispatch_outcome_classifier_timeout.py",
+            "fleet/test_dispatch_lifespan.py",
+            "fleet/test_dispatch_state_handle.py",
+            "fleet/test_research_campaign_dispatch.py",
+            "fleet/test_campaign_capture.py",
+            "fleet/test_dispatch_failure_semantics.py",
+            "fleet/test_dispatch_stderr_forwarding.py",
+            "fleet/test_dispatch_envelope_fields.py",
+            "fleet/test_dispatch_labels_cleaned.py",
+            "fleet/test_resume_preflight.py",
+            "fleet/test_helpers_exports.py",
+        }
+    ),
 }
 
 MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {

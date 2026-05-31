@@ -53,7 +53,7 @@ best available plan.
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Issue all Task calls in a single message to maximize parallelism
 - Write output to `{{AUTOSKILLIT_TEMP}}/review-design/` (relative to the current working directory)
 - After writing output files, emit the **absolute paths** as structured output tokens

@@ -47,7 +47,7 @@ PASS and WARN proceed to `decompose_phases`; FAIL escalates immediately.
 - Parse `environment.type` from the experiment plan first
 - Try Docker before falling back to micromamba
 - Write the environment setup report before emitting the verdict token
-- Use `model: "sonnet"` for all subagents
+- Spawn all subagents via `Agent(model="sonnet")`
 
 ## Workflow
 

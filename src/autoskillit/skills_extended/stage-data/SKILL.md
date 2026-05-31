@@ -59,7 +59,7 @@ compute on doomed downloads.
 - Create data directories for every entry whose `location` field is non-null,
   using `mkdir -p`
 - Write the resource feasibility report before emitting the verdict token
-- Use `model: "sonnet"` for all subagents
+- Spawn all subagents via `Agent(model="sonnet")`
 - Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow

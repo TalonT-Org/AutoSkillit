@@ -33,7 +33,7 @@ Research modern solutions, approaches, and strategies relevant to the issues or 
 
 **ALWAYS:**
 - Use subagents with web search for parallel research
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Keep findings concise and actionable
 - Present options with trade-offs
 - Make recommendations based on technical merit and project fit

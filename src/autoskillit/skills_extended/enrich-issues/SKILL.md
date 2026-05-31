@@ -242,6 +242,6 @@ After processing all candidates, emit to stdout:
 **ALWAYS:**
 - Respect `--dry-run`: never call `gh issue edit` when this flag is set
 - Verify codebase claims before incorporating them into requirements
-- Use `model: "sonnet"` for per-issue analysis subagents
+- Spawn all subagents via `Agent(model="sonnet")`
 - Emit the `---enrich-issues-result---` block as the final output
 - Issue all Task calls in a single message to maximize parallelism

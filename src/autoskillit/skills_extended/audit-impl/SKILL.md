@@ -58,7 +58,7 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 **ALWAYS:**
 - Use Explore subagents for file reads and diff retrieval in Steps 1, 2, and 2.5
 - Use `Agent(subagent_type="autoskillit:audit-impl-slice-auditor")` for Step 3 audit slices
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Resolve all plan files before starting (abort early if any are missing)
 - Write `Dry-walkthrough verified = TRUE` as the absolute first line of any remediation file
 - Issue all Task calls in a single message to maximize parallelism

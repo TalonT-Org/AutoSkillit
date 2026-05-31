@@ -57,7 +57,7 @@ immediately.
 - Execute `depends_on` before `acquisition` for the same entry
 - Verify each download using the entry's `verification` criteria
 - Write the download report before emitting the verdict token
-- Use `model: "sonnet"` for all subagents
+- Spawn all subagents via `Agent(model="sonnet")`
 
 ## Workflow
 

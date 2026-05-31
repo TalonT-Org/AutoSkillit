@@ -22,7 +22,7 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "core/_version_snapshot.py",  # Version snapshot — routes codex_version by backend name
         "execution/headless/_headless_helpers.py",  # assert_headless_cmd claude -p flag check
         "server/_lifespan.py",  # Codex MCP registration gate
-        "server/_session_type.py",  # Codex interactive pre-reveal — env var dispatch at import time (no BackendCapabilities available)
+        "server/_session_type.py",  # Codex pre-reveal — env var dispatch, no capabilities
         "cli/session/_session_launch.py",  # Feature-gate backend-alignment fallback
     }
 )

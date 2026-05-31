@@ -20,7 +20,10 @@ class TestCheckMcpServerRegisteredCodexBranch:
                     "mcp_servers": {
                         "autoskillit": {
                             "command": "autoskillit",
-                            "env_vars": ["AUTOSKILLIT_HEADLESS"],
+                            "env_vars": [
+                                "AUTOSKILLIT_HEADLESS",
+                                "AUTOSKILLIT_MCP_CLIENT_BACKEND",
+                            ],
                         }
                     }
                 }

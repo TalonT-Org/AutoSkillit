@@ -290,7 +290,8 @@ async def test_plan_review_pre_revealed_for_non_notification_backend(monkeypatch
     templates = await mcp.list_resource_templates()
     uris = {t.uri_template for t in templates}
     assert "agent://plan-review/{name}" in uris, (
-        "plan-review resources should be pre-revealed at startup for codex non-notification backend"
+        "plan-review resources should be pre-revealed at startup"
+        " for codex non-notification backend"
     )
 
 

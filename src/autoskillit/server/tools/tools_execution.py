@@ -371,16 +371,6 @@ async def run_skill(
                     _resolve_provider_profile,
                 )
 
-                if not step_provider and step_name and tool_ctx.active_recipe_steps is not None:
-                    _recipe_step_pre = tool_ctx.active_recipe_steps.get(step_name)
-                    if _recipe_step_pre is not None and _recipe_step_pre.provider:
-                        step_provider = _recipe_step_pre.provider
-                        logger.warning(
-                            "step_provider_resolved_from_recipe",
-                            step=step_name,
-                            provider=step_provider,
-                        )
-
                 _profile, _env_dict = _resolve_provider_profile(
                     step_name or "",
                     tool_ctx.recipe_name or "",
@@ -483,6 +473,14 @@ async def run_skill(
                             "idle_output_timeout_resolved_from_recipe",
                             step=step_name,
                             value=idle_output_timeout,
+                        )
+
+                    if not step_provider and _recipe_step.provider:
+                        step_provider = _recipe_step.provider
+                        logger.warning(
+                            "step_provider_resolved_from_recipe",
+                            step=step_name,
+                            provider=step_provider,
                         )
 
             write_watch_dirs: list[Path] = []

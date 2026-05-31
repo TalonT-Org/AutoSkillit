@@ -428,7 +428,8 @@
         "callable": "autoskillit.smoke_utils.diagnose_merge_gate",
         "test_stdout": "${{ context.merge_test_stdout }}",
         "test_stderr": "${{ context.merge_test_stderr }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate",
+        "work_dir": "${{ context.work_dir }}"
       },
       "capture": {
         "merge_gate_diagnosis_path": "${{ result.diagnosis_path }}",
@@ -1112,7 +1113,8 @@
         "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr",
         "base_branch": "${{ inputs.base_branch }}",
         "local_review_rounds": "${{ inputs.local_review_rounds }}",
-        "current_iteration": "${{ context.review_loop_count }}"
+        "current_iteration": "${{ context.review_loop_count }}",
+        "work_dir": "${{ context.work_dir }}"
       },
       "capture": {
         "annotated_diff_path": "${{ result.annotated_diff_path }}",
@@ -1217,8 +1219,10 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.review_path_rebase",
-        "work_dir": "${{ context.work_dir }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_result": [
         {
@@ -1807,8 +1811,10 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.queue_ejected_fix",
-        "work_dir": "${{ context.work_dir }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_result": [
         {
@@ -2054,8 +2060,10 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.direct_merge_conflict_fix",
-        "work_dir": "${{ context.work_dir }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_result": [
         {
@@ -2163,8 +2171,10 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.immediate_merge_conflict_fix",
-        "work_dir": "${{ context.work_dir }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_result": [
         {
@@ -2298,8 +2308,10 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.review_path_rebase",
-        "work_dir": "${{ context.work_dir }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_result": [
         {

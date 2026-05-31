@@ -1043,8 +1043,13 @@ def test_run_python_steps_with_relative_output_dir_have_work_dir(recipe_yaml: Pa
         output_dir = step.with_args.get("output_dir", "")
         if not output_dir or not isinstance(output_dir, str):
             continue
-        # {{AUTOSKILLIT_TEMP}} expands to a relative string; treat it as relative
-        is_relative = not output_dir.startswith("/") or "{{AUTOSKILLIT_TEMP}}" in output_dir
+        # Only flag explicit template placeholders and literal relative paths.
+        # Context variable refs (${{ context.* }}) resolve at runtime and may be
+        # absolute — do not flag them.
+        is_context_ref = output_dir.startswith("${{")
+        is_relative = not is_context_ref and (
+            not output_dir.startswith("/") or "{{AUTOSKILLIT_TEMP}}" in output_dir
+        )
         if is_relative:
             assert "work_dir" in step.with_args, (
                 f"{recipe_yaml.name} step '{step_name}': run_python step has relative "

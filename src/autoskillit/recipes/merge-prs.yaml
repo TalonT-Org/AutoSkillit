@@ -1506,8 +1506,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.review_path_rebase
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_review_integration

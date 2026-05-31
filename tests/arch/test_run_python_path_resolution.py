@@ -25,6 +25,23 @@ _EXPLICITLY_EXCLUDED: dict[str, str] = {
         "constructed as absolute via ${{ context.work_dir }}/... in recipe YAML; "
         "is_absolute() guard in resolve_relative_path_args skips it safely"
     ),
+    "eval_run_dir": (
+        "always passed as an absolute path from context (eval_run_dir is set by "
+        "the recipe executor as an absolute directory); never a relative path at the "
+        "run_python call site"
+    ),
+    "worktree_path": (
+        "always absolute; git worktree paths are inherently absolute by design "
+        "and are never passed as relative paths to run_python steps"
+    ),
+    "work_dir": (
+        "enrich_diff_context receives work_dir as the anchor/base directory itself "
+        "for constructing temp_dir; resolving it against itself would be circular"
+    ),
+    "log_dir": (
+        "patch_pr_token_summary receives log_dir as an absolute path from the "
+        "caller context; never passed as a relative string to run_python steps"
+    ),
 }
 
 

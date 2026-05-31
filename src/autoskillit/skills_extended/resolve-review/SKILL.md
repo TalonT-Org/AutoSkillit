@@ -461,6 +461,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Capability-based dispatch | `test_no_backend_name_bypass.py` | `if backend.name == "..."` — must use capability fields |
 | step_name in run_cmd | `test_anti_pattern_guards.py` | Missing `step_name` in `run_cmd` `with:` blocks in recipe YAML |
 | No hardcoded temp paths | `test_python_no_hardcoded_temp.py` | Literal `{{AUTOSKILLIT_TEMP}}` path string in Python outside whitelist |
+| run_python path resolution | `test_run_python_path_resolution.py` | smoke_utils callable with relative-path fallback or path-like param not in `_PATH_LIKE_ARGS` |
 | SkillResult kill_reason | `test_skill_result_construction_guard.py` | `SkillResult()` without `kill_reason=` kwarg |
 | Never-raises contracts | `test_never_raises_contracts.py` | `mcp.tool()` handlers without top-level `try/except` and "Never raises" docstring |
 | ClaudeFlags isolation | `test_backend_flag_isolation.py` | `ClaudeFlags` referenced in `_session_launch.py` — backend flags belong in backend layer only |

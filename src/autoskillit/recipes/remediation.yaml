@@ -1107,8 +1107,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.review_path_rebase
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_review
@@ -1636,8 +1637,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.queue_ejected_fix
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_queue_fix
@@ -1839,8 +1841,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.direct_merge_conflict_fix
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_direct_fix
@@ -1943,8 +1946,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.immediate_merge_conflict_fix
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: re_push_immediate_fix
@@ -2069,8 +2073,9 @@ steps:
     tool: run_python
     with:
       callable: autoskillit.recipe._cmd_rpc.review_path_rebase
-      work_dir: ${{ context.work_dir }}
-      base_branch: ${{ inputs.base_branch }}
+      args:
+        work_dir: ${{ context.work_dir }}
+        base_branch: ${{ inputs.base_branch }}
     on_result:
     - when: ${{ result.status }} == clean
       route: check_ci_rebase_loop

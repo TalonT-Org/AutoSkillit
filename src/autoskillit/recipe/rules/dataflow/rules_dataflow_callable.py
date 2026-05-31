@@ -13,12 +13,13 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
 
 def _get_provided_args(with_args: dict) -> set[str]:
     _nested = with_args.get("args")
     nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()
-    top_level_args = set(with_args.keys()) - {"callable", "timeout", "args", "work_dir"}
+    top_level_args = set(with_args.keys()) - {"callable", "timeout", "args"}
     return nested_args | top_level_args
 
 
@@ -28,7 +29,7 @@ def _get_args_values(with_args: dict) -> dict[str, object]:
     if isinstance(_nested, dict):
         result.update(_nested)
     for key, val in with_args.items():
-        if key not in {"callable", "timeout", "args", "work_dir"}:
+        if key not in {"callable", "timeout", "args"}:
             result[key] = val
     return result
 
@@ -91,7 +92,12 @@ def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFindi
         if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
             continue
         valid_params = set(sig.parameters.keys())
-        provided_args = _get_provided_args(step.with_args)
+        tool_level_params = _TOOL_PARAMS.get(step.tool, frozenset()) - {
+            "callable",
+            "args",
+            "timeout",
+        }
+        provided_args = _get_provided_args(step.with_args) - tool_level_params
         invalid = provided_args - valid_params
         for arg_name in sorted(invalid):
             findings.append(

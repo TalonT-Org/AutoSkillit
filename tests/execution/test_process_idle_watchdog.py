@@ -638,4 +638,57 @@ async def test_watch_stdout_idle_marker_suppression_bounded(
     assert elapsed < 5.0
 
 
+@pytest.mark.anyio
+async def test_stdout_idle_NOT_fired_when_execution_marker_active(
+    tmp_path: anyio.Path,
+) -> None:
+    """IDLE_STALL NOT fired when stdout silent but run-skill-in-progress marker is fresh.
+
+    Failing before implementation: run-skill-in-progress-* marker is invisible to
+    dispatch-in-progress-* glob, so IDLE_STALL fires immediately.
+    After fix: marker matched by *-in-progress-* glob, stall suppressed.
+    """
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    marker_dir = tmp_path / "marker_dir"
+    await anyio.Path(marker_dir).mkdir()
+    marker_path = marker_dir / "run-skill-in-progress-caller-session-step1.marker"
+    await anyio.Path(marker_path).write_text("{}")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    async def touch_marker() -> None:
+        for _ in range(100):
+            await anyio.sleep(0.02)
+            try:
+                await anyio.Path(marker_path).touch()
+            except OSError:
+                break
+
+    with anyio.move_on_after(0.5):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(touch_marker)
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.05,  # idle_output_timeout — short to trigger quickly if not suppressed
+                    acc,
+                    trigger,
+                    0.02,  # _poll_interval
+                    marker_dir=marker_dir,
+                    session_id="caller-session",
+                    max_suppression_seconds=10.0,
+                )
+            )
+            await trigger.wait()
+
+    assert not acc.idle_stall, (
+        "IDLE_STALL fired even though run-skill execution marker was active. "
+        "The *-in-progress-* glob fix is needed."
+    )
+
+
 # test write

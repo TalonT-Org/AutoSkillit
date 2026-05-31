@@ -58,9 +58,7 @@ class RetryReason(StrEnum):
     THINKING_STALL = "thinking_stall"  # final turn: thinking blocks only, no text or tool output
     IDLE_STALL = "idle_stall"  # stdout idle watchdog kill — session may have partial progress
     RATE_LIMITED = "rate_limited"  # transient HTTP 429 or rate-limit pattern — wait-and-retry
-    CANCELLED = (
-        "cancelled"  # transport-induced asyncio.CancelledError — retry if orchestrator alive
-    )
+    CANCELLED = "cancelled"
 
 
 class InfraExitCategory(StrEnum):

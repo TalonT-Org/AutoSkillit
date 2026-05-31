@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
+
+import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext

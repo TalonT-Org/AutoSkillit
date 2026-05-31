@@ -84,7 +84,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 
 This is the analysis phase. It runs entirely before any guidance is generated.
 
-Group findings; launch one parallel Task subagent per finding (model: "sonnet").
+Group findings; launch one parallel subagent per finding via `Agent(model="sonnet")`.
 Each subagent receives: finding metadata + full plan text.
 Each subagent classifies the finding as:
 
@@ -123,7 +123,7 @@ A finding is **goalposts-moving** when:
 - The pattern is: the plan improved to satisfy the prior concern, but the reviewer
   raised the bar on the same theme
 
-Detection heuristic — launch one subagent (model: "sonnet") per ADDRESSABLE finding.
+Detection heuristic — launch one subagent via `Agent(model="sonnet")` per ADDRESSABLE finding.
 Each subagent receives: current finding + all prior guidance entries. It returns:
 
 ```json

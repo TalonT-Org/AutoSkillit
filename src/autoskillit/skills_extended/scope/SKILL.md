@@ -53,7 +53,7 @@ text is supplementary context.
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Write output to `{{AUTOSKILLIT_TEMP}}/scope/` directory
 - Clearly separate facts (what the code does) from hypotheses (what might be true)
 - Include a known/unknown matrix in the output
@@ -73,7 +73,7 @@ text is supplementary context.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch subagents via the Task tool (model: "sonnet") to explore in parallel.
+Launch subagents via `Agent(model="sonnet")` to explore in parallel.
 You **must launch at least 5 subagents**. Select from the suggested menu below,
 define entirely custom subagents, or use any combination. The menu is a guide,
 not a mandate — you are free to skip entries that are not relevant and substitute

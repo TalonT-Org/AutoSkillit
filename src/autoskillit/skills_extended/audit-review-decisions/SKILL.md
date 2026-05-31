@@ -183,7 +183,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 1. Group candidates into batches of ~10. Launch **parallel Sonnet subagents**
-   (`model: "sonnet"`) per batch.
+   via `Agent(model="sonnet")` per batch.
 
 2. Each Sonnet agent receives its candidate batch and, for each candidate:
    - If `path` is set: reads the file and surrounding context.

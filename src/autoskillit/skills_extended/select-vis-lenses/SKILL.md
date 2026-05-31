@@ -43,7 +43,7 @@ consumption. Does NOT invoke the vis-lens skills — that is handled by the
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Write a vis-lens context file for each selected lens before emitting tokens
 - Issue all Task calls in a single message to maximize parallelism
 

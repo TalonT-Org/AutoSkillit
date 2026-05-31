@@ -41,7 +41,7 @@ outputs, and synthesizes a complete visualization plan.
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Write a vis-lens context file for each selected lens before invoking it
 - Log every conflict resolution decision in the Conflict Resolution Log table
 - Emit `visualization_plan_path` and `report_plan_path` tokens as your final output

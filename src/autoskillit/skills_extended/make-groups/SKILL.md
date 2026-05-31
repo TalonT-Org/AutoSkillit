@@ -64,7 +64,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 
 **ALWAYS:**
 - Use subagents to verify codebase structure before finalizing groups
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Include every requirement from the source document in exactly one group
 - Assign each group a sequential suffix: groupA, groupB, ... groupZ
 - State dependencies between groups explicitly

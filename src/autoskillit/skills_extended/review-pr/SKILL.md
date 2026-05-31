@@ -55,7 +55,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=approved)
 - Tag the authenticated GitHub user (`gh api user -q .login`) in escalation comments (`needs_human` verdict) — omit the mention silently if username derivation fails
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Deduplicate findings by (file, line) pairs before posting
 - Issue all Task calls in a single message to maximize parallelism
 
@@ -309,7 +309,7 @@ in parallel. Do NOT iterate through dimensions across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Each subagent (model: sonnet) receives only the PR diff content (not the full codebase) and
+Each subagent via `Agent(model="sonnet")` receives only the PR diff content (not the full codebase) and
 returns findings in JSON format:
 
 ```json

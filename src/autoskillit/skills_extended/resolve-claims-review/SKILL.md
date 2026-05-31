@@ -216,7 +216,7 @@ codebase and git history. This analysis phase runs entirely before code changes 
 (`citations`, `methodology`, `comparisons`, `unknown`).
 This is dimension-based grouping, NOT file-path grouping.
 
-Launch one parallel subagent (Task tool, `model: "sonnet"`) per non-empty dimension
+Launch one parallel subagent via `Agent(model="sonnet")` per non-empty dimension
 group. Each subagent receives:
 - Its list of findings (path, line, body, diff_hunk, dimension)
 - Instructions to read the actual content at each flagged line (±30 lines context)

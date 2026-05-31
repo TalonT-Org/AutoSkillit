@@ -102,7 +102,7 @@ If no candidates remain after filtering, emit the result block immediately and e
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Process up to 8 candidates in parallel using subagents (`model: "sonnet"`).
+Process up to 8 candidates in parallel using subagents via `Agent(model="sonnet")`.
 For each candidate:
 
 #### 5a. Fetch Full Content
@@ -242,6 +242,6 @@ After processing all candidates, emit to stdout:
 **ALWAYS:**
 - Respect `--dry-run`: never call `gh issue edit` when this flag is set
 - Verify codebase claims before incorporating them into requirements
-- Use `model: "sonnet"` for per-issue analysis subagents
+- Spawn all subagents via `Agent(model="sonnet")`
 - Emit the `---enrich-issues-result---` block as the final output
 - Issue all Task calls in a single message to maximize parallelism

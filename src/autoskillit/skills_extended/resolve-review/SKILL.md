@@ -368,8 +368,8 @@ source files if a comment explicitly references code outside the hunk or the
 `diff_hunk` is missing. The classification criteria and output format are
 identical to the sub-agent path.
 
-This produces 3–6 groups on a typical PR. Launch one parallel sub-agent per group using
-the Task tool (`model: "sonnet"`).
+This produces 3–6 groups on a typical PR. Launch one parallel sub-agent per group via
+`Agent(model="sonnet")`.
 
 **Context resolution hierarchy** (applied per finding):
 1. **`diff_context_map` code_region** — richest context (±50 annotated diff lines); used when review-pr ran in the same pipeline and wrote the handoff file.

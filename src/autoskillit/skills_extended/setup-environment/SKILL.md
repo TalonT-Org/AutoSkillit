@@ -42,12 +42,14 @@ PASS and WARN proceed to `decompose_phases`; FAIL escalates immediately.
 - Write files outside `{{AUTOSKILLIT_TEMP}}/setup-environment/`
 - Skip the Docker availability probe before attempting a build
 - Run subagents in the background (`run_in_background: true` is prohibited)
+- Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
 - Parse `environment.type` from the experiment plan first
 - Try Docker before falling back to micromamba
 - Write the environment setup report before emitting the verdict token
-- Use `model: "sonnet"` for all subagents
+- Spawn all subagents via `Agent(model="sonnet")`
+- Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
 

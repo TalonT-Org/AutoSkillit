@@ -59,7 +59,7 @@ tokens after the skill name for the first path-like token (starts with `/`,
 **ALWAYS:**
 - Create a new worktree from the current branch
 - Use subagents to deeply understand the codebase context BEFORE implementing
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Follow the implementation phases from the experiment plan
 - Put all experiment artifacts in one self-contained `research/` subfolder
 - Commit per phase with descriptive messages
@@ -126,7 +126,7 @@ branch_name = ${BRANCH_NAME}
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Before implementing anything, launch subagents (model: "sonnet") to understand
+Before implementing anything, launch subagents via `Agent(model="sonnet")` to understand
 the codebase context needed for the experiment. The following are **minimum
 required** — launch as many additional subagents as needed.
 

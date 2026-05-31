@@ -40,7 +40,7 @@ Analyze open GitHub issues, classify each into a recipe route, group them into p
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Issue all Task calls in a single message to maximize parallelism
 - Pause for human input on ambiguous classifications
 - Write the triage report and manifest to `{{AUTOSKILLIT_TEMP}}/triage-issues/` (relative to the current working directory)
@@ -89,7 +89,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 
 Before codebase analysis, run `issue-splitter` for every open issue to detect mixed-concern issues and expand the working set.
 
-Launch up to 8 subagents in parallel (`model: "sonnet"`), one per issue. Each subagent invokes:
+Launch up to 8 subagents in parallel via `Agent(model="sonnet")`, one per issue. Each subagent invokes:
 
 ```
 /autoskillit:issue-splitter --issue {N} --repo {owner/repo} [--no-label if --no-label was passed] [--dry-run if --dry-run was passed]
@@ -133,7 +133,7 @@ Launch parallel subagents (up to 8) to analyze each issue. Each subagent receive
 - **File paths** — explicitly mentioned files or files inferred from the description
 - **Dependencies** — explicit issue references (`#N`) or inferred dependencies from content overlap
 
-Use `model: "sonnet"` for all subagents.
+Spawn all subagents via `Agent(model="sonnet")`.
 
 ### Step 3: Recipe Classification
 

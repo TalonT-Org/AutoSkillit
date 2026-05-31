@@ -60,7 +60,7 @@ Read `refined_wps.json` from $1 and `refined_plan.json` from $2. Extract:
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Spawn 1-2 subagents (model: "sonnet"):
+Spawn 1-2 subagents via `Agent(model="sonnet")`:
 
 **Subagent A — Phase alignment:**
 Provide the task description and all phase goals/scopes. Ask: "For each phase, does its

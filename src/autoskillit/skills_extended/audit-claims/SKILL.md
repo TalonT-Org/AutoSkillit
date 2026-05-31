@@ -56,7 +56,7 @@ comments and emits a verdict for recipe routing.
 - Output `verdict=` on the final line
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
 - Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation)
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Deduplicate findings by (file, line) pairs before posting
 - Issue all Task calls in a single message to maximize parallelism
 
@@ -118,7 +118,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 Divide the diff by top-level markdown section: `## Executive Summary`, `## Results`,
 `## Methodology`, `## Discussion`, `## Limitations`, and any other top-level `##` section.
 
-Launch one Task tool subagent (`model: "sonnet"`) per section containing `+` diff lines.
+Launch one subagent via `Agent(model="sonnet")` per section containing `+` diff lines.
 Each subagent returns a JSON array of extracted claims:
 
 ```json
@@ -165,7 +165,7 @@ Aggregate all extracted claims from all subagents. Save to
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Group extracted claims by `claim_type`. Launch one Task tool subagent (`model: "sonnet"`)
+Group extracted claims by `claim_type`. Launch one subagent via `Agent(model="sonnet")`
 per non-empty group. Each subagent receives the claim list and the full PR diff, and
 returns findings:
 

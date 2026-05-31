@@ -137,7 +137,7 @@ Store as `domain_pr_numbers`.
 
 #### Step 1.5: Parallel Domain Analysis Subagents
 
-For each domain `D` in `domain_diffs`, spawn a Task subagent (model: sonnet) in a
+For each domain `D` in `domain_diffs`, spawn a subagent via `Agent(model="sonnet")` in a
 single parallel message.
 
 Each subagent receives:
@@ -164,7 +164,7 @@ Each subagent returns ONLY a JSON object:
 
 #### Step 1.6: Cross-Domain Dependency Analysis
 
-Spawn one Task subagent (model: sonnet) with ALL domain summaries from Step 1.5.
+Spawn one subagent via `Agent(model="sonnet")` with ALL domain summaries from Step 1.5.
 
 Analyze cross-domain dependencies:
 - Do recipe schema changes require corresponding server tool updates?
@@ -183,7 +183,7 @@ Return JSON:
 
 ### Phase 2: Quality Assessment (parallel subagents)
 
-Spawn three parallel Task subagents (model: sonnet).
+Spawn three parallel subagents via `Agent(model="sonnet")`.
 
 #### Subagent 2A: Test Coverage Delta
 
@@ -265,7 +265,7 @@ Return JSON:
 
 ### Phase 3: Review Summary Synthesis
 
-Spawn one Task subagent (model: sonnet) with ALL results from Phases 1–2.
+Spawn one subagent via `Agent(model="sonnet")` with ALL results from Phases 1–2.
 
 The subagent synthesizes a reviewer-focused verdict based on:
 - Domain risk scores from Phase 1

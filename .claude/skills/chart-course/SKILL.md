@@ -59,7 +59,7 @@ incorporate the issue content as additional strategic context.
 - Proceed past a checkpoint without user response
 
 **ALWAYS:**
-- Use `model: "sonnet"` for all Task tool subagent calls
+- Spawn all subagents via `Agent(model="sonnet")`
 - Initialize code-index via `set_project_path` before exploration (Phase 1)
 - Ask the user before moving to the next phase
 - Generate at least one diagram per direction explored
@@ -115,7 +115,7 @@ If `compass_path` was provided:
 
 #### Step 1.3: Launch Parallel Exploration Subagents
 
-Launch ALL concurrently in a single message. Every subagent uses `model: "sonnet"`.
+Launch ALL concurrently in a single message. Every subagent is spawned via `Agent(model="sonnet")`.
 
 **Subagent A: Architecture & Extension Points**
 Explore protocol definitions, plugin points, layering (L0/L1/L2/L3),
@@ -202,14 +202,14 @@ From the user's description, extract:
 
 For each direction, launch targeted analysis:
 
-**Subagent: Codebase Fit Analysis** (`model: "sonnet"`)
+**Subagent: Codebase Fit Analysis** via `Agent(model="sonnet")`
 - Where in the architecture would this connect?
 - What existing protocols, abstractions, or extension points support it?
 - What would need to change to accommodate it?
 - What existing capabilities does it build on?
 - What would it conflict with or make harder?
 
-**Subagent: External Research** (`model: "sonnet"`, web search)
+**Subagent: External Research** (via `Agent(model="sonnet")`, web search)
 - How do other projects in this space handle this?
 - Are there standards, libraries, or patterns to adopt?
 - What pitfalls have others encountered?

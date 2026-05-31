@@ -82,7 +82,7 @@ In addition to the arguments above, this skill reads from the worktree:
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Write the report to `research/` in the worktree root
 - Include experiment scripts inline as fenced code blocks for reproducibility
 - Commit the report to the worktree before returning

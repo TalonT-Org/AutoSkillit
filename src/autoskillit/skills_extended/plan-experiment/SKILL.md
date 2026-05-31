@@ -68,7 +68,7 @@ incorporate the feedback before writing the plan.
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
 **ALWAYS:**
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Write output to `{{AUTOSKILLIT_TEMP}}/plan-experiment/` directory
 - State hypotheses as falsifiable claims with measurable outcomes
 - Define metrics before describing the method
@@ -112,7 +112,7 @@ Detect and read inputs:
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch subagents (model: "sonnet") to assess feasibility. The following are
+Launch subagents via `Agent(model="sonnet")` to assess feasibility. The following are
 **minimum required** — launch as many additional subagents as needed to fill
 information gaps and produce the best possible experiment plan.
 

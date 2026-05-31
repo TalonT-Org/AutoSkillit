@@ -314,7 +314,7 @@ Before writing the final plan, verify:
   plan_parts = /absolute/cwd/{{AUTOSKILLIT_TEMP}}/make-plan/{filename}.md
   ```
   This token is MANDATORY — the pipeline cannot capture the output without it.
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Recommend the single best technical solution
 - Ground decisions in design quality and correctness
 - Include verification steps

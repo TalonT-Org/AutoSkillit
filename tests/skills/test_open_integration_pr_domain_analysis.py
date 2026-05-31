@@ -42,8 +42,7 @@ def test_skill_defines_step_4g_parallel_subagents(skill_text: str) -> None:
 
 
 def test_skill_spawns_parallel_subagents_for_domains(skill_text: str) -> None:
-    assert "Task tool" in skill_text
-    assert "model: sonnet" in skill_text
+    assert 'Agent(model="sonnet")' in skill_text
 
 
 def test_skill_has_at_least_seven_domain_names(skill_text: str) -> None:

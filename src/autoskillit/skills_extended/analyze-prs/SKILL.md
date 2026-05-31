@@ -35,7 +35,7 @@ complexity, and produce machine-readable output for the `merge-prs` recipe.
 
 **ALWAYS:**
 - Use subagents to fetch PR data in parallel
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Abort clearly if `gh` CLI is not authenticated
 - Include every open PR targeting base_branch in the output — no PR is silently dropped (blocked PRs appear in ci_blocked_prs / review_blocked_prs arrays, not in the ordered prs list)
 - **Default to parallel batch processing**: When multiple PRs are present, ALWAYS process

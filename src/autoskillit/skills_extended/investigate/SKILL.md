@@ -36,7 +36,7 @@ Deep analysis mode is activated when ANY of the following conditions are met:
 
 ### Model
 
-When deep analysis mode is active, all subagents spawned via the Task tool always use `model: "sonnet"`. The main skill session model is controlled by the recipe or user — typically `opus[1m]` for the main session in deep mode.
+When deep analysis mode is active, all subagents are spawned via `Agent(model="sonnet")`. The main skill session model is controlled by the recipe or user — typically `opus[1m]` for the main session in deep mode.
 
 ### When NOT Activated
 
@@ -82,7 +82,7 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Use subagents for parallel exploration
 - Issue all Task calls in a single message to maximize parallelism
 - Limit total subagent spawns to 9 across all batches (standard and deep mode). If the investigation requires more exploration vectors, consolidate related questions into fewer, broader subagent prompts rather than spawning additional agents.
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Write findings as a markdown report with unique name to `{{AUTOSKILLIT_TEMP}}/investigate/` directory (relative to the current working directory)
 - After writing the investigation report, emit the **absolute path** as a structured output
   token as your final output. Resolve the relative `{{AUTOSKILLIT_TEMP}}/investigate/...`
@@ -222,7 +222,7 @@ Cross-reference: if a commit message references the same error type, component n
 
 #### Part C: Conditional Analysis (only if history found)
 
-If Part A or Part B found matches, spawn a single subagent (using `model: "sonnet"` via the Task tool) to:
+If Part A or Part B found matches, spawn a single subagent via `Agent(model="sonnet")` to:
 
 - Read the prior fix diffs via `git show {commit_hash}`
 - Read any prior investigation report files discovered during log scanning
@@ -337,7 +337,7 @@ Parse the investigation target (same as Step 1). Then propose an adaptive batch 
 
 ### Step D2: Batch 1 — Broad Parallel Exploration
 
-Launch a minimum of 5 parallel subagents (model: "sonnet") covering:
+Launch a minimum of 5 parallel subagents via `Agent(model="sonnet")` covering:
 
 - **Code path tracing**: Trace execution paths through the primary affected components
 - **Log and history analysis**: Scan session logs and git history for prior occurrences
@@ -366,7 +366,7 @@ For each subsequent batch (Batch 2, Batch 3, ...):
 
 Fires when ANY finding across any batch is marked NEEDS-EVIDENCE.
 
-Spawn one adversarial subagent (model: "sonnet") whose role is to disconfirm the primary hypothesis:
+Spawn one adversarial subagent via `Agent(model="sonnet")` whose role is to disconfirm the primary hypothesis:
 
 - Provide the primary hypothesis and all supporting evidence collected so far
 - Task: find counterevidence — code paths, behaviors, or data that contradict the hypothesis
@@ -380,7 +380,7 @@ Spawn one adversarial subagent (model: "sonnet") whose role is to disconfirm the
 
 **Issue ALL blast radius subagent calls in a single message — one per candidate — so they execute in parallel. Do not iterate across multiple turns.**
 
-Spawn solution-space subagents to enumerate candidate fixes. For each candidate, spawn one blast radius subagent (model: "sonnet") to assess:
+Spawn solution-space subagents to enumerate candidate fixes. For each candidate, spawn one blast radius subagent via `Agent(model="sonnet")` to assess:
 
 - Which components would be affected by this fix
 - What tests would need to be added or modified
@@ -388,7 +388,7 @@ Spawn solution-space subagents to enumerate candidate fixes. For each candidate,
 
 After blast radius analysis, converge to a single recommendation — the highest-confidence, lowest-blast-radius candidate with direct code evidence. Kill alternative options and document why each was rejected.
 
-**Adversarial Breakage Analysis:** After converging to a single recommendation, assess whether it proposes removal, replacement, or any action whose execution would eliminate, reduce, or supersede the function of an existing mechanism. If so, spawn one adversarial breakage subagent (model: "sonnet") per such recommendation:
+**Adversarial Breakage Analysis:** After converging to a single recommendation, assess whether it proposes removal, replacement, or any action whose execution would eliminate, reduce, or supersede the function of an existing mechanism. If so, spawn one adversarial breakage subagent via `Agent(model="sonnet")` per such recommendation:
 
 1. Receive the recommendation and the mechanism it targets, along with the Design Intent findings for that mechanism
 2. Trace the mechanism's full dependency chain through code: callers, importers, flag consumers
@@ -401,7 +401,7 @@ If the recommendation does not propose removal or change of an existing mechanis
 
 ### Step D6: Post-Report Validation
 
-After writing the report (Step 4), spawn 2–3 independent validator subagents (model: "sonnet") with distinct roles:
+After writing the report (Step 4), spawn 2–3 independent validator subagents via `Agent(model="sonnet")` with distinct roles:
 
 - **Validator 1 — Factual accuracy**: Cross-check every claim in the report against actual code/evidence. Flag any factual inaccuracy.
 - **Validator 2 — Recommendation soundness**: Assess whether the single recommendation is implementable, safe, and correctly scoped.

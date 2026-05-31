@@ -53,7 +53,7 @@ signal downstream processing.
 - Run subagents in the background (`run_in_background: true` is prohibited)
 
 **ALWAYS:**
-- Use `model: "sonnet"` when spawning all subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Issue all Task calls in a single message to maximize parallelism
 - Write `validated: true` as the **first line** of the validated report file
 - Respect interactive vs headless mode for the approval step (Step 9)

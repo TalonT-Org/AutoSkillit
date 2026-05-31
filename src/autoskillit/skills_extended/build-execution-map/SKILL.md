@@ -51,7 +51,7 @@ Space-separated issue numbers (required, minimum 2), plus optional flags:
 
 **ALWAYS:**
 - Use parallel subagents (up to 8) for issue fetching in Step 1
-- Use `model: "sonnet"` for all subagents
+- Spawn all subagents via `Agent(model="sonnet")`
 - Write both JSON and markdown report outputs to `{{AUTOSKILLIT_TEMP}}/build-execution-map/`
 - Emit `execution_map` and `execution_map_report` tokens with absolute paths (use `$(pwd)` to resolve the working directory prefix)
 - Emit structured output tokens as the final lines of text output (plain text, no markdown decorators)

@@ -57,7 +57,7 @@ issues upfront, load recipe, execute session, collect result, report.
   transitions are fully automated.
 - Emit `---process-issues-result---` result block on completion (success or failure)
 - Write the summary report to `{{AUTOSKILLIT_TEMP}}/process-issues/` (relative to the current working directory)
-- Use `model: "sonnet"` when spawning subagents via the Task tool
+- Spawn all subagents via `Agent(model="sonnet")`
 - Issue all Task calls in a single message to maximize parallelism
 - Use `gh` CLI for all GitHub operations (not raw API calls)
 - Include `--force` in all `gh label create` calls

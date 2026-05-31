@@ -506,6 +506,46 @@ def test_implement_skills_have_anti_blame_prohibition(skill_dir: Path) -> None:
     )
 
 
+_READ_BEFORE_EDITING_RE = re.compile(r"Read before editing", re.IGNORECASE)
+_SUBAGENT_CAVEAT_RE = re.compile(
+    r"(?:subagent|child session).*(?:do not|don't|NOT).*(?:satisfy|count)",
+    re.IGNORECASE,
+)
+
+# Skills that spawn subagents for analysis/triage but NEVER apply file edits.
+# The read-before-editing guard is irrelevant for read-only spawning skills.
+_NON_EDITING_SPAWNING_SKILL_DIRS: frozenset[str] = frozenset(
+    {
+        "resolve-design-review",  # Spawns subagents for triage but NEVER blocks fixes
+    }
+)
+
+
+@pytest.mark.parametrize(
+    "skill_dir",
+    [d for d in _all_skill_dirs() if d.name.startswith(("implement-", "retry-", "resolve-"))],
+    ids=lambda d: d.name,
+)
+def test_implement_skills_have_read_before_editing_with_subagent_caveat(skill_dir: Path) -> None:
+    """All implement-*, retry-*, and resolve-* skills that spawn subagents must have
+    the Read-before-editing instruction with the subagent isolation caveat."""
+    if skill_dir.name in _NON_EDITING_SPAWNING_SKILL_DIRS:
+        return  # Read-only spawning skill \u2014 guard not applicable.
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        return
+    content = skill_md.read_text(encoding="utf-8")
+    if not _SPAWN_INDICATOR_RE.search(content):
+        return  # Skill does not spawn subagents \u2014 rule does not apply.
+    assert _READ_BEFORE_EDITING_RE.search(content), (
+        f"{skill_dir.name}/SKILL.md spawns subagents but lacks 'Read before editing' instruction."
+    )
+    assert _SUBAGENT_CAVEAT_RE.search(content), (
+        f"{skill_dir.name}/SKILL.md has 'Read before editing' but lacks the subagent isolation "
+        "caveat. Add: 'Reads performed by subagents do NOT satisfy this requirement.'"
+    )
+
+
 @pytest.mark.parametrize("skill_dir", _all_skill_dirs(), ids=lambda p: p.name)
 def test_reviews_post_requires_input_flag(skill_dir: Path) -> None:
     """Any SKILL.md section that POSTs to the GitHub Reviews endpoint must use --input -.

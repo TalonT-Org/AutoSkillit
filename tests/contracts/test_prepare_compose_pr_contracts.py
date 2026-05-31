@@ -101,3 +101,24 @@ def test_prepare_pr_skill_command_includes_issue_number() -> None:
         f" ${{{{ context.issue_number }}}} as a positional arg, "
         f"not rely on with: metadata. Got: {skill_command!r}"
     )
+
+
+def test_prepare_pr_plan_summary_prohibits_nested_heading():
+    """Plan Summary placeholder must prohibit including the ## Summary heading.
+
+    Checks that a single sentence contains both the prohibition verb and the
+    heading reference — a proximity anchor that prevents false passes from
+    unrelated occurrences scattered across the file.
+    """
+    import regex as re
+
+    text = PREPARE_PR.read_text()
+    pattern = re.compile(
+        r"(?:NOT include|NEVER.*include).*## Summary.*heading"
+        r"|heading.*## Summary.*(?:NOT include|NEVER)",
+        re.IGNORECASE,
+    )
+    assert pattern.search(text), (
+        "prepare-pr/SKILL.md must contain a proximity-anchored prohibition: "
+        "'do NOT include the ## Summary heading' or 'NEVER include the ## Summary heading'"
+    )

@@ -59,7 +59,7 @@ branch already checked out.
 - Run `{test_command}` (from config, default: `task test-check`) after applying all fixes to catch regressions
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary: findings fetched, fixes applied, fixes skipped (with reasons)
-- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error.
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error. **Note:** Reads performed by subagents (Task/Agent) do NOT satisfy this requirement — they run in a child session whose reads are invisible to the parent. If a file was only read inside a subagent, you must Read it again in this main session before calling Edit.
 - **CWD awareness**: Before running `python3` or other interpreters, verify your current working directory is the worktree root (not the orchestrator's project root). Use absolute paths for imports or `cd` to the worktree first. A wrong-CWD import error wastes a full API turn.
 - Issue all Task calls in a single message to maximize parallelism
 

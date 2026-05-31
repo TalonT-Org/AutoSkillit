@@ -184,7 +184,7 @@ Record absolute paths in `lens_context_paths` list (comma-separated).
 
 ### Step 7: Read Plan Summaries
 
-Read `## Summary` from each plan file. Store plan summaries for the prep file.
+Read the **body text** under `## Summary` from each plan file — do NOT include the `## Summary` heading itself. Store only the prose content for the prep file.
 
 ### Step 8: Write PR Prep File
 
@@ -208,8 +208,10 @@ Write PR prep file to `{{AUTOSKILLIT_TEMP}}/prepare-pr/pr_prep_{ts}.md`:
 
 ## Plan Summary
 
-{for single plan: ## Summary section content}
-{for multiple plans: individual summaries with group headings}
+{for single plan: paste the body text from the plan's ## Summary section — do NOT include the ## Summary heading itself, only the prose underneath it}
+{for multiple plans: individual summaries with group headings — each summary is body text only, never the ## Summary heading}
+
+**NEVER** include the `## Summary` heading in this section. The content here must be pure prose that flows directly under `## Plan Summary` without any nested `##` headings.
 
 ## Requirements
 

@@ -8,10 +8,6 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-@pytest.mark.xfail(
-    reason="#3383: CodexBackend.validate_skill_content and .list_plugins not yet implemented",
-    strict=True,
-)
 def test_no_not_implemented_error_in_registered_backends() -> None:
     """No method on any BACKEND_REGISTRY class should raise NotImplementedError.
 

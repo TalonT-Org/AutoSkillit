@@ -179,7 +179,7 @@ The Foundation Auditor performs step-by-step control-flow analysis: enumerates f
 **SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
-- `summary`: `"Continue plan review subagent to finalize findings"`
+- `summary`: `"Continue rectify subagent to finalize findings"`
 
 The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 
@@ -198,7 +198,7 @@ The Interface Mapper traces variable SET/READ points with full hop-by-hop proven
 **SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
-- `summary`: `"Continue plan review subagent to finalize findings"`
+- `summary`: `"Continue rectify subagent to finalize findings"`
 
 The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 
@@ -217,7 +217,7 @@ The Registry Tracer uses three-layer tracing (LSP primary, tree-sitter structura
 **SendMessage continuation protocol:** If the subagent returns with a continuation hint (truncated at maxTurns), use `SendMessage` to resume it:
 - `to`: the `agentId` from the continuation hint
 - `message`: `"Finalize your analysis and provide your complete findings report."`
-- `summary`: `"Continue plan review subagent to finalize findings"`
+- `summary`: `"Continue rectify subagent to finalize findings"`
 
 The `summary` field is **required** when `message` is a string — omitting it causes `InputValidationError`. If the resumed agent still returns truncated, proceed without its findings rather than retrying further.
 

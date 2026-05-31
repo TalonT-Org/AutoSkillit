@@ -146,7 +146,7 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
 
 def _resolve_step_name_from_recipe(
     skill_command: str,
-    active_recipe_steps: dict,
+    active_recipe_steps: dict[str, object],
 ) -> tuple[str, bool]:
     """Resolve step_name from active_recipe_steps by matching skill_command prefix.
 
@@ -160,8 +160,11 @@ def _resolve_step_name_from_recipe(
         return ("", False)
     matches: list[str] = []
     for step_key, step_obj in active_recipe_steps.items():
-        step_sc = step_obj.with_args.get("skill_command", "")
-        if step_sc.split()[0] == cmd_prefix:
+        with_args = getattr(step_obj, "with_args", None)
+        if not isinstance(with_args, dict):
+            continue
+        step_sc = with_args.get("skill_command", "")
+        if step_sc and step_sc.split()[0] == cmd_prefix:
             matches.append(step_key)
     if len(matches) == 1:
         return (matches[0], False)

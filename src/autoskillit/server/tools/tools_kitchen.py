@@ -791,6 +791,7 @@ def _apply_unlock_keys(current_pipeline_li: dict[str, str], unlock_keys: list[st
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@_cancellation_shield()
 @track_response_size("lock_ingredients")
 async def lock_ingredients(
     locked: dict[str, str] | None = None,

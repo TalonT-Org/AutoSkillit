@@ -1004,6 +1004,19 @@ class TestCodexEnsurePreLaunchConfigValidation:
         CodexBackend().ensure_pre_launch()
         assert call_order == ["register", "doctor"]
 
+    def test_ensure_pre_launch_returns_empty_on_nonzero_returncode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 1, stdout="error output")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        assert CodexBackend().ensure_pre_launch() == []
+
     def test_ensure_pre_launch_returns_empty_on_malformed_json(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -717,10 +717,11 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "hooks": frozenset(
         {
             "hooks",
-            "infra",
-            "cli",
-            "fleet",
-            "server",
+            "cli/test_cli_hooks.py",
+            "cli/test_install.py",
+            "server/test_kitchen_lifecycle.py",
+            "server/test_tools_kitchen_gate.py",
+            "server/test_tools_kitchen_gate_hook_config.py",
             "execution/test_quota_sleep.py",
         }
     ),

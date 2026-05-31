@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re as _re
 from pathlib import Path
 from typing import Any
 
@@ -40,8 +41,18 @@ def _format_toml_value(v: Any) -> str:
     raise TypeError(msg)
 
 
+_BARE_KEY_RE = _re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _quote_key(k: str) -> str:
+    if _BARE_KEY_RE.match(k):
+        return k
+    escaped = k.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _format_inline_table(d: dict[str, Any]) -> str:
-    pairs = [f"{k} = {_format_toml_value(v)}" for k, v in d.items()]
+    pairs = [f"{_quote_key(k)} = {_format_toml_value(v)}" for k, v in d.items()]
     return "{" + ", ".join(pairs) + "}"
 
 
@@ -62,22 +73,22 @@ def _classify_list(key: str, lst: list) -> bool:
 
 def _emit_aot_entry(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
     """Emit a single [[path]] array-of-tables entry."""
-    lines.append(f"\n[[{'.'.join(path)}]]")
+    lines.append(f"\n[[{'.'.join(_quote_key(p) for p in path)}]]")
     nested_aot: list[tuple[str, list[dict]]] = []
     for k, v in d.items():
         if isinstance(v, dict):
-            lines.append(f"{k} = {_format_inline_table(v)}")
+            lines.append(f"{_quote_key(k)} = {_format_inline_table(v)}")
         elif isinstance(v, list) and _classify_list(k, v):
             nested_aot.append((k, v))
         else:
-            lines.append(f"{k} = {_format_toml_value(v)}")
+            lines.append(f"{_quote_key(k)} = {_format_toml_value(v)}")
     for k, entries in nested_aot:
         for entry in entries:
             _emit_aot_entry(entry, [*path, k], lines)
 
 
 def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> None:
-    header = f"[{'.'.join(path)}]"
+    header = f"[{'.'.join(_quote_key(p) for p in path)}]"
 
     scalars: list[tuple[str, Any]] = []
     tables: list[tuple[str, dict]] = []
@@ -107,9 +118,9 @@ def _emit_toml_table(d: dict[str, Any], path: list[str], lines: list[str]) -> No
     if scalars or inline_tables:
         lines.append(f"\n{header}")
         for k, v in scalars:
-            lines.append(f"{k} = {_format_toml_value(v)}")
+            lines.append(f"{_quote_key(k)} = {_format_toml_value(v)}")
         for k, v in inline_tables:
-            lines.append(f"{k} = {_format_inline_table(v)}")
+            lines.append(f"{_quote_key(k)} = {_format_inline_table(v)}")
 
     for k, v in recurse_tables:
         _emit_toml_table(v, [*path, k], lines)
@@ -126,7 +137,7 @@ def _serialize_toml(data: dict[str, Any]) -> str:
             continue
         if isinstance(v, list) and _classify_list(k, v):
             continue
-        lines.append(f"{k} = {_format_toml_value(v)}")
+        lines.append(f"{_quote_key(k)} = {_format_toml_value(v)}")
     for k, v in data.items():
         if isinstance(v, dict):
             _emit_toml_table(v, [k], lines)

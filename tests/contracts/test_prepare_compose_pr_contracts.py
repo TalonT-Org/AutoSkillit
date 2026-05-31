@@ -101,3 +101,19 @@ def test_prepare_pr_skill_command_includes_issue_number() -> None:
         f" ${{{{ context.issue_number }}}} as a positional arg, "
         f"not rely on with: metadata. Got: {skill_command!r}"
     )
+
+
+def test_prepare_pr_plan_summary_prohibits_nested_heading():
+    """Plan Summary placeholder must explicitly prohibit including the ## Summary heading."""
+    text = PREPARE_PR.read_text()
+    assert "NOT include" in text and "## Summary" in text and "heading" in text, (
+        "prepare-pr/SKILL.md must explicitly state: do NOT include the ## Summary heading"
+    )
+
+
+def test_prepare_pr_plan_summary_has_negative_example():
+    """Plan Summary section must have a NEVER instruction about the heading."""
+    text = PREPARE_PR.read_text()
+    assert "NEVER" in text and "## Summary" in text and "heading" in text, (
+        "prepare-pr/SKILL.md must contain a NEVER instruction about the ## Summary heading"
+    )

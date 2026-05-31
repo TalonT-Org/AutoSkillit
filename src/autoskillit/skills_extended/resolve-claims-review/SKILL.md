@@ -56,6 +56,7 @@ Called by the research recipe when `audit_claims` routes `changes_requested` via
 - Run intent validation BEFORE making any code changes
 - Gracefully degrade (exit 0, report skip) if `gh` is unavailable or no PR is found
 - Report a structured summary including escalation count
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error. **Note:** Reads performed by subagents (Task/Agent) do NOT satisfy this requirement — they run in a child session whose reads are invisible to the parent. If a file was only read inside a subagent, you must Read it again in this main session before calling Edit.
 - Issue all Task calls in a single message to maximize parallelism
 
 ## Configuration

@@ -54,6 +54,7 @@ Continue implementing a plan in an **existing** git worktree. This skill is used
 - Continue from where the previous session left off
 - Run the project's test suite from the worktree directory
 - Rebase onto base branch before completion (ready for squash-and-merge)
+- **Read before editing**: Before issuing an `Edit` call on any file, ensure you have issued a `Read` on that file earlier in this session. Claude Code rejects `Edit` on unread files — the retry wastes a full API turn at current context size. If you are uncertain whether a file was read, issue a targeted `Read` (offset + limit to the region you plan to edit) rather than risk an error. **Note:** Reads performed by subagents (Task/Agent) do NOT satisfy this requirement — they run in a child session whose reads are invisible to the parent. If a file was only read inside a subagent, you must Read it again in this main session before calling Edit.
 - **Read files fully**: When reading a file to understand it in full, read it in a single call without a `limit` parameter. Do not paginate files with sequential offset reads — read once completely. Use `limit`/`offset` only for targeted section reads of files you have already read in full.
 - Issue all Task calls in a single message to maximize parallelism
 

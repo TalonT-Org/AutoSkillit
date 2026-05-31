@@ -1139,6 +1139,51 @@ class TestContractDrivenAlwaysWriteSkills:
         )
 
 
+class TestStdoutWriteHeuristicStrengthening:
+    """Heuristic guards: truncated-line fallback must not fire on false positives."""
+
+    def test_stdout_write_heuristic_does_not_override_zero_write_gate_for_completion_required(
+        self,
+    ) -> None:
+        truncated_line = (
+            '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","id":"t1"'
+        )
+        result_record = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "done",
+                "session_id": "test-sess",
+            }
+        )
+        stdout = truncated_line + "\n" + result_record
+        sr = _build_skill_result(
+            _make_result(returncode=0, stdout=stdout),
+            skill_command="/autoskillit:implement task",
+            write_behavior=WriteBehaviorSpec(mode="always"),
+            completion_required=True,
+            completion_marker="%%ORDER_UP::abc123%%",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is False
+
+    def test_truncated_line_with_text_block_write_mention_does_not_fire(self) -> None:
+        from autoskillit.execution.headless._headless_evidence import _stdout_mentions_write_tools
+
+        line = (
+            '{"type":"assistant","message":{"content":[{"type":"text",'
+            '"text":"Use Write to"},{"type":"tool_use"'
+        )
+        assert _stdout_mentions_write_tools(line) is False
+
+    def test_truncated_line_ending_with_brace_does_not_fire(self) -> None:
+        from autoskillit.execution.headless._headless_evidence import _stdout_mentions_write_tools
+
+        line = '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write"}}'
+        assert _stdout_mentions_write_tools(line) is False
+
+
 class TestHelperDiversityGuard:
     """Ensure test helper covers all write-relevant tool names."""
 

@@ -53,6 +53,8 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     order_id: str
     infra_exit_category: str
     has_progress_evidence: bool
+    has_implementation_progress: bool
+    completion_required: bool
     provider_fallback: bool
     provider_used: str
     api_retry_count: int

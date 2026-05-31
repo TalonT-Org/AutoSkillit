@@ -43,6 +43,7 @@ class SkillContract:
     write_behavior: str | None = None
     write_expected_when: list[str] = dataclasses.field(default_factory=list)
     read_only: bool = False
+    completion_required: bool = False
     result_fields: list[ResultFieldSpec] = dataclasses.field(default_factory=list)
 
 

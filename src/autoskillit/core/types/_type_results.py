@@ -303,6 +303,7 @@ class SkillResult:
     """API retry event accumulation bundle."""
     contamination: ContaminationOutcome = field(default_factory=ContaminationOutcome)
     """Pre-contamination context bundle — populated only when clone_guard fires."""
+    completion_required: bool = False
 
     def to_json(self) -> str:
         data: dict[str, Any] = {
@@ -324,6 +325,8 @@ class SkillResult:
             "git_writes_detected": self.evidence.git_writes_detected,
             "file_changes_count": self.evidence.file_changes_count,
             "has_progress_evidence": self.has_progress_evidence,
+            "has_implementation_progress": self.has_implementation_progress,
+            "completion_required": self.completion_required,
             "last_stop_reason": self.last_stop_reason,
             "lifespan_started": self.lifespan_started,
             "provider_fallback": self.provider.fallback_activated,
@@ -417,6 +420,10 @@ class SkillResult:
     def has_progress_evidence(self) -> bool:
         """Whether any evidence of meaningful progress exists."""
         return self.worktree_path is not None or self.evidence.has_evidence
+
+    @property
+    def has_implementation_progress(self) -> bool:
+        return self.evidence.has_implementation_evidence
 
 
 @dataclass

@@ -50,6 +50,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_headless_path_validation.py` | Tests for headless.py: _build_skill_result, path validation, synthesis, and contract gates |
 | `test_headless_provider_fallback.py` | Tests for the provider fallback loop in _execute_claude_headless — STALE and BUDGET_EXHAUSTED trigger provider switch |
 | `test_headless_provider_forwarding.py` | Tests verifying provider_extras and profile_name forwarding through the headless call chain |
+| `test_false_success_integration.py` | Integration tests for completion_required guard against false success via marker_absent_contract_met bypass |
 | `test_headless_result_write_reconciliation.py` | Integration tests for EMPTY_OUTPUT + write-evidence reconciliation gate in _build_skill_result |
 | `test_headless_synthesis.py` | Tests for headless.py synthesis helpers: output path extraction, validation, contamination |
 | `test_headless_result.py` | Tests for _build_skill_result: idle_stall lifespan_started, kill_reason propagation, backend delegation, write evidence, recovery write-name wiring, Codex write-evidence computation, and Codex NDJSON pipeline (happy path, turn failed, termination branches) |

@@ -178,12 +178,12 @@ def _stdout_mentions_write_tools(stdout: str) -> bool:
         try:
             obj = json.loads(line)
         except json.JSONDecodeError:
-            # Truncated line: check if it looks like an assistant record with a write tool name.
             if (
                 (line.startswith('{"type":"assistant"') or line.startswith('{"type": "assistant"'))
                 and '"subagent_type"' not in line
                 and '"tool_use"' in line
                 and ('"Write"' in line or '"Edit"' in line)
+                and not line.endswith("}}")
             ):
                 return True
             continue

@@ -82,3 +82,30 @@ class TestWriteEvidence:
             file_changes_count=1,
         )
         assert ev.has_implementation_evidence is True
+
+
+class TestHasImplementationProgress:
+    def test_excludes_infrastructure_writes(self) -> None:
+        from autoskillit.core.types import RetryReason, SkillResult
+
+        ev = WriteEvidence(
+            write_call_count=0,
+            fs_writes_detected=True,
+            git_writes_detected=True,
+            file_changes_count=0,
+        )
+        sr = SkillResult(
+            success=True,
+            result="done",
+            session_id="s1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+            worktree_path="/tmp/wt",
+            evidence=ev,
+        )
+        assert sr.has_progress_evidence is True
+        assert sr.has_implementation_progress is False

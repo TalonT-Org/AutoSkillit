@@ -117,6 +117,8 @@ def _check_session_content(
     completion_marker: str,
     expected_output_patterns: Sequence[str] = (),
     prior_completion_markers: Sequence[str] | None = None,
+    *,
+    completion_required: bool = False,
 ) -> bool:
     """Validate session content fields after termination-specific gates pass."""
     if session.is_error:
@@ -144,6 +146,9 @@ def _check_session_content(
                         if marker_stripped:
                             found_prior = True
                             break
+            if completion_required:
+                logger.debug("content_check_failed", reason="completion_required_marker_absent")
+                return False
             if not found_prior:
                 if expected_output_patterns and _check_expected_patterns(
                     result_text, expected_output_patterns

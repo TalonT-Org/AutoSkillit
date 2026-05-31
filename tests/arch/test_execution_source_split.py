@@ -16,9 +16,9 @@ NEW_HEADLESS_MODULES = [
     "_headless_execute.py",
 ]
 HEADLESS_SIZE_BUDGETS = {
-    "headless/__init__.py": 465,
+    "headless/__init__.py": 470,
     "headless/_headless_helpers.py": 220,
-    "headless/_headless_execute.py": 600,
+    "headless/_headless_execute.py": 605,
     "headless/_headless_recovery.py": 366,
     "headless/_headless_path_tokens.py": 175,
     "headless/_headless_result.py": 865,
@@ -103,7 +103,7 @@ SESSION_SIZE_BUDGETS = {
 NEW_SESSION_FSM_MODULES = ["_retry_fsm.py", "_session_outcome.py"]
 SESSION_FSM_SIZE_BUDGETS = {
     "session/_retry_fsm.py": 215,
-    "session/_session_outcome.py": 260,
+    "session/_session_outcome.py": 270,
 }
 MQ_SIZE_BUDGETS = {
     "merge_queue/__init__.py": 550,

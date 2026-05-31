@@ -50,7 +50,7 @@ skills:
     - name: is_fixable
       type: string
     expected_output_patterns:
-    - "diagnosis_path[ \\t]*=[ \\t]*(?:/.+)?"
+    - "diagnosis_path[ \\t]*=[ \\t]*/.+"
     - "failure_subtype[ \\t]*=[ \\t]*(flaky|timing_race|deterministic|fixture|import|env|unknown|no_failure)"
     pattern_examples:
     - "diagnosis_path = /tmp/diagnosis.md\nfailure_type = test\nfailure_subtype = deterministic\nis_fixable = true\n%%ORDER_UP%%"
@@ -139,11 +139,13 @@ skills:
       type: string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
+    - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: conditional
     write_expected_when:
     - "conflict_report_path[ \\t]*=[ \\t]*/.+"
+    completion_required: true
   resolve-review:
     inputs:
     - name: feature_branch
@@ -195,9 +197,11 @@ skills:
       type: string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
+    - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
+    completion_required: true
   implement-worktree-no-merge:
     inputs:
     - name: plan_path
@@ -210,9 +214,11 @@ skills:
       type: string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
+    - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
+    completion_required: true
   investigate:
     inputs:
     - name: topic
@@ -330,11 +336,13 @@ skills:
       type: integer
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
+    - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/impl-foo-20260316\nbranch_name = feature/123\nphases_implemented = 2\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: conditional
     write_expected_when:
     - "phases_implemented[ \\t]*=[ \\t]*[1-9][0-9]*"
+    completion_required: true
   review-approach:
     inputs:
     - name: plan_path
@@ -514,10 +522,9 @@ skills:
     - name: pr_url
       type: string
     expected_output_patterns:
-    - "pr_url[ \\t]*=[ \\t]*(https://github\\.com/.*/pull/\\d+)?"
+    - "pr_url[ \\t]*=[ \\t]*https://github\\.com/.*/pull/\\d+"
     pattern_examples:
     - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
-    - "pr_url = \n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
     - "pr_url[ \\t]*=[ \\t]*https://"
@@ -1429,9 +1436,11 @@ skills:
       type: string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
+    - "%%ORDER_UP::[a-f0-9]+%%"
     pattern_examples:
-    - "worktree_path = /tmp/worktrees/research-20260101-120000\n%%ORDER_UP%%"
+    - "worktree_path = /tmp/worktrees/research-20260101-120000\n%%ORDER_UP::a1b2c3d4%%"
     write_behavior: always
+    completion_required: true
 
   run-experiment:
     inputs:

@@ -781,10 +781,20 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "hook_registry": frozenset(
         {
             "hooks",
-            "server",
-            "infra",
             "cli",
-            "docs",
+            # server/ narrowed to 2 files
+            "server/test_tools_kitchen_envelope.py",
+            "server/test_lifespan.py",
+            # infra/ narrowed to 7 files
+            "infra/test_adr_runtime_guard_coverage.py",
+            "infra/test_command_guard_completeness.py",
+            "infra/test_guard_coverage.py",
+            "infra/test_risky_gh_subcommand_coverage.py",
+            "infra/test_session_scope_enforcement.py",
+            "infra/test_session_type_exemption_enforcement.py",
+            "infra/test_skill_exemption_enforcement.py",
+            # docs/ narrowed to 1 file
+            "docs/test_doc_counts.py",
         }
     ),
     # Standalone modules (not subpackage directories)

@@ -4,8 +4,9 @@ description: >-
   Test agent definition variants against canary test cases. For each canary,
   stages each variant agent file temporarily, runs it via eval-agent wrapper,
   then invokes a judge to evaluate outputs against detection criteria. Produces
-  a comparative scorecard. Unlike skill-eval, variants are independent read-only
-  invocations and can run in parallel.
+  a comparative scorecard. Unlike skill-eval, variants are independent
+  invocations that can run in parallel (each stages and cleans up its own
+  uniquely-named agent file).
 summary: >-
   parse_manifests > run_canaries > compile_scorecard > done
 
@@ -46,10 +47,11 @@ kitchen_rules:
   - >-
     PARALLEL EXECUTION: Canary x variant combinations are independent and
     SHOULD run in parallel up to inputs.max_parallel. Unlike skill-eval,
-    there is no shared clone — each invocation is read-only.
+    there is no shared clone — each canary x variant pair stages its own
+    uniquely-named agent file.
   - >-
     VARIANT STAGING: Before each eval-agent run, stage the variant agent
-    file to {source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}.md
+    file to {source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}-{canary_id}.md
     using run_cmd cp. After the run (success OR failure), remove the staged
     file using run_cmd rm. Cleanup MUST execute on both paths to prevent
     orphaned agent files in the codebase.
@@ -113,10 +115,10 @@ steps:
             resolved["agent_name"]
 
          c. Stage the variant agent file:
-            run_cmd cp {agent_file} {inputs.source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}.md
+            run_cmd cp {agent_file} {inputs.source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}-{canary_id}.md
 
          d. Run the eval-agent wrapper:
-            run_skill /eval-agent --agent-name {agent_name}-eval-{variant_id} --prompt-file {eval_run_dir}/{canary_id}/resolved_prompt.txt
+            run_skill /eval-agent --agent-name {agent_name}-eval-{variant_id}-{canary_id} --prompt-file {eval_run_dir}/{canary_id}/resolved_prompt.txt
             cwd = inputs.source_dir
 
          e. On SUCCESS:
@@ -128,7 +130,7 @@ steps:
 
          g. ALWAYS (success or failure):
             Cleanup staged agent file:
-            run_cmd rm {inputs.source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}.md
+            run_cmd rm {inputs.source_dir}/src/autoskillit/agents/{agent_name}-eval-{variant_id}-{canary_id}.md
 
 
       3. After ALL VARIANTS for a canary complete:

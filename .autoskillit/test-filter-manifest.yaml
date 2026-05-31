@@ -1,8 +1,8 @@
 # Test Filter Manifest
 #
-# Maps non-Python file glob patterns (repo-relative) to test directories
+# Maps file glob patterns (repo-relative) to test directories
 # (relative to tests/). Used by _test_filter.py to select which tests
-# to run when non-Python files change.
+# to run when matched files change.
 #
 # Files already handled by Bucket A (pyproject.toml, uv.lock, conftest.py)
 # are intentionally absent — Bucket A triggers a full run before the
@@ -179,6 +179,29 @@ install.sh:
   - cli/
 
 scripts/verify-test-filter.sh:
+  - infra/
+
+# Python scripts under scripts/ — route to verified test consumers
+scripts/benchmark-testmon.py:
+  - infra/
+scripts/check_contract_freshness.py:
+  - infra/
+scripts/check_doc_counts.py:
+  - infra/
+scripts/check_sub_claude_md.py:
+  - docs/
+scripts/check_tool_annotations.py:
+  - arch/
+scripts/compare-coverage-ast.py:
+  - infra/
+scripts/compile_recipes.py:
+  - recipe/
+  - infra/
+scripts/recipe_contract_freshness.py:
+  - hooks/
+scripts/regen_contracts.py:
+  - infra/
+scripts/sync_versions.py:
   - infra/
 
 # Source non-Python files

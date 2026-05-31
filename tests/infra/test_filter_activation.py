@@ -109,3 +109,16 @@ def test_build_test_scope_returns_full_run_reason_for_unmapped():
     changed = {"scripts/random_script.py"}
     result = build_test_scope(changed_files=changed, mode=FilterMode.CONSERVATIVE)
     assert result is FullRunReason.UNMAPPED_FILE
+
+
+def test_build_test_scope_routes_known_script_via_manifest():
+    from tests._test_filter import FilterMode, FullRunReason, build_test_scope, load_manifest
+
+    manifest = load_manifest(REPO_ROOT)
+    changed = {"scripts/benchmark-testmon.py"}
+    result = build_test_scope(
+        changed_files=changed, mode=FilterMode.CONSERVATIVE, manifest=manifest
+    )
+    assert result is not FullRunReason.UNMAPPED_FILE
+    assert isinstance(result, set)
+    assert any(p.name == "infra" for p in result)

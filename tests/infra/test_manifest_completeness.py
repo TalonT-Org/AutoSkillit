@@ -4,7 +4,8 @@ Completeness test: every non-Python tracked file (outside Bucket A and the ignor
 list) must match at least one pattern in .autoskillit/test-filter-manifest.yaml.
 
 Orphan detection test: every manifest pattern must match at least one currently
-tracked non-Python file (no dead/stale patterns).
+tracked file eligible for manifest routing (non-Python files plus Python files
+outside src/ and tests/ — no dead/stale patterns).
 """
 
 from __future__ import annotations
@@ -82,6 +83,31 @@ def _tracked_non_python_files() -> tuple[str, ...]:
     return tuple(f for f in result.stdout.splitlines() if not f.endswith(".py"))
 
 
+@functools.cache
+def _tracked_files_for_orphan_check() -> tuple[str, ...]:
+    """Return tracked files eligible for manifest orphan detection.
+
+    Includes all non-Python files plus Python files outside src/ and tests/
+    (which are routed through the manifest rather than cascade logic).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--cached"],
+            capture_output=True,
+            text=True,
+            cwd=_REPO_ROOT,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        msg = f"git ls-files failed in {_REPO_ROOT}: {e.stderr.strip()}"
+        raise RuntimeError(msg) from e
+    return tuple(
+        f
+        for f in result.stdout.splitlines()
+        if not f.endswith(".py") or (not f.startswith("src/") and not f.startswith("tests/"))
+    )
+
+
 def _should_be_covered(file_path: str) -> bool:
     """Return True if file_path must be covered by a manifest pattern."""
     if file_path in _BUCKET_A_FILES:
@@ -132,14 +158,14 @@ def test_file_covered_by_manifest(file_path: str) -> None:
 
 @pytest.mark.parametrize("pattern", _MANIFEST_PATTERNS)
 def test_manifest_pattern_matches_real_file(pattern: str) -> None:
-    """Every manifest pattern must match at least one currently tracked non-Python file.
+    """Every manifest pattern must match at least one currently tracked file.
 
     Failure means the pattern is orphaned — either the files it matched were deleted,
     renamed, or the pattern was misspelled from the start.
     Fix: remove the stale pattern from .autoskillit/test-filter-manifest.yaml or
     correct its path.
     """
-    all_tracked = _tracked_non_python_files()
+    all_tracked = _tracked_files_for_orphan_check()
     matched_files = [f for f in all_tracked if _PER_PATTERN_SPECS[pattern].match_file(f)]
     assert matched_files, (
         f"Manifest pattern {pattern!r} matches no tracked files — it may be stale "

@@ -732,6 +732,38 @@ async def test_run_skill_returns_structured_error_when_executor_raises(
     assert "unexpected executor failure" in data["result"]
 
 
+@pytest.mark.anyio
+async def test_run_skill_returns_structured_result_on_cancelled_error(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """run_skill returns SkillResult JSON with subtype=cancelled on asyncio.CancelledError.
+
+    This is the primary gap test: CancelledError from executor.run() must produce a
+    structured SkillResult (needs_retry=True, subtype=cancelled) rather than escaping
+    the tool handler and dropping the MCP transport session.
+    """
+    import asyncio
+
+    from autoskillit.core import SkillResult
+
+    class CancellingExecutor:
+        async def run(self, *args, **kwargs) -> SkillResult:
+            raise asyncio.CancelledError()
+
+    tool_ctx_kitchen_open.executor = CancellingExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    from autoskillit.server.tools.tools_execution import run_skill
+
+    result_json = await run_skill("/test-skill arg", str(tmp_path))
+    data = json.loads(result_json)
+    assert data["success"] is False
+    assert data["subtype"] == "cancelled"
+    assert data["needs_retry"] is True
+    assert data["retry_reason"] == "cancelled"
+    assert "cancelled" in data["result"].lower()
+
+
 class TestCwdExistenceValidation:
     """run_skill and run_cmd reject non-existent cwd before reaching executor/subprocess."""
 

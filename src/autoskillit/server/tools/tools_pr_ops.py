@@ -16,6 +16,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -101,6 +102,7 @@ async def _close_issues_sequentially(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("get_pr_reviews")
 async def get_pr_reviews(
     pr_number: int,
@@ -172,6 +174,7 @@ async def get_pr_reviews(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("bulk_close_issues")
 async def bulk_close_issues(
     issue_numbers: list[int],

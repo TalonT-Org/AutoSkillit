@@ -14,6 +14,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult, WriteBehaviorSpec
@@ -148,6 +149,7 @@ def _parse_enrich_result(response_text: str) -> dict[str, Any]:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("prepare_issue")
 async def prepare_issue(
     title: str,
@@ -255,6 +257,7 @@ async def prepare_issue(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "github"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("enrich_issues")
 async def enrich_issues(
     issue_number: int | None = None,

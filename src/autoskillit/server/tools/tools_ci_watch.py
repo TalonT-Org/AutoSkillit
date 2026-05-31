@@ -18,6 +18,7 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import resolve_repo_from_remote
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,7 @@ def _coerce_none_string(value: str | None, *, tool: str) -> str | None:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("wait_for_ci")
 async def wait_for_ci(
     branch: str,
@@ -232,6 +234,7 @@ async def wait_for_ci(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "ci"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("get_ci_status")
 async def get_ci_status(
     branch: str | None = None,

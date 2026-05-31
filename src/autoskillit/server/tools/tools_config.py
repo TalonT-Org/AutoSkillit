@@ -10,6 +10,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import _hook_config_overlay_path, _hook_config_path
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -132,6 +133,7 @@ def _replace_fleet_semaphore(ctx, max_concurrent: int, acquire_timeout_sec: floa
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@_cancellation_shield()
 @track_response_size("configure_fleet")
 async def configure_fleet(
     max_concurrent_dispatches: int | None = None,
@@ -201,6 +203,7 @@ async def configure_fleet(
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@_cancellation_shield()
 @track_response_size("configure_order")
 async def configure_order(
     timeout: int | None = None,

@@ -17,6 +17,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir, write_telemetry_clear_marker
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,7 @@ def _get_log_root() -> Path:
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("kitchen_status")
 async def kitchen_status() -> str:
     """Return version health and configuration status for the running server.
@@ -79,6 +81,7 @@ async def kitchen_status() -> str:
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield()
 @track_response_size("get_pipeline_report")
 async def get_pipeline_report(clear: bool = False) -> str:
     """Return accumulated run_skill failures since last clear.
@@ -158,6 +161,7 @@ def _merge_wall_clock_seconds(steps: list[dict], timing_report: list[dict]) -> l
     tags={"autoskillit", "kitchen-core", "telemetry", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield()
 @track_response_size("get_token_summary")
 async def get_token_summary(clear: bool = False, format: str = "json", order_id: str = "") -> str:
     """Return accumulated run_skill token usage grouped by step name.
@@ -227,6 +231,7 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     tags={"autoskillit", "kitchen-core", "telemetry", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield()
 @track_response_size("get_timing_summary")
 async def get_timing_summary(clear: bool = False, format: str = "json", order_id: str = "") -> str:
     """Return accumulated wall-clock timing grouped by step name.
@@ -273,6 +278,7 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
     tags={"autoskillit", "kitchen", "kitchen-core", "telemetry"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield()
 @track_response_size("analyze_tool_sequences")
 async def analyze_tool_sequences(
     recipe: str = "",
@@ -383,6 +389,7 @@ def _read_quota_events(log_root: Path, n: int) -> tuple[list[dict], int]:
     tags={"autoskillit", "kitchen-core", "telemetry", "fleet"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield()
 @track_response_size("get_quota_events")
 async def get_quota_events(n: int = 50) -> str:
     """Return the most recent quota guard events from the diagnostic log.
@@ -427,6 +434,7 @@ async def get_quota_events(n: int = 50) -> str:
     tags={"autoskillit", "kitchen", "kitchen-core", "telemetry"},
     annotations={"readOnlyHint": True},
 )
+@_cancellation_shield()
 @track_response_size("write_telemetry_files")
 async def write_telemetry_files(
     output_dir: str,
@@ -511,6 +519,7 @@ async def write_telemetry_files(
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
+@_cancellation_shield()
 @track_response_size("read_db")
 async def read_db(
     db_path: str,

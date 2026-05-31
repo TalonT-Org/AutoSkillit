@@ -117,14 +117,14 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
     ("src/autoskillit/server/_lifespan.py", 64),
     # tools_kitchen.py — hook config dict, quota guard overlay, ingredient locks overlay
-    ("src/autoskillit/server/tools/tools_kitchen.py", 127),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 146),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 691),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 751),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 128),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 147),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 695),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 755),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools/tools_status.py", 499),
+    ("src/autoskillit/server/tools/tools_status.py", 507),
     # tools_github.py — bug report dict
-    ("src/autoskillit/server/tools/tools_github.py", 303),
+    ("src/autoskillit/server/tools/tools_github.py", 307),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 24),
     # _init_helpers.py — ~/.claude.json (co-owned)
@@ -138,7 +138,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _marketplace.py — hooks.json (co-owned)
     ("src/autoskillit/cli/_marketplace.py", 188),
     # tools_config.py — hook config overlay dict (session-scoped, not schema-versioned)
-    ("src/autoskillit/server/tools/tools_config.py", 47),
+    ("src/autoskillit/server/tools/tools_config.py", 48),
     # _update_checks.py — dismissal state file
     ("src/autoskillit/cli/update/_update_checks.py", 77),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)

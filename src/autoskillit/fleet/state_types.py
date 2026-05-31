@@ -461,5 +461,6 @@ _ABANDON_REASONS: frozenset[str] = frozenset(
         RetryReason.PATH_CONTAMINATION,
         RetryReason.CLONE_CONTAMINATION,
         RetryReason.IDLE_STALL,
+        RetryReason.CANCELLED,  # transport teardown — session was never started or was torn down
     }
 )

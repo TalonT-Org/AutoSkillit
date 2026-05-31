@@ -47,6 +47,7 @@ from autoskillit.server._misc import (
     resolve_provider,
 )
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
 
@@ -330,6 +331,7 @@ def _build_tool_category_listing(
     annotations={"readOnlyHint": True},
     meta={"anthropic/maxResultSizeChars": 100_000, "anthropic/alwaysLoad": True},
 )
+@_cancellation_shield()
 @track_response_size("open_kitchen")
 async def open_kitchen(
     name: str | None = None,
@@ -632,6 +634,7 @@ async def open_kitchen(
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@_cancellation_shield()
 @track_response_size("close_kitchen")
 async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     """Close the AutoSkillit kitchen.
@@ -652,6 +655,7 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@_cancellation_shield()
 @track_response_size("disable_quota_guard")
 async def disable_quota_guard() -> str:
     """Disable the quota guard for the remainder of this kitchen session.
@@ -787,6 +791,7 @@ def _apply_unlock_keys(current_pipeline_li: dict[str, str], unlock_keys: list[st
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@_cancellation_shield()
 @track_response_size("lock_ingredients")
 async def lock_ingredients(
     locked: dict[str, str] | None = None,
@@ -916,6 +921,7 @@ def _reload_session_handler() -> dict[str, str]:
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
+@_cancellation_shield()
 @track_response_size("reload_session")
 async def reload_session() -> str:
     """Signal the parent autoskillit process to reload this session with the full

@@ -343,6 +343,20 @@ def _is_mcp_tool_decorator(node: ast.expr) -> bool:
     return False
 
 
+def _has_cancellation_shield(func_node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
+    """Return True if the function has @_cancellation_shield in its decorator list."""
+    for dec in func_node.decorator_list:
+        if isinstance(dec, ast.Name) and dec.id == "_cancellation_shield":
+            return True
+        if (
+            isinstance(dec, ast.Call)
+            and isinstance(dec.func, ast.Name)
+            and dec.func.id == "_cancellation_shield"
+        ):
+            return True
+    return False
+
+
 def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
     """Return True if the function has a top-level try/except Exception.
 

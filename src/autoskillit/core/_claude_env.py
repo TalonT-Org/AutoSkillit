@@ -120,7 +120,7 @@ def build_agent_env(
             raise ValueError(
                 f"AUTOSKILLIT_SESSION_TYPE={_session_type_raw!r} is not a valid SessionType. "
                 f"Valid values: {valid}"
-            )
+            ) from None
     if required is not None:
         missing = required - frozenset(out.keys())
         if missing:

@@ -510,9 +510,17 @@ def test_normalize_model_id_strips_context_window_suffix():
     assert normalize_model_id("claude-sonnet-4-6-20250514[200k]") == "claude-sonnet-4-6"
 
 
-def test_detect_model_drift_suppressed_when_profile_routed():
-    """Profile-routed sessions with non-Anthropic observed model suppress MODEL_DRIFT."""
+def test_detect_model_drift_fires_when_profile_and_cross_vendor():
+    """Profile-routed session with Anthropic configured + non-Anthropic observed fires drift."""
     anomalies = detect_model_drift("opus", "MiniMax-M2.7", profile_name="minimax")
+    assert len(anomalies) == 1
+    assert anomalies[0]["detail"]["configured_model"] == "opus"
+    assert anomalies[0]["detail"]["observed_model"] == "MiniMax-M2.7"
+
+
+def test_detect_model_drift_suppressed_when_profile_both_non_anthropic():
+    """Profile-routed sessions with both models non-Anthropic suppress MODEL_DRIFT."""
+    anomalies = detect_model_drift("MiniMax-M1", "MiniMax-M2.7", profile_name="minimax")
     assert anomalies == []
 
 

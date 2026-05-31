@@ -1605,13 +1605,13 @@ class TestModelAliasDriftIntegration:
         )
         assert tu["profile_name"] == "minimax"
 
-    def test_no_false_drift_with_profile_routed_non_anthropic(self, tmp_path):
-        """flush_session_log with profile-routed non-Anthropic model produces zero MODEL_DRIFT."""
+    def test_no_false_drift_with_profile_routed_both_non_anthropic(self, tmp_path):
+        """flush_session_log with both configured and observed non-Anthropic produces zero MODEL_DRIFT."""
         _flush(
             tmp_path,
             session_id="profile-non-anthropic-001",
             proc_snapshots=None,
-            model_identifier="opus",
+            model_identifier="MiniMax-M1",
             profile_name="minimax",
             token_usage={
                 "input_tokens": 1000,

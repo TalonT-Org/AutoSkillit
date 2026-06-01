@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from autoskillit.workspace.skills import bundled_skills_extended_dir
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 skills_dir = bundled_skills_extended_dir()
 COLLAPSE_SKILL = skills_dir / "collapse-issues" / "SKILL.md"

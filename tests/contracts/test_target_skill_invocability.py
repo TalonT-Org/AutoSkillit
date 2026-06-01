@@ -20,6 +20,8 @@ from autoskillit.workspace import (
     SkillsDirectoryProvider,
 )
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 def _make_session(
     tmp_path: Path,

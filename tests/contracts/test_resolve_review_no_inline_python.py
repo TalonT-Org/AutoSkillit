@@ -8,6 +8,8 @@ import pytest
 
 from tests.contracts.conftest import _all_skill_mds
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 @pytest.fixture()
 def resolve_review_content() -> str:

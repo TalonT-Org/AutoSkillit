@@ -3,7 +3,11 @@
 import re
 from pathlib import Path
 
+import pytest
+
 from autoskillit.recipe._skill_placeholder_parser import extract_validation_rule_block
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 SKILL_PATH = (
     Path(__file__).resolve().parent.parent.parent

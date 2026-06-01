@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 # ── REQ-C8-01: recipe gateway exports schema types ──────────────────────────
 
 

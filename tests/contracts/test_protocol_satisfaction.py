@@ -11,11 +11,15 @@ import inspect
 import re
 from pathlib import Path
 
+import pytest
+
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
     run_managed_async,
     run_managed_sync,
 )
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 # ── Importability ──────────────────────────────────────────────────────────────
 

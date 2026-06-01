@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
 def _sous_chef_text() -> str:

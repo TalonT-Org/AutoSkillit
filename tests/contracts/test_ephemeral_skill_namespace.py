@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core import SkillSource
 from autoskillit.workspace.session_skills import (
     _SKILLS_SUBDIR,
@@ -21,6 +23,8 @@ from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
 )
 from autoskillit.workspace.skills import DefaultSkillResolver
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _PREFIXED_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
 

@@ -12,7 +12,11 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from tests.contracts.conftest import _all_skill_mds
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 def test_no_skill_appends_validation_summary_to_issue_body() -> None:

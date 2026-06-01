@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 _SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 
 # Identifies a SKILL.md as invoking sub-skills via the Skill tool

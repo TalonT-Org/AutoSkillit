@@ -6,6 +6,10 @@ public symbols so callers can use short import paths.
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 def test_config_package_exports() -> None:
     from autoskillit.config import AutomationConfig, load_config  # noqa: F401

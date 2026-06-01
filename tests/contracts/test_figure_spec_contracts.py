@@ -12,6 +12,8 @@ from autoskillit.core import PRODUCER_SCHEMA_FIELDS, REQUIRED_CONSUMER_FIELDS, F
 from autoskillit.core.io import load_yaml
 from autoskillit.core.paths import pkg_root
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 _VIS_LENS_DIR = pkg_root() / "skills_extended"
 
 

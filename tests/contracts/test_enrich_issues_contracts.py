@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 SKILL_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended/enrich-issues"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 

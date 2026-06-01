@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 def test_load_recipe_instructs_step_name_exact_yaml_key():
     """

@@ -8,6 +8,8 @@ import pytest
 
 from autoskillit.core import pkg_root
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 def _read_scope_skill_md() -> str:
     return (pkg_root() / "skills_extended" / "scope" / "SKILL.md").read_text()

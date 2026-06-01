@@ -8,6 +8,8 @@ import pytest
 
 from tests.contracts._anti_confirm_helpers import ANTI_CONFIRM_RE as _ANTI_CONFIRM_RE
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 def _sous_chef_text() -> str:
     skill_md = (

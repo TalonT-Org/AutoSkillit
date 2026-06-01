@@ -5,9 +5,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import pytest
+
 from autoskillit.core import pkg_root
 from autoskillit.core.io import load_yaml
 from autoskillit.workspace.skills import DefaultSkillResolver
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _SKILL_DIR = pkg_root() / "skills_extended" / "make-campaign"
 _SKILL_MD = _SKILL_DIR / "SKILL.md"

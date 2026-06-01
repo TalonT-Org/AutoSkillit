@@ -11,6 +11,8 @@ import pytest
 import autoskillit.config.settings as settings_mod
 from autoskillit.config.settings import AutomationConfig
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 _SUBCONFIG_DATACLASSES = [
     cls
     for cls in vars(settings_mod).values()

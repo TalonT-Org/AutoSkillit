@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 # ── WP3-1: OutputPatternResolver ──────────────────────────────────────────────
 
 

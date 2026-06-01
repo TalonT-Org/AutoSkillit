@@ -6,6 +6,8 @@ import pytest
 
 from tests._helpers import extract_always_block
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 SKILLS_ROOT = (
     Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "skills_extended"
 )

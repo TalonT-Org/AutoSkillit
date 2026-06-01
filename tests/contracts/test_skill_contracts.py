@@ -11,6 +11,8 @@ import pytest
 from autoskillit.core.io import load_yaml
 from autoskillit.execution.session._session_content import _check_expected_patterns
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
 
 

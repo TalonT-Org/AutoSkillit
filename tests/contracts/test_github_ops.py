@@ -16,6 +16,8 @@ import pytest
 
 from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 def _all_skill_mds() -> list[tuple[str, str]]:
     """Returns [(skill_name, content), ...] for all SKILL.md files from both skill directories."""

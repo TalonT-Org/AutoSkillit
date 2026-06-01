@@ -21,6 +21,8 @@ from autoskillit.workspace.session_skills import (
 )
 from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 _INVOCATION_PATTERNS = (
     re.compile(
         r"(?i)\bLOAD(?:ED)?\b[^\n]{0,120}/autoskillit:([a-z][\w-]+)[^\n]{0,120}\bSkill tool\b"

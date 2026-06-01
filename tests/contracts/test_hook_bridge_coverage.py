@@ -8,9 +8,13 @@ Prevents silent omission when fields are added to QuotaGuardConfig that need
 to cross the stdlib-only boundary.
 """
 
+import pytest
+
 from autoskillit.config.settings import QuotaGuardConfig
 from autoskillit.hooks._hook_settings import QUOTA_GUARD_HOOK_PAYLOAD_KEYS
 from autoskillit.server.tools.tools_kitchen import _quota_guard_hook_payload
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 def test_quota_guard_hook_payload_keys_match_payload_keys() -> None:

@@ -37,7 +37,6 @@ from autoskillit.core import (
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.pipeline import canonical_step_name
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
@@ -146,7 +145,7 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
         tracker = json.loads(tracker_path.read_text())
     except (json.JSONDecodeError, OSError):
         return None
-    canonical = canonical_step_name(step_name)
+    canonical = _canonical_step_name(step_name)
     deps = tracker.get("dependencies", {}).get(canonical, [])
     if not deps:
         return None

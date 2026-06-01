@@ -272,7 +272,7 @@ def test_output_patterns_nonempty_for_investigate() -> None:
             "conditional",
             ["verdict"],
         ),
-        ("/autoskillit:make-plan some task", "always", []),
+        ("/autoskillit:make-plan some task", "conditional", ["verdict"]),
         ("/autoskillit:nonexistent-skill foo", None, []),
         ("/autoskillit:resolve-merge-conflicts", "conditional", ["conflict_report_path"]),
     ],

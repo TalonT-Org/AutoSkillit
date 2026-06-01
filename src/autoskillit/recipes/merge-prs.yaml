@@ -864,11 +864,16 @@ steps:
       output_dir: '.'
     capture:
       pr_plan_path: ${{ result.plan_path }}
+      verdict: ${{ result.verdict }}
     capture_list:
       plan_parts: ${{ result.plan_parts }}
       all_plan_paths: ${{ result.plan_path }}
     retries: 0
-    on_success: verify
+    on_result:
+    - when: ${{ result.verdict }} == plan
+      route: verify
+    - when: ${{ result.verdict }} == false_positive
+      route: verify
     on_failure: register_clone_failure
     note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
       into plan_parts[]. For a single-part plan, plan_parts has one entry equal to

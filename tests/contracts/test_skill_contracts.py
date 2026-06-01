@@ -315,12 +315,12 @@ def test_skill_contracts_allowed_values_covers_recipe_routes() -> None:
         "merge-prs.yaml",
     ]
     contracts = load_yaml(_CONTRACTS_YAML)
-    verdict_output = next(
-        (o for o in contracts["skills"]["review-pr"].get("outputs", []) if o["name"] == "verdict"),
-        None,
-    )
-    assert verdict_output is not None
-    allowed = set(verdict_output.get("allowed_values", []))
+    allowed: set[str] = set()
+    for skill_data in contracts.get("skills", {}).values():
+        for o in skill_data.get("outputs", []):
+            if o.get("name") == "verdict":
+                allowed.update(o.get("allowed_values", []))
+    assert allowed, "No verdict output found in skill_contracts.yaml"
 
     # Match only lowercase verdict values (review-pr convention: approved, changes_requested…).
     # Excludes all-uppercase review-design verdicts (GO, REVISE, STOP) which appear in the
@@ -553,3 +553,31 @@ def test_delimiter_patterns_have_hr_split_example(skills: dict[str, Any]) -> Non
         "Delimiter patterns lack HR-split examples. Add an example with "
         "---\\n<name>--- to each listed skill:\n" + "\n".join(failures)
     )
+
+
+# ---------------------------------------------------------------------------
+# make-plan false-positive escape valve tests
+# ---------------------------------------------------------------------------
+
+
+def test_make_plan_verdict_output(skills):
+    """make-plan must declare a verdict output with plan/false_positive values."""
+    mp = skills["make-plan"]
+    verdict_outputs = [o for o in mp["outputs"] if o["name"] == "verdict"]
+    assert len(verdict_outputs) == 1, "make-plan must have exactly one verdict output"
+    assert set(verdict_outputs[0]["allowed_values"]) == {"plan", "false_positive"}
+
+
+def test_make_plan_conditional_write_behavior(skills):
+    """make-plan must use conditional write_behavior gated on verdict=plan."""
+    mp = skills["make-plan"]
+    assert mp["write_behavior"] == "conditional"
+    assert mp["write_expected_when"] == ["verdict[ \\t]*=[ \\t]*plan"]
+
+
+def test_make_plan_examples_cover_verdicts(skills):
+    """pattern_examples must include examples for both verdict values."""
+    mp = skills["make-plan"]
+    examples_text = "\n".join(mp.get("pattern_examples", []))
+    assert "verdict = plan" in examples_text
+    assert "verdict = false_positive" in examples_text

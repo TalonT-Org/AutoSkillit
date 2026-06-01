@@ -821,7 +821,16 @@ class TestInvestigateFirstStructure:
         assert "context.remediation_path" in skill_cmd
         assert "plan_path" in step.capture
         assert "plan_parts" in step.capture_list
-        assert step.on_success == "dry_walkthrough"
+        assert "verdict" in step.capture
+        assert step.on_success is None
+        assert step.on_result is not None
+        plan_routes = [
+            c
+            for c in step.on_result.conditions
+            if c.when and "plan" in c.when and "false_positive" not in c.when
+        ]
+        assert len(plan_routes) == 1
+        assert plan_routes[0].route == "dry_walkthrough"
         assert step.on_failure == "release_issue_failure"
 
     def test_if3_test_step_uses_implementation_ref(self, recipe) -> None:

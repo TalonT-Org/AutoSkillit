@@ -197,15 +197,25 @@
       },
       "capture": {
         "plan_path": "${{ result.plan_path }}",
-        "all_plan_paths": "${{ result.plan_path }}"
+        "all_plan_paths": "${{ result.plan_path }}",
+        "verdict": "${{ result.verdict }}"
       },
       "capture_list": {
         "plan_parts": "${{ result.plan_parts }}"
       },
       "retries": 0,
-      "on_success": "review_approach",
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == plan",
+          "route": "review_approach"
+        },
+        {
+          "when": "${{ result.verdict }} == false_positive",
+          "route": "push"
+        }
+      ],
       "on_failure": "release_issue_failure",
-      "note": "Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file. plan_parts context key contains the full ordered list of part files (sorted alphabetically). For a single-part plan, plan_parts has one entry equal to plan_path. GROUPS MODE: Replace the skill_command task with the current group's file path from context.group_files extracted from the group step's capture — do NOT read the file; pass the path directly to the skill. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan from the remediate step; pass it inline in the skill_command rather than as a named with: key. ACCUMULATION: After each plan step execution in groups mode, the agent MUST append the captured plan_path to context.all_plan_paths using a comma separator instead of letting the capture block overwrite the accumulated value. For multi-group runs, the accumulated value looks like \"/path/groupA_plan.md,/path/groupB_plan.md\". ISSUE CONTEXT: If inputs.issue_url is a non-empty string, pass it to the skill so the make-plan skill can call fetch_github_issue internally to get full issue content: \"/autoskillit:make-plan {group_path}\\n\\nGitHub Issue: {inputs.issue_url}\" ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty string, append it to the skill_command: \"/autoskillit:make-plan {group_path}\\n\\nadversarial_review_level={inputs.adversarial_review_level}\"\n"
+      "note": "Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file. plan_parts context key contains the full ordered list of part files (sorted alphabetically). For a single-part plan, plan_parts has one entry equal to plan_path. GROUPS MODE: Replace the skill_command task with the current group's file path from context.group_files extracted from the group step's capture — do NOT read the file; pass the path directly to the skill. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan from the remediate step; pass it inline in the skill_command rather than as a named with: key. When in remediation mode, also append audit_remediation_mode=true to the skill_command. ACCUMULATION: After each plan step execution in groups mode, the agent MUST append the captured plan_path to context.all_plan_paths using a comma separator instead of letting the capture block overwrite the accumulated value. For multi-group runs, the accumulated value looks like \"/path/groupA_plan.md,/path/groupB_plan.md\". When verdict=false_positive, do NOT overwrite all_plan_paths — preserve the existing accumulated value from prior plan executions. ISSUE CONTEXT: If inputs.issue_url is a non-empty string, pass it to the skill so the make-plan skill can call fetch_github_issue internally to get full issue content: \"/autoskillit:make-plan {group_path}\\n\\nGitHub Issue: {inputs.issue_url}\" ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty string, append it to the skill_command: \"/autoskillit:make-plan {group_path}\\n\\nadversarial_review_level={inputs.adversarial_review_level}\" VERDICT: The skill emits verdict=plan (normal) or verdict=false_positive (remediation finding is a false positive). false_positive routes to push.\n"
     },
     "review_approach": {
       "tool": "run_skill",

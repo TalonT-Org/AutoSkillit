@@ -255,15 +255,23 @@ skills:
       type: string
       required: true
     outputs:
+    - name: verdict
+      type: string
+      allowed_values:
+        - plan
+        - false_positive
     - name: plan_path
       type: file_path
     - name: plan_parts
       type: file_path_list
     expected_output_patterns:
-    - "plan_path[ \\t]*=[ \\t]*/.+"
+    - "verdict[ \\t]*=[ \\t]*(plan|false_positive)"
     pattern_examples:
-    - "plan_path = /tmp/plan.md\n%%ORDER_UP%%"
-    write_behavior: always
+    - "verdict = plan\nplan_path = /tmp/plan.md\nplan_parts = /tmp/plan.md\n%%ORDER_UP%%"
+    - "verdict = false_positive\n%%ORDER_UP%%"
+    write_behavior: conditional
+    write_expected_when:
+    - "verdict[ \\t]*=[ \\t]*plan"
   write-recipe:
     inputs: []
     outputs:

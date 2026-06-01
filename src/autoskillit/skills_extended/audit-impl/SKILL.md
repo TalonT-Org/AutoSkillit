@@ -267,6 +267,19 @@ a suspected branch-mismatch before accepting the verdicts. Re-verify one finding
 implementation. If the file exists on `{implementation_ref}`, the subagent read the wrong
 branch — discard those MISSING findings and re-run the slice with the correct diff.
 
+**Named-deviation post-processing:** After collecting all slice results, scan for
+`NAMED_DEVIATION` findings. For each NAMED_DEVIATION finding:
+1. Extract the original symbol name from the finding
+2. Search all OTHER slices' requirements (not the finding's own slice) for references
+   to the original symbol name
+3. If the original name is NOT referenced by any other slice's requirements →
+   downgrade to `ODD` (the implementation's naming is self-consistent)
+4. If the original name IS referenced by another slice's requirements →
+   retain as `MISSING` (cross-slice dependency requires the exact name)
+
+This post-processing runs before the final verdict determination. After downgrading,
+apply the standard three-tier logic to the updated findings set.
+
 **NO GO** if any finding is `MISSING` or `CONFLICT`.
 
 **GO (with notes)** if only `ODD` findings exist — unexpected additions that do not break

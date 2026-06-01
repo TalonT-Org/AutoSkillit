@@ -286,6 +286,7 @@ def _should_inject_skill(
     features: dict[str, bool],
     experimental_enabled: bool = False,
     allow_only: frozenset[str] | None = None,
+    backend_name: str | None = None,
 ) -> bool:
     """Return True if this skill should be written to the ephemeral session dir.
 
@@ -294,6 +295,12 @@ def _should_inject_skill(
        project-local overrides visible via CWD auto-discovery.
     2. Effective disable filtering (already accounts for cook session, packs, recipe).
     """
+    if (
+        skill_info.backend_requirements
+        and backend_name is not None
+        and backend_name not in skill_info.backend_requirements
+    ):
+        return False
     # Channel deduplication — unconditional
     if skill_info.source == SkillSource.BUNDLED:
         return False
@@ -608,6 +615,7 @@ class DefaultSessionSkillManager:
                     else False
                 ),
                 allow_only=allow_only,
+                backend_name=backend.name if backend is not None else None,
             ):
                 if skill_info.source == SkillSource.BUNDLED:
                     logger.debug("init_session_plugin_dir_skip", skill=skill_info.name)

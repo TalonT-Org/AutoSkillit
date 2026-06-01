@@ -1,6 +1,7 @@
 ---
 name: scope
 categories: [research]
+backend_requirements: [claude-code]
 description: Survey codebase and web sources to build a known/unknown matrix for a research question. Phase 1 of the research recipe.
 hooks:
   PreToolUse:

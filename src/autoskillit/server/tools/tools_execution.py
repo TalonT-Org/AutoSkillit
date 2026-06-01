@@ -59,6 +59,12 @@ def _is_absolute_path(path: str) -> bool:
     return Path(path).is_absolute()
 
 
+def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool:
+    """Return True if skill's backend_requirements exclude effective_backend."""
+    reqs = getattr(skill_info, "backend_requirements", None)
+    return bool(reqs and effective_backend not in reqs)
+
+
 def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     """Check if step_name is locked out by ingredient locks. Returns deny JSON or None."""
     from autoskillit.server import _get_ctx
@@ -650,6 +656,24 @@ async def run_skill(
                 resolved_command, target_name = resolve_target_skill(
                     skill_command, tool_ctx.skill_resolver
                 )
+
+            # Backend compatibility gate — fires before both replay and live session paths.
+            if target_name and tool_ctx.skill_resolver and tool_ctx.backend is not None:
+                _compat_skill_info = tool_ctx.skill_resolver.resolve(target_name)
+                if _compat_skill_info:
+                    _effective_backend = backend_override or tool_ctx.backend.name
+                    if _is_backend_incompatible(_compat_skill_info, _effective_backend):
+                        return SkillResult.crashed(
+                            exception=RuntimeError(
+                                f"Skill {target_name!r} requires backend "
+                                f"{sorted(_compat_skill_info.backend_requirements)} but session "
+                                f"backend is {_effective_backend!r}."
+                            ),
+                            skill_command=resolved_command,
+                            order_id=effective_order_id,
+                        ).to_json()
+            elif target_name and not tool_ctx.skill_resolver:
+                logger.debug("backend_compat_check_skipped_no_resolver")
 
             # Server-side recipe step parameter resolution.
             # When a step_name is provided and the recipe's step definition is cached,

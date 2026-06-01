@@ -6,7 +6,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import RETIRED_SKILL_NAMES, SkillSource, YAMLError, load_yaml, pkg_root
+from autoskillit.core import (
+    KNOWN_BACKEND_NAMES,
+    RETIRED_SKILL_NAMES,
+    SkillSource,
+    YAMLError,
+    get_logger,
+    load_yaml,
+    pkg_root,
+)
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -15,6 +25,7 @@ class SkillInfo:
     source: SkillSource
     path: Path
     categories: frozenset[str] = frozenset()
+    backend_requirements: frozenset[str] = frozenset()
 
 
 def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
@@ -98,11 +109,35 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
         if isinstance(categories_raw, list)
         else frozenset()
     )
+    backend_reqs_raw = data.get("backend_requirements", [])
+    if backend_reqs_raw and not isinstance(backend_reqs_raw, list):
+        logger.warning(
+            "backend_requirements_not_a_list",
+            value=backend_reqs_raw,
+            skill=name,
+            hint="use bracket syntax: backend_requirements: [claude-code]",
+        )
+        backend_reqs_raw = [backend_reqs_raw]
+    backend_requirements = (
+        frozenset(str(r) for r in backend_reqs_raw)
+        if isinstance(backend_reqs_raw, list)
+        else frozenset()
+    )
+    invalid = backend_requirements - KNOWN_BACKEND_NAMES
+    if invalid:
+        logger.warning(
+            "unrecognized_backend_requirements",
+            invalid=sorted(invalid),
+            skill=name,
+            valid=sorted(KNOWN_BACKEND_NAMES),
+        )
+        backend_requirements = backend_requirements - invalid
     return SkillInfo(
         name=name,
         source=source,
         path=skill_path,
         categories=categories,
+        backend_requirements=backend_requirements,
     )
 
 

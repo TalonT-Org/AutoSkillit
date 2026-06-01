@@ -1,6 +1,7 @@
 ---
 name: validate-review-decisions
 categories: [audit]
+backend_requirements: [claude-code]
 description: >-
   Validate review-decisions audit findings with mandatory intent analysis
   and seven evidence-gathering rules. Adds docstring-as-contract recognition,

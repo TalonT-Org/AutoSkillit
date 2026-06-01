@@ -1,6 +1,7 @@
 ---
 name: vis-lens-figure-table
 categories: [vis-lens]
+backend_requirements: [claude-code]
 activate_deps: [mermaid]
 description: "Create Decisional Layout visualization planning spec showing figure-vs-table selection heuristics: tables win for exact values, ≤5 items, leaderboards, and ablation matrices; figures win for trends, distributions, and spatial patterns; borderline cases recommend both. Decisional lens answering \"Should this result be a figure or a table?\""
 hooks:

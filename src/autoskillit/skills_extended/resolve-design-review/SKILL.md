@@ -1,6 +1,7 @@
 ---
 name: resolve-design-review
 categories: [research]
+backend_requirements: [claude-code]
 description: >
   Triage STOP verdict findings from review-design, classifying each as
   ADDRESSABLE/STRUCTURAL/DISCUSS using parallel subagents. If any are ADDRESSABLE

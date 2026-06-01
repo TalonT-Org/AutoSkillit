@@ -1,6 +1,7 @@
 ---
 name: prepare-issue
 categories: [github]
+backend_requirements: [claude-code]
 description: >
   Create a single GitHub issue and immediately triage it — dedup check,
   classification (recipe:implementation or recipe:remediation), mixed-concern

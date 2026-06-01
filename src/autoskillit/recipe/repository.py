@@ -95,6 +95,7 @@ class DefaultRecipeRepository:
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
         defer_unresolved: bool = False,
+        backend_name: str | None = None,
     ) -> dict[str, Any]:
         project_dir = Path(project_dir)
         result = self._get_list(project_dir)
@@ -112,13 +113,20 @@ class DefaultRecipeRepository:
                 temp_dir=temp_dir,
                 temp_dir_relpath=temp_dir_relpath,
                 defer_unresolved=defer_unresolved,
+                backend_name=backend_name,
             ),
         )
 
     def validate_from_path(
-        self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
+        self,
+        script_path: Any,
+        temp_dir_relpath: str = ".autoskillit/temp",
+        *,
+        backend_name: str | None = None,
     ) -> dict[str, Any]:
-        return _api.validate_from_path(script_path, temp_dir_relpath=temp_dir_relpath)
+        return _api.validate_from_path(
+            script_path, temp_dir_relpath=temp_dir_relpath, backend_name=backend_name
+        )
 
     def list_all(
         self,

@@ -1,6 +1,7 @@
 ---
 name: compose-pr
 categories: [github]
+backend_requirements: [claude-code]
 description: Composition executor for pull requests. ALWAYS invoke this skill when instructed to compose a PR. Do not read prep files or create PRs directly — use this skill first to load the composition workflow.
 hooks:
   PreToolUse:

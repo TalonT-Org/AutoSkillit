@@ -190,6 +190,7 @@ def load_and_validate(
     temp_dir_relpath: str | None = None,
     lister: SkillLister | None = None,
     defer_unresolved: bool = False,
+    backend_name: str | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -246,6 +247,7 @@ def load_and_validate(
         _user_exp_hash,
         _method_traditions_hash,
         _user_method_traditions_hash,
+        backend_name,
     )
 
     cached = _api_cache._LOAD_CACHE.get(cache_key)
@@ -372,6 +374,7 @@ def load_and_validate(
                 available_sub_recipes=known_sub_recipes,
                 project_dir=_pdir,
                 skill_resolver=_skill_resolver,
+                backend_name=backend_name,
             )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)

@@ -78,6 +78,7 @@ class ValidationContext:
     provider_profiles: frozenset[str] = field(default_factory=frozenset)
     skill_category_map: dict[str, frozenset[str]] | None = None
     overridden_skills: frozenset[str] | None = None
+    backend_name: str | None = None
     skill_resolver: SkillResolver | None = None
     blocks: tuple[RecipeBlock, ...] = field(default_factory=tuple)
     predecessors: dict[str, set[str]] = field(default_factory=dict)
@@ -128,6 +129,7 @@ def make_validation_context(
     disabled_subsets: frozenset[str] = frozenset(),
     disabled_features: frozenset[str] = frozenset(),
     provider_profiles: frozenset[str] = frozenset(),
+    backend_name: str | None = None,
     skill_resolver: SkillResolver | None = None,
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
@@ -154,6 +156,7 @@ def make_validation_context(
         disabled_subsets=disabled_subsets,
         disabled_features=disabled_features,
         provider_profiles=provider_profiles,
+        backend_name=backend_name,
         skill_resolver=skill_resolver,
         blocks=extract_blocks(recipe, step_graph, predecessors=predecessors),
         predecessors=predecessors,

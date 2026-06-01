@@ -1,6 +1,7 @@
 ---
 name: audit-impl
 categories: [audit]
+backend_requirements: [claude-code]
 description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates remediation file for retry). Final gate before merge in any implementation pipeline.
 hooks:
   PreToolUse:

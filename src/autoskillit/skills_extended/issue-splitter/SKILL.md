@@ -1,6 +1,7 @@
 ---
 name: issue-splitter
 categories: [github]
+backend_requirements: [claude-code]
 description: >
   Analyze a GitHub issue for mixed concerns and split it into focused sub-issues
   with proper cross-references. Integrates into triage-issues as a pre-classification step.

@@ -420,6 +420,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
         defer_unresolved: bool = False,
+        backend_name: str | None = None,
     ) -> dict[str, Any]:
         self.calls.append(
             {
@@ -432,6 +433,7 @@ class InMemoryRecipeRepository(RecipeRepository):
                 "temp_dir": temp_dir,
                 "temp_dir_relpath": temp_dir_relpath,
                 "defer_unresolved": defer_unresolved,
+                "backend_name": backend_name,
             }
         )
         if self._stale:
@@ -447,13 +449,18 @@ class InMemoryRecipeRepository(RecipeRepository):
         return self._validated.get(name, {"valid": True, "suggestions": []})
 
     def validate_from_path(
-        self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
+        self,
+        script_path: Any,
+        temp_dir_relpath: str = ".autoskillit/temp",
+        *,
+        backend_name: str | None = None,
     ) -> dict[str, Any]:
         self.calls.append(
             {
                 "method": "validate_from_path",
                 "script_path": script_path,
                 "temp_dir_relpath": temp_dir_relpath,
+                "backend_name": backend_name,
             }
         )
         key = str(script_path)

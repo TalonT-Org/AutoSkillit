@@ -1,6 +1,7 @@
 ---
 name: vis-lens-reproducibility
 categories: [vis-lens]
+backend_requirements: [claude-code]
 activate_deps: [mermaid]
 description: "Create Replicative Reproducibility visualization planning spec showing data availability, preprocessing parameter disclosure (bin widths, smoothing windows), plotting library/version, random seeds, and code reference per figure. Replicative lens answering \"Can the figures be reproduced from the data and code?\""
 hooks:

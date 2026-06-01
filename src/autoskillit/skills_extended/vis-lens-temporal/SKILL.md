@@ -1,6 +1,7 @@
 ---
 name: vis-lens-temporal
 categories: [vis-lens]
+backend_requirements: [claude-code]
 activate_deps: [mermaid]
 description: "Create Temporal Dynamics visualization planning spec showing axis scaling (linear vs log), smoothing disclosure, epoch/step alignment, run aggregation (mean + variance bands), early-stopping markers, and wall-clock vs step-count x-axis. Temporal lens answering \"Are training dynamics shown clearly and honestly?\""
 hooks:

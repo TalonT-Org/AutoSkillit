@@ -1,5 +1,6 @@
 ---
 name: investigate
+backend_requirements: [claude-code]
 description: Deep investigation of errors, bugs, or codebase questions without making any code changes. Use when user mentions investigate, understand, explore, analyze, or pastes error tracebacks. Spawns parallel subagents for comprehensive exploration.
 hooks:
   PreToolUse:

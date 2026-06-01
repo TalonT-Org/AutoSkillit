@@ -1,5 +1,6 @@
 ---
 name: write-recipe
+backend_requirements: [claude-code]
 description: Generate YAML recipes for .autoskillit/recipes/. Use when user says "make script skill", "generate script", "script a workflow", "write a script", "create a script", "new recipe", "write a pipeline", or when loaded by other skills for script formatting.
 hooks:
   PreToolUse:
@@ -81,6 +82,7 @@ Every generated script MUST follow the workflow YAML schema:
 
 ```yaml
 name: {script-name}
+backend_requirements: [claude-code]
 autoskillit_version: "{version}"  # from kitchen_status.package_version
 description: {One line description.}
 summary: {Concise pipeline chain, e.g. "plan > verify > implement > test > merge"}
@@ -295,6 +297,7 @@ This is the reference format. All generated scripts should match this style:
 
 ```yaml
 name: implementation
+backend_requirements: [claude-code]
 description: Plan, verify, implement, test, and merge a task.
 summary: make-plan > dry-walk > implement > test > merge
 
@@ -387,6 +390,7 @@ A condensed bugfix loop showing retry, classify, and routing patterns:
 
 ```yaml
 name: example-loop
+backend_requirements: [claude-code]
 description: Test, fix, and merge with automatic retry.
 summary: test > investigate > plan > implement > verify > merge
 

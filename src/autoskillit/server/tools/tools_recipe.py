@@ -221,6 +221,7 @@ async def load_recipe(
                 ingredient_overrides=_merged_overrides,
                 temp_dir=tool_ctx.temp_dir,
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
+                backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
             )
             recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
@@ -269,6 +270,7 @@ async def validate_recipe(script_path: str) -> str:
             result = tool_ctx.recipes.validate_from_path(
                 Path(script_path),
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
+                backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
             )
             return json.dumps(result)
     except Exception as exc:

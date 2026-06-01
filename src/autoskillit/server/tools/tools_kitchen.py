@@ -492,6 +492,7 @@ async def open_kitchen(
                         resolved_defaults=_defaults,
                         ingredient_overrides=_merged_overrides,
                         defer_unresolved=False,
+                        backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                     )
                 except ProcessStaleError as exc:
                     logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
@@ -559,6 +560,7 @@ async def open_kitchen(
                     resolved_defaults=_defaults,
                     ingredient_overrides=_merged_overrides,
                     defer_unresolved=not _user_overrides_present,
+                    backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                 )
             except ProcessStaleError as exc:
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)

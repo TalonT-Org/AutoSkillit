@@ -99,11 +99,11 @@ def test_resolve_review_reads_from_review_pr_output_dir() -> None:
     consumer_md = _read_skill_md("resolve-review")
 
     if _has_dynamic_read_variable(consumer_md):
-        return
+        pytest.skip("resolve-review uses dynamic path resolution; no flat-path violation possible")
 
     flat_read_paths = _AUTOSKILLIT_TEMP_PREFIX_RE.findall(consumer_md)
     if not flat_read_paths:
-        return
+        pytest.skip("no flat read paths found in resolve-review SKILL.md")
 
     violations: list[str] = []
     for recipe_path in sorted(_RECIPES_DIR.glob("*.yaml")):

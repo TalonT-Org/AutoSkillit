@@ -16,17 +16,25 @@ from pathlib import Path
 
 SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 
-_PRIVATE_REEXPORTS = frozenset(
-    {
-        "_InstallLock",
-        "_is_release_tag",
-        "_is_stable_track",
-        "_retire_old_versions",
-        "_collect_disabled_feature_tags",
-        "_AUTOSKILLIT_GITIGNORE_ENTRIES",
-        "_COMMITTED_BY_DESIGN",
-    }
-)
+
+def _load_private_reexports() -> frozenset[str]:
+    """Load _PRIVATE_REEXPORTS from core/__init__.py via AST to avoid duplication."""
+    init_path = SRC_ROOT / "core" / "__init__.py"
+    source = init_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(init_path))
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if isinstance(target, ast.Name) and target.id == "_PRIVATE_REEXPORTS":
+                    call = stmt.value
+                    if isinstance(call, ast.Call) and call.args:
+                        arg_src = ast.get_source_segment(source, call.args[0])
+                        if arg_src is not None:
+                            return frozenset(ast.literal_eval(arg_src))
+    return frozenset()
+
+
+_PRIVATE_REEXPORTS = _load_private_reexports()
 
 
 def _extract_all(tree: ast.Module) -> set[str] | None:

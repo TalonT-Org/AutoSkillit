@@ -1184,7 +1184,8 @@
         "local_review_rounds": "${{ inputs.local_review_rounds }}"
       },
       "capture": {
-        "review_loop_count": "${{ result.next_iteration }}"
+        "review_loop_count": "${{ result.next_iteration }}",
+        "review_prev_iteration": "${{ result.prev_iteration }}"
       },
       "on_result": [
         {
@@ -1198,6 +1199,7 @@
       "on_failure": "check_repo_ci_event",
       "optional_context_refs": [
         "review_loop_count",
+        "review_prev_iteration",
         "review_verdict"
       ],
       "note": "Compound iteration + blocking guard. Routes back to pre_review_cleanup (then annotate_pr_diff) only when had_blocking=true AND max_exceeded=false. had_blocking is true when previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds AND verdict not in LOCAL_ROUND_EXEMPT_VERDICTS). approved_with_comments yields had_blocking=false unconditionally because its resolve pass is one-shot, regardless of local_review_rounds.\n"
@@ -1206,13 +1208,12 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.smoke_utils.pre_iteration_cleanup",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}",
-        "work_dir": "${{ context.work_dir }}"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_prev_iteration }}"
       },
       "on_success": "annotate_pr_diff",
       "on_failure": "annotate_pr_diff",
       "optional_context_refs": [
-        "review_loop_count"
+        "review_prev_iteration"
       ]
     },
     "check_repo_ci_event": {

@@ -188,6 +188,7 @@ def check_review_loop(
 
     return {
         "next_iteration": str(next_iteration),
+        "prev_iteration": str(iteration),
         "max_exceeded": "true" if next_iteration >= max_iter else "false",
         "had_blocking": had_blocking,
     }

@@ -589,9 +589,9 @@ def test_tool_ctx_kitchen_open_fixture_gate_starts_open(tool_ctx_kitchen_open) -
 
 @pytest.fixture()
 def _register_aider_backend(monkeypatch):
-    from autoskillit.execution.backends import BACKEND_REGISTRY, ClaudeCodeBackend
+    from autoskillit.execution.backends import BACKEND_REGISTRY, CodexBackend
 
-    monkeypatch.setitem(BACKEND_REGISTRY, "aider", ClaudeCodeBackend)
+    monkeypatch.setitem(BACKEND_REGISTRY, "aider", CodexBackend)
 
 
 def test_make_context_skips_replay_runner_for_non_claude_backend(

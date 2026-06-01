@@ -138,6 +138,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_food_truck.py` | Tests for food_truck semantic validation rule |
 | `test_rules_graph.py` | Tests for graph semantic validation rule |
 | `test_rules_graph_routes.py` | Tests for rules_graph_routes.py semantic rules (rate-limit-route-missing) |
+| `test_rules_ingredient_step_name.py` | Tests for ingredient-step-name-asymmetry semantic validation rule |
 | `test_rules_inline_script.py` | Tests for inline_script semantic validation rule |
 | `test_rules_inputs.py` | Tests for inputs semantic validation rule |
 | `test_rules_integration_predicate.py` | Tests for integration_predicate semantic validation rule |

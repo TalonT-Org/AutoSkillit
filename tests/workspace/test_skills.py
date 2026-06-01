@@ -791,15 +791,15 @@ class TestBackendRequirements:
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.backend_requirements == frozenset()
 
-    def test_non_list_backend_requirements_defaults_to_empty(self, tmp_path) -> None:
+    def test_non_list_backend_requirements_coerced_to_list(self, tmp_path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: test\nbackend_requirements: claude-code\n---\n# content")
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset()
+        assert info.backend_requirements == frozenset({"claude-code"})
 
-    def test_invalid_backend_name_produces_warning(self, tmp_path) -> None:
+    def test_invalid_backend_name_pruned_with_warning(self, tmp_path) -> None:
         import structlog.testing
 
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
@@ -808,7 +808,7 @@ class TestBackendRequirements:
         skill_md.write_text("---\nname: test\nbackend_requirements: [claude_code]\n---\n# content")
         with structlog.testing.capture_logs() as logs:
             info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset({"claude_code"})
+        assert info.backend_requirements == frozenset()
         assert any(log["event"] == "unrecognized_backend_requirements" for log in logs)
 
     def test_valid_backend_names_no_warning(self, tmp_path, caplog) -> None:

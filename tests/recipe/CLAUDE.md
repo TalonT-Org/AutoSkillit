@@ -170,6 +170,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_skill_command_prefix.py` | Tests for skill_command_prefix semantic validation rule |
 | `test_rules_skill_content.py` | Tests for skill_content semantic validation rule |
 | `test_rules_skills.py` | Tests for skills semantic validation rule |
+| `test_rules_stamp_ownership.py` | Tests for exclusive-stamp-ownership semantic rule |
 | `test_rules_step_skill_name.py` | Tests for step-skill-name-mismatch semantic validation rule |
 | `test_rules_skill_routing.py` | Tests for skill-result-routing-gap rule and merge-pr contract allowed_values |
 | `test_rules_subset_disabled.py` | Tests for subset_disabled semantic validation rule |

@@ -100,9 +100,9 @@ def test_step4_still_reads_file_for_editing():
 
 
 def test_diff_context_path_matches_review_pr_output_path():
-    """resolve-review's diff_context path must match what review-pr writes."""
+    """resolve-review's diff_context path must reference the review-pr handoff file."""
     full = _skill_text()
-    assert "review-pr/diff_context" in full
+    assert "diff_context_" in full and "REVIEW_PR_OUTPUT" in full
 
 
 def test_step2_map_type_is_dict_of_dicts():

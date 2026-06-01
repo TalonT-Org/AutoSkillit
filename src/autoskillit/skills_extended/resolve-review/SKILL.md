@@ -887,8 +887,8 @@ all review findings were already addressed and no code changes were needed.
 
 When `mode=local`, the following additional tokens are emitted:
 ```
-deferred_observations_path = {AUTOSKILLIT_TEMP}/resolve-review/deferred_observations_{pr_number}.json
-reject_patterns_path = {AUTOSKILLIT_TEMP}/resolve-review/reject_patterns_{pr_number}.json
+deferred_observations_path = {{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_{pr_number}.json
+reject_patterns_path = {{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_{pr_number}.json
 ```
 
 When `mode=github` and prior local rounds accumulated observations, these are posted

@@ -10,7 +10,7 @@ variable (AUTOSKILLIT_ALLOWED_WRITE_PREFIX or REVIEW_OUTPUT_DIR).
 
 from __future__ import annotations
 
-import re
+import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
@@ -106,7 +106,7 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
         static_base = _static_base_prefix(output_dir)
 
         for declared in declared_paths:
-            normalised_declared = _normalise_path(declared)
+            normalised_declared = _normalise_path("{{AUTOSKILLIT_TEMP}}/" + declared)
             normalised_base = _normalise_path(static_base)
             if normalised_base.startswith(normalised_declared):
                 # Recipe output_dir is a subdirectory of the SKILL.md declared scope

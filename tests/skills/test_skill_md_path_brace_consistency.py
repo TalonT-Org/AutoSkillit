@@ -17,7 +17,7 @@ _SKILLS_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "sk
 
 # Matches {AUTOSKILLIT_TEMP} without the surrounding double-brace escaping.
 # Negative lookbehind excludes {{ and negative lookahead excludes }}.
-_SINGLE_BRACE_RE = re.compile(r"(?<!\{)\{AUTOSKILLIT_TEMP\}(?!\})")
+_SINGLE_BRACE_RE = re.compile(r"(?<![{$])\{AUTOSKILLIT_TEMP\}(?!\})")
 
 
 def test_no_single_brace_autoskillit_temp() -> None:

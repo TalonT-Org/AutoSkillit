@@ -77,6 +77,8 @@ _CATALOG_EXCLUSIONS: frozenset[str] = frozenset(
         "test_make_context_env_boundary.py",
         "test_command_guard_completeness.py",
         "test_interactive_subprocess_contracts.py",
+        # SKILL.md content guard (validates brace consistency in skill prose):
+        "test_skill_md_path_brace_consistency.py",
     }
 )
 

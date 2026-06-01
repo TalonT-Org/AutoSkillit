@@ -15,7 +15,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 SRC = Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit"
 TESTS = Path(__file__).resolve().parent.parent
 
-_PYRIGHT_RE = re.compile(r"pyright:\s*ignore")
+_PYRIGHT_RE = re.compile(r"#\s*pyright:\s*ignore|#.*--\s*pyright:\s*ignore")
 
 PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
     ("recipe/__init__.py", 219): "dynamic method on lazy-registry object",

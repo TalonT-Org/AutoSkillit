@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._skill_helpers import _has_dynamic_skill_name
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.rules.rules_skills import _has_dynamic_skill_name
 
 
 @semantic_rule(

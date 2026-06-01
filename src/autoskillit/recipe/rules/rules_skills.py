@@ -2,30 +2,15 @@
 
 from __future__ import annotations
 
-import regex as re
-
 from autoskillit.core import AUTOSKILLIT_SKILL_PREFIX, SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._skill_helpers import _get_bundled_skill_names, _get_skill_category_map
+from autoskillit.recipe._skill_helpers import (
+    _get_bundled_skill_names,
+    _get_skill_category_map,
+    _has_dynamic_skill_name,
+)
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-
-_SKILL_TOKEN_RE = re.compile(r"/(?:autoskillit:)?(\S+)")
-
-
-def _has_dynamic_skill_name(skill_cmd: str) -> bool:
-    """Return True if the skill name portion contains template expressions.
-
-    Handles both ``${{ }}`` Jinja-style expressions and bare ``{placeholder}``
-    orchestrator-level template tokens (e.g. ``exp-lens-{slug}``).
-    """
-    m = _SKILL_TOKEN_RE.search(skill_cmd)
-    if not m:
-        return False
-    token = m.group(1)
-    first_space = token.find(" ")
-    name_part = token[:first_space] if first_space >= 0 else token
-    return "${{" in name_part or "{" in name_part
 
 
 @semantic_rule(

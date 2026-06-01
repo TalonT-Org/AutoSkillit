@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
-    AGENT_BACKEND_ENV_VAR,
+    CLAUDE_CODE_CAPABILITIES,
+    BackendCapabilities,
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
@@ -79,10 +80,11 @@ class RecordingSubprocessRunner(SubprocessRunner):
        delegates to ``ScenarioRecorder.record_step()`` which spawns the real subprocess
        under PTY capture, then constructs a ``SubprocessResult`` from the cassette.
     2. **Non-PTY Codex session** (``step_name`` + ``pty_mode=False`` +
-       ``AUTOSKILLIT_AGENT_BACKEND=codex``): delegates to the inner runner, writes
+       ``capabilities.pty_required=False``): delegates to the inner runner, writes
        ``codex_stdout.ndjson`` and ``step_meta.json`` cassette files, then records via
        ``recorder.record_non_session_step(tool='run_skill')``.
-    3. **Non-session command** (``step_name`` + ``pty_mode=False`` + non-Codex backend):
+    3. **Non-session command** (``step_name`` + ``pty_mode=False`` +
+       ``capabilities.pty_required=True``):
        delegates to the inner runner, then records a summary via
        ``recorder.record_non_session_step(tool='run_cmd')``.
     4. **Untracked** (no ``step_name``): passes through to inner runner unrecorded.
@@ -99,9 +101,12 @@ class RecordingSubprocessRunner(SubprocessRunner):
         inner: SubprocessRunner | None = None,
         *,
         scenario_dir: Path | None = None,
+        capabilities: BackendCapabilities = CLAUDE_CODE_CAPABILITIES,
     ) -> None:
         self.recorder = recorder
         self._scenario_dir = scenario_dir
+        self._capabilities = capabilities
+        self._backend_name = "claude-code" if capabilities.pty_required else "codex"
         if inner is None:
             from autoskillit.execution.process import DefaultSubprocessRunner
 
@@ -144,12 +149,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     session_log_dir=session_log_dir,
                 )
 
-            # Non-PTY session step — use AUTOSKILLIT_AGENT_BACKEND as the
-            # discriminator; it is the most explicit signal and avoids cmd[0]
-            # fragility.  Codex backends are definitionally non-PTY
-            # (CodexBackend.capabilities.pty_required=False), so this branch
-            # is only reachable when pty_mode=False.
-            if (env or {}).get(AGENT_BACKEND_ENV_VAR, "") == "codex":
+            if not self._capabilities.pty_required:
                 return await self._record_non_pty_session(
                     cmd=cmd,
                     cwd=cwd,
@@ -347,7 +347,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             atomic_write(cassette_dir / "codex_stdout.ndjson", ndjson_content)
 
             meta = {
-                "backend": "codex",
+                "backend": self._backend_name,
                 "model": _extract_model(cmd),
                 "exit_code": result.returncode,
                 "duration_ms": int(result.elapsed_seconds * 1000),

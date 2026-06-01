@@ -18,6 +18,7 @@ from typing import Any
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     MARKETPLACE_PREFIX,
+    CodingAgentBackend,
     DirectInstall,
     FleetLock,
     MarketplaceInstall,
@@ -207,6 +208,28 @@ def make_context(
 
         runner = DefaultSubprocessRunner()
 
+    from autoskillit.execution import get_backend  # lazy: avoids execution init on server import
+    from autoskillit.fleet import (  # lazy: avoids fleet init on server import
+        FleetSemaphore,
+        build_protected_campaign_ids,
+    )
+
+    _codex_feature_enabled = is_feature_enabled(
+        "codex_backend", config.features, experimental_enabled=config.experimental_enabled
+    )
+    if _codex_feature_enabled and config.agent_backend.backend == "codex":
+        from autoskillit.execution import CodexBackend
+
+        backend: CodingAgentBackend = CodexBackend()
+    else:
+        backend = get_backend(config.agent_backend.backend)
+        if _codex_feature_enabled:
+            logger.warning(
+                "codex_backend_flag_ignored",
+                reason="config.agent_backend.backend is not 'codex'",
+                configured_backend=config.agent_backend.backend,
+            )
+
     if runner is not None and os.environ.get(REPLAY_SCENARIO_ENV):
         if config.agent_backend.backend != "claude-code":
             logger.warning(
@@ -264,6 +287,7 @@ def make_context(
                             recorder=recorder,
                             inner=runner,
                             scenario_dir=Path(scenario_dir),
+                            capabilities=backend.capabilities,
                         )
 
     # Lazy token resolution: config → GITHUB_TOKEN env var → gh CLI → None.
@@ -305,28 +329,6 @@ def make_context(
     )
     ephemeral_root = resolve_ephemeral_root()
     session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
-
-    from autoskillit.execution import get_backend  # lazy: avoids execution init on server import
-    from autoskillit.fleet import (  # lazy: avoids fleet init on server import
-        FleetSemaphore,
-        build_protected_campaign_ids,
-    )
-
-    backend = get_backend(config.agent_backend.backend)
-
-    if is_feature_enabled(
-        "codex_backend", config.features, experimental_enabled=config.experimental_enabled
-    ):
-        if config.agent_backend.backend == "codex":
-            from autoskillit.execution import CodexBackend
-
-            backend = CodexBackend()
-        else:
-            logger.warning(
-                "codex_backend_flag_ignored",
-                reason="config.agent_backend.backend is not 'codex'",
-                configured_backend=config.agent_backend.backend,
-            )
 
     audit = DefaultAuditLog()
     github_api_log = DefaultGitHubApiLog()

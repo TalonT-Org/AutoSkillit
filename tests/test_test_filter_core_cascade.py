@@ -177,7 +177,7 @@ class TestModuleCascadeCore:
 
     def test_type_protocols_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_protocols_backend"] == frozenset(
-            {"core", "execution", "pipeline", "cli", "workspace", "_llm_triage"}
+            {"core", "execution", "pipeline", "cli", "workspace", "_llm_triage", "server"}
         )
 
     def test_json_cascade(self) -> None:
@@ -554,7 +554,7 @@ class TestBuildTestScopeCoreCascade:
 
     def test_type_protocols_backend_narrow_cascade(self, tmp_path: Path) -> None:
         """_type_protocols_backend -> cascade of
-        {"core", "execution", "pipeline", "cli", "workspace"} only."""
+        {"core", "execution", "pipeline", "cli", "workspace", "server"} only."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_protocols_backend.py"},

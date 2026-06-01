@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from autoskillit.core import AGENT_BACKEND_ENV_VAR
+from autoskillit.core import CLAUDE_CODE_CAPABILITIES, BackendCapabilities
 from autoskillit.core.types import (
     DirectInstall,
     OutputFormat,
@@ -31,6 +31,20 @@ from tests.fakes import MockSubprocessRunner
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _api_sim_claude = pytest.importorskip("api_simulator.claude")
+
+_NON_PTY_CAPABILITIES = BackendCapabilities(
+    pty_required=False,
+    channel_b_capable=False,
+    session_resume_capable=True,
+    skill_injection_capable=True,
+    supports_thinking_blocks=False,
+    supports_claude_format_stdout=False,
+    exit_code_is_terminal=True,
+    mcp_config_capable=True,
+    food_truck_capable=True,
+    completion_record_types=frozenset({"turn.completed", "turn.failed", "error"}),
+    session_record_types=frozenset({"item.completed"}),
+)
 
 
 @dataclass
@@ -420,6 +434,36 @@ def test_recording_runner_recorder_is_public():
     assert runner.recorder is mock_recorder
 
 
+# --- T-CAPABILITIES-STORED: capabilities stored on construction ---
+
+
+def test_recording_runner_stores_capabilities():
+    """RecordingSubprocessRunner stores capabilities as _capabilities."""
+    mock_recorder = Mock()
+    runner = RecordingSubprocessRunner(recorder=mock_recorder)
+    assert runner._capabilities is CLAUDE_CODE_CAPABILITIES
+
+
+# --- T-BACKEND-NAME-PTY: default capabilities derives 'claude-code' ---
+
+
+def test_recording_runner_backend_name_pty():
+    """Default CLAUDE_CODE_CAPABILITIES derives _backend_name='claude-code'."""
+    mock_recorder = Mock()
+    runner = RecordingSubprocessRunner(recorder=mock_recorder)
+    assert runner._backend_name == "claude-code"
+
+
+# --- T-BACKEND-NAME-NONPTY: non-PTY capabilities derives 'codex' ---
+
+
+def test_recording_runner_backend_name_nonpty():
+    """BackendCapabilities(pty_required=False) derives _backend_name='codex'."""
+    mock_recorder = Mock()
+    runner = RecordingSubprocessRunner(recorder=mock_recorder, capabilities=_NON_PTY_CAPABILITIES)
+    assert runner._backend_name == "codex"
+
+
 # --- T-REPLAY-PLAYER: player attribute stored ---
 
 
@@ -750,12 +794,16 @@ async def test_nonpty_dispatch_routes_to_record_non_pty_session(tmp_path):
     mock_recorder = Mock()
     inner = MockSubprocessRunner()
     inner.set_default(_make_result(returncode=0, stdout="codex output"))
-    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner, scenario_dir=tmp_path)
+    runner = RecordingSubprocessRunner(
+        recorder=mock_recorder,
+        inner=inner,
+        scenario_dir=tmp_path,
+        capabilities=_NON_PTY_CAPABILITIES,
+    )
 
     cmd = ["codex", "exec", "--model", "o3", "implement the thing"]
     env = {
         "SCENARIO_STEP_NAME": "codex-step",
-        AGENT_BACKEND_ENV_VAR: "codex",
     }
 
     result = await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=False)
@@ -791,11 +839,14 @@ async def test_nonpty_cassettes_written(tmp_path):
     inner = MockSubprocessRunner()
     inner.set_default(expected)
     runner = RecordingSubprocessRunner(
-        recorder=mock_recorder, inner=inner, scenario_dir=scenario_dir
+        recorder=mock_recorder,
+        inner=inner,
+        scenario_dir=scenario_dir,
+        capabilities=_NON_PTY_CAPABILITIES,
     )
 
     cmd = ["codex", "exec", "--model", "o3", "go"]
-    env = {"SCENARIO_STEP_NAME": "codex-step", AGENT_BACKEND_ENV_VAR: "codex"}
+    env = {"SCENARIO_STEP_NAME": "codex-step"}
 
     await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=False)
 
@@ -828,10 +879,15 @@ async def test_nonpty_result_passthrough(tmp_path):
     expected = _make_result(returncode=42, stdout="raw codex out")
     inner = MockSubprocessRunner()
     inner.set_default(expected)
-    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner, scenario_dir=tmp_path)
+    runner = RecordingSubprocessRunner(
+        recorder=mock_recorder,
+        inner=inner,
+        scenario_dir=tmp_path,
+        capabilities=_NON_PTY_CAPABILITIES,
+    )
 
     cmd = ["codex", "exec", "--model", "o3", "go"]
-    env = {"SCENARIO_STEP_NAME": "step", AGENT_BACKEND_ENV_VAR: "codex"}
+    env = {"SCENARIO_STEP_NAME": "step"}
 
     result = await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=False)
 
@@ -875,10 +931,14 @@ async def test_nonpty_no_step_name_skips_recording():
     mock_recorder = Mock()
     inner = MockSubprocessRunner()
     inner.set_default(_make_result(returncode=0))
-    runner = RecordingSubprocessRunner(recorder=mock_recorder, inner=inner)
+    runner = RecordingSubprocessRunner(
+        recorder=mock_recorder,
+        inner=inner,
+        capabilities=_NON_PTY_CAPABILITIES,
+    )
 
     cmd = ["codex", "exec", "do something"]
-    env = {AGENT_BACKEND_ENV_VAR: "codex"}
+    env = {}
 
     await runner(cmd, cwd=Path("/tmp"), timeout=60, env=env, pty_mode=False)
 

@@ -1,6 +1,10 @@
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 RESOLVE_SKILL_MD = (
     Path(__file__).parent.parent.parent
     / "src"

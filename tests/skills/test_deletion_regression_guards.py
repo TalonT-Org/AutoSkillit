@@ -12,6 +12,8 @@ SKILLS_ROOT = pkg_root() / "skills_extended"
 MERGE_PR_SKILL = SKILLS_ROOT / "merge-pr" / "SKILL.md"
 REVIEW_PR_SKILL = SKILLS_ROOT / "review-pr" / "SKILL.md"
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 @pytest.fixture(scope="module")
 def merge_pr_text():

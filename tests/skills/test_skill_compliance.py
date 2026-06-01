@@ -26,6 +26,8 @@ from autoskillit.workspace.skills import DefaultSkillResolver
 from tests._helpers import extract_always_block, extract_never_block
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
 
 # Patterns that detect instructions to output/emit/print plain text

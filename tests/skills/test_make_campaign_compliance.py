@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from autoskillit.core import pkg_root
 from autoskillit.core.io import load_yaml
 from autoskillit.recipe._skill_placeholder_parser import (
@@ -17,6 +19,8 @@ from autoskillit.recipe._skill_placeholder_parser import (
     shell_vars_assigned,
 )
 from tests.skills.test_skill_output_compliance import FIXED_NAME_SKILLS
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 _CONTRACTS_PATH = pkg_root() / "recipe" / "skill_contracts.yaml"
 _SKILL_MD_PATH = pkg_root() / "skills_extended" / "make-campaign" / "SKILL.md"

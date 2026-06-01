@@ -5,6 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 _AMBIGUOUS_PATTERNS = [
     # "(Task tool, model: ..." or "(Task tool, `model:" parenthetical
     re.compile(r"\(\s*Task\s+tool\s*,\s*`?model:"),

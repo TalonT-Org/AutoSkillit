@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/audit-arch/SKILL.md"
 
 

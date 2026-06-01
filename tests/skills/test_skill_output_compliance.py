@@ -12,6 +12,8 @@ from autoskillit.core import pkg_root
 from autoskillit.core.io import load_yaml
 from autoskillit.workspace.skills import DefaultSkillResolver
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 # Skills whose output files are intentionally fixed-name (no timestamp needed).
 # These are idempotent by design — the filename IS the identity.
 FIXED_NAME_SKILLS: frozenset[str] = frozenset(

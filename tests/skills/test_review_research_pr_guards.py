@@ -6,6 +6,10 @@ verdict mechanics, and GitHub Reviews API posting requirements.
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
     / "src"

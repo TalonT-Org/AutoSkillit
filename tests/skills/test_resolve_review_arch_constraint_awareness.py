@@ -10,6 +10,8 @@ import pytest
 
 from tests._arch_constraint_discovery import discover_constraint_tests
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 _CATALOG_HEADING = "architectural constraint catalog — consult before classifying accept"
 
 

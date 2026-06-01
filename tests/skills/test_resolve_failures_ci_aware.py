@@ -23,6 +23,9 @@ from autoskillit.core import pkg_root
 _SKILL_MD = pkg_root() / "skills_extended" / "resolve-failures" / "SKILL.md"
 
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
+
 @pytest.fixture(scope="module")
 def skill_text() -> str:
     assert _SKILL_MD.exists(), f"resolve-failures SKILL.md not found at {_SKILL_MD}"

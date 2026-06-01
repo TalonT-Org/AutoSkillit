@@ -4,6 +4,8 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 @pytest.fixture(scope="module")
 def make_plan_text() -> str:

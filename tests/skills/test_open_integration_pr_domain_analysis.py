@@ -11,6 +11,8 @@ SKILL_MD = (
 )
 _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 @pytest.fixture
 def skill_text() -> str:

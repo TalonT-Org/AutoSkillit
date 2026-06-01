@@ -12,6 +12,8 @@ import pytest
 
 from autoskillit.core.io import load_yaml
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 

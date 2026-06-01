@@ -10,6 +10,9 @@ from autoskillit.core.paths import pkg_root
 _SKILLS_ROOT = pkg_root() / "skills_extended"
 
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
+
 def _read_skill(name: str) -> str:
     path = _SKILLS_ROOT / name / "SKILL.md"
     assert path.exists(), f"SKILL.md not found for {name!r}"

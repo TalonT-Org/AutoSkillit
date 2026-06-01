@@ -16,6 +16,8 @@ PROJECT_ROOT = pkg_root()
 SKILLS_ROOT = pkg_root() / "skills_extended"
 RECIPE_PATH = pkg_root() / "recipes" / "merge-prs.yaml"
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 @pytest.fixture(scope="module")
 def merge_pr_skill_text():

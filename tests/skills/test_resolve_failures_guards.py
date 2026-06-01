@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from autoskillit.core.paths import pkg_root
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 SKILL_MD = pkg_root() / "skills_extended" / "resolve-failures" / "SKILL.md"
 

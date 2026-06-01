@@ -36,11 +36,13 @@ def _setup_isolated_clone(tmp_path: Path) -> tuple[Path, Path]:
     """
     bare = tmp_path / "remote.git"
     bare.mkdir()
-    subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "main", str(bare)], check=True, capture_output=True
+    )
 
     source = tmp_path / "source"
     source.mkdir()
-    subprocess.run(["git", "init", str(source)], check=True, capture_output=True)
+    subprocess.run(["git", "init", "-b", "main", str(source)], check=True, capture_output=True)
     subprocess.run(
         ["git", "-C", str(source), "config", "user.email", "test@test.com"],
         check=True,
@@ -121,7 +123,7 @@ class TestCreateAndPublishBranchIsolation:
         """When no upstream remote exists, origin is used as fallback."""
         repo = tmp_path / "repo"
         repo.mkdir()
-        subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+        subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo), "config", "user.email", "test@test.com"],
             check=True,
@@ -138,7 +140,9 @@ class TestCreateAndPublishBranchIsolation:
 
         bare = tmp_path / "remote.git"
         bare.mkdir()
-        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "init", "--bare", "-b", "main", str(bare)], check=True, capture_output=True
+        )
         _git(repo, "remote", "add", "origin", str(bare))
         _git(repo, "push", "-u", "origin", "HEAD")
 

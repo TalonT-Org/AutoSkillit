@@ -487,10 +487,10 @@ tasks:
         BEFORE=$(awk '/MemAvailable/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo "?")
         echo "Available memory before: ${BEFORE} MB"
 
-        sudo sh -c 'sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory' || {
+        sudo sh -c 'sync && echo 3 > /proc/sys/vm/drop_caches && if [ -f /proc/sys/vm/compact_memory ]; then echo 1 > /proc/sys/vm/compact_memory; fi' || {
           echo ""
           echo "ERROR: sudo failed — ensure passwordless sudo is configured, or run manually:"
-          echo "  sudo sh -c 'sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory'"
+          echo "  sudo sh -c 'sync && echo 3 > /proc/sys/vm/drop_caches && if [ -f /proc/sys/vm/compact_memory ]; then echo 1 > /proc/sys/vm/compact_memory; fi'"
           exit 1
         }
 

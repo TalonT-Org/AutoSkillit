@@ -10,12 +10,28 @@ import pytest
 
 import autoskillit.recipe.rules.rules_stamp_ownership as _rso
 from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER, Severity
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
+from autoskillit.workspace import DefaultSkillResolver
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _RULE_ID = "exclusive-stamp-ownership"
+
+_CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
+
+
+def _load_always_write_skills() -> list[str]:
+    raw = load_yaml(_CONTRACTS_YAML)
+    return sorted(
+        name
+        for name, spec in raw.get("skills", {}).items()
+        if spec.get("write_behavior") == "always"
+    )
+
+
+_ALWAYS_WRITE_SKILLS: list[str] = _load_always_write_skills()
 
 
 def _make_recipe_for_skill(skill_name: str) -> str:
@@ -143,3 +159,23 @@ def test_stamp_ownership_rule_passes_for_unrelated_skill(tmp_path: Path) -> None
 
     rule_ids = [f.rule for f in findings]
     assert _RULE_ID not in rule_ids
+
+
+@pytest.mark.parametrize("skill_name", _ALWAYS_WRITE_SKILLS)
+def test_no_write_target_overlap_across_always_write_skills(skill_name: str) -> None:
+    """Skills with write_behavior=always must not write stamps owned by other skills."""
+    resolver = DefaultSkillResolver()
+    info = resolver.resolve(skill_name)
+    if info is None:
+        pytest.skip(f"{skill_name} not resolvable")
+    content = info.path.read_text(encoding="utf-8")
+    violations = []
+    for stamp, owner in _rso._STAMP_OWNERS.items():
+        if skill_name == owner:
+            continue
+        if _rso._has_write_instruction(content, stamp):
+            violations.append((stamp, owner))
+    assert not violations, (
+        f"Skill '{skill_name}' writes stamps owned by other skills: "
+        + ", ".join(f"'{s}' (owned by '{o}')" for s, o in violations)
+    )

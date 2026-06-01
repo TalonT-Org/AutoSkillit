@@ -320,8 +320,19 @@ async def run_python(
             from autoskillit.server.tools._execution_helpers import (
                 _import_and_call,  # noqa: PLC0415
                 resolve_relative_path_args,  # noqa: PLC0415
+                validate_path_arg_anchoring,  # noqa: PLC0415
             )
 
+            if work_dir and not Path(work_dir).is_absolute():
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": f"run_python: work_dir must be absolute, got {work_dir!r}",
+                    }
+                )
+            anchor_err = validate_path_arg_anchoring(args, work_dir)
+            if anchor_err:
+                return json.dumps({"success": False, "error": anchor_err})
             resolved_args = args
             if work_dir:
                 resolved_args = resolve_relative_path_args(args or {}, work_dir)

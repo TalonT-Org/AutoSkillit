@@ -602,6 +602,79 @@ def test_push_after_readonly_skill_without_force_passes() -> None:
     assert not hits, "push-after-edit-requires-force must not fire for read_only skills"
 
 
+# ---------------------------------------------------------------------------
+# run-python-requires-work-dir rule tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_python_requires_work_dir_when_output_dir_relative() -> None:
+    """run_python step with relative output_dir and no work_dir triggers error."""
+    recipe = _make_recipe_with_args(
+        "run_python",
+        {"callable": "mod.fn", "output_dir": "{{AUTOSKILLIT_TEMP}}/y"},
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "run-python-requires-work-dir"]
+    assert matched, "Expected run-python-requires-work-dir finding"
+    assert all(f.severity == Severity.ERROR for f in matched)
+
+
+def test_run_python_no_violation_when_work_dir_present() -> None:
+    """run_python step with relative output_dir but work_dir present passes."""
+    recipe = _make_recipe_with_args(
+        "run_python",
+        {
+            "callable": "mod.fn",
+            "output_dir": "{{AUTOSKILLIT_TEMP}}/y",
+            "work_dir": "${{ context.work_dir }}",
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "run-python-requires-work-dir"]
+    assert not matched
+
+
+def test_run_python_no_violation_when_output_dir_absolute() -> None:
+    """run_python step with absolute output_dir needs no work_dir."""
+    recipe = _make_recipe_with_args(
+        "run_python",
+        {"callable": "mod.fn", "output_dir": "/absolute/path"},
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "run-python-requires-work-dir"]
+    assert not matched
+
+
+def test_python_shorthand_requires_work_dir_when_output_dir_relative() -> None:
+    """python: shorthand step with relative output_dir and no work_dir triggers error."""
+    recipe = Recipe(
+        name="test-recipe",
+        description="Test recipe.",
+        version="0.2.0",
+        kitchen_rules="Use run_skill only.",
+        steps={
+            "parse": RecipeStep(
+                python="autoskillit.smoke_utils.parse_eval_manifests",
+                with_args={"output_dir": "{{AUTOSKILLIT_TEMP}}/eval"},
+            )
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "run-python-requires-work-dir"]
+    assert matched, "python: shorthand must also be caught"
+
+
+def test_run_python_no_violation_when_recipe_expression() -> None:
+    """${{ }} recipe expressions are skipped — resolved to absolute paths at runtime."""
+    recipe = _make_recipe_with_args(
+        "run_python",
+        {"callable": "mod.fn", "output_dir": "${{ context.planner_dir }}"},
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "run-python-requires-work-dir"]
+    assert not matched
+
+
 def test_all_bundled_recipes_pass_push_after_edit_rule() -> None:
     """All bundled recipes must have zero push-after-edit-requires-force findings."""
     from autoskillit.core import pkg_root

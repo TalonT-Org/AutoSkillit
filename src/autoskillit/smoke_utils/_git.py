@@ -12,6 +12,8 @@ def check_bug_report_non_empty(workspace: str) -> dict[str, str]:
     Called by run_python from the check_summary step in smoke-test.yaml.
     The workspace argument is the root directory initialised by the setup step.
     """
+    if not Path(workspace).is_absolute():
+        raise ValueError(f"workspace must be absolute, got {workspace!r}")
     report = Path(workspace) / "bug_report.json"
     if not report.exists():
         return {"non_empty": "false"}
@@ -35,6 +37,9 @@ def compute_domain_partitions(
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
     from autoskillit.execution import partition_files_by_domain  # noqa: PLC0415
+
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
 
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{base_branch}..{batch_branch}"],
@@ -62,6 +67,9 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
     from autoskillit.execution import parse_merge_queue_response  # noqa: PLC0415
+
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
 
     repo_info = subprocess.run(
         ["gh", "repo", "view", "--json", "owner,name"],

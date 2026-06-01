@@ -1049,7 +1049,7 @@
       "with": {
         "callable": "autoskillit.smoke_utils.enrich_diff_context",
         "pr_number": "${{ context.pr_number }}",
-        "work_dir": "${{ context.work_dir }}"
+        "project_dir": "${{ context.work_dir }}"
       },
       "on_success": "resolve_review",
       "on_failure": "resolve_review",

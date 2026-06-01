@@ -34,8 +34,8 @@ _EXPLICITLY_EXCLUDED: dict[str, str] = {
         "always absolute; git worktree paths are inherently absolute by design "
         "and are never passed as relative paths to run_python steps"
     ),
-    "work_dir": (
-        "enrich_diff_context receives work_dir as the anchor/base directory itself "
+    "project_dir": (
+        "enrich_diff_context receives project_dir as the anchor/base directory itself "
         "for constructing temp_dir; resolving it against itself would be circular"
     ),
     "log_dir": (
@@ -45,47 +45,45 @@ _EXPLICITLY_EXCLUDED: dict[str, str] = {
 }
 
 
-def test_smoke_utils_output_dir_never_resolves_against_implicit_cwd() -> None:
-    """No smoke_utils callable may fall back to a relative path when output_dir is falsy."""
-    violations: list[str] = []
+def _find_absoluteness_guard(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef, _param_names: set[str]
+) -> bool:
+    """Check whether *func_node* guards *param_names* with is_absolute() or raise."""
+    for node in ast.walk(func_node):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "is_absolute":
+                return True
+        if isinstance(node, ast.Raise) and node.exc is not None:
+            for child in ast.walk(node.exc):
+                if (
+                    isinstance(child, ast.Constant)
+                    and isinstance(child.value, str)
+                    and "absolute" in child.value.lower()
+                ):
+                    return True
+    return False
 
+
+_GUARDED_PARAMS = {"output_dir", "workspace", "diagnostics_log_dir", "project_dir"}
+
+
+def test_smoke_utils_path_params_always_guarded_absolute() -> None:
+    """Every Path(path_param) in smoke_utils must be preceded by an is_absolute() guard."""
+    violations = []
     for py_file in sorted(_SMOKE_UTILS_DIR.glob("*.py")):
-        source = py_file.read_text()
-        tree = ast.parse(source, filename=str(py_file))
-
+        tree = ast.parse(py_file.read_text(), filename=str(py_file))
         for func_node in ast.walk(tree):
             if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            param_names = {arg.arg for arg in func_node.args.args}
-            if "output_dir" not in param_names:
+            func_params = {a.arg for a in func_node.args.args}
+            guarded_in_func = func_params & _GUARDED_PARAMS
+            if not guarded_in_func:
                 continue
-
-            for stmt in ast.walk(func_node):
-                if not isinstance(stmt, ast.If):
-                    continue
-                for else_stmt in stmt.orelse:
-                    for call_node in ast.walk(else_stmt):
-                        if not isinstance(call_node, ast.Call):
-                            continue
-                        func = call_node.func
-                        if not (isinstance(func, ast.Name) and func.id == "Path"):
-                            continue
-                        if not call_node.args:
-                            continue
-                        first_arg = call_node.args[0]
-                        if not isinstance(first_arg, ast.Constant):
-                            continue
-                        val = first_arg.value
-                        if isinstance(val, str) and not val.startswith("/"):
-                            violations.append(
-                                f"{py_file.name}:{call_node.lineno}: "
-                                f"'{func_node.name}' falls back to relative Path({val!r}) "
-                                f"— raise ValueError instead"
-                            )
-
+            has_guard = _find_absoluteness_guard(func_node, guarded_in_func)
+            if not has_guard:
+                violations.append(f"{py_file.name}:{func_node.name}: missing absoluteness guard")
     assert not violations, (
-        "smoke_utils callables must not fall back to relative paths; "
-        "run_python work_dir anchoring ensures output_dir always arrives absolute:\n"
+        "smoke_utils callables with path params must check is_absolute():\n"
         + "\n".join(violations)
     )
 
@@ -121,4 +119,15 @@ def test_path_like_args_registry_complete() -> None:
         "smoke_utils callable params with path-like names must be registered in "
         "_PATH_LIKE_ARGS or listed in _EXPLICITLY_EXCLUDED with justification:\n"
         + "\n".join(unregistered)
+    )
+
+
+def test_path_like_args_synchronized_across_layers() -> None:
+    """_PATH_LIKE_ARGS and _RUN_PYTHON_PATH_LIKE_ARGS must stay in sync."""
+    from autoskillit.recipe.rules.rules_tools import _RUN_PYTHON_PATH_LIKE_ARGS
+    from autoskillit.server.tools._execution_helpers import _PATH_LIKE_ARGS
+
+    assert _PATH_LIKE_ARGS == _RUN_PYTHON_PATH_LIKE_ARGS, (
+        f"Path-like args registries out of sync: "
+        f"server={_PATH_LIKE_ARGS}, recipe={_RUN_PYTHON_PATH_LIKE_ARGS}"
     )

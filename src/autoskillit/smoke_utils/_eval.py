@@ -25,6 +25,8 @@ def parse_eval_manifests(
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
 
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     eval_run_dir = Path(output_dir) / "runs" / timestamp
     eval_run_dir.mkdir(parents=True, exist_ok=True)
@@ -108,6 +110,8 @@ def parse_agent_eval_manifests(
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
 
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     eval_run_dir = Path(output_dir) / "runs" / timestamp
     eval_run_dir.mkdir(parents=True, exist_ok=True)

@@ -175,6 +175,12 @@ class TestWriteTelemetryFiles:
         assert result["success"] is False
         assert result["subtype"] == "gate_error"
 
+    @pytest.mark.anyio
+    async def test_rejects_relative_output_dir(self, tool_ctx_kitchen_open):
+        result = json.loads(await write_telemetry_files(".autoskillit/temp/telemetry"))
+        assert result["success"] is False
+        assert "absolute" in result["error"]
+
 
 # ---------------------------------------------------------------------------
 # TestReadDb — moved from test_tools_workspace.py (tools_status owns read_db)

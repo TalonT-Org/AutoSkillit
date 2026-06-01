@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+from pathlib import PurePosixPath
 
 from autoskillit.core import (
     GATED_TOOLS,
@@ -25,6 +26,10 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 logger = get_logger(__name__)
 
 _ALL_TOOLS: frozenset[str] = GATED_TOOLS | UNGATED_TOOLS | HEADLESS_TOOLS
+
+_RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
+    {"output_dir", "workspace", "diagnostics_log_dir"}
+)
 
 # Known parameter signatures for MCP tools that accept `with:` args in recipes.
 # Intentionally hardcoded — recipe validation runs without a live MCP server.
@@ -547,4 +552,58 @@ def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFi
                 )
             )
 
+    return findings
+
+
+@semantic_rule(
+    name="run-python-requires-work-dir",
+    description="run_python steps with relative path-like args must include work_dir",
+    severity=Severity.ERROR,
+)
+def _check_run_python_requires_work_dir(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        is_run_python = step.tool == "run_python" or step.python is not None
+        if not is_run_python:
+            continue
+        with_args = step.with_args or {}
+        has_relative_path_like = any(
+            k in _RUN_PYTHON_PATH_LIKE_ARGS
+            and isinstance(v, str)
+            and v
+            and "${{" not in v
+            and not PurePosixPath(v).is_absolute()
+            for k, v in with_args.items()
+        )
+        if has_relative_path_like and "work_dir" not in with_args:
+            findings.append(
+                RuleFinding(
+                    rule="run-python-requires-work-dir",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}' has relative path-like args "
+                        "but no work_dir — add work_dir to anchor paths"
+                    ),
+                )
+            )
+        work_dir_val = with_args.get("work_dir")
+        if (
+            isinstance(work_dir_val, str)
+            and work_dir_val
+            and "${{" not in work_dir_val
+            and not PurePosixPath(work_dir_val).is_absolute()
+        ):
+            findings.append(
+                RuleFinding(
+                    rule="run-python-requires-work-dir",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}' has work_dir='{work_dir_val}' "
+                        "which is not absolute and not a template — "
+                        "use an absolute path or template expression"
+                    ),
+                )
+            )
     return findings

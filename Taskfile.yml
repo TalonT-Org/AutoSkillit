@@ -472,3 +472,29 @@ tasks:
         fi
 
         echo "Done."
+
+  drop-cache:
+    desc: "Drop Linux page cache and compact memory for WSL2 memory reclaim (do NOT run during active I/O-heavy sessions)"
+    preconditions:
+      - sh: '[ "$(uname -s)" = "Linux" ]'
+        msg: "drop-cache requires Linux (WSL2)"
+    cmds:
+      - |
+        echo "Syncing filesystem and dropping page cache..."
+        echo "WARNING: Do not run this while sessions are actively doing I/O-heavy work (tests, git operations)."
+        echo ""
+
+        BEFORE=$(awk '/MemAvailable/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo "?")
+        echo "Available memory before: ${BEFORE} MB"
+
+        sudo sh -c 'sync && echo 3 > /proc/sys/vm/drop_caches && if [ -f /proc/sys/vm/compact_memory ]; then echo 1 > /proc/sys/vm/compact_memory; fi' || {
+          echo ""
+          echo "ERROR: sudo failed — ensure passwordless sudo is configured, or run manually:"
+          echo "  sudo sh -c 'sync && echo 3 > /proc/sys/vm/drop_caches && if [ -f /proc/sys/vm/compact_memory ]; then echo 1 > /proc/sys/vm/compact_memory; fi'"
+          exit 1
+        }
+
+        AFTER=$(awk '/MemAvailable/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo "?")
+        echo ""
+        echo "Available memory after:  ${AFTER} MB"
+        echo "Done. Page cache dropped and memory compacted."

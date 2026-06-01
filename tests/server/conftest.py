@@ -106,6 +106,7 @@ def _make_mock_ctx() -> MagicMock:
     ctx.gate = gate
     ctx.project_dir = Path("/fake/project")
     ctx.config.subsets.disabled = []  # REQ-VIS-008: no subsets disabled by default
+    ctx.active_recipe_ingredients = None
     return ctx
 
 

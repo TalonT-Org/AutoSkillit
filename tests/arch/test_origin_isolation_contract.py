@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.medium]
+
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
 GIT_REMOTE_COMMANDS = {"ls-remote", "push", "fetch", "remote"}

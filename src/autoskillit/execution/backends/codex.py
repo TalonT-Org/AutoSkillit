@@ -328,6 +328,7 @@ class CodexBackend:
             mcp_env_forward_vars=frozenset({MCP_CLIENT_BACKEND_ENV_VAR}),
             replay_capable=False,
             record_capable=False,
+            anthropic_provider_capable=False,
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:

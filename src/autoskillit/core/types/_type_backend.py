@@ -30,8 +30,9 @@ class BackendCapabilities:
 
     Every field must have at least one production read site in src/ —
     enforced by tests/arch/test_capability_consumption.py. Fields without
-    a consumer must be added to the _FORWARD_DECLARED exemption set with
-    a linked issue justifying the exception.
+    a consumer must be added to the _FORWARD_DECLARED exemption set as a
+    ForwardDeclaredField(issue=NNNN, rationale="...", added_date=date(...))
+    entry with a linked tracking issue.
     """
 
     # True when backend streams a side-channel JSONL log (Channel B)

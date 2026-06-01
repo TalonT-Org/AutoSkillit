@@ -1,25 +1,55 @@
 """Architectural invariant: every BackendCapabilities field must be consumed in production."""
 
+from __future__ import annotations
+
 import ast
 import dataclasses
-import re
+from datetime import date
 from pathlib import Path
 
 import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-# Fields that are explicitly forward-declared and have no consumer yet.
-# Every entry must reference a tracking issue: 'field_name': '#NNNN'.
-_FORWARD_DECLARED: dict[str, str] = {
-    "supports_thinking_blocks": "#3298",  # planned for thinking-block rendering
-    "supports_context_exhaustion_detection": "#3299",  # planned for context exhaustion handling
-    "min_version": "#3300",  # planned for version validation in doctor
-    "version_check_command": "#3301",  # planned for version validation in doctor
-    "mcp_env_forward_vars": "#3458",  # consumed by tests/arch/test_mcp_env_forward_coverage.py
-}
 
-_ISSUE_REF_RE = re.compile(r"#\d+")
+@dataclasses.dataclass(frozen=True)
+class ForwardDeclaredField:
+    """Structured forward-declaration for a BackendCapabilities field without a consumer."""
+
+    issue: int
+    rationale: str
+    added_date: date
+
+
+_STALENESS_THRESHOLD_DAYS = 180
+
+_FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
+    "supports_thinking_blocks": ForwardDeclaredField(
+        issue=3497,
+        rationale="thinking-block rendering gating",
+        added_date=date(2026, 5, 31),
+    ),
+    "supports_context_exhaustion_detection": ForwardDeclaredField(
+        issue=3384,
+        rationale="context exhaustion and recovery paths",
+        added_date=date(2026, 5, 31),
+    ),
+    "min_version": ForwardDeclaredField(
+        issue=3122,
+        rationale="version validation via BackendCapabilities fields",
+        added_date=date(2026, 5, 31),
+    ),
+    "version_check_command": ForwardDeclaredField(
+        issue=3122,
+        rationale="version validation via BackendCapabilities fields",
+        added_date=date(2026, 5, 31),
+    ),
+    "mcp_env_forward_vars": ForwardDeclaredField(
+        issue=3458,
+        rationale="MCP env forwarding — enforcement arch test exists, awaiting src/ consumer",
+        added_date=date(2026, 5, 31),
+    ),
+}
 
 
 def _collect_attribute_reads(src_root: Path, field_names: frozenset[str]) -> dict[str, list[str]]:
@@ -53,16 +83,66 @@ def test_all_capability_fields_have_production_consumers():
     }
     assert not unconsumed, (
         f"BackendCapabilities fields with zero production read sites "
-        f"(add a consumer or add to _FORWARD_DECLARED as 'field_name': '#NNNN' dict entry): "
+        f"(add a consumer or add to _FORWARD_DECLARED as "
+        f"ForwardDeclaredField(issue=NNNN, rationale='...', added_date=date(YYYY, M, D))): "
         f"{sorted(unconsumed)}"
     )
 
 
 def test_forward_declared_has_linked_issues():
-    """Every _FORWARD_DECLARED entry must have a linked issue reference matching #\\d+."""
-    missing = {
-        field: ref for field, ref in _FORWARD_DECLARED.items() if not _ISSUE_REF_RE.search(ref)
+    """Every _FORWARD_DECLARED entry must have a positive issue number."""
+    invalid = {
+        field: entry.issue for field, entry in _FORWARD_DECLARED.items() if entry.issue <= 0
     }
-    assert not missing, (
-        f"_FORWARD_DECLARED entries missing issue reference (need '#NNNN'): {missing}"
+    assert not invalid, (
+        f"_FORWARD_DECLARED entries with invalid issue number (need positive int): {invalid}"
+    )
+
+
+def test_forward_declared_fields_have_no_consumers():
+    """_FORWARD_DECLARED entries must NOT have production consumers.
+
+    If a field gains a consumer in src/, it must be removed from
+    _FORWARD_DECLARED — the exemption is no longer needed.
+    """
+    from autoskillit.core import BackendCapabilities, paths
+
+    src_root = paths.pkg_root()
+    field_names = frozenset(f.name for f in dataclasses.fields(BackendCapabilities))
+    reads = _collect_attribute_reads(src_root, field_names)
+
+    stale = {name: sites for name, sites in reads.items() if name in _FORWARD_DECLARED and sites}
+    assert not stale, (
+        f"_FORWARD_DECLARED entries that now have production consumers "
+        f"(remove from _FORWARD_DECLARED): {stale}"
+    )
+
+
+def test_forward_declared_fields_exist_on_dataclass():
+    """Every _FORWARD_DECLARED key must be a real field on BackendCapabilities."""
+    from autoskillit.core import BackendCapabilities
+
+    real_fields = frozenset(f.name for f in dataclasses.fields(BackendCapabilities))
+    unknown = frozenset(_FORWARD_DECLARED.keys()) - real_fields
+    assert not unknown, (
+        f"_FORWARD_DECLARED keys that are not BackendCapabilities fields: {sorted(unknown)}"
+    )
+
+
+def test_forward_declared_entries_not_stale():
+    """Time-bomb: forward-declared fields older than 180 days require re-justification.
+
+    If a field has been forward-declared for > 180 days, either:
+    - add a production consumer and remove from _FORWARD_DECLARED, or
+    - update the added_date to reset the clock (with a current tracking issue)
+    """
+    today = date.today()
+    stale = [
+        f"{name} (added={entry.added_date}, age={(today - entry.added_date).days}d)"
+        for name, entry in _FORWARD_DECLARED.items()
+        if (today - entry.added_date).days > _STALENESS_THRESHOLD_DAYS
+    ]
+    assert not stale, (
+        f"_FORWARD_DECLARED entries older than {_STALENESS_THRESHOLD_DAYS} days "
+        f"(add a consumer, or update added_date with a fresh tracking issue): {stale}"
     )

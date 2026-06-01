@@ -16,8 +16,8 @@ outputs, and synthesizes a complete visualization plan.
 
 ## When to Use
 
-- As the `plan_visualization` step of the `research` recipe, after `review_design`
-  GO and before `create_worktree`
+- As the `plan_visualization` step of the `research-design` recipe, after
+  `review_design` GO and before `create_worktree`
 
 ## Arguments
 

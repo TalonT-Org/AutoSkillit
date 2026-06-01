@@ -94,7 +94,7 @@ class TestResearchRecipeStructure:
         assert step.on_result is not None
         go_cond = next((c for c in step.on_result.conditions if c.when and "GO" in c.when), None)
         assert go_cond is not None, "Missing GO route"
-        assert go_cond.route == "plan_visualization"
+        assert go_cond.route == "dial"
         revise_cond = next(
             (c for c in step.on_result.conditions if c.when and "REVISE" in c.when), None
         )

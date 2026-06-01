@@ -100,8 +100,8 @@ def test_both_fixtures_nonempty_and_distinct():
 # ---------------------------------------------------------------------------
 
 
-def test_plan_visualization_captures_methodology_tradition(research_recipe):
-    assert "methodology_tradition" in research_recipe.steps["plan_visualization"].capture
+def test_dial_captures_methodology_tradition(research_recipe):
+    assert "methodology_tradition" in research_recipe.steps["dial"].capture
 
 
 def test_generate_report_receives_experiment_type_arg(research_recipe):

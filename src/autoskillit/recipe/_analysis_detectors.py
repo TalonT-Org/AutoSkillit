@@ -116,6 +116,8 @@ _OBSERVABILITY_CAPTURES: frozenset[tuple[str, str]] = frozenset(
         ("selected_lenses", "prepare-pr"),
         ("lens_context_paths", "prepare-research-pr"),
         ("lens_context_paths", "prepare-pr"),
+        ("selected_lenses", "select-vis-lenses"),
+        ("lens_context_paths", "select-vis-lenses"),
         ("pr_url", "compose-pr"),
         ("html_path", "bundle-local-report"),
         ("resource_report", "stage-data"),

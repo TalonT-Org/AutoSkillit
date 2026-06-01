@@ -165,8 +165,12 @@ def has_dynamic_write_path(content: str) -> bool:
     When a SKILL.md reads AUTOSKILLIT_ALLOWED_WRITE_PREFIX or a derived
     variable at runtime, its write paths adapt to whatever prefix the
     framework provides — static path alignment checking is not applicable.
+    Scans only the NEVER block to avoid false positives from prose or examples.
     """
-    return bool(_DYNAMIC_WRITE_VAR_RE.search(content))
+    never_block = extract_never_block(content)
+    if not never_block:
+        return False
+    return bool(_DYNAMIC_WRITE_VAR_RE.search(never_block))
 
 
 def extract_validation_rule_block(content: str, rule_label: str) -> str | None:

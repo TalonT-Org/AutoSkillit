@@ -18,14 +18,14 @@ TESTS = Path(__file__).resolve().parent.parent
 _PYRIGHT_RE = re.compile(r"#\s*pyright:\s*ignore|#.*--\s*pyright:\s*ignore")
 
 PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
-    ("recipe/__init__.py", 219): "dynamic method on lazy-registry object",
+    ("recipe/__init__.py", 222): "dynamic method on lazy-registry object",
     ("recipe/_api.py", 256): "global-mutated variable set by _finalize_registry()",
 }
 
 TEST_ALLOWLIST: dict[tuple[str, int], str] = {
     (
         "arch/test_recipe_rule_registration.py",
-        70,
+        74,
     ): "global-mutated variable Pyright cannot resolve",
     ("recipe/test_research_campaign_rules.py", 7): "side-effect import for rule registration",
     ("recipe/test_research_sub_recipe_rules.py", 9): "side-effect import for rule registration",

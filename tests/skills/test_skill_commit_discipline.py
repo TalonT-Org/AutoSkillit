@@ -14,6 +14,8 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 
+pytestmark = [pytest.mark.small]
+
 _SKILLS_DIRS = [pkg_root() / "skills", pkg_root() / "skills_extended"]
 
 

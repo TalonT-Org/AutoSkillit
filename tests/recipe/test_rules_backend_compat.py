@@ -187,6 +187,7 @@ class TestBackendNameThreadingAPI:
         findings = result.get("findings", [])
         compat_findings = [f for f in findings if f.get("rule") == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
+        assert compat_findings[0]["severity"] == "error"
 
     def test_cache_key_varies_by_backend_name(self, tmp_path, monkeypatch):
         import autoskillit.recipe._api as api_mod

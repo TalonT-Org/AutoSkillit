@@ -276,7 +276,7 @@ def test_retry_reason_value_count_is_16() -> None:
 
 
 def test_semantic_rule_family_count_is_54() -> None:
-    assert _count_semantic_rule_files() == 54
+    assert _count_semantic_rule_files() == 55
 
 
 # ----- per-doc count assertions (run once docs exist) -------------------------

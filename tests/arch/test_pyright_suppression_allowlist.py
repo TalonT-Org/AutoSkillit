@@ -79,7 +79,7 @@ def test_type_ignore_count_budget() -> None:
     for path in SRC.rglob("*.py"):
         if "__pycache__" in path.parts:
             continue
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if "# type: ignore" in line:
                 count += 1
     budget = 94

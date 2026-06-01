@@ -14,13 +14,13 @@ from __future__ import annotations
 import functools
 import importlib.metadata
 import json
-import logging
 import os
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ._install_detect import parse_direct_url
+from .logging import get_logger
 from .types._type_constants_env import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_CODEX,
@@ -30,7 +30,7 @@ from .types._type_constants_env import (
 if TYPE_CHECKING:
     from .types._type_protocols_backend import CodingAgentBackend
 
-logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
+logger = get_logger(__name__)
 
 
 @functools.lru_cache(maxsize=4)

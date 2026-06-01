@@ -8,10 +8,10 @@ backend is provided.
 
 from __future__ import annotations
 
-import logging
 from unittest.mock import MagicMock
 
 import pytest
+import structlog.testing
 
 from autoskillit.core import _version_snapshot as mod
 from autoskillit.core._version_snapshot import collect_version_snapshot
@@ -66,15 +66,15 @@ def test_codex_backend_no_cross_contamination():
     assert result["plugins"] == []
 
 
-def test_unknown_backend_name_logs_warning(caplog):
+def test_unknown_backend_name_logs_warning():
     backend = _make_backend("unknown", "1.0", [{"ref": "p1"}])
-    with caplog.at_level(logging.WARNING, logger="autoskillit.core._version_snapshot"):
+    with structlog.testing.capture_logs() as logs:
         result = collect_version_snapshot(backend)
     assert result["claude_code_version"] == ""
     assert result["plugins"] == []
     assert result["codex_version"] == ""
     assert result["codex_plugins"] == []
-    assert any("Unknown backend name 'unknown'" in rec.message for rec in caplog.records)
+    assert any("Unknown backend name 'unknown'" in str(e.get("event", "")) for e in logs)
 
 
 def test_backend_version_called_exactly_once():

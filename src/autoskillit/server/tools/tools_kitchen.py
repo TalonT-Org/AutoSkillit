@@ -124,6 +124,7 @@ def _write_hook_config() -> None:
     payload = {
         "quota_guard": _quota_guard_hook_payload(cfg),
         "kitchen_id": ctx.kitchen_id,
+        "git_ops_policy": {},
     }
     hook_cfg_path = _hook_config_path(ctx.project_dir)
     try:
@@ -150,6 +151,40 @@ def _update_hook_config_with_recipe() -> None:
         atomic_write(hook_cfg_path, json.dumps(payload))
     except OSError:
         logger.warning("hook_config_recipe_update_write_failed", path=str(hook_cfg_path))
+
+
+def _update_hook_config_with_git_ops_policy() -> None:
+    """Propagate recipe-level git_ops_policy overlay to .hook_config.json.
+
+    Reads the overlay from the hook config overlay file and merges it into the
+    base config's git_ops_policy dict. Currently no recipe sets this; the
+    mechanism exists for future recipes that legitimately need destructive git ops
+    (e.g. allow_push for a release automation recipe).
+    """
+    from autoskillit.server import _get_ctx, logger
+
+    ctx = _get_ctx()
+    hook_cfg_path = _hook_config_path(ctx.project_dir)
+    overlay_path = _hook_config_overlay_path(ctx.project_dir)
+    try:
+        payload = json.loads(hook_cfg_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        logger.warning("hook_config_git_ops_policy_update_read_failed", path=str(hook_cfg_path))
+        return
+    git_ops_policy: dict = payload.get("git_ops_policy", {})
+    if overlay_path.exists():
+        try:
+            overlay = json.loads(overlay_path.read_text())
+            overlay_policy = overlay.get("git_ops_policy", {})
+            if overlay_policy:
+                git_ops_policy = {**git_ops_policy, **overlay_policy}
+        except (OSError, json.JSONDecodeError):
+            pass
+    payload["git_ops_policy"] = git_ops_policy
+    try:
+        atomic_write(hook_cfg_path, json.dumps(payload))
+    except OSError:
+        logger.warning("hook_config_git_ops_policy_update_write_failed", path=str(hook_cfg_path))
 
 
 async def _open_kitchen_handler() -> str | None:
@@ -578,10 +613,9 @@ async def open_kitchen(
 
             try:
                 _update_hook_config_with_recipe()
+                _update_hook_config_with_git_ops_policy()
             except Exception:
-                logger.warning(
-                    "open_kitchen_failure", stage="update_hook_config_recipe", exc_info=True
-                )
+                logger.warning("open_kitchen_failure", stage="update_hook_config", exc_info=True)
 
             composite = result.get("composite_hash", "")
             from autoskillit.server._state import _check_rerun  # noqa: PLC0415

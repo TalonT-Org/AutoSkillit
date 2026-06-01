@@ -206,6 +206,7 @@ If `${RESEARCH_DIR}/visualization-plan.md` exists:
 4. Commit scripts and images (if any were produced):
    ```bash
    git add research/ && git commit -m "Add visualization scripts and figures"
+   # Do NOT use --amend — always create new commits.
    ```
 
 ### Step 3 — Write Report
@@ -463,6 +464,7 @@ files committed alongside this report.}
    ```
    git add research/
    git commit -m "Add research report: {brief title}"
+   # Do NOT use --amend — always create new commits.
    ```
 
 After committing, emit the structured output token as the very last line of

@@ -72,7 +72,7 @@ normal commit protocol.
 
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {work_dir} status --porcelain`
-2. If any files are dirty: `git -C {work_dir} add -- <files you modified> && git -C {work_dir} commit -m "fix: commit pending review changes"`
+2. If any files are dirty: `git -C {work_dir} add -- <files you modified> && git -C {work_dir} commit -m "fix: commit pending review changes"` — do NOT use `--amend`.
 3. Only then proceed with the test or structured output
 
 This ensures that even if context exhaustion interrupts the fix loop, all applied
@@ -594,6 +594,7 @@ For each finding where the classification map shows `verdict = ACCEPT`
    # If pre-commit hooks are configured:
    pre-commit run --files {file} && git add {file}
    git commit -m "fix(review): {brief description of reviewer's request}"
+   # Do NOT use --amend — always create new commits.
    ```
 
 **Classification gate — REJECT/DISCUSS bypass:**

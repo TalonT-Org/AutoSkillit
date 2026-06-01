@@ -157,6 +157,51 @@ def is_gh_command(segment: list[str]) -> bool:
     return command_verb(segment) == "gh"
 
 
+def is_git_command(segment: list[str]) -> bool:
+    """Return True if the segment's command verb is 'git' or ends with '/git'."""
+    verb = command_verb(segment)
+    return verb == "git" or verb.endswith("/git")
+
+
+_GIT_GLOBAL_FLAGS: frozenset[str] = frozenset(
+    {"-C", "--work-tree", "--git-dir", "--no-pager", "--bare", "-c"}
+)
+_GIT_GLOBAL_FLAGS_WITH_VALUE: frozenset[str] = frozenset({"-C", "--work-tree", "--git-dir", "-c"})
+
+
+def extract_git_subcommand_and_flags(
+    segment: list[str],
+) -> tuple[str, list[str]] | None:
+    """Extract the git subcommand and its flags from a tokenized segment.
+
+    Skips global git flags (and their value tokens) to find the subcommand,
+    then returns (subcommand, remaining_tokens). Returns None if the segment
+    is not a git command or has no subcommand.
+    """
+    if not segment:
+        return None
+    verb = segment[0]
+    if verb != "git" and not verb.endswith("/git"):
+        return None
+    i = 1
+    while i < len(segment):
+        token = segment[i]
+        if token in _GIT_GLOBAL_FLAGS_WITH_VALUE:
+            i += 2  # skip flag and its value
+            continue
+        if token in _GIT_GLOBAL_FLAGS:
+            i += 1
+            continue
+        if token.startswith("-"):
+            i += 1
+            continue
+        # First non-flag token is the subcommand
+        subcommand = token
+        remaining = segment[i + 1 :]
+        return (subcommand, remaining)
+    return None
+
+
 def has_interpreter_write(command: str) -> bool:
     if not _INTERPRETER_RE.search(command):
         return False

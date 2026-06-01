@@ -64,6 +64,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_review_pr_verdict_guards.py` | Behavioral guard tests for review-pr/SKILL.md verdict logic |
 | `test_review_research_pr_guards.py` | Behavioral guards for review-research-pr/SKILL.md |
 | `test_skill_body_cleanliness.py` | Assert that no SKILL.md body references %%ORDER_UP%% |
+| `test_skill_commit_discipline.py` | Prohibition tests: skills with git commit instructions must explicitly forbid --amend |
 | `test_skill_compliance.py` | SKILL.md compliance tests: structural invariants for skill composition safety |
 | `test_skill_genericization.py` | Verify skill SKILL.md files contain no project-specific AutoSkillit internals |
 | `test_skill_md_spawn_syntax.py` | Regression guard: SKILL.md subagent spawn instructions must use unambiguous Agent(model="sonnet") syntax (issue #3367) |

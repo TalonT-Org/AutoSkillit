@@ -294,7 +294,8 @@ Research worktrees do not — skip pre-commit for them.
 ```bash
 if [ -f "${WORKTREE_PATH}/.pre-commit-config.yaml" ]; then
     cd "${WORKTREE_PATH}" && pre-commit run --all-files
-    # Fix any formatting or linting issues, then re-stage and re-commit.
+    # Fix any formatting or linting issues, re-stage, and create a new commit (NEVER --amend):
+    # git add -u && git commit -m 'style: apply pre-commit auto-fixes'
 else
     echo "No .pre-commit-config.yaml found — skipping pre-commit (research worktree)."
 fi
@@ -330,4 +331,4 @@ branch_name = ${BRANCH_NAME}
 - **Environment build fails** — report the error, suggest fixes to environment.yml
 - **Script creation fails** — report which phase and why, offer to fix/retry or abort.
   Do NOT clean up the worktree.
-- **Pre-commit fails** — fix formatting/linting issues and re-commit
+- **Pre-commit fails** — fix formatting/linting issues and create a new commit (do NOT use `--amend`)

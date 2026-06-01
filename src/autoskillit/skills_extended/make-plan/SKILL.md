@@ -263,6 +263,7 @@ git cherry-pick {commit-hash}
 # Option C: Squash merge (single linear commit from all changes)
 git merge --squash origin/{branch}
 git commit -m "feat: apply changes from {branch}"
+# Do NOT use --amend — always create new commits.
 ```
 
 These produce regular (single-parent) commits that `merge_worktree`'s rebase gate

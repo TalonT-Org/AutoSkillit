@@ -831,6 +831,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "infra/test_command_guard_completeness.py",
             "infra/test_guard_coverage.py",
             "infra/test_risky_gh_subcommand_coverage.py",
+            "infra/test_risky_git_ops_coverage.py",
             "infra/test_session_scope_enforcement.py",
             "infra/test_session_type_exemption_enforcement.py",
             "infra/test_skill_exemption_enforcement.py",

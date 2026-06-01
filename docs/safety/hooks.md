@@ -1,13 +1,13 @@
 # Hooks
 
-AutoSkillit registers 23 Claude Code hook scripts: 17 PreToolUse, 5 PostToolUse,
+AutoSkillit registers 24 Claude Code hook scripts: 18 PreToolUse, 5 PostToolUse,
 and 1 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
-## PreToolUse hooks (17)
+## PreToolUse hooks (18)
 
 ### `branch_protection_guard.py`
 **Guarded tools:** `merge_worktree`, `push_to_remote`
@@ -70,6 +70,18 @@ Blocks `gh pr create` called via `run_cmd` while the kitchen is open. Uses
 `shlex.split` tokenisation to avoid false positives from quoted shell
 arguments (e.g. `echo 'do not gh pr create'` does not match). Directs the
 caller to use the `prepare_pr → compose_pr` pipeline instead.
+
+### `git_ops_guard.py`
+**Guarded tool:** `Bash`, `run_cmd`
+Blocks destructive raw git CLI operations in headless skill sessions:
+`commit --amend`, `push --force` / `-f` / `--force-with-lease`, `reset --hard`,
+`clean -f` / `-fd`, and `checkout .` / `checkout -- .`. Uses `shlex.split`
+tokenisation with global-flag skipping so `git -C /path commit --amend` and
+full-path invocations like `/usr/bin/git push --force` are correctly detected.
+Also catches interpreter-wrapped (`python3 -c "subprocess.run(['git', 'commit', '--amend'])"`)
+and nested-shell forms. Session scope: headless only. Orchestrator sessions
+are exempt. Per-subcommand allow-overrides are available via `git_ops_policy`
+in `.hook_config.json` for future recipes that legitimately need these operations.
 
 ### `generated_file_write_guard.py`
 **Guarded tools:** `Write`, `Edit`

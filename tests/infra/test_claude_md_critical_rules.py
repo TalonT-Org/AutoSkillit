@@ -95,3 +95,10 @@ def test_claude_md_has_github_api_discipline(claude_md: str) -> None:
     """CLAUDE.md must include §3.5 GitHub API Call Discipline rule."""
     assert "GitHub API Call Discipline" in claude_md
     assert "sleep 1" in claude_md or "asyncio.sleep(1)" in claude_md
+
+
+def test_claude_md_contains_commit_discipline_rule(claude_md: str) -> None:
+    """CLAUDE.md must contain the commit discipline rule for headless session inheritance."""
+    assert "commit discipline" in claude_md.lower() or (
+        "--amend" in claude_md and "never" in claude_md.lower()
+    )

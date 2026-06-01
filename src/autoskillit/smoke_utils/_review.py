@@ -276,7 +276,10 @@ def enrich_diff_context(
     out = Path(output_dir)
     if not out.is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
-    ctx_lines = int(context_lines) if context_lines else 50
+    try:
+        ctx_lines = int(context_lines) if context_lines else 50
+    except ValueError as exc:
+        raise ValueError(f"context_lines must be numeric, got: {context_lines!r}") from exc
     handoff_path = out / f"diff_context_{pr_number}.json"
 
     if not handoff_path.exists():

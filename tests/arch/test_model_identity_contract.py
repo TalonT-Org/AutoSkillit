@@ -106,3 +106,31 @@ def test_drift_call_site_uses_independent_observed_source():
         return
 
     pytest.fail(f"No assignment to {observed_var_name!r} found in flush_session_log body")
+
+
+def test_detect_model_drift_has_profile_suppression_guard():
+    """detect_model_drift must contain a profile_name suppression check — AST enforcement."""
+    source = ANOMALY_DETECTION.read_text()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "detect_model_drift":
+            body_src = ast.dump(node)
+            assert "profile_name" in body_src, (
+                "detect_model_drift must reference profile_name in its body — "
+                "profile-routed sessions require suppression to prevent false MODEL_DRIFT"
+            )
+            for child in ast.walk(node):
+                if isinstance(child, ast.If):
+                    test_src = ast.dump(child.test)
+                    if "profile_name" in test_src:
+                        assert "normalize_model_id" in test_src, (
+                            "profile_name suppression guard must normalize observed_model "
+                            "before calling _is_non_anthropic — raw-string check misclassifies "
+                            "Anthropic short aliases ('sonnet', 'opus', 'haiku') as non-Anthropic"
+                        )
+                        return
+            pytest.fail(
+                "detect_model_drift references profile_name but has no If guard on it — "
+                "the parameter must be used for suppression, not just recording"
+            )
+    pytest.fail("detect_model_drift not found in anomaly_detection.py")

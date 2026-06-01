@@ -120,6 +120,7 @@ from .tool_sequence_analysis import render_mermaid as render_mermaid
 from .types import ADMIRAL_DISPATCH_SECTIONS as ADMIRAL_DISPATCH_SECTIONS
 from .types import AGENT_BACKEND_CLAUDE_CODE as AGENT_BACKEND_CLAUDE_CODE
 from .types import AGENT_BACKEND_CODEX as AGENT_BACKEND_CODEX
+from .types import KNOWN_BACKEND_NAMES as KNOWN_BACKEND_NAMES
 from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS

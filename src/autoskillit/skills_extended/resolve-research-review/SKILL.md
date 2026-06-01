@@ -1,6 +1,7 @@
 ---
 name: resolve-research-review
 categories: [research]
+backend_requirements: [claude-code]
 description: >
   Fetch PR review comments from review-research-pr, run research-aware intent
   validation (ACCEPT/REJECT/DISCUSS), apply targeted fixes, escalate unrerunnable

@@ -1,6 +1,7 @@
 ---
 name: run-experiment
 categories: [research]
+backend_requirements: [claude-code]
 description: Execute a designed experiment in a worktree and collect structured results. Supports --adjust retry mode.
 hooks:
   PreToolUse:

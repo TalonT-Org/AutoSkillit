@@ -1,6 +1,7 @@
 ---
 name: review-design
 categories: [research]
+backend_requirements: [claude-code]
 description: Validate an experiment plan before execution using triage-first, fail-fast dimensional analysis with an adversarial red-team. Emits verdict (GO/REVISE/STOP), experiment_type, evaluation_dashboard, and revision_guidance.
 hooks:
   PreToolUse:

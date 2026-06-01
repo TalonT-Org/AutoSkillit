@@ -1,5 +1,6 @@
 ---
 name: review-approach
+backend_requirements: [claude-code]
 description: Research modern solutions and approaches for issues or features proposed in a report or plan. Use when user says "review approach", "review approaches", "research solutions", or wants external validation of a proposed direction.
 hooks:
   PreToolUse:

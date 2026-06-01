@@ -1,6 +1,7 @@
 ---
 name: implement-experiment
 categories: [research]
+backend_requirements: [claude-code]
 description: Deploy experiment artifacts in an isolated git worktree following an approved experiment plan, with per-phase commits.
 hooks:
   PreToolUse:

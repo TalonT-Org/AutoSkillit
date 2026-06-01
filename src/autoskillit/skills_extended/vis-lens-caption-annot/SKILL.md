@@ -1,6 +1,7 @@
 ---
 name: vis-lens-caption-annot
 categories: [vis-lens]
+backend_requirements: [claude-code]
 activate_deps: [mermaid]
 description: "Create Annotative Caption visualization planning spec showing declarative titles, axis labels with units, error definition in legend, baseline references, sample sizes, and venue-specific caption format. Annotative lens answering \"Are figure captions and axis labels fully self-contained?\""
 hooks:

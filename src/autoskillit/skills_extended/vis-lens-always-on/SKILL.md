@@ -1,6 +1,7 @@
 ---
 name: vis-lens-always-on
 categories: [vis-lens]
+backend_requirements: [claude-code]
 activate_deps: [mermaid]
 description: "Create Always-On visualization triage report running three sequential analysis passes (anti-pattern, accessibility, annotation completeness) and emitting a combined PASS|WARN_N|FAIL_N verdict. Composite lens answering \"What are the blocking visualization issues?\""
 hooks:

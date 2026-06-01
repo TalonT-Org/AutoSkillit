@@ -1,6 +1,7 @@
 ---
 name: select-directions
 categories: [research]
+backend_requirements: [claude-code]
 description: >
   Direction-selection gate: parse scope directions manifest, present for
   selection (human or agent), enforce breadth, output filtered directions.

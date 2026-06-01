@@ -1,5 +1,6 @@
 ---
 name: close-kitchen
+backend_requirements: [claude-code]
 description: Close the AutoSkillit kitchen — hides kitchen MCP tools for this session.
 disable-model-invocation: true
 ---

@@ -767,3 +767,105 @@ def test_resolve_instance_cache_caches_none(monkeypatch: pytest.MonkeyPatch) -> 
     assert result1 is None
     assert "nonexistent-skill-xyz" in resolver._resolve_cache
     assert resolver._resolve_cache["nonexistent-skill-xyz"] is None
+
+
+# ---------------------------------------------------------------------------
+# Backend requirements parsing tests
+# ---------------------------------------------------------------------------
+
+
+class TestBackendRequirements:
+    def test_parse_backend_requirements_from_frontmatter(self, tmp_path) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: test\nbackend_requirements: [claude-code]\n---\n# content")
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.backend_requirements == frozenset({"claude-code"})
+
+    def test_empty_backend_requirements(self, tmp_path) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: test\n---\n# content")
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.backend_requirements == frozenset()
+
+    def test_non_list_backend_requirements_defaults_to_empty(self, tmp_path) -> None:
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: test\nbackend_requirements: claude-code\n---\n# content")
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.backend_requirements == frozenset()
+
+    def test_invalid_backend_name_produces_warning(self, tmp_path, caplog) -> None:
+        import logging
+
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text("---\nname: test\nbackend_requirements: [claude_code]\n---\n# content")
+        with caplog.at_level(logging.WARNING, logger="autoskillit.workspace.skills"):
+            info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.backend_requirements == frozenset({"claude_code"})
+        assert "unrecognized_backend_requirements" in caplog.text
+
+    def test_valid_backend_names_no_warning(self, tmp_path, caplog) -> None:
+        import logging
+
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_md = tmp_path / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: test\nbackend_requirements: [claude-code, codex]\n---\n# content"
+        )
+        with caplog.at_level(logging.WARNING, logger="autoskillit.workspace.skills"):
+            info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.backend_requirements == frozenset({"claude-code", "codex"})
+        assert "unrecognized_backend_requirements" not in caplog.text
+
+    def test_investigate_skill_has_claude_code_requirement(self) -> None:
+        info = DefaultSkillResolver().resolve("investigate")
+        assert info is not None
+        assert "claude-code" in info.backend_requirements
+
+    def test_skill_info_default_backend_requirements(self) -> None:
+        from autoskillit.workspace.skills import SkillInfo
+
+        info = SkillInfo(name="test", source=SkillSource.BUNDLED, path=Path("/fake/SKILL.md"))
+        assert info.backend_requirements == frozenset()
+
+
+class TestSkillInfoSchemaExhaustiveness:
+    def test_all_skillinfo_fields_parsed_by_frontmatter_function(self) -> None:
+        """Every non-constructor field on SkillInfo must be parsed."""
+        import ast
+        import dataclasses
+        import inspect
+
+        from autoskillit.workspace.skills import SkillInfo, _skill_info_from_frontmatter
+
+        dc_fields = {f.name for f in dataclasses.fields(SkillInfo)}
+        constructor_only = {"name", "source", "path"}
+        parseable_fields = dc_fields - constructor_only
+
+        source = inspect.getsource(_skill_info_from_frontmatter)
+        tree = ast.parse(source)
+        data_gets: set[str] = set()
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+            ):
+                data_gets.add(node.args[0].value)
+
+        missing = parseable_fields - data_gets
+        assert not missing, (
+            f"SkillInfo field(s) {sorted(missing)} are not read by "
+            f"_skill_info_from_frontmatter via data.get(). "
+            f"Add data.get() calls for these fields."
+        )

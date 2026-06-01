@@ -1,5 +1,6 @@
 ---
 name: retry-worktree
+backend_requirements: [claude-code]
 description: Worktree retry executor. ALWAYS invoke this skill when instructed to continue or retry an implementation in an existing worktree. Do not resume editing files directly — use this skill first to load the retry workflow.
 hooks:
   PreToolUse:

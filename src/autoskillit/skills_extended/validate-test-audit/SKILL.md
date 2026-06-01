@@ -1,6 +1,7 @@
 ---
 name: validate-test-audit
 categories: [audit]
+backend_requirements: [claude-code]
 description: >-
   Validate test audit findings with test-domain semantic rules and intent
   analysis. Adds import-path-as-contract recognition, precondition-as-assertion

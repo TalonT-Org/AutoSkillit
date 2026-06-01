@@ -1,6 +1,7 @@
 ---
 name: prepare-research-pr
 categories: [research]
+backend_requirements: [claude-code]
 description: >
   Reads a research report and experiment plan, synthesizes a recommendation,
   selects 1-2 exp-lens lenses, writes a context file per lens, and writes a

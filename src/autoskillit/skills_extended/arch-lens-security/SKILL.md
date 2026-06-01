@@ -1,6 +1,7 @@
 ---
 name: arch-lens-security
 categories: [arch-lens]
+backend_requirements: [claude-code]
 activate_deps: [mermaid]
 description: Create Security architecture diagram showing trust boundaries, validation layers, and process isolation. Security lens answering "Where are the trust boundaries?"
 hooks:

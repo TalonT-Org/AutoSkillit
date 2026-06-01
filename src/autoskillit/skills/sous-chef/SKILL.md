@@ -1,5 +1,6 @@
 ---
 name: sous-chef
+backend_requirements: [claude-code]
 description: Internal bootstrap document injected by open_kitchen into every orchestrator session.
 ---
 <!-- Internal bootstrap document — not a user-invocable skill.

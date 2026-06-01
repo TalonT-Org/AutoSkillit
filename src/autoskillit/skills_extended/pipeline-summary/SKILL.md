@@ -1,6 +1,7 @@
 ---
 name: pipeline-summary
 categories: [github]
+backend_requirements: [claude-code]
 description: Create a GitHub issue and PR summarizing pipeline bugs and fixes. Use when a pipeline run completes with accumulated bug fixes on a feature branch.
 hooks:
   PreToolUse:

@@ -1,6 +1,7 @@
 ---
 name: arch-lens-scenarios
 categories: [arch-lens]
+backend_requirements: [claude-code]
 activate_deps: [mermaid]
 description: Create Scenarios architecture diagram showing end-to-end user journeys and component cooperation validation. Validation lens answering "Do the components work together?"
 hooks:

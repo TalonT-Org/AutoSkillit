@@ -1,5 +1,6 @@
 ---
 name: resolve-failures
+backend_requirements: [claude-code]
 description: Failure resolution executor. ALWAYS invoke this skill when instructed to fix test failures in a worktree. Do not read test output or edit code directly — use this skill first to load the failure resolution workflow.
 hooks:
   PreToolUse:

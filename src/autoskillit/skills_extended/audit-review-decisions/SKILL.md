@@ -1,6 +1,7 @@
 ---
 name: audit-review-decisions
 categories: [audit]
+backend_requirements: [claude-code]
 description: >
   Audit merged PR review threads for agreed-but-deferred suggestions (design decisions,
   future work, out-of-scope items) that were never implemented. Mines REVIEW-FLAG markers

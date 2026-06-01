@@ -17,6 +17,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_backend_flag_isolation.py` | AST guard: ClaudeFlags must not appear in _session_launch.py — backend-specific flags belong inside each backend's build_interactive_cmd() |
 | `test_backend_coherence.py` | Architectural tests for backend coherence enforcement |
 | `test_canonical_constant_consumption.py` | Architectural invariant: every *_ENV_FORWARD_VARS constant must have a production consumer |
+| `test_backend_name_sync.py` | Architectural invariant: KNOWN_BACKEND_NAMES (IL-0) must match BACKEND_REGISTRY keys (IL-1) |
 | `test_capability_consumption.py` | Architectural invariant: every BackendCapabilities field must be consumed in production |
 | `test_capability_docstrings.py` | Architectural invariant: BackendCapabilities must have class and field documentation |
 | `test_no_backend_name_bypass.py` | Architectural invariant: backend-specific behavior must use capability fields, not name comparisons |
@@ -93,6 +94,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_subagent_filter_guard.py` | AST guard: all assistant-record NDJSON processing sites must use _is_parent_assistant_record or _is_parent_assistant predicate |
 | `test_enqueue_ready_type_enforcement.py` | AST guard: mutation methods (_enqueue_direct, _enable_auto_merge_direct) must accept EnqueueReady, not str |
 | `test_origin_isolation_contract.py` | AST + shell lint guard: no hardcoded "origin" in git remote operations outside allowlist; shell scripts must try upstream before origin |
+| `test_skill_backend_annotations.py` | Architectural invariant: skills using Claude-Code-only features must declare backend_requirements: [claude-code] |
 
 ## Architecture Notes
 

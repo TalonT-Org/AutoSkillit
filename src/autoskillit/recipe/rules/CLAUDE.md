@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (34 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis (35 flat rule files + 4 subdirectories).
 
 ## Subdirectories
 
@@ -19,6 +19,7 @@ See each subdirectory's CLAUDE.md for details.
 |------|---------|
 | `__init__.py` | Docstring-only — rules register via `@semantic_rule` decorator on import |
 | `rules_actions.py` | Semantic rules for `stop`/`route`/`confirm` action-type steps |
+| `rules_backend_compat.py` | Backend-skill compatibility: flags `run_skill` steps whose `backend_requirements` exclude the target backend |
 | `rules_blocks.py` | Block-level budget rules; loads `block_budgets.yaml` at import |
 | `rules_bypass.py` | Rules for `skip_when_false` bypass routing contracts and `hidden-input-ref-in-template` detection |
 | `rules_callable_scope.py` | Enforces scoped directory args for file-discovering callables |

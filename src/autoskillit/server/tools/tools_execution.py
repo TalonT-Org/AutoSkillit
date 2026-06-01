@@ -651,6 +651,24 @@ async def run_skill(
                     skill_command, tool_ctx.skill_resolver
                 )
 
+            # Backend compatibility gate — fires before both replay and live session paths.
+            if target_name and tool_ctx.skill_resolver and tool_ctx.backend is not None:
+                _compat_skill_info = tool_ctx.skill_resolver.resolve(target_name)
+                if _compat_skill_info and _compat_skill_info.backend_requirements:
+                    _effective_backend = backend_override or tool_ctx.backend.name
+                    if _effective_backend not in _compat_skill_info.backend_requirements:
+                        return SkillResult.crashed(
+                            exception=RuntimeError(
+                                f"Skill {target_name!r} requires backend "
+                                f"{_compat_skill_info.backend_requirements} but session "
+                                f"backend is {_effective_backend!r}."
+                            ),
+                            skill_command=resolved_command,
+                            order_id=effective_order_id,
+                        ).to_json()
+            elif target_name and not tool_ctx.skill_resolver:
+                logger.debug("backend_compat_check_skipped_no_resolver")
+
             # Server-side recipe step parameter resolution.
             # When a step_name is provided and the recipe's step definition is cached,
             # auto-fill parameters the LLM may have omitted.

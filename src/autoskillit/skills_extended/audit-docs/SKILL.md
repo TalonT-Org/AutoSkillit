@@ -1,6 +1,7 @@
 ---
 name: audit-docs
 categories: [audit]
+backend_requirements: [claude-code]
 description: >
   Audit documentation for drift, staleness, and inconsistency against the actual
   codebase. Use when user says "audit docs", "check documentation", "docs audit",

@@ -1,6 +1,7 @@
 ---
 name: generate-report
 categories: [research]
+backend_requirements: [claude-code]
 description: Synthesize experiment results into a structured research report in the research/ folder. Supports --inconclusive flag.
 hooks:
   PreToolUse:

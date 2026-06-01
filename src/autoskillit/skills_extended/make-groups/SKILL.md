@@ -1,5 +1,6 @@
 ---
 name: make-groups
+backend_requirements: [claude-code]
 description: Break a large plan, architecture proposal, or feature document into sequenced implementation groups for the make-plan pipeline. Use when user says "make groups", "group requirements", "sequence groups", or wants to decompose a large document into ordered implementation units.
 hooks:
   PreToolUse:

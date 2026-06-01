@@ -1,6 +1,7 @@
 ---
 name: enrich-issues
 categories: [github]
+backend_requirements: [claude-code]
 description: >
   Backfill structured requirements on existing GitHub issues triaged with
   recipe:implementation labels. Scans candidates, skips already-enriched issues,

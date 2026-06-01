@@ -1,6 +1,7 @@
 ---
 name: validate-audit
 categories: [audit]
+backend_requirements: [claude-code]
 description: Validate audit findings from audit-arch, audit-tests, audit-cohesion, audit-feature-gates, audit-docs, or audit-review-decisions against actual code, git history, and design intent using 9–10 parallel subagents. Removes contested findings, documents exceptions, adjusts severities. Use when user says "validate audit", "validate findings", "validate report", or "check audit results".
 hooks:
   PreToolUse:

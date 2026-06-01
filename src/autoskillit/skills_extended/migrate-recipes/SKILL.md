@@ -1,5 +1,6 @@
 ---
 name: migrate-recipes
+backend_requirements: [claude-code]
 activate_deps: [write-recipe]
 description: Apply versioned migration notes to an AutoSkillit recipe. Use when user confirms migration, called by agent or autoskillit migrate CLI, or invoked directly.
 hooks:

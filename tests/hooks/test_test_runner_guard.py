@@ -30,10 +30,11 @@ def _build_event(command: str, tool_name: str = "Bash") -> dict:
 
 
 def _run_hook(
-    event: dict,
+    event: dict | None,
     monkeypatch,
     *,
     headless: bool = True,
+    raw_stdin: str | None = None,
 ) -> str:
     """Import main(), patch sys.stdin, capture stdout. Returns stdout string."""
     from autoskillit.hooks.guards.test_runner_guard import main  # noqa: PLC0415
@@ -43,7 +44,7 @@ def _run_hook(
     else:
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
 
-    stdin_text = json.dumps(event)
+    stdin_text = raw_stdin if raw_stdin is not None else json.dumps(event)
     monkeypatch.setattr("sys.stdin", io.StringIO(stdin_text))
     buf = io.StringIO()
     try:
@@ -85,14 +86,12 @@ class TestSessionScope:
 
 class TestExemptSkills:
     def test_allows_implement_experiment(self, monkeypatch):
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "implement-experiment")
         event = _build_event("pytest --collect-only tests/")
         output = _run_hook(event, monkeypatch, headless=True)
         assert output == ""
 
     def test_denies_non_exempt_skill(self, monkeypatch):
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "implement-worktree")
         event = _build_event("pytest tests/")
         output = _run_hook(event, monkeypatch, headless=True)
@@ -102,12 +101,6 @@ class TestExemptSkills:
 # ---------------------------------------------------------------------------
 # T3: TestDenyPatterns
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _enable_headless(monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    yield
 
 
 class TestDenyPatterns:
@@ -231,17 +224,8 @@ class TestAllowPatterns:
 
 class TestFailOpen:
     def test_malformed_json(self, monkeypatch):
-        from autoskillit.hooks.guards.test_runner_guard import main  # noqa: PLC0415
-
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        monkeypatch.setattr("sys.stdin", io.StringIO("not valid json {{{"))
-        buf = io.StringIO()
-        try:
-            with redirect_stdout(buf):
-                main()
-        except SystemExit:
-            pass
-        assert buf.getvalue() == ""
+        output = _run_hook(None, monkeypatch, headless=True, raw_stdin="not valid json {{{")
+        assert output == ""
 
     def test_missing_tool_input(self, monkeypatch):
         event: dict = {"tool_name": "Bash"}
@@ -292,6 +276,13 @@ class TestRegistration:
 
     def test_in_new_subdir_basenames(self):
         assert "test_runner_guard.py" in NEW_SUBDIR_BASENAMES
+
+    def test_exempt_skills_in_sync(self):
+        from autoskillit.hooks.guards.test_runner_guard import _EXEMPT_SKILLS  # noqa: PLC0415
+
+        matching = [h for h in HOOK_REGISTRY if "guards/test_runner_guard.py" in h.scripts]
+        assert matching, "No HookDef found for test_runner_guard.py"
+        assert matching[0].exempt_skills == _EXEMPT_SKILLS
 
 
 # ---------------------------------------------------------------------------

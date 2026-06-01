@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import load_yaml
+from autoskillit.recipe._skill_placeholder_parser import extract_never_block
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -58,28 +59,9 @@ _CONTRACTS_PATH = _SRC_ROOT / "recipe" / "skill_contracts.yaml"
 _RECIPES_DIR = _SRC_ROOT / "recipes"
 
 
-def _extract_never_block(skill_md: str) -> str:
-    """Return the text of the first NEVER block (from 'NEVER:' to the next '**ALWAYS'/'## ')."""
-    upper = skill_md.upper()
-    never_pos = upper.find("\n**NEVER")
-    if never_pos == -1:
-        never_pos = upper.find("\n## CRITICAL CONSTRAINTS")
-    if never_pos == -1:
-        return ""
-    always_pos = upper.find("\n**ALWAYS", never_pos + 1)
-    section_pos = upper.find("\n## ", never_pos + 1)
-    # End at the earlier of ALWAYS or next section header
-    end_pos = len(skill_md)
-    if always_pos != -1:
-        end_pos = min(end_pos, always_pos)
-    if section_pos != -1:
-        end_pos = min(end_pos, section_pos)
-    return skill_md[never_pos:end_pos]
-
-
 def _has_write_restriction_prose(skill_md: str) -> bool:
     """Return True if the NEVER block contains write restriction patterns."""
-    never_block = _extract_never_block(skill_md).lower()
+    never_block = extract_never_block(skill_md).lower()
     if not never_block:
         return False
     return any(re.search(p, never_block) for p in _WRITE_RESTRICTION_PATTERNS)

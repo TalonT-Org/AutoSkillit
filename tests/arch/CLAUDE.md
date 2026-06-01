@@ -86,6 +86,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_interactive_ordering_gate.py` | AST guard: _session_launch.py and _cook.py must import and call assert_interactive_ordering before subprocess invocation |
 | `test_watcher_signal_consistency.py` | Structural guard: all process watchers must call `_has_active_execution_marker` |
 | `test_write_restriction_coverage.py` | Architectural invariant: skills with prose write restrictions in NEVER blocks have runtime enforcement (read_only, output_dir, or allowlist) |
+| `test_cross_skill_handoff_paths.py` | Architectural test: cross-skill artifact read paths (e.g., resolve-review reading review-pr outputs) must be compatible with the producer skill's recipe output_dir |
 | `test_model_identity_contract.py` | AST guard: detect_model_drift must use normalize_model_id and _models_match, and must have a profile_name suppression guard with normalize_model_id — prevents raw-string false positives and profile-routed false MODEL_DRIFT |
 | `test_helpers_exports.py` | Asserts shared test helpers export required symbols (strip_markdown_code_regions) |
 | `test_session_type_exhaustive.py` | AST guard: _apply_session_type_visibility must use exhaustive match/assert_never dispatch |

@@ -33,10 +33,13 @@ def test_step8_writes_diff_context_file():
     assert "diff_context_{pr_number}.json" in section
 
 
-def test_diff_context_path_uses_review_pr_temp_dir():
-    """Handoff file must live in AUTOSKILLIT_TEMP/review-pr/, not resolve-review/."""
+def test_diff_context_path_uses_dynamic_output_dir():
+    """Handoff file must use the environment-derived write directory, not a hardcoded flat path."""
     section = _step8_section()
-    assert "review-pr/diff_context" in section
+    assert "REVIEW_OUTPUT_DIR" in section, (
+        "Step 8 must reference REVIEW_OUTPUT_DIR for the diff_context write path, "
+        "not a hardcoded {{AUTOSKILLIT_TEMP}}/review-pr/ path."
+    )
 
 
 def test_diff_context_schema_has_context_entries():

@@ -44,6 +44,25 @@ def _all_surrounding_windows(text: str, target: str) -> list[str]:
 
 
 @pytest.mark.parametrize("filename_pattern", _VULNERABLE_FILES)
+def test_write_instruction_uses_dynamic_output_dir(filename_pattern: str) -> None:
+    """Write instructions for collision-risk files must use the dynamic output dir variable.
+
+    Write paths must reference ${REVIEW_OUTPUT_DIR} rather than hardcoded
+    {{AUTOSKILLIT_TEMP}}/review-pr/ so the write guard's allowed prefix is respected
+    when the recipe scopes output_dir to an iteration subdirectory.
+    """
+    text = _SKILL_PATH.read_text()
+    windows = _all_surrounding_windows(text, filename_pattern)
+    assert windows, f"Pattern {filename_pattern!r} not found in review-pr/SKILL.md"
+    found = any("REVIEW_OUTPUT_DIR" in window for window in windows)
+    assert found, (
+        f"No REVIEW_OUTPUT_DIR reference found near any occurrence of {filename_pattern!r} in "
+        f"review-pr/SKILL.md. Write paths must use ${{REVIEW_OUTPUT_DIR}} so they adapt to "
+        f"the recipe's output_dir at runtime. First window: {windows[0][:300]!r}"
+    )
+
+
+@pytest.mark.parametrize("filename_pattern", _VULNERABLE_FILES)
 def test_write_instruction_includes_idempotent_guidance(filename_pattern: str) -> None:
     """Write instructions for collision-risk files must include idempotent-write guidance.
 

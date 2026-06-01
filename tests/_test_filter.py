@@ -445,6 +445,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "contracts/test_no_interpreter_writes_in_skills.py",
         }
     ),
+    "rules_skill_write_path_alignment": frozenset({"recipe"}),
     # --- Internal utility modules (no external src importers) ---
     "_analysis": frozenset({"recipe"}),
     "_analysis_bfs": frozenset({"recipe"}),
@@ -456,6 +457,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "_skill_placeholder_parser": frozenset(
         {
             "recipe",
+            "arch/test_write_restriction_coverage.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_skill_tool_syntax_contracts.py",

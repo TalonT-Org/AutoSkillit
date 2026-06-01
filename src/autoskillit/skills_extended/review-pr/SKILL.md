@@ -137,7 +137,7 @@ query($owner:String!, $repo:String!, $number:Int!, $after:String) {
 }
 ```
 
-Build two lists from the thread nodes. For each thread, resolve line via:
+Build two lists from the thread nodes. Do not output prose between iterations. For each thread, resolve line via:
 `line = thread.get("line") or thread.get("originalLine")` — `line` is nullable for
 outdated threads where new commits have shifted the diff anchor; `originalLine` is
 the stable fallback.
@@ -778,7 +778,7 @@ After writing the summary file and before emitting the verdict token, write the 
 file for resolve-review's pre-built context. This costs zero additional API calls or file
 reads — all data is already in the session's context.
 
-For each finding in `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity is
+Do not output prose between iterations. For each finding in `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity is
 `"critical"` or `"warning"`, build a context entry:
 - `path` — the finding's `file` field (the finding schema uses `file`, not `path`;
   map `finding.file` → `path` in the context entry for resolve-review compatibility)

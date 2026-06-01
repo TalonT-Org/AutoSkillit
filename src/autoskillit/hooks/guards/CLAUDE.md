@@ -10,6 +10,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `ask_user_question_guard.py` | Blocks `AskUserQuestion` before kitchen is open |
 | `background_exec_guard.py` | Blocks `run_in_background=true` on Bash/Agent calls in headless skill sessions (ADR-0001) |
 | `branch_protection_guard.py` | Blocks merge/push targeting protected branches |
+| `compose_pr_body_guard.py` | PreToolUse guard: validates compose-pr body file contains required `Closes #N` reference before `gh pr create` executes |
 | `fleet_dispatch_guard.py` | Blocks `dispatch_food_truck` from headless sessions (prevents L3->L3 recursion) |
 | `generated_file_write_guard.py` | Blocks Write/Edit to machine-generated files (`hooks.json`, `settings.json`) |
 | `grep_pattern_lint_guard.py` | Blocks Grep with BRE `\|` syntax; surfaces corrected ERE pattern |

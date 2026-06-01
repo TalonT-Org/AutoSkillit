@@ -30,6 +30,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_planner_result_naming_guard.py` | Tests for planner_result_naming_guard.py PreToolUse hook |
 | `test_codex_hooks.py` | Tests for cli/_hooks_codex.py — AST scan, hook generation, sync idempotency |
 | `test_recipe_contract_freshness.py` | Tests for the recipe-contract-freshness pre-commit hook |
+| `test_compose_pr_body_guard.py` | Tests for compose_pr_body_guard.py PreToolUse hook — body file Closes #N validation |
 | `test_command_classification.py` | Tests for the shared _command_classification.py command classification primitives |
 | `test_command_classification_git.py` | Tests for the git command classification primitives (is_git_command, extract_git_subcommand_and_flags) |
 | `test_pr_create_guard.py` | Tests for pr_create_guard.py interpreter bypass detection |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 from datetime import UTC, datetime
@@ -858,12 +859,10 @@ def _apply_unlock_keys(current_pipeline_li: dict[str, str], unlock_keys: list[st
 def _build_ingredient_key_suggestions(
     unknown: set[str], declared: frozenset[str]
 ) -> dict[str, list[str]]:
-    from difflib import get_close_matches  # noqa: PLC0415
-
     suggestions: dict[str, list[str]] = {}
     declared_sorted = sorted(declared)
     for key in sorted(unknown):
-        matches = get_close_matches(key, declared_sorted, n=2, cutoff=0.5)
+        matches = difflib.get_close_matches(key, declared_sorted, n=2, cutoff=0.5)
         if matches:
             suggestions[key] = list(matches)
     return suggestions

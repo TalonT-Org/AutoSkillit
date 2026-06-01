@@ -172,6 +172,34 @@ def test_pr_create_guard_exempt_session_types_matches_hookdef() -> None:
     )
 
 
+def test_git_ops_guard_exempt_session_types_matches_hookdef() -> None:
+    """_EXEMPT_SESSION_TYPES in git_ops_guard.py must equal exempt_session_types on HookDef.
+
+    Catches drift between the two parallel frozensets that the stdlib-only boundary
+    prevents from sharing a common import.
+    """
+    script_path = HOOKS_DIR / "guards/git_ops_guard.py"
+    spec = importlib.util.spec_from_file_location("git_ops_guard", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    script_exempt: frozenset[str] | None = getattr(module, "_EXEMPT_SESSION_TYPES", None)
+    assert script_exempt is not None, "_EXEMPT_SESSION_TYPES not found in git_ops_guard.py"
+
+    hookdef_exempt: frozenset[str] | None = None
+    for hookdef in HOOK_REGISTRY:
+        if "guards/git_ops_guard.py" in hookdef.scripts:
+            hookdef_exempt = getattr(hookdef, "exempt_session_types", None)
+            break
+    assert hookdef_exempt is not None, "No HookDef found for guards/git_ops_guard.py"
+
+    assert script_exempt == hookdef_exempt, (
+        f"_EXEMPT_SESSION_TYPES in git_ops_guard.py {script_exempt!r} does not match "
+        f"exempt_session_types on the HookDef {hookdef_exempt!r}. "
+        "Update both frozensets together."
+    )
+
+
 def test_pr_create_guard_has_interactive_kitchen_pass_case() -> None:
     """test_pr_create_guard.py must have at least one test where kitchen_open=True,
     no session type env var is set, and the guard allows via recipe authorization."""

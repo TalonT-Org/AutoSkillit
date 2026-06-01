@@ -86,6 +86,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_resolve_review_no_inline_python.py` | Contract: resolve-review SKILL.md must not contain python3 -c invocations or ```python blocks with .write_text() |
 | `test_dry_walkthrough_transformation_extent.py` | Contract test: dry-walkthrough SKILL.md Step 2 must check transformation extent/scope |
 | `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
+| `test_source_attribution_contracts.py` | Cross-skill contract: source-attribution prohibition in dual-source skills |
 
 ## Architecture Notes
 

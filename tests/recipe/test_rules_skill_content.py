@@ -1241,3 +1241,153 @@ def test_git_add_all_long_form_flagged(tmp_path: Path) -> None:
     with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _BLIND_GIT_ADD_RULE_ID in [f.rule for f in findings]
+
+
+# ---------------------------------------------------------------------------
+# source-attribution-directive tests
+# ---------------------------------------------------------------------------
+
+_SOURCE_ATTR_RULE_ID = "source-attribution-directive"
+
+_MOCK_MANIFEST_WITH_SOURCE_PIN = {
+    "skills": {
+        "test-skill": {
+            "source_pin_fields": [
+                {
+                    "field": "task_title",
+                    "required_source": "plan file # heading",
+                    "prohibited_sources": ["issue title", "issue body"],
+                }
+            ],
+        }
+    }
+}
+
+_MOCK_MANIFEST_WITHOUT_SOURCE_PIN = {
+    "skills": {
+        "test-skill": {
+            "expected_output_patterns": ["plan_path\\s*=\\s*/.+"],
+        }
+    }
+}
+
+
+def test_source_attribution_directive_fires_when_missing(tmp_path: Path) -> None:
+    """Rule fires when SKILL.md lacks prohibition language for a skill with source_pin_fields."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # Test Skill
+
+            ## Arguments
+            None.
+
+            ### Step 1
+            Extract the title from plan files.
+            """
+        )
+    )
+
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_RECIPE_CALLING_TEST_SKILL)
+    recipe = load_recipe(recipe_path)
+
+    with (
+        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch(
+            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+            return_value=_MOCK_MANIFEST_WITH_SOURCE_PIN,
+        ),
+    ):
+        findings = run_semantic_rules(recipe)
+
+    rule_ids = [f.rule for f in findings]
+    assert _SOURCE_ATTR_RULE_ID in rule_ids, (
+        f"Expected '{_SOURCE_ATTR_RULE_ID}' finding when SKILL.md lacks prohibition, "
+        f"got: {rule_ids}"
+    )
+
+
+def test_source_attribution_directive_silent_when_present(tmp_path: Path) -> None:
+    """Rule does NOT fire when SKILL.md has prohibition language."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # Test Skill
+
+            ## Critical Constraints
+
+            **NEVER:**
+            - Use the issue title, issue body, or any closing_issue metadata for
+              `task_title` or `## Title`. These MUST come exclusively from plan
+              file headings.
+            """
+        )
+    )
+
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_RECIPE_CALLING_TEST_SKILL)
+    recipe = load_recipe(recipe_path)
+
+    with (
+        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch(
+            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+            return_value=_MOCK_MANIFEST_WITH_SOURCE_PIN,
+        ),
+    ):
+        findings = run_semantic_rules(recipe)
+
+    rule_ids = [f.rule for f in findings]
+    assert _SOURCE_ATTR_RULE_ID not in rule_ids, (
+        f"Rule must not fire when prohibition language is present, got: {rule_ids}"
+    )
+
+
+def test_source_attribution_directive_silent_without_source_pin_fields(
+    tmp_path: Path,
+) -> None:
+    """Rule does NOT fire when skill has no source_pin_fields in manifest."""
+    skill_dir = tmp_path / "test-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # Test Skill
+
+            ## Arguments
+            None.
+            """
+        )
+    )
+
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_RECIPE_CALLING_TEST_SKILL)
+    recipe = load_recipe(recipe_path)
+
+    with (
+        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch(
+            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+            return_value=_MOCK_MANIFEST_WITHOUT_SOURCE_PIN,
+        ),
+    ):
+        findings = run_semantic_rules(recipe)
+
+    rule_ids = [f.rule for f in findings]
+    assert _SOURCE_ATTR_RULE_ID not in rule_ids, (
+        f"Rule must not fire when skill has no source_pin_fields, got: {rule_ids}"
+    )
+
+
+def test_source_attribution_directive_rule_registered() -> None:
+    """The source-attribution-directive rule must be registered in the rule registry."""
+    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule_names = [r.name for r in _RULE_REGISTRY]
+    assert "source-attribution-directive" in rule_names

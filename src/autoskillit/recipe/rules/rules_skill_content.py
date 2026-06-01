@@ -721,3 +721,66 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
                     )
                 )
     return findings
+
+
+_SOURCE_PROHIBITION_RE = re.compile(
+    r"(?:NOT|NEVER|DO NOT)[\s\S]{0,120}?"
+    r"(?:issue\s+title|issue\s+body|issue\s+metadata|closing_issue|"
+    r"branch\s+names|ambient\s+context|re-?deriv|overrid|substitut)"
+    r"[\s\S]{0,120}?"
+    r"(?:task_title|title|## Title)",
+    re.IGNORECASE,
+)
+
+
+@semantic_rule(
+    name="source-attribution-directive",
+    description=(
+        "A SKILL.md for a skill with source_pin_fields lacks explicit prohibition "
+        "language against using prohibited sources for pinned fields. Without it, "
+        "weaker providers may conflate issue metadata with plan-derived content."
+    ),
+)
+def _check_source_attribution_directive(ctx: ValidationContext) -> list[RuleFinding]:
+    manifest = load_bundled_manifest()
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+
+        skill_data = manifest.get("skills", {}).get(skill_name)
+        if not skill_data or not skill_data.get("source_pin_fields"):
+            continue
+
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue
+
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        if not _SOURCE_PROHIBITION_RE.search(content):
+            findings.append(
+                RuleFinding(
+                    rule="source-attribution-directive",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"SKILL.md for '{skill_name}' has source_pin_fields but lacks "
+                        f"explicit prohibition language against using prohibited sources "
+                        f"for pinned fields. Add a NEVER item prohibiting the use of "
+                        f"issue metadata for task_title derivation."
+                    ),
+                )
+            )
+    return findings

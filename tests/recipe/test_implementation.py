@@ -299,3 +299,52 @@ def test_main_repo_guard_step_exists(recipe_name: str) -> None:
     assert "main_repo_guard" in step.with_args.get("callable", ""), (
         f"{recipe_name}: main_repo_guard callable must reference main_repo_guard"
     )
+
+
+# T_DEV_IMP1
+def test_fix_captures_deviation_manifest_path(recipe) -> None:
+    """fix must capture deviation_manifest_path as optional_string."""
+    step = recipe.steps["fix"]
+    capture = step.capture or {}
+    assert "deviation_manifest_path" in capture
+    assert "deviation_manifest_path" in capture["deviation_manifest_path"].from_
+    assert capture["deviation_manifest_path"].value_type == "optional_string"
+
+
+# T_DEV_IMP2
+def test_retry_worktree_captures_deviation_manifest_path(recipe) -> None:
+    """retry_worktree must capture deviation_manifest_path as optional_string."""
+    step = recipe.steps["retry_worktree"]
+    capture = step.capture or {}
+    assert "deviation_manifest_path" in capture
+    assert "deviation_manifest_path" in capture["deviation_manifest_path"].from_
+    assert capture["deviation_manifest_path"].value_type == "optional_string"
+
+
+# T_DEV_IMP3
+def test_audit_impl_forwards_deviation_manifest_path(recipe) -> None:
+    """audit_impl must forward deviation_manifest_path kwarg and declare it optional."""
+    step = recipe.steps["audit_impl"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "deviation_manifest_path=" in cmd
+    assert "deviation_manifest_path" in (step.optional_context_refs or [])
+
+
+# T_DEV_IMP4
+def test_merge_gate_fix_captures_deviation_manifest_path(recipe) -> None:
+    """merge_gate_fix must capture deviation_manifest_path (flows to audit_impl)."""
+    step = recipe.steps["merge_gate_fix"]
+    capture = step.capture or {}
+    assert "deviation_manifest_path" in capture
+    assert capture["deviation_manifest_path"].value_type == "optional_string"
+
+
+# T_DEV_CROSS1
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation"])
+def test_audit_impl_deviation_manifest_path_kwarg_consistency(recipe_name: str) -> None:
+    """Both recipes must forward deviation_manifest_path identically to audit_impl."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    step = recipe.steps["audit_impl"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "deviation_manifest_path=${{ context.deviation_manifest_path }}" in cmd
+    assert "deviation_manifest_path" in (step.optional_context_refs or [])

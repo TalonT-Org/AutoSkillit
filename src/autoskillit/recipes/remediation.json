@@ -338,7 +338,8 @@
         "implementation_ref": "${{ result.worktree_path }}",
         "worktree_path": "${{ result.worktree_path }}",
         "branch_name": "${{ result.branch_name }}",
-        "phases_implemented": "${{ result.phases_implemented }}"
+        "phases_implemented": "${{ result.phases_implemented }}",
+        "deviation_manifest_path": "${{ result.deviation_manifest_path }}"
       },
       "on_result": [
         {
@@ -636,7 +637,11 @@
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
-        "fixes_applied": "${{ result.fixes_applied }}"
+        "fixes_applied": "${{ result.fixes_applied }}",
+        "deviation_manifest_path": {
+          "from": "${{ result.deviation_manifest_path }}",
+          "type": "optional_string"
+        }
       },
       "on_result": [
         {
@@ -705,7 +710,11 @@
       },
       "capture": {
         "verdict": "${{ result.verdict }}",
-        "fixes_applied": "${{ result.fixes_applied }}"
+        "fixes_applied": "${{ result.fixes_applied }}",
+        "deviation_manifest_path": {
+          "from": "${{ result.deviation_manifest_path }}",
+          "type": "optional_string"
+        }
       },
       "on_result": [
         {
@@ -802,7 +811,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.branch_name }} ${{ inputs.base_branch }}",
+        "skill_command": "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.branch_name }} ${{ inputs.base_branch }} deviation_manifest_path=${{ context.deviation_manifest_path }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "audit_impl",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl"
@@ -828,6 +837,9 @@
       "on_rate_limit": "check_audit_remediation_loop",
       "optional": true,
       "skip_when_false": "inputs.audit_impl",
+      "optional_context_refs": [
+        "deviation_manifest_path"
+      ],
       "note": "Only run if inputs.audit_impl = true. If inputs.audit_impl = false, skip directly to commit_guard."
     },
     "remediate": {

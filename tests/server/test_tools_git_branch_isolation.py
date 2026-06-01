@@ -15,7 +15,7 @@ import pytest
 from autoskillit.server.tools.tools_git import create_and_publish_branch
 from tests.conftest import _make_result
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 def _git(cwd: Path, *args: str) -> str:

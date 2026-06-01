@@ -11,9 +11,8 @@ import re
 
 import pytest
 
+from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER as STAMP
 from autoskillit.core.paths import pkg_root
-
-STAMP = "Dry-walkthrough verified = TRUE"
 
 
 @pytest.fixture(scope="module")

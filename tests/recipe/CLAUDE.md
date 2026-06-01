@@ -111,6 +111,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_research_sub_recipe_rules.py` | Contract tests for research sub-recipe semantic rules and dataflow analysis |
 | `test_resolve_ci_routing_invariant.py` | Tests for CI routing invariant in resolve steps |
 | `test_review_loop_routing_integration.py` | Integration tests for review loop routing |
+| `test_review_loop_artifact_isolation.py` | Structural tests that loop-iterated run_skill steps use iteration-scoped output_dir to prevent artifact collision |
 | `test_review_loop_routing_invariant.py` | Routing invariant tests: check_review_loop is mandatory waypoint between review_pr and check_repo_ci_event |
 | `test_rule_helpers.py` | Unit tests for push_reachable and other rule helper functions |
 | `test_rule_decomposition.py` | Tests for semantic rule decomposition structure |
@@ -164,6 +165,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_review_loop_waypoint.py` | Tests for review-loop-waypoint-guard semantic rule |
 | `test_rules_route_gate.py` | Tests for route-gate-shared-stop semantic validation rule |
 | `test_rules_loop_counter.py` | Tests for loop-counter-cross-path-sharing and loop-guard-before-verify semantic rules |
+| `test_rules_loop_artifact_scope.py` | Tests for loop-iterated-step-requires-iteration-scoped-output semantic validation rule |
 | `test_rules_loop_progress.py` | Tests for loop-body-uncaptured-output semantic validation rule |
 | `test_rules_recipe.py` | Tests for recipe-level semantic validation rule |
 | `test_rules_registry.py` | Tests for rule registry and decorator |

@@ -144,6 +144,7 @@ class TestFailOpen:
     def test_malformed_json_stdin(self, monkeypatch, tmp_path):
         from autoskillit.hooks.guards.compose_pr_body_guard import main  # noqa: PLC0415
 
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr("sys.stdin", io.StringIO("not valid json {{{"))

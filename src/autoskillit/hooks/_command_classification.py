@@ -7,6 +7,7 @@ _INTERPRETER_LINE_RE.
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 from collections.abc import Sequence
@@ -49,6 +50,16 @@ _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 
 
+def resolve_write_target(path: str, cwd: str = "") -> str | None:
+    if not path:
+        return None
+    if os.path.isabs(path):
+        return path
+    if cwd:
+        return os.path.join(cwd, path)
+    return None
+
+
 def tokenize_command_segments(command: str) -> list[list[str]]:
     """Split a shell command into segments of (verb, args...) token lists.
 
@@ -73,10 +84,11 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     return segments
 
 
-def extract_redirect_targets(tokens: list[str]) -> list[str]:
-    """Extract absolute redirect target paths from shlex-tokenized command tokens.
+def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
+    """Extract redirect target paths from shlex-tokenized command tokens.
 
-    Returns ALL absolute paths including pseudo-devices — caller filters.
+    Returns resolved paths including pseudo-devices — caller filters.
+    Relative paths are resolved against cwd when provided.
 
     Handles three redirect forms at depth 0 only:
     - Separate:  ['>', '/path'] or ['>>', '/path']
@@ -115,8 +127,9 @@ def extract_redirect_targets(tokens: list[str]) -> list[str]:
                 path = tokens[i + 1]
                 while path and path[-1] in _TRAILING_SHELL_CLOSERS:
                     path = path[:-1]
-                if path.startswith("/"):
-                    targets.append(path)
+                resolved = resolve_write_target(path, cwd)
+                if resolved is not None:
+                    targets.append(resolved)
                 i += 2
                 continue
         elif _REDIRECT_OP_ONLY_RE.match(tok):
@@ -124,8 +137,9 @@ def extract_redirect_targets(tokens: list[str]) -> list[str]:
                 path = tokens[i + 1]
                 while path and path[-1] in _TRAILING_SHELL_CLOSERS:
                     path = path[:-1]
-                if path.startswith("/"):
-                    targets.append(path)
+                resolved = resolve_write_target(path, cwd)
+                if resolved is not None:
+                    targets.append(resolved)
                 i += 2
                 continue
         else:
@@ -134,8 +148,9 @@ def extract_redirect_targets(tokens: list[str]) -> list[str]:
                 path = m.group(2)
                 while path and path[-1] in _TRAILING_SHELL_CLOSERS:
                     path = path[:-1]
-                if path.startswith("/"):
-                    targets.append(path)
+                resolved = resolve_write_target(path, cwd)
+                if resolved is not None:
+                    targets.append(resolved)
         i += 1
     return targets
 

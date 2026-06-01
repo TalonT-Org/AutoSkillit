@@ -511,3 +511,18 @@ def test_resolve_merge_conflicts_step5_pre_existing_failure_carve_out(skill_md: 
         "integration target before escalating. Without this carve-out, failures introduced "
         "by upstream (not the branch) trigger false escalations that mask the real CI failure."
     )
+
+
+def test_step5_prohibits_amend_and_requires_new_commit(step5_section: str) -> None:
+    """Step 5 must explicitly instruct a new commit after staging pre-commit fixes
+    and must NOT contain --amend as an instruction (only as a prohibition)."""
+    # Requirement: explicit new commit instruction must exist
+    assert re.search(r"git\s.*commit\s+-m", step5_section), (
+        "Step 5 must contain an explicit 'git commit -m' instruction for staged fixes"
+    )
+    # Prohibition: if --amend appears, it must be in a "do not" context
+    amend_lines = [line for line in step5_section.splitlines() if "--amend" in line]
+    for line in amend_lines:
+        assert re.search(r"(?i)do\s+not|never|prohibit", line), (
+            f"--amend appears without prohibition context: {line}"
+        )

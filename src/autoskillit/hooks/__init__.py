@@ -11,6 +11,7 @@ from autoskillit.hook_registry import (
     HookDef,
     generate_hooks_json,
 )
+from autoskillit.hooks._command_classification import _INTERPRETER_LINE_RE, _WRITE_APIS_RE
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.hooks.guards.branch_protection_guard import BRANCH_PROTECTION_DENY_TRIGGER
 from autoskillit.hooks.guards.review_loop_gate import REVIEW_LOOP_DENY_TRIGGER
@@ -27,5 +28,7 @@ __all__ = [
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
     "REVIEW_LOOP_DENY_TRIGGER",
     "_HOOK_CONFIG_PATH_COMPONENTS",
+    "_INTERPRETER_LINE_RE",
+    "_WRITE_APIS_RE",
     "generate_hooks_json",
 ]

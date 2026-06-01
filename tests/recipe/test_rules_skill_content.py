@@ -1391,3 +1391,112 @@ def test_source_attribution_directive_rule_registered() -> None:
 
     rule_names = [r.name for r in _RULE_REGISTRY]
     assert "source-attribution-directive" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# interpreter-mediated-write-in-skill tests
+# ---------------------------------------------------------------------------
+
+_INTERP_WRITE_RULE_ID = "interpreter-mediated-write-in-skill"
+
+
+def _write_skill_and_run_rules(tmp_path: Path, skill_md_content: str) -> list[object]:
+    skill_name = "interp-skill"
+    skill_dir = tmp_path / skill_name
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(skill_md_content)
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+        return run_semantic_rules(recipe)
+
+
+def test_interpreter_write_rule_registered() -> None:
+    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule_names = [r.name for r in _RULE_REGISTRY]
+    assert _INTERP_WRITE_RULE_ID in rule_names
+
+
+@pytest.mark.parametrize(
+    "bash_content",
+    [
+        "python3 -c \"open(path, 'w').write(data)\"",
+        "python3 - <<'EOF'\nPath(x).write_text(y)\nEOF",
+        "result=$(python3 -c \"open(x, 'w').write(y)\")",
+    ],
+    ids=["python3-c-open-w", "heredoc-write-text", "subshell-open-w"],
+)
+def test_interpreter_mediated_write_fires(tmp_path: Path, bash_content: str) -> None:
+    skill_md = textwrap.dedent(
+        f"""\
+        # interp-skill
+
+        ### Step 1
+        ```bash
+        {bash_content}
+        ```
+        """
+    )
+    findings = _write_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _INTERP_WRITE_RULE_ID in rule_ids
+
+
+def test_python_block_write_api_fires(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # interp-skill
+
+        ### Step 1
+        ```python
+        Path(output).write_text(content)
+        ```
+        """
+    )
+    findings = _write_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _INTERP_WRITE_RULE_ID in rule_ids
+
+
+@pytest.mark.parametrize(
+    "bash_content",
+    [
+        'python3 -c "json.load(open(path))"',
+        "echo data > path",
+        'python3 -c "print(Path(x).read_text())"',
+    ],
+    ids=["read-only-open", "shell-redirect", "read-text-only"],
+)
+def test_interpreter_mediated_write_does_not_fire(tmp_path: Path, bash_content: str) -> None:
+    skill_md = textwrap.dedent(
+        f"""\
+        # interp-skill
+
+        ### Step 1
+        ```bash
+        {bash_content}
+        ```
+        """
+    )
+    findings = _write_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _INTERP_WRITE_RULE_ID not in rule_ids
+
+
+def test_python_block_read_only_does_not_fire(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # interp-skill
+
+        ### Step 1
+        ```python
+        data = Path(input_path).read_text()
+        ```
+        """
+    )
+    findings = _write_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _INTERP_WRITE_RULE_ID not in rule_ids

@@ -60,6 +60,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Spawn all subagents via `Agent(model="sonnet")`
 - Deduplicate findings by (file, line) pairs before posting
 - Issue all Task calls in a single message to maximize parallelism
+- Use the Write tool or bash redirects (`> path`) for all file writes — never `open(path, 'w')` or `.write_text()` inside a `python3` heredoc or `python3 -c` invocation, as these are blocked by the write guard
 
 ## Workflow
 

@@ -442,6 +442,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "recipe",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_skill_tool_syntax_contracts.py",
+            "contracts/test_no_interpreter_writes_in_skills.py",
         }
     ),
     # --- Internal utility modules (no external src importers) ---
@@ -460,6 +461,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "skills/test_skill_tool_syntax_contracts.py",
             "skills/test_audit_impl_diff_discipline.py",
             "skills/test_skill_variable_threading.py",
+            "contracts/test_no_interpreter_writes_in_skills.py",
         }
     ),
     "_recipe_composition": frozenset({"recipe"}),
@@ -810,6 +812,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks",
             "cli/test_cli_hooks.py",
             "cli/test_install.py",
+            "recipe",
             "server/test_kitchen_lifecycle.py",
             "server/test_tools_kitchen_gate.py",
             "server/test_tools_kitchen_gate_hook_config.py",

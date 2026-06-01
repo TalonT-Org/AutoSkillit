@@ -12,6 +12,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `_capture.py` | Capture spec extraction and validation — `_extract_captures`, `_normalize_capture_spec`, `CaptureCompletenessError` |
 | `_outcome.py` | Dispatch outcome classification — `classify_dispatch_outcome`, pure mapping from subprocess signals to `DispatchStatus` |
 | `_prompts.py` | Prompt builder for L2 fleet dispatch sessions — assembles admiral dispatch instruction block from SKILL.md sections |
+| `_reset.py` | Dispatch artifact reset — `find_dispatch_in_campaigns`, `reset_dispatch_artifacts`, `update_campaign_state`, `ResetReport` |
 | `result_parser.py` | L2 result block parser with Channel B JSONL fallback |
 | `sidecar.py` | Per-issue JSONL sidecar — `IssueSidecarEntry`, append/read/`compute_remaining` helpers |
 | `_dispatch_reaper.py` | Stale dispatch process reaping — `reap_stale_dispatches()`, `reap_stale_dispatches_async()` |
@@ -41,6 +42,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `tests/fleet/test_label_cleanup.py` | Tests for `cleanup_orphaned_labels` — finally block cleanup on CancelledError, RuntimeError, no-sidecar, no-client, multiple issues |
 | `tests/fleet/test_startup_label_recovery.py` | Tests for `sweep_stale_dispatch_labels` — dead dispatch cleanup, alive dispatch skip, missing sidecar, multi-campaign |
 | `tests/fleet/test_find_dispatch_for_issue.py` | Tests for `find_dispatch_for_issue` — running dispatch lookup, non-running skip, missing sidecar, empty state |
+| `tests/fleet/test_reset.py` | Tests for `find_dispatch_in_campaigns`, `compute_reset_labels` |
 
 ## Architecture Notes
 

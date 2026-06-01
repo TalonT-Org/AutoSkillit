@@ -19,6 +19,12 @@ from ._liveness import is_dispatch_session_alive
 from ._outcome import classify_dispatch_outcome
 from ._prompts import _build_admiral_dispatch_block as _build_admiral_dispatch_block
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
+from ._reset import (
+    ResetReport,
+    find_dispatch_in_campaigns,
+    reset_dispatch_artifacts,
+    update_campaign_state,
+)
 from ._semaphore import FleetSemaphore
 from .result_parser import L3ParseResult, parse_l3_result_block
 from .sidecar import (
@@ -159,4 +165,8 @@ __all__ = [
     "read_sidecar",
     "read_sidecar_from_path",
     "sidecar_path",
+    "ResetReport",
+    "find_dispatch_in_campaigns",
+    "reset_dispatch_artifacts",
+    "update_campaign_state",
 ]

@@ -414,7 +414,7 @@ class TestPrepFileParsing:
 
         monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
         monkeypatch.chdir(tmp_path)
-        # Create two prep files with explicit mtimes — older one has 100, newer has 999
+        # Create two prep files with explicit mtimes — older one has 1000, newer has 2000
         prep_dir = tmp_path / ".autoskillit" / "temp" / "prepare-pr"
         prep_dir.mkdir(parents=True, exist_ok=True)
         old = prep_dir / "pr_prep_old.md"

@@ -613,19 +613,9 @@ async def open_kitchen(
 
             try:
                 _update_hook_config_with_recipe()
-            except Exception:
-                logger.warning(
-                    "open_kitchen_failure", stage="update_hook_config_recipe", exc_info=True
-                )
-
-            try:
                 _update_hook_config_with_git_ops_policy()
             except Exception:
-                logger.warning(
-                    "open_kitchen_failure",
-                    stage="update_hook_config_git_ops_policy",
-                    exc_info=True,
-                )
+                logger.warning("open_kitchen_failure", stage="update_hook_config", exc_info=True)
 
             composite = result.get("composite_hash", "")
             from autoskillit.server._state import _check_rerun  # noqa: PLC0415

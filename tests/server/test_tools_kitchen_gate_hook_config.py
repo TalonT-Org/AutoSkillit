@@ -313,6 +313,57 @@ async def test_update_hook_config_with_recipe_excludes_pr_create_for_non_pr_reci
     assert "recipe_allows_pr_create" not in data
 
 
+@pytest.mark.anyio
+async def test_hook_config_git_ops_policy_skipped_when_recipe_raises(tmp_path, monkeypatch):
+    """When _update_hook_config_with_recipe raises, _update_hook_config_with_git_ops_policy
+    must NOT be called — both must share the same try/except block."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "",
+    }
+    mock_ctx.recipes.find.return_value = None
+    mock_ctx.config.migration.suppressed = []
+    mock_ctx.config.linux_tracing.log_dir = ""
+    mock_ctx.quota_refresh_task = None
+    git_ops_mock = MagicMock()
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+                new=AsyncMock(),
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        return_value={},
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen._update_hook_config_with_recipe",
+                            side_effect=RuntimeError("recipe config failed"),
+                        ):
+                            with patch(
+                                "autoskillit.server.tools.tools_kitchen._update_hook_config_with_git_ops_policy",
+                                git_ops_mock,
+                            ):
+                                from autoskillit.server.tools.tools_kitchen import (
+                                    open_kitchen,
+                                )
+
+                                await open_kitchen(name="demo", ctx=mock_ctx)
+
+    git_ops_mock.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Group H — layered hook config: overlay isolation
 # ---------------------------------------------------------------------------

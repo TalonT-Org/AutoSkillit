@@ -9,6 +9,7 @@ Never raises — all helpers silently return empty fallbacks on any error.
 
 from __future__ import annotations
 
+import copy
 import functools
 import importlib.metadata
 import json
@@ -78,6 +79,8 @@ def collect_version_snapshot(backend: CodingAgentBackend | None = None) -> dict[
         elif backend.name == AGENT_BACKEND_CODEX:
             result["codex_version"] = version_str
             result["codex_plugins"] = plugin_list
+        else:
+            logger.warning("Unrecognized backend name %r — version data discarded", backend.name)
     else:
         env_backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
         if env_backend == AGENT_BACKEND_CLAUDE_CODE:
@@ -91,7 +94,8 @@ def collect_version_snapshot(backend: CodingAgentBackend | None = None) -> dict[
                 )
                 if proc.returncode != 0:
                     logger.warning("claude --version exited with code %d", proc.returncode)
-                result["claude_code_version"] = proc.stdout.strip() or proc.stderr.strip()
+                else:
+                    result["claude_code_version"] = proc.stdout.strip() or proc.stderr.strip()
             except subprocess.TimeoutExpired:
                 pass
             except Exception:
@@ -147,7 +151,7 @@ def collect_version_snapshot(backend: CodingAgentBackend | None = None) -> dict[
             except Exception:
                 logger.warning("Failed to run codex plugin list", exc_info=True)
 
-    return result
+    return copy.copy(result)
 
 
 def _autoskillit_version() -> str:

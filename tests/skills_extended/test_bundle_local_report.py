@@ -18,6 +18,8 @@ from autoskillit.report.renderer import (
     _validate_diagram_paths,
 )
 
+pytestmark = [pytest.mark.medium]
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

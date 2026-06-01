@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.medium]
+
 _MERMAID_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "assets" / "mermaid"
 
 

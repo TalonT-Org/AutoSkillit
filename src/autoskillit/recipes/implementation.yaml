@@ -782,8 +782,9 @@ steps:
       re-enters the plan step with the remediation file. All parts have been merged
       at this point — no worktree exists. Uses context.base_sha (a stable commit SHA
       captured before any merge began) as implementation_ref. A SHA names a git object
-      and survives git branch -D unconditionally. The diff git diff base_sha..base_branch
-      (two-dot, SHA on the left) covers the full implementation.
+      and survives git branch -D unconditionally. HEAD points to merge_target (the
+      feature branch tip when open_pr=true, or base_branch when open_pr=false). The
+      diff git diff base_sha..HEAD covers the full implementation.
 
       '
   remediate:

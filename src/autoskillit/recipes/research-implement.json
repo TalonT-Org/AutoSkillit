@@ -137,9 +137,23 @@
       "capture": {
         "group_files": "${{ result.group_files }}"
       },
-      "on_success": "plan_phase",
+      "on_success": "capture_impl_base",
       "on_failure": "escalate_stop",
       "note": "Decomposes the experiment plan into sequenced phases. Each phase becomes an independently plannable implementation unit. Typical decomposition: infrastructure/logging -> data generators -> plotting/analysis scripts -> experiment implementation.\n"
+    },
+    "capture_impl_base": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "git rev-parse HEAD",
+        "cwd": "${{ inputs.worktree_path }}",
+        "step_name": "capture_impl_base"
+      },
+      "capture": {
+        "impl_base_sha": "${{ result.stdout | trim }}"
+      },
+      "on_success": "plan_phase",
+      "on_failure": "escalate_stop",
+      "note": "Captures the worktree HEAD SHA before phase implementation begins. Used by audit_impl to diff pre-implementation state against post-implementation state, detecting phases that produced no commits.\n"
     },
     "plan_phase": {
       "tool": "run_skill",
@@ -317,7 +331,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:audit-impl ${{ context.group_files }} ${{ inputs.base_branch }}",
+        "skill_command": "/autoskillit:audit-impl ${{ context.group_files }} ${{ context.impl_base_sha }} ${{ inputs.base_branch }}",
         "cwd": "${{ context.worktree_path }}",
         "step_name": "audit_impl",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl"
@@ -341,7 +355,7 @@
       "on_failure": "escalate_stop",
       "on_context_limit": "escalate_stop",
       "skip_when_false": "inputs.audit_impl",
-      "note": "Diffs base_branch...HEAD and verifies all decomposed phases from group_files have corresponding implementation commits. Catches silent group abandonment when on_context_limit fires mid-iteration — reports exactly which phases were completed vs. skipped. On GO, proceeds to run_experiment. On error, escalates immediately. On NO GO, routes to remediate which re-enters plan_phase via check_audit_retry_loop (max 2 cycles). If false (inputs.audit_impl=false), skip directly to run_experiment.\n"
+      "note": "Diffs impl_base_sha..HEAD (two-dot SHA-mode) and verifies all decomposed phases from group_files have corresponding implementation commits. impl_base_sha is captured by capture_impl_base before phase implementation begins. Catches silent group abandonment when on_context_limit fires mid-iteration — reports exactly which phases were completed vs. skipped. On GO, proceeds to run_experiment. On error, escalates immediately. On NO GO, routes to remediate which re-enters plan_phase via check_audit_retry_loop (max 2 cycles). If false (inputs.audit_impl=false), skip directly to run_experiment.\n"
     },
     "remediate": {
       "action": "route",

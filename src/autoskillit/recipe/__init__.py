@@ -98,6 +98,9 @@ from autoskillit.recipe.methodology_venue_appendix import (  # noqa: E402
 from autoskillit.recipe.repository import DefaultRecipeRepository  # noqa: E402
 from autoskillit.recipe.rules import rules_actions as _rules_actions  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_audit_impl_topology as _rules_audit_impl_topology,
+)
+from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_backend_compat as _rules_backend_compat,
 )
 from autoskillit.recipe.rules import rules_blocks as _rules_blocks  # noqa: E402 F401

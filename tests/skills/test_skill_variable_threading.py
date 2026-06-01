@@ -53,7 +53,8 @@ THREADING_CONTRACTS: list[ThreadingContract] = [
         variable="implementation_ref",
         target_step="Step 2",
         must_appear_in_pattern=r"git (diff|log)\b",
-        must_not_hardcode="HEAD",
+        # HEAD is correct in SHA-mode (..HEAD); branch-mode prohibition
+        # is enforced by test_step2_diff_commands_use_implementation_ref_not_head
     ),
 ]
 

@@ -61,7 +61,10 @@ def test_extract_step_sections_captures_decimal_steps(skill_content: str) -> Non
 def test_step2_diff_commands_use_implementation_ref_not_head(
     step_sections: dict[str, str],
 ) -> None:
-    """Step 2 git diff/log commands must reference {implementation_ref}, not HEAD."""
+    """Step 2 git diff/log commands in branch-mode must reference {implementation_ref}, not HEAD.
+
+    SHA-mode commands correctly use {implementation_ref}..HEAD.
+    """
     assert "Step 2" in step_sections, "SKILL.md must contain a Step 2 section"
     step2_text = step_sections["Step 2"]
     git_cmds = extract_git_commands(step2_text)
@@ -72,10 +75,13 @@ def test_step2_diff_commands_use_implementation_ref_not_head(
         c
         for c in diff_log_cmds
         # allow 'git rev-parse --abbrev-ref HEAD' — that is a different operation
-        if "HEAD" in c and "rev-parse" not in c and "abbrev-ref" not in c
+        if "HEAD" in c
+        and "rev-parse" not in c
+        and "abbrev-ref" not in c
+        and "{implementation_ref}.." not in c  # SHA-mode: HEAD is correct target
     ]
     assert not head_violations, (
-        "Step 2 git diff/log commands must not hardcode HEAD; "
+        "Step 2 git diff/log commands must not hardcode HEAD in branch-mode; "
         "use {implementation_ref} or {branch_name} instead. "
         f"Offending commands: {head_violations}"
     )
@@ -125,3 +131,70 @@ def test_step2_has_diff_size_guard(step_sections: dict[str, str]) -> None:
         kw in step2_text.lower() for kw in ("chunk", "batch", "group", "split", "per-file")
     )
     assert has_chunking, "Step 2 must describe a chunking or batching strategy for large diffs"
+
+
+def test_step0_sha_mode_formula_uses_head_not_base_branch(
+    step_sections: dict[str, str],
+) -> None:
+    """Step 0 SHA-mode diff formula must use ..HEAD, not ..{base_branch}."""
+    assert "Step 0" in step_sections, "SKILL.md must contain a Step 0 section"
+    step0_text = step_sections["Step 0"]
+    git_cmds = extract_git_commands(step0_text)
+    sha_mode_cmds = [
+        c
+        for c in git_cmds
+        if c.startswith(("git diff", "git log")) and "{implementation_ref}.." in c
+    ]
+    assert sha_mode_cmds, (
+        "Step 0 must contain at least one git diff/log command with "
+        "{implementation_ref}.. (two-dot SHA-mode pattern)"
+    )
+    base_branch_violations = [c for c in sha_mode_cmds if "{base_branch}" in c]
+    assert not base_branch_violations, (
+        "Step 0 SHA-mode git diff commands must not use {base_branch} as the right operand; "
+        "use HEAD instead (base_branch is unchanged in pre-merge topology). "
+        f"Offending commands: {base_branch_violations}"
+    )
+    head_present = any("HEAD" in c for c in sha_mode_cmds)
+    assert head_present, (
+        "Step 0 SHA-mode git diff commands must use HEAD as the right operand. "
+        f"Commands found: {sha_mode_cmds}"
+    )
+
+
+def test_step2_sha_mode_commands_use_head(
+    step_sections: dict[str, str],
+) -> None:
+    """Step 2 SHA-mode git diff/log commands must use ..HEAD, not ..{base_branch}."""
+    assert "Step 2" in step_sections, "SKILL.md must contain a Step 2 section"
+    step2_text = step_sections["Step 2"]
+    git_cmds = extract_git_commands(step2_text)
+    sha_mode_cmds = [
+        c
+        for c in git_cmds
+        if c.startswith(("git diff", "git log")) and "{implementation_ref}.." in c
+    ]
+    assert sha_mode_cmds, (
+        "Step 2 must contain at least one git diff/log command with "
+        "{implementation_ref}.. (two-dot SHA-mode pattern)"
+    )
+    base_branch_violations = [c for c in sha_mode_cmds if "{base_branch}" in c]
+    assert not base_branch_violations, (
+        "Step 2 SHA-mode git diff commands must not use {base_branch} as the right operand; "
+        "use HEAD instead. "
+        f"Offending commands: {base_branch_violations}"
+    )
+
+
+def test_step2_does_not_prohibit_head_unconditionally(
+    step_sections: dict[str, str],
+) -> None:
+    """Step 2 HEAD prohibition must not be unconditional — SHA-mode uses HEAD legitimately."""
+    assert "Step 2" in step_sections, "SKILL.md must contain a Step 2 section"
+    step2_text = step_sections["Step 2"]
+    unconditional_prohibition = re.search(r"do\s+NOT\s+hardcode\s+HEAD", step2_text, re.IGNORECASE)
+    assert unconditional_prohibition is None, (
+        "Step 2 must not unconditionally prohibit HEAD — SHA-mode commands use "
+        "{implementation_ref}..HEAD legitimately. Replace the blanket 'do NOT hardcode HEAD' "
+        "with 'do NOT bypass the command form determined in Step 0'."
+    )

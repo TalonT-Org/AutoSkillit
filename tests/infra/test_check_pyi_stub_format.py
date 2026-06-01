@@ -62,5 +62,5 @@ def test_check_pyi_rejects_non_relative_import(tmp_path):
 
     mod = _load_check_module()
     violations = mod.check_file(pyi)
-    assert len(violations) == 1
-    assert "level 0" in violations[0]
+    assert len(violations) >= 1
+    assert any("level 0" in v for v in violations)

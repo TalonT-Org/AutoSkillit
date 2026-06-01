@@ -162,7 +162,7 @@ steps:
     tool: run_cmd
     with:
       cmd: "git rev-parse HEAD"
-      cwd: "${{ context.worktree_path }}"
+      cwd: "${{ inputs.worktree_path }}"
       step_name: capture_impl_base
     capture:
       impl_base_sha: "${{ result.stdout | trim }}"

@@ -21,7 +21,11 @@ SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 
 def check_file(path: Path) -> list[str]:
     violations = []
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (SyntaxError, UnicodeDecodeError, OSError) as exc:
+        violations.append(f"{path.name}: could not parse — {exc}")
+        return violations
     for node in tree.body:
         if isinstance(node, ast.ImportFrom):
             if node.level != 1:

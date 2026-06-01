@@ -197,6 +197,7 @@
       },
       "capture": {
         "plan_path": "${{ result.plan_path }}",
+        "all_plan_paths": "${{ result.plan_path }}",
         "verdict": "${{ result.verdict }}"
       },
       "capture_list": {

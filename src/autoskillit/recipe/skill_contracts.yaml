@@ -1410,8 +1410,8 @@ skills:
     - name: methodology_tradition
       type: string
     expected_output_patterns:
-    - "selected_lenses[ \\t]*=[ \\t]*.+"
-    - "lens_context_paths[ \\t]*=[ \\t]*.+"
+    - "selected_lenses[ \\t]*=[ \\t]*\\S+"
+    - "lens_context_paths[ \\t]*=[ \\t]*\\S+"
     pattern_examples:
     - "selected_lenses = vis-lens-always-on,vis-lens-chart-select\nlens_context_paths = /tmp/select-vis-lenses/vis_ctx_always-on.md,/tmp/select-vis-lenses/vis_ctx_chart-select.md\ndisambiguation_rule_applied = null\ntier_c_lens = null\nmethodology_tradition = null\n%%ORDER_UP%%"
     write_behavior: always

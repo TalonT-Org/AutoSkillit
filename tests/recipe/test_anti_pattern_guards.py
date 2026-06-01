@@ -104,7 +104,7 @@ def test_merge_prs_no_run_cmd_push():
 
 def test_merge_prs_has_no_loop_push_kitchen_rule():
     """AP2: merge-prs.yaml push_to_remote must only appear in the designated push steps."""
-    raw = load_yaml((builtin_recipes_dir() / "merge-prs.yaml").read_text())
+    raw = load_yaml(builtin_recipes_dir() / "merge-prs.yaml")
     steps = raw.get("steps", {})
     push_steps = {name for name, step in steps.items() if step.get("tool") == "push_to_remote"}
     unexpected = push_steps - {

@@ -86,7 +86,7 @@ def _has_write_restriction_prose(skill_md: str) -> bool:
 
 
 def _load_contracts() -> dict:
-    return load_yaml(_CONTRACTS_PATH.read_text())
+    return load_yaml(_CONTRACTS_PATH)
 
 
 def _skill_is_read_only(skill_name: str, contracts: dict) -> bool:
@@ -105,7 +105,7 @@ def _load_parsed_recipes() -> list[dict]:
     """Parse all recipe YAML files once and return their data dicts."""
     results: list[dict] = []
     for recipe_path in sorted(_RECIPES_DIR.glob("*.yaml")):
-        data = load_yaml(recipe_path.read_text())
+        data = load_yaml(recipe_path)
         if isinstance(data, dict):
             results.append(data)
     return results
@@ -204,7 +204,7 @@ def test_planner_skills_always_have_output_dir() -> None:
     planner skill sessions — no planner skill runs without an allowed_write_prefix.
     """
     planner_yaml = _RECIPES_DIR / "planner.yaml"
-    data = load_yaml(planner_yaml.read_text())
+    data = load_yaml(planner_yaml)
     steps = data.get("steps", {})
 
     violations: list[str] = []

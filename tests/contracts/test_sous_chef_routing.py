@@ -261,10 +261,13 @@ def test_sous_chef_no_resume_session_id_in_context_limit_routing() -> None:
     on_context_limit routing.
 
     Context-exhausted sessions must start fresh to get a full context window.
+    The fleet dispatch resume discipline section may legitimately reference
+    resume_session_id — this test only checks the context-limit routing section.
     """
     skill_md = _sous_chef_text()
-    assert "resume_session_id" not in skill_md, (
-        "sous-chef SKILL.md must not instruct passing resume_session_id; "
+    routing_section = _extract_routing_section(skill_md)
+    assert "resume_session_id" not in routing_section, (
+        "CONTEXT LIMIT ROUTING must not instruct passing resume_session_id; "
         "context-exhausted sessions must start fresh"
     )
 

@@ -294,7 +294,8 @@ async def test_guard_full_flow_contamination_detected(tmp_path):
     # detect_contamination: rev-parse HEAD (moved), status (dirty)
     runner.push(_git_result(stdout="def456\n"))
     runner.push(_git_result(stdout=" M file.py\n"))
-    # revert_contamination: reset --hard, clean -fd
+    # revert_contamination (selective, direct_commits=True): reset --hard, checkout --, clean -fd
+    runner.push(_git_result())
     runner.push(_git_result())
     runner.push(_git_result())
 
@@ -311,13 +312,13 @@ async def test_guard_full_flow_contamination_detected(tmp_path):
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
         policy=build_clone_guard_policy(
             readonly_skill=False,
-            has_write_scope=False,
+            has_write_scope=True,
             is_clone_commit=False,
-            is_worktree=True,
+            is_worktree=False,
         ),
     )
     assert reverted
-    assert len(runner.call_args_list) == 4  # 2 detect + 2 revert
+    assert len(runner.call_args_list) == 5  # 2 detect + 3 selective revert
     assert len(audit.get_report()) == 1
     record = audit.get_report()[0]
     assert record.subtype == "clone_contamination"
@@ -446,9 +447,9 @@ async def test_audit_log_records_contamination(tmp_path):
         skill_command="/autoskillit:implement-worktree-no-merge plan.md",
         policy=build_clone_guard_policy(
             readonly_skill=False,
-            has_write_scope=False,
+            has_write_scope=True,
             is_clone_commit=False,
-            is_worktree=True,
+            is_worktree=False,
         ),
     )
 
@@ -735,9 +736,9 @@ async def test_result_needs_retry_set_on_revert(tmp_path):
         None,
         policy=build_clone_guard_policy(
             readonly_skill=False,
-            has_write_scope=False,
+            has_write_scope=True,
             is_clone_commit=False,
-            is_worktree=True,
+            is_worktree=False,
         ),
     )
     assert reverted
@@ -801,9 +802,9 @@ async def test_original_retry_reason_preserved_on_revert(tmp_path):
         None,
         policy=build_clone_guard_policy(
             readonly_skill=False,
-            has_write_scope=False,
+            has_write_scope=True,
             is_clone_commit=False,
-            is_worktree=True,
+            is_worktree=False,
         ),
     )
     assert reverted
@@ -843,9 +844,9 @@ async def test_original_subtype_preserved_on_revert(tmp_path):
         None,
         policy=build_clone_guard_policy(
             readonly_skill=False,
-            has_write_scope=False,
+            has_write_scope=True,
             is_clone_commit=False,
-            is_worktree=True,
+            is_worktree=False,
         ),
     )
     assert result.contamination.subtype == "context_exhaustion"
@@ -1047,12 +1048,12 @@ async def test_worktree_recovery_skipped_when_snapshot_worktree_set_none(tmp_pat
         str(tmp_path),
         runner,
         None,
-        skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        skill_command="/autoskillit:rectify plan.md",
         policy=build_clone_guard_policy(
             readonly_skill=False,
-            has_write_scope=False,
+            has_write_scope=True,
             is_clone_commit=False,
-            is_worktree=True,
+            is_worktree=False,
         ),
     )
     assert reverted
@@ -1091,6 +1092,35 @@ async def test_worktree_recovery_on_success_path(tmp_path):
     )
     assert not reverted
     assert result.worktree_path == str(wt_dir)
+
+
+# ---------------------------------------------------------------------------
+# T29: clone-commit skill failure does not revert
+# ---------------------------------------------------------------------------
+@pytest.mark.anyio
+async def test_clone_commit_skill_failure_does_not_revert(tmp_path):
+    """Guard must not revert when policy has is_clone_commit=True and success=False."""
+    runner = MockSubprocessRunner()
+    snapshot = CloneSnapshot(head_sha="abc123")
+    skill_result = _make_skill_result(success=False, worktree_path=None)
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:resolve-failures",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=True,
+            is_clone_commit=True,
+            is_worktree=False,
+        ),
+    )
+    assert not reverted
+    assert result is skill_result
+    assert len(runner.call_args_list) == 0
 
 
 # ---------------------------------------------------------------------------

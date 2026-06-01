@@ -8,8 +8,8 @@ silent regression if sections are accidentally removed.
 import re
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.core.paths import pkg_root
 
 PROJECT_ROOT = pkg_root()
@@ -34,7 +34,7 @@ def impl_no_merge_skill_text():
 
 @pytest.fixture(scope="module")
 def recipe():
-    return yaml.safe_load(RECIPE_PATH.read_text())
+    return load_yaml(RECIPE_PATH)
 
 
 # --- merge-pr SKILL.md guards ---
@@ -177,7 +177,6 @@ def test_merge_prs_routes_escalation_to_stop(recipe):
 
 @pytest.fixture(scope="function")
 def skill_contracts_yaml():
-    from autoskillit.core.io import load_yaml
 
     contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
     return load_yaml(contracts_path)
@@ -185,7 +184,6 @@ def skill_contracts_yaml():
 
 @pytest.fixture(scope="function")
 def merge_prs_recipe():
-    from autoskillit.core.io import load_yaml
 
     return load_yaml(RECIPE_PATH)
 
@@ -242,7 +240,7 @@ def test_resolve_merge_conflicts_never_runs_full_test_suite():
 
 def test_resolve_merge_conflicts_in_skill_contracts():
     contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
-    contracts = yaml.safe_load(contracts_path.read_text())
+    contracts = load_yaml(contracts_path)
     assert "resolve-merge-conflicts" in contracts.get("skills", {}), (
         "skill_contracts.yaml must declare resolve-merge-conflicts as a key under 'skills'"
     )

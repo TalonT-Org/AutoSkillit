@@ -60,12 +60,11 @@ def test_temp_dir_env_override_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 def test_default_yaml_contains_temp_dir_key() -> None:
-    import yaml
-
     from autoskillit.core import pkg_root
+    from autoskillit.core.io import load_yaml
 
     defaults_path = pkg_root() / "config" / "defaults.yaml"
-    data = yaml.safe_load(defaults_path.read_text())
+    data = load_yaml(defaults_path)
     assert data["workspace"]["temp_dir"] == ".autoskillit/temp"
 
 

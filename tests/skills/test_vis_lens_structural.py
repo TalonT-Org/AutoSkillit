@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 
@@ -39,7 +40,7 @@ def _frontmatter(text: str) -> dict:
     if lines[0].strip() != "---":
         return {}
     end = next(i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "---")
-    return yaml.safe_load("\n".join(lines[1:end]))
+    return load_yaml("\n".join(lines[1:end]))
 
 
 @pytest.mark.parametrize("slug", VIS_LENS_SLUGS)

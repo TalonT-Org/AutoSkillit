@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _SKILLS_ROOT = _PROJECT_ROOT / "src" / "autoskillit" / "skills_extended"
@@ -26,7 +26,7 @@ def test_audit_feature_gates_skill_has_audit_category():
     source = _SKILL_FILE.read_text()
     parts = source.split("---", 2)
     assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"
-    fm = yaml.safe_load(parts[1])
+    fm = load_yaml(parts[1])
     assert isinstance(fm, dict), "SKILL.md frontmatter must parse to a dict"
     assert "audit" in fm.get("categories", []), "audit-feature-gates must have categories: [audit]"
 

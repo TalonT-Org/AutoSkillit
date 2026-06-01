@@ -9,9 +9,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import yaml
-
 import autoskillit
+from autoskillit.core.io import load_yaml
 
 
 class TestVersionConsistency:
@@ -58,7 +57,7 @@ class TestVersionConsistency:
         recipes_dir = Path(autoskillit.__file__).parent / "recipes"
         has_field = {}
         for recipe_path in sorted(recipes_dir.rglob("*.yaml")):
-            data = yaml.safe_load(recipe_path.read_text())
+            data = load_yaml(recipe_path)
             if not isinstance(data, dict):
                 continue
             if "autoskillit_version" in data:

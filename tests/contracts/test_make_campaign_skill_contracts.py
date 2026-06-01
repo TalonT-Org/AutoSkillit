@@ -5,9 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import yaml
-
 from autoskillit.core import pkg_root
+from autoskillit.core.io import load_yaml
 from autoskillit.workspace.skills import DefaultSkillResolver
 
 _SKILL_DIR = pkg_root() / "skills_extended" / "make-campaign"
@@ -22,7 +21,7 @@ def _parse_frontmatter(content: str) -> dict[str, Any]:
     """Extract YAML frontmatter between --- delimiters."""
     m = re.match(r"^---\n(.+?)\n---\n", content, re.DOTALL)
     assert m, "SKILL.md must have YAML frontmatter delimited by ---"
-    parsed = yaml.safe_load(m.group(1))
+    parsed = load_yaml(m.group(1))
     assert isinstance(parsed, dict), "SKILL.md frontmatter must be a YAML mapping"
     return parsed
 

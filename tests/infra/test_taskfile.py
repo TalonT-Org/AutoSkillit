@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 TASKFILE = REPO_ROOT / "Taskfile.yml"
@@ -11,7 +11,7 @@ TASKFILE = REPO_ROOT / "Taskfile.yml"
 
 class TestTaskfile:
     def _load(self) -> dict:
-        return yaml.safe_load(TASKFILE.read_text())
+        return load_yaml(TASKFILE)
 
     def test_install_worktree_has_status_block(self):
         """T1 — install-worktree has a status: block with at least two entries."""

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SKILL_DIR = _PROJECT_ROOT / ".autoskillit" / "skills" / "eval-agent"
@@ -20,7 +20,7 @@ def test_eval_agent_frontmatter_name():
     source = _SKILL_FILE.read_text()
     parts = source.split("---", 2)
     assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"
-    fm = yaml.safe_load(parts[1])
+    fm = load_yaml(parts[1])
     assert isinstance(fm, dict), "frontmatter must parse to dict"
     assert fm.get("name") == "eval-agent"
 
@@ -29,7 +29,7 @@ def test_eval_agent_categories_include_eval():
     """Frontmatter categories includes eval."""
     source = _SKILL_FILE.read_text()
     parts = source.split("---", 2)
-    fm = yaml.safe_load(parts[1])
+    fm = load_yaml(parts[1])
     assert "eval" in fm.get("categories", [])
 
 

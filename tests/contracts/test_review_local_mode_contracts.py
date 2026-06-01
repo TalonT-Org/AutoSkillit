@@ -9,7 +9,7 @@ Verifies that:
 
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 CONTRACTS_YAML = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipe" / "skill_contracts.yaml"
@@ -35,7 +35,7 @@ RESOLVE_REVIEW_SKILL_PATH = (
 
 
 def _contracts() -> dict:
-    return yaml.safe_load(CONTRACTS_YAML.read_text())
+    return load_yaml(CONTRACTS_YAML)
 
 
 def _review_pr_skill() -> str:

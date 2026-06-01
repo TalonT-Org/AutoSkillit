@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.rules.rules_blocks import _block_budgets  # re-use the cached loader
 
@@ -26,7 +26,7 @@ def test_all_run_cmd_steps_have_step_name(recipe_path):
     """AP5: Every run_cmd step in every bundled recipe must declare step_name in with:.
     Unnamed run_cmd calls are invisible to pipeline reports and timing instrumentation.
     """
-    raw = yaml.safe_load(recipe_path.read_text())
+    raw = load_yaml(recipe_path)
     steps = raw.get("steps", {})
     violations = []
     for step_name, step_data in steps.items():
@@ -104,7 +104,7 @@ def test_merge_prs_no_run_cmd_push():
 
 def test_merge_prs_has_no_loop_push_kitchen_rule():
     """AP2: merge-prs.yaml push_to_remote must only appear in the designated push steps."""
-    raw = yaml.safe_load((builtin_recipes_dir() / "merge-prs.yaml").read_text())
+    raw = load_yaml(builtin_recipes_dir() / "merge-prs.yaml")
     steps = raw.get("steps", {})
     push_steps = {name for name, step in steps.items() if step.get("tool") == "push_to_remote"}
     unexpected = push_steps - {

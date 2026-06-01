@@ -3,8 +3,8 @@
 from pathlib import Path
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.core.types import Severity
 from autoskillit.recipe._api import load_and_validate, validate_from_path
 from autoskillit.recipe.io import load_recipe
@@ -29,7 +29,7 @@ class TestImplementationPipelineIssueUrl:
 
     def test_issue_url_ingredient_declared(self):
         """issue_url ingredient must be declared as optional with no default."""
-        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        data = load_yaml(_recipe_path("implementation"))
         assert "issue_url" in data["ingredients"]
         ing = data["ingredients"]["issue_url"]
         assert ing.get("required", False) is False
@@ -37,12 +37,12 @@ class TestImplementationPipelineIssueUrl:
 
     def test_no_fetch_issue_step(self):
         """fetch_issue step must NOT exist — orchestrator no longer fetches issue content."""
-        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        data = load_yaml(_recipe_path("implementation"))
         assert "fetch_issue" not in data["steps"]
 
     def test_get_issue_title_step_present(self):
         """claim_and_resolve step must exist with correct structure."""
-        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        data = load_yaml(_recipe_path("implementation"))
         assert "claim_and_resolve" in data["steps"]
         assert "parse_issue_number" not in data["steps"]
         step = data["steps"]["claim_and_resolve"]
@@ -55,7 +55,7 @@ class TestImplementationPipelineIssueUrl:
 
     def test_get_issue_title_between_capture_base_sha_and_create_branch(self):
         """clone step must route to claim_and_resolve, which routes to create_and_publish."""
-        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        data = load_yaml(_recipe_path("implementation"))
         assert data["steps"]["clone"]["on_success"] == "claim_and_resolve"
         on_result = data["steps"]["claim_and_resolve"].get("on_result", [])
         true_routes = [r["route"] for r in on_result if r.get("when", "").endswith("== true")]
@@ -63,20 +63,20 @@ class TestImplementationPipelineIssueUrl:
 
     def test_create_branch_uses_callable(self):
         """create_and_publish step must use create_and_publish_branch MCP tool."""
-        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        data = load_yaml(_recipe_path("implementation"))
         step = data["steps"]["create_and_publish"]
         assert step["tool"] == "create_and_publish_branch"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """plan step must reference inputs.issue_url, not issue_content."""
-        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        data = load_yaml(_recipe_path("implementation"))
         skill_step_with = data["steps"]["plan"].get("with", {})
         assert any("issue_url" in str(v) for v in skill_step_with.values())
         assert not any("issue_content" in str(v) for v in skill_step_with.values())
 
     def test_issue_number_referenced_in_prepare_pr_step(self):
         """prepare_pr must reference context.issue_number in with: for dataflow tracking."""
-        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        data = load_yaml(_recipe_path("implementation"))
         prepare_pr_with = data["steps"]["prepare_pr"].get("with", {})
         assert any("issue_number" in str(v) for v in prepare_pr_with.values())
 
@@ -101,7 +101,7 @@ class TestImplementationPipelineIssueUrl:
             w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "issue_content"
         ]
         assert issue_content_dead == []
-        data = yaml.safe_load(_recipe_path("implementation").read_text())
+        data = load_yaml(_recipe_path("implementation"))
         for step_name, step in data["steps"].items():
             captures = step.get("capture", {})
             assert "issue_content" not in captures, (
@@ -116,7 +116,7 @@ class TestInvestigateFirstIssueUrl:
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_issue_url_ingredient_declared(self):
-        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        data = load_yaml(_recipe_path("remediation"))
         assert "issue_url" in data["ingredients"]
         ing = data["ingredients"]["issue_url"]
         assert ing.get("required", False) is False
@@ -124,12 +124,12 @@ class TestInvestigateFirstIssueUrl:
 
     def test_no_fetch_issue_step(self):
         """fetch_issue step must NOT exist — orchestrator no longer fetches issue content."""
-        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        data = load_yaml(_recipe_path("remediation"))
         assert "fetch_issue" not in data["steps"]
 
     def test_get_issue_title_step_present(self):
         """claim_and_resolve step must exist with correct structure."""
-        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        data = load_yaml(_recipe_path("remediation"))
         assert "claim_and_resolve" in data["steps"]
         assert "parse_issue_number" not in data["steps"]
         step = data["steps"]["claim_and_resolve"]
@@ -143,7 +143,7 @@ class TestInvestigateFirstIssueUrl:
 
     def test_get_issue_title_between_set_merge_target_and_create_branch(self):
         """clone step must route to claim_and_resolve (set_merge_target is now part of clone)."""
-        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        data = load_yaml(_recipe_path("remediation"))
         assert data["steps"]["clone"]["on_success"] == "claim_and_resolve"
         on_result = data["steps"]["claim_and_resolve"].get("on_result", [])
         true_routes = [r["route"] for r in on_result if r.get("when", "").endswith("== true")]
@@ -151,19 +151,19 @@ class TestInvestigateFirstIssueUrl:
 
     def test_create_branch_uses_callable(self):
         """create_and_publish step must use create_and_publish_branch MCP tool."""
-        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        data = load_yaml(_recipe_path("remediation"))
         step = data["steps"]["create_and_publish"]
         assert step["tool"] == "create_and_publish_branch"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
         """investigate step must reference inputs.issue_url, not issue_content."""
-        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        data = load_yaml(_recipe_path("remediation"))
         skill_step_with = data["steps"]["investigate"].get("with", {})
         assert any("issue_url" in str(v) for v in skill_step_with.values())
         assert not any("issue_content" in str(v) for v in skill_step_with.values())
 
     def test_issue_number_referenced_in_prepare_pr_step(self):
-        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        data = load_yaml(_recipe_path("remediation"))
         prepare_pr_with = data["steps"]["prepare_pr"].get("with", {})
         assert any("issue_number" in str(v) for v in prepare_pr_with.values())
 
@@ -188,7 +188,7 @@ class TestInvestigateFirstIssueUrl:
             w for w in report.warnings if w.code == "DEAD_OUTPUT" and w.field == "issue_content"
         ]
         assert issue_content_dead == []
-        data = yaml.safe_load(_recipe_path("remediation").read_text())
+        data = load_yaml(_recipe_path("remediation"))
         for step_name, step in data["steps"].items():
             captures = step.get("capture", {})
             assert "issue_content" not in captures, (
@@ -203,31 +203,31 @@ class TestImplementationGroupsIssueTitle:
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_fetch_issue_step_replaced(self):
-        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        data = load_yaml(_recipe_path("implementation-groups"))
         assert "fetch_issue" not in data["steps"]
         assert "claim_and_resolve" in data["steps"]
 
     def test_get_issue_title_captures_three_fields(self):
-        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        data = load_yaml(_recipe_path("implementation-groups"))
         step = data["steps"]["claim_and_resolve"]
         assert "issue_number" in step["capture"]
         assert "issue_title" in step["capture"]
         assert "issue_slug" in step["capture"]
 
     def test_get_issue_title_skips_when_no_url(self):
-        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        data = load_yaml(_recipe_path("implementation-groups"))
         step = data["steps"]["claim_and_resolve"]
         assert step.get("skip_when_false") == "inputs.issue_url"
         assert step.get("optional") is True
 
     def test_create_branch_uses_callable(self):
-        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        data = load_yaml(_recipe_path("implementation-groups"))
         step = data["steps"]["create_and_publish"]
         assert step["tool"] == "create_and_publish_branch"
 
     def test_no_issue_content_capture(self):
         """issue_content must not be captured anywhere in the recipe."""
-        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        data = load_yaml(_recipe_path("implementation-groups"))
         all_captures = {
             k: v
             for step in data["steps"].values()
@@ -237,7 +237,7 @@ class TestImplementationGroupsIssueTitle:
         assert "issue_content" not in all_captures
 
     def test_prepare_pr_step_still_references_issue_number(self):
-        data = yaml.safe_load(_recipe_path("implementation-groups").read_text())
+        data = load_yaml(_recipe_path("implementation-groups"))
         step = data["steps"]["prepare_pr"]
         assert "context.issue_number" in str(step)
 
@@ -275,21 +275,21 @@ class TestClaimReleaseGates:
 
     def test_claim_issue_step_present(self):
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             assert "claim_and_resolve" in data["steps"], (
                 f"{name}: missing claim_and_resolve step (claim_and_resolve_issue tool)"
             )
 
     def test_get_issue_title_routes_to_claim_issue(self):
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             assert data["steps"]["clone"]["on_success"] == "claim_and_resolve", (
                 f"{name}: clone.on_success should be claim_and_resolve"
             )
 
     def test_claim_issue_routes_to_create_branch_on_true(self):
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             step = data["steps"]["claim_and_resolve"]
             routes = step.get("on_result", [])
             true_routes = [r["route"] for r in routes if r.get("when", "").endswith("== true")]
@@ -298,7 +298,7 @@ class TestClaimReleaseGates:
             )
 
     def test_release_issue_steps_present(self):
-        cache = {name: yaml.safe_load(_recipe_path(name).read_text()) for name in self.RECIPES}
+        cache = {name: load_yaml(_recipe_path(name)) for name in self.RECIPES}
         for name in self.RECIPES:
             assert "release_issue_failure" in cache[name]["steps"], (
                 f"{name}: missing release_issue_failure"
@@ -314,7 +314,7 @@ class TestClaimReleaseGates:
 
     def test_release_issue_success_routes_to_register_clone_success(self):
         for name in self.RECIPES_WITH_RELEASE_SUCCESS_STEP:
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             step = data["steps"]["release_issue_success"]
             assert step["on_success"] == "patch_token_summary", (
                 f"{name}: release_issue_success.on_success should be patch_token_summary"
@@ -322,7 +322,7 @@ class TestClaimReleaseGates:
 
     def test_release_issue_failure_routes_to_register_clone_failure(self):
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             step = data["steps"]["release_issue_failure"]
             assert step["on_success"] == "register_clone_failure", (
                 f"{name}: release_issue_failure.on_success should be register_clone_failure"
@@ -340,7 +340,7 @@ class TestClaimReleaseGates:
             "expected dict does not cover all RECIPES — update split lists"
         )
         for name, expected_route in expected.items():
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             ci_step = data["steps"]["ci_watch"]
             on_result = ci_step.get("on_result")
             if on_result:
@@ -391,7 +391,7 @@ class TestClaimReleaseGates:
     def test_claim_issue_step_passes_allow_reentry_from_upfront_claimed(self):
         """claim_and_resolve with: block includes allow_reentry from inputs.upfront_claimed."""
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             claim_with = data["steps"]["claim_and_resolve"].get("with", {})
             assert "allow_reentry" in claim_with, (
                 f"{name}: claim_and_resolve.with missing allow_reentry"
@@ -403,7 +403,7 @@ class TestClaimReleaseGates:
     def test_upfront_claimed_ingredient_present_with_default_false(self):
         """Recipes expose upfront_claimed ingredient defaulting to 'false'."""
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             ingredients = data.get("ingredients", {})
             assert "upfront_claimed" in ingredients, f"{name}: missing upfront_claimed ingredient"
             assert ingredients["upfront_claimed"].get("default") == "false", (
@@ -413,7 +413,7 @@ class TestClaimReleaseGates:
     def test_claim_issue_routes_register_clone_failure_when_not_claimed(self):
         """claim_and_resolve fallthrough routes through register_clone_failure."""
         for name in self.RECIPES:
-            data = yaml.safe_load(_recipe_path(name).read_text())
+            data = load_yaml(_recipe_path(name))
             on_result = data["steps"]["claim_and_resolve"].get("on_result", [])
             # The fallthrough route (no 'when' key) must route through register_clone_failure
             # so the clone is registered before escalation (clone-terminal-requires-registration)
@@ -451,7 +451,7 @@ class TestIssueUrlPruning:
             "remediation",
             ingredient_overrides={"issue_url": "https://github.com/org/repo/issues/42"},
         )
-        content = yaml.safe_load(result["content"])
+        content = load_yaml(result["content"])
         steps = content.get("steps", {})
         assert "claim_and_resolve" in steps, (
             "claim_and_resolve must be present when issue_url is a URL"
@@ -468,7 +468,7 @@ class TestIssueUrlPruning:
             ingredient_overrides={},
         )
         content_str = result["content"]
-        content = yaml.safe_load(content_str)
+        content = load_yaml(content_str)
         steps = content.get("steps", {})
         assert (
             "claim_and_resolve" not in steps

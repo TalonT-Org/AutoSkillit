@@ -1,6 +1,6 @@
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import load_recipe
 
@@ -46,7 +46,7 @@ def test_skill_has_planner_category(skill_name: str) -> None:
     assert content.startswith("---"), f"{skill_name}: must start with YAML frontmatter"
     parts = content.split("---", 2)
     assert len(parts) >= 3
-    data = yaml.safe_load(parts[1]) or {}
+    data = load_yaml(parts[1]) or {}
     assert "planner" in (data.get("categories") or []), (
         f"{skill_name}: must declare 'categories: [planner]'"
     )
@@ -120,7 +120,7 @@ def test_refine_sizing_excluded_from_issues_fixed() -> None:
 
 @pytest.mark.parametrize("skill_name", PLANNER_FINALIZATION_SKILLS)
 def test_skill_in_defaults_yaml_tier2(skill_name: str) -> None:
-    defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
     tier2 = defaults["skills"]["tier2"]
     assert skill_name in tier2, f"{skill_name} must appear in defaults.yaml skills.tier2"
 
@@ -136,7 +136,7 @@ def test_all_planner_recipe_skills_registered_in_contract_card() -> None:
 
     card_path = RECIPES_ROOT / "contracts" / "planner.yaml"
     assert card_path.is_file(), "planner contract card not found — run generate_recipe_card"
-    card = yaml.safe_load(card_path.read_text())
+    card = load_yaml(card_path)
     registered = set(card.get("skills", {}).keys())
 
     missing = recipe_skills - registered
@@ -149,7 +149,7 @@ def test_planner_contract_card_records_positional_args_for_generate_phases() -> 
     """T1b: the generate_phases dataflow entry must record positional_args > 0."""
     card_path = RECIPES_ROOT / "contracts" / "planner.yaml"
     assert card_path.is_file(), "planner contract card not found — run generate_recipe_card"
-    card = yaml.safe_load(card_path.read_text())
+    card = load_yaml(card_path)
 
     generate_phases_entry = next(
         (e for e in card.get("dataflow", []) if e.get("step") == "generate_phases"),
@@ -327,7 +327,7 @@ def test_validate_task_alignment_skill_exists():
     assert skill_md.is_file(), "SKILL.md must exist"
     content = skill_md.read_text()
     parts = content.split("---", 2)
-    data = yaml.safe_load(parts[1])
+    data = load_yaml(parts[1])
     assert "planner" in (data.get("categories") or [])
     assert "warning" in content.lower(), "Must emit warning-severity findings"
 

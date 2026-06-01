@@ -227,9 +227,8 @@ def test_make_plan_no_activate_agents():
 # T12: Agent definition frontmatter has required fields
 def test_agent_definition_frontmatter_valid():
     """For each .md file in agents/, parse YAML frontmatter and assert required fields exist."""
-    import yaml
-
     from autoskillit.core import pkg_root
+    from autoskillit.core.io import load_yaml
 
     agents_dir = pkg_root() / "agents"
     for md_file in sorted(agents_dir.glob("*.md")):
@@ -240,7 +239,7 @@ def test_agent_definition_frontmatter_valid():
         if content.startswith("---"):
             parts = content.split("---", 2)
             assert len(parts) >= 3, f"{md_file.name}: missing YAML frontmatter"
-            frontmatter = yaml.safe_load(parts[1])
+            frontmatter = load_yaml(parts[1])
             for field in ("name", "description", "tools", "model", "maxTurns"):
                 assert field in frontmatter, f"{md_file.name}: missing frontmatter field '{field}'"
 
@@ -423,9 +422,8 @@ def test_wp_elaborator_is_packless():
 # DIAG_C6: pipeline-health-scanner agent exists
 def test_pipeline_health_scanner_agent_exists():
     """pipeline-health-scanner.md agent definition must exist with required frontmatter."""
-    import yaml
-
     from autoskillit.core import pkg_root
+    from autoskillit.core.io import load_yaml
 
     agent_path = pkg_root() / "agents" / "pipeline-health-scanner.md"
     assert agent_path.is_file(), f"pipeline-health-scanner.md not found at {agent_path}"
@@ -434,7 +432,7 @@ def test_pipeline_health_scanner_agent_exists():
 
     parts = content.split("---", 2)
     assert len(parts) >= 3, "pipeline-health-scanner.md must have YAML frontmatter"
-    frontmatter = yaml.safe_load(parts[1]) or {}
+    frontmatter = load_yaml(parts[1]) or {}
     max_turns = frontmatter.get("maxTurns")
     assert max_turns is not None and max_turns >= 80, (
         f"pipeline-health-scanner maxTurns must be >= 80 (got {max_turns}); "
@@ -455,9 +453,8 @@ def test_pipeline_health_scanner_agent_exists():
 # DIAG_C7: plan-registry-tracer maxTurns >= 80
 def test_plan_registry_tracer_max_turns_sufficient() -> None:
     """plan-registry-tracer.md maxTurns must be >= 80."""
-    import yaml
-
     from autoskillit.core import pkg_root
+    from autoskillit.core.io import load_yaml
 
     agent_path = pkg_root() / "agents" / "plan-registry-tracer.md"
     assert agent_path.is_file(), f"plan-registry-tracer.md not found at {agent_path}"
@@ -465,7 +462,7 @@ def test_plan_registry_tracer_max_turns_sufficient() -> None:
 
     parts = content.split("---", 2)
     assert len(parts) >= 3, "plan-registry-tracer.md must have YAML frontmatter"
-    frontmatter = yaml.safe_load(parts[1]) or {}
+    frontmatter = load_yaml(parts[1]) or {}
     max_turns = frontmatter.get("maxTurns")
     assert max_turns is not None and max_turns >= 80, (
         f"plan-registry-tracer maxTurns must be >= 80 (got {max_turns}); "
@@ -517,9 +514,8 @@ def test_agent_tool_list_covers_body_references():
     """Agent frontmatter tools must include all tools referenced in the body."""
     import re
 
-    import yaml
-
     from autoskillit.core import pkg_root
+    from autoskillit.core.io import load_yaml
 
     _SPAWN_SUBAGENT_RE = re.compile(r"spawn\s+\w+\s+subagent", re.IGNORECASE)
     _LSP_BODY_RE = re.compile(r"\bLSP\b")
@@ -533,7 +529,7 @@ def test_agent_tool_list_covers_body_references():
         parts = content.split("---", 2)
         if len(parts) < 3:
             continue
-        frontmatter = yaml.safe_load(parts[1]) or {}
+        frontmatter = load_yaml(parts[1]) or {}
         tools: list[str] = frontmatter.get("tools", [])
         body = parts[2]
         if _SPAWN_SUBAGENT_RE.search(body) and "Agent" not in tools:

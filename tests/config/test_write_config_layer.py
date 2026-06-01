@@ -31,14 +31,14 @@ class TestWriteConfigLayer:
 
     def test_write_config_layer_writes_valid_content(self, tmp_path: Path) -> None:
         """write_config_layer writes valid schema content atomically."""
-        import yaml as _yaml
 
         from autoskillit.config.settings import write_config_layer
+        from autoskillit.core.io import load_yaml
 
         config_path = tmp_path / "config.yaml"
         write_config_layer(config_path, {"github": {"default_repo": "owner/repo"}})
         assert config_path.is_file()
-        data = _yaml.safe_load(config_path.read_text())
+        data = load_yaml(config_path)
         assert data["github"]["default_repo"] == "owner/repo"
 
     def test_write_config_layer_accepts_packs_enabled(self, tmp_path: Path) -> None:

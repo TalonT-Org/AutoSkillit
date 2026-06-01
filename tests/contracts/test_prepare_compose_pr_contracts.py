@@ -79,9 +79,9 @@ RECIPES_DIR = Path(__file__).parents[2] / "src" / "autoskillit" / "recipes"
 
 def test_compose_pr_skill_command_includes_issue_number() -> None:
     """compose_pr skill_command must structurally include context.issue_number."""
-    import yaml
+    from autoskillit.core.io import load_yaml
 
-    data = yaml.safe_load((RECIPES_DIR / "implementation.yaml").read_text())
+    data = load_yaml(RECIPES_DIR / "implementation.yaml")
     skill_command = data["steps"]["compose_pr"]["with"]["skill_command"]
     assert "${{ context.issue_number }}" in skill_command, (
         f"compose_pr skill_command must include"
@@ -92,9 +92,9 @@ def test_compose_pr_skill_command_includes_issue_number() -> None:
 
 def test_prepare_pr_skill_command_includes_issue_number() -> None:
     """prepare_pr skill_command must structurally include context.issue_number."""
-    import yaml
+    from autoskillit.core.io import load_yaml
 
-    data = yaml.safe_load((RECIPES_DIR / "implementation.yaml").read_text())
+    data = load_yaml(RECIPES_DIR / "implementation.yaml")
     skill_command = data["steps"]["prepare_pr"]["with"]["skill_command"]
     assert "${{ context.issue_number }}" in skill_command, (
         f"prepare_pr skill_command must include"

@@ -16,9 +16,9 @@ def test_ci_workflow_does_not_pre_regenerate_hooks_json() -> None:
     then the test compared on-disk vs generate_hooks_json() — always passing.
     The new test uses registry.sha256 (committed) which cannot be silenced by pre-regen.
     """
-    import yaml
+    from autoskillit.core.io import load_yaml
 
-    workflow = yaml.safe_load((_repo_root() / ".github" / "workflows" / "tests.yml").read_text())
+    workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
     step_names = [s.get("name") for job in workflow["jobs"].values() for s in job.get("steps", [])]
     assert not any("Generate hooks.json" in (n or "") for n in step_names), (
         "CI must not pre-regenerate hooks.json — this defeats drift detection. "

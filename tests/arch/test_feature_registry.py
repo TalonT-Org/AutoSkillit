@@ -130,6 +130,7 @@ def test_feature_skill_categories_match_real_skills():
     """Every FeatureDef.skill_categories entry must map to a frontmatter category tag."""
     import yaml
 
+    from autoskillit.core.io import load_yaml
     from autoskillit.core.paths import pkg_root
     from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
 
@@ -149,7 +150,7 @@ def test_feature_skill_categories_match_real_skills():
             if len(parts) < 3:
                 continue
             try:
-                data = yaml.safe_load(parts[1]) or {}
+                data = load_yaml(parts[1]) or {}
             except yaml.YAMLError:
                 continue
             cats = data.get("categories", [])
@@ -545,11 +546,11 @@ def test_build_config_schema_accepts_experimental_enabled():
 
 def test_defaults_yaml_omits_experimental_enabled():
     """Package defaults.yaml omits experimental_enabled; no per-feature entries."""
-    import yaml
 
+    from autoskillit.core.io import load_yaml
     from autoskillit.core.paths import pkg_root
 
-    defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
     features = defaults.get("features", {})
     assert "experimental_enabled" not in features
     assert "fleet" not in features, "fleet entry removed from defaults.yaml"

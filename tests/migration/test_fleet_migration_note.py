@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from autoskillit.core.io import load_yaml
+
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
 MIGRATIONS_DIR = Path(__file__).parents[2] / "src" / "autoskillit" / "migrations"
@@ -14,7 +16,7 @@ def test_fleet_rename_migration_note_exists():
     detect_keys = []
     for note_path in notes:
         try:
-            data = yaml.safe_load(note_path.read_text())
+            data = load_yaml(note_path)
         except yaml.YAMLError as exc:
             pytest.fail(f"Malformed YAML in {note_path.name}: {exc}")
         for change in data.get("changes", []):
@@ -32,7 +34,7 @@ def test_fleet_rename_migration_note_is_valid():
     notes = list(MIGRATIONS_DIR.glob("*.yaml"))
     for note_path in notes:
         try:
-            data = yaml.safe_load(note_path.read_text())
+            data = load_yaml(note_path)
         except yaml.YAMLError as exc:
             pytest.fail(f"Malformed YAML in {note_path.name}: {exc}")
         for change in data.get("changes", []):

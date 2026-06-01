@@ -7,6 +7,7 @@ import yaml
 
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.config.settings import QuotaGuardConfig
+from autoskillit.core.io import load_yaml
 from autoskillit.core.paths import pkg_root
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
@@ -85,7 +86,7 @@ class TestQuotaGuardConfig:
 
     def test_defaults_yaml_has_cache_refresh_interval(self):
         """QG_C4: defaults.yaml defines quota_guard.cache_refresh_interval < cache_max_age."""
-        defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
         assert "quota_guard" in defaults, (
             f"Missing 'quota_guard' key in defaults.yaml: {list(defaults.keys())}"
         )
@@ -121,7 +122,7 @@ class TestQuotaGuardConfig:
 
     def test_defaults_yaml_has_per_window_enabled_keys(self):
         """QG_C7: defaults.yaml has both per-window enabled keys set to True."""
-        defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+        defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
         assert defaults["quota_guard"]["short_window_enabled"] is True
         assert defaults["quota_guard"]["long_window_enabled"] is True
 

@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.core.io import load_yaml
+
 _TESTS_ROOT = Path(__file__).parent.parent
 
 # Auto-discover all test files in the fleet directory — self-maintaining
@@ -248,13 +250,10 @@ def _has_module_level_skip(tree: ast.Module) -> bool:
 
 def test_ci_workflow_gates_experimental_for_stable_track() -> None:
     """CI workflow must set AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED in the test job."""
-    import yaml
-
     workflow_path = _TESTS_ROOT.parent / ".github" / "workflows" / "tests.yml"
     assert workflow_path.exists(), f"CI workflow not found at {workflow_path}"
 
-    with workflow_path.open() as f:
-        wf = yaml.safe_load(f)
+    wf = load_yaml(workflow_path)
 
     assert isinstance(wf, dict), f"CI workflow YAML is empty or invalid at {workflow_path}"
     jobs = wf.get("jobs", {})

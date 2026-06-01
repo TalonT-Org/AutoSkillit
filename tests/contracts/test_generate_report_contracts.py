@@ -122,7 +122,7 @@ def test_anti_fabrication_never_rule() -> None:
 
 def test_generate_report_group_manifest_input() -> None:
     """generate-report contract must declare group_manifest as an optional input."""
-    import yaml
+    from autoskillit.core.io import load_yaml
 
     contract_path = (
         Path(__file__).resolve().parent.parent.parent
@@ -132,7 +132,7 @@ def test_generate_report_group_manifest_input() -> None:
         / "contracts"
         / "research.yaml"
     )
-    manifest = yaml.safe_load(contract_path.read_text())
+    manifest = load_yaml(contract_path)
     assert isinstance(manifest, dict), f"research.yaml did not parse to a dict: {type(manifest)}"
     assert "skills" in manifest, "research.yaml missing top-level 'skills' key"
     assert "generate-report" in manifest["skills"], (

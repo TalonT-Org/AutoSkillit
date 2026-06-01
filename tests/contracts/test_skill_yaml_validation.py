@@ -14,8 +14,7 @@ def _all_skill_roots() -> list[Path]:
 
 def test_skill_md_yaml_examples_are_valid_workflows() -> None:
     """YAML workflow examples embedded in SKILL.md files must pass validation."""
-    import yaml as _yaml
-
+    from autoskillit.core.io import load_yaml
     from autoskillit.recipe.io import (
         _parse_recipe as _parse_workflow,
     )
@@ -36,7 +35,7 @@ def test_skill_md_yaml_examples_are_valid_workflows() -> None:
                 # Skip format templates that use {placeholder} syntax
                 if "{script-name}" in block or "{mcp_tool_name}" in block:
                     continue
-                data = _yaml.safe_load(block)
+                data = load_yaml(block)
                 if not isinstance(data, dict) or "steps" not in data:
                     continue
                 wf = _parse_workflow(data)

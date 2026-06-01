@@ -1232,8 +1232,9 @@ def load_manifest(path: str | Path) -> dict[str, Any] | None:
     if not manifest_path.exists():
         return None
     try:
+        _Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
         with manifest_path.open() as f:
-            return yaml.safe_load(f)
+            return yaml.load(f, Loader=_Loader)
     except OSError as exc:
         warnings.warn(f"Cannot read manifest {manifest_path}: {exc}", stacklevel=2)
         return None

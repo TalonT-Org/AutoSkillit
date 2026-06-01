@@ -9,7 +9,8 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
@@ -29,7 +30,7 @@ def _parse_frontmatter(content: str) -> dict:
     except ValueError as exc:
         raise ValueError("Unclosed frontmatter delimiter in SKILL.md content") from exc
     fm_text = content[3:end].strip()
-    return yaml.safe_load(fm_text) or {}
+    return load_yaml(fm_text) or {}
 
 
 # ---------------------------------------------------------------------------

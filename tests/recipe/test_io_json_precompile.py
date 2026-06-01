@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from autoskillit.core import RecipeSource
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import (
     _collect_recipes,
     _load_recipe_dict,
@@ -33,7 +34,7 @@ def _write_yaml(path: Path, data: dict) -> None:
 
 def _compile_json(yaml_path: Path) -> None:
     """Inline compilation: YAML -> JSON sibling."""
-    data = yaml.safe_load(yaml_path.read_bytes())
+    data = load_yaml(yaml_path)
     json_path = yaml_path.with_suffix(".json")
     json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -201,7 +202,7 @@ def test_collect_recipes_identical_with_json(tmp_path):
 
 def test_compile_recipes_roundtrip():
     for yaml_path in sorted(builtin_recipes_dir().rglob("*.yaml")):
-        data = yaml.safe_load(yaml_path.read_bytes())
+        data = load_yaml(yaml_path)
         json_text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
         roundtripped = json.loads(json_text)
         assert roundtripped == data, f"Roundtrip failed for {yaml_path.name}"
@@ -212,7 +213,7 @@ def test_bundled_json_files_are_fresh():
         json_path = yaml_path.with_suffix(".json")
         assert json_path.exists(), f"Missing JSON sibling for {yaml_path.name}"
 
-        yaml_data = yaml.safe_load(yaml_path.read_bytes())
+        yaml_data = load_yaml(yaml_path)
         json_data = json.loads(json_path.read_text(encoding="utf-8"))
         assert json_data == yaml_data, f"JSON is stale for {yaml_path.name}"
         assert json_path.stat().st_mtime_ns >= yaml_path.stat().st_mtime_ns, (

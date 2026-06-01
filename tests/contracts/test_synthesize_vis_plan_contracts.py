@@ -6,7 +6,8 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.small]
 
@@ -34,7 +35,7 @@ def _frontmatter() -> dict[str, object]:
         None,
     )
     assert end is not None, "SKILL.md frontmatter missing closing ---"
-    return yaml.safe_load("\n".join(lines[1:end]))
+    return load_yaml("\n".join(lines[1:end]))
 
 
 def test_skill_md_exists() -> None:

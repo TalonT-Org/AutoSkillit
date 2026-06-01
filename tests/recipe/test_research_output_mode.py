@@ -1,6 +1,7 @@
 # tests/recipe/test_research_output_mode.py
 import pytest
 
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -219,15 +220,13 @@ def test_research_bundles_documented_in_kitchen_rules(recipe):
 
 def test_research_output_mode_enum_rule_fires_for_invalid_value():
     """research-output-mode-enum rule must fire ERROR when output_mode.default is invalid."""
-    import yaml
-
     from autoskillit.core import Severity
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.io import _parse_recipe
     from autoskillit.recipe.validator import run_semantic_rules
 
     src = RESEARCH_RECIPE_PATH.read_text()
-    data = yaml.safe_load(src)
+    data = load_yaml(src)
     data["ingredients"]["output_mode"] = {"default": "bogus", "required": False}
     bad_recipe = _parse_recipe(data)
     ctx = make_validation_context(bad_recipe)
@@ -243,15 +242,13 @@ def test_research_output_mode_enum_rule_fires_for_invalid_value():
 
 def test_research_output_mode_enum_rule_clean_for_valid_values():
     """research-output-mode-enum rule must NOT fire for 'local' or 'pr'."""
-    import yaml
-
     from autoskillit.recipe._analysis import make_validation_context
     from autoskillit.recipe.io import _parse_recipe
     from autoskillit.recipe.validator import run_semantic_rules
 
     for valid in ("local", "pr"):
         src = RESEARCH_RECIPE_PATH.read_text()
-        data = yaml.safe_load(src)
+        data = load_yaml(src)
         data["ingredients"]["output_mode"] = {"default": valid, "required": False}
         recipe = _parse_recipe(data)
         ctx = make_validation_context(recipe)

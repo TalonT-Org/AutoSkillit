@@ -1,7 +1,8 @@
 """Verify report.md YAML frontmatter matches the audit-trail schema."""
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -59,6 +60,6 @@ def test_frontmatter_round_trips_through_yaml(sample_report_text: str):
     assert lines[0] == "---", "Report must start with YAML frontmatter delimiter"
     end_idx = lines.index("---", 1)
     yaml_block = "\n".join(lines[1:end_idx])
-    parsed = yaml.safe_load(yaml_block)
+    parsed = load_yaml(yaml_block)
     assert isinstance(parsed, dict)
     assert "experiment_type" in parsed

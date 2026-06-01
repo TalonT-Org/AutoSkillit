@@ -7,9 +7,9 @@ from __future__ import annotations
 import re
 
 import pytest
-import yaml
 
 from autoskillit.core import pkg_root
+from autoskillit.core.io import load_yaml
 from autoskillit.workspace.skills import DefaultSkillResolver
 
 # Skills whose output files are intentionally fixed-name (no timestamp needed).
@@ -364,7 +364,7 @@ def _extract_critical_constraints_section(skill_md: str) -> str:
 
 def _get_contracted_path_capture_skills() -> dict[str, list[str]]:
     """Return {skill_name: [token_names]} for skills with path-capture contracts."""
-    raw = yaml.safe_load(SKILL_CONTRACTS_PATH.read_text())
+    raw = load_yaml(SKILL_CONTRACTS_PATH)
     skills_data = raw.get("skills", {}) if isinstance(raw, dict) else {}
     result: dict[str, list[str]] = {}
     for skill_name, contract in skills_data.items():
@@ -435,7 +435,7 @@ def test_every_contracted_skill_has_emit_instruction() -> None:
 
 def test_contracted_path_capture_skills_includes_backslash_s_patterns() -> None:
     """_get_contracted_path_capture_skills must return all skills with \\S+-terminated patterns."""
-    raw = yaml.safe_load(SKILL_CONTRACTS_PATH.read_text())
+    raw = load_yaml(SKILL_CONTRACTS_PATH)
     skills_data = raw.get("skills", {}) if isinstance(raw, dict) else {}
 
     # Dynamically find skills whose contracts include \S+-terminated path-capture patterns.

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 SKILL_PATH = (
     Path(__file__).resolve().parent.parent.parent
@@ -21,7 +21,7 @@ _SKILL_CONTRACTS_PATH = (
     / "skill_contracts.yaml"
 )
 
-_SKILL_CONTRACTS_MANIFEST = yaml.safe_load(_SKILL_CONTRACTS_PATH.read_text())
+_SKILL_CONTRACTS_MANIFEST = load_yaml(_SKILL_CONTRACTS_PATH)
 
 
 def test_blocked_hypotheses_declared_in_contract() -> None:
@@ -74,7 +74,7 @@ def test_run_experiment_group_manifest_output() -> None:
         / "contracts"
         / "research.yaml"
     )
-    manifest = yaml.safe_load(contract_path.read_text())
+    manifest = load_yaml(contract_path)
     assert isinstance(manifest, dict), f"research.yaml did not parse to a dict: {type(manifest)}"
     assert "skills" in manifest, "research.yaml missing top-level 'skills' key"
     assert "run-experiment" in manifest["skills"], (

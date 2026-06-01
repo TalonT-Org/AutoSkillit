@@ -5,8 +5,8 @@ from __future__ import annotations
 import textwrap
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import _parse_recipe
 from autoskillit.recipe.validator import run_semantic_rules
@@ -160,7 +160,7 @@ class TestPythonCaptureOutputCoverageRule:
                 action: stop
                 message: Done
         """)
-        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        recipe = _parse_recipe(load_yaml(recipe_yaml))
         findings = run_semantic_rules(recipe)
         undeclared = [f for f in findings if f.rule == "undeclared-python-capture-key"]
         assert undeclared == []
@@ -185,7 +185,7 @@ class TestPythonCaptureOutputCoverageRule:
                 action: stop
                 message: Done
         """)
-        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        recipe = _parse_recipe(load_yaml(recipe_yaml))
         findings = run_semantic_rules(recipe)
         undeclared = [f for f in findings if f.rule == "undeclared-python-capture-key"]
         assert len(undeclared) == 1
@@ -210,7 +210,7 @@ class TestPythonCaptureOutputCoverageRule:
                 action: stop
                 message: Done
         """)
-        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        recipe = _parse_recipe(load_yaml(recipe_yaml))
         findings = run_semantic_rules(recipe)
         undeclared = [f for f in findings if f.rule == "undeclared-python-capture-key"]
         assert len(undeclared) == 1
@@ -242,7 +242,7 @@ class TestPythonCaptureOutputCoverageRule:
                 action: stop
                 message: Done
         """)
-        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        recipe = _parse_recipe(load_yaml(recipe_yaml))
         findings = run_semantic_rules(recipe)
         undeclared = [f for f in findings if f.rule == "undeclared-python-capture-key"]
         assert len(undeclared) == 1
@@ -266,7 +266,7 @@ class TestPythonCaptureOutputCoverageRule:
                 action: stop
                 message: Done
         """)
-        recipe = _parse_recipe(yaml.safe_load(recipe_yaml))
+        recipe = _parse_recipe(load_yaml(recipe_yaml))
         findings = run_semantic_rules(recipe)
         undeclared = [f for f in findings if f.rule == "undeclared-python-capture-key"]
         assert undeclared == []

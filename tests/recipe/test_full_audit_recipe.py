@@ -1,7 +1,8 @@
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -96,7 +97,7 @@ def test_full_audit_done_step_has_message() -> None:
 def test_full_audit_done_step_message_embeds_issue_urls_in_sentinel() -> None:
     """done step message must instruct the model to include issue_urls in the sentinel JSON."""
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     message = data["steps"]["done"]["message"]
     assert "issue_urls" in message, "done message must reference issue_urls"
     msg_lower = message.lower()
@@ -147,21 +148,21 @@ def test_full_audit_semantic_rules_no_errors() -> None:
 def test_full_audit_description_mentions_review_decisions() -> None:
     """full-audit description must mention audit-review-decisions."""
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     assert "audit-review-decisions" in data["description"]
 
 
 def test_full_audit_summary_mentions_six() -> None:
     """full-audit summary must reference 6 parallel chains."""
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     assert "6" in data["summary"]
 
 
 def test_full_audit_run_audits_note_mentions_review_decisions() -> None:
     """run_audits note must include audit-review-decisions as the 6th skill."""
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     note = data["steps"]["run_audits"]["note"]
     assert "audit-review-decisions" in note
 
@@ -169,7 +170,7 @@ def test_full_audit_run_audits_note_mentions_review_decisions() -> None:
 def test_full_audit_validate_audits_note_mentions_review_decisions() -> None:
     """validate_audits note must include review_decisions validation."""
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     note = data["steps"]["validate_audits"]["note"]
     assert "review_decisions" in note
 
@@ -177,7 +178,7 @@ def test_full_audit_validate_audits_note_mentions_review_decisions() -> None:
 def test_full_audit_validate_audits_routes_tests_to_specialized_skill() -> None:
     """validate_audits step must route test audits to validate-test-audit."""
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     note = data["steps"]["validate_audits"]["note"]
     assert "validate-test-audit" in note
 
@@ -185,7 +186,7 @@ def test_full_audit_validate_audits_routes_tests_to_specialized_skill() -> None:
 def test_full_audit_validate_audits_routes_review_decisions_to_specialized_skill() -> None:
     """validate_audits step must route review-decisions to validate-review-decisions."""
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     note = data["steps"]["validate_audits"]["note"]
     assert "validate-review-decisions" in note
 
@@ -223,21 +224,21 @@ def test_full_audit_kitchen_rule_mentions_prefer_completion() -> None:
 
 def test_full_audit_run_audits_note_mentions_max_parallel() -> None:
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     note = data["steps"]["run_audits"]["note"].lower()
     assert "max_parallel" in note or "max parallel" in note
 
 
 def test_full_audit_validate_audits_no_wave_barrier() -> None:
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     note = data["steps"]["validate_audits"]["note"].lower()
     assert "as each" in note or "as soon as" in note or "slot" in note
 
 
 def test_full_audit_create_issues_uses_batched_graphql() -> None:
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     step = data["steps"]["create_issues"]
     assert step["tool"] == "run_skill"
     assert "file-audit-issues" in step["with"]["skill_command"]
@@ -246,9 +247,7 @@ def test_full_audit_create_issues_uses_batched_graphql() -> None:
 
 
 def test_full_audit_create_issues_captures_issue_urls() -> None:
-    import yaml
-
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     capture = data["steps"]["create_issues"]["capture"]
     assert "issue_urls" in capture
 
@@ -256,5 +255,5 @@ def test_full_audit_create_issues_captures_issue_urls() -> None:
 def test_full_audit_recipe_version_bumped() -> None:
     from packaging.version import Version
 
-    data = yaml.safe_load(RECIPE_PATH.read_text())
+    data = load_yaml(RECIPE_PATH)
     assert Version(data["recipe_version"]) > Version("1.0.0")

@@ -11,8 +11,8 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.workspace.skills import DefaultSkillResolver
 
 _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
@@ -32,7 +32,7 @@ _HIGH_RISK_SKILLS = [
 
 
 def _skills_with_output_patterns() -> list[str]:
-    raw = yaml.safe_load(_CONTRACTS_YAML.read_text())
+    raw = load_yaml(_CONTRACTS_YAML)
     return sorted(
         name
         for name, contract in raw.get("skills", {}).items()

@@ -1,5 +1,4 @@
-import yaml
-
+from autoskillit.core.io import load_yaml
 from autoskillit.core.paths import pkg_root
 from autoskillit.workspace.skills import DefaultSkillResolver
 
@@ -57,7 +56,7 @@ def test_troubleshoot_experiment_emits_retry_delay_token():
 def test_troubleshoot_experiment_contract_includes_retry_delay():
     """skill_contracts.yaml must declare retry_delay as a troubleshoot-experiment output."""
     contracts_path = pkg_root() / "recipe" / "skill_contracts.yaml"
-    data = yaml.safe_load(contracts_path.read_text())
+    data = load_yaml(contracts_path)
     skill = data["skills"]["troubleshoot-experiment"]
     output_names = [o["name"] for o in skill["outputs"]]
     assert "retry_delay" in output_names

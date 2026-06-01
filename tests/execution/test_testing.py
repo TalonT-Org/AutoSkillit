@@ -859,11 +859,10 @@ async def test_multi_command_section_headers(tmp_path: Path) -> None:
 
 
 def test_defaults_yaml_has_commands_null() -> None:
-    import yaml
-
+    from autoskillit.core.io import load_yaml
     from autoskillit.core.paths import pkg_root
 
-    defaults = yaml.safe_load((pkg_root() / "config" / "defaults.yaml").read_text())
+    defaults = load_yaml(pkg_root() / "config" / "defaults.yaml")
     assert "commands" in defaults["test_check"]
     assert defaults["test_check"]["commands"] is None
 

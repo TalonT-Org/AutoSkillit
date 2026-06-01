@@ -12,7 +12,8 @@ import tomllib
 from pathlib import Path
 
 import pytest
-import yaml
+
+from autoskillit.core.io import load_yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 PRECOMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
@@ -27,7 +28,7 @@ class TestPreCommitConfig:
         Without this, developers can commit a stale uv.lock undetected.
         If this test fails, add a uv-lock-check hook to .pre-commit-config.yaml.
         """
-        config = yaml.safe_load(PRECOMMIT_CONFIG.read_text())
+        config = load_yaml(PRECOMMIT_CONFIG)
         entries = [
             hook.get("entry", "")
             for repo in config.get("repos", [])
@@ -57,7 +58,7 @@ class TestPreCommitConfig:
         Without this, agents can commit new .py files without updating the
         directory's CLAUDE.md file table, causing CI test failures.
         """
-        config = yaml.safe_load(PRECOMMIT_CONFIG.read_text())
+        config = load_yaml(PRECOMMIT_CONFIG)
         hooks = [hook for repo in config.get("repos", []) for hook in repo.get("hooks", [])]
         sub_claude_hooks = [h for h in hooks if "check_sub_claude_md" in h.get("entry", "")]
         assert sub_claude_hooks, (
@@ -76,7 +77,7 @@ class TestPreCommitConfig:
         Without this, recipe YAML edits that staleness-change contract cards
         go undetected until CI runs the staleness test.
         """
-        config = yaml.safe_load(PRECOMMIT_CONFIG.read_text())
+        config = load_yaml(PRECOMMIT_CONFIG)
         hooks = [hook for repo in config.get("repos", []) for hook in repo.get("hooks", [])]
         freshness_hooks = [h for h in hooks if "check_contract_freshness" in h.get("entry", "")]
         assert freshness_hooks, (
@@ -115,7 +116,7 @@ class TestCIWorkflow:
         This is the CI-level backstop that catches lockfile staleness even if
         pre-commit was bypassed (direct push, git commit --no-verify, etc.).
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         run_commands = [
             step.get("run", "")
             for job in workflow.get("jobs", {}).values()
@@ -132,7 +133,7 @@ class TestCIWorkflow:
         A preflight job runs once on a cheap single runner and validates prerequisites
         before the matrix fans out. When it fails, only one runner fails instead of all.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         jobs = workflow.get("jobs", {})
         assert "preflight" in jobs, (
             "No 'preflight' job in CI workflow — "
@@ -145,7 +146,7 @@ class TestCIWorkflow:
         Without this, the test matrix spins up before the lockfile check completes,
         wasting runner time on a doomed run.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         jobs = workflow.get("jobs", {})
         test_job = jobs.get("test", {})
         needs = test_job.get("needs", [])
@@ -166,7 +167,7 @@ class TestCIWorkflow:
         If this test fails, change the Install dependencies step in tests.yml to:
             run: uv sync --locked --extra dev
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         run_commands = [
             step.get("run", "")
             for job in workflow.get("jobs", {}).values()
@@ -193,7 +194,7 @@ class TestCIWorkflow:
         Note: the correct input parameter is 'version', not 'uv-version' — 'uv-version'
         is an output of the action and is silently ignored as an input.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         for job_name, job in workflow.get("jobs", {}).items():
             for step in job.get("steps", []):
                 uses = step.get("uses", "")
@@ -214,7 +215,7 @@ class TestCIWorkflow:
 
         If this test fails, add 'version: "X.Y.Z"' to all setup-task steps in tests.yml.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         for job_name, job in workflow.get("jobs", {}).items():
             for step in job.get("steps", []):
                 uses = step.get("uses", "")
@@ -229,7 +230,7 @@ class TestCIWorkflow:
     def test_ci_push_trigger_excludes_develop(self) -> None:
         """Push trigger must NOT include develop — PRs from develop already
         get CI via pull_request trigger, and including it in push causes duplicate checks."""
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         # PyYAML parses the YAML 'on:' key as Python True (boolean)
         triggers = workflow.get(True, workflow.get("on", {}))
         push_branches = triggers["push"]["branches"]
@@ -240,14 +241,14 @@ class TestCIWorkflow:
 
     def test_ci_pull_request_trigger_includes_develop(self) -> None:
         """PR trigger must include develop so PRs targeting it get CI."""
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         triggers = workflow.get(True, workflow.get("on", {}))
         pr_branches = triggers["pull_request"]["branches"]
         assert "develop" in pr_branches, "CI must trigger on PRs targeting develop branch"
 
     def test_ci_preflight_outputs_os_matrix(self) -> None:
         """preflight job must export an os-matrix output computed from base_ref."""
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         outputs = workflow["jobs"]["preflight"].get("outputs", {})
         assert "os-matrix" in outputs, (
             "preflight must export os-matrix so the test job can vary runners "
@@ -256,7 +257,7 @@ class TestCIWorkflow:
 
     def test_ci_test_matrix_uses_preflight_os_matrix(self) -> None:
         """test job matrix must consume the os-matrix from preflight, not a hardcoded list."""
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         matrix = workflow["jobs"]["test"]["strategy"]["matrix"]
         os_value = matrix["os"]
         assert "fromJSON" in os_value or "needs.preflight" in str(os_value), (
@@ -270,7 +271,7 @@ class TestCIWorkflow:
         Uses github.base_ref for pull_request events and github.ref for push events,
         since github.base_ref is empty on direct push events.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         steps = workflow["jobs"]["preflight"]["steps"]
         matrix_steps = [
             s
@@ -285,7 +286,7 @@ class TestCIWorkflow:
 
     def test_ci_stable_target_produces_dual_os_matrix(self) -> None:
         """The stable branch must produce a dual-element ubuntu+macos matrix."""
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         steps = workflow["jobs"]["preflight"]["steps"]
         for step in steps:
             run = step.get("run", "")
@@ -302,7 +303,7 @@ class TestCIWorkflow:
         automated tooling) must still run CI. Without this trigger, a push to stable
         skips all checks.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         triggers = workflow.get(True, workflow.get("on", {}))
         push_branches = triggers.get("push", {}).get("branches", [])
         assert "stable" in push_branches, (
@@ -315,7 +316,7 @@ class TestCIWorkflow:
         Without ruff in CI, lint violations that bypass pre-commit reach the repository
         unchallenged. If this test fails, add a 'uvx ruff check' step to the preflight job.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         preflight_steps = workflow["jobs"]["preflight"]["steps"]
         assert any("ruff check" in step.get("run", "") for step in preflight_steps), (
             "CI preflight job has no 'ruff check' step — "
@@ -333,7 +334,7 @@ class TestRecipeWorkflowField:
         they create capture inversions when the repo's actual trigger differs."""
         recipes_dir = REPO_ROOT / "src" / "autoskillit" / "recipes"
         for recipe_path in recipes_dir.glob("*.yaml"):
-            recipe = yaml.safe_load(recipe_path.read_text())
+            recipe = load_yaml(recipe_path)
             for step_name, step in recipe.get("steps", {}).items():
                 if step.get("tool") != "wait_for_ci":
                     continue
@@ -375,7 +376,7 @@ class TestCIWorkflowExpressions:
         in the merge queue for develop-targeting PRs, incorrectly disabling
         experimental features.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         jobs = workflow["jobs"]
         test_job = jobs["test"]
 
@@ -415,7 +416,7 @@ class TestCIEnvVarIsolation:
 
         This prevents Dynaconf env var leakage into tests.
         """
-        workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+        workflow = load_yaml(CI_WORKFLOW)
         conftest_text = CONFTEST_PATH.read_text()
 
         # Collect all AUTOSKILLIT_* env vars from CI
@@ -463,7 +464,7 @@ class TestSetupUvVersionPin:
         workflows_dir = CI_WORKFLOW.parent
         violations = []
         for wf_path in sorted(workflows_dir.glob("*.yml")):
-            workflow = yaml.safe_load(wf_path.read_text())
+            workflow = load_yaml(wf_path)
             for job_name, job in workflow.get("jobs", {}).items():
                 for step in job.get("steps", []):
                     uses = step.get("uses", "")

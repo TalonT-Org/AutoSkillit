@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SKILL_DIR = _PROJECT_ROOT / ".autoskillit" / "skills" / "judge-eval"
@@ -19,7 +19,7 @@ def test_judge_eval_frontmatter_name() -> None:
     source = _SKILL_FILE.read_text()
     parts = source.split("---", 2)
     assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"
-    fm = yaml.safe_load(parts[1])
+    fm = load_yaml(parts[1])
     assert isinstance(fm, dict), "frontmatter must parse to dict"
     assert fm.get("name") == "judge-eval"
 
@@ -29,7 +29,7 @@ def test_judge_eval_categories_include_eval() -> None:
     source = _SKILL_FILE.read_text()
     parts = source.split("---", 2)
     assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"
-    fm = yaml.safe_load(parts[1])
+    fm = load_yaml(parts[1])
     assert "eval" in fm.get("categories", [])
 
 

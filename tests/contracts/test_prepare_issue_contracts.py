@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+from autoskillit.core.io import load_yaml
 
 SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/prepare-issue/SKILL.md"
 
@@ -126,7 +126,7 @@ def test_prepare_issue_trigger_phrases_in_description_frontmatter():
     raw = SKILL_MD.read_text()
     parts = raw.split("---", 2)
     assert len(parts) >= 3, "SKILL.md must have YAML frontmatter"
-    fm = yaml.safe_load(parts[1])
+    fm = load_yaml(parts[1])
     desc = fm.get("description", "").lower()
     trigger_phrases = [
         "open an issue",

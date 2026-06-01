@@ -37,7 +37,7 @@ def _scan_pyright_ignores(root: Path) -> set[tuple[str, int]]:
     for path in root.rglob("*.py"):
         if "__pycache__" in path.parts:
             continue
-        for i, line in enumerate(path.read_text().splitlines(), 1):
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if _PYRIGHT_RE.search(line):
                 found.add((str(path.relative_to(root)), i))
     return found

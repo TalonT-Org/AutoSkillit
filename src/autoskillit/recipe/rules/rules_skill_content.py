@@ -265,10 +265,7 @@ INTERPRETER_WRITE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
     severity=Severity.ERROR,
 )
 def _check_no_interpreter_mediated_writes(ctx: ValidationContext) -> list[RuleFinding]:
-    from autoskillit.hooks._command_classification import (
-        _INTERPRETER_LINE_RE,
-        _WRITE_APIS_RE,
-    )
+    from autoskillit.hooks import _INTERPRETER_LINE_RE, _WRITE_APIS_RE
 
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():

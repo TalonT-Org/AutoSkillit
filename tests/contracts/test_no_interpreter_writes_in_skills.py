@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.hooks._command_classification import _INTERPRETER_LINE_RE, _WRITE_APIS_RE
+from autoskillit.hooks import _INTERPRETER_LINE_RE, _WRITE_APIS_RE
 from autoskillit.recipe._skill_placeholder_parser import extract_bash_blocks, extract_python_blocks
 from autoskillit.recipe.rules.rules_skill_content import INTERPRETER_WRITE_ALLOWLIST
 from tests.contracts.conftest import _all_skill_mds

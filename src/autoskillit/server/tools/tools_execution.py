@@ -568,7 +568,6 @@ async def run_skill(
 
             from autoskillit.core import (
                 AGENT_BACKEND_CLAUDE_CODE,
-                AGENT_BACKEND_CODEX,
                 is_feature_enabled,
             )
 
@@ -626,7 +625,7 @@ async def run_skill(
                     provider_extras
                     and "ANTHROPIC_BASE_URL" in provider_extras
                     and tool_ctx.backend is not None
-                    and tool_ctx.backend.name == AGENT_BACKEND_CODEX
+                    and not tool_ctx.backend.capabilities.anthropic_provider_capable
                 )
                 else None
             )

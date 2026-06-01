@@ -13,7 +13,7 @@ import pytest
 
 from autoskillit.hooks.guards.remove_clone_guard import _check_sync
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 
 def _git(cwd: Path, *args: str) -> str:

@@ -71,7 +71,7 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
                   "content": "%%ORDER_UP%%"}}
         f.write(json.dumps(record) + "\\n")
         f.flush()
-    time.sleep(300)
+    time.sleep(3600)
 """)
 
 # Script that:
@@ -211,7 +211,7 @@ class TestChannelBDrainWait:
         _phase1_timeout=400: must exceed outer timeout (300s) so that Phase 1 never fires
         first with STALE when subprocess startup is slow under WSL2 + xdist load; the
         outer 300s guard cancels all tasks before Phase 1 can timeout independently.
-        natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(300)),
+        natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
         so shorten grace window to reduce total test time and avoid asyncio-waitpid
         thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
         """

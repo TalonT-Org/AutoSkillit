@@ -25,7 +25,8 @@ def _has_path_startswith_slash(func_node: ast.FunctionDef) -> bool:
 def test_extract_redirect_targets_uses_resolve_write_target():
     import autoskillit.hooks._command_classification as mod
 
-    source = ast.parse(open(mod.__file__).read())
+    with open(mod.__file__) as f:
+        source = ast.parse(f.read())
     for node in ast.walk(source):
         if isinstance(node, ast.FunctionDef) and node.name == "extract_redirect_targets":
             assert not _has_path_startswith_slash(node), (

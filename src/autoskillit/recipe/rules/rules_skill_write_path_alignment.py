@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import regex as re
 
-from autoskillit.core import Severity
+from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe._skill_placeholder_parser import (
@@ -21,6 +21,8 @@ from autoskillit.recipe._skill_placeholder_parser import (
 )
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+logger = get_logger(__name__)
 
 _CONTEXT_TEMPLATE_RE = re.compile(r"\$\{\{\s*context\.[^}]+\}\}")
 _AUTOSKILLIT_TEMP_RE = re.compile(r"\{\{AUTOSKILLIT_TEMP\}\}")
@@ -98,6 +100,7 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
         try:
             content = skill_md_path.read_text(encoding="utf-8")
         except OSError:
+            logger.debug("Could not read SKILL.md for %s at %s", skill_name, skill_md_path)
             continue
 
         if has_dynamic_write_path(content):

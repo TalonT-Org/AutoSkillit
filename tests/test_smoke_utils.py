@@ -121,9 +121,14 @@ def test_check_review_loop_stops_at_max_iterations() -> None:
 
 
 def test_check_review_loop_returns_expected_fields() -> None:
-    """check_review_loop must return next_iteration, max_exceeded, and had_blocking."""
+    """check_review_loop returns next/prev iteration, max_exceeded, had_blocking."""
     result = check_review_loop(pr_number="42")
-    assert set(result.keys()) == {"next_iteration", "max_exceeded", "had_blocking"}
+    assert set(result.keys()) == {
+        "next_iteration",
+        "prev_iteration",
+        "max_exceeded",
+        "had_blocking",
+    }
 
 
 # T_CRL11 — verify check_review_loop has no subprocess calls

@@ -121,23 +121,30 @@ def _contains_blocked_git_op(cmd: str) -> tuple[str, ...] | None:
                 return op_tuple
 
     # Check for interpreter-wrapped invocations (python3 -c "subprocess.run(['git', ...])")
-    target_commands = [" ".join(("git",) + op[1:]) for op in _BLOCKED_GIT_OPS]
-    if has_interpreter_wrapped_command(cmd, target_commands=target_commands):
-        # Return first matching op found in the command string
+    if has_interpreter_wrapped_command(cmd, target_commands=["git"]):
+        cmd_lower = cmd.lower()
         for op_tuple in _BLOCKED_GIT_OPS:
-            if op_tuple[0] in cmd and all(f in cmd for f in op_tuple[1:]):
+            if op_tuple[0] in cmd_lower and all(f in cmd_lower for f in op_tuple[1:]):
                 return op_tuple
 
     # Check for nested shell invocations (bash -c "git commit --amend")
     if has_nested_shell(cmd):
+        cmd_lower = cmd.lower()
         for op_tuple in _BLOCKED_GIT_OPS:
-            if "git" in cmd and op_tuple[0] in cmd and all(f in cmd for f in op_tuple[1:]):
+            if (
+                "git" in cmd_lower
+                and op_tuple[0] in cmd_lower
+                and all(f in cmd_lower for f in op_tuple[1:])
+            ):
                 return op_tuple
 
     return None
 
 
 def main() -> None:
+    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
+        sys.exit(0)
+
     try:
         data = json.loads(sys.stdin.read())
         tool_input = data.get("tool_input", {})

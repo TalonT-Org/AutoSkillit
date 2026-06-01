@@ -23,8 +23,16 @@ _BASH_TOOL_NAME = "Bash"
 _HOOK_CONFIG_RELPATH = ".autoskillit/temp/.hook_config.json"
 
 
-def _make_clean_env(skill_name: str | None, session_type: str | None = None) -> dict[str, str]:
+def _make_clean_env(
+    skill_name: str | None,
+    session_type: str | None = None,
+    headless: bool = True,
+) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items()}
+    if headless:
+        env["AUTOSKILLIT_HEADLESS"] = "1"
+    else:
+        env.pop("AUTOSKILLIT_HEADLESS", None)
     if skill_name is not None:
         env["AUTOSKILLIT_SKILL_NAME"] = skill_name
     else:
@@ -44,6 +52,7 @@ def _run_guard(
     skill_name: str | None = None,
     session_type: str | None = None,
     use_bash_key: bool = False,
+    headless: bool = True,
 ) -> str:
     """Invoke git_ops_guard.main() and return captured stdout."""
     from autoskillit.hooks.guards.git_ops_guard import main  # noqa: PLC0415
@@ -62,7 +71,7 @@ def _run_guard(
         hook_cfg.parent.mkdir(parents=True, exist_ok=True)
         hook_cfg.write_text(json.dumps({"kitchen": "open"}))
 
-    clean_env = _make_clean_env(skill_name, session_type)
+    clean_env = _make_clean_env(skill_name, session_type, headless=headless)
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -303,3 +312,18 @@ class TestInterpreterAndNestedShell:
         # env-prefix pattern (VAR=1 git ...) fails-open matching artifact_download_guard
         out = _run_guard("VAR=1 git commit --amend", kitchen_open=True, tmpdir=tmp_path)
         assert out.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# Session scope: headless vs interactive
+# ---------------------------------------------------------------------------
+
+
+class TestHeadlessScope:
+    def test_denies_in_headless_session(self, tmp_path):
+        out = _run_guard("git commit --amend", kitchen_open=True, tmpdir=tmp_path, headless=True)
+        assert _is_denied(out)
+
+    def test_allows_in_interactive_session(self, tmp_path):
+        out = _run_guard("git commit --amend", kitchen_open=True, tmpdir=tmp_path, headless=False)
+        assert out.strip() == "", "Interactive sessions must be allowed"

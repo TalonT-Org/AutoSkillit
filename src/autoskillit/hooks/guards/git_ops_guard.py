@@ -20,6 +20,8 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    _GIT_GLOBAL_FLAGS,
+    _GIT_GLOBAL_FLAGS_WITH_VALUE,
     _SHELL_OPS,
     has_interpreter_wrapped_command,
     has_nested_shell,
@@ -50,11 +52,6 @@ _BLOCKED_GIT_OPS: frozenset[tuple[str, ...]] = frozenset(
         ("checkout", "--", "."),
     }
 )
-
-_GIT_GLOBAL_FLAGS: frozenset[str] = frozenset(
-    {"-C", "--work-tree", "--git-dir", "--no-pager", "--bare", "-c"}
-)
-_GIT_GLOBAL_FLAGS_WITH_VALUE: frozenset[str] = frozenset({"-C", "--work-tree", "--git-dir", "-c"})
 
 # No skill legitimately needs destructive git ops in a headless session.
 _EXEMPT_SKILLS: frozenset[str] = frozenset()

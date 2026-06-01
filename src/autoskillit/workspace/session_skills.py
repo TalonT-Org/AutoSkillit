@@ -8,6 +8,7 @@ Provides three components:
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import time
@@ -173,6 +174,20 @@ def _parse_activate_deps(content: str) -> list[str]:
     if not items:
         return []
     return [item.strip() for item in items.split(",") if item.strip()]
+
+
+def _parse_write_paths(content: str) -> list[str]:
+    """Extract write_paths list from SKILL.md content.
+
+    Uses proper YAML parsing via ``parse_frontmatter_content`` to handle
+    both inline ``write_paths: ["path1", "path2"]`` and multi-line YAML
+    list syntax. Returns raw template strings (may contain ``{{AUTOSKILLIT_TEMP}}``).
+    """
+    fm = parse_frontmatter_content(content)
+    raw = fm.get("write_paths", [])
+    if not isinstance(raw, list):
+        return []
+    return [str(p) for p in raw if p and isinstance(p, str)]
 
 
 def _is_skill_disabled(
@@ -366,6 +381,59 @@ def compute_skill_closure(
             elif dep not in visited:
                 queue.append(dep)
     return frozenset(resolved)
+
+
+def collect_closure_write_paths(
+    closure: frozenset[str],
+    resolver: SkillResolver,
+) -> tuple[str, ...]:
+    """Collect write_paths from all skills in a pre-computed closure.
+
+    Returns a deduplicated tuple of raw template paths (may contain
+    ``{{AUTOSKILLIT_TEMP}}``). Unresolvable or unreadable skills are
+    silently skipped.
+    """
+    paths: list[str] = []
+    seen: set[str] = set()
+    for name in sorted(closure):
+        info = resolver.resolve(name)
+        if info is None:
+            continue
+        try:
+            content = info.path.read_text()
+        except OSError:
+            continue
+        for wp in _parse_write_paths(content):
+            if wp not in seen:
+                seen.add(wp)
+                paths.append(wp)
+    return tuple(paths)
+
+
+def resolve_closure_write_dirs(
+    closure: frozenset[str],
+    resolver: SkillResolver,
+    cwd: str,
+    existing: list[Path] | None = None,
+) -> list[Path]:
+    """Collect and resolve write_paths from closure skills into absolute Paths.
+
+    Substitutes ``{{AUTOSKILLIT_TEMP}}`` with ``cwd/.autoskillit/temp`` and
+    returns deduplicated resolved Paths ready to extend ``write_watch_dirs``.
+    Paths already present in ``existing`` are excluded from the result.
+    """
+    raw_paths = collect_closure_write_paths(closure, resolver)
+    if not raw_paths:
+        return []
+    temp_prefix = os.path.join(cwd, ".autoskillit", "temp")
+    seen: set[Path] = set(existing) if existing else set()
+    result: list[Path] = []
+    for rwp in raw_paths:
+        resolved = Path(rwp.replace("{{AUTOSKILLIT_TEMP}}", temp_prefix))
+        if resolved not in seen:
+            seen.add(resolved)
+            result.append(resolved)
+    return result
 
 
 class SkillsDirectoryProvider:

@@ -114,3 +114,74 @@ class TestWriteGuardWorktreeIntegration:
         prefixes = executor.calls[0].allowed_write_prefixes
         worktree_parent = str((clone_dir.parent / "worktrees").resolve()) + "/"
         assert worktree_parent not in prefixes
+
+    @pytest.mark.anyio
+    async def test_closure_write_paths_extend_allowed_prefixes(
+        self, tmp_path: Path, tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
+    ):
+        """run_skill for a skill with deps declaring write_paths includes dep paths in prefixes."""
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        from unittest.mock import MagicMock
+
+        from autoskillit.workspace.skills import SkillInfo, SkillSource
+        from tests.fakes import InMemoryHeadlessExecutor
+
+        executor = InMemoryHeadlessExecutor()
+        tool_ctx_kitchen_open.executor = executor
+
+        # Create a synthetic SKILL.md for the dep skill with write_paths
+        dep_dir = tmp_path / "dep-skill"
+        dep_dir.mkdir()
+        dep_skill_md = dep_dir / "SKILL.md"
+        dep_skill_md.write_text(
+            "---\nname: dep-skill\ndescription: A dep.\n"
+            'write_paths: ["{{AUTOSKILLIT_TEMP}}/dep-skill/"]\n---\nbody\n'
+        )
+
+        # Mock skill_resolver to return the dep's SkillInfo
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.side_effect = lambda name: (
+            SkillInfo(
+                name="dep-skill",
+                source=SkillSource.BUNDLED_EXTENDED,
+                path=dep_skill_md,
+            )
+            if name == "dep-skill"
+            else SkillInfo(
+                name=name,
+                source=SkillSource.BUNDLED_EXTENDED,
+                path=dep_dir / "SKILL.md",
+            )
+        )
+        tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+        # Mock session_skill_manager to return a closure containing dep-skill
+        mock_ssm = MagicMock()
+        mock_ssm.compute_skill_closure.return_value = frozenset({"target-skill", "dep-skill"})
+        session_dir = tmp_path / "session"
+        mock_ssm.init_session.return_value = MagicMock(path=str(session_dir))
+        mock_ssm.activate_skill_deps.return_value = True
+        tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+        # Create the expected skill file in the session directory
+        (session_dir / ".claude" / "skills" / "target-skill").mkdir(parents=True)
+        (session_dir / ".claude" / "skills" / "target-skill" / "SKILL.md").write_text(
+            "---\nname: target-skill\ndescription: Target.\n---\nbody\n"
+        )
+
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+        clone_dir = tmp_path / "clone"
+        clone_dir.mkdir()
+        (clone_dir / ".autoskillit" / "temp" / "target-skill").mkdir(parents=True)
+
+        from autoskillit.server.tools.tools_execution import run_skill
+
+        await run_skill(skill_command="/autoskillit:target-skill", cwd=str(clone_dir))
+
+        assert len(executor.calls) == 1
+        prefixes = executor.calls[0].allowed_write_prefixes
+        expected_dep_prefix = (
+            str((clone_dir / ".autoskillit" / "temp" / "dep-skill").resolve()) + "/"
+        )
+        assert expected_dep_prefix in prefixes

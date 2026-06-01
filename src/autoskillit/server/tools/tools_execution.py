@@ -39,6 +39,7 @@ from autoskillit.server._misc import (
     SCENARIO_STEP_NAME_ENV,
     _hook_config_overlay_path,
     _pipeline_tracker_path,
+    resolve_closure_write_dirs,
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
@@ -731,24 +732,6 @@ async def run_skill(
                 tool_ctx.completion_required_resolver
                 and tool_ctx.completion_required_resolver(skill_command)
             )
-            allowed_write_prefix = ""
-            allowed_write_prefixes: tuple[str, ...] = ()
-            if write_watch_dirs:
-                allowed_write_prefix, allowed_write_prefixes = _compute_write_prefixes(
-                    write_watch_dirs, cwd, skill_command
-                )
-            elif is_read_only:
-                _skill_temp_name = target_name or ""
-                if _skill_temp_name:
-                    allowed_write_prefix = os.path.join(
-                        cwd, ".autoskillit", "temp", _skill_temp_name, ""
-                    )
-                else:
-                    logger.warning(
-                        "read_only_skill_no_target_name",
-                        skill_command=skill_command[:SKILL_COMMAND_DISPLAY_MAX],
-                    )
-
             invocation_marker = f"%%ORDER_UP::{uuid4().hex[:8]}%%"
 
             skill_add_dirs: list[ValidatedAddDir] = []
@@ -778,6 +761,7 @@ async def run_skill(
 
             if not replay_snapshot_used and tool_ctx.session_skill_manager is not None:
                 allow_only: frozenset[str] | None = None
+                closure: frozenset[str] = frozenset()
                 if target_name:
                     closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
                     allow_only = closure if closure else None
@@ -827,6 +811,34 @@ async def run_skill(
                                 session_id=session_id,
                                 order_id=effective_order_id,
                             ).to_json()
+                    # Replay-path sessions inherit write scope from their original
+                    # snapshot — they don't need re-augmentation because the snapshot
+                    # was built from a live session that already had the full prefix set.
+                    if closure and tool_ctx.skill_resolver is not None:
+                        write_watch_dirs.extend(
+                            resolve_closure_write_dirs(
+                                closure, tool_ctx.skill_resolver, cwd, write_watch_dirs
+                            )
+                        )
+
+            allowed_write_prefix = ""
+            allowed_write_prefixes: tuple[str, ...] = ()
+            if write_watch_dirs:
+                allowed_write_prefix, allowed_write_prefixes = _compute_write_prefixes(
+                    write_watch_dirs, cwd, skill_command
+                )
+            elif is_read_only:
+                _skill_temp_name = target_name or ""
+                if _skill_temp_name:
+                    allowed_write_prefix = os.path.join(
+                        cwd, ".autoskillit", "temp", _skill_temp_name, ""
+                    )
+                else:
+                    logger.warning(
+                        "read_only_skill_no_target_name",
+                        skill_command=skill_command[:SKILL_COMMAND_DISPLAY_MAX],
+                    )
+
             _local_dir = validate_project_local_skill_dir(Path(cwd), tool_ctx.backend)
             if _local_dir is not None:
                 skill_add_dirs.append(_local_dir)

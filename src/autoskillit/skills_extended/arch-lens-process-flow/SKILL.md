@@ -3,6 +3,7 @@ name: arch-lens-process-flow
 categories: [arch-lens]
 backend_requirements: [claude-code]
 activate_deps: [mermaid]
+write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-process-flow/"]
 description: Create Process/Execution Flow architecture diagram showing runtime behavior, state transitions, and decision points. Physiological lens answering "How does it behave?"
 hooks:
   PreToolUse:

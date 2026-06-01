@@ -41,6 +41,8 @@ from autoskillit.workspace.session_skills import (
     CODEX_SKILLS_SUBDIR,
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
+    collect_closure_write_paths,
+    resolve_closure_write_dirs,
     resolve_ephemeral_root,
 )
 from autoskillit.workspace.skill_format import (
@@ -88,6 +90,8 @@ __all__ = [
     "detect_project_local_overrides",
     "clone_repo",
     "CloneSourceResolution",
+    "collect_closure_write_paths",
+    "resolve_closure_write_dirs",
     "detect_branch",
     "detect_source_dir",
     "detect_uncommitted_changes",

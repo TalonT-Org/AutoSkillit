@@ -3,6 +3,7 @@ name: arch-lens-error-resilience
 categories: [arch-lens]
 backend_requirements: [claude-code]
 activate_deps: [mermaid]
+write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-error-resilience/"]
 description: Create Error/Resilience architecture diagram showing failure handling, recovery mechanisms, and circuit breakers. Diagnostic lens answering "How are failures handled?"
 hooks:
   PreToolUse:

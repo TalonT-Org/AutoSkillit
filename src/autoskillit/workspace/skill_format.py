@@ -75,4 +75,23 @@ def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> 
         if "<" in desc or ">" in desc:
             errors.append("'description' must not contain '<' or '>' characters")
 
+    write_paths = frontmatter.get("write_paths")
+    if write_paths is not None:
+        if not isinstance(write_paths, list):
+            errors.append("'write_paths' must be a list of strings")
+        else:
+            for i, wp in enumerate(write_paths):
+                if not isinstance(wp, str) or not wp:
+                    errors.append(f"'write_paths[{i}]' must be a non-empty string")
+                elif ".." in wp:
+                    errors.append(f"'write_paths[{i}]' must not contain '..' (path traversal)")
+                elif not (
+                    wp.startswith("{{AUTOSKILLIT_TEMP}}/") or wp.startswith(".autoskillit/temp/")
+                ):
+                    errors.append(
+                        f"'write_paths[{i}]' must start with "
+                        "'{{AUTOSKILLIT_TEMP}}/' "
+                        f"(got {wp!r})"
+                    )
+
     return errors

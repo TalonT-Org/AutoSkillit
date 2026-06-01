@@ -41,6 +41,9 @@ from autoskillit.execution import (
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.workspace import clone_registry as clone_registry
+from autoskillit.workspace import (
+    resolve_closure_write_dirs as resolve_closure_write_dirs,
+)
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig

@@ -96,3 +96,50 @@ class TestParseFrontmatterContent:
         content = "---\n: invalid\n---\nBody"
         result = parse_frontmatter_content(content)
         assert result == {}
+
+
+class TestWritePathsValidation:
+    """Tests for write_paths validation in validate_skill_frontmatter."""
+
+    def test_valid_write_paths(self) -> None:
+        fm = {
+            "name": "skill-a",
+            "description": "A skill.",
+            "write_paths": ["{{AUTOSKILLIT_TEMP}}/skill-a/"],
+        }
+        assert validate_skill_frontmatter(fm, "skill-a") == []
+
+    def test_write_paths_not_list(self) -> None:
+        fm = {"name": "skill-a", "description": "A skill.", "write_paths": "bad"}
+        errors = validate_skill_frontmatter(fm, "skill-a")
+        assert any("list" in e for e in errors)
+
+    def test_write_paths_traversal_rejected(self) -> None:
+        fm = {
+            "name": "skill-a",
+            "description": "A skill.",
+            "write_paths": ["{{AUTOSKILLIT_TEMP}}/../etc/"],
+        }
+        errors = validate_skill_frontmatter(fm, "skill-a")
+        assert any(".." in e for e in errors)
+
+    def test_write_paths_wrong_prefix_rejected(self) -> None:
+        fm = {
+            "name": "skill-a",
+            "description": "A skill.",
+            "write_paths": ["/absolute/path/"],
+        }
+        errors = validate_skill_frontmatter(fm, "skill-a")
+        assert any("AUTOSKILLIT_TEMP" in e for e in errors)
+
+    def test_write_paths_absent_is_valid(self) -> None:
+        fm = {"name": "skill-a", "description": "A skill."}
+        assert validate_skill_frontmatter(fm, "skill-a") == []
+
+    def test_write_paths_resolved_prefix_accepted(self) -> None:
+        fm = {
+            "name": "skill-a",
+            "description": "A skill.",
+            "write_paths": [".autoskillit/temp/skill-a/"],
+        }
+        assert validate_skill_frontmatter(fm, "skill-a") == []

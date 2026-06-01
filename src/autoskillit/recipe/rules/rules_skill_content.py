@@ -7,17 +7,12 @@ Validates that every {placeholder} in a SKILL.md bash block is either:
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
-
 import regex as re
 
 from autoskillit.core import Severity
-
-if TYPE_CHECKING:
-    from autoskillit.core import SkillResolver
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._git_helpers import _GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE
+from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe._skill_placeholder_parser import (
     _VRULE_RE,
     extract_bash_blocks,
@@ -28,10 +23,6 @@ from autoskillit.recipe._skill_placeholder_parser import (
 )
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-
-# Search directories for SKILL.md resolution (patchable in tests via patch.object).
-# When None (default), uses SkillResolver to find bundled skills.
-SKILL_SEARCH_DIRS: list[Path] | None = None
 
 _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
@@ -54,28 +45,6 @@ _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("audit-impl", "implementation_ref"),
     }
 )
-
-
-def _resolve_skill_md(skill_name: str, *, resolver: SkillResolver | None = None) -> Path | None:
-    """Resolve a skill name to its SKILL.md path.
-
-    When SKILL_SEARCH_DIRS is set (e.g., in tests), searches those directories.
-    Otherwise uses SkillResolver to find the bundled skill.
-    """
-    if SKILL_SEARCH_DIRS is not None:
-        for search_dir in SKILL_SEARCH_DIRS:
-            skill_md = search_dir / skill_name / "SKILL.md"
-            if skill_md.is_file():
-                return skill_md
-        return None
-    if resolver is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
-
-        resolver = DefaultSkillResolver()
-    skill_info = resolver.resolve(skill_name)
-    if skill_info is None:
-        return None
-    return skill_info.path  # skill_info.path IS the SKILL.md file
 
 
 @semantic_rule(

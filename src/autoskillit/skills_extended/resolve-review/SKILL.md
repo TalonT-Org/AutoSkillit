@@ -248,6 +248,8 @@ Save raw responses to:
 - `{{AUTOSKILLIT_TEMP}}/resolve-review/reviews_{pr_number}.json`
 - `{{AUTOSKILLIT_TEMP}}/resolve-review/threads_{pr_number}.json` (first page; subsequent pages merged in memory)
 
+Use `jq -n` or the Write tool to create these files. If a file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+
 Build a lookup map from the threads response:
 - `comment_id_to_thread_id: dict[int, str]` — key: comment `databaseId` (integer), value: thread GraphQL `id` (string node ID)
 - Skip threads where `isResolved` is already `true` (no need to resolve again)
@@ -532,6 +534,8 @@ persistent local file for later posting when mode switches to `github`.
 Read the `iteration` field from `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
 to get the round number. If that file is absent, use `iteration = 0`.
 
+This file accumulates across review loop iterations. Before writing, read the existing file (if it exists), merge new entries with existing ones, then write the combined result using `jq -n` or the Write tool.
+
 Read `{{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_${PR_NUMBER}.json` if it
 exists. If absent, start with an empty array.
 
@@ -733,6 +737,8 @@ Track:
 
 After Step 6.5, save all REJECT-classified comments to a **stable, accumulating** JSON file
 (without timestamp — the same file is reused across local rounds):
+
+This file accumulates across review loop iterations. Before writing, read the existing file (if it exists), merge new entries with existing ones, then write the combined result using `jq -n` or the Write tool.
 
 Read `{{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_${PR_NUMBER}.json` if it exists.
 If absent, start with an empty array.

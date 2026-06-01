@@ -60,6 +60,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_review_pr_diff_context_handoff.py` | Guards: review-pr writes diff_context handoff file in Step 8 before verdict emission |
 | `test_review_pr_inline_comment_guards.py` | Structural guards for review-pr/SKILL.md posting mechanics |
 | `test_review_pr_local_mode.py` | Contract tests for review-pr/SKILL.md local mode (mode=local) behavior |
+| `test_review_pr_artifact_idempotency.py` | Structural tests for review-pr/SKILL.md idempotent-write guidance on collision-risk files |
 | `test_review_pr_prior_thread_awareness.py` | Behavioral guard tests for review-pr/SKILL.md prior-thread awareness (T_RPA1–T_RPA7) |
 | `test_review_pr_verdict_guards.py` | Behavioral guard tests for review-pr/SKILL.md verdict logic |
 | `test_review_research_pr_guards.py` | Behavioral guards for review-research-pr/SKILL.md |

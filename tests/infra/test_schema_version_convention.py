@@ -152,7 +152,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils/_review.py", 100),
     ("src/autoskillit/smoke_utils/_review.py", 101),
     ("src/autoskillit/smoke_utils/_review.py", 119),
-    ("src/autoskillit/smoke_utils/_review.py", 303),
+    ("src/autoskillit/smoke_utils/_review.py", 310),
     # smoke_utils/_git.py — partitions, merge queue data
     # Line 110 is a list-payload write site (dual membership: also in list_sites
     # in test_allowlist_includes_list_payloads_as_documented). The AST scanner catches

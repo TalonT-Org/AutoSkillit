@@ -121,9 +121,14 @@ def test_check_review_loop_stops_at_max_iterations() -> None:
 
 
 def test_check_review_loop_returns_expected_fields() -> None:
-    """check_review_loop must return next_iteration, max_exceeded, and had_blocking."""
+    """check_review_loop returns next/prev iteration, max_exceeded, had_blocking."""
     result = check_review_loop(pr_number="42")
-    assert set(result.keys()) == {"next_iteration", "max_exceeded", "had_blocking"}
+    assert set(result.keys()) == {
+        "next_iteration",
+        "prev_iteration",
+        "max_exceeded",
+        "had_blocking",
+    }
 
 
 # T_CRL11 — verify check_review_loop has no subprocess calls
@@ -914,11 +919,14 @@ def test_enrich_diff_context_fills_empty_code_regions(tmp_path: Path) -> None:
             {"path": "src/app.py", "line": 42, "severity": "critical", "code_region": ""},
         ],
     )
-    result = enrich_diff_context(pr_number="123", project_dir=str(tmp_path))
+    review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
+    result = enrich_diff_context(
+        pr_number="123", project_dir=str(tmp_path), output_dir=str(review_dir)
+    )
     assert result["enriched"] == "true"
     assert result["enriched_count"] == "1"
 
-    handoff_path = tmp_path / ".autoskillit" / "temp" / "review-pr" / "diff_context_123.json"
+    handoff_path = review_dir / "diff_context_123.json"
     handoff = json.loads(handoff_path.read_text())
     assert "[L42]" in handoff["context_entries"][0]["code_region"]
 
@@ -938,11 +946,14 @@ def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> 
             {"path": "src/app.py", "line": 40, "severity": "warning", "code_region": ""},
         ],
     )
-    result = enrich_diff_context(pr_number="123", project_dir=str(tmp_path))
+    review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
+    result = enrich_diff_context(
+        pr_number="123", project_dir=str(tmp_path), output_dir=str(review_dir)
+    )
     assert result["enriched"] == "true"
     assert result["enriched_count"] == "1"
 
-    handoff_path = tmp_path / ".autoskillit" / "temp" / "review-pr" / "diff_context_123.json"
+    handoff_path = review_dir / "diff_context_123.json"
     handoff = json.loads(handoff_path.read_text())
     assert handoff["context_entries"][0]["code_region"] == "pre-existing"
     assert "[L40]" in handoff["context_entries"][1]["code_region"]
@@ -951,7 +962,9 @@ def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> 
 # T_EDC3
 def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
     """enrich_diff_context returns gracefully when handoff file does not exist."""
-    result = enrich_diff_context(pr_number="999", project_dir=str(tmp_path))
+    result = enrich_diff_context(
+        pr_number="999", project_dir=str(tmp_path), output_dir=str(tmp_path)
+    )
     assert result["enriched"] == "false"
     assert result["reason"] == "handoff_not_found"
 
@@ -2352,7 +2365,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 21 public names."""
+    """smoke_utils.__all__ must list all 23 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2372,10 +2385,12 @@ def test_smoke_utils_all_exports_complete() -> None:
         "diagnose_merge_gate",
         "enrich_diff_context",
         "fetch_merge_queue_data",
+        "init_counter",
         "LOCAL_ROUND_EXEMPT_VERDICTS",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
         "patch_pr_token_summary",
+        "pre_iteration_cleanup",
         "try_load_json",
     }
     assert set(su.__all__) == expected
@@ -2400,9 +2415,11 @@ def test_smoke_utils_all_exports_complete() -> None:
         "diagnose_merge_gate",
         "enrich_diff_context",
         "fetch_merge_queue_data",
+        "init_counter",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
         "patch_pr_token_summary",
+        "pre_iteration_cleanup",
         "try_load_json",
     ],
 )
@@ -2441,7 +2458,7 @@ def test_callable_rejects_relative_output_dir(callable_name: str, minimal_args: 
 
 def test_enrich_diff_context_rejects_relative_project_dir() -> None:
     with pytest.raises(ValueError, match="absolute"):
-        enrich_diff_context(pr_number="1", project_dir="relative/path")
+        enrich_diff_context(pr_number="1", project_dir="relative/path", output_dir="/tmp")
 
 
 def test_check_bug_report_non_empty_rejects_relative_workspace() -> None:
@@ -2452,3 +2469,123 @@ def test_check_bug_report_non_empty_rejects_relative_workspace() -> None:
 def test_consolidate_health_reports_rejects_relative_log_dir() -> None:
     with pytest.raises(ValueError, match="absolute"):
         consolidate_health_reports(diagnostics_log_dir="relative/path", kitchen_id="test")
+
+
+# ---------------------------------------------------------------------------
+# T_IC1–T_IC3: init_counter callable
+# ---------------------------------------------------------------------------
+
+
+def test_init_counter_with_empty_string() -> None:
+    """init_counter returns value='0' when counter_value is empty."""
+    from autoskillit.smoke_utils import init_counter  # noqa: PLC0415
+
+    assert init_counter(counter_value="") == {"value": "0"}
+
+
+def test_init_counter_with_whitespace_only() -> None:
+    """init_counter returns value='0' when counter_value is whitespace."""
+    from autoskillit.smoke_utils import init_counter  # noqa: PLC0415
+
+    assert init_counter(counter_value="  ") == {"value": "0"}
+
+
+def test_init_counter_with_numeric_value() -> None:
+    """init_counter passes through a numeric string unchanged."""
+    from autoskillit.smoke_utils import init_counter  # noqa: PLC0415
+
+    assert init_counter(counter_value="2") == {"value": "2"}
+
+
+# ---------------------------------------------------------------------------
+# T_PIC1–T_PIC3: pre_iteration_cleanup callable
+# ---------------------------------------------------------------------------
+
+
+def test_pre_iteration_cleanup_removes_files(tmp_path: Path) -> None:
+    """pre_iteration_cleanup removes all files in output_dir, preserving patterns."""
+    from autoskillit.smoke_utils import pre_iteration_cleanup  # noqa: PLC0415
+
+    out = tmp_path / "iter_0"
+    out.mkdir()
+    (out / "prior_threads_123.json").write_text("{}")
+    (out / "diff_context_123.json").write_text("{}")
+    (out / "deferred_obs_123.json").write_text("[]")
+
+    result = pre_iteration_cleanup(
+        output_dir=str(out),
+        preserve_patterns="deferred_obs*.json",
+    )
+    assert result["cleaned"] == "true"
+    assert result["removed_count"] == "2"
+    assert not (out / "prior_threads_123.json").exists()
+    assert not (out / "diff_context_123.json").exists()
+    assert (out / "deferred_obs_123.json").exists()
+
+
+def test_pre_iteration_cleanup_noop_when_dir_missing(tmp_path: Path) -> None:
+    """pre_iteration_cleanup is a no-op when output_dir does not exist."""
+    from autoskillit.smoke_utils import pre_iteration_cleanup  # noqa: PLC0415
+
+    result = pre_iteration_cleanup(output_dir=str(tmp_path / "nonexistent"))
+    assert result["cleaned"] == "false"
+    assert result["reason"] == "not_found"
+
+
+def test_pre_iteration_cleanup_noop_when_dir_empty(tmp_path: Path) -> None:
+    """pre_iteration_cleanup returns cleaned=true with removed_count=0 when dir is empty."""
+    from autoskillit.smoke_utils import pre_iteration_cleanup  # noqa: PLC0415
+
+    out = tmp_path / "empty_iter"
+    out.mkdir()
+    result = pre_iteration_cleanup(output_dir=str(out))
+    assert result["cleaned"] == "true"
+    assert result["removed_count"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# T_EDC4–T_EDC5: enrich_diff_context with iteration-scoped output_dir
+# ---------------------------------------------------------------------------
+
+_ANNOTATED_DIFF_ITER = (
+    "+++ b/src/app.py\n"
+    "@@ -38,10 +38,12 @@ def main():\n"
+    "[L38] existing_line_38\n"
+    "[L39] existing_line_39\n"
+    "[L40]+new_import\n"
+    "[L41]+another_import\n"
+    "[L42] existing_42\n"
+    "[L43] existing_43\n"
+)
+
+
+def _setup_iter_handoff(iter_dir: Path, pr: str = "123") -> None:
+    iter_dir.mkdir(parents=True)
+    handoff = {
+        "schema_version": 1,
+        "context_entries": [
+            {"path": "src/app.py", "line": 42, "severity": "critical", "code_region": ""},
+        ],
+    }
+    (iter_dir / f"diff_context_{pr}.json").write_text(json.dumps(handoff))
+    (iter_dir / f"annotated_diff_{pr}.txt").write_text(_ANNOTATED_DIFF_ITER)
+
+
+def test_enrich_diff_context_iteration_scoped_output_dir(tmp_path: Path) -> None:
+    """enrich_diff_context reads from iteration-scoped output_dir."""
+    iter_dir = tmp_path / ".autoskillit" / "temp" / "review-pr" / "iter_1"
+    _setup_iter_handoff(iter_dir)
+
+    result = enrich_diff_context(
+        pr_number="123",
+        project_dir=str(tmp_path),
+        output_dir=str(iter_dir),
+    )
+    assert result["enriched"] == "true"
+    assert int(result["enriched_count"]) > 0
+
+
+def test_enrich_diff_context_requires_output_dir() -> None:
+    """enrich_diff_context must raise TypeError when output_dir is not provided."""
+    with pytest.raises(TypeError):
+        enrich_diff_context(pr_number="1", project_dir="/tmp")  # type: ignore[call-arg]

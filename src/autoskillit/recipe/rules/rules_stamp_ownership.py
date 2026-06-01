@@ -5,39 +5,15 @@ Validates that no skill other than the designated owner writes a registered stam
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
-
 from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER, Severity
-
-if TYPE_CHECKING:
-    from autoskillit.core import SkillResolver
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-
-SKILL_SEARCH_DIRS: list[Path] | None = None
 
 _STAMP_OWNERS: dict[str, str] = {
     DRY_WALKTHROUGH_VERIFIED_MARKER: "dry-walkthrough",
 }
-
-
-def _resolve_skill_md(skill_name: str, *, resolver: SkillResolver | None = None) -> Path | None:
-    if SKILL_SEARCH_DIRS is not None:
-        for search_dir in SKILL_SEARCH_DIRS:
-            skill_md = search_dir / skill_name / "SKILL.md"
-            if skill_md.is_file():
-                return skill_md
-        return None
-    if resolver is None:
-        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
-
-        resolver = DefaultSkillResolver()
-    skill_info = resolver.resolve(skill_name)
-    if skill_info is None:
-        return None
-    return skill_info.path
 
 
 def _has_write_instruction(content: str, stamp: str) -> bool:

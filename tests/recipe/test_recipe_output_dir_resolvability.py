@@ -37,6 +37,8 @@ def test_output_dir_values_are_server_resolvable(recipe_name: str) -> None:
     for step_name, step in recipe.steps.items():
         if "output_dir" in step.with_args:
             output_dir = step.with_args["output_dir"]
+            if "${{ context." in output_dir:
+                continue
             assert "${{" not in output_dir, (
                 f"Recipe '{recipe_name}', step '{step_name}': output_dir "
                 f"'{output_dir}' contains unresolvable ${{{{ }}}} template. "

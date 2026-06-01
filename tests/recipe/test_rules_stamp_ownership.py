@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.recipe._skill_helpers as _sh
 import autoskillit.recipe.rules.rules_stamp_ownership as _rso
 from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER, Severity
 from autoskillit.core.io import load_yaml
@@ -70,7 +71,7 @@ def test_stamp_ownership_rule_fires_for_non_owner(tmp_path: Path) -> None:
     recipe_path.write_text(_make_recipe_for_skill("bad-skill"))
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_rso, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]
@@ -101,7 +102,7 @@ def test_stamp_ownership_rule_passes_for_owner(tmp_path: Path) -> None:
     recipe_path.write_text(_make_recipe_for_skill("dry-walkthrough"))
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_rso, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]
@@ -128,7 +129,7 @@ def test_stamp_ownership_rule_passes_for_backtick_reference(tmp_path: Path) -> N
     recipe_path.write_text(_make_recipe_for_skill("checker-skill"))
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_rso, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]
@@ -154,7 +155,7 @@ def test_stamp_ownership_rule_passes_for_unrelated_skill(tmp_path: Path) -> None
     recipe_path.write_text(_make_recipe_for_skill("clean-skill"))
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_rso, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]

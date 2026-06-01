@@ -137,7 +137,7 @@ query($owner:String!, $repo:String!, $number:Int!, $after:String) {
 }
 ```
 
-Build two lists from the thread nodes. For each thread, resolve line via:
+Build two lists from the thread nodes. Do not output prose between iterations. For each thread, resolve line via:
 `line = thread.get("line") or thread.get("originalLine")` — `line` is nullable for
 outdated threads where new commits have shifted the diff anchor; `originalLine` is
 the stable fallback.
@@ -179,6 +179,8 @@ else:
 ```
 
 Save to: `{{AUTOSKILLIT_TEMP}}/review-pr/prior_threads_{pr_number}.json`
+
+Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
 
 If the GraphQL call fails (token scope, network): set both lists to `[]` and log a warning.
 Prior-thread context is best-effort — failure must not abort the review.
@@ -776,7 +778,7 @@ After writing the summary file and before emitting the verdict token, write the 
 file for resolve-review's pre-built context. This costs zero additional API calls or file
 reads — all data is already in the session's context.
 
-For each finding in `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity is
+Do not output prose between iterations. For each finding in `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity is
 `"critical"` or `"warning"`, build a context entry:
 - `path` — the finding's `file` field (the finding schema uses `file`, not `path`;
   map `finding.file` → `path` in the context entry for resolve-review compatibility)
@@ -814,6 +816,8 @@ Log: `"Wrote diff-scoped context handoff: N entries → {path}"`. If the write f
 (e.g., temp dir unavailable), log a warning and continue — the handoff file is
 best-effort and its absence is handled gracefully by resolve-review.
 
+Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+
 **Write Raw Findings JSON (after diff-context handoff):**
 
 After writing the diff-context handoff file, also write the raw findings list for
@@ -839,6 +843,8 @@ Write to `{{AUTOSKILLIT_TEMP}}/review-pr/raw_findings_{pr_number}.json`:
 
 Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` where severity
 is `"critical"` or `"warning"`. Log: `"Wrote raw findings: N entries → {path}"`.
+
+Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
 
 Output the verdict as the final line:
 

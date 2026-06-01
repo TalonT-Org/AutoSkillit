@@ -720,7 +720,7 @@ class TestImplementationGroupsStructure:
         step = recipe.steps["extract_pr_number"]
         assert step.tool == "run_cmd"
         assert "pr_number" in step.capture
-        assert step.on_success == "annotate_pr_diff"
+        assert step.on_success == "init_review_loop_count"
 
     def test_ig_ci_watch_routes_to_check_repo_merge_state(self, recipe) -> None:
         """REQ-C7-01: ci_watch on_result success must route to check_repo_merge_state."""

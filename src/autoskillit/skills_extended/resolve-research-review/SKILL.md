@@ -139,6 +139,8 @@ Save to:
 - `{{AUTOSKILLIT_TEMP}}/resolve-research-review/reviews_{pr}.json`
 - `{{AUTOSKILLIT_TEMP}}/resolve-research-review/threads_{pr}.json`
 
+Use `jq -n` or the Write tool to create these files. If a file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+
 ### Step 3: Parse, Classify, and Dimension-Group
 
 From **inline comments**, extract per comment:
@@ -184,7 +186,7 @@ Apply `DIMENSION_PATTERN` to each comment body to extract the dimension label.
 | slop                          | hygiene         |
 | (unparseable / no match)      | unknown         |
 
-Save `dimension_groups_{pr}.json` with findings keyed by group.
+Save `dimension_groups_{pr}.json` with findings keyed by group. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes) (SINGLE MESSAGE)
 
@@ -263,7 +265,7 @@ statistical claims.
 **Fallback:** If a subagent fails, classify all comments in that group as `DISCUSS`.
 
 Merge results into `classification_map: dict[comment_id, verdict_entry]`.
-Save `classification_map_{pr}.json`.
+Save `classification_map_{pr}.json`. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 Write analysis report to `{{AUTOSKILLIT_TEMP}}/resolve-research-review/analysis_{pr}_{ts}.md`
 with banner (BEFORE any code changes):
@@ -395,6 +397,8 @@ Schema extends resolve-review's schema with a `dimension` field:
 
 Save escalation records to:
 `{{AUTOSKILLIT_TEMP}}/resolve-research-review/escalation_records_{pr}.json`
+
+Use `jq -n` or the Write tool to create this file. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 ### Step 7: Report
 

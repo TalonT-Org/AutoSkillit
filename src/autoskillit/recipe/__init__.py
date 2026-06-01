@@ -121,6 +121,9 @@ from autoskillit.recipe.rules import (  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_inline_script as _rules_inline_script  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa: E402 F401
+from autoskillit.recipe.rules import (
+    rules_loop_artifact_scope as _rules_loop_artifact_scope,  # noqa: E402 F401
+)
 from autoskillit.recipe.rules import rules_loop_counter as _rules_loop_counter  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_loop_progress as _rules_loop_progress  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_merge as _rules_merge  # noqa: E402 F401

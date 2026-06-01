@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.recipe._skill_helpers as _sh
 import autoskillit.recipe.rules.rules_skill_content as _rsc
 from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
@@ -67,7 +68,7 @@ def test_undefined_bash_placeholder_rule_fires(tmp_path: Path) -> None:
     recipe = load_recipe(recipe_path)
 
     # Patch the skill resolver to include the synthetic skill dir
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]
@@ -122,7 +123,7 @@ def test_valid_skill_passes_placeholder_rule(tmp_path: Path) -> None:
 
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]
@@ -178,7 +179,7 @@ def test_output_section_no_markdown_rule_fires_when_directive_missing(tmp_path: 
     recipe = load_recipe(recipe_path)
 
     with (
-        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
             "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_PATTERNS,
@@ -219,7 +220,7 @@ def test_output_section_no_markdown_rule_passes_when_directive_present(tmp_path:
     recipe = load_recipe(recipe_path)
 
     with (
-        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
             "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_PATTERNS,
@@ -303,7 +304,7 @@ def test_hardcoded_origin_fires_for_git_remote_commands(
         )
     )
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" in [f.rule for f in findings], (
         f"Rule did not fire for: {label!r}"
@@ -342,7 +343,7 @@ def test_hardcoded_origin_silent_with_remote_variable(tmp_path: Path) -> None:
         )
     )
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
         "Rule fired unexpectedly on skill using $REMOTE variable"
@@ -372,7 +373,7 @@ def test_hardcoded_origin_does_not_fire_on_fixed_resolve_merge_conflicts(tmp_pat
         )
     )
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
         "hardcoded-origin-remote fired on resolve-merge-conflicts after Part B fix — "
@@ -403,7 +404,7 @@ def test_hardcoded_origin_does_not_fire_on_fixed_retry_worktree(tmp_path: Path) 
         )
     )
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
         "hardcoded-origin-remote fired on retry-worktree after Part B fix — "
@@ -434,7 +435,7 @@ def test_hardcoded_origin_ignores_comment_lines(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("comment-skill", {"worktree_path": "wt"}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings]
 
@@ -471,7 +472,7 @@ def test_hardcoded_origin_silent_for_shell_default_value_expression(tmp_path: Pa
         )
     )
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
         "Rule fired on ${REMOTE:-origin} shell default-value expression — "
@@ -495,7 +496,7 @@ def _write_pkg_skill_and_run(tmp_path: Path, skill_md_content: str) -> list[obje
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         return run_semantic_rules(recipe)
 
 
@@ -661,7 +662,7 @@ def test_grep_bre_alternation_is_flagged(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _BRE_RULE_ID in [f.rule for f in findings], (
         "Expected rule to fire for grep BRE \\| pattern in bash block"
@@ -687,7 +688,7 @@ def test_git_grep_bre_is_excluded(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _BRE_RULE_ID not in [f.rule for f in findings], (
         "Rule must not fire for --grep= BRE context (git uses BRE for --grep=)"
@@ -734,7 +735,7 @@ def test_hardcoded_origin_does_not_fire_on_part_b_fixed_skills(
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill(skill_name, ingredients))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert "hardcoded-origin-remote" not in [f.rule for f in findings], (
         f"hardcoded-origin-remote fired on {skill_name!r} after Part B fix — "
@@ -795,7 +796,7 @@ def test_transition_boundary_anti_confirmation_rule_fires(tmp_path: Path) -> Non
     recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]
@@ -818,7 +819,7 @@ def test_transition_boundary_anti_confirmation_rule_passes(tmp_path: Path) -> No
     recipe_path.write_text(_make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]
@@ -871,7 +872,7 @@ def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> No
 
     with (
         patch.object(_rsc, "_resolve_skill_md", tracking_fn),
-        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
     ):
         run_semantic_rules(ctx)
 
@@ -909,7 +910,7 @@ def test_executable_field_content_validity_fires_for_missing_criteria(tmp_path: 
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _EXEC_RULE_ID in [f.rule for f in findings], (
         "Rule must fire when V9 mentions acquisition but lacks content-validity criteria"
@@ -935,7 +936,7 @@ def test_executable_field_content_validity_passes_when_criteria_present(tmp_path
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _EXEC_RULE_ID not in [f.rule for f in findings], (
         "Rule must not fire when V9 contains placeholder/template rejection language"
@@ -959,7 +960,7 @@ def test_executable_field_content_validity_ignores_non_executable_skills(tmp_pat
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("other-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _EXEC_RULE_ID not in [f.rule for f in findings], (
         "Rule must not fire for skills not in _EXECUTABLE_FIELD_SKILLS"
@@ -989,7 +990,7 @@ def test_executable_field_content_validity_checks_all_v_rules(tmp_path: Path) ->
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("plan-experiment", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     exec_findings = [f for f in findings if f.rule == _EXEC_RULE_ID]
     # Both V7 (spec_path) and V9 (acquisition) should fire since neither
@@ -1027,7 +1028,7 @@ def test_reviews_post_requires_input_flag_rule(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("test-reviews-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     rule_ids = [f.rule for f in findings]
     assert _REVIEWS_RULE_ID in rule_ids, (
@@ -1060,7 +1061,7 @@ def test_reviews_post_requires_input_flag_rule_passes_with_input_flag(
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("good-reviews-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     rule_ids = [f.rule for f in findings]
     assert _REVIEWS_RULE_ID not in rule_ids, (
@@ -1099,7 +1100,7 @@ def test_reviews_post_rule_subsection_granularity(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("granularity-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     rule_ids = [f.rule for f in findings]
     assert _REVIEWS_RULE_ID in rule_ids, (
@@ -1127,7 +1128,7 @@ def test_reviews_post_regex_flag_before_path(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("flag-before-path-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     rule_ids = [f.rule for f in findings]
     assert _REVIEWS_RULE_ID in rule_ids, (
@@ -1162,7 +1163,7 @@ def test_blind_git_add_in_skill_flagged(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("bad-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     matching = [f for f in findings if f.rule == _BLIND_GIT_ADD_RULE_ID]
     assert len(matching) >= 1, (
@@ -1190,7 +1191,7 @@ def test_scoped_git_add_in_skill_allowed(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("good-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _BLIND_GIT_ADD_RULE_ID not in [f.rule for f in findings]
 
@@ -1214,7 +1215,7 @@ def test_git_add_u_in_skill_allowed(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("update-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _BLIND_GIT_ADD_RULE_ID not in [f.rule for f in findings]
 
@@ -1238,7 +1239,7 @@ def test_git_add_all_long_form_flagged(tmp_path: Path) -> None:
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill("all-skill", {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
     assert _BLIND_GIT_ADD_RULE_ID in [f.rule for f in findings]
 
@@ -1295,7 +1296,7 @@ def test_source_attribution_directive_fires_when_missing(tmp_path: Path) -> None
     recipe = load_recipe(recipe_path)
 
     with (
-        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
             "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_SOURCE_PIN,
@@ -1334,7 +1335,7 @@ def test_source_attribution_directive_silent_when_present(tmp_path: Path) -> Non
     recipe = load_recipe(recipe_path)
 
     with (
-        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
             "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_SOURCE_PIN,
@@ -1370,7 +1371,7 @@ def test_source_attribution_directive_silent_without_source_pin_fields(
     recipe = load_recipe(recipe_path)
 
     with (
-        patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]),
+        patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
         patch(
             "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITHOUT_SOURCE_PIN,
@@ -1408,7 +1409,7 @@ def _write_skill_and_run_rules(tmp_path: Path, skill_md_content: str) -> list[ob
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         return run_semantic_rules(recipe)
 
 

@@ -19,6 +19,8 @@ CLAUDE_MD = REPO_ROOT / "CLAUDE.md"
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
+
 # Old flat-layout paths that must never appear in any link.
 FORBIDDEN_OLD_PATHS = {
     "docs/recipes.md",

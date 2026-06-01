@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = REPO_ROOT / "docs"
 DOCS_README = DOCS_DIR / "README.md"
@@ -21,6 +23,8 @@ EXPECTED_SUBDIRS = {
 }
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)#]+)(?:#[^)]*)?\)")
+
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
 
 
 def _all_md_files() -> list[Path]:

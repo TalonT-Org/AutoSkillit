@@ -17,6 +17,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = REPO_ROOT / "docs"
 GLOSSARY = DOCS_DIR / "glossary.md"
 
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
+
 # Each entry: (banned regex, canonical form). Matching is case-insensitive
 # unless the regex carries an explicit flag.
 BANNED_VARIANTS: list[tuple[str, str]] = [

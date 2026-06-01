@@ -14,6 +14,8 @@ import pytest
 
 from autoskillit.core.io import load_yaml
 
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = REPO_ROOT / "src" / "autoskillit"
 DOCS_DIR = REPO_ROOT / "docs"

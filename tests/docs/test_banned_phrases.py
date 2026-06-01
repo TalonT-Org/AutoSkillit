@@ -14,6 +14,8 @@ import pytest
 
 from tests._helpers import strip_markdown_code_regions
 
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = REPO_ROOT / "docs"
 ROOT_README = REPO_ROOT / "README.md"

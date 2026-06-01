@@ -18,6 +18,7 @@ from typing import Any
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     MARKETPLACE_PREFIX,
+    CodingAgentBackend,
     DirectInstall,
     FleetLock,
     MarketplaceInstall,
@@ -213,16 +214,16 @@ def make_context(
         build_protected_campaign_ids,
     )
 
-    backend = get_backend(config.agent_backend.backend)
-
-    if is_feature_enabled(
+    _codex_feature_enabled = is_feature_enabled(
         "codex_backend", config.features, experimental_enabled=config.experimental_enabled
-    ):
-        if config.agent_backend.backend == "codex":
-            from autoskillit.execution import CodexBackend
+    )
+    if _codex_feature_enabled and config.agent_backend.backend == "codex":
+        from autoskillit.execution import CodexBackend
 
-            backend = CodexBackend()
-        else:
+        backend: CodingAgentBackend = CodexBackend()
+    else:
+        backend = get_backend(config.agent_backend.backend)
+        if _codex_feature_enabled:
             logger.warning(
                 "codex_backend_flag_ignored",
                 reason="config.agent_backend.backend is not 'codex'",

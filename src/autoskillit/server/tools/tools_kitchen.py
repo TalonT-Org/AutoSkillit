@@ -324,7 +324,7 @@ def _close_kitchen_handler() -> None:
             timeout=ctx.config.fleet.acquire_timeout_sec,
         )
     except (TypeError, ValueError):
-        logger.warning("fleet_lock_reset_skipped")
+        logger.warning("fleet_lock_reset_skipped", exc_info=True)
     tracker_dir = _pipeline_tracker_dir(ctx.project_dir)
     try:
         if tracker_dir.is_dir():

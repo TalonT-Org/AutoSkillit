@@ -17,6 +17,7 @@ from autoskillit.core.types._type_constants import SKILL_ACTIVATE_DEPS_REQUIRED
 from autoskillit.core.types._type_constants_registries import PACK_REGISTRY
 from autoskillit.workspace.session_skills import (
     SkillsDirectoryProvider,
+    _parse_write_paths,
     compute_skill_closure,
 )
 from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
@@ -161,3 +162,21 @@ def test_all_activate_deps_resolve() -> None:
                         f"{dep!r} which does not resolve to a skill or pack"
                     )
     assert not failures, "Unresolvable activate_deps entries:\n" + "\n".join(failures)
+
+
+def test_write_paths_use_autoskillit_temp_prefix() -> None:
+    """All bundled skills declaring write_paths must use {{AUTOSKILLIT_TEMP}}/ prefix."""
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+    violations: list[str] = []
+    for info in resolver.list_all():
+        try:
+            content = info.path.read_text()
+        except OSError:
+            continue
+        paths = _parse_write_paths(content)
+        for wp in paths:
+            if not wp.startswith("{{AUTOSKILLIT_TEMP}}/"):
+                violations.append(f"{info.name}: {wp!r}")
+    assert not violations, f"write_paths must start with {{{{AUTOSKILLIT_TEMP}}}}/: {violations}"

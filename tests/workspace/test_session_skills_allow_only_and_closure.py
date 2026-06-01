@@ -10,6 +10,8 @@ from autoskillit.core import FEATURE_REGISTRY
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
+    _parse_write_paths,
+    collect_closure_write_paths,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -49,6 +51,10 @@ def _make_synthetic_provider(
             fm_lines.append(f"categories: [{', '.join(categories)}]")
         if deps:
             fm_lines.append(f"activate_deps: [{', '.join(deps)}]")
+        write_paths = spec.get("write_paths", [])
+        if write_paths:
+            quoted = ", ".join(f'"{wp}"' for wp in write_paths)
+            fm_lines.append(f"write_paths: [{quoted}]")
         content = "---\n" + "\n".join(fm_lines) + "\n---\nbody\n"
         (skill_dir / "SKILL.md").write_text(content)
         skill_infos.append(
@@ -460,3 +466,104 @@ class TestComputeSkillClosure:
             {"target": {"deps": ["audit"]}},
         )
         assert compute_skill_closure("target", provider) == frozenset({"target"})
+
+
+class TestParseWritePaths:
+    """Unit tests for _parse_write_paths frontmatter parser."""
+
+    def test_no_write_paths_returns_empty(self) -> None:
+        content = "---\nname: skill-a\ndescription: A.\n---\nbody"
+        assert _parse_write_paths(content) == []
+
+    def test_single_path(self) -> None:
+        content = (
+            '---\nname: a\ndescription: A.\nwrite_paths: ["{{AUTOSKILLIT_TEMP}}/a/"]\n---\nbody'
+        )
+        assert _parse_write_paths(content) == ["{{AUTOSKILLIT_TEMP}}/a/"]
+
+    def test_multiple_paths(self) -> None:
+        content = (
+            "---\nname: a\ndescription: A.\n"
+            'write_paths: ["{{AUTOSKILLIT_TEMP}}/a/", "{{AUTOSKILLIT_TEMP}}/b/"]\n---\nbody'
+        )
+        assert _parse_write_paths(content) == [
+            "{{AUTOSKILLIT_TEMP}}/a/",
+            "{{AUTOSKILLIT_TEMP}}/b/",
+        ]
+
+    def test_no_frontmatter(self) -> None:
+        assert _parse_write_paths("no frontmatter here") == []
+
+    def test_empty_list(self) -> None:
+        content = "---\nname: a\ndescription: A.\nwrite_paths: []\n---\nbody"
+        assert _parse_write_paths(content) == []
+
+    def test_multiline_yaml_list(self) -> None:
+        content = (
+            "---\nname: a\ndescription: A.\nwrite_paths:\n"
+            '  - "{{AUTOSKILLIT_TEMP}}/a/"\n'
+            '  - "{{AUTOSKILLIT_TEMP}}/b/"\n---\nbody'
+        )
+        assert _parse_write_paths(content) == [
+            "{{AUTOSKILLIT_TEMP}}/a/",
+            "{{AUTOSKILLIT_TEMP}}/b/",
+        ]
+
+    def test_non_list_returns_empty(self) -> None:
+        content = '---\nname: a\ndescription: A.\nwrite_paths: "bad"\n---\nbody'
+        assert _parse_write_paths(content) == []
+
+
+class TestCollectClosureWritePaths:
+    """Unit tests for collect_closure_write_paths."""
+
+    def test_standalone_skill_with_write_paths(self, tmp_path: Path) -> None:
+        provider = _make_synthetic_provider(
+            tmp_path,
+            {"alpha": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/alpha/"]}},
+        )
+        closure = frozenset({"alpha"})
+        result = collect_closure_write_paths(closure, provider.resolver)
+        assert result == ("{{AUTOSKILLIT_TEMP}}/alpha/",)
+
+    def test_skill_without_write_paths(self, tmp_path: Path) -> None:
+        provider = _make_synthetic_provider(tmp_path, {"beta": {}})
+        closure = frozenset({"beta"})
+        assert collect_closure_write_paths(closure, provider.resolver) == ()
+
+    def test_closure_unions_write_paths(self, tmp_path: Path) -> None:
+        provider = _make_synthetic_provider(
+            tmp_path,
+            {
+                "root": {
+                    "deps": ["dep-a"],
+                    "write_paths": ["{{AUTOSKILLIT_TEMP}}/root/"],
+                },
+                "dep-a": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/dep-a/"]},
+            },
+        )
+        closure = frozenset({"root", "dep-a"})
+        result = collect_closure_write_paths(closure, provider.resolver)
+        assert "{{AUTOSKILLIT_TEMP}}/root/" in result
+        assert "{{AUTOSKILLIT_TEMP}}/dep-a/" in result
+
+    def test_dedup_across_skills(self, tmp_path: Path) -> None:
+        provider = _make_synthetic_provider(
+            tmp_path,
+            {
+                "a": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/shared/"]},
+                "b": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/shared/"]},
+            },
+        )
+        closure = frozenset({"a", "b"})
+        result = collect_closure_write_paths(closure, provider.resolver)
+        assert result.count("{{AUTOSKILLIT_TEMP}}/shared/") == 1
+
+    def test_unresolvable_skill_skipped(self, tmp_path: Path) -> None:
+        provider = _make_synthetic_provider(
+            tmp_path,
+            {"real": {"write_paths": ["{{AUTOSKILLIT_TEMP}}/real/"]}},
+        )
+        closure = frozenset({"real", "ghost"})
+        result = collect_closure_write_paths(closure, provider.resolver)
+        assert result == ("{{AUTOSKILLIT_TEMP}}/real/",)

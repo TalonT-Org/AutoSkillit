@@ -20,6 +20,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `planner_result_naming_guard.py` | Blocks Write/Edit with non-canonical planner result filenames (e.g. `P1-A1-WP2a_result.json`); denies with correction hint |
 | `planner_gh_discovery_guard.py` | Blocks GitHub issue/PR listing in planner sessions |
 | `artifact_download_guard.py` | Blocks `gh run download` and `gh release download` without `--dir` flag |
+| `git_ops_guard.py` | Blocks destructive git operations (commit --amend, push --force, reset --hard, clean -f, checkout .) in headless skill sessions |
 | `pr_create_guard.py` | Blocks `gh pr create` via `run_cmd` when kitchen is open |
 | `quota_guard.py` | Blocks `run_skill` when quota threshold exceeded; fails open on missing cache |
 | `ingredient_lock_guard.py` | Blocks `run_skill` for steps locked by `lock_ingredients`; supplemental to server-side enforcement |

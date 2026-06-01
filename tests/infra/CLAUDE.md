@@ -31,6 +31,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_generated_files.py` | Tests that generated files with machine-local paths are not tracked in git |
 | `test_gitattributes.py` | REQ-R741-A03: .gitattributes must exist and mark vendored JS as binary |
 | `test_grep_pattern_lint_guard.py` | Tests for grep_pattern_lint_guard.py — PreToolUse hook for Grep tool pattern syntax |
+| `test_git_ops_guard.py` | Tests for the git_ops_guard PreToolUse hook — blocks destructive git operations in headless sessions |
 | `test_guard_coverage.py` | Structural test: destructive tools have PreToolUse hook coverage |
 | `test_skill_orchestration_guard.py` | Tests for skill_orchestration_guard.py PreToolUse hook |
 | `test_manifest_completeness.py` | Manifest completeness and orphan detection tests for the test-filter manifest |
@@ -48,6 +49,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_pyproject_metadata.py` | Verify pyproject.toml contains required public release metadata |
 | `test_resume_ownership_guard.py` | Tests for resume_ownership_guard.py PreToolUse hook — ownership validation at resume |
 | `test_risky_gh_subcommand_coverage.py` | Structural enforcement: risky gh subcommands must have guard coverage |
+| `test_risky_git_ops_coverage.py` | Structural enforcement: risky git operations must have guard coverage |
 | `test_release_sanity.py` | Release-readiness sanity checks |
 | `test_release_workflows.py` | Structural contract tests for the release CI workflows |
 | `test_remove_clone_guard.py` | Tests for the remove_clone_guard PreToolUse hook |

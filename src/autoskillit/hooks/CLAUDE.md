@@ -19,7 +19,7 @@ Sub-packages: guards/ (see guards/CLAUDE.md), formatters/ (see formatters/CLAUDE
 | `pipeline_step_post_hook.py` | `PostToolUse`: auto-marks pipeline steps complete after `run_skill` |
 | `ingredient_lock_guard.py` | PreToolUse guard script (see guards/CLAUDE.md) |
 | `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`) |
-| `_command_classification.py` | Shared stdlib-only command classification primitives for guard scripts (interpreter/wrapper detection) |
+| `_command_classification.py` | Shared stdlib-only command classification primitives for guard scripts (interpreter/wrapper detection, git command classification) |
 
 ## Architecture Notes
 

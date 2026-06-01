@@ -14,6 +14,8 @@ import pytest
 from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER as STAMP
 from autoskillit.core.paths import pkg_root
 
+pytestmark = [pytest.mark.small]
+
 
 @pytest.fixture(scope="module")
 def audit_impl_text() -> str:

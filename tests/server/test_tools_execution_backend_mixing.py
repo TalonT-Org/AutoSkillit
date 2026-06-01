@@ -28,7 +28,7 @@ async def test_codex_backend_minimax_profile_with_anthropic_base_url_derives_ove
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     fake_backend = MagicMock(spec=CodingAgentBackend)
-    type(fake_backend).name = property(lambda self: "codex")
+    fake_backend.capabilities.anthropic_provider_capable = False
     tool_ctx_kitchen_open.backend = fake_backend
     tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
@@ -72,7 +72,7 @@ async def test_codex_backend_non_anthropic_profile_without_base_url_no_override(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     fake_backend = MagicMock(spec=CodingAgentBackend)
-    type(fake_backend).name = property(lambda self: "codex")
+    fake_backend.capabilities.anthropic_provider_capable = True
     tool_ctx_kitchen_open.backend = fake_backend
     tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)

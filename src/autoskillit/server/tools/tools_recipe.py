@@ -318,7 +318,10 @@ async def migrate_recipe(name: str, ctx: Context = CurrentContext()) -> str:
                 extra={"recipe_name": name},
             )
 
-            from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_config,
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
 

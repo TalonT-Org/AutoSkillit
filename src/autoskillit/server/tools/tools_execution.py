@@ -16,17 +16,27 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
     DISPATCH_ID_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     SkillResult,
     ValidatedAddDir,
+    WriteBehaviorSpec,
+    claude_code_project_dir,
+    execution_marker,
     extract_skill_name,
+    find_caller_session_id,
     get_logger,
+    is_feature_enabled,
+    resolve_target_skill,
     truncate_text,
     validate_project_local_skill_dir,
 )
+from autoskillit.core import current_order_id as _current_order_id
+from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
+from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
@@ -44,6 +54,11 @@ from autoskillit.server._misc import (
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._execution_helpers import (
+    _import_and_call,
+    resolve_relative_path_args,
+    validate_path_arg_anchoring,
+)
 
 logger = get_logger(__name__)
 
@@ -68,7 +83,7 @@ def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool
 
 def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     """Check if step_name is locked out by ingredient locks. Returns deny JSON or None."""
-    from autoskillit.server import _get_ctx
+    from autoskillit.server import _get_ctx  # circular-break
 
     ctx = _get_ctx()
     overlay_path = _hook_config_overlay_path(ctx.project_dir)
@@ -115,12 +130,11 @@ def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
 
 def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
     """Check if step_name's dependencies are satisfied. Returns deny JSON or None."""
-    from autoskillit.pipeline import canonical_step_name
 
     effective_oid = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
     if not effective_oid:
         return None
-    from autoskillit.server import _get_ctx
+    from autoskillit.server import _get_ctx  # circular-break
 
     ctx = _get_ctx()
     tracker_path = _pipeline_tracker_path(ctx.project_dir, effective_oid)
@@ -130,7 +144,7 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
         tracker = json.loads(tracker_path.read_text())
     except (json.JSONDecodeError, OSError):
         return None
-    canonical = canonical_step_name(step_name)
+    canonical = _canonical_step_name(step_name)
     deps = tracker.get("dependencies", {}).get(canonical, [])
     if not deps:
         return None
@@ -180,7 +194,7 @@ def _resolve_step_name_from_recipe(
 
 def _has_active_locks(order_id: str) -> bool:
     """Return True if any ingredient locks are actively denying steps."""
-    from autoskillit.server import _get_ctx
+    from autoskillit.server import _get_ctx  # circular-break
 
     ctx = _get_ctx()
     overlay_path = _hook_config_overlay_path(ctx.project_dir)
@@ -230,7 +244,7 @@ async def run_cmd(
                 ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd}
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
             _start = time.monotonic()
@@ -324,12 +338,6 @@ async def run_python(
                 "autoskillit.run_python",
                 extra={"callable": callable},
             )
-            from autoskillit.server.tools._execution_helpers import (
-                _import_and_call,  # noqa: PLC0415
-                resolve_relative_path_args,  # noqa: PLC0415
-                validate_path_arg_anchoring,  # noqa: PLC0415
-            )
-
             if work_dir and not Path(work_dir).is_absolute():
                 return json.dumps(
                     {
@@ -359,13 +367,13 @@ async def run_python(
 
 
 def _persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
-    from autoskillit.server._misc import persist_run_skill_state  # noqa: PLC0415
+    from autoskillit.server._misc import persist_run_skill_state  # circular-break
 
     persist_run_skill_state(skill_result, project_dir)
 
 
 def _clear_run_skill_state(project_dir: Path) -> None:
-    from autoskillit.server._misc import clear_run_skill_state  # noqa: PLC0415
+    from autoskillit.server._misc import clear_run_skill_state  # circular-break
 
     clear_run_skill_state(project_dir)
 
@@ -495,7 +503,7 @@ async def run_skill(
         return _dep_denial
     try:
         _sn_token = _oid_token = None
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import _get_ctx  # circular-break
 
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
@@ -539,7 +547,7 @@ async def run_skill(
                 extra={"cwd": cwd, "model": model or "default"},
             )
 
-            from autoskillit.server import _get_config
+            from autoskillit.server import _get_config  # circular-break
 
             # Auto-enrich order_id from the fleet dispatcher's env variable when the
             # caller did not pass an explicit value. AUTOSKILLIT_DISPATCH_ID is injected
@@ -567,11 +575,6 @@ async def run_skill(
             profile_name_out: str = ""
             effective_model = model
 
-            from autoskillit.core import (
-                AGENT_BACKEND_CLAUDE_CODE,
-                is_feature_enabled,
-            )
-
             _cfg = _get_config()
             if not step_provider and step_name and tool_ctx.active_recipe_steps is not None:
                 _recipe_step_pre = tool_ctx.active_recipe_steps.get(step_name)
@@ -586,7 +589,7 @@ async def run_skill(
             if is_feature_enabled(
                 "providers", _cfg.features, experimental_enabled=_cfg.experimental_enabled
             ):
-                from autoskillit.server._guards import (
+                from autoskillit.server._guards import (  # circular-break
                     _resolve_model_as_profile,
                     _resolve_provider_profile,
                 )
@@ -637,17 +640,12 @@ async def run_skill(
                 expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
 
             # Look up write-expectation metadata from skill contract
-            from autoskillit.core import WriteBehaviorSpec
-
             write_spec: WriteBehaviorSpec | None = None
             if tool_ctx.write_expected_resolver:
                 write_spec = tool_ctx.write_expected_resolver(skill_command)
 
             # Build validated add_dirs via DefaultSessionSkillManager
-            from pathlib import Path
             from uuid import uuid4
-
-            from autoskillit.core import resolve_target_skill
 
             # Resolve correct namespace and prepare for tier2 activation
             resolved_command = skill_command
@@ -843,24 +841,8 @@ async def run_skill(
             if _local_dir is not None:
                 skill_add_dirs.append(_local_dir)
 
-            from autoskillit.pipeline.context import (  # noqa: PLC0415
-                current_order_id as _current_order_id,
-            )
-            from autoskillit.pipeline.context import (  # noqa: PLC0415
-                current_step_name as _current_step_name,
-            )
-            from autoskillit.pipeline.tokens import (  # noqa: PLC0415
-                canonical_step_name as _canonical_step_name,
-            )
-
             _sn_token = _current_step_name.set(_canonical_step_name(step_name))
             _oid_token = _current_order_id.set(effective_order_id)
-
-            from autoskillit.core import (  # noqa: PLC0415
-                claude_code_project_dir,
-                execution_marker,
-                find_caller_session_id,
-            )
 
             _marker_dir: Path | None = None
             try:
@@ -927,7 +909,7 @@ async def run_skill(
                     _persist_run_skill_state(skill_result, tool_ctx.project_dir)
                 if effective_order_id:
                     skill_result.order_id = effective_order_id
-                from autoskillit.server._misc import (  # noqa: PLC0415
+                from autoskillit.server._misc import (  # circular-break
                     _refresh_quota_cache,
                 )
 

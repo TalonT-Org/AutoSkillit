@@ -63,7 +63,7 @@ async def test_check(
                 extra={"worktree": worktree_path},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
             if tool_ctx.tester is None:
@@ -164,7 +164,7 @@ async def reset_test_dir(
                 extra={"resolved": resolved, "force": force},
             )
 
-            from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import _get_config, _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
             _start = time.monotonic()
@@ -250,7 +250,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                 )
                 return json.dumps({"error": f"Directory does not exist: {resolved}"})
 
-            from autoskillit.server import _get_config
+            from autoskillit.server import _get_config  # circular-break
 
             marker_name = _get_config().safety.reset_guard_marker
             marker_path = Path(resolved) / marker_name
@@ -302,7 +302,7 @@ async def reset_workspace(test_dir: str, ctx: Context = CurrentContext()) -> str
                     }
                 )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
             if tool_ctx.workspace_mgr is None:

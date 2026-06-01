@@ -10,21 +10,21 @@ import pytest
 pytestmark = [pytest.mark.layer("core"), pytest.mark.medium]
 
 
-def test_server_import_does_not_load_fleet_package_lazily() -> None:
+def test_server_import_loads_fleet_package_eagerly() -> None:
     """
-    Fleet module loading is deferred to lifespan/tool-call time via lazy imports.
-    A bare `import autoskillit.server` must not pull in autoskillit.fleet.* —
-    not because of an env-var gate, but because no top-level fleet import exists.
+    Fleet imports in server/ are hoisted to module level so they bind at startup
+    before core's lazy_loader freezes the symbol map. Importing autoskillit.server
+    must pull in autoskillit.fleet.
     """
     code = (
         "import sys; import autoskillit.server; "
         "fleet_modules = [k for k in sys.modules if k.startswith('autoskillit.fleet')]; "
-        "print(fleet_modules)"
+        "print(bool(fleet_modules))"
     )
     result = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
-    assert result.stdout.strip() == "[]", f"Fleet modules leaked: {result.stdout}"
+    assert result.stdout.strip() == "True", f"Fleet modules not loaded: {result.stdout}"
 
 
 def test_cli_app_import_does_not_load_fleet_package() -> None:

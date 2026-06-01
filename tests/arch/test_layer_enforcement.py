@@ -467,6 +467,139 @@ def test_il2_no_deferred_upward_imports(pkg_name: str) -> None:
     assert not violations, f"Deferred layer violations in {pkg_name}/:\n" + "\n".join(violations)
 
 
+def test_il3_unnecessary_deferred_imports() -> None:
+    """IL-3 server/ must not defer imports from lower-layer packages.
+
+    Deferred imports of IL-0/IL-1/IL-2 from IL-3 cannot be circular (lower layers
+    never import server/), so they are unnecessary and create hot-upgrade race
+    conditions when the MCP server reloads modules after uv tool install.
+    """
+    server_dir = SRC_ROOT / "server"
+    assert server_dir.exists(), "server/ package must exist"
+    violations: list[str] = []
+
+    for py_file in sorted(server_dir.rglob("*.py")):
+        source = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(py_file))
+        deferred_nodes = _collect_deferred_imports(tree)
+        tc_lines = _type_checking_lines(tree)
+        source_lines = source.splitlines()
+
+        for node in deferred_nodes:
+            if node.lineno in tc_lines:
+                continue
+
+            stems: list[str] = []
+            if isinstance(node, ast.ImportFrom) and node.module:
+                parts = node.module.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    stems = [parts[1]]
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    if parts[0] == "autoskillit" and len(parts) > 1:
+                        stems.append(parts[1])
+
+            for imported_stem in stems:
+                if imported_stem not in SUBPACKAGE_LAYERS:
+                    continue
+                imported_layer = SUBPACKAGE_LAYERS[imported_stem]
+                if imported_layer >= SUBPACKAGE_LAYERS["server"]:
+                    continue
+                line_text = source_lines[node.lineno - 1]
+                if "# circular-break" in line_text:
+                    continue
+                violations.append(
+                    f"  {_rel(py_file)}:{node.lineno}: server (IL-3) "
+                    f"deferred-imports {imported_stem} (IL-{imported_layer})"
+                    f" — hoist to module level or add # circular-break"
+                )
+
+    assert not violations, "Unnecessary deferred cross-layer imports in server/:\n" + "\n".join(
+        violations
+    )
+
+
+def test_il3_deferred_autoskillit_imports_tagged() -> None:
+    """Every autoskillit.* deferred import in server/ must carry a # circular-break tag.
+
+    Generalizes the single-site check test_workspace_deferred_import_has_comment into a
+    universal policy for IL-3. Ensures all deferred imports document their justification.
+    """
+    server_dir = SRC_ROOT / "server"
+    assert server_dir.exists(), "server/ package must exist"
+    violations: list[str] = []
+
+    for py_file in sorted(server_dir.rglob("*.py")):
+        source = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(py_file))
+        deferred_nodes = _collect_deferred_imports(tree)
+        tc_lines = _type_checking_lines(tree)
+        source_lines = source.splitlines()
+
+        for node in deferred_nodes:
+            if node.lineno in tc_lines:
+                continue
+
+            is_autoskillit = False
+            if isinstance(node, ast.ImportFrom) and node.module:
+                parts = node.module.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    is_autoskillit = True
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    if parts[0] == "autoskillit" and len(parts) > 1:
+                        is_autoskillit = True
+
+            if not is_autoskillit:
+                continue
+
+            line_text = source_lines[node.lineno - 1]
+            if "# circular-break" not in line_text:
+                violations.append(
+                    f"  {_rel(py_file)}:{node.lineno}: deferred autoskillit import "
+                    f"missing # circular-break tag"
+                )
+
+    assert not violations, (
+        "Deferred autoskillit.* imports in server/ without # circular-break tag:\n"
+        + "\n".join(violations)
+    )
+
+
+def test_il3_cross_layer_imports_hoisted() -> None:
+    """Cross-layer deferred imports in server/ must be hoisted to module level."""
+    server_root = SRC_ROOT / "server"
+    violations: list[str] = []
+    for py_path in sorted(server_root.rglob("*.py")):
+        source = py_path.read_text()
+        tree = ast.parse(source, filename=str(py_path))
+        tc = _type_checking_lines(tree)
+        for node in _collect_deferred_imports(tree):
+            if node.lineno in tc:
+                continue
+            if isinstance(node, ast.ImportFrom) and node.module:
+                parts = node.module.split(".")
+            elif isinstance(node, ast.Import):
+                parts = node.names[0].name.split(".")
+            else:
+                continue
+            if parts[0] != "autoskillit" or len(parts) < 2:
+                continue
+            if parts[1] == "server":
+                continue
+            rel = _rel(py_path)
+            violations.append(
+                f"  {rel}:{node.lineno}: deferred cross-layer import of autoskillit.{parts[1]}"
+            )
+    assert not violations, (
+        "Cross-layer deferred imports in server/ must be hoisted to module "
+        "level (lower layers cannot cause circular imports with server/):\n"
+        + "\n".join(violations)
+    )
+
+
 def test_workspace_deferred_import_has_comment() -> None:
     """P14-F2: deferred import in cli/app.py must carry a rationale comment."""
     src = (SRC_ROOT / "cli" / "app.py").read_text()

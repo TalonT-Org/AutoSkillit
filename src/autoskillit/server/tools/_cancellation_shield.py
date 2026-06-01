@@ -16,7 +16,7 @@ from typing import Any, Literal, TypeVar
 
 import anyio
 
-from autoskillit.core import get_logger
+from autoskillit.core import FleetErrorCode, fleet_error, get_logger
 
 logger = get_logger(__name__)
 
@@ -54,8 +54,6 @@ def _build_cancellation_response(result_type: str) -> str:
     """Build a structured JSON error response for transport-level CancelledError."""
     msg = "CancelledError: transport teardown"
     if result_type == "fleet_error":
-        from autoskillit.core import FleetErrorCode, fleet_error  # noqa: PLC0415
-
         return fleet_error(FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH, msg)
     if result_type in ("run_cmd", "run_python"):
         return json.dumps({"success": False, "exit_code": -1, "stdout": "", "stderr": msg})

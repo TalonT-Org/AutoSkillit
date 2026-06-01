@@ -194,7 +194,9 @@ async def prepare_issue(
                 extra={"dry_run": dry_run, "split": split},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.executor is None:
@@ -306,7 +308,9 @@ async def enrich_issues(
                 extra={"dry_run": dry_run},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.executor is None:

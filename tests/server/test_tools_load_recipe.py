@@ -412,7 +412,7 @@ class TestApplyTriageGate:
         mock_triage = AsyncMock(
             return_value=[{"meaningful": False, "summary": "ok", "skill": "investigate"}]
         )
-        with patch("autoskillit._llm_triage.triage_staleness", mock_triage):
+        with patch("autoskillit.server._misc.triage_staleness", mock_triage):
             # First call: triage_staleness invoked once
             await _apply_triage_gate(copy.deepcopy(result_template), name, recipe_info=recipe_info)
 
@@ -424,7 +424,7 @@ class TestApplyTriageGate:
         assert cached is not None
         assert cached.triage_result == "cosmetic"
 
-        with patch("autoskillit._llm_triage.triage_staleness", mock_triage):
+        with patch("autoskillit.server._misc.triage_staleness", mock_triage):
             # Second call: must read from cache and skip triage_staleness entirely
             await _apply_triage_gate(copy.deepcopy(result_template), name, recipe_info=recipe_info)
 

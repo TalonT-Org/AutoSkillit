@@ -42,7 +42,7 @@ def _apply_session_type_visibility() -> None:
     Non-notification backends (e.g. Codex) do not process notifications/tools/list_changed
     so kitchen tools are pre-revealed at startup when AUTOSKILLIT_MCP_CLIENT_BACKEND=codex.
     """
-    from autoskillit.server import mcp
+    from autoskillit.server import mcp  # circular-break
 
     _session = _resolve_session_type()
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"

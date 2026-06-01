@@ -54,6 +54,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_kitchen_guard_scoping.py` | Architectural enforcement: any_kitchen_open call-site scoping and test helper isolation |
 | `test_kitchen_id_assignment.py` | AST guard: ctx.kitchen_id assignment only via resolve_kitchen_id() |
 | `test_layer_enforcement.py` | MCP tool registry + import layer contracts + cross-package rules |
+| `test_pyi_stub_completeness.py` | Stub-symbol completeness: verifies core submodule public symbols appear in __init__.pyi |
 | `test_layer_markers.py` | Enforce pytestmark layer markers on all in-scope test files |
 | `test_conftest_env_coverage.py` | Structural guard: root conftest _clear_private_env fixture must reference AUTOSKILLIT_PRIVATE_ENV_VARS and _HEADLESS_EXCLUSIVE_VARS programmatically |
 | `test_make_context_env_boundary.py` | AST guard: _factory.py functions must not read AUTOSKILLIT_PRIVATE_ENV_VARS from os.environ |

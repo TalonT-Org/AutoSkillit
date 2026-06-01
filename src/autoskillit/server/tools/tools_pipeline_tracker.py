@@ -88,7 +88,9 @@ async def record_pipeline_step(
                 }
             )
 
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import (  # circular-break
+            _get_ctx,
+        )  # circular-break: server-internal circular dependency
 
         ctx = _get_ctx()
         tracker_path = _pipeline_tracker_path(ctx.project_dir, effective_pipeline_id)

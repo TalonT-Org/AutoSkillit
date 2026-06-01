@@ -24,6 +24,7 @@ from autoskillit.core import (
     PluginSource,
     SubprocessRunner,
     WriteBehaviorSpec,
+    _get_autoskillit_install_path,
     detect_autoskillit_mcp_prefix,
     get_logger,
     is_feature_enabled,
@@ -42,9 +43,13 @@ from autoskillit.execution import (
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
     DefaultMergeQueueWatcher,
+    DefaultSubprocessRunner,
     DefaultTestRunner,
+    RecordingSubprocessRunner,
     build_replay_runner,
+    get_backend,
 )
+from autoskillit.fleet import FleetSemaphore, build_protected_campaign_ids
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
     DefaultAuditLog,
@@ -110,7 +115,6 @@ def _default_plugin_dir() -> Path:
 
 def _resolve_marketplace_cache_path() -> Path:
     """Read the installPath for autoskillit from installed_plugins.json."""
-    from autoskillit.core import _get_autoskillit_install_path
 
     return _get_autoskillit_install_path()
 
@@ -203,15 +207,7 @@ def make_context(
         passed explicitly, tester is left as None.
     """
     if runner is _UNSET:
-        from autoskillit.execution import DefaultSubprocessRunner
-
         runner = DefaultSubprocessRunner()
-
-    from autoskillit.execution import get_backend  # lazy: avoids execution init on server import
-    from autoskillit.fleet import (  # lazy: avoids fleet init on server import
-        FleetSemaphore,
-        build_protected_campaign_ids,
-    )
 
     _codex_feature_enabled = is_feature_enabled(
         "codex_backend", config.features, experimental_enabled=config.experimental_enabled
@@ -272,8 +268,6 @@ def make_context(
                         make_scenario_recorder = None  # type: ignore[assignment]
 
                     if make_scenario_recorder is not None:
-                        from autoskillit.execution import RecordingSubprocessRunner
-
                         recorder = make_scenario_recorder(
                             output_dir=scenario_dir, recipe_name=recipe_name
                         )

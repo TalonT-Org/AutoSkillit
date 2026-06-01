@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 
 def _get_ctx_or_none():  # type: ignore[return]
-    from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn
+    from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn  # circular-break
 
     return _ctx_none_fn()
 

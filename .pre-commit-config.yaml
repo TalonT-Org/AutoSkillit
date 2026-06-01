@@ -74,6 +74,13 @@ repos:
         files: __init__\.pyi$
         pass_filenames: false
 
+      - id: check-pyi-stub-symbols
+        name: Check __init__.pyi stub symbol completeness
+        language: system
+        entry: python scripts/check_pyi_stub_symbols.py
+        files: __init__\.pyi$
+        pass_filenames: false
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

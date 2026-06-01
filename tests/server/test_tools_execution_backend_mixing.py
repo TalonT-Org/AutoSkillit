@@ -32,7 +32,8 @@ async def test_codex_backend_minimax_profile_with_anthropic_base_url_derives_ove
     tool_ctx_kitchen_open.backend = fake_backend
     tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
         lambda *a, **kw: (
@@ -76,7 +77,8 @@ async def test_anthropic_capable_backend_profile_without_base_url_no_override(
     tool_ctx_kitchen_open.backend = fake_backend
     tool_ctx_kitchen_open.session_skill_manager = None
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
         lambda *a, **kw: (

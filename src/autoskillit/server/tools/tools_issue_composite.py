@@ -63,7 +63,9 @@ async def claim_and_resolve_issue(
         ):
             logger.info("claim_and_resolve_issue", issue_url=issue_url)
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.github_client is None:

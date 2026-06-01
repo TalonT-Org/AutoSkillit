@@ -101,7 +101,9 @@ async def wait_for_ci(
         with structlog.contextvars.bound_contextvars(tool="wait_for_ci"):
             logger.info("wait_for_ci", branch=branch, repo=repo or "(infer)")
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             _timing_ctx = tool_ctx
@@ -264,7 +266,9 @@ async def get_ci_status(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import (  # circular-break
+            _get_ctx,
+        )  # circular-break: server-internal circular dependency
 
         tool_ctx = _get_ctx()
         if tool_ctx.ci_watcher is None:

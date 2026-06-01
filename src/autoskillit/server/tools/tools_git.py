@@ -71,9 +71,9 @@ async def merge_worktree(
                 extra={"worktree": worktree_path, "base": base_branch},
             )
 
-            from autoskillit.server import _get_config, _get_ctx
-            from autoskillit.server._misc import resolve_remote_name
-            from autoskillit.server.git import perform_merge
+            from autoskillit.server import _get_config, _get_ctx  # circular-break
+            from autoskillit.server._misc import resolve_remote_name  # circular-break
+            from autoskillit.server.git import perform_merge  # circular-break
 
             tool_ctx = _get_ctx()
             runner = tool_ctx.runner
@@ -162,9 +162,9 @@ async def classify_fix(
                     }
                 )
 
-            from autoskillit.server import _get_config, _get_ctx
-            from autoskillit.server._misc import resolve_remote_name
-            from autoskillit.server.git import _filter_changed_files
+            from autoskillit.server import _get_config, _get_ctx  # circular-break
+            from autoskillit.server._misc import resolve_remote_name  # circular-break
+            from autoskillit.server.git import _filter_changed_files  # circular-break
 
             tool_ctx = _get_ctx()
             _start = time.monotonic()
@@ -325,7 +325,7 @@ async def create_unique_branch(
                 extra={"remote": remote},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
             _start = time.monotonic()
@@ -546,7 +546,7 @@ async def create_and_publish_branch(
                 extra={"run_name": run_name, "issue_number": issue_number},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import _get_ctx  # circular-break
 
             tool_ctx = _get_ctx()
             clone_mgr = tool_ctx.clone_mgr
@@ -562,7 +562,7 @@ async def create_and_publish_branch(
             base_name = _compute_branch_name(issue_slug, run_name, issue_number)
             compute_ms = int((time.monotonic() - _compute_start) * 1000)
 
-            from autoskillit.server._misc import resolve_remote_name
+            from autoskillit.server._misc import resolve_remote_name  # circular-break
 
             _branch_start = time.monotonic()
             resolved_remote = await resolve_remote_name(work_dir)

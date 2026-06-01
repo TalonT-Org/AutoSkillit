@@ -90,7 +90,9 @@ async def clone_repo(
                 },
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.clone_mgr is None:
@@ -161,7 +163,9 @@ async def remove_clone(
                 extra={"clone_path": clone_path, "keep": keep},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.clone_mgr is None:
@@ -238,7 +242,9 @@ async def push_to_remote(
                 },
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             clone_mgr = tool_ctx.clone_mgr
@@ -337,7 +343,9 @@ async def register_clone_status(
                     }
                 )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             owner = os.environ.get(CAMPAIGN_ID_ENV_VAR, "") or tool_ctx.kitchen_id
@@ -414,7 +422,9 @@ async def batch_cleanup_clones(
         with structlog.contextvars.bound_contextvars(tool="batch_cleanup_clones"):
             logger.info("batch_cleanup_clones", registry_path=registry_path, all_owners=all_owners)
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.clone_mgr is None:
@@ -551,7 +561,9 @@ async def bootstrap_clone(
                 },
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.clone_mgr is None:

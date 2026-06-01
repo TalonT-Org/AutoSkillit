@@ -117,19 +117,19 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
-    ("src/autoskillit/server/_lifespan.py", 64),
+    ("src/autoskillit/server/_lifespan.py", 87),
     # tools_kitchen.py — hook config, quota guard, git_ops_policy, ingredient locks overlay
-    ("src/autoskillit/server/tools/tools_kitchen.py", 132),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 151),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 185),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 138),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 157),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 191),
     ("src/autoskillit/server/tools/tools_kitchen.py", 809),
     ("src/autoskillit/server/tools/tools_kitchen.py", 869),
     # tools_pipeline_tracker.py — tracker_data dict
-    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 164),
+    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 166),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools/tools_status.py", 513),
+    ("src/autoskillit/server/tools/tools_status.py", 529),
     # tools_github.py — bug report dict
-    ("src/autoskillit/server/tools/tools_github.py", 307),
+    ("src/autoskillit/server/tools/tools_github.py", 312),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 24),
     # _init_helpers.py — ~/.claude.json (co-owned)
@@ -143,7 +143,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _marketplace.py — hooks.json (co-owned)
     ("src/autoskillit/cli/_marketplace.py", 188),
     # tools_config.py — hook config overlay dict (session-scoped, not schema-versioned)
-    ("src/autoskillit/server/tools/tools_config.py", 48),
+    ("src/autoskillit/server/tools/tools_config.py", 50),
     # _update_checks.py — dismissal state file
     ("src/autoskillit/cli/update/_update_checks.py", 77),
     # _update_checks_fetch.py — fetch cache (extracted from _update_checks.py)

@@ -165,9 +165,8 @@ class TestDispatchFoodTruckCampaignState:
                 per_dispatch_state_path=None,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
@@ -199,9 +198,8 @@ class TestDispatchFoodTruckCampaignState:
                 per_dispatch_state_path=None,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
@@ -232,9 +230,8 @@ class TestDispatchFoodTruckCampaignState:
                 per_dispatch_state_path=None,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
@@ -268,9 +265,8 @@ class TestDispatchFoodTruckCampaignState:
                 per_dispatch_state_path=None,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
@@ -346,9 +342,8 @@ class TestCampaignStateFieldCompleteness:
                 per_dispatch_state_path=per_dispatch_sp,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
@@ -415,9 +410,8 @@ class TestCampaignStateFieldCompleteness:
                 per_dispatch_state_path=per_dispatch_sp,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
@@ -486,9 +480,8 @@ class TestCampaignStateFieldCompleteness:
                 per_dispatch_state_path=per_dispatch_sp,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
@@ -525,9 +518,8 @@ class TestCampaignStateFieldCompleteness:
                 per_dispatch_state_path=None,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
@@ -772,9 +764,8 @@ class TestValidationFailureCampaignState:
                 per_dispatch_state_path=None,
             )
 
-        import autoskillit.fleet
-
-        monkeypatch.setattr(autoskillit.fleet, "execute_dispatch", _fake_execute)
+        _exec_path = "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch"
+        monkeypatch.setattr(_exec_path, _fake_execute)
 
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 

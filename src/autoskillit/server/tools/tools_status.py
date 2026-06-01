@@ -11,7 +11,17 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import (
+    atomic_write,
+    compute_analysis,
+    filter_sessions_by_recipe,
+    format_top_bigrams,
+    get_logger,
+    parse_sessions_from_summary_dir,
+    render_adjacency_table,
+    render_dot,
+    render_mermaid,
+)
 from autoskillit.pipeline import TelemetryFormatter
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
@@ -28,7 +38,7 @@ logger = get_logger(__name__)
 
 def _get_log_root() -> Path:
     """Return the resolved log root directory for the current context."""
-    from autoskillit.server import _get_ctx
+    from autoskillit.server import _get_ctx  # circular-break: server-internal circular dependency
 
     return resolve_log_dir(_get_ctx().config.linux_tracing.log_dir)
 
@@ -52,7 +62,11 @@ async def kitchen_status() -> str:
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="kitchen_status"):
         try:
-            from autoskillit.server import _get_config, _get_ctx, version_info
+            from autoskillit.server import (  # circular-break
+                _get_config,
+                _get_ctx,
+                version_info,
+            )  # circular-break: server-internal circular dependency
 
             info = version_info()
             status = {
@@ -110,7 +124,9 @@ async def get_pipeline_report(clear: bool = False) -> str:
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
         try:
-            from autoskillit.server._state import _startup_ready
+            from autoskillit.server._state import (  # circular-break
+                _startup_ready,
+            )  # circular-break: server-internal circular dependency
 
             if _startup_ready is not None and not _startup_ready.is_set():
                 try:
@@ -125,7 +141,9 @@ async def get_pipeline_report(clear: bool = False) -> str:
                         }
                     )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             failures = _get_ctx().audit.get_report_as_dicts()
             if clear:
@@ -194,7 +212,9 @@ async def get_token_summary(clear: bool = False, format: str = "json", order_id:
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_token_summary"):
         try:
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             ctx = _get_ctx()
             steps = _merge_wall_clock_seconds(
@@ -259,7 +279,9 @@ async def get_timing_summary(clear: bool = False, format: str = "json", order_id
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_timing_summary"):
         try:
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             steps = _get_ctx().timing_log.get_report(order_id=order_id)
             total = _get_ctx().timing_log.compute_total(order_id=order_id)
@@ -322,16 +344,6 @@ async def analyze_tool_sequences(
                 return json.dumps(
                     {"success": False, "error": f"min_count must be >= 1, got {min_count}"}
                 )
-            from autoskillit.core import (
-                compute_analysis,
-                filter_sessions_by_recipe,
-                format_top_bigrams,
-                parse_sessions_from_summary_dir,
-                render_adjacency_table,
-                render_dot,
-                render_mermaid,
-            )
-
             log_root = _get_log_root()
             sessions = list(parse_sessions_from_summary_dir(log_root))
             if recipe:
@@ -422,7 +434,9 @@ async def get_quota_events(n: int = 50) -> str:
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_quota_events"):
         try:
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             ctx = _get_ctx()
             log_root = resolve_log_dir(ctx.config.linux_tracing.log_dir)
@@ -476,7 +490,9 @@ async def write_telemetry_files(
                 extra={"output_dir": output_dir},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             out = Path(output_dir)
@@ -607,7 +623,10 @@ async def read_db(
                 )
                 return json.dumps({"success": False, "error": f"Path is not a file: {db}"})
 
-            from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_config,
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.db_reader is None:

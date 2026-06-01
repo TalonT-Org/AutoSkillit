@@ -14,7 +14,7 @@ from autoskillit.server.tools.tools_issue_labels import claim_issue
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 _ISSUE_URL = "https://github.com/owner/repo/issues/42"
-_FLEET_MODULE = "autoskillit.fleet"
+_CLAIM_MODULE = "autoskillit.server.tools._claim_helpers"
 
 
 def _make_dead_dispatch() -> DispatchRecord:
@@ -55,9 +55,9 @@ class TestClaimIssueLiveness:
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=dead_dispatch),
-            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", return_value=False),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=dead_dispatch),
+            patch(f"{_CLAIM_MODULE}.is_dispatch_session_alive", return_value=False),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", cleanup_mock),
         ):
             result = json.loads(await claim_issue(_ISSUE_URL))
 
@@ -74,9 +74,9 @@ class TestClaimIssueLiveness:
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=dispatch),
-            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", return_value=True),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", AsyncMock()),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=dispatch),
+            patch(f"{_CLAIM_MODULE}.is_dispatch_session_alive", return_value=True),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", AsyncMock()),
         ):
             result = json.loads(await claim_issue(_ISSUE_URL))
 
@@ -88,7 +88,7 @@ class TestClaimIssueLiveness:
         """When no dispatch found for issue, claiming is blocked (manual label or unknown)."""
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
-        with patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=None):
+        with patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=None):
             result = json.loads(await claim_issue(_ISSUE_URL))
 
         assert result["success"] is True
@@ -103,9 +103,9 @@ class TestClaimIssueLiveness:
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=dispatch),
-            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", return_value=True),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=dispatch),
+            patch(f"{_CLAIM_MODULE}.is_dispatch_session_alive", return_value=True),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", cleanup_mock),
         ):
             await claim_issue(_ISSUE_URL)
 
@@ -123,9 +123,9 @@ class TestClaimAndResolveIssueLiveness:
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=dead_dispatch),
-            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", return_value=False),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=dead_dispatch),
+            patch(f"{_CLAIM_MODULE}.is_dispatch_session_alive", return_value=False),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", cleanup_mock),
         ):
             result = json.loads(await claim_and_resolve_issue(_ISSUE_URL))
 
@@ -142,9 +142,9 @@ class TestClaimAndResolveIssueLiveness:
         tool_ctx_kitchen_open.github_client = _mock_client_with_in_progress_label()
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=dispatch),
-            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", return_value=True),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", AsyncMock()),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=dispatch),
+            patch(f"{_CLAIM_MODULE}.is_dispatch_session_alive", return_value=True),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", AsyncMock()),
         ):
             result = json.loads(await claim_and_resolve_issue(_ISSUE_URL))
 
@@ -164,9 +164,9 @@ class TestClaimHelperParity:
         cleanup_mock = AsyncMock(return_value=True)
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=dead_dispatch),
-            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", return_value=False),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=dead_dispatch),
+            patch(f"{_CLAIM_MODULE}.is_dispatch_session_alive", return_value=False),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", cleanup_mock),
         ):
             decision = await _try_claim_with_liveness(
                 issue_url=_ISSUE_URL,
@@ -190,8 +190,8 @@ class TestClaimHelperParity:
         dispatch = _make_dead_dispatch()
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=dispatch),
-            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", return_value=True),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=dispatch),
+            patch(f"{_CLAIM_MODULE}.is_dispatch_session_alive", return_value=True),
         ):
             decision = await _try_claim_with_liveness(
                 issue_url=_ISSUE_URL,
@@ -222,8 +222,8 @@ class TestClaimHelperTerminalDispatchRecovery:
         cleanup_mock = AsyncMock(return_value=True)
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", cleanup_mock),
         ):
             decision = await _try_claim_with_liveness(
                 issue_url=_ISSUE_URL,
@@ -255,8 +255,8 @@ class TestClaimHelperTerminalDispatchRecovery:
         mark_cleaned_mock = AsyncMock()
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", cleanup_mock),
             patch(
                 "autoskillit.server.tools._claim_helpers._mark_dispatch_labels_cleaned",
                 mark_cleaned_mock,
@@ -290,9 +290,9 @@ class TestClaimHelperTerminalDispatchRecovery:
         liveness_mock = AsyncMock(return_value=True)
 
         with (
-            patch(f"{_FLEET_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
-            patch(f"{_FLEET_MODULE}.is_dispatch_session_alive", liveness_mock),
-            patch(f"{_FLEET_MODULE}.cleanup_orphaned_labels", AsyncMock(return_value=True)),
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
+            patch(f"{_CLAIM_MODULE}.is_dispatch_session_alive", liveness_mock),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", AsyncMock(return_value=True)),
         ):
             decision = await _try_claim_with_liveness(
                 issue_url=_ISSUE_URL,

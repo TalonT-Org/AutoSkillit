@@ -1103,10 +1103,10 @@ async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree"),
             patch("autoskillit.server._lifespan.resolve_kitchen_id", return_value="kitchen-test"),
             patch(
-                "autoskillit.fleet.discover_campaign_state_files",
+                "autoskillit.server._lifespan.discover_campaign_state_files",
                 return_value=[sp],
             ),
-            patch("autoskillit.core.register_active_kitchen"),
+            patch("autoskillit.server._lifespan.register_active_kitchen"),
         ):
             await _fleet_auto_gate_boot(ctx)
 

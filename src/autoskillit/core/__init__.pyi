@@ -82,9 +82,11 @@ from .runtime.kitchen_state import KitchenMarker as KitchenMarker
 from .runtime.kitchen_state import find_caller_session_id as find_caller_session_id
 from .runtime.kitchen_state import get_state_dir as get_state_dir
 from .runtime.kitchen_state import is_marker_fresh as is_marker_fresh
+from .runtime.kitchen_state import marker_path as marker_path
 from .runtime.kitchen_state import read_marker as read_marker
 from .runtime.kitchen_state import resolve_kitchen_id as resolve_kitchen_id
 from .runtime.kitchen_state import sweep_stale_markers as sweep_stale_markers
+from .runtime.kitchen_state import write_marker as write_marker
 from .runtime.readiness import cleanup_readiness_sentinel as cleanup_readiness_sentinel
 from .runtime.readiness import readiness_sentinel_path as readiness_sentinel_path
 from .runtime.readiness import write_readiness_sentinel as write_readiness_sentinel

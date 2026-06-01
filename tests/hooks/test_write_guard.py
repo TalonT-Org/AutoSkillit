@@ -879,3 +879,106 @@ class TestExtractBashWriteTargetsNewFamilies:
 
         result = _extract_bash_write_targets("git -C /repo reset --hard")
         assert result is not None
+
+
+class TestRedirectRelativePathResolution:
+    """Tests for redirect relative path resolution via AUTOSKILLIT_CWD."""
+
+    def test_relative_redirect_resolved_against_cwd(self, monkeypatch: pytest.MonkeyPatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("echo foo > output.txt")
+        assert result is not None
+        assert "/workspace/output.txt" in result
+
+    def test_relative_redirect_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp/")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _run_hook(_build_bash_event("echo foo > .autoskillit/temp/out.txt"))
+        assert result == ""
+
+    def test_relative_redirect_outside_prefix_denied(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp/")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _run_hook(_build_bash_event("echo foo > src/main.py"))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_no_cwd_relative_redirect_fails_open(self, monkeypatch: pytest.MonkeyPatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
+        result = _extract_bash_write_targets("echo foo > output.txt")
+        assert result is None
+
+
+class TestGhCommandRedirectChecking:
+    """gh commands with redirects must have their redirect targets checked."""
+
+    def test_gh_with_absolute_redirect_outside_prefix_denied(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp/")
+        result = _run_hook(_build_bash_event("gh pr diff 123 > /outside/file.txt"))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_gh_with_redirect_to_dev_null_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp/")
+        result = _run_hook(_build_bash_event("gh pr diff 123 > /dev/null"))
+        assert result == ""
+
+    def test_gh_with_relative_redirect_resolved(self, monkeypatch: pytest.MonkeyPatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("gh pr diff 123 > output.txt")
+        assert result is not None
+        assert "/workspace/output.txt" in result
+
+    def test_gh_with_redirect_within_prefix_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp/")
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _run_hook(_build_bash_event("gh pr diff 123 > .autoskillit/temp/diff.txt"))
+        assert result == ""
+
+
+class TestWriteGuardCrossProductMatrix:
+    """Cross-product test: every write mechanism resolves every path type."""
+
+    @pytest.mark.parametrize(
+        "cmd_template",
+        [
+            "echo x > {path}",
+            "echo x >> {path}",
+            "sed -i 's/x/y/' {path}",
+            "rm {path}",
+            "tee {path}",
+            "mv /src {path}",
+            "cp /src {path}",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "path_type,expected_resolved",
+        [
+            ("/workspace/src/main.py", "/workspace/src/main.py"),
+            ("src/main.py", "/workspace/src/main.py"),
+            ("./src/main.py", "/workspace/./src/main.py"),
+        ],
+    )
+    def test_all_write_mechanisms_resolve_all_path_types(
+        self, cmd_template, path_type, expected_resolved, monkeypatch: pytest.MonkeyPatch
+    ):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        cmd = cmd_template.format(path=path_type)
+        result = _extract_bash_write_targets(cmd)
+        assert result is not None, f"Expected write detection for: {cmd}"
+        assert expected_resolved in result, f"Expected {expected_resolved} in {result} for: {cmd}"

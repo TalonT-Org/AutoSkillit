@@ -18,6 +18,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     extract_interpreter_write_paths,
     extract_redirect_targets,
     is_gh_command,
+    resolve_write_target,
     tokenize_command_segments,
 )
 
@@ -79,11 +80,9 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
                 found_write = True
                 double_dash = segment.index("--", idx + 1)
                 for t in segment[double_dash + 1 :]:
-                    if t.startswith("/"):
-                        if t not in _PSEUDO_DEVICE_PATHS:
-                            targets.append(t)
-                    elif cwd:
-                        targets.append(os.path.join(cwd, t))
+                    resolved = resolve_write_target(t, cwd)
+                    if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(resolved)
             elif subcmd == "reset" and "--hard" in segment[idx + 1 :]:
                 found_write = True
     elif verb in _WRITE_VERBS:
@@ -94,45 +93,34 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
             flags = [t for t in segment[1:] if t.startswith("-")]
             has_inplace = any(t.startswith("-i") or t == "--in-place" for t in flags)
             if has_inplace and non_flag:
-                # non_flag: first element is typically the sed expression, last is file
                 path = non_flag[-1]
-                if path.startswith("/"):
-                    if path not in _PSEUDO_DEVICE_PATHS:
-                        targets.append(path)
-                elif cwd:
-                    targets.append(os.path.join(cwd, path))
+                resolved = resolve_write_target(path, cwd)
+                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(resolved)
         elif verb == "tee":
             if non_flag:
                 path = non_flag[0]
-                if path.startswith("/"):
-                    if path not in _PSEUDO_DEVICE_PATHS:
-                        targets.append(path)
-                elif cwd:
-                    targets.append(os.path.join(cwd, path))
+                resolved = resolve_write_target(path, cwd)
+                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(resolved)
         elif verb in ("mv", "cp"):
             if len(non_flag) >= 2:
                 path = non_flag[-1]
-                if path.startswith("/"):
-                    if path not in _PSEUDO_DEVICE_PATHS:
-                        targets.append(path)
-                elif cwd:
-                    targets.append(os.path.join(cwd, path))
+                resolved = resolve_write_target(path, cwd)
+                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(resolved)
         elif verb == "patch":
             for t in non_flag:
-                if t.startswith("/"):
-                    if t not in _PSEUDO_DEVICE_PATHS:
-                        targets.append(t)
-                    break
-                elif cwd:
-                    targets.append(os.path.join(cwd, t))
+                resolved = resolve_write_target(t, cwd)
+                if resolved is not None:
+                    if resolved not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(resolved)
                     break
         elif verb in ("rm", "unlink"):
             for t in non_flag:
-                if t.startswith("/"):
-                    if t not in _PSEUDO_DEVICE_PATHS:
-                        targets.append(t)
-                elif cwd:
-                    targets.append(os.path.join(cwd, t))
+                resolved = resolve_write_target(t, cwd)
+                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(resolved)
 
     if found_write:
         return targets
@@ -159,19 +147,15 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
             found_any_write = True
             all_targets.extend(result)
 
-    # Apply redirect regex to full command; skip only when all segments are gh.
-    has_non_gh = any(not is_gh_command(seg) for seg in segments)
-
-    if not segments or has_non_gh:
-        try:
-            flat_tokens = shlex.split(command)
-        except (ValueError, TypeError, AttributeError):
-            flat_tokens = []
-        redirect_paths = extract_redirect_targets(flat_tokens)
-        for path in redirect_paths:
-            found_any_write = True
-            if path not in _PSEUDO_DEVICE_PATHS:
-                all_targets.append(path)
+    try:
+        flat_tokens = shlex.split(command)
+    except (ValueError, TypeError, AttributeError):
+        flat_tokens = []
+    redirect_paths = extract_redirect_targets(flat_tokens, cwd)
+    for path in redirect_paths:
+        found_any_write = True
+        if path not in _PSEUDO_DEVICE_PATHS:
+            all_targets.append(path)
 
     if not found_any_write:
         return None

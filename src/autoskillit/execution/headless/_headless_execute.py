@@ -19,6 +19,7 @@ from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
     KillReason,
+    ModelIdentity,
     ProviderOutcome,
     RecipeIdentity,
     RetryReason,
@@ -107,8 +108,7 @@ async def _execute_claude_headless(
     marker_dir: Path | None = None,
     session_id: str | None = None,
     step_backend: CodingAgentBackend | None = None,
-    model_identifier: str = "",
-    profile_name: str = "",
+    model_identity: ModelIdentity = ModelIdentity.unknown(),
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -299,8 +299,7 @@ async def _execute_claude_headless(
                         version=recipe_version,
                     ),
                     max_sessions=ctx.config.linux_tracing.max_sessions,
-                    model_identifier=model_identifier,
-                    profile_name=profile_name,
+                    model_identity=model_identity,
                     telemetry=_build_error_path_telemetry(
                         ctx.github_api_log,
                         session_id="",
@@ -361,8 +360,7 @@ async def _execute_claude_headless(
                             version=recipe_version,
                         ),
                         max_sessions=ctx.config.linux_tracing.max_sessions,
-                        model_identifier=model_identifier,
-                        profile_name=profile_name,
+                        model_identity=model_identity,
                         telemetry=_build_error_path_telemetry(
                             ctx.github_api_log,
                             session_id="",
@@ -559,8 +557,7 @@ async def _execute_claude_headless(
                     version=recipe_version,
                 ),
                 max_sessions=ctx.config.linux_tracing.max_sessions,
-                model_identifier=model_identifier,
-                profile_name=profile_name,
+                model_identity=model_identity,
                 is_resume=spec.is_resume,
                 codex_log_path=_codex_log,
             )
@@ -588,7 +585,7 @@ async def _execute_claude_headless(
             order_id=order_id,
             loc_insertions=_metrics.loc_insertions,
             loc_deletions=_metrics.loc_deletions,
-            model=model_identifier,
+            model=model_identity.effective_model,
         )
     except Exception:
         logger.debug("token_log_record_failed", exc_info=True)

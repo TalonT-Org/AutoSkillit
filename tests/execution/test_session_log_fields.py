@@ -1694,3 +1694,38 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path, monkeypatch):
     assert len(summary["turn_timestamps"]) == 2
     assert len(summary["turn_tool_calls"]) == 2
     assert summary["turn_timestamps"][0] == "2026-05-30T08:33:53.843Z"
+
+
+@pytest.mark.parametrize(
+    "provider_model",
+    ["MiniMax-M2.7-highspeed", "gpt-4o"],
+)
+def test_non_anthropic_provider_model_identity_round_trip(tmp_path, provider_model):
+    """Non-Anthropic provider sessions must write the effective provider model, not the Anthropic alias."""
+    from autoskillit.core.types._type_results import ModelIdentity
+
+    session_id = f"non-anthropic-rt-{provider_model[:8]}"
+    _flush(
+        tmp_path,
+        session_id=session_id,
+        proc_snapshots=None,
+        step_name="implement",
+        model_identity=ModelIdentity.for_provider(
+            configured="sonnet", effective="", profile="minimax"
+        ),
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
+            "model_breakdown": {provider_model: {"output_tokens": 50}},
+        },
+    )
+    tu_path = tmp_path / "sessions" / session_id / "token_usage.json"
+    assert tu_path.exists()
+    data = json.loads(tu_path.read_text())
+    assert data["model_identifier"] == provider_model, (
+        f"expected provider model {provider_model!r}, got {data['model_identifier']!r}"
+    )
+    assert data["configured_model"] == "sonnet"
+    assert data["profile_name"] == "minimax"

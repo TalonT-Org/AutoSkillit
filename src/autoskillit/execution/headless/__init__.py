@@ -48,12 +48,13 @@ from autoskillit.execution.headless._headless_helpers import (
     PostSessionMetrics,
     _compute_post_session_metrics,  # noqa: F401
     _derive_step_name_from_skill_command,
-    _resolve_model,
+    _resolve_model,  # noqa: F401
     _resolve_pty_mode,  # noqa: F401
     _resolve_session_log_dir,
     _session_log_dir,  # noqa: F401
     _stat_snapshot,  # noqa: F401
     assert_interactive_ordering,
+    resolve_model_identity,
 )
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
@@ -155,8 +156,12 @@ async def run_headless_core(
         skill_command=original_skill_command[:SKILL_COMMAND_DISPLAY_MAX],
         step_name=step_name or None,
     ):
-        resolved_model = _resolve_model(
-            model, ctx.config, step_name=step_name, recipe_name=recipe_name
+        model_identity = resolve_model_identity(
+            model,
+            ctx.config,
+            step_name=step_name,
+            recipe_name=recipe_name,
+            profile_name=profile_name,
         )
         add_dirs_tuple = tuple(add_dirs)
         assert ctx.backend is not None, (
@@ -164,7 +169,7 @@ async def run_headless_core(
         )
         config = SkillSessionConfig(
             completion_marker=effective_marker,
-            model=resolved_model,
+            model=model_identity.configured_model or None,
             plugin_source=ctx.plugin_source,
             output_format=cfg.output_format,
             add_dirs=add_dirs_tuple,
@@ -200,7 +205,7 @@ async def run_headless_core(
         logger.debug(
             "run_headless_core_entry",
             cwd=cwd,
-            resolved_model=resolved_model,
+            resolved_model=model_identity.configured_model,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             plugin_source=repr(ctx.plugin_source),
@@ -237,8 +242,7 @@ async def run_headless_core(
             provider_fallback_name=provider_fallback_name,
             provider_extras=provider_extras,
             step_backend=step_backend,
-            model_identifier=resolved_model or "",
-            profile_name=profile_name,
+            model_identity=model_identity,
             marker_dir=marker_dir,
             session_id=caller_session_id,
         )
@@ -368,7 +372,9 @@ class DefaultHeadlessExecutor:
                 f"(food_truck_capable=False); got {self._ctx.backend.name!r}"
             )
         cfg = self._ctx.config
-        resolved_model = _resolve_model(model, cfg, step_name=step_name)
+        model_identity = resolve_model_identity(
+            model, cfg, step_name=step_name, profile_name=profile_name
+        )
         fleet_cfg = cfg.fleet
 
         merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
@@ -399,7 +405,7 @@ class DefaultHeadlessExecutor:
             completion_marker=completion_marker,
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
-            model=resolved_model,
+            model=model_identity.configured_model or None,
             env_extras=merged_extras or None,
             output_format=cfg.run_skill.output_format,
             exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
@@ -461,6 +467,5 @@ class DefaultHeadlessExecutor:
             max_extension_seconds=effective_max_ext,
             marker_dir=effective_marker_dir,
             session_id=session_id,
-            model_identifier=resolved_model or "",
-            profile_name=profile_name,
+            model_identity=model_identity,
         )

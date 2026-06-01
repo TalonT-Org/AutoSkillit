@@ -102,4 +102,8 @@ def _write_sessions(log_root: Path, entries: list[dict]) -> None:
         }
         if "model_identifier" in entry:
             token_data["model_identifier"] = entry["model_identifier"]
+        if "configured_model" in entry:
+            token_data["configured_model"] = entry["configured_model"]
+        if "profile_name" in entry:
+            token_data["profile_name"] = entry["profile_name"]
         (session_dir / "token_usage.json").write_text(json.dumps(token_data))

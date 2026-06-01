@@ -1112,3 +1112,97 @@ def test_efficiency_table_zero_loc_step_shows_dash(tmp_path: Path) -> None:
     )
     assert plan_row is not None, "No '| plan |' row found in efficiency section"
     assert "—" in plan_row
+
+
+def test_non_anthropic_session_shows_provider_model_name(tmp_path: Path) -> None:
+    """Non-Anthropic sessions must show the effective provider model, not the Anthropic alias."""
+    from autoskillit.hooks.token_summary_hook import _format_table, _load_sessions
+
+    kitchen_id = "kitchen-non-anthropic-001"
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    _write_sessions(
+        log_root,
+        [
+            {
+                "session_id": "s1",
+                "dir_name": "s1",
+                "timestamp": "2026-06-01T00:00:00Z",
+                "kitchen_id": kitchen_id,
+                "model_identifier": "MiniMax-M2.7-highspeed",
+                "configured_model": "sonnet",
+                "profile_name": "minimax",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+            }
+        ],
+    )
+
+    aggregated = _load_sessions(log_root, kitchen_id)
+    assert aggregated, "Expected at least one aggregated session entry"
+
+    step_entry = next(iter(aggregated.values()))
+    assert step_entry["model"] == "MiniMax-M2.7-highspeed"
+    assert step_entry["model"] != "sonnet"
+
+    table = _format_table(aggregated)
+    assert "MiniMax-M2.7-highspeed" in table
+    assert "sonnet" not in table.split("## Token Usage Summary")[1].split("|")[2]
+    assert "*" in table
+
+
+@pytest.mark.parametrize(
+    "scenario,model_identifier,configured_model,profile_name,expected_model",
+    [
+        ("anthropic", "claude-sonnet-4-6", "claude-sonnet-4-6", "", "claude-sonnet-4-6"),
+        ("non-anthropic", "MiniMax-M2.7-highspeed", "sonnet", "minimax", "MiniMax-M2.7-highspeed"),
+    ],
+)
+def test_reader_agreement_contract(
+    tmp_path: Path,
+    scenario,
+    model_identifier,
+    configured_model,
+    profile_name,
+    expected_model,
+) -> None:
+    """Both readers must agree and non-Anthropic sessions must not show Anthropic aliases."""
+    from autoskillit.hooks.token_summary_hook import _load_sessions
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    kitchen_id = f"kitchen-rac-{scenario}"
+    log_root = tmp_path / f"rac-logs-{scenario}"
+    log_root.mkdir()
+    _write_sessions(
+        log_root,
+        [
+            {
+                "session_id": f"rac-{scenario}",
+                "dir_name": f"rac-{scenario}",
+                "timestamp": "2026-06-01T00:00:00Z",
+                "kitchen_id": kitchen_id,
+                "model_identifier": model_identifier,
+                "configured_model": configured_model,
+                "profile_name": profile_name,
+                "input_tokens": 100,
+                "output_tokens": 50,
+            },
+        ],
+    )
+
+    disk_log = DefaultTokenLog()
+    disk_log.load_from_log_dir(log_root)
+    disk_entries = disk_log.get_report()
+    assert disk_entries
+    disk_model = disk_entries[0]["model"]
+
+    hook_agg = _load_sessions(log_root, kitchen_id)
+    assert hook_agg
+    hook_model = next(iter(hook_agg.values()))["model"]
+
+    assert disk_model == hook_model, f"readers disagree: disk={disk_model!r}, hook={hook_model!r}"
+    assert disk_model == expected_model
+
+    if scenario == "non-anthropic":
+        assert not disk_model.startswith("claude-")
+        assert disk_model not in ("sonnet", "opus", "haiku")

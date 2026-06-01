@@ -258,7 +258,8 @@ class TestProviderFieldsReachFlush:
     async def test_model_identifier_reaches_flush_session_log(
         self, minimal_ctx, tmp_path, monkeypatch
     ):
-        """model_identifier must be forwarded to flush_session_log — not silently dropped."""
+        """model_identity must be forwarded to flush_session_log — not silently dropped."""
+        from autoskillit.core.types._type_results import ModelIdentity
         from autoskillit.execution.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
@@ -275,8 +276,8 @@ class TestProviderFieldsReachFlush:
             timeout=30.0,
             stale_threshold=5.0,
             step_name="implement",
-            model_identifier="claude-opus-4-6",
+            model_identity=ModelIdentity.anthropic("claude-opus-4-6"),
         )
 
         assert len(flush_calls) == 1
-        assert flush_calls[0].get("model_identifier") == "claude-opus-4-6"
+        assert flush_calls[0]["model_identity"].configured_model == "claude-opus-4-6"

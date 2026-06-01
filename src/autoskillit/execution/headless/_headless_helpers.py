@@ -12,6 +12,7 @@ from autoskillit.core import (
     ClaudeFlags,
     CmdSpec,
     CodingAgentBackend,
+    ModelIdentity,
     SkillResult,
     claude_code_project_dir,
     get_logger,
@@ -143,6 +144,31 @@ def _resolve_model(
         return config.model.default_model
     logger.debug("model_resolved", tier="none", model=None)
     return None
+
+
+def resolve_model_identity(
+    step_model: str,
+    config: AutomationConfig,
+    *,
+    step_name: str = "",
+    recipe_name: str = "",
+    profile_name: str = "",
+) -> ModelIdentity:
+    """Wrap _resolve_model() with provider awareness.
+
+    For non-Anthropic providers, effective_model is left empty so the downstream
+    argmax fallback in flush_session_log fires and extracts the real provider model
+    from model_breakdown.
+    """
+    resolved = _resolve_model(step_model, config, step_name=step_name, recipe_name=recipe_name)
+    configured = resolved or ""
+    if profile_name and profile_name != "anthropic":
+        return ModelIdentity.for_provider(
+            configured=configured, effective="", profile=profile_name
+        )
+    if configured:
+        return ModelIdentity.anthropic(configured)
+    return ModelIdentity.unknown()
 
 
 def _derive_step_name_from_skill_command(skill_command: str) -> str:

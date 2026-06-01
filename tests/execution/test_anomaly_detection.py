@@ -526,8 +526,12 @@ def test_detect_model_drift_suppressed_when_profile_routed_cross_vendor():
         ("sonnet", "MiniMax-M2.7", "minimax", False),
         # Profile-routed, both non-Anthropic: suppress
         ("MiniMax-M1", "MiniMax-M2.7", "minimax", False),
+        # Profile set, observed is Anthropic: guard does NOT suppress, drift fires
+        ("sonnet", "claude-opus-4-6", "alt-anthropic", True),
+        ("sonnet", "opus", "my-profile", True),
         # No profile, cross-vendor: real drift
         ("opus", "MiniMax-M2.7", "", True),
+        ("opus", "MiniMax-M2.7", None, True),
         # No profile, same family: no drift
         ("sonnet", "claude-sonnet-4-6", "", False),
     ],

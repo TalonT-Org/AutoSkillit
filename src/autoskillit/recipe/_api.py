@@ -35,6 +35,7 @@ from autoskillit.recipe._api_cache import (  # noqa: F401
     _compute_registry_hash,
     _LoadCacheEntry,
     _path_mtime_ns,
+    _refresh_staleness_baseline,
 )
 from autoskillit.recipe._api_listing import (  # noqa: F401
     format_recipe_list_response,
@@ -548,4 +549,6 @@ def load_and_validate(
         )
         _api_cache._LOAD_CACHE.put(cache_key, entry)
 
+    if result.get("valid", False):
+        _api_cache._refresh_staleness_baseline()
     return cast(LoadRecipeResult, _api_cache._LOAD_CACHE.copy_result(result))

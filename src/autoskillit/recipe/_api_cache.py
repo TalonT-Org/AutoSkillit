@@ -19,8 +19,9 @@ _STALENESS_LAST_CHECK: float = 0.0
 _STALENESS_IS_STALE: bool = False
 _STALENESS_CACHES_CLEARED: bool = False
 _STALENESS_TTL: float = 30.0
-_STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe/rules",)
-_DEEP_MTIME_BASELINE: int | None = None
+_STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe",)
+_DEEP_CONTENT_BASELINE: str | None = None
+_STALENESS_LOCK = threading.Lock()
 
 
 @_dc(frozen=True, slots=True)
@@ -100,46 +101,47 @@ def _get_pkg_version() -> str:
 
 
 def _compute_registry_hash(experiment_types_dir: Path) -> str:
-    """Compute md5 hash of sorted (path, mtime_ns) pairs for experiment-type YAMLs."""
+    """Compute md5 hash of sorted YAML file contents for experiment-type registry."""
     if not experiment_types_dir.exists():
         return ""
-    entries: list[tuple[str, int]] = []
+    h = hashlib.md5(usedforsecurity=False)
     for p in sorted(experiment_types_dir.glob("*.yaml")):
         try:
-            entries.append((p.name, p.stat().st_mtime_ns))
+            h.update(p.name.encode())
+            h.update(p.read_bytes())
         except OSError:
             continue
-    return hashlib.md5(str(entries).encode(), usedforsecurity=False).hexdigest()
+    return h.hexdigest()
 
 
-def _compute_deep_mtime() -> int:
-    """Return max mtime_ns across all .py files in staleness-scanned subdirectories."""
+def _compute_content_hash() -> str:
+    """Return SHA-256 hex digest of all .py files in staleness-scanned subdirectories."""
     root = pkg_root()
-    max_mt = 0
+    h = hashlib.sha256()
     for subdir in _STALENESS_SCAN_DIRS:
         d = root / subdir
         if d.is_dir():
-            for f in d.rglob("*.py"):
+            for f in sorted(d.rglob("*.py")):
                 if f.is_file():
                     try:
-                        mt = f.stat().st_mtime_ns
-                        if mt > max_mt:
-                            max_mt = mt
+                        rel = f.relative_to(root)
+                        h.update(f"{rel}\n".encode())
+                        h.update(f.read_bytes())
                     except OSError:
                         continue
-    return max_mt
+    return h.hexdigest()
 
 
 def _get_process_start_mtime() -> int:
-    global _PROCESS_START_PKG_MTIME, _DEEP_MTIME_BASELINE  # noqa: PLW0603
+    global _PROCESS_START_PKG_MTIME, _DEEP_CONTENT_BASELINE  # noqa: PLW0603
     if _PROCESS_START_PKG_MTIME is None:
         _PROCESS_START_PKG_MTIME = _path_mtime_ns(pkg_root())
-        _DEEP_MTIME_BASELINE = _compute_deep_mtime()
+        _DEEP_CONTENT_BASELINE = _compute_content_hash()
     return _PROCESS_START_PKG_MTIME
 
 
 def _check_process_staleness() -> bool:
-    """Return True if the package directory or rule files were modified after process start.
+    """Return True if recipe Python source content changed since process start.
 
     Fleet sessions always return False — dispatched subprocesses have fresh
     baselines and revalidate independently.
@@ -152,17 +154,28 @@ def _check_process_staleness() -> bool:
     now = time.monotonic()
     if now - _STALENESS_LAST_CHECK < _STALENESS_TTL:
         return _STALENESS_IS_STALE
-    _STALENESS_LAST_CHECK = now
-    try:
-        pkg_stale = _path_mtime_ns(pkg_root()) != _get_process_start_mtime()
-        if not pkg_stale:
-            current_deep = _compute_deep_mtime()
-            pkg_stale = current_deep != _DEEP_MTIME_BASELINE
-        _STALENESS_IS_STALE = pkg_stale
-    except (OSError, RuntimeError):
-        logger.warning("pkg_root() unavailable during staleness check; assuming non-stale")
-        _STALENESS_IS_STALE = False
+    with _STALENESS_LOCK:
+        _STALENESS_LAST_CHECK = now
+        try:
+            _get_process_start_mtime()
+            current_hash = _compute_content_hash()
+            pkg_stale = current_hash != _DEEP_CONTENT_BASELINE
+            _STALENESS_IS_STALE = pkg_stale
+        except (OSError, RuntimeError):
+            logger.warning("pkg_root() unavailable during staleness check; assuming non-stale")
+            _STALENESS_IS_STALE = False
     return _STALENESS_IS_STALE
+
+
+def _refresh_staleness_baseline() -> None:
+    """Re-capture baselines after a confirmed-good load."""
+    global _PROCESS_START_PKG_MTIME, _DEEP_CONTENT_BASELINE  # noqa: PLW0603
+    global _STALENESS_LAST_CHECK, _STALENESS_IS_STALE  # noqa: PLW0603
+    with _STALENESS_LOCK:
+        _PROCESS_START_PKG_MTIME = _path_mtime_ns(pkg_root())
+        _DEEP_CONTENT_BASELINE = _compute_content_hash()
+        _STALENESS_LAST_CHECK = 0.0
+        _STALENESS_IS_STALE = False
 
 
 def _clear_stale_caches() -> None:

@@ -202,6 +202,8 @@ def test_compose_pr_unconditional_diagram_gate_before_step3():
     step3_idx = text.find("### Step 3")
     assert step2_idx != -1 and step3_idx != -1
     between = text[step2_idx:step3_idx]
-    assert "do not" in between.lower() and (
-        "generat" in between.lower() or "fabricat" in between.lower() or "creat" in between.lower()
-    ), "Must have unconditional no-fabrication instruction between Step 2 and Step 3"
+    lower = between.lower()
+    assert "do not" in lower, "Must have 'do not' instruction between Step 2 and Step 3"
+    assert "generat" in lower, "Must prohibit 'generate' between Step 2 and Step 3"
+    assert "fabricat" in lower, "Must prohibit 'fabricate' between Step 2 and Step 3"
+    assert "creat" in lower, "Must prohibit 'create' between Step 2 and Step 3"

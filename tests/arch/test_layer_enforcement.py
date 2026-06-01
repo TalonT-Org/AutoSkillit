@@ -27,6 +27,8 @@ from tests.arch._helpers import (
 )
 from tests.arch._rules import RuleDescriptor
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 # ── Sub-package layer registry ────────────────────────────────────────────────
 SUBPACKAGE_LAYERS: dict[str, int] = {
     # IL-0: core/ — zero autoskillit internal imports

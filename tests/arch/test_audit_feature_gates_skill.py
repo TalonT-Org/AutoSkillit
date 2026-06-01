@@ -3,7 +3,11 @@
 import re
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.io import load_yaml
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _SKILLS_ROOT = _PROJECT_ROOT / "src" / "autoskillit" / "skills_extended"

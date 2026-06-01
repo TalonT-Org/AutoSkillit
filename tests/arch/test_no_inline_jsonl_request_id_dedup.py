@@ -10,6 +10,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 SESSION_LOG = SRC / "execution" / "session_log.py"
 TOOL_SEQ = SRC / "core" / "tool_sequence_analysis.py"

@@ -8,6 +8,10 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 
 def test_format_ingredients_table_delegates_to_render_gfm_table():
     """format_ingredients_table must call _render_gfm_table (not inline width math).

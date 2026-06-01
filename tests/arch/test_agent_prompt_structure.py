@@ -5,7 +5,11 @@ inconclusive output format, and empty-array documentation.
 
 import re
 
+import pytest
+
 from autoskillit.core import pkg_root
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _AGENTS_DIR = pkg_root() / "agents"
 

@@ -10,7 +10,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 FORBIDDEN_WRITE_CALLS = frozenset(
     {

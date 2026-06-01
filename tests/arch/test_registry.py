@@ -25,6 +25,8 @@ from tests.arch._rules import (
     Violation,
 )
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 

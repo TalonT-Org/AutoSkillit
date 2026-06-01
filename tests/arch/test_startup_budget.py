@@ -10,6 +10,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
 FORBIDDEN_SUBPROCESS_CALLS = frozenset(

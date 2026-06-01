@@ -8,7 +8,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 from tests.arch._helpers import SRC_ROOT
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 # IL contract forbidden imports: package -> set of packages it CANNOT import at runtime.
 _FORBIDDEN_BY_CONTRACT: dict[str, frozenset[str]] = {

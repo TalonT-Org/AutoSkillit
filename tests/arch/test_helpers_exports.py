@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 
 def test_strip_markdown_code_regions_exported_from_helpers() -> None:
     """strip_markdown_code_regions must be importable from tests._helpers."""

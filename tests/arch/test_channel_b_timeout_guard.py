@@ -9,10 +9,14 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 from tests.conftest import TimeoutTier
 
 TESTS_ROOT = Path(__file__).parent.parent
 CHANNEL_B_TEST_FILE = TESTS_ROOT / "execution" / "test_process_channel_b.py"
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 # Tests that deliberately use short timeouts to provoke TIMED_OUT behavior.
 # Each entry: (function_name, timeout_value, rationale)

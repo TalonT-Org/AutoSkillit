@@ -7,6 +7,10 @@ never register because the module is never imported.
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 
 def test_every_rules_module_imported_by_recipe_init() -> None:
     """REQ-RECIPE-001: every recipe/rules_*.py file must be imported by

@@ -42,6 +42,8 @@ from tests.arch._rules import (
     _rel,
 )
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 
 def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
     """

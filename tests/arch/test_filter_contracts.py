@@ -8,8 +8,12 @@ import ast
 import inspect
 from pathlib import Path
 
+import pytest
+
 import autoskillit._test_filter as src_filter
 import tests._test_filter as conftest_filter
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 def _get_return_annotation(module: object, func_name: str) -> str:

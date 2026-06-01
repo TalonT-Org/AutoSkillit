@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 _TRIPLICATED_TESTS = [
     "test_ci_step_structure",
     "test_re_push_has_explicit_remote_url",

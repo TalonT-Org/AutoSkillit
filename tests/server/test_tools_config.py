@@ -304,3 +304,186 @@ async def test_configure_fleet_semaphore_null_fleet_lock(tmp_path, monkeypatch) 
     assert payload["success"] is True
     assert mock_ctx.fleet_lock.max_concurrent == 4
     assert mock_ctx.fleet_lock.timeout is None
+
+
+@pytest.mark.anyio
+async def test_configure_fleet_snapshot_matches_live_semaphore(tmp_path, monkeypatch) -> None:
+    """Snapshot max_concurrent_dispatches must equal ctx.fleet_lock.max_concurrent."""
+    from autoskillit.fleet._semaphore import FleetSemaphore
+    from autoskillit.server import _state
+
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(json.dumps({}))
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
+    mock_ctx.config = AutomationConfig()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+
+    from autoskillit.server.tools.tools_config import configure_fleet
+
+    result = await configure_fleet(max_concurrent_dispatches=5)
+    payload = json.loads(result)
+
+    assert payload["success"] is True
+    assert mock_ctx.fleet_lock.max_concurrent == 5
+    assert payload["config"]["fleet"]["max_concurrent_dispatches"] == 5
+
+
+@pytest.mark.anyio
+async def test_configure_fleet_acquire_timeout_only_updates_semaphore(
+    tmp_path, monkeypatch
+) -> None:
+    """acquire_timeout_sec-only call must update the live semaphore."""
+    from autoskillit.fleet._semaphore import FleetSemaphore
+    from autoskillit.server import _state
+
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(json.dumps({}))
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
+    mock_ctx.config = AutomationConfig()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+
+    from autoskillit.server.tools.tools_config import configure_fleet
+
+    result = await configure_fleet(acquire_timeout_sec=30.0)
+    payload = json.loads(result)
+
+    assert payload["success"] is True
+    assert mock_ctx.fleet_lock.timeout == 30.0
+    assert payload["config"]["fleet"]["acquire_timeout_sec"] == 30.0
+
+
+@pytest.mark.anyio
+async def test_configure_fleet_snapshot_reads_semaphore_not_overlay(tmp_path, monkeypatch) -> None:
+    """Snapshot acquire_timeout_sec must reflect the live semaphore's carried-forward timeout."""
+    from autoskillit.fleet._semaphore import FleetSemaphore
+    from autoskillit.server import _state
+
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(json.dumps({}))
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3, timeout=60.0)
+    mock_ctx.config = AutomationConfig()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+
+    from autoskillit.server.tools.tools_config import configure_fleet
+
+    result = await configure_fleet(max_concurrent_dispatches=5)
+    payload = json.loads(result)
+
+    assert payload["success"] is True
+    assert mock_ctx.fleet_lock.timeout == 60.0
+    assert payload["config"]["fleet"]["acquire_timeout_sec"] == 60.0
+
+
+@pytest.mark.anyio
+async def test_configure_fleet_close_reopen_resets_semaphore_to_defaults(
+    tmp_path, monkeypatch
+) -> None:
+    """After close/reopen, semaphore must return to config defaults."""
+    from unittest.mock import patch
+
+    from autoskillit.fleet._semaphore import FleetSemaphore
+    from autoskillit.server import _state
+
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(json.dumps({}))
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
+    mock_ctx.config = AutomationConfig()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+
+    from autoskillit.server.tools.tools_config import configure_fleet
+
+    result = await configure_fleet(max_concurrent_dispatches=6)
+    payload = json.loads(result)
+    assert payload["success"] is True
+    assert mock_ctx.fleet_lock.max_concurrent == 6
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    assert mock_ctx.fleet_lock.max_concurrent == mock_ctx.config.fleet.max_concurrent_dispatches
+
+    hook_cfg_path.write_text(json.dumps({}))
+    result2 = await configure_fleet()
+    payload2 = json.loads(result2)
+    assert payload2["success"] is True
+    assert (
+        payload2["config"]["fleet"]["max_concurrent_dispatches"]
+        == mock_ctx.config.fleet.max_concurrent_dispatches
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "calls",
+    [
+        [{"max_concurrent_dispatches": 4}],
+        [{"acquire_timeout_sec": 15.0}],
+        [{"max_concurrent_dispatches": 4, "acquire_timeout_sec": 15.0}],
+        [{"max_concurrent_dispatches": 4}, {"acquire_timeout_sec": 25.0}],
+    ],
+    ids=["max_only", "timeout_only", "both", "sequential"],
+)
+async def test_configure_fleet_snapshot_semaphore_invariant(tmp_path, monkeypatch, calls) -> None:
+    """Snapshot must always match the live semaphore for semaphore-managed fields."""
+    from autoskillit.fleet._semaphore import FleetSemaphore
+    from autoskillit.server import _state
+
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(json.dumps({}))
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
+    mock_ctx.config = AutomationConfig()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+
+    from autoskillit.server.tools.tools_config import configure_fleet
+
+    payload = None
+    for call_kwargs in calls:
+        result = await configure_fleet(**call_kwargs)
+        payload = json.loads(result)
+        assert payload["success"] is True
+
+    assert payload is not None
+    assert (
+        payload["config"]["fleet"]["max_concurrent_dispatches"]
+        == mock_ctx.fleet_lock.max_concurrent
+    )
+    if mock_ctx.fleet_lock.timeout is not None:
+        assert payload["config"]["fleet"]["acquire_timeout_sec"] == mock_ctx.fleet_lock.timeout
+    else:
+        assert (
+            payload["config"]["fleet"]["acquire_timeout_sec"]
+            == mock_ctx.config.fleet.acquire_timeout_sec
+        )

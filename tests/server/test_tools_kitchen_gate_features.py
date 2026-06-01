@@ -93,6 +93,28 @@ def test_close_kitchen_cancels_quota_refresh_task(tmp_path, monkeypatch):
     assert mock_ctx.quota_refresh_task is None
 
 
+def test_close_kitchen_resets_fleet_lock(tmp_path, monkeypatch):
+    """_close_kitchen_handler resets ctx.fleet_lock to config defaults."""
+    from autoskillit.config import AutomationConfig
+    from autoskillit.fleet._semaphore import FleetSemaphore
+
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.config = AutomationConfig()
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=6, timeout=42.0)
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
+
+            _close_kitchen_handler()
+
+    assert mock_ctx.fleet_lock is not None
+    assert mock_ctx.fleet_lock.max_concurrent == mock_ctx.config.fleet.max_concurrent_dispatches
+    assert mock_ctx.fleet_lock.timeout == mock_ctx.config.fleet.acquire_timeout_sec
+
+
 @pytest.mark.anyio
 async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatch):
     """open_kitchen(name=X, ingredients_only=True) must omit content from result."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import fields as dc_fields
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import FleetLock, atomic_write, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import _hook_config_overlay_path, _hook_config_path
@@ -49,7 +49,9 @@ def _write_session_config(
     return (True, existing)
 
 
-def _build_config_snapshot(config, domain: str, overlay: dict) -> dict:
+def _build_config_snapshot(
+    config, domain: str, overlay: dict, *, fleet_lock: FleetLock | None = None
+) -> dict:
     """Build complete config snapshot: dataclass defaults + overlay overrides."""
     if domain == "fleet":
         defaults = {f.name: getattr(config.fleet, f.name) for f in dc_fields(config.fleet)}
@@ -63,6 +65,11 @@ def _build_config_snapshot(config, domain: str, overlay: dict) -> dict:
 
     domain_overrides = overlay.get(domain, {})
     snapshot_domain = {**defaults, **domain_overrides}
+
+    if domain == "fleet" and fleet_lock is not None:
+        snapshot_domain["max_concurrent_dispatches"] = fleet_lock.max_concurrent
+        if fleet_lock.timeout is not None:
+            snapshot_domain["acquire_timeout_sec"] = fleet_lock.timeout
 
     return {domain: snapshot_domain, "core": {**core_defaults, **core_overrides}}
 
@@ -189,11 +196,28 @@ async def configure_fleet(
         if not ok:
             return json.dumps({"success": False, "error": result})
 
-        if max_concurrent_dispatches is not None:
-            _replace_fleet_semaphore(ctx, max_concurrent_dispatches, acquire_timeout_sec)
+        if max_concurrent_dispatches is not None or acquire_timeout_sec is not None:
+            effective_max = (
+                max_concurrent_dispatches
+                if max_concurrent_dispatches is not None
+                else (
+                    ctx.fleet_lock.max_concurrent
+                    if ctx.fleet_lock is not None
+                    else ctx.config.fleet.max_concurrent_dispatches
+                )
+            )
+            _pre_timeout = ctx.fleet_lock.timeout if ctx.fleet_lock is not None else None
+            _replace_fleet_semaphore(ctx, effective_max, acquire_timeout_sec)
+            if ctx.fleet_lock is not None:
+                if max_concurrent_dispatches is not None:
+                    assert ctx.fleet_lock.max_concurrent == max_concurrent_dispatches
+                if acquire_timeout_sec is not None:
+                    assert ctx.fleet_lock.timeout == acquire_timeout_sec
+                else:
+                    assert ctx.fleet_lock.timeout == _pre_timeout
 
         assert isinstance(result, dict)
-        snapshot = _build_config_snapshot(ctx.config, "fleet", result)
+        snapshot = _build_config_snapshot(ctx.config, "fleet", result, fleet_lock=ctx.fleet_lock)
         return json.dumps({"success": True, "config": snapshot})
     except Exception as exc:
         logger.error("configure_fleet unhandled exception", exc_info=True)

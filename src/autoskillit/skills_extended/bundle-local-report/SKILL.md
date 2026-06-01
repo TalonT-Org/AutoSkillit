@@ -21,7 +21,7 @@ mermaid diagrams and inserted plot images from `yaml:figure-spec` blocks.
 
 **ALWAYS:**
 - Emit: `html_path = <absolute path to report.html>` (or `html_path = ` if report_path is absent) as your final output.
-- Use `{AUTOSKILLIT_TEMP}` as the base for temp files.
+- Use `{{AUTOSKILLIT_TEMP}}` as the base for temp files.
 - Using ONLY classDef styles from the mermaid skill (no invented colors).
 
 ## Arguments

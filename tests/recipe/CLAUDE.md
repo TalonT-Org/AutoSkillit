@@ -172,6 +172,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_shadowed_input.py` | Tests for shadowed_input semantic validation rule |
 | `test_rules_skill_command_prefix.py` | Tests for skill_command_prefix semantic validation rule |
 | `test_rules_skill_content.py` | Tests for skill_content semantic validation rule |
+| `test_rules_skill_write_path_alignment.py` | Tests for skill-write-path-recipe-alignment semantic rule: fires when SKILL.md NEVER block path is broader than recipe's iteration-scoped output_dir |
 | `test_rules_backend_compat.py` | Tests for backend-incompatible-skill semantic validation rule |
 | `test_rules_skills.py` | Tests for skills semantic validation rule |
 | `test_rules_stamp_ownership.py` | Tests for exclusive-stamp-ownership semantic rule |

@@ -207,7 +207,7 @@ Matches the regex `<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*>`.
 
 **When `mode=local`:**
 - Skip ALL GitHub API calls for fetching comments (no `gh api repos/.../pulls/{N}/comments`, no `gh api repos/.../pulls/{N}/reviews`, no GraphQL `reviewThreads` query)
-- Instead, read findings from `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+- Instead, read findings from the review-pr output directory (derive path via `${AUTOSKILLIT_ALLOWED_WRITE_PREFIX}` if set, otherwise check for the latest `iter_*` subdirectory under `{{AUTOSKILLIT_TEMP}}/review-pr/`, falling back to the flat directory): `local_findings_{pr_number}.json`
 - Transform the local findings format into the same internal structure used by the GitHub-sourced flow: each finding maps to `path`, `line`, `body`, `severity`, `dimension`
 - Load `diff_context_{pr_number}.json` as normal (mode-independent — same handoff file written by review-pr)
 - Set `comment_id_to_thread_id = {}` (no thread IDs in local mode)
@@ -293,7 +293,12 @@ run, same as the current behavior).
 After saving the raw review responses, check for the handoff file from review-pr:
 
 ```bash
-DIFF_CONTEXT_PATH="{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_${PR_NUMBER}.json"
+# Read review-pr artifacts from the iteration-scoped directory
+REVIEW_PR_DIR="${AUTOSKILLIT_TEMP}/review-pr"
+# If iter_N directory exists under review-pr/, use the latest iteration
+REVIEW_PR_ITER_DIR=$(ls -d "${REVIEW_PR_DIR}"/iter_* 2>/dev/null | sort -V | tail -1)
+REVIEW_PR_OUTPUT="${REVIEW_PR_ITER_DIR:-${REVIEW_PR_DIR}}"
+DIFF_CONTEXT_PATH="${REVIEW_PR_OUTPUT}/diff_context_${PR_NUMBER}.json"
 ```
 
 If the file exists:
@@ -531,7 +536,9 @@ Track: `accept_count`, `reject_count`, `discuss_count`.
 After intent validation (Step 3.5), accumulate all DISCUSS-classified findings to a
 persistent local file for later posting when mode switches to `github`.
 
-Read the `iteration` field from `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+Read the `iteration` field from `local_findings_{pr_number}.json` in the review-pr output
+directory (use `${REVIEW_PR_OUTPUT}` derived above, or the latest `iter_*` subdirectory
+under `{{AUTOSKILLIT_TEMP}}/review-pr/` if not already set, falling back to the flat path)
 to get the round number. If that file is absent, use `iteration = 0`.
 
 This file accumulates across review loop iterations. Before writing, read the existing file (if it exists), merge new entries with existing ones, then write the combined result using `jq -n` or the Write tool.
@@ -880,8 +887,8 @@ all review findings were already addressed and no code changes were needed.
 
 When `mode=local`, the following additional tokens are emitted:
 ```
-deferred_observations_path = {AUTOSKILLIT_TEMP}/resolve-review/deferred_observations_{pr_number}.json
-reject_patterns_path = {AUTOSKILLIT_TEMP}/resolve-review/reject_patterns_{pr_number}.json
+deferred_observations_path = {{AUTOSKILLIT_TEMP}}/resolve-review/deferred_observations_{pr_number}.json
+reject_patterns_path = {{AUTOSKILLIT_TEMP}}/resolve-review/reject_patterns_{pr_number}.json
 ```
 
 When `mode=github` and prior local rounds accumulated observations, these are posted

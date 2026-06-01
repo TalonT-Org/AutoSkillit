@@ -110,6 +110,73 @@ _VRULE_RE = re.compile(
 )
 
 
+def extract_never_block(content: str) -> str:
+    """Return the text of the first NEVER block for semantic rule validation.
+
+    Searches for the NEVER block delimiter (``**NEVER`` or ``## CRITICAL CONSTRAINTS``)
+    and extracts to the next ``**ALWAYS`` or ``## `` section header. Returns the
+    raw block text (not just list items). Used by semantic rule validation — distinct
+    from ``tests._helpers.extract_never_block`` which extracts ``- `` list items only.
+    """
+    upper = content.upper()
+    never_pos = upper.find("\n**NEVER")
+    if never_pos == -1:
+        never_pos = upper.find("\n## CRITICAL CONSTRAINTS")
+    if never_pos == -1:
+        return ""
+    always_pos = upper.find("\n**ALWAYS", never_pos + 1)
+    section_pos = upper.find("\n## ", never_pos + 1)
+    end_pos = len(content)
+    if always_pos != -1:
+        end_pos = min(end_pos, always_pos)
+    if section_pos != -1:
+        end_pos = min(end_pos, section_pos)
+    return content[never_pos:end_pos]
+
+
+_WRITE_SCOPE_RE = re.compile(
+    r"\{\{AUTOSKILLIT_TEMP\}\}/([a-z][a-z0-9_-]+(?:/[a-z0-9_${}. -]+)*)/?",
+)
+
+
+def extract_write_path_declarations(content: str) -> list[str]:
+    """Extract {{AUTOSKILLIT_TEMP}}/.../ path patterns from SKILL.md NEVER block.
+
+    For semantic rule validation — extracts the declared write scope directory
+    from the NEVER block constraint. Scans only the NEVER block (not the full
+    content) to avoid noise from write instruction lines in the Workflow section.
+    Returns a list of path portions after {{AUTOSKILLIT_TEMP}}/ (e.g., ['review-pr/']).
+    """
+    never_block = extract_never_block(content)
+    if not never_block:
+        return []
+    paths = _WRITE_SCOPE_RE.findall(never_block)
+    return [m + "/" if not m.endswith("/") else m for m in paths]
+
+
+_DYNAMIC_WRITE_VAR_RE = re.compile(
+    r"\$\{?(REVIEW_OUTPUT_DIR|AUTOSKILLIT_ALLOWED_WRITE_PREFIX)\}?",
+)
+
+
+def has_dynamic_write_path(content: str) -> bool:
+    """Return True if the SKILL.md uses a dynamic variable for write paths.
+
+    When a SKILL.md reads AUTOSKILLIT_ALLOWED_WRITE_PREFIX or a derived
+    variable at runtime, its write paths adapt to whatever prefix the
+    framework provides — static path alignment checking is not applicable.
+    Scans from the NEVER block onward (NEVER + ALWAYS + Workflow) to avoid
+    false positives from documentation preamble while catching actual usage.
+    """
+    upper = content.upper()
+    never_pos = upper.find("\n**NEVER")
+    if never_pos == -1:
+        never_pos = upper.find("\n## CRITICAL CONSTRAINTS")
+    if never_pos == -1:
+        return False
+    return bool(_DYNAMIC_WRITE_VAR_RE.search(content[never_pos:]))
+
+
 def extract_validation_rule_block(content: str, rule_label: str) -> str | None:
     """Extract a named validation rule block (e.g., 'V9') from SKILL.md content.
 

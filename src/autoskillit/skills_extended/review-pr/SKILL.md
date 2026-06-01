@@ -66,6 +66,13 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 
 ### Step 0: Validate Arguments
 
+Resolve the output directory from the environment:
+```bash
+REVIEW_OUTPUT_DIR="${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-pr/}"
+```
+
+All file writes in this skill MUST target `${REVIEW_OUTPUT_DIR}`.
+
 Parse two positional arguments: `feature_branch` and `base_branch`.
 
 Derive the escalation username for `needs_human` verdicts:
@@ -178,7 +185,7 @@ else:
 [{"file": "src/bar.py", "line": 17, "body": "[warning] tests: ..."}]
 ```
 
-Save to: `{{AUTOSKILLIT_TEMP}}/review-pr/prior_threads_{pr_number}.json`
+Save to: `${REVIEW_OUTPUT_DIR}prior_threads_{pr_number}.json`
 
 Use `jq -n` or the Write tool to create this file. If the file already exists from a prior review loop iteration, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
 
@@ -195,7 +202,7 @@ gh pr diff {pr_number}
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-Save the diff to `{{AUTOSKILLIT_TEMP}}/review-pr/diff_{pr_number}.txt`. (relative to the current working directory)
+Save the diff to `${REVIEW_OUTPUT_DIR}diff_{pr_number}.txt`. (relative to the current working directory)
 
 ### Step 2.7: Deterministic Diff Annotation
 
@@ -531,7 +538,7 @@ else:
 
 **When `mode=local`:**
 - Skip ALL GitHub API calls for posting comments (no batch review POST, no individual comment POSTs, no file-level comments, no summary review POST)
-- Instead, write findings to `{{AUTOSKILLIT_TEMP}}/review-pr/local_findings_{pr_number}.json`
+- Instead, write findings to `${REVIEW_OUTPUT_DIR}local_findings_{pr_number}.json`
 
 **Iteration tracking:** Before writing, check if `local_findings_{pr_number}.json` already exists. If so, read its `iteration` field and set the new value to `iteration + 1`. If the file does not exist, set `iteration` to `0`.
 
@@ -560,9 +567,9 @@ For `iteration_number`: read from existing file (`iteration + 1`) or start at `0
 Include all findings from `FILTERED_FINDINGS` + `UNPOSTABLE_FINDINGS` (same as what would have been posted to GitHub). Use `path` as the field name (not `file`) in the JSON output for consistency with resolve-review's expected format.
 
 **Still write mode-independent files:**
-- `{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_{pr_number}.json` (Step 8)
-- `{{AUTOSKILLIT_TEMP}}/review-pr/raw_findings_{pr_number}.json` (Step 8)
-- `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md` (Step 8)
+- `${REVIEW_OUTPUT_DIR}diff_context_{pr_number}.json` (Step 8)
+- `${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json` (Step 8)
+- `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md` (Step 8)
 
 Then skip directly to Step 8 (verdict emission) — no GitHub API calls, no Step 6.5 confirmation, no Step 7 submission.
 
@@ -770,7 +777,7 @@ These findings target lines not in the diff and could not be posted as inline co
 
 **CRITICAL — Ordering:** Step 8 must execute after Steps 6 and 7. Do not write the summary file before posting inline comments and submitting the review verdict to GitHub. Writing the file first anchors you to treating it as the primary output rather than a local audit artifact.
 
-Save findings summary to `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
+Save findings summary to `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md`. (relative to the current working directory)
 
 **Write Diff-Scoped Context Handoff (before emitting verdict):**
 
@@ -792,7 +799,7 @@ Do not output prose between iterations. For each finding in `FILTERED_FINDINGS` 
   raw annotated-diff lines as-is. If ANNOTATED_DIFF is empty or the file section is
   not found, set `code_region` to `""`.
 
-Write to `{{AUTOSKILLIT_TEMP}}/review-pr/diff_context_{pr_number}.json`:
+Write to `${REVIEW_OUTPUT_DIR}diff_context_{pr_number}.json`:
 
 ```json
 {
@@ -824,7 +831,7 @@ After writing the diff-context handoff file, also write the raw findings list fo
 downstream enrichment. This is a separate file from the handoff — it captures only
 the finding dicts as produced by the subagents, without code_region extraction.
 
-Write to `{{AUTOSKILLIT_TEMP}}/review-pr/raw_findings_{pr_number}.json`:
+Write to `${REVIEW_OUTPUT_DIR}raw_findings_{pr_number}.json`:
 
 ```json
 {
@@ -874,13 +881,13 @@ Exit 1 only for unrecoverable tool-level errors.
 - `verdict=changes_requested` → `%%REVIEW_GATE::LOOP_REQUIRED%%` — Blocking issues found; recipe routes to `resolve_review`
 - `verdict=needs_human` → `%%REVIEW_GATE::CLEAR%%` — Uncertain trade-offs; human review requested via the authenticated GitHub user mention (derived at runtime)
 
-Summary written to: `{{AUTOSKILLIT_TEMP}}/review-pr/summary_{pr_number}_{timestamp}.md`
+Summary written to: `${REVIEW_OUTPUT_DIR}summary_{pr_number}_{timestamp}.md`
 
 **Mode-conditional path output:**
 
 When `mode=local`, the following token is emitted:
 ```
-local_findings_path = {AUTOSKILLIT_TEMP}/review-pr/local_findings_{pr_number}.json
+local_findings_path = ${REVIEW_OUTPUT_DIR}local_findings_{pr_number}.json
 ```
 
 When `mode=github`, no local_findings_path token is emitted (findings are posted directly to GitHub).

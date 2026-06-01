@@ -113,8 +113,8 @@ def test_prepare_pr_title_source_attribution():
 
     text = PREPARE_PR.read_text()
     pattern = re.compile(
-        r"(?:NOT|NEVER).*(?:issue\s+title|issue\s+body|issue\s+metadata|closing_issue)"
-        r".*(?:task_title|PR\s+title|## Title)",
+        r"(?:NOT|NEVER)[\s\S]*?(?:issue\s+title|issue\s+body|issue\s+metadata|closing_issue)"
+        r"[\s\S]*?(?:task_title|PR\s+title|## Title)",
         re.IGNORECASE,
     )
     assert pattern.search(text), (
@@ -129,8 +129,8 @@ def test_compose_pr_title_source_attribution():
 
     text = COMPOSE_PR.read_text()
     pattern = re.compile(
-        r"(?:NOT|NEVER).*(?:re-?deriv|overrid|substitut|replac).*(?:task_title|title)"
-        r"|task_title.*(?:ONLY|exclusively|solely).*(?:prep\s+file|## Title)",
+        r"(?:NOT|NEVER)[\s\S]*?(?:re-?deriv|overrid|substitut|replac)[\s\S]*?(?:task_title|title)"
+        r"|task_title[\s\S]*?(?:ONLY|exclusively|solely)[\s\S]*?(?:prep\s+file|## Title)",
         re.IGNORECASE,
     )
     assert pattern.search(text), (

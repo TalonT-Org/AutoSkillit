@@ -36,7 +36,7 @@ The worktree is left intact for the orchestrator to test and merge separately.
 - Force push or perform destructive git operations
 - Merge the worktree branch into any branch
 - Delete or remove the worktree
-- Run the full test suite (the orchestrator handles testing)
+- Run the full test suite (the orchestrator handles testing) — NEVER invoke pytest, python -m pytest, or any test runner directly
 - Rebase onto the base branch
 - Clean up the worktree environment
 - Re-run tests just to see failures — grep the saved output file instead
@@ -173,7 +173,7 @@ Where practical, delegate test updates to subagents to keep main conversation co
 cd "${WORKTREE_PATH}" && pre-commit run --all-files
 ```
 
-Fix any formatting or linting issues. Do NOT run the full test suite.
+Fix any formatting or linting issues. Do NOT run any tests — NEVER invoke pytest, python -m pytest, or any test runner directly. Use `task test-check` if explicitly instructed to verify tests.
 
 If pre-commit auto-fixes files, stage them and create a **new** commit (do NOT use `--amend`):
 ```bash

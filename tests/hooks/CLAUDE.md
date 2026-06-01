@@ -39,6 +39,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_remove_clone_guard_isolation.py` | Integration tests for remove_clone_guard _check_sync with clone-isolated origin topology |
 | `test_pipeline_step_post_hook.py` | Tests for pipeline_step_post_hook.py PostToolUse hook — step completion marking, progress banner, fail-open paths |
 | `test_pipeline_step_guard.py` | Tests for pipeline_step_guard.py PreToolUse advisory guard — dep-unmet warning, fail-open paths |
+| `test_test_runner_guard.py` | Tests for `test_runner_guard.py` — session scope, exempt skills, deny/allow patterns, fail-open |
 
 ## Architecture Notes
 

@@ -17,7 +17,6 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
-    AGENT_BACKEND_CODEX,
     DISPATCH_ID_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,

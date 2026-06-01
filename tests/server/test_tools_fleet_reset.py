@@ -62,6 +62,9 @@ def _make_subprocess_result(returncode: int = 0, stdout: str = "", stderr: str =
 
 
 def _setup_tool(tool_ctx, monkeypatch, state_path: Path) -> None:
+    from autoskillit.server import _state
+
+    monkeypatch.setattr(_state, "_ctx", tool_ctx)
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_fleet_reset._require_enabled",
         lambda: None,
@@ -222,10 +225,13 @@ class TestResetDispatchEdgeCases:
     async def test_reset_dispatch_partial_failure(
         self, build_ctx_open, tmp_path, monkeypatch
     ) -> None:
+        from autoskillit.server import _state
+
         sidecar = tmp_path / "sidecar.jsonl"
         _write_sidecar(sidecar, pr_url=None)
         state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
         tool_ctx = build_ctx_open()
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
         monkeypatch.setattr(
             "autoskillit.server.tools.tools_fleet_reset._require_enabled",
             lambda: None,
@@ -273,10 +279,13 @@ class TestResetDispatchEdgeCases:
     async def test_reset_dispatch_pr_fallback_search(
         self, build_ctx_open, tmp_path, monkeypatch
     ) -> None:
+        from autoskillit.server import _state
+
         sidecar = tmp_path / "sidecar.jsonl"
         _write_sidecar(sidecar, pr_url=None)
         state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
         tool_ctx = build_ctx_open()
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
         monkeypatch.setattr(
             "autoskillit.server.tools.tools_fleet_reset._require_enabled",
             lambda: None,

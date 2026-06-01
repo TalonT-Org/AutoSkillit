@@ -46,8 +46,7 @@ async def reset_dispatch(
     if (gate := _require_enabled()) is not None:
         return gate
 
-    fleet_err = _require_fleet("reset_dispatch")
-    if fleet_err is not None:
+    if (fleet_err := _require_fleet("reset_dispatch")) is not None:
         return fleet_err
 
     if reset_to not in _VALID_RESET_TARGETS:

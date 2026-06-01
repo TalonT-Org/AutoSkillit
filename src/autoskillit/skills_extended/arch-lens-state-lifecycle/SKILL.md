@@ -3,6 +3,7 @@ name: arch-lens-state-lifecycle
 categories: [arch-lens]
 backend_requirements: [claude-code]
 activate_deps: [mermaid]
+write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-state-lifecycle/"]
 description: Create State Lifecycle architecture diagram showing field contracts, validation gates, and resume safety. Contract overlay lens answering "How is state corruption prevented?"
 hooks:
   PreToolUse:

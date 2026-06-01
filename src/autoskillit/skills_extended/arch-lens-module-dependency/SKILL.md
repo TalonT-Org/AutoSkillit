@@ -3,6 +3,7 @@ name: arch-lens-module-dependency
 categories: [arch-lens]
 backend_requirements: [claude-code]
 activate_deps: [mermaid]
+write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-module-dependency/"]
 description: Create Module Dependency architecture diagram showing package coupling, layering, and fan-in/fan-out. Structural lens answering "How are modules coupled?"
 hooks:
   PreToolUse:

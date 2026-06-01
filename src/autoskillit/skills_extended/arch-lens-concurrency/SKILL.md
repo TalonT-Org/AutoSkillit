@@ -3,6 +3,7 @@ name: arch-lens-concurrency
 categories: [arch-lens]
 backend_requirements: [claude-code]
 activate_deps: [mermaid]
+write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-concurrency/"]
 description: Create Concurrency architecture diagram showing parallel execution patterns, thread pools, synchronization, and barriers. Physiological lens answering "How does parallelism work?"
 hooks:
   PreToolUse:

@@ -66,48 +66,59 @@ class TestValidateAddDir:
 
 
 class TestValidateProjectLocalSkillDir:
-    """validate_project_local_skill_dir: None for codex,
-    delegates to validate_add_dir for claude."""
+    """validate_project_local_skill_dir: None when not project_local_skills_capable,
+    delegates to validate_add_dir otherwise."""
 
     @staticmethod
-    def _make_backend(name: str) -> MagicMock:
+    def _make_backend(*, project_local_skills_capable: bool) -> MagicMock:
         b = MagicMock()
-        b.name = name
-        b.capabilities.project_local_skills_capable = name != "codex"
+        b.capabilities.project_local_skills_capable = project_local_skills_capable
         return b
 
     def test_claude_backend_claude_layout_returns_validated_add_dir(self, tmp_path: Path) -> None:
         skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("# Test")
-        result = validate_project_local_skill_dir(tmp_path, self._make_backend("claude-code"))
+        result = validate_project_local_skill_dir(
+            tmp_path, self._make_backend(project_local_skills_capable=True)
+        )
         assert isinstance(result, ValidatedAddDir)
 
     def test_codex_backend_returns_none(self, tmp_path: Path) -> None:
         skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("# Test")
-        result = validate_project_local_skill_dir(tmp_path, self._make_backend("codex"))
+        result = validate_project_local_skill_dir(
+            tmp_path, self._make_backend(project_local_skills_capable=False)
+        )
         assert result is None
 
     def test_claude_backend_codex_layout_returns_none(self, tmp_path: Path) -> None:
         codex_skill = tmp_path / ".codex" / "skills" / "test-skill"
         codex_skill.mkdir(parents=True)
         (codex_skill / "SKILL.md").write_text("# Test")
-        result = validate_project_local_skill_dir(tmp_path, self._make_backend("claude-code"))
+        result = validate_project_local_skill_dir(
+            tmp_path, self._make_backend(project_local_skills_capable=True)
+        )
         assert result is None
 
     def test_codex_backend_claude_layout_returns_none(self, tmp_path: Path) -> None:
         skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("# Test")
-        result = validate_project_local_skill_dir(tmp_path, self._make_backend("codex"))
+        result = validate_project_local_skill_dir(
+            tmp_path, self._make_backend(project_local_skills_capable=False)
+        )
         assert result is None
 
     def test_empty_dir_returns_none_claude(self, tmp_path: Path) -> None:
-        result = validate_project_local_skill_dir(tmp_path, self._make_backend("claude-code"))
+        result = validate_project_local_skill_dir(
+            tmp_path, self._make_backend(project_local_skills_capable=True)
+        )
         assert result is None
 
     def test_empty_dir_returns_none_codex(self, tmp_path: Path) -> None:
-        result = validate_project_local_skill_dir(tmp_path, self._make_backend("codex"))
+        result = validate_project_local_skill_dir(
+            tmp_path, self._make_backend(project_local_skills_capable=False)
+        )
         assert result is None

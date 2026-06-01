@@ -23,6 +23,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_bash_blocks,
     extract_bash_placeholders,
     extract_declared_ingredients,
+    extract_python_blocks,
     shell_vars_assigned,
 )
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
@@ -247,6 +248,74 @@ def _check_blind_git_add_in_skill(ctx: ValidationContext) -> list[RuleFinding]:
                             ),
                         )
                     )
+    return findings
+
+
+INTERPRETER_WRITE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
+
+
+@semantic_rule(
+    name="interpreter-mediated-write-in-skill",
+    description=(
+        "SKILL.md bash block contains an interpreter-mediated file write "
+        "(python3 -c / heredoc with .write_text(), open(..., 'w'), etc.). "
+        "These are blocked by write_guard.py at runtime when paths are dynamic. "
+        "Use the Write tool or bash redirects instead."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_no_interpreter_mediated_writes(ctx: ValidationContext) -> list[RuleFinding]:
+    from autoskillit.hooks._command_classification import (
+        _INTERPRETER_LINE_RE,
+        _WRITE_APIS_RE,
+    )
+
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        if any(sname == skill_name for sname, _ in INTERPRETER_WRITE_ALLOWLIST):
+            continue
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        violations: list[str] = []
+        for block in extract_bash_blocks(content):
+            has_interpreter = False
+            for line in block.splitlines():
+                stripped = line.lstrip()
+                cleaned = stripped.lstrip("$(")
+                if _INTERPRETER_LINE_RE.search(cleaned):
+                    has_interpreter = True
+                    break
+            if has_interpreter and _WRITE_APIS_RE.search(block):
+                violations.append("bash block")
+        for block in extract_python_blocks(content):
+            if _WRITE_APIS_RE.search(block):
+                violations.append("python block")
+        if violations:
+            findings.append(
+                RuleFinding(
+                    rule="interpreter-mediated-write-in-skill",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' SKILL.md contains interpreter-mediated "
+                        f"file write in {len(violations)} block(s): {violations}. "
+                        f"Use the Write tool or bash redirects instead."
+                    ),
+                )
+            )
     return findings
 
 

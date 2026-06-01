@@ -1,6 +1,8 @@
-"""Guards for resolve-review SKILL.md: blind git add prevention."""
+"""Guards for resolve-review SKILL.md: blind git add, /tmp scratch-file."""
 
 from __future__ import annotations
+
+import re
 
 import pytest
 
@@ -22,3 +24,18 @@ def test_resolve_review_no_blind_add() -> None:
             raise AssertionError(
                 f"resolve-review/SKILL.md contains blind 'git add .': {stripped!r}"
             )
+
+
+def test_never_constraint_mentions_tmp() -> None:
+    """NEVER constraint must explicitly prohibit /tmp scratch files."""
+    content = SKILL_MD.read_text()
+    never_section = re.search(
+        r"\*\*NEVER:\*\*\s*\n(.*?)(?:\n\*\*ALWAYS:\*\*|\n##|\Z)",
+        content,
+        re.DOTALL,
+    )
+    assert never_section is not None, "NEVER section not found in SKILL.md"
+    never_text = never_section.group(1)
+    assert "/tmp" in never_text, (
+        "NEVER constraint must explicitly mention /tmp to prevent scratch-file writes"
+    )

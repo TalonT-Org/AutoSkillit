@@ -1,8 +1,9 @@
-"""Shared parser helpers for SKILL.md bash-block placeholder analysis.
+"""Shared parser helpers for SKILL.md bash-block and python-block analysis.
 
 Used by:
-  - src/autoskillit/recipe/rules_skill_content.py (semantic rule)
+  - src/autoskillit/recipe/rules/rules_skill_content.py (semantic rules)
   - tests/skills/test_skill_placeholder_contracts.py (structural linter)
+  - tests/contracts/test_no_interpreter_writes_in_skills.py (write safety linter)
 """
 
 from __future__ import annotations
@@ -12,6 +13,10 @@ import regex as re
 
 def extract_bash_blocks(content: str) -> list[str]:
     return re.findall(r"```bash\s*\n(.*?)```", content, re.DOTALL)
+
+
+def extract_python_blocks(content: str) -> list[str]:
+    return re.findall(r"```python\s*\n(.*?)```", content, re.DOTALL)
 
 
 def extract_bash_placeholders(bash_blocks: list[str]) -> set[str]:

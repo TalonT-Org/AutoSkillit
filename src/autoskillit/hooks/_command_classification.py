@@ -1,7 +1,8 @@
 """Shared command classification primitives for guard scripts.
 
 Supported interpreters: python3?, perl, ruby, node.
-To add coverage for a new interpreter, update _INTERPRETER_RE only.
+To add coverage for a new interpreter, update both _INTERPRETER_RE and
+_INTERPRETER_LINE_RE.
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ _INTERPRETER_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?|perl|ruby|node)\s+"
     r"(?:-[ce]\s|.*<<)"
 )
+
+_INTERPRETER_LINE_RE = re.compile(r"(?:python3?|perl|ruby|node)\s+(?:-[ce]\s|.*<<)")
 
 _NESTED_SHELL_RE = re.compile(r"(?:^|&&|\|\||;)\s*(?:bash|sh|zsh|dash)\s+-c\s+")
 

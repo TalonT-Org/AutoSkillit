@@ -59,6 +59,23 @@ def test_re_push_review_routes_to_check_review_loop(recipe) -> None:
     assert step.on_success == "check_review_loop"
 
 
+def test_pre_remediation_merge_routes_path_validation_to_remediate(recipe) -> None:
+    """path_validation on pre_remediation_merge must route to remediate, not fall
+    through to result.error — a missing worktree on resume means the prior session
+    already merged it."""
+    step = recipe.steps["pre_remediation_merge"]
+    assert step.on_result is not None
+    pv_routes = [
+        c.route for c in step.on_result.conditions if c.when and "path_validation" in c.when
+    ]
+    assert pv_routes, (
+        "pre_remediation_merge must explicitly route path_validation; "
+        "without it, a missing worktree on resume falls through to "
+        "release_issue_failure"
+    )
+    assert pv_routes[0] == "remediate"
+
+
 # T_REM_LOOP3
 def test_check_review_loop_routes_to_annotate_pr_diff_when_had_blocking(
     recipe,

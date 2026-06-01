@@ -592,6 +592,10 @@
           "route": "remediate"
         },
         {
+          "when": "result.failed_step == 'path_validation'",
+          "route": "remediate"
+        },
+        {
           "when": "result.error",
           "route": "release_issue_failure"
         },
@@ -600,7 +604,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Merges the current worktree before the remediation cycle creates a new one. Audit NO GO means the implementation is incomplete, not wrong — merge it first, then remediate on top. This prevents orphaning the original worktree when implement re-runs. dirty_tree routes to commit_guard_pre_remediation to auto-commit before retrying merge. dirty_main_repo routes to main_repo_guard_pre_remediation to stash. test_gate and rebase route to remediate — the remediation plan will address these. Only hard errors escalate to release_issue_failure.\n"
+      "note": "Merges the current worktree before the remediation cycle creates a new one. Audit NO GO means the implementation is incomplete, not wrong — merge it first, then remediate on top. This prevents orphaning the original worktree when implement re-runs. dirty_tree routes to commit_guard_pre_remediation to auto-commit before retrying merge. dirty_main_repo routes to main_repo_guard_pre_remediation to stash. test_gate, rebase, and path_validation route to remediate — the remediation plan will address these. path_validation means the worktree was already merged in a prior session. Only hard errors escalate to release_issue_failure.\n"
     },
     "commit_guard_pre_remediation": {
       "tool": "run_python",

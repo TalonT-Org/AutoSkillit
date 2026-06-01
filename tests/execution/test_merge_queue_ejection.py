@@ -11,6 +11,7 @@ import pytest
 
 import autoskillit.execution.merge_queue as _mq
 from autoskillit.core.types import PRState
+from autoskillit.execution.merge_queue import EnqueueReady, validate_enqueue_ready
 from tests.execution._merge_queue_helpers import _make_watcher, _queue_state
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -657,3 +658,122 @@ class TestEnqueueMethod:
         )
         assert result["success"] is False
         assert github_reason in result["error"]
+
+
+class TestEnqueueMergeabilityGate:
+    """Tests for mergeability validation gate on enqueue/toggle paths."""
+
+    @pytest.mark.anyio
+    async def test_enqueue_polls_when_mergeable_unknown_then_succeeds(self):
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                _queue_state(mergeable="UNKNOWN"),
+                _queue_state(mergeable="UNKNOWN"),
+                _queue_state(mergeable="MERGEABLE"),
+            ]
+        )
+        watcher._enable_auto_merge_direct = AsyncMock()  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.enqueue(
+                pr_number=1,
+                target_branch="main",
+                repo="owner/repo",
+                auto_merge_available=True,
+            )
+        assert result["success"] is True
+        assert watcher._enable_auto_merge_direct.call_count == 1  # type: ignore[union-attr]
+        assert watcher._fetch_pr_and_queue_state.call_count == 3  # type: ignore[union-attr]
+
+    @pytest.mark.anyio
+    async def test_enqueue_returns_failure_when_mergeable_stays_conflicting(self):
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(mergeable="CONFLICTING")
+        )
+        watcher._enable_auto_merge_direct = AsyncMock()  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.enqueue(
+                pr_number=1,
+                target_branch="main",
+                repo="owner/repo",
+                auto_merge_available=True,
+            )
+        assert result["success"] is False
+        assert "CONFLICTING" in result["error"]
+        watcher._enable_auto_merge_direct.assert_not_called()  # type: ignore[union-attr]
+
+    @pytest.mark.anyio
+    async def test_enqueue_returns_failure_when_pr_merged(self):
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(merged=True)
+        )
+        result = await watcher.enqueue(pr_number=1, target_branch="main", repo="owner/repo")
+        assert result["success"] is False
+        assert watcher._fetch_pr_and_queue_state.call_count == 1  # type: ignore[union-attr]
+
+    @pytest.mark.anyio
+    async def test_enqueue_returns_failure_when_pr_closed(self):
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(state="CLOSED")
+        )
+        result = await watcher.enqueue(pr_number=1, target_branch="main", repo="owner/repo")
+        assert result["success"] is False
+        assert watcher._fetch_pr_and_queue_state.call_count == 1  # type: ignore[union-attr]
+
+    @pytest.mark.anyio
+    async def test_enqueue_polls_through_stale_conflicting_to_mergeable(self):
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                _queue_state(mergeable="CONFLICTING"),
+                _queue_state(mergeable="CONFLICTING"),
+                _queue_state(mergeable="MERGEABLE"),
+            ]
+        )
+        watcher._enable_auto_merge_direct = AsyncMock()  # type: ignore[method-assign]
+        with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
+            result = await watcher.enqueue(
+                pr_number=1,
+                target_branch="main",
+                repo="owner/repo",
+                auto_merge_available=True,
+            )
+        assert result["success"] is True
+        assert watcher._fetch_pr_and_queue_state.call_count == 3  # type: ignore[union-attr]
+
+    @pytest.mark.anyio
+    async def test_toggle_validates_mergeability_before_mutation(self):
+        watcher = _make_watcher()
+        watcher._fetch_pr_and_queue_state = AsyncMock(  # type: ignore[method-assign]
+            return_value=_queue_state(mergeable="CONFLICTING")
+        )
+        watcher._toggle_auto_merge = AsyncMock()  # type: ignore[method-assign]
+        result = await watcher.toggle(pr_number=1, target_branch="main", repo="owner/repo")
+        assert result["success"] is False
+        watcher._toggle_auto_merge.assert_not_called()  # type: ignore[union-attr]
+
+    def test_validate_enqueue_ready_returns_none_for_unknown(self):
+        assert validate_enqueue_ready(_queue_state(mergeable="UNKNOWN")) is None
+
+    def test_validate_enqueue_ready_returns_none_for_conflicting(self):
+        assert validate_enqueue_ready(_queue_state(mergeable="CONFLICTING")) is None
+
+    def test_validate_enqueue_ready_returns_token_for_mergeable(self):
+        result = validate_enqueue_ready(_queue_state(mergeable="MERGEABLE"))
+        assert isinstance(result, EnqueueReady)
+        assert result.pr_node_id == "PR_kwDO_test"
+
+    @pytest.mark.anyio
+    async def test_enqueue_direct_rejects_raw_string(self):
+        watcher = _make_watcher()
+        with pytest.raises((TypeError, AttributeError)):
+            await watcher._enqueue_direct("raw_string")  # type: ignore[arg-type]
+
+    @pytest.mark.anyio
+    async def test_enable_auto_merge_direct_rejects_raw_string(self):
+        watcher = _make_watcher()
+        with pytest.raises((TypeError, AttributeError)):
+            await watcher._enable_auto_merge_direct("raw_string")  # type: ignore[arg-type]

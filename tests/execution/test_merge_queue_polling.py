@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from autoskillit.execution.merge_queue import EnqueueReady
 from tests.execution._merge_queue_helpers import _make_watcher, _queue_state
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -695,7 +696,7 @@ class TestToggleAutoMergeConfirmation:
         watcher._ensure_client = lambda: watcher._client
 
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
-            await watcher._toggle_auto_merge("PR_node123")
+            await watcher._toggle_auto_merge(EnqueueReady(pr_node_id="PR_node123"))
 
         assert watcher._client.post.call_count == 4
 
@@ -728,7 +729,7 @@ class TestToggleAutoMergeConfirmation:
             sleep_durations.append(seconds)
 
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", side_effect=_capture_sleep):
-            await watcher._toggle_auto_merge("PR_node123")
+            await watcher._toggle_auto_merge(EnqueueReady(pr_node_id="PR_node123"))
 
         assert 2 not in sleep_durations
 

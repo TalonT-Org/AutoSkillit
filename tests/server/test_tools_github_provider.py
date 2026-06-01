@@ -24,7 +24,8 @@ async def test_report_bug_forwards_provider_name_as_distinct_parameter(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
 
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    _feat = "autoskillit.server.tools.tools_github.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
         lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),

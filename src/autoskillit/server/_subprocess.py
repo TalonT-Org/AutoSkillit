@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import TerminationReason
+from autoskillit.core import TerminationReason, current_order_id, current_step_name
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
@@ -71,8 +71,6 @@ async def _run_subprocess(
     returncode, stdout, stderr = _process_runner_result(result, timeout)
 
     if is_gh:
-        from autoskillit.core import current_order_id, current_step_name  # circular-break
-
         latency_ms = (time.monotonic() - start) * 1000.0
         log = _get_ctx().github_api_log
         if log is not None:

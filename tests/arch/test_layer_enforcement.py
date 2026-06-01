@@ -568,6 +568,38 @@ def test_il3_deferred_autoskillit_imports_tagged() -> None:
     )
 
 
+def test_il3_cross_layer_imports_hoisted() -> None:
+    """Cross-layer deferred imports in server/ must be hoisted to module level."""
+    server_root = SRC_ROOT / "server"
+    violations: list[str] = []
+    for py_path in sorted(server_root.rglob("*.py")):
+        source = py_path.read_text()
+        tree = ast.parse(source, filename=str(py_path))
+        tc = _type_checking_lines(tree)
+        for node in _collect_deferred_imports(tree):
+            if node.lineno in tc:
+                continue
+            if isinstance(node, ast.ImportFrom) and node.module:
+                parts = node.module.split(".")
+            elif isinstance(node, ast.Import):
+                parts = node.names[0].name.split(".")
+            else:
+                continue
+            if parts[0] != "autoskillit" or len(parts) < 2:
+                continue
+            if parts[1] == "server":
+                continue
+            rel = _rel(py_path)
+            violations.append(
+                f"  {rel}:{node.lineno}: deferred cross-layer import of autoskillit.{parts[1]}"
+            )
+    assert not violations, (
+        "Cross-layer deferred imports in server/ must be hoisted to module "
+        "level (lower layers cannot cause circular imports with server/):\n"
+        + "\n".join(violations)
+    )
+
+
 def test_workspace_deferred_import_has_comment() -> None:
     """P14-F2: deferred import in cli/app.py must carry a rationale comment."""
     src = (SRC_ROOT / "cli" / "app.py").read_text()

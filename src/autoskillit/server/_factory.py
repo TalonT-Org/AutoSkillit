@@ -43,9 +43,13 @@ from autoskillit.execution import (
     DefaultGitHubFetcher,
     DefaultHeadlessExecutor,
     DefaultMergeQueueWatcher,
+    DefaultSubprocessRunner,
     DefaultTestRunner,
+    RecordingSubprocessRunner,
     build_replay_runner,
+    get_backend,
 )
+from autoskillit.fleet import FleetSemaphore, build_protected_campaign_ids
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
     DefaultAuditLog,
@@ -203,15 +207,7 @@ def make_context(
         passed explicitly, tester is left as None.
     """
     if runner is _UNSET:
-        from autoskillit.execution import DefaultSubprocessRunner  # circular-break: lazy-load
-
         runner = DefaultSubprocessRunner()
-
-    from autoskillit.execution import get_backend  # circular-break: lazy-load
-    from autoskillit.fleet import (  # circular-break: lazy-load fleet
-        FleetSemaphore,
-        build_protected_campaign_ids,
-    )
 
     _codex_feature_enabled = is_feature_enabled(
         "codex_backend", config.features, experimental_enabled=config.experimental_enabled
@@ -272,10 +268,6 @@ def make_context(
                         make_scenario_recorder = None  # type: ignore[assignment]
 
                     if make_scenario_recorder is not None:
-                        from autoskillit.execution import (  # circular-break
-                            RecordingSubprocessRunner,
-                        )
-
                         recorder = make_scenario_recorder(
                             output_dir=scenario_dir, recipe_name=recipe_name
                         )

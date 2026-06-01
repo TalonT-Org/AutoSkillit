@@ -74,7 +74,7 @@ def _setup_tool(tool_ctx, monkeypatch, state_path: Path) -> None:
         lambda _name: None,
     )
     monkeypatch.setattr(
-        "autoskillit.fleet.discover_campaign_state_files",
+        "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
         lambda _project_dir: [state_path],
     )
 
@@ -176,7 +176,7 @@ class TestResetDispatchErrors:
             lambda _name: json.dumps({"success": False, "error": "not_fleet"}),
         )
         monkeypatch.setattr(
-            "autoskillit.fleet.discover_campaign_state_files",
+            "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -199,7 +199,7 @@ class TestResetDispatchErrors:
             lambda: json.dumps({"success": False, "error": "gate_closed"}),
         )
         monkeypatch.setattr(
-            "autoskillit.fleet.discover_campaign_state_files",
+            "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -247,7 +247,7 @@ class TestResetDispatchEdgeCases:
             lambda _name: None,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet.discover_campaign_state_files",
+            "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -301,7 +301,7 @@ class TestResetDispatchEdgeCases:
             lambda _name: None,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet.discover_campaign_state_files",
+            "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 

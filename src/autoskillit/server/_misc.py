@@ -11,9 +11,22 @@ import asyncio
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import get_logger
+from autoskillit._llm_triage import triage_staleness
+from autoskillit.core import (
+    DIRECT_INSTALL_CACHE_SUBDIR,
+    MARKETPLACE_PREFIX,
+    detect_autoskillit_mcp_prefix,
+    ensure_project_temp,
+    get_logger,
+)
 from autoskillit.execution import (
     SCENARIO_STEP_NAME_ENV as SCENARIO_STEP_NAME_ENV,
+)
+from autoskillit.execution import (
+    SessionState,
+    clear_session_state,
+    persist_session_state,
+    resolve_remote_repo,
 )
 from autoskillit.execution import (
     _refresh_quota_cache as _refresh_quota_cache,
@@ -38,6 +51,12 @@ from autoskillit.execution import (
 )
 from autoskillit.execution import (
     write_telemetry_clear_marker as write_telemetry_clear_marker,
+)
+from autoskillit.hook_registry import (
+    _claude_settings_path,
+    _count_hook_registry_drift,
+    find_broken_hook_scripts,
+    validate_plugin_cache_hooks,
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.workspace import clone_registry as clone_registry
@@ -134,17 +153,6 @@ def _extract_block(text: str, start_delim: str, end_delim: str) -> list[str]:
 
 def _build_hook_diagnostic_warning() -> str | None:
     """Run hook health and drift checks. Return a warning string if issues are found."""
-    from autoskillit.core import (  # circular-break
-        DIRECT_INSTALL_CACHE_SUBDIR,
-        MARKETPLACE_PREFIX,
-        detect_autoskillit_mcp_prefix,
-    )
-    from autoskillit.hook_registry import (  # circular-break
-        _claude_settings_path,
-        _count_hook_registry_drift,
-        find_broken_hook_scripts,
-        validate_plugin_cache_hooks,
-    )
 
     issues: list[str] = []
 
@@ -197,8 +205,6 @@ async def _apply_triage_gate(
 
     import functools
 
-    from autoskillit._llm_triage import triage_staleness  # circular-break
-
     if _ctx.backend is not None and _ctx.backend.capabilities.triage_capable:
         triage_fn = functools.partial(triage_staleness, backend=_ctx.backend)
     else:
@@ -223,7 +229,6 @@ async def resolve_repo_from_remote(cwd: str, hint: str | None = None) -> str:
     hint: optional owner/repo string or full GitHub URL; parsed before
           git remote inference. Passes through to resolve_remote_repo.
     """
-    from autoskillit.execution import resolve_remote_repo  # circular-break
 
     return await resolve_remote_repo(cwd, hint=hint) or ""
 
@@ -281,12 +286,6 @@ async def _quota_refresh_loop(config: QuotaGuardConfig, *, provider: str = "anth
 def persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> None:
     import os  # noqa: PLC0415
 
-    from autoskillit.core import ensure_project_temp  # circular-break
-    from autoskillit.execution import (  # circular-break
-        SessionState,
-        persist_session_state,
-    )
-
     if not skill_result.session_id:
         return
     try:
@@ -306,10 +305,6 @@ def persist_run_skill_state(skill_result: SkillResult, project_dir: Path) -> Non
 
 
 def clear_run_skill_state(project_dir: Path) -> None:
-    from autoskillit.core import ensure_project_temp  # circular-break
-    from autoskillit.execution import (  # circular-break
-        clear_session_state,
-    )
 
     try:
         state_dir = ensure_project_temp(project_dir) / "session_state"

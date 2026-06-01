@@ -139,7 +139,7 @@ def test_startup_broken_hook_detection(tmp_path: Path, monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "autoskillit.hook_registry.iter_all_scope_paths",
+        "autoskillit.server._lifespan.iter_all_scope_paths",
         lambda project_root=None: iter([("user", user_settings)]),
     )
 
@@ -157,11 +157,11 @@ def test_startup_hook_health_checks_plugin_cache(tmp_path: Path, monkeypatch) ->
     ]
 
     monkeypatch.setattr(
-        "autoskillit.hook_registry.iter_all_scope_paths",
+        "autoskillit.server._lifespan.iter_all_scope_paths",
         lambda project_root=None: iter([]),
     )
     monkeypatch.setattr(
-        "autoskillit.hook_registry.validate_plugin_cache_hooks",
+        "autoskillit.server._lifespan.validate_plugin_cache_hooks",
         lambda cache_dir=None: stale_commands,
     )
 

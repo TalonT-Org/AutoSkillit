@@ -12,7 +12,7 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import atomic_write, get_logger
+from autoskillit.core import atomic_write, get_logger, is_feature_enabled
 from autoskillit.pipeline import write_status
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -240,8 +240,6 @@ async def report_bug(
             effective_model = model or cfg.model or ""
             report_provider_extras: dict[str, str] | None = None
             report_profile_name: str = ""
-
-            from autoskillit.core import is_feature_enabled  # circular-break
 
             if is_feature_enabled(
                 "providers",

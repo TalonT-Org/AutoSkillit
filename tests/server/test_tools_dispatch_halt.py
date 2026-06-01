@@ -139,7 +139,7 @@ class TestDispatchFoodTruckHaltEnforcement:
         from autoskillit.fleet import DispatchStatus as _DS
 
         monkeypatch.setattr(
-            "autoskillit.fleet.execute_dispatch",
+            "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
             AsyncMock(
                 return_value=DispatchResult(
                     outcome=DispatchCompleted(
@@ -230,7 +230,7 @@ class TestPostDispatchHaltOnFailure:
 
         mock_execute = AsyncMock()
         monkeypatch.setattr(
-            "autoskillit.fleet.execute_dispatch",
+            "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
             mock_execute,
         )
 

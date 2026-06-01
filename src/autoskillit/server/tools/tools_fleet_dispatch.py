@@ -16,7 +16,33 @@ if TYPE_CHECKING:
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.core import get_logger
+from autoskillit.core import (
+    FleetErrorCode,
+    SessionCheckpoint,
+    detect_autoskillit_mcp_prefix,
+    find_caller_session_id,
+    fleet_error,
+    get_logger,
+    is_feature_enabled,
+)
+from autoskillit.fleet import (
+    _INFRASTRUCTURE_FAILURE_REASONS,
+    DispatchCompleted,
+    DispatchRecord,
+    DispatchRejected,
+    DispatchResult,
+    DispatchStatus,
+    _build_food_truck_prompt,
+    evaluate_skip_when,
+    execute_dispatch,
+    find_completed_dispatch,
+    has_blocking_dispatch,
+    read_all_campaign_captures,
+    read_state,
+    record_gate_outcome,
+    reset_blocking_dispatch,
+    upsert_dispatch_record_by_name,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir
@@ -57,14 +83,6 @@ def _write_dispatch_to_campaign_state(
     field reconstruction and eliminating double-normalization of token_usage.
     """
     try:
-        from autoskillit.fleet import (  # circular-break
-            DispatchCompleted,
-            DispatchRecord,
-            DispatchRejected,
-            read_state,
-            upsert_dispatch_record_by_name,
-        )
-
         match outcome:
             case DispatchRejected(error_code=code, message=msg):
                 upsert_dispatch_record_by_name(
@@ -115,8 +133,6 @@ def _write_dispatch_to_campaign_state(
 
 def _get_food_truck_prompt_builder() -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
-    from autoskillit.core import detect_autoskillit_mcp_prefix  # circular-break
-    from autoskillit.fleet import _build_food_truck_prompt  # circular-break
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
     return functools.partial(_build_food_truck_prompt, mcp_prefix=mcp_prefix)
@@ -196,11 +212,6 @@ async def dispatch_food_truck(
         # Feature guard: config authority check independent of MCP visibility state.
         # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
         # dispatch_food_truck never executes when features.fleet is disabled in config.
-        from autoskillit.core import (  # circular-break
-            FleetErrorCode,
-            fleet_error,
-            is_feature_enabled,
-        )
         from autoskillit.server import _get_ctx as _get_ctx_for_feature_check  # circular-break
 
         _feature_ctx = _get_ctx_for_feature_check()
@@ -219,11 +230,6 @@ async def dispatch_food_truck(
             os.environ.get("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false").lower() == "true"
         )
         if campaign_state_path_str and not continue_on_failure:
-            from autoskillit.fleet import (  # circular-break
-                has_blocking_dispatch,
-                reset_blocking_dispatch,
-            )
-
             campaign_sp = Path(campaign_state_path_str)
             if dispatch_name:
                 if not reset_blocking_dispatch(campaign_sp, dispatch_name):
@@ -250,18 +256,6 @@ async def dispatch_food_truck(
                     "No further dispatches permitted.",
                 )
 
-        from autoskillit.core import SessionCheckpoint  # circular-break
-        from autoskillit.fleet import (  # circular-break
-            _INFRASTRUCTURE_FAILURE_REASONS,
-            DispatchCompleted,
-            DispatchRecord,
-            DispatchResult,
-            DispatchStatus,
-            evaluate_skip_when,
-            execute_dispatch,
-            read_all_campaign_captures,
-            upsert_dispatch_record_by_name,
-        )
         from autoskillit.server import _get_ctx  # circular-break
         from autoskillit.server._misc import (  # circular-break
             _refresh_quota_cache,
@@ -274,14 +268,10 @@ async def dispatch_food_truck(
             SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
         )
         tool_ctx = _get_ctx()
-        from autoskillit.core import find_caller_session_id  # circular-break
-
         caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
         effective_name = dispatch_name or recipe
 
         if campaign_state_path_str:
-            from autoskillit.fleet import find_completed_dispatch  # circular-break
-
             prior_record = find_completed_dispatch(Path(campaign_state_path_str), effective_name)
             if prior_record is not None:
                 return DispatchCompleted(
@@ -395,8 +385,6 @@ async def dispatch_food_truck(
         return outcome.to_envelope()
     except Exception as exc:
         logger.error("dispatch_food_truck unhandled exception", exc_info=True)
-        from autoskillit.core import FleetErrorCode, fleet_error  # circular-break
-
         return fleet_error(
             FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",
@@ -432,12 +420,6 @@ async def record_gate_dispatch(
         return fleet_gate
 
     try:
-        from autoskillit.core import (  # circular-break
-            FleetErrorCode,
-            fleet_error,
-            is_feature_enabled,
-        )
-        from autoskillit.fleet import record_gate_outcome  # circular-break
         from autoskillit.server import _get_ctx as _get_ctx_for_feature_check  # circular-break
 
         _feature_ctx = _get_ctx_for_feature_check()
@@ -471,8 +453,6 @@ async def record_gate_dispatch(
         )
     except Exception as exc:
         logger.error("record_gate_dispatch unhandled exception", exc_info=True)
-        from autoskillit.core import FleetErrorCode, fleet_error  # circular-break
-
         return fleet_error(
             FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
             f"{type(exc).__name__}: {exc}",

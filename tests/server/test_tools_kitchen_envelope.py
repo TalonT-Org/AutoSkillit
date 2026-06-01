@@ -30,15 +30,15 @@ async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
     (settings_dir / "settings.json").write_text("{}")
 
     monkeypatch.setattr(
-        "autoskillit.hook_registry._claude_settings_path",
+        "autoskillit.server._misc._claude_settings_path",
         lambda scope: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
-        "autoskillit.hook_registry._count_hook_registry_drift",
+        "autoskillit.server._misc._count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=1),
     )
     monkeypatch.setattr(
-        "autoskillit.hook_registry.find_broken_hook_scripts",
+        "autoskillit.server._misc.find_broken_hook_scripts",
         lambda _: [],
     )
 
@@ -73,15 +73,15 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
     (settings_dir / "settings.json").write_text("{}")
 
     monkeypatch.setattr(
-        "autoskillit.hook_registry._claude_settings_path",
+        "autoskillit.server._misc._claude_settings_path",
         lambda scope: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
-        "autoskillit.hook_registry.find_broken_hook_scripts",
+        "autoskillit.server._misc.find_broken_hook_scripts",
         lambda _: ["python3 /missing/status_health_guard.py"],
     )
     monkeypatch.setattr(
-        "autoskillit.hook_registry._count_hook_registry_drift",
+        "autoskillit.server._misc._count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=0),
     )
 
@@ -118,12 +118,12 @@ async def test_build_hook_diagnostic_warning_skips_missing_when_plugin_active(
     (settings_dir / "settings.json").write_text('{"hooks": {}}')
 
     monkeypatch.setattr(
-        "autoskillit.hook_registry._claude_settings_path",
+        "autoskillit.server._misc._claude_settings_path",
         lambda scope: settings_dir / "settings.json",
     )
-    monkeypatch.setattr("autoskillit.hook_registry.validate_plugin_cache_hooks", lambda **_: [])
+    monkeypatch.setattr("autoskillit.server._misc.validate_plugin_cache_hooks", lambda **_: [])
     monkeypatch.setattr(
-        "autoskillit.core.detect_autoskillit_mcp_prefix", lambda: MARKETPLACE_PREFIX
+        "autoskillit.server._misc.detect_autoskillit_mcp_prefix", lambda: MARKETPLACE_PREFIX
     )
 
     from autoskillit.server._misc import _build_hook_diagnostic_warning
@@ -146,17 +146,17 @@ async def test_build_hook_diagnostic_warning_orphaned_still_fires_when_plugin_ac
     (settings_dir / "settings.json").write_text('{"hooks": {}}')
 
     monkeypatch.setattr(
-        "autoskillit.hook_registry._claude_settings_path",
+        "autoskillit.server._misc._claude_settings_path",
         lambda scope: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
-        "autoskillit.hook_registry._count_hook_registry_drift",
+        "autoskillit.server._misc._count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=1),
     )
-    monkeypatch.setattr("autoskillit.hook_registry.find_broken_hook_scripts", lambda _: [])
-    monkeypatch.setattr("autoskillit.hook_registry.validate_plugin_cache_hooks", lambda **_: [])
+    monkeypatch.setattr("autoskillit.server._misc.find_broken_hook_scripts", lambda _: [])
+    monkeypatch.setattr("autoskillit.server._misc.validate_plugin_cache_hooks", lambda **_: [])
     monkeypatch.setattr(
-        "autoskillit.core.detect_autoskillit_mcp_prefix", lambda: MARKETPLACE_PREFIX
+        "autoskillit.server._misc.detect_autoskillit_mcp_prefix", lambda: MARKETPLACE_PREFIX
     )
 
     from autoskillit.server._misc import _build_hook_diagnostic_warning

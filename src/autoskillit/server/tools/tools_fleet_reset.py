@@ -8,6 +8,16 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import FleetErrorCode, IssueLabelState, fleet_error, get_logger
+from autoskillit.fleet import (
+    _RESETTABLE_STATUSES,
+    DispatchStatus,
+    discover_campaign_state_files,
+    find_dispatch_in_campaigns,
+    format_resettable_statuses,
+    reset_dispatch_artifacts,
+    resolve_worktrees_dir,
+    update_campaign_state,
+)
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._notify import track_response_size
@@ -56,17 +66,7 @@ async def reset_dispatch(
         )
 
     try:
-        from autoskillit.fleet import (  # circular-break: lazy-load fleet
-            _RESETTABLE_STATUSES,
-            DispatchStatus,
-            discover_campaign_state_files,
-            find_dispatch_in_campaigns,
-            format_resettable_statuses,
-            reset_dispatch_artifacts,
-            resolve_worktrees_dir,
-            update_campaign_state,
-        )
-        from autoskillit.server import _get_ctx  # circular-break: server.__init__ cycle
+        from autoskillit.server import _get_ctx  # circular-break
 
         tool_ctx = _get_ctx()
         project_dir = tool_ctx.project_dir

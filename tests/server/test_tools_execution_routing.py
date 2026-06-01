@@ -363,7 +363,8 @@ async def test_run_skill_injects_provider_extras_when_feature_enabled(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
         lambda *a, **kw: ("vertex", {"ANTHROPIC_API_KEY": "test-key-xyz"}),
@@ -386,7 +387,8 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: False)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: False)
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
@@ -405,7 +407,8 @@ async def test_run_skill_provider_extras_none_when_default_profile(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {}),

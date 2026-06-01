@@ -227,7 +227,8 @@ async def test_run_skill_resolves_step_provider_from_recipe_step(
     step = RecipeStep(name="run_canaries", provider="minimax")
     tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
 
     captured_kwargs: dict = {}
 
@@ -261,7 +262,8 @@ async def test_run_skill_llm_step_provider_overrides_recipe_step(
     step = RecipeStep(name="run_canaries", provider="minimax")
     tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
 
     captured_kwargs: dict = {}
 
@@ -297,7 +299,8 @@ async def test_run_skill_logs_warning_when_step_provider_resolved_from_recipe(
     step = RecipeStep(name="run_canaries", provider="minimax")
     tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.core.is_feature_enabled", lambda *a, **kw: True)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
         "autoskillit.server._guards._resolve_provider_profile",
         lambda *a, **kw: ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),

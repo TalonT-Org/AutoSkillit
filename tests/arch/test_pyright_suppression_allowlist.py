@@ -1,7 +1,7 @@
 """
 Pyright suppression allowlist — REQ-PYRIGHT-001.
 
-Every # pyright: ignore comment in production code must appear in an
+Every pyright suppression comment in production code must appear in an
 explicit allowlist. Unlisted suppressions fail CI.
 """
 

@@ -40,7 +40,7 @@ def test_loop_iterated_run_skill_steps_use_iter_scoped_output_dir(bundled_recipe
         output_dir = step.with_args.get("output_dir", "")
         if not output_dir:
             continue
-        if "{{AUTOSKILLIT_TEMP}}" not in output_dir and ".autoskillit/temp" not in output_dir:
+        if "{{AUTOSKILLIT_TEMP}}" not in output_dir:
             continue
         if "${{ context." not in output_dir:
             violations.append((step_name, output_dir))

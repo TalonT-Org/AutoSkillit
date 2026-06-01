@@ -912,7 +912,7 @@ class TestRedirectRelativePathResolution:
 
         monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
         result = _extract_bash_write_targets("echo foo > output.txt")
-        assert result is None or result == []
+        assert result == []
 
 
 class TestGhCommandRedirectChecking:

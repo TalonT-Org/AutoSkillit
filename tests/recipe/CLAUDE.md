@@ -206,6 +206,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_validator_structural.py` | Tests for recipe validator structural analysis |
 
 | `test_audit_impl_defaults.py` | Contract test: implementation.yaml and remediation.yaml must default inputs.audit_impl to 'true' |
+| `test_analysis_detectors_rename.py` | Tests for plan-visualization → synthesize-vis-plan rename in _OBSERVABILITY_CAPTURES |
 | `test_false_positive_escape_valve.py` | Tests for false-positive escape valve routing in recipes that invoke make-plan |
 ## Architecture Notes
 

@@ -68,8 +68,8 @@ fi
 
 if [ -n "${VIS_TRACE_PATH}" ] && [ -f "${VIS_TRACE_PATH}" ]; then
     cp "${VIS_TRACE_PATH}" "${AUDIT_DIR}/visualization-plan-trace.md"
-elif [ -f "${SRC_TEMP}/plan-visualization/visualization-plan-trace.md" ]; then
-    cp "${SRC_TEMP}/plan-visualization/visualization-plan-trace.md" "${AUDIT_DIR}/visualization-plan-trace.md"
+elif [ -f "${SRC_TEMP}/synthesize-vis-plan/visualization-plan-trace.md" ]; then
+    cp "${SRC_TEMP}/synthesize-vis-plan/visualization-plan-trace.md" "${AUDIT_DIR}/visualization-plan-trace.md"
 fi
 
 cd "${RESOLVED}" && git add research/ && git commit -m "Add experiment plan and scope to research/"

@@ -54,7 +54,6 @@ def _extract_body_file_path(cmd: str) -> str | None:
                 return tokens[j + 1]
             if t.startswith("--body-file="):
                 return t.split("=", 1)[1]
-        continue
     return None
 
 

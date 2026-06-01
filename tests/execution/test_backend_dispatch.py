@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -271,3 +272,121 @@ class TestStepBackendOverride:
         executor = InMemoryHeadlessExecutor()
         await executor.run("/test", "/tmp", backend_override="codex")
         assert executor.calls[0].backend_override == "codex"
+
+
+def _patch_for_flush(monkeypatch, tmp_path, skill_result):
+    """Monkeypatch internals so _execute_claude_headless reaches flush_session_log.
+
+    Mirrors _patch_common from test_flush_provider_integration.py, minus the ctx
+    argument and the unused _sub_result shared state.
+    """
+    import autoskillit.execution.session_log as _sl_mod
+    from autoskillit.execution.headless import PostSessionMetrics
+
+    sub_result = SubprocessResult(
+        returncode=1,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=99,
+    )
+
+    async def fake_runner(cmd, **kwargs):  # noqa: ARG001
+        return sub_result
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._build_skill_result",
+        lambda *a, **kw: skill_result,  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
+        lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
+        lambda *a: "",  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
+        lambda: {},
+    )
+
+    flush_calls: list[dict] = []
+    monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: flush_calls.append(kw))
+    return fake_runner, flush_calls
+
+
+class TestCodexLogDispatch:
+    """Verify channel_b_capable drives codex log dispatch to flush_session_log."""
+
+    @pytest.mark.anyio
+    async def test_channel_b_false_dispatches_codex_log_via_locate_session(
+        self, minimal_ctx, tmp_path, monkeypatch
+    ):
+        from autoskillit.core.types import CmdSpec
+        from autoskillit.execution.headless._headless_execute import _execute_claude_headless
+
+        result = SkillResult(
+            success=False,
+            result="",
+            session_id="sid-1",
+            subtype="error",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        backend = _mock_backend(channel_b_capable=False, process_name="codex")
+        backend.name = "codex"
+        sentinel = Path("/sentinel/codex.jsonl")
+        backend.session_locator().locate_session.return_value = sentinel
+
+        fake_runner, flush_calls = _patch_for_flush(monkeypatch, tmp_path, result)
+        minimal_ctx.runner = fake_runner  # type: ignore[assignment]
+        minimal_ctx.backend = _mock_backend()
+
+        await _execute_claude_headless(
+            CmdSpec(cmd=("codex", "--quiet", "test"), env={}),
+            str(tmp_path),
+            minimal_ctx,
+            timeout=30.0,
+            stale_threshold=5.0,
+            step_backend=backend,
+        )
+
+        backend.session_locator().locate_session.assert_called_once_with("sid-1")
+        assert flush_calls[0]["codex_log_path"] == sentinel
+
+    @pytest.mark.anyio
+    async def test_channel_b_true_skips_session_locator(self, minimal_ctx, tmp_path, monkeypatch):
+        from autoskillit.core.types import CmdSpec
+        from autoskillit.execution.headless._headless_execute import _execute_claude_headless
+
+        result = SkillResult(
+            success=False,
+            result="",
+            session_id="sid-2",
+            subtype="error",
+            is_error=True,
+            exit_code=1,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        backend = _mock_backend(channel_b_capable=True)
+        fake_runner, flush_calls = _patch_for_flush(monkeypatch, tmp_path, result)
+        minimal_ctx.runner = fake_runner  # type: ignore[assignment]
+        minimal_ctx.backend = backend
+
+        await _execute_claude_headless(
+            CmdSpec(cmd=("claude", "--print", "test"), env={}),
+            str(tmp_path),
+            minimal_ctx,
+            timeout=30.0,
+            stale_threshold=5.0,
+            step_backend=backend,
+        )
+
+        backend.session_locator.assert_not_called()
+        assert flush_calls[0]["codex_log_path"] is None

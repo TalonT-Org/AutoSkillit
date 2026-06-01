@@ -84,10 +84,6 @@ src/autoskillit/skills_extended/*/SKILL.md:
   - workspace/
   - planner/
 
-src/autoskillit/recipe/rules/rules_backend_compat.py:
-  - recipe/
-  - arch/
-
 src/autoskillit/config/defaults.yaml:
   - config/
   - infra/

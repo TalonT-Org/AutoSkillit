@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,9 +11,21 @@ from autoskillit.core import Severity, SkillSource
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
-from autoskillit.workspace.skills import SkillInfo
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+def _make_skill_info(
+    name: str = "investigate",
+    backend_requirements: frozenset[str] = frozenset({"claude-code"}),
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        name=name,
+        source=SkillSource.BUNDLED_EXTENDED,
+        path=MagicMock(),
+        categories=frozenset(),
+        backend_requirements=backend_requirements,
+    )
 
 
 def _make_recipe_with_skill_step(skill_command: str) -> Recipe:
@@ -22,10 +35,10 @@ def _make_recipe_with_skill_step(skill_command: str) -> Recipe:
             with_args={"skill_command": skill_command, "cwd": "/tmp"},
         )
     }
-    return Recipe(name="test-recipe", steps=steps)
+    return Recipe(name="test-recipe", description="test", steps=steps)
 
 
-def _mock_resolver(skill_info: SkillInfo | None) -> MagicMock:
+def _mock_resolver(skill_info: SimpleNamespace | None) -> MagicMock:
     resolver = MagicMock()
     resolver.resolve.return_value = skill_info
     resolver.list_all.return_value = [skill_info] if skill_info else []
@@ -34,12 +47,7 @@ def _mock_resolver(skill_info: SkillInfo | None) -> MagicMock:
 
 class TestBackendIncompatibleSkillRule:
     def test_incompatible_backend_produces_error(self):
-        skill_info = SkillInfo(
-            name="investigate",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=MagicMock(),
-            backend_requirements=frozenset({"claude-code"}),
-        )
+        skill_info = _make_skill_info()
         recipe = _make_recipe_with_skill_step("/investigate something")
         resolver = _mock_resolver(skill_info)
         ctx = make_validation_context(
@@ -56,12 +64,7 @@ class TestBackendIncompatibleSkillRule:
         assert "codex" in compat_findings[0].message
 
     def test_compatible_backend_no_finding(self):
-        skill_info = SkillInfo(
-            name="investigate",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=MagicMock(),
-            backend_requirements=frozenset({"claude-code"}),
-        )
+        skill_info = _make_skill_info()
         recipe = _make_recipe_with_skill_step("/investigate something")
         resolver = _mock_resolver(skill_info)
         ctx = make_validation_context(
@@ -75,12 +78,7 @@ class TestBackendIncompatibleSkillRule:
         assert len(compat_findings) == 0
 
     def test_none_backend_skips_gracefully(self):
-        skill_info = SkillInfo(
-            name="investigate",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=MagicMock(),
-            backend_requirements=frozenset({"claude-code"}),
-        )
+        skill_info = _make_skill_info()
         recipe = _make_recipe_with_skill_step("/investigate something")
         resolver = _mock_resolver(skill_info)
         ctx = make_validation_context(
@@ -94,12 +92,7 @@ class TestBackendIncompatibleSkillRule:
         assert len(compat_findings) == 0
 
     def test_empty_backend_requirements_no_finding(self):
-        skill_info = SkillInfo(
-            name="investigate",
-            source=SkillSource.BUNDLED_EXTENDED,
-            path=MagicMock(),
-            backend_requirements=frozenset(),
-        )
+        skill_info = _make_skill_info(backend_requirements=frozenset())
         recipe = _make_recipe_with_skill_step("/investigate something")
         resolver = _mock_resolver(skill_info)
         ctx = make_validation_context(

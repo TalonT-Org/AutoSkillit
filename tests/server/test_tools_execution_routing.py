@@ -94,7 +94,9 @@ async def test_run_skill_activates_deps_for_tier3_target(
 
     # Set up skill_resolver to produce a resolved name
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
+    mock_resolver.resolve.return_value = MagicMock(
+        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
+    )
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     from tests.fakes import InMemoryHeadlessExecutor
@@ -162,7 +164,9 @@ async def test_run_skill_passes_allow_only_to_init_session(
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
+    mock_resolver.resolve.return_value = MagicMock(
+        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
+    )
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
@@ -242,7 +246,9 @@ async def test_run_skill_make_plan_closure_includes_arch_lens_pack(
     tool_ctx_kitchen_open.session_skill_manager = _RecordingManager(real_mgr)
 
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
+    mock_resolver.resolve.return_value = MagicMock(
+        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
+    )
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()

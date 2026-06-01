@@ -1008,3 +1008,43 @@ class TestArch010Enforcement:
             f"ARCH-010 violations in {test_file.relative_to(Path(__file__).parent.parent)}:\n"
             + "\n".join(f"  {v}" for v in violations)
         )
+
+
+# ── ARCH-011: pyi stub re-export only ─────────────────────────────────────────
+
+
+def test_pyi_stub_only_reexports() -> None:
+    """ARCH-011: __init__.pyi stub files must contain only 'from .X import Y as Y' lines.
+
+    lazy_loader.attach_stub() uses _StubVisitor which only processes ImportFrom nodes.
+    Any other statement type (def, class, assign) is silently ignored, causing the
+    symbol to be absent from __all__ and invisible at runtime.
+    """
+    violations: list[str] = []
+    for pyi_file in SRC_ROOT.rglob("__init__.pyi"):
+        source = pyi_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(pyi_file))
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom):
+                if node.level != 1:
+                    violations.append(
+                        f"  {_rel(pyi_file)}:{node.lineno}: "
+                        f"import level {node.level} (must be 1: from .X import Y as Y)"
+                    )
+                for alias in node.names:
+                    if alias.asname != alias.name:
+                        violations.append(
+                            f"  {_rel(pyi_file)}:{node.lineno}: "
+                            f"missing 'as' form: {alias.name} "
+                            f"(must be {alias.name} as {alias.name})"
+                        )
+            else:
+                violations.append(
+                    f"  {_rel(pyi_file)}:{node.lineno}: "
+                    f"{type(node).__name__} not allowed — only 'from .X import Y as Y' lines. "
+                    f"lazy_loader.attach_stub() silently ignores {type(node).__name__} statements."
+                )
+    assert not violations, (
+        "ARCH-011: __init__.pyi stubs must contain only relative re-export imports "
+        "(from .module import Name as Name):\n" + "\n".join(violations)
+    )

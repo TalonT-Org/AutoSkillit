@@ -13,7 +13,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `conftest.py` | Arch conftest — shared fixtures for AST-based tests |
 | `test_anyio_migration.py` | Regression guards for the asyncio→anyio migration (C-6) |
 | `test_arch_deselection.py` | Tests for diff-aware parametrized deselection — REQ-ARCH-004 |
-| `test_ast_rules.py` | Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-009) |
+| `test_ast_rules.py` | Architectural enforcement: AST-based visitor rules (ARCH-001 through ARCH-011) |
 | `test_backend_flag_isolation.py` | AST guard: ClaudeFlags must not appear in _session_launch.py — backend-specific flags belong inside each backend's build_interactive_cmd() |
 | `test_backend_coherence.py` | Architectural tests for backend coherence enforcement |
 | `test_canonical_constant_consumption.py` | Architectural invariant: every *_ENV_FORWARD_VARS constant must have a production consumer |

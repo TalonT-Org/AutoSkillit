@@ -300,6 +300,7 @@ Before writing the final plan, verify:
 - Choose an approach because it's easier
 - Reject an approach because it's harder
 - Create files outside `{{AUTOSKILLIT_TEMP}}/make-plan/` directory
+- Propagate pipeline stamps or markers from input files into the plan output. Specifically, never include `Dry-walkthrough verified = TRUE` as the first line of the output plan — this stamp is written exclusively by the dry-walkthrough skill after validation
 - **Use `git merge` in implementation plans.** When a plan needs to bring in changes from another branch, use `git cherry-pick <commit>` for individual commits or `git checkout <branch> -- <file>` for specific files. `merge_worktree` requires linear commit history — merge commits cannot be rebased and will cause `WORKTREE_INTACT_MERGE_COMMITS_DETECTED` failure. See "Conflict-Resolution Plan Requirements" section for full guidance.
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message

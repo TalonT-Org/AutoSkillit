@@ -73,6 +73,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_skill_tool_syntax_contracts.py` | Validates that SKILL.md bash blocks do not contain grep BRE \\| alternation patterns |
 | `test_skill_variable_threading.py` | Generic intra-skill variable threading contracts: verifies computed variables appear in correct downstream commands |
 | `test_sous_chef_deferred_escalation.py` | Contract tests for sous-chef deferred issue escalation (T6/T7) |
+| `test_stamp_ownership.py` | Stamp ownership tests: only dry-walkthrough may write the verification stamp |
 | `test_tier1_no_temp_reference.py` | Tier 1 SKILL.md files must not reference temp at all |
 | `test_tier2_3_no_literal_temp.py` | Tier 2/3 SKILL.md files must use {{AUTOSKILLIT_TEMP}}, never the literal |
 | `test_troubleshoot_experiment_contracts.py` | Troubleshoot experiment skill discoverability test |

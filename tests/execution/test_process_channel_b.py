@@ -378,8 +378,9 @@ class TestChannelBFullPipelineAdjudication:
         - completion_drain_timeout=0.5s: the heartbeat has already seen the empty result
           and failed to confirm by the time Channel B fires (~1s after task group start),
           so 0.5s of additional drain time is more than sufficient semantically.
-        - timeout=180s: guards against the outer wall-clock expiring under xdist -n 4 load.
-          _phase1_timeout=360 must exceed outer timeout so Phase 1 never fires STALE before
+        - timeout=120s: subprocess wall-clock guard. Must be less than pytest.mark.timeout
+          (180s on the class) so run_managed_async completes before pytest kills the test.
+          _phase1_timeout=250 must exceed outer timeout so Phase 1 never fires STALE before
           the outer guard when subprocess startup is slow under WSL2 + xdist load.
         - _session_id_timeout=0.5s: the script writes the JSONL marker at t~0.25s from
           subprocess start. 0.5s is generous for session ID extraction (from stdout)
@@ -395,12 +396,12 @@ class TestChannelBFullPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=180,
+            timeout=120,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
             natural_exit_grace_seconds=0.5,
-            _phase1_timeout=360,
+            _phase1_timeout=250,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,

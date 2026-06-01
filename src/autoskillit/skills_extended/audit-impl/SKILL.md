@@ -60,7 +60,6 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 - Use `Agent(subagent_type="autoskillit:audit-impl-slice-auditor")` for Step 3 audit slices
 - Spawn all subagents via `Agent(model="sonnet")`
 - Resolve all plan files before starting (abort early if any are missing)
-- Write `Dry-walkthrough verified = TRUE` as the absolute first line of any remediation file
 - Issue all Task calls in a single message to maximize parallelism
 - On a NO GO verdict, after writing the remediation file, emit the **absolute path** as a
   structured output token as your final output. Resolve the relative
@@ -317,8 +316,6 @@ verdict = GO
 Generate `{{AUTOSKILLIT_TEMP}}/audit-impl/remediation_{topic}_{YYYY-MM-DD_HHMMSS}.md`:
 
 ```markdown
-Dry-walkthrough verified = TRUE
-
 # Remediation Plan: {topic}
 
 ## Audit Context
@@ -374,7 +371,7 @@ Then print:
 {absolute path to remediation file}
 
 ### Verdict
-MERGE BLOCKED — feed remediation file to /autoskillit:retry-worktree or /autoskillit:implement-worktree-no-merge
+MERGE BLOCKED — feed remediation file to /autoskillit:make-plan for re-planning, then proceed through dry-walkthrough and implement
 ```
 
 Exit 1.
@@ -408,6 +405,5 @@ NO GO; omit the `remediation_path=` line entirely on GO).
 ## Related Skills
 
 - `/autoskillit:implement-worktree` — produces the worktree this skill audits
-- `/autoskillit:implement-worktree-no-merge` — orchestrator-mode implementation
-- `/autoskillit:retry-worktree` — consumes the remediation file on NO GO
+- `/autoskillit:make-plan` — re-plans from the remediation file on NO GO
 - `/autoskillit:make-groups` — produces the manifest this skill accepts as `plans_input`

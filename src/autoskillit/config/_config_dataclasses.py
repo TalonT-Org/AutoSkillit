@@ -7,7 +7,13 @@ import os
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from autoskillit.core import LABEL_LIFECYCLE_REGISTRY, IssueLabelState, OutputFormat, get_logger
+from autoskillit.core import (
+    DRY_WALKTHROUGH_VERIFIED_MARKER,
+    LABEL_LIFECYCLE_REGISTRY,
+    IssueLabelState,
+    OutputFormat,
+    get_logger,
+)
 
 logger = get_logger(__name__)
 
@@ -62,7 +68,7 @@ class ResetWorkspaceConfig:
 
 @dataclass
 class ImplementGateConfig:
-    marker: str = "Dry-walkthrough verified = TRUE"
+    marker: str = DRY_WALKTHROUGH_VERIFIED_MARKER
     skill_names: set[str] = field(
         default_factory=lambda: {
             "/implement-worktree",

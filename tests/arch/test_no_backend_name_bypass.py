@@ -18,7 +18,6 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "execution/recording.py",  # Replay setup: fmt == "codex" Compare for player selection
         "execution/headless/_headless_evidence.py",  # Claude-specific evidence extraction
         "execution/headless/_headless_result.py",  # Claude-specific result parsing
-        "server/tools/tools_execution.py",  # Provider-override backend routing
         "core/_version_snapshot.py",  # Version snapshot — routes codex_version by backend name
         "execution/headless/_headless_helpers.py",  # assert_headless_cmd claude -p flag check
         "server/_session_type.py",  # Codex pre-reveal — env var dispatch, no capabilities

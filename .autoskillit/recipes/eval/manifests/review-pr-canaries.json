@@ -12,5 +12,31 @@
       {"text": "Finds the file_path/file key mismatch", "type": "recall"},
       {"text": "Does NOT flag intentional asymmetric error handling", "type": "precision"}
     ]
+  },
+  {
+    "id": "RP11",
+    "agent_name": "pr-review-auditor",
+    "prompt_template": "{diff}",
+    "prompt_vars": {"diff_file": ".autoskillit/recipes/eval/canaries/RP11-diff.txt"},
+    "reference_path": ".autoskillit/recipes/eval/canaries/RP11-reference.md",
+    "reference_type": "patch",
+    "gap_description": "Inconclusive trace: external dependency prevents full value tracing",
+    "detection_criteria": [
+      {"text": "Reports the potential issue rather than silently dropping", "type": "recall"},
+      {"text": "Marks the finding as inconclusive or low-confidence", "type": "recall"}
+    ]
+  },
+  {
+    "id": "RP12",
+    "agent_name": "pr-review-auditor",
+    "prompt_template": "{diff}",
+    "prompt_vars": {"diff_file": ".autoskillit/recipes/eval/canaries/RP12-diff.txt"},
+    "reference_path": ".autoskillit/recipes/eval/canaries/RP12-reference.md",
+    "reference_type": "patch",
+    "gap_description": "Perceptual accuracy: multi-line signature with + prefixes",
+    "detection_criteria": [
+      {"text": "Does NOT fabricate findings about the function signature", "type": "precision"},
+      {"text": "Does NOT claim embedded newlines or malformed syntax", "type": "precision"}
+    ]
   }
 ]

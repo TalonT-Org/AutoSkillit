@@ -1,0 +1,44 @@
+diff --git a/src/autoskillit/pipeline/result_cache.py b/src/autoskillit/pipeline/result_cache.py
+new file mode 100644
+--- /dev/null
++++ b/src/autoskillit/pipeline/result_cache.py
+@@ -0,0 +1,38 @@
+[L1]+from __future__ import annotations
+[L2]+
+[L3]+import hashlib
+[L4]+from pathlib import Path
+[L5]+from typing import Any
+[L6]+
+[L7]+from autoskillit.core.runtime import get_cache_backend
+[L8]+
+[L9]+
+[L10]+def store_result(key: str, payload: dict[str, Any], ttl: int = 3600) -> None:
+[L11]+    backend = get_cache_backend()
+[L12]+    hashed = hashlib.sha256(key.encode()).hexdigest()
+[L13]+    backend.set(hashed, payload, ttl=ttl)
+[L14]+
+[L15]+
+[L16]+def load_result(key: str) -> dict[str, Any] | None:
+[L17]+    backend = get_cache_backend()
+[L18]+    hashed = hashlib.sha256(key.encode()).hexdigest()
+[L19]+    return backend.get(hashed)
+[L20]+
+[L21]+
+[L22]+def invalidate_stale(max_age: int = 7200) -> int:
+[L23]+    """Remove entries older than max_age seconds. Returns count removed."""
+[L24]+    backend = get_cache_backend()
+[L25]+    entries = backend.list_entries()
+[L26]+    removed = 0
+[L27]+    for entry in entries:
+[L28]+        if entry.age_seconds > max_age:
+[L29]+            backend.delete(entry.key)
+[L30]+            removed += 1
+[L31]+    return removed
+[L32]+
+[L33]+
+[L34]+def warm_cache(keys: list[str], fetcher: Any) -> None:
+[L35]+    for key in keys:
+[L36]+        existing = load_result(key)
+[L37]+        if existing is None:
+[L38]+            result = fetcher.fetch(key)
+[L39]+            store_result(key, result)

@@ -1,0 +1,47 @@
+diff --git a/src/autoskillit/pipeline/step_validator.py b/src/autoskillit/pipeline/step_validator.py
+new file mode 100644
+--- /dev/null
++++ b/src/autoskillit/pipeline/step_validator.py
+@@ -0,0 +1,42 @@
+[L1]+from __future__ import annotations
+[L2]+
+[L3]+import logging
+[L4]+from dataclasses import dataclass
+[L5]+from typing import Any
+[L6]+
+[L7]+logger = logging.getLogger(__name__)
+[L8]+
+[L9]+
+[L10]+@dataclass(frozen=True, slots=True)
+[L11]+class ValidationResult:
+[L12]+    passed: bool
+[L13]+    message: str
+[L14]+    step_name: str
+[L15]+
+[L16]+
+[L17]+def validate_step_output(
+[L18]+    step_name: str,
+[L19]+    output: dict[str, Any],
+[L20]+    required_keys: list[str],
+[L21]+    allow_empty: bool = False,
+[L22]+) -> ValidationResult:
+[L23]+    missing = [k for k in required_keys if k not in output]
+[L24]+    if missing:
+[L25]+        return ValidationResult(
+[L26]+            passed=False,
+[L27]+            message=f"Missing keys: {', '.join(missing)}",
+[L28]+            step_name=step_name,
+[L29]+        )
+[L30]+    if not allow_empty:
+[L31]+        empty = [k for k in required_keys if not output[k]]
+[L32]+            return ValidationResult(
+[L33]+                passed=False,
+[L34]+                message=f"Empty values: {', '.join(empty)}",
+[L35]+                step_name=step_name,
+[L36]+            )
+[L37]+    return ValidationResult(
+[L38]+        passed=True,
+[L39]+        message="All checks passed",
+[L40]+        step_name=step_name,
+[L41]+    )
+[L42]+

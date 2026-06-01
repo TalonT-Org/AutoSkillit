@@ -187,6 +187,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
+    ctx.active_recipe_ingredients = frozenset()
     if ctx.gate is None:
         logger.warning("fleet_auto_gate_boot_no_gate")
         return
@@ -285,6 +286,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
+    ctx.active_recipe_ingredients = frozenset()
     if ctx.gate is not None:
         ctx.gate.enable()
     for subset in ctx.config.subsets.disabled:
@@ -329,6 +331,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     ctx.active_recipe_packs = _packs
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
+    ctx.active_recipe_ingredients = frozenset()
 
     if ctx.gate is None:
         logger.warning("food_truck_auto_gate_boot_no_gate")
@@ -450,6 +453,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
+    ctx.active_recipe_ingredients = frozenset()
 
     if ctx.gate is None:
         logger.warning("skill_auto_gate_boot_no_gate")

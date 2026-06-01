@@ -119,8 +119,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # tools_kitchen.py — hook config dict, quota guard overlay, ingredient locks overlay
     ("src/autoskillit/server/tools/tools_kitchen.py", 130),
     ("src/autoskillit/server/tools/tools_kitchen.py", 149),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 713),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 773),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 762),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 822),
     # tools_pipeline_tracker.py — tracker_data dict
     ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 164),
     # tools_status.py — mcp_data dict

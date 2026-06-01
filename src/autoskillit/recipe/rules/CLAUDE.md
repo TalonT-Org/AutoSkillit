@@ -29,6 +29,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_flake_loop.py` | Flake-suspected unwinnable loop detection for merge gate cycles |
 | `rules_food_truck.py` | Food-truck recipe validation: sentinel stop step requirement |
 | `rules_fixing.py` | Conditional-write skill must gate on declared verdict output |
+| `rules_ingredient_step_name.py` | 1:1 gating ingredient ↔ step name asymmetry detection |
 | `rules_inline_script.py` | Detects inline shell scripts in `run_cmd` cmd fields |
 | `rules_inputs.py` | Input/ingredient validation; version compatibility checks |
 | `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |

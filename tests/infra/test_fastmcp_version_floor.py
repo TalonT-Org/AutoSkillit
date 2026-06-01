@@ -25,6 +25,11 @@ def test_transforms_attribute_is_list():
     """mcp._transforms must be a list — test fixtures depend on .clear()."""
     from autoskillit.server import mcp
 
+    assert hasattr(mcp, "_transforms"), (
+        "FastMCP server instance lost the '_transforms' attribute — "
+        "test fixtures across conftest.py, server/, and fleet/ depend on "
+        "mcp._transforms.clear() for visibility state cleanup"
+    )
     assert isinstance(mcp._transforms, list)
 
 

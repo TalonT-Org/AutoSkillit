@@ -154,9 +154,9 @@ repository-access, scenarios, security, state-lifecycle
 Instruct the subagent to return 1–3 lens slugs. Only include a lens if at least one
 changed file maps to that lens's concern.
 
-**Development lens criteria:** Select the `development` lens when the changed files
-include build configuration, test infrastructure, CI/CD pipeline definitions, or
-quality gate configuration and developer tooling setup. Assess by file purpose, not
+**Development lens criteria:** Select `development` when the changed files include
+build configuration, test infrastructure, CI/CD pipeline definitions, quality gate
+configuration, or developer tooling setup. Assess by file purpose, not
 filename. The codebase may use any build system, CI platform, or test framework.
 
 Output: comma-separated slug list → `selected_lens_slugs`.

@@ -1,9 +1,6 @@
 """AST guard: detect_model_drift must use normalize_model_id and _models_match.
 
-Raw string comparison between the alias domain (config) and the full-ID domain
-(API response) is a structural false-positive source. This guard prevents
-regression where someone modifies detect_model_drift without going through
-normalization and prefix matching.
+profile_name suppression guard must call _is_non_anthropic exactly once, on observed_model only.
 """
 
 from __future__ import annotations
@@ -127,6 +124,20 @@ def test_detect_model_drift_has_profile_suppression_guard():
                             "profile_name suppression guard must normalize observed_model "
                             "before calling _is_non_anthropic — raw-string check misclassifies "
                             "Anthropic short aliases ('sonnet', 'opus', 'haiku') as non-Anthropic"
+                        )
+                        non_anthropic_count = test_src.count("_is_non_anthropic")
+                        assert non_anthropic_count == 1, (
+                            f"profile_name suppression guard calls _is_non_anthropic "
+                            f"{non_anthropic_count} times — must be exactly 1 (on observed_model "
+                            f"only). Checking configured_model makes the guard dead for the "
+                            f"standard production case (Anthropic alias configured + "
+                            f"non-Anthropic observed via profile routing)"
+                        )
+                        assert "observed_model" in test_src, (
+                            "profile_name suppression guard must call _is_non_anthropic "
+                            "on observed_model, not configured_model — checking configured_model "
+                            "reintroduces the production-blindness bug since configured_model "
+                            "is always a Claude alias in production"
                         )
                         return
             pytest.fail(

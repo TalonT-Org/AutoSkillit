@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.execution.backends import ClaudeCodeBackend
 from autoskillit.recipe.contracts import StaleItem
 
 # ---------------------------------------------------------------------------
@@ -65,7 +66,7 @@ async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
             current_value="new2",
         ),
     ]
-    await triage_staleness(items, agent_backend="claude-code")
+    await triage_staleness(items, backend=ClaudeCodeBackend())
     assert len(read_calls) == 1, (
         f"SKILL.md read {len(read_calls)} times; expected exactly 1 (cache hit on second item)"
     )
@@ -113,7 +114,7 @@ class TestTriageStaleness:
             stored_value="abc123",
             current_value="def456",
         )
-        result = await triage_staleness([item], agent_backend="claude-code")
+        result = await triage_staleness([item], backend=ClaudeCodeBackend())
 
         assert len(result) == 1
         assert result[0]["meaningful"] is True
@@ -157,7 +158,7 @@ class TestTriageStaleness:
         )
 
         with structlog.testing.capture_logs() as logs:
-            await triage_staleness([item], agent_backend="claude-code")
+            await triage_staleness([item], backend=ClaudeCodeBackend())
 
         assert any(log["log_level"] == "warning" for log in logs), (
             "A warning log must be emitted on timeout"
@@ -205,7 +206,7 @@ class TestTriageStaleness:
         )
 
         with structlog.testing.capture_logs() as logs:
-            result = await triage_staleness([item], agent_backend="claude-code")
+            result = await triage_staleness([item], backend=ClaudeCodeBackend())
 
         assert result[0]["meaningful"] is True
         assert any(log["log_level"] == "warning" for log in logs), (
@@ -270,7 +271,7 @@ class TestTriageStaleness:
             stored_value="abc123",
             current_value="def456",
         )
-        result = await triage_staleness([item], agent_backend="claude-code")
+        result = await triage_staleness([item], backend=ClaudeCodeBackend())
 
         assert result[0]["meaningful"] is False
         assert result[0]["summary"] == "ok"
@@ -295,7 +296,7 @@ class TestTriageStaleness:
             stored_value="abc123",
             current_value="def456",
         )
-        result = await triage_staleness([item], agent_backend="claude-code")
+        result = await triage_staleness([item], backend=ClaudeCodeBackend())
 
         assert len(result) == 1
         assert result[0]["meaningful"] is True
@@ -368,7 +369,7 @@ class TestTriageStaleness:
             stored_value="abc123",
             current_value="def456",
         )
-        result = await triage_staleness([item], agent_backend="claude-code")
+        result = await triage_staleness([item], backend=ClaudeCodeBackend())
 
         assert result[0]["meaningful"] is False, (
             f"triage_staleness must parse NDJSON via parse_session_result, not json.loads. "
@@ -435,7 +436,7 @@ async def test_triage_staleness_batch_fallback_on_malformed_response(
         )
         for i in range(n)
     ]
-    results = await triage_staleness(items, agent_backend="claude-code")
+    results = await triage_staleness(items, backend=ClaudeCodeBackend())
 
     assert len(results) == n
     assert all(r["meaningful"] is True for r in results), (
@@ -484,7 +485,7 @@ async def test_triage_command_includes_format_required_flags(
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
     )
-    await triage_staleness([item], agent_backend="claude-code")
+    await triage_staleness([item], backend=ClaudeCodeBackend())
 
     # Verify the command passed to run_managed_async includes format-required flags
     cmd = mock_run.call_args.kwargs["cmd"]
@@ -538,7 +539,7 @@ async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
     )
-    await triage_staleness([item], agent_backend="claude-code")
+    await triage_staleness([item], backend=ClaudeCodeBackend())
 
     env = mock_run.call_args.kwargs["env"]
     assert env is not None
@@ -556,11 +557,10 @@ async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.
 async def test_triage_command_uses_backend_binary_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """The triage command first element must equal get_backend('claude-code').binary_name()."""
+    """The triage command first element must equal ClaudeCodeBackend().binary_name()."""
     from unittest.mock import AsyncMock
 
     from autoskillit._llm_triage import triage_staleness
-    from autoskillit.execution import get_backend
     from autoskillit.execution.process import SubprocessResult, TerminationReason
 
     skill_dir = tmp_path / "test-skill"
@@ -597,10 +597,10 @@ async def test_triage_command_uses_backend_binary_name(
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
     )
-    await triage_staleness([item], agent_backend="claude-code")
+    await triage_staleness([item], backend=ClaudeCodeBackend())
 
     cmd = mock_run.call_args.kwargs["cmd"]
-    expected_binary = get_backend("claude-code").binary_name()
+    expected_binary = ClaudeCodeBackend().binary_name()
     assert cmd[0] == expected_binary, (
         f"triage_cmd[0] must equal get_backend().binary_name(), got {cmd[0]!r}"
     )
@@ -651,7 +651,7 @@ async def test_triage_staleness_does_not_use_pty(
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
     )
-    await triage_staleness([item], agent_backend="claude-code")
+    await triage_staleness([item], backend=ClaudeCodeBackend())
 
     assert mock_run.called
     pty_mode = mock_run.call_args.kwargs.get("pty_mode")

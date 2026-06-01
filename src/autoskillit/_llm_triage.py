@@ -13,13 +13,14 @@ from typing import Any
 
 from autoskillit.core import (
     ClaudeFlags,
+    CodingAgentBackend,
     OutputFormat,
     SubprocessResult,
     TerminationReason,
     build_agent_env,
     get_logger,
 )
-from autoskillit.execution import get_backend, parse_session_result, run_managed_async
+from autoskillit.execution import parse_session_result, run_managed_async
 from autoskillit.recipe import StaleItem, load_bundled_manifest
 from autoskillit.workspace import bundled_skills_dir
 
@@ -30,7 +31,7 @@ _SKILL_MD_TRUNCATE = 1500
 
 
 async def triage_staleness(
-    stale_items: list[StaleItem], *, agent_backend: str = "claude-code"
+    stale_items: list[StaleItem], *, backend: CodingAgentBackend
 ) -> list[dict[str, Any]]:
     """Use Haiku to determine if stale contracts changed meaningfully.
 
@@ -71,13 +72,13 @@ async def triage_staleness(
             if skill_md_path.is_file():
                 skill_md_cache[item.skill] = skill_md_path.read_text()
 
-    results.extend(await _triage_batch(hash_items, skill_md_cache, agent_backend=agent_backend))
+    results.extend(await _triage_batch(hash_items, skill_md_cache, backend=backend))
 
     return results
 
 
 async def _triage_batch(
-    batch: list[StaleItem], skill_md_cache: dict[str, str], *, agent_backend: str = "claude-code"
+    batch: list[StaleItem], skill_md_cache: dict[str, str], *, backend: CodingAgentBackend
 ) -> list[dict[str, Any]]:
     """Triage one batch of hash_mismatch items with a single Haiku subprocess call.
 
@@ -103,12 +104,12 @@ async def _triage_batch(
     if not triageable:
         return pre_results
 
-    if not get_backend(agent_backend).capabilities.triage_capable:
+    if not backend.capabilities.triage_capable:
         return pre_results + [
             {
                 "skill": i.skill,
                 "meaningful": True,
-                "summary": f"Skipped LLM triage (backend={agent_backend}).",
+                "summary": f"Skipped LLM triage (backend={backend.name}).",
             }
             for i in triageable
         ]
@@ -120,7 +121,7 @@ async def _triage_batch(
         # Build the command manually — triage is a read-only Haiku query with no
         # tool use, so it must NOT receive --dangerously-skip-permissions.
         triage_cmd: list[str] = [
-            get_backend(agent_backend).binary_name(),
+            backend.binary_name(),
             ClaudeFlags.PRINT,
             prompt,
             ClaudeFlags.MODEL,

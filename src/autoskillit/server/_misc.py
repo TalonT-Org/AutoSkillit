@@ -196,11 +196,8 @@ async def _apply_triage_gate(
 
     from autoskillit._llm_triage import triage_staleness
 
-    agent_backend = _ctx.config.agent_backend.backend
-    _triage_capable = _ctx.backend is not None and _ctx.backend.capabilities.triage_capable
-
-    if _triage_capable:
-        triage_fn = functools.partial(triage_staleness, agent_backend=agent_backend)
+    if _ctx.backend is not None and _ctx.backend.capabilities.triage_capable:
+        triage_fn = functools.partial(triage_staleness, backend=_ctx.backend)
     else:
         triage_fn = None
 

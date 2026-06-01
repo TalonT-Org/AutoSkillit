@@ -798,7 +798,7 @@ steps:
     retries: 1
     with:
       skill_command: /autoskillit:prepare-pr ${{ context.all_plan_paths }} ${{ inputs.run_name
-        }} ${{ inputs.base_branch }} ${{ context.issue_number }}
+        }} ${{ inputs.base_branch }} ${{ context.issue_number }} ${{ inputs.arch_lenses }}
       cwd: ${{ context.work_dir }}
       output_dir: '.'
       step_name: prepare_pr

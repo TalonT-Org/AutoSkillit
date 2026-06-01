@@ -1,6 +1,6 @@
 """Process-scoped version snapshot for session telemetry (IL-0).
 
-collect_version_snapshot() is cached with lru_cache(maxsize=1) so that the
+collect_version_snapshot() is cached with lru_cache(maxsize=4) so that the
 subprocess call to `claude --version` and filesystem reads happen once per
 process lifetime. Callers must call .cache_clear() in tests that need isolation.
 
@@ -9,6 +9,7 @@ Never raises — all helpers silently return empty fallbacks on any error.
 
 from __future__ import annotations
 
+import copy
 import functools
 import importlib.metadata
 import json
@@ -16,7 +17,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ._install_detect import parse_direct_url
 from .types._type_constants_env import (
@@ -25,12 +26,19 @@ from .types._type_constants_env import (
     AGENT_BACKEND_ENV_VAR,
 )
 
+if TYPE_CHECKING:
+    from .types._type_protocols_backend import CodingAgentBackend
+
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 module, no autoskillit imports allowed
 
 
-@functools.lru_cache(maxsize=1)
-def collect_version_snapshot() -> dict[str, Any]:
+@functools.lru_cache(maxsize=4)
+def collect_version_snapshot(backend: CodingAgentBackend | None = None) -> dict[str, Any]:
     """Return a static version snapshot for the current process.
+
+    When *backend* is provided, version and plugin data are retrieved via
+    Protocol method calls.  When *backend* is ``None``, the legacy env-var
+    dispatch path is used (subprocess + filesystem reads).
 
     Fields:
         autoskillit_version: installed package version string.
@@ -43,15 +51,107 @@ def collect_version_snapshot() -> dict[str, Any]:
         codex_plugins: list of plugin dicts from `codex plugin list --json`, or [].
     """
     install = _install_info()
-    return {
+    result: dict[str, Any] = {
         "autoskillit_version": _autoskillit_version(),
         "install_type": install.get("install_type", "unknown"),
         "commit_id": install.get("commit_id"),
-        "claude_code_version": _claude_code_version(),
-        "plugins": _plugins(),
-        "codex_version": _codex_version(),
-        "codex_plugins": _codex_plugins(),
+        "claude_code_version": "",
+        "plugins": [],
+        "codex_version": "",
+        "codex_plugins": [],
     }
+
+    if backend is not None:
+        try:
+            version_str = backend.version()
+        except Exception:
+            logger.warning("backend.version() failed", exc_info=True)
+            version_str = ""
+        try:
+            plugin_list = backend.list_plugins()
+        except Exception:
+            logger.warning("backend.list_plugins() failed", exc_info=True)
+            plugin_list = []
+
+        if backend.name == AGENT_BACKEND_CLAUDE_CODE:
+            result["claude_code_version"] = version_str
+            result["plugins"] = plugin_list
+        elif backend.name == AGENT_BACKEND_CODEX:
+            result["codex_version"] = version_str
+            result["codex_plugins"] = plugin_list
+        else:
+            logger.warning("Unrecognized backend name %r — version data discarded", backend.name)
+    else:
+        env_backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
+        if env_backend == AGENT_BACKEND_CLAUDE_CODE:
+            exec_path = os.environ.get("CLAUDE_CODE_EXECPATH") or "claude"
+            try:
+                proc = subprocess.run(
+                    [exec_path, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if proc.returncode != 0:
+                    logger.warning("claude --version exited with code %d", proc.returncode)
+                else:
+                    result["claude_code_version"] = proc.stdout.strip() or proc.stderr.strip()
+            except subprocess.TimeoutExpired:
+                pass
+            except Exception:
+                logger.warning("Failed to run claude --version", exc_info=True)
+
+            try:
+                path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+                if path.exists():
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    plugins_map: dict[str, Any] = data.get("plugins", {})
+                    if isinstance(plugins_map, dict):
+                        entries: list[dict[str, Any]] = []
+                        for ref, installs in plugins_map.items():
+                            if not isinstance(installs, list) or not installs:
+                                continue
+                            first = installs[0]
+                            info = first if isinstance(first, dict) else {}
+                            entry: dict[str, Any] = {"ref": ref}
+                            if "version" in info:
+                                entry["version"] = info["version"]
+                            entries.append(entry)
+                        result["plugins"] = entries
+            except Exception:
+                logger.warning("Failed to read installed_plugins.json", exc_info=True)
+
+        elif env_backend == AGENT_BACKEND_CODEX:
+            try:
+                proc = subprocess.run(
+                    ["codex", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                result["codex_version"] = proc.stdout.strip() or proc.stderr.strip()
+            except subprocess.TimeoutExpired:
+                pass
+            except Exception:
+                logger.warning("Failed to run codex --version", exc_info=True)
+
+            try:
+                proc = subprocess.run(
+                    ["codex", "plugin", "list", "--json"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if proc.stdout.strip():
+                    parsed = json.loads(proc.stdout)
+                    if isinstance(parsed, list):
+                        result["codex_plugins"] = parsed
+            except subprocess.TimeoutExpired:
+                pass
+            except Exception:
+                logger.warning("Failed to run codex plugin list", exc_info=True)
+
+    return copy.copy(result)
 
 
 def _autoskillit_version() -> str:
@@ -66,113 +166,3 @@ def _install_info() -> dict[str, Any]:
     """Classify the autoskillit install type and commit hash."""
     info = parse_direct_url()
     return {"install_type": info["install_type"], "commit_id": info["commit_id"]}
-
-
-def _claude_code_version() -> str:
-    """Run `claude --version` and return the stripped output, or "" on error.
-
-    Prefers CLAUDE_CODE_EXECPATH (injected by Claude Code into the MCP server
-    environment) over bare `claude` on PATH so that the binary that actually
-    launched the server is queried rather than whatever `claude` resolves to in
-    the current PATH.
-    """
-    backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
-    if backend != AGENT_BACKEND_CLAUDE_CODE:
-        return ""
-    exec_path = os.environ.get("CLAUDE_CODE_EXECPATH") or "claude"
-    try:
-        result = subprocess.run(
-            [exec_path, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            logger.warning("claude --version exited with code %d", result.returncode)
-        return result.stdout.strip() or result.stderr.strip()
-    except subprocess.TimeoutExpired:
-        return ""
-    except Exception:
-        logger.warning("Failed to run claude --version", exc_info=True)
-        return ""
-
-
-def _codex_version() -> str:
-    """Run ``codex --version`` and return the stripped output, or "" on error."""
-    backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
-    if backend != AGENT_BACKEND_CODEX:
-        return ""
-    try:
-        result = subprocess.run(
-            ["codex", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.stdout.strip() or result.stderr.strip()
-    except subprocess.TimeoutExpired:
-        return ""
-    except Exception:
-        logger.warning("Failed to run codex --version", exc_info=True)
-        return ""
-
-
-def _codex_plugins() -> list[dict[str, Any]]:
-    """Run ``codex plugin list --json`` and return parsed plugin list, or [] on error."""
-    backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
-    if backend != AGENT_BACKEND_CODEX:
-        return []
-    try:
-        result = subprocess.run(
-            ["codex", "plugin", "list", "--json"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if not result.stdout.strip():
-            return []
-        parsed = json.loads(result.stdout)
-        if not isinstance(parsed, list):
-            return []
-        return parsed
-    except subprocess.TimeoutExpired:
-        return []
-    except Exception:
-        logger.warning("Failed to run codex plugin list", exc_info=True)
-        return []
-
-
-def _plugins() -> list[dict[str, Any]]:
-    """Read installed_plugins.json and return a list of plugin descriptors.
-
-    The real schema produced by `claude plugin install` is:
-        {"version": 2, "plugins": {"<ref>": [{"version": "...", ...}, ...]}}
-
-    Each ref maps to a **list** of install-scope objects; each object carries a
-    "version" field. We use the first entry (index 0) per ref.
-    """
-    backend = os.environ.get(AGENT_BACKEND_ENV_VAR, AGENT_BACKEND_CLAUDE_CODE)
-    if backend != AGENT_BACKEND_CLAUDE_CODE:
-        return []
-    try:
-        path = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-        if not path.exists():
-            return []
-        data = json.loads(path.read_text(encoding="utf-8"))
-        plugins: dict[str, Any] = data.get("plugins", {})
-        if not isinstance(plugins, dict):
-            return []
-        entries = []
-        for ref, installs in plugins.items():
-            if not isinstance(installs, list) or not installs:
-                continue
-            first = installs[0]
-            info = first if isinstance(first, dict) else {}
-            entry: dict[str, Any] = {"ref": ref}
-            if "version" in info:
-                entry["version"] = info["version"]
-            entries.append(entry)
-        return entries
-    except Exception:
-        logger.warning("Failed to read installed_plugins.json", exc_info=True)
-        return []

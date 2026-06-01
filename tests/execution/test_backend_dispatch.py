@@ -308,7 +308,7 @@ def _patch_for_flush(monkeypatch, tmp_path, skill_result):
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
-        lambda: {},
+        lambda backend=None: {},
     )
 
     flush_calls: list[dict] = []

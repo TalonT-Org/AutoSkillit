@@ -8,8 +8,7 @@ import types
 import typing
 from pathlib import Path
 
-from autoskillit.core import get_logger
-from autoskillit.core.types._type_constants import RUN_PYTHON_SENTINEL_KEYS
+from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, get_logger
 
 logger = get_logger(__name__)
 

@@ -89,19 +89,23 @@ def test_smoke_utils_path_params_always_guarded_absolute() -> None:
 
 
 def test_sentinel_keys_do_not_collide_with_callable_params() -> None:
-    """No sentinel key may also be a legitimate callable parameter in bundled recipes."""
+    """Sentinel keys that collide with callable params must be explicitly declared.
+
+    Introspection-aware stripping preserves sentinel keys the callable declares.
+    This test verifies that any collision involves an explicit parameter declaration
+    (not **kwargs), confirming the introspection guard will preserve the value.
+    """
     import importlib
     import inspect
 
-    import yaml
-
-    from autoskillit.core.types._type_constants import RUN_PYTHON_SENTINEL_KEYS
+    from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS
+    from autoskillit.core.io import load_yaml
 
     recipes_dir = Path(__file__).resolve().parent.parent.parent / "src/autoskillit/recipes"
-    collisions: list[str] = []
+    unsafe_collisions: list[str] = []
 
     for yaml_file in sorted(recipes_dir.glob("*.yaml")):
-        content = yaml.safe_load(yaml_file.read_text())
+        content = load_yaml(yaml_file.read_text())
         steps = content.get("steps", {})
         if not isinstance(steps, dict):
             continue
@@ -119,21 +123,29 @@ def test_sentinel_keys_do_not_collide_with_callable_params() -> None:
                 sig = inspect.signature(func)
             except (ImportError, AttributeError, ValueError):
                 continue
-            overlap = RUN_PYTHON_SENTINEL_KEYS & set(sig.parameters.keys())
+            explicit_params = {
+                name
+                for name, p in sig.parameters.items()
+                if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            }
+            overlap = RUN_PYTHON_SENTINEL_KEYS & explicit_params
             for key in sorted(overlap):
-                collisions.append(
-                    f"{yaml_file.name}:{step_name} → {callable_path} declares '{key}'"
-                )
+                if sig.parameters[key].default is inspect.Parameter.empty:
+                    unsafe_collisions.append(
+                        f"{yaml_file.name}:{step_name} → {callable_path} declares "
+                        f"'{key}' as required (no default) — recipe must pass it via args:"
+                    )
 
-    assert not collisions, (
-        "Sentinel keys collide with callable parameters — "
-        "these keys would be stripped before reaching the callable:\n" + "\n".join(collisions)
+    assert not unsafe_collisions, (
+        "Sentinel keys collide with REQUIRED callable parameters — "
+        "the recipe step must pass these via the nested args: dict "
+        "to ensure the introspection guard preserves them:\n" + "\n".join(unsafe_collisions)
     )
 
 
 def test_sentinel_keys_subset_of_tool_params() -> None:
     """Sentinel keys must be a subset of run_python's tool-level params."""
-    from autoskillit.core.types._type_constants import RUN_PYTHON_SENTINEL_KEYS
+    from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS
     from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
     tool_params = _TOOL_PARAMS["run_python"]

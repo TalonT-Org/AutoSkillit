@@ -5,8 +5,7 @@ from __future__ import annotations
 import importlib
 import inspect
 
-from autoskillit.core import SKILL_TOOLS, Severity
-from autoskillit.core.types._type_constants import RUN_PYTHON_SENTINEL_KEYS
+from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,

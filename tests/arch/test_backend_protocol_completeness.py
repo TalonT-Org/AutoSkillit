@@ -120,3 +120,24 @@ def test_all_backends_implement_ensure_pre_launch():
         assert callable(getattr(cls, "ensure_pre_launch")), (
             f"{name} backend ensure_pre_launch must be callable"
         )
+
+
+def test_coding_agent_backend_protocol_includes_translate_model():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert hasattr(CodingAgentBackend, "translate_model"), (
+        "CodingAgentBackend protocol must define translate_model"
+    )
+    assert callable(getattr(CodingAgentBackend, "translate_model")), (
+        "translate_model must be callable"
+    )
+
+
+def test_all_backends_implement_translate_model():
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        assert hasattr(cls, "translate_model"), f"{name} backend must implement translate_model"
+        assert callable(getattr(cls, "translate_model")), (
+            f"{name} backend translate_model must be callable"
+        )

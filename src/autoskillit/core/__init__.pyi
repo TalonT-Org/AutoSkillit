@@ -128,9 +128,11 @@ from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
+from .types import CLAUDE_MODEL_ALIASES as CLAUDE_MODEL_ALIASES
 from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_MARKER
 from .types import CODEX_INTERACTIVE_REQUIRED_ENV as CODEX_INTERACTIVE_REQUIRED_ENV
 from .types import CODEX_MCP_ENV_FORWARD_VARS as CODEX_MCP_ENV_FORWARD_VARS
+from .types import CODEX_MODEL_ALIASES as CODEX_MODEL_ALIASES
 from .types import CODEX_SCHEMA_VERSION as CODEX_SCHEMA_VERSION
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
@@ -296,6 +298,7 @@ from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSource as SkillSource
 from .types import StreamParser as StreamParser
+from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner
 from .types import SupportsDebug as SupportsDebug

@@ -151,6 +151,8 @@ def test_stub_class_satisfies_coding_agent_backend():
         def ensure_pre_launch(self) -> list[str]:
             return []
 
+        def translate_model(self, model: str) -> str: ...
+
     assert isinstance(_Backend(), CodingAgentBackend)
 
 

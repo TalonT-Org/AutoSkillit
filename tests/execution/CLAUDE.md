@@ -10,6 +10,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `_merge_queue_helpers.py` | Merge-queue test helper factories — _make_watcher, _queue_state |
 | `conftest.py` | Shared fixtures and helpers for tests/execution/ |
 | `test_anomaly_detection.py` | Tests for post-hoc anomaly detection over ProcSnapshot data |
+| `test_model_alias_registry.py` | Shared alias registry consistency tests — key parity between anomaly_detection and backend alias maps |
 | `test_boundary_pty_dispatch.py` | Layer-boundary integration tests for DefaultSubprocessRunner + PTY wrapping + Python shims |
 | `test_check_repo_merge_state.py` | Round-trip budget tests for fetch_repo_merge_state |
 | `test_ci.py` | L1 unit tests for execution/ci.py — CIWatcher service |

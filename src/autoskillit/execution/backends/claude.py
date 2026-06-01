@@ -288,6 +288,15 @@ class ClaudeCodeBackend:
     def binary_name(self) -> str:
         return "claude"
 
+    def translate_model(self, model: str) -> str:
+        from autoskillit.core.types._type_backend import (
+            CLAUDE_MODEL_ALIASES,
+            strip_context_window_suffix,
+        )
+
+        base = strip_context_window_suffix(model)
+        return CLAUDE_MODEL_ALIASES.get(base, base)
+
     def version_cmd(self) -> tuple[str, ...]:
         return ("claude", "--version")
 
@@ -302,7 +311,7 @@ class ClaudeCodeBackend:
     ) -> CmdSpec:
         cmd = ["claude", ClaudeFlags.PRINT, prompt, ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS]
         if model:
-            cmd += [ClaudeFlags.MODEL, model]
+            cmd += [ClaudeFlags.MODEL, self.translate_model(model)]
         env = dict(build_agent_env(base=base, extras=env_extras, required=required))
         env.update(_HEADLESS_ENV_HARDENING)
         return CmdSpec(cmd=tuple(cmd), env=env)
@@ -372,7 +381,7 @@ class ClaudeCodeBackend:
         if system_prompt is not None and isinstance(resume_spec, NoResume):
             builder.kv_flag(ClaudeFlags.APPEND_SYSTEM_PROMPT, system_prompt)
         if model:
-            builder.kv_flag(ClaudeFlags.MODEL, model)
+            builder.kv_flag(ClaudeFlags.MODEL, self.translate_model(model))
         match plugin_source:
             case DirectInstall(plugin_dir=p):
                 builder.kv_flag(ClaudeFlags.PLUGIN_DIR, str(p))

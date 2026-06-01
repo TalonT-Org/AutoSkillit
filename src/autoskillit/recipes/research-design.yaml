@@ -151,6 +151,7 @@ steps:
       output_dir: "{{AUTOSKILLIT_TEMP}}/apply"
     capture_list:
       all_figure_spec_paths: "${{ result.figure_spec_path }}"
+    optional_context_refs: [selected_lenses, lens_context_paths]
     retries: 0
     on_success: synthesize
     on_failure: synthesize

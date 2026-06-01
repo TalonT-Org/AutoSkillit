@@ -189,6 +189,12 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
                 for cond in reachable_step.on_result.conditions:
                     if cond.when and isinstance(cond.when, str):
                         consumed.update(_CONTEXT_REF_RE.findall(cond.when))
+            # optional_context_refs declares that a step may receive and use these
+            # context variables even when they are not expressed via ${{ context.X }}
+            # template syntax (e.g., phoropter steps that consume captures via engine
+            # template expansion like {slug} or {context_path}).
+            if reachable_step.optional_context_refs:
+                consumed.update(reachable_step.optional_context_refs)
 
         # on_result routing — both legacy field and predicate conditions count
         # as structural consumption of captured variables.

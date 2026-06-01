@@ -110,6 +110,14 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
         else frozenset()
     )
     backend_reqs_raw = data.get("backend_requirements", [])
+    if backend_reqs_raw and not isinstance(backend_reqs_raw, list):
+        logger.warning(
+            "backend_requirements_not_a_list",
+            value=backend_reqs_raw,
+            skill=name,
+            hint="use bracket syntax: backend_requirements: [claude-code]",
+        )
+        backend_reqs_raw = [backend_reqs_raw]
     backend_requirements = (
         frozenset(str(r) for r in backend_reqs_raw)
         if isinstance(backend_reqs_raw, list)
@@ -123,6 +131,7 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
             skill=name,
             valid=sorted(KNOWN_BACKEND_NAMES),
         )
+        backend_requirements = backend_requirements - invalid
     return SkillInfo(
         name=name,
         source=source,

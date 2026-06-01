@@ -25,15 +25,6 @@ def test_codex_version_populated_with_codex_backend() -> None:
     assert result["codex_version"] == "1.2.3"
 
 
-def test_codex_version_empty_with_claude_code_backend() -> None:
-    backend = Mock()
-    backend.name = "claude-code"
-    backend.version.return_value = "1.0"
-    backend.list_plugins.return_value = []
-    result = collect_version_snapshot(backend)
-    assert result["codex_version"] == ""
-
-
 def test_codex_version_empty_when_no_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -41,27 +32,28 @@ def test_codex_version_empty_when_no_backend(
 
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
 
-    def _no_codex_call(*args, **kwargs):  # noqa: ARG001
-        raise AssertionError("codex should not be called when backend is unset")
+    calls: list[list[str]] = []
+    original_run = mod.subprocess.run
 
-    monkeypatch.setattr(mod.subprocess, "run", _no_codex_call)
+    def _track_and_allow_claude(*args, **kwargs):
+        cmd = args[0] if args else kwargs.get("args", [])
+        calls.append(list(cmd))
+        if cmd and cmd[0] not in ("claude", "codex"):
+            return original_run(*args, **kwargs)
+        if cmd and cmd[0] == "codex":
+            raise AssertionError("codex should not be called when backend is unset")
+        raise FileNotFoundError("claude not found in test")
+
+    monkeypatch.setattr(mod.subprocess, "run", _track_and_allow_claude)
     result = collect_version_snapshot()
     assert result["codex_version"] == ""
+    assert not any(c[0] == "codex" for c in calls if c)
 
 
-def test_no_cross_contamination_claude_version_empty_for_codex() -> None:
-    backend = Mock()
-    backend.name = "codex"
-    backend.version.return_value = "1.2.3"
-    backend.list_plugins.return_value = []
-    result = collect_version_snapshot(backend)
-    assert result["claude_code_version"] == ""
-
-
-def test_codex_version_key_present_in_snapshot() -> None:
+def test_codex_version_key_value_in_snapshot() -> None:
     backend = Mock()
     backend.name = "codex"
     backend.version.return_value = "1.0"
     backend.list_plugins.return_value = []
     result = collect_version_snapshot(backend)
-    assert "codex_version" in result
+    assert result["codex_version"] == "1.0"

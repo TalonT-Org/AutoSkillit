@@ -148,10 +148,22 @@ def test_subprocess_path_exercised_without_backend_env(monkeypatch):
     assert len(called) == 1
 
 
-def test_lru_cache_maxsize_is_four():
-    assert hasattr(collect_version_snapshot, "__wrapped__")
+def test_cache_holds_distinct_backends():
+    backends = []
+    for i in range(4):
+        b = Mock()
+        b.name = "claude-code"
+        b.version.return_value = f"v{i}"
+        b.list_plugins.return_value = []
+        backends.append(b)
+    for b in backends:
+        collect_version_snapshot(b)
     info = collect_version_snapshot.cache_info()
-    assert info.maxsize == 4
+    assert info.currsize == 4
+    assert info.misses == 4
+    for b in backends:
+        collect_version_snapshot(b)
+    assert collect_version_snapshot.cache_info().hits >= 4
 
 
 def test_backend_dispatch_populates_correct_keys():

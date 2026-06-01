@@ -158,9 +158,16 @@ class TestWriteGuardWorktreeIntegration:
         # Mock session_skill_manager to return a closure containing dep-skill
         mock_ssm = MagicMock()
         mock_ssm.compute_skill_closure.return_value = frozenset({"target-skill", "dep-skill"})
-        mock_ssm.init_session.return_value = MagicMock(path=str(tmp_path / "session"))
+        session_dir = tmp_path / "session"
+        mock_ssm.init_session.return_value = MagicMock(path=str(session_dir))
         mock_ssm.activate_skill_deps.return_value = True
         tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+        # Create the expected skill file in the session directory
+        (session_dir / ".claude" / "skills" / "target-skill").mkdir(parents=True)
+        (session_dir / ".claude" / "skills" / "target-skill" / "SKILL.md").write_text(
+            "---\nname: target-skill\ndescription: Target.\n---\nbody\n"
+        )
 
         monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 

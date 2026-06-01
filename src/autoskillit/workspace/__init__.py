@@ -42,6 +42,7 @@ from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     collect_closure_write_paths,
+    resolve_closure_write_dirs,
     resolve_ephemeral_root,
 )
 from autoskillit.workspace.skill_format import (
@@ -90,6 +91,7 @@ __all__ = [
     "clone_repo",
     "CloneSourceResolution",
     "collect_closure_write_paths",
+    "resolve_closure_write_dirs",
     "detect_branch",
     "detect_source_dir",
     "detect_uncommitted_changes",

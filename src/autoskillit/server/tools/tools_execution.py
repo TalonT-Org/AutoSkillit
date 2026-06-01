@@ -39,11 +39,11 @@ from autoskillit.server._misc import (
     SCENARIO_STEP_NAME_ENV,
     _hook_config_overlay_path,
     _pipeline_tracker_path,
+    resolve_closure_write_dirs,
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.workspace import collect_closure_write_paths
 
 logger = get_logger(__name__)
 
@@ -816,17 +816,11 @@ async def run_skill(
                     # snapshot — they don't need re-augmentation because the snapshot
                     # was built from a live session that already had the full prefix set.
                     if closure and tool_ctx.skill_resolver is not None:
-                        _raw_write_paths = collect_closure_write_paths(
-                            closure, tool_ctx.skill_resolver
+                        write_watch_dirs.extend(
+                            resolve_closure_write_dirs(
+                                closure, tool_ctx.skill_resolver, cwd, write_watch_dirs
+                            )
                         )
-                        if _raw_write_paths:
-                            _temp_prefix = os.path.join(cwd, ".autoskillit", "temp")
-                            for _rwp in _raw_write_paths:
-                                _resolved_wp = Path(
-                                    _rwp.replace("{{AUTOSKILLIT_TEMP}}", _temp_prefix)
-                                )
-                                if _resolved_wp not in write_watch_dirs:
-                                    write_watch_dirs.append(_resolved_wp)
 
             allowed_write_prefix = ""
             allowed_write_prefixes: tuple[str, ...] = ()

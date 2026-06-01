@@ -135,3 +135,11 @@ class TestWritePathsValidation:
     def test_write_paths_absent_is_valid(self) -> None:
         fm = {"name": "skill-a", "description": "A skill."}
         assert validate_skill_frontmatter(fm, "skill-a") == []
+
+    def test_write_paths_resolved_prefix_accepted(self) -> None:
+        fm = {
+            "name": "skill-a",
+            "description": "A skill.",
+            "write_paths": [".autoskillit/temp/skill-a/"],
+        }
+        assert validate_skill_frontmatter(fm, "skill-a") == []

@@ -85,7 +85,9 @@ def validate_skill_frontmatter(frontmatter: dict[str, Any], skill_name: str) -> 
                     errors.append(f"'write_paths[{i}]' must be a non-empty string")
                 elif ".." in wp:
                     errors.append(f"'write_paths[{i}]' must not contain '..' (path traversal)")
-                elif not wp.startswith("{{AUTOSKILLIT_TEMP}}/"):
+                elif not (
+                    wp.startswith("{{AUTOSKILLIT_TEMP}}/") or wp.startswith(".autoskillit/temp/")
+                ):
                     errors.append(
                         f"'write_paths[{i}]' must start with "
                         "'{{AUTOSKILLIT_TEMP}}/' "

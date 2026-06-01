@@ -811,7 +811,6 @@ async def run_skill(
                                 session_id=session_id,
                                 order_id=effective_order_id,
                             ).to_json()
-                    # Extend write_watch_dirs with write_paths from the closure.
                     # Replay-path sessions inherit write scope from their original
                     # snapshot — they don't need re-augmentation because the snapshot
                     # was built from a live session that already had the full prefix set.

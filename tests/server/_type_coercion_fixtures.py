@@ -32,3 +32,7 @@ def _str_path_param(path: str) -> Path:
 
 def _kwargs_callable(name: str, **kwargs: object) -> dict:
     return {"name": name, "extras": kwargs}
+
+
+def _work_dir_param(work_dir: str, base_branch: str) -> dict:
+    return {"work_dir": work_dir, "base_branch": base_branch}

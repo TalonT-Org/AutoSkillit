@@ -88,6 +88,74 @@ def test_smoke_utils_path_params_always_guarded_absolute() -> None:
     )
 
 
+def test_sentinel_keys_do_not_collide_with_callable_params() -> None:
+    """No sentinel key may also be a legitimate callable parameter in bundled recipes."""
+    import importlib
+    import inspect
+
+    import yaml
+
+    from autoskillit.core.types._type_constants import RUN_PYTHON_SENTINEL_KEYS
+
+    recipes_dir = Path(__file__).resolve().parent.parent.parent / "src/autoskillit/recipes"
+    collisions: list[str] = []
+
+    for yaml_file in sorted(recipes_dir.glob("*.yaml")):
+        content = yaml.safe_load(yaml_file.read_text())
+        steps = content.get("steps", {})
+        if not isinstance(steps, dict):
+            continue
+        for step_name, step in steps.items():
+            if not isinstance(step, dict) or step.get("tool") != "run_python":
+                continue
+            with_args = step.get("with", {})
+            callable_path = with_args.get("callable", "")
+            if not callable_path or "." not in callable_path:
+                continue
+            try:
+                module_path, attr_name = callable_path.rsplit(".", 1)
+                mod = importlib.import_module(module_path)
+                func = getattr(mod, attr_name)
+                sig = inspect.signature(func)
+            except (ImportError, AttributeError, ValueError):
+                continue
+            overlap = RUN_PYTHON_SENTINEL_KEYS & set(sig.parameters.keys())
+            for key in sorted(overlap):
+                collisions.append(
+                    f"{yaml_file.name}:{step_name} → {callable_path} declares '{key}'"
+                )
+
+    assert not collisions, (
+        "Sentinel keys collide with callable parameters — "
+        "these keys would be stripped before reaching the callable:\n" + "\n".join(collisions)
+    )
+
+
+def test_sentinel_keys_subset_of_tool_params() -> None:
+    """Sentinel keys must be a subset of run_python's tool-level params."""
+    from autoskillit.core.types._type_constants import RUN_PYTHON_SENTINEL_KEYS
+    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
+
+    tool_params = _TOOL_PARAMS["run_python"]
+    assert RUN_PYTHON_SENTINEL_KEYS < tool_params, (
+        f"Sentinel keys {RUN_PYTHON_SENTINEL_KEYS - tool_params} are not in _TOOL_PARAMS"
+    )
+    non_sentinel_tool_params = tool_params - RUN_PYTHON_SENTINEL_KEYS - {"args"}
+    assert non_sentinel_tool_params == {"work_dir"}, (
+        f"Unexpected non-sentinel tool params: {non_sentinel_tool_params}"
+    )
+
+
+def test_executor_uses_canonical_sentinel_constant() -> None:
+    """_execution_helpers must not define its own private sentinel set."""
+    from autoskillit.server.tools import _execution_helpers
+
+    assert not hasattr(_execution_helpers, "_RUN_PYTHON_SENTINEL_KEYS"), (
+        "_execution_helpers still defines private _RUN_PYTHON_SENTINEL_KEYS; "
+        "it must import RUN_PYTHON_SENTINEL_KEYS from core"
+    )
+
+
 def test_path_like_args_registry_complete() -> None:
     """Every smoke_utils callable param named *_dir, *_path, or *_file must be in _PATH_LIKE_ARGS
     or explicitly excluded."""

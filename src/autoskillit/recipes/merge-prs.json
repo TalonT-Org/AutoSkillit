@@ -143,8 +143,10 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.create_persistent_integration",
-        "work_dir": "${{ context.work_dir }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_success": "fetch_merge_queue_data",
       "on_failure": "register_clone_failure",
@@ -409,9 +411,11 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.attempt_cheap_rebase",
-        "work_dir": "${{ context.work_dir }}",
-        "ejected_pr_branch": "${{ context.ejected_pr_branch }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "ejected_pr_branch": "${{ context.ejected_pr_branch }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_result": [
         {
@@ -707,9 +711,11 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.proactive_rebase_next_pr",
-        "work_dir": "${{ context.work_dir }}",
-        "next_pr_branch": "${{ context.next_pr_branch }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "next_pr_branch": "${{ context.next_pr_branch }}",
+          "base_branch": "${{ inputs.base_branch }}"
+        }
       },
       "on_result": [
         {
@@ -1406,11 +1412,13 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.recipe._cmd_rpc.force_push_and_wait_mergeability",
-        "work_dir": "${{ context.work_dir }}",
-        "batch_branch": "${{ context.batch_branch }}",
-        "review_pr_number": "${{ context.review_pr_number }}",
-        "max_polls": "12",
-        "poll_interval": "15"
+        "args": {
+          "work_dir": "${{ context.work_dir }}",
+          "batch_branch": "${{ context.batch_branch }}",
+          "review_pr_number": "${{ context.review_pr_number }}",
+          "max_polls": "12",
+          "poll_interval": "15"
+        }
       },
       "on_success": "check_mergeability_post_rebase",
       "on_failure": "register_clone_failure",

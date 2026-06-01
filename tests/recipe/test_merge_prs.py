@@ -261,9 +261,9 @@ def test_pmp_has_create_persistent_integration_step(recipe) -> None:
 
 def test_pmp_create_persistent_integration_passes_required_args(recipe) -> None:
     """create_persistent_integration must pass work_dir and base_branch."""
-    args = recipe.steps["create_persistent_integration"].with_args
-    assert "work_dir" in args
-    assert "base_branch" in args
+    nested_args = recipe.steps["create_persistent_integration"].with_args.get("args", {})
+    assert "work_dir" in nested_args
+    assert "base_branch" in nested_args
 
 
 def test_pmp_create_persistent_integration_routes_to_analyze_prs(recipe) -> None:

@@ -6,6 +6,7 @@ import importlib
 import inspect
 
 from autoskillit.core import SKILL_TOOLS, Severity
+from autoskillit.core.types._type_constants import RUN_PYTHON_SENTINEL_KEYS
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
@@ -13,7 +14,6 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
 
 
 def _get_provided_args(with_args: dict) -> set[str]:
@@ -92,11 +92,7 @@ def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFindi
         if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
             continue
         valid_params = set(sig.parameters.keys())
-        tool_level_params = _TOOL_PARAMS.get(step.tool, frozenset()) - {
-            "callable",
-            "args",
-            "timeout",
-        }
+        tool_level_params = RUN_PYTHON_SENTINEL_KEYS | {"args", "work_dir"}
         provided_args = _get_provided_args(step.with_args) - tool_level_params
         invalid = provided_args - valid_params
         for arg_name in sorted(invalid):

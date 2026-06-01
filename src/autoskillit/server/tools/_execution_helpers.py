@@ -9,11 +9,9 @@ import typing
 from pathlib import Path
 
 from autoskillit.core import get_logger
+from autoskillit.core.types._type_constants import RUN_PYTHON_SENTINEL_KEYS
 
 logger = get_logger(__name__)
-
-
-_RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout", "work_dir"})
 
 _PATH_LIKE_ARGS: frozenset[str] = frozenset({"output_dir", "workspace", "diagnostics_log_dir"})
 
@@ -107,6 +105,7 @@ async def _import_and_call(
 
     if args is None:
         args = {}
+    args = dict(args)
 
     if "." not in dotted_path:
         return {"success": False, "error": f"Invalid dotted path: {dotted_path!r}"}
@@ -131,8 +130,9 @@ async def _import_and_call(
 
     sig = inspect.signature(func)
 
+    valid_keys = set(sig.parameters.keys())
     for key in list(args.keys()):
-        if key in _RUN_PYTHON_SENTINEL_KEYS:
+        if key in RUN_PYTHON_SENTINEL_KEYS and key not in valid_keys:
             logger.warning(
                 "run_python stripped sentinel key from args",
                 callable=dotted_path,
@@ -144,7 +144,6 @@ async def _import_and_call(
         p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
     )
     if not accepts_var_keyword:
-        valid_keys = set(sig.parameters.keys())
         for key in list(args.keys()):
             if key not in valid_keys:
                 logger.warning(

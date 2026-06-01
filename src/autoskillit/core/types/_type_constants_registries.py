@@ -101,6 +101,7 @@ GATED_TOOLS: frozenset[str] = frozenset(
         "claim_and_resolve_issue",
         "create_and_publish_branch",
         "record_pipeline_step",
+        "reset_dispatch",
     }
 )
 
@@ -115,6 +116,7 @@ FLEET_TOOLS: frozenset[str] = frozenset(
         "get_quota_events",
         "dispatch_food_truck",
         "record_gate_dispatch",
+        "reset_dispatch",
     }
 )
 
@@ -127,7 +129,11 @@ FLEET_DISPATCH_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-FLEET_MENU_TOOLS: tuple[str, ...] = ("dispatch_food_truck", "record_gate_dispatch")
+FLEET_MENU_TOOLS: tuple[str, ...] = (
+    "dispatch_food_truck",
+    "record_gate_dispatch",
+    "reset_dispatch",
+)
 
 FLEET_ERROR_CODES: frozenset[str] = frozenset(FleetErrorCode)
 
@@ -264,6 +270,7 @@ TOOL_SUBSET_TAGS: dict[str, frozenset[str]] = {
     "get_pipeline_report": frozenset({"kitchen-core", "fleet"}),
     "dispatch_food_truck": frozenset({"kitchen-core", "fleet"}),
     "record_gate_dispatch": frozenset({"kitchen-core", "fleet"}),
+    "reset_dispatch": frozenset({"kitchen-core", "fleet"}),
     "merge_worktree": frozenset({"kitchen-core"}),
     "unlock_agent_pack": frozenset({"kitchen-core"}),
     "record_pipeline_step": frozenset({"kitchen-core"}),

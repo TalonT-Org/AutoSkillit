@@ -106,6 +106,7 @@ class TestToolRegistration:
             "configure_order",
             "record_pipeline_step",
             "lock_ingredients",
+            "reset_dispatch",
         }
         assert expected == tool_names
 

@@ -287,6 +287,7 @@ def test_fleet_tools_matches_expected() -> None:
             "get_quota_events",
             "dispatch_food_truck",
             "record_gate_dispatch",
+            "reset_dispatch",
         }
     )
     assert FLEET_TOOLS == expected, "Update expected set when FLEET_TOOLS changes"

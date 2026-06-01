@@ -222,6 +222,7 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "configure_order",  # simple config snapshot dict
         "lock_ingredients",  # simple success/error result
         "record_pipeline_step",  # structured init/status result
+        "reset_dispatch",  # JSON cleanup report, generic renders correctly
     }
 )
 

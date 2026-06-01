@@ -442,6 +442,9 @@ class FleetErrorCode(StrEnum):
     FLEET_PROCESS_STALE = "fleet_process_stale"
     FLEET_DISPATCH_SKIPPED = "fleet_dispatch_skipped"
     FLEET_RESUME_SESSION_MISSING = "fleet_resume_session_missing"
+    FLEET_RESET_NOT_FOUND = "fleet_reset_not_found"
+    FLEET_RESET_INVALID_TARGET = "fleet_reset_invalid_target"
+    FLEET_RESET_STILL_RUNNING = "fleet_reset_still_running"
 
 
 class FeatureLifecycle(StrEnum):

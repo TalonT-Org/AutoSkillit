@@ -51,6 +51,9 @@ class TestFleetErrorCodeEnum:
             "fleet_dispatch_skipped",
             "fleet_process_stale",
             "fleet_resume_session_missing",
+            "fleet_reset_not_found",
+            "fleet_reset_invalid_target",
+            "fleet_reset_still_running",
         }
         assert {c.value for c in FleetErrorCode} == expected_values
 

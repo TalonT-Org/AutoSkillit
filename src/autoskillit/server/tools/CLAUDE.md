@@ -1,6 +1,6 @@
 # tools/
 
-MCP `@mcp.tool()` handlers registered on import (19 tool modules).
+MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 
 ## Files
 
@@ -21,6 +21,7 @@ MCP `@mcp.tool()` handlers registered on import (19 tool modules).
 | `_execution_helpers.py` | `_import_and_call`, `_coerce_scalar` subprocess coercion helpers (no MCP tools) |
 | `tools_execution.py` | `run_cmd`, `run_python`, `run_skill` |
 | `tools_fleet_dispatch.py` | `dispatch_food_truck`, `record_gate_dispatch` |
+| `tools_fleet_reset.py` | `reset_dispatch` (full dispatch artifact cleanup) |
 | `tools_git.py` | `merge_worktree`, `classify_fix`, `create_unique_branch`, `create_and_publish_branch`, `check_pr_mergeable` |
 | `tools_github.py` | `fetch_github_issue`, `get_issue_title`, `report_bug` |
 | `tools_issue_headless.py` | `prepare_issue`, `enrich_issues` (headless session tools) |

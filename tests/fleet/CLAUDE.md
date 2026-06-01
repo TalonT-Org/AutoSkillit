@@ -49,6 +49,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_research_campaign_dispatch.py` | Tests for multi-recipe research campaign dispatch capture propagation (Group J) |
 | `test_result_parser.py` | Tests for fleet.result_parser — L2 result block parsing |
 | `test_retry_failed_dispatch.py` | Tests for explicit retry of failed campaign dispatches via FAILURE → PENDING state transition |
+| `test_reset.py` | Tests for `find_dispatch_in_campaigns`, `compute_reset_labels` |
 | `test_skip_when.py` | Unit tests for `evaluate_skip_when` — campaign/inputs ref resolution, expression validation, quote stripping |
 | `test_sidecar.py` | Sidecar tests |
 | `test_startup_label_recovery.py` | Tests for sweep_stale_dispatch_labels — dead dispatch label cleanup, alive dispatch skip, missing sidecar, multi-campaign |

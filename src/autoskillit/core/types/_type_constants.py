@@ -26,6 +26,7 @@ __all__ = [
     "QUOTA_BUDGET_EXCEEDED_TRIGGER",
     "QUOTA_POST_WARNING_TRIGGER",
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
+    "RUN_PYTHON_SENTINEL_KEYS",
     "SCOPE_DIRECTION_SOURCE_TYPES",
     "WORKTREE_SKILLS",
 ]
@@ -186,6 +187,8 @@ DATA_MANIFEST_SOURCE_TYPES: frozenset[str] = frozenset(
         "wet_lab",
     }
 )
+
+RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout"})
 
 SCOPE_DIRECTION_SOURCE_TYPES: frozenset[str] = frozenset(
     {

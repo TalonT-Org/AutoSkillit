@@ -417,3 +417,31 @@ class TestImportAndCallTypeCoercion:
         assert result["success"] is True
         assert result["result"]["name"] == "test"
         assert result["result"]["extras"]["extra"] == "y"
+
+    @pytest.mark.anyio
+    async def test_sentinel_stripping_preserves_callable_accepted_keys(self):
+        """Sentinel keys that the callable legitimately accepts must NOT be stripped."""
+        result = json.loads(
+            await run_python(
+                callable="tests.server._type_coercion_fixtures._work_dir_param",
+                args={"work_dir": "/some/path", "base_branch": "main"},
+                timeout=10,
+            )
+        )
+        assert result["success"] is True
+        assert result["result"]["work_dir"] == "/some/path"
+        assert result["result"]["base_branch"] == "main"
+
+    @pytest.mark.anyio
+    async def test_import_and_call_does_not_mutate_input_args(self):
+        """_import_and_call must not mutate the caller's args dict."""
+        from autoskillit.server.tools._execution_helpers import _import_and_call
+
+        original_args = {"value": "hello", "callable": "bogus", "unknown_key": 99}
+        frozen_copy = dict(original_args)
+        await _import_and_call(
+            "tests.server._type_coercion_fixtures._str_only_param",
+            args=original_args,
+            timeout=10,
+        )
+        assert original_args == frozen_copy

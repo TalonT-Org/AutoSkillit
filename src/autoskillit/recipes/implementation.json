@@ -222,15 +222,25 @@
       },
       "capture": {
         "plan_path": "${{ result.plan_path }}",
-        "all_plan_paths": "${{ result.plan_path }}"
+        "all_plan_paths": "${{ result.plan_path }}",
+        "verdict": "${{ result.verdict }}"
       },
       "capture_list": {
         "plan_parts": "${{ result.plan_parts }}"
       },
       "retries": 0,
-      "on_success": "review_approach",
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == plan",
+          "route": "review_approach"
+        },
+        {
+          "when": "${{ result.verdict }} == false_positive",
+          "route": "check_has_commits"
+        }
+      ],
       "on_failure": "release_issue_failure",
-      "note": "Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file. plan_parts context key contains the full ordered list of part files (sorted alphabetically). For a single-part plan, plan_parts has one entry equal to plan_path. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan from the remediate step; pass it inline in the skill_command rather than as a named with: key. ACCUMULATION: all_plan_paths accumulates across any re-entries to the plan step (e.g. remediation). For a single-pass run, all_plan_paths equals plan_path (the capture block handles this automatically). ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the skill_command so the make-plan skill can detect and fetch the issue itself: \"/autoskillit:make-plan {task}\\n\\nGitHub Issue: {inputs.issue_url}\" The skill detects the URL pattern and calls fetch_github_issue internally. ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty string, append it to the skill_command: \"/autoskillit:make-plan {task}\\n\\nadversarial_review_level={inputs.adversarial_review_level}\"\n"
+      "note": "Produces plan in {{AUTOSKILLIT_TEMP}}/make-plan/. Glob plan_dir for *_part_*.md or single plan file. plan_parts context key contains the full ordered list of part files (sorted alphabetically). For a single-part plan, plan_parts has one entry equal to plan_path. REMEDIATION MODE: context.remediation_path is available when the orchestrator re-enters plan from the remediate step; pass it inline in the skill_command rather than as a named with: key. When in remediation mode, also append audit_remediation_mode=true to the skill_command. ACCUMULATION: all_plan_paths accumulates across any re-entries to the plan step (e.g. remediation). For a single-pass run, all_plan_paths equals plan_path (the capture block handles this automatically). When verdict=false_positive, do NOT overwrite all_plan_paths — preserve the existing accumulated value from prior plan executions. ISSUE CONTEXT: If inputs.issue_url is a non-empty string, append it to the skill_command so the make-plan skill can detect and fetch the issue itself: \"/autoskillit:make-plan {task}\\n\\nGitHub Issue: {inputs.issue_url}\" The skill detects the URL pattern and calls fetch_github_issue internally. ADVERSARIAL REVIEW LEVEL: If inputs.adversarial_review_level is a non-empty string, append it to the skill_command: \"/autoskillit:make-plan {task}\\n\\nadversarial_review_level={inputs.adversarial_review_level}\" VERDICT: The skill emits verdict=plan (normal) or verdict=false_positive (remediation finding is a false positive). false_positive skips implement and routes to check_has_commits.\n"
     },
     "review_approach": {
       "tool": "run_skill",
@@ -619,7 +629,8 @@
       "with": {
         "clone_path": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
-        "branch": "${{ context.merge_target }}"
+        "branch": "${{ context.merge_target }}",
+        "force": "true"
       },
       "on_success": "prepare_pr",
       "on_failure": "release_issue_failure",

@@ -184,10 +184,15 @@ steps:
       group_files: "${{ context.group_files }}"
     capture:
       phase_plan_path: "${{ result.plan_path }}"
+      verdict: "${{ result.verdict }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"
     retries: 0
-    on_success: implement_phase
+    on_result:
+    - when: "${{ result.verdict }} == plan"
+      route: implement_phase
+    - when: "${{ result.verdict }} == false_positive"
+      route: implement_phase
     on_failure: escalate_stop
     note: >
       Plans the current setup phase. Replace ${{ context.group_files }} in the

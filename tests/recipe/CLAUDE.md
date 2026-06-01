@@ -206,6 +206,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_validator_structural.py` | Tests for recipe validator structural analysis |
 
 | `test_audit_impl_defaults.py` | Contract test: implementation.yaml and remediation.yaml must default inputs.audit_impl to 'true' |
+| `test_false_positive_escape_valve.py` | Tests for false-positive escape valve routing in recipes that invoke make-plan |
 ## Architecture Notes
 
 `conftest.py` provides shared fixtures for recipe tests. The `fixtures/` subdirectory contains YAML test data files including sample recipes and expected diagram output. The `test_rules_*.py` files each test a single semantic validation rule from `recipe/rules/` and its subdirectories (`campaign/`, `ci/`, `dataflow/`, `graph/`).

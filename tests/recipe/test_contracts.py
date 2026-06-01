@@ -719,13 +719,14 @@ def test_generate_recipe_card_includes_output_patterns(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_write_behavior_always_loaded() -> None:
-    """make-plan contract declares write_behavior='always' with no patterns."""
+def test_write_behavior_conditional_make_plan_loaded() -> None:
+    """make-plan contract declares write_behavior='conditional' gated on verdict."""
     manifest = load_bundled_manifest()
     contract = get_skill_contract("make-plan", manifest)
     assert contract is not None
-    assert contract.write_behavior == "always"
-    assert contract.write_expected_when == []
+    assert contract.write_behavior == "conditional"
+    assert len(contract.write_expected_when) > 0
+    assert any("verdict" in p for p in contract.write_expected_when)
 
 
 def test_write_behavior_conditional_loaded() -> None:
@@ -761,7 +762,6 @@ ALWAYS_WRITE_SKILLS = {
     "implement-worktree-no-merge",
     "make-campaign",
     "make-groups",
-    "make-plan",
     "plan-experiment",
     "plan-visualization",
     "planner-consolidate-wps",
@@ -821,6 +821,7 @@ def test_always_write_skills_matches_yaml() -> None:
 CONDITIONAL_WRITE_SKILLS: dict[str, str] = {
     # skill_name → substring that must appear in write_expected_when patterns
     "compose-pr": "pr_url",
+    "make-plan": "verdict",
     "promote-to-main": "verdict",
     "resolve-failures": "verdict",
     "resolve-merge-conflicts": "conflict_report_path",

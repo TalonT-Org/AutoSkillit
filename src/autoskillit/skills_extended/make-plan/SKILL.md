@@ -338,6 +338,19 @@ Save the plan to: `{{AUTOSKILLIT_TEMP}}/make-plan/{task_name}_plan_{YYYY-MM-DD_H
 
 **Structured output:** After saving the file(s), emit the following lines so pipeline orchestrators can capture both fields:
 
+**Verdict emission:** Every run MUST emit a `verdict` token as the first structured output line:
+- `verdict = plan` — a valid implementation plan was produced. Emit `plan_path` and `plan_parts` tokens after.
+- `verdict = false_positive` — all remediation findings are false positives; no implementation is needed. Do NOT emit `plan_path` or `plan_parts` tokens. Do NOT write a plan file.
+
+**When to emit `false_positive`:** Emit `verdict = false_positive` ONLY when ALL of the following are true:
+1. ARGUMENTS contains `audit_remediation_mode=true` (injected by the recipe orchestrator when in remediation context)
+2. The remediation file describes findings that are demonstrably incorrect — the implementation already satisfies the requirement through an equivalent mechanism (e.g., naming deviation following an established codebase convention, structural equivalent, functionally identical approach)
+3. There are zero genuine gaps requiring code changes
+
+If `audit_remediation_mode=true` is NOT present in ARGUMENTS, NEVER emit `false_positive`. Always emit `verdict = plan` and produce a plan file.
+
+**Remediation mode detection:** Scan ARGUMENTS for a line matching `audit_remediation_mode=true`. When present, the skill is operating in remediation context and MAY emit `verdict = false_positive` if all findings are false positives. When absent, the skill MUST emit `verdict = plan` regardless of assessment.
+
 For a single-part plan:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
@@ -347,16 +360,23 @@ For a single-part plan:
 > code fences cause match failure.
 
 ```
+verdict = plan
 plan_path = {absolute_path}
 plan_parts = {absolute_path}
 ```
 
 For a multi-part plan (list all part paths in alphabetical order):
 ```
+verdict = plan
 plan_path = {path_to_part_a}
 plan_parts = {path_to_part_a}
 {path_to_part_b}
 {path_to_part_c}
+```
+
+For a false positive verdict (remediation mode only):
+```
+verdict = false_positive
 ```
 
 **Plan structure (single-part):**

@@ -23,7 +23,6 @@ _KNOWN_UNGAPPED_WRITE_ALWAYS = frozenset(
         "generate-report",
         "make-campaign",
         "make-groups",
-        "make-plan",
         "plan-experiment",
         "plan-visualization",
         "planner-assess-review-approach",

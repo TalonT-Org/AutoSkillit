@@ -47,7 +47,7 @@ def _patch_common(monkeypatch, tmp_path, skill_result, ctx):
     )
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
-        lambda: {},
+        lambda backend=None: {},  # noqa: ARG005
     )
 
     flush_calls: list[dict] = []
@@ -139,7 +139,7 @@ class TestProviderFieldsReachFlush:
         )
         monkeypatch.setattr(
             "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
-            lambda: {},
+            lambda backend=None: {},  # noqa: ARG005
         )
         monkeypatch.setattr(minimal_ctx.config.providers, "provider_retry_limit", 2)
         monkeypatch.setattr(
@@ -181,7 +181,7 @@ class TestProviderFieldsReachFlush:
 
         monkeypatch.setattr(
             "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
-            lambda: {},
+            lambda backend=None: {},  # noqa: ARG005
         )
 
         flush_calls: list[dict] = []
@@ -223,7 +223,7 @@ class TestProviderFieldsReachFlush:
 
         monkeypatch.setattr(
             "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
-            lambda: {},
+            lambda backend=None: {},  # noqa: ARG005
         )
 
         flush_calls: list[dict] = []

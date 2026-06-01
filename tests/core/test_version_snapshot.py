@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,6 +18,14 @@ def _clear_snapshot_cache():
     collect_version_snapshot.cache_clear()
     yield
     collect_version_snapshot.cache_clear()
+
+
+def _make_backend(name: str, version: str = "", plugins: list | None = None) -> MagicMock:
+    b = MagicMock()
+    b.name = name
+    b.version.return_value = version
+    b.list_plugins.return_value = plugins if plugins is not None else []
+    return b
 
 
 def test_collect_version_snapshot_returns_required_keys():
@@ -113,26 +122,15 @@ def test_plugins_graceful_on_corrupt_json(monkeypatch, tmp_path):
     assert result["plugins"] == []
 
 
-def test_claude_code_version_skipped_for_codex_backend(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
-    sentinel = object()
-    monkeypatch.setattr(mod.subprocess, "run", lambda *a, **kw: sentinel)
-    result = collect_version_snapshot()
+def test_claude_code_version_skipped_for_codex_backend():
+    backend = _make_backend("codex", "1.2.3", [])
+    result = collect_version_snapshot(backend)
     assert result["claude_code_version"] == ""
 
 
-def test_plugins_skipped_for_codex_backend(monkeypatch, tmp_path):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
-    plugins_dir = tmp_path / ".claude" / "plugins"
-    plugins_dir.mkdir(parents=True)
-    plugin_data = {"version": 2, "plugins": {"some-ref": [{"version": "1.0"}]}}
-    (plugins_dir / "installed_plugins.json").write_text(json.dumps(plugin_data), encoding="utf-8")
-    monkeypatch.setattr(mod.Path, "home", classmethod(lambda cls: tmp_path))
-    result = collect_version_snapshot()
+def test_plugins_skipped_for_codex_backend():
+    backend = _make_backend("codex", "1.2.3", [{"ref": "x"}])
+    result = collect_version_snapshot(backend)
     assert result["plugins"] == []
 
 
@@ -150,3 +148,19 @@ def test_subprocess_path_exercised_without_backend_env(monkeypatch):
     result = collect_version_snapshot()
     assert result["claude_code_version"] == ""
     assert len(called) == 1
+
+
+def test_cache_maxsize_is_4():
+    info = collect_version_snapshot.cache_info()
+    assert info.maxsize == 4
+
+
+def test_cache_per_backend_instance():
+    claude = _make_backend("claude-code", "1.0", [])
+    codex = _make_backend("codex", "2.0", [])
+    collect_version_snapshot(claude)
+    collect_version_snapshot(claude)
+    collect_version_snapshot(codex)
+    collect_version_snapshot(codex)
+    assert claude.version.call_count == 1
+    assert codex.version.call_count == 1

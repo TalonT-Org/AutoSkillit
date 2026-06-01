@@ -168,7 +168,7 @@ async def _execute_claude_headless(
     linux_tracing_cfg = ctx.config.linux_tracing
     _start_ts = datetime.now(UTC).isoformat()
     _start_mono = time.monotonic()
-    _versions = collect_version_snapshot()
+    _versions = collect_version_snapshot(_step_backend)
 
     _readonly_skill = readonly_skill
     _has_write_scope = bool(write_watch_dirs)

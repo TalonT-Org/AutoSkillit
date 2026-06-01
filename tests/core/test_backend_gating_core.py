@@ -1,22 +1,20 @@
 """Backend gating tests for core/_version_snapshot.py.
 
-Verify that _claude_code_version and _plugins return empty fallbacks
-for non-claude-code backends without performing any I/O.
+Verify that collect_version_snapshot() dispatches to the supplied backend's
+``version()`` and ``list_plugins()`` methods, that the appropriate keys are
+populated per backend, and that subprocess/filesystem are not touched when a
+backend is provided.
 """
 
 from __future__ import annotations
 
-import subprocess
+import logging
+from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core._version_snapshot import (
-    _claude_code_version,
-    _codex_plugins,
-    _codex_version,
-    _plugins,
-    collect_version_snapshot,
-)
+from autoskillit.core import _version_snapshot as mod
+from autoskillit.core._version_snapshot import collect_version_snapshot
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -28,122 +26,94 @@ def _clear_snapshot_cache():
     collect_version_snapshot.cache_clear()
 
 
-def test_claude_code_version_returns_empty_for_non_claude_code_backend(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "headless")
-
-    def _no_call(*args, **kwargs):
-        raise AssertionError("subprocess.run should not be called")
-
-    monkeypatch.setattr(mod.subprocess, "run", _no_call)
-    assert _claude_code_version() == ""
+def _make_backend(name: str, version: str = "", plugins: list | None = None) -> MagicMock:
+    b = MagicMock()
+    b.name = name
+    b.version.return_value = version
+    b.list_plugins.return_value = plugins if plugins is not None else []
+    return b
 
 
-def test_plugins_returns_empty_for_non_claude_code_backend(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "headless")
-
-    def _no_read(*args, **kwargs):
-        raise AssertionError("Path.home should not be called")
-
-    monkeypatch.setattr(mod.Path, "home", staticmethod(_no_read))
-    assert _plugins() == []
+def test_claude_backend_populates_claude_keys():
+    backend = _make_backend("claude-code", "1.2.3", [{"ref": "p1"}])
+    result = collect_version_snapshot(backend)
+    assert result["claude_code_version"] == "1.2.3"
+    assert result["plugins"] == [{"ref": "p1"}]
+    assert result["codex_version"] == ""
+    assert result["codex_plugins"] == []
 
 
-def test_collect_version_snapshot_skips_claude_fields(monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "headless")
-    result = collect_version_snapshot()
+def test_codex_backend_populates_codex_keys():
+    backend = _make_backend("codex", "4.5.6", [{"ref": "p2"}])
+    result = collect_version_snapshot(backend)
+    assert result["codex_version"] == "4.5.6"
+    assert result["codex_plugins"] == [{"ref": "p2"}]
     assert result["claude_code_version"] == ""
     assert result["plugins"] == []
 
 
-def test_claude_code_version_still_runs_for_claude_code_backend(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
-    called = []
-
-    def _fake_run(*args, **kwargs):
-        called.append(args)
-        raise FileNotFoundError("claude not found")
-
-    monkeypatch.setattr(mod.subprocess, "run", _fake_run)
-    _claude_code_version()
-    assert len(called) == 1
+def test_claude_backend_no_cross_contamination():
+    backend = _make_backend("claude-code", "1.2.3", [{"ref": "p1"}])
+    result = collect_version_snapshot(backend)
+    assert result["codex_version"] == ""
+    assert result["codex_plugins"] == []
 
 
-def test_codex_version_returns_empty_for_non_codex_backend(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
+def test_codex_backend_no_cross_contamination():
+    backend = _make_backend("codex", "4.5.6", [{"ref": "p2"}])
+    result = collect_version_snapshot(backend)
+    assert result["claude_code_version"] == ""
+    assert result["plugins"] == []
 
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "headless")
 
-    def _no_call(*args, **kwargs):
+def test_unknown_backend_name_logs_warning(caplog):
+    backend = _make_backend("unknown", "1.0", [{"ref": "p1"}])
+    with caplog.at_level(logging.WARNING, logger="autoskillit.core._version_snapshot"):
+        result = collect_version_snapshot(backend)
+    assert result["claude_code_version"] == ""
+    assert result["plugins"] == []
+    assert result["codex_version"] == ""
+    assert result["codex_plugins"] == []
+    assert any("Unknown backend name 'unknown'" in rec.message for rec in caplog.records)
+
+
+def test_backend_version_called_exactly_once():
+    backend = _make_backend("claude-code", "1.2.3")
+    collect_version_snapshot(backend)
+    assert backend.version.call_count == 1
+
+
+def test_backend_list_plugins_called_exactly_once():
+    backend = _make_backend("claude-code", "1.2.3", [{"ref": "p1"}])
+    collect_version_snapshot(backend)
+    assert backend.list_plugins.call_count == 1
+
+
+def test_private_helpers_not_importable():
+    for name in ("_claude_code_version", "_codex_version", "_codex_plugins", "_plugins"):
+        assert name not in dir(mod)
+    for name in ("_claude_code_version", "_codex_version", "_codex_plugins", "_plugins"):
+        with pytest.raises(ImportError):
+            __import__(f"autoskillit.core._version_snapshot.{name}", fromlist=[name])
+
+
+def test_no_subprocess_called_with_backend(monkeypatch):
+    backend = _make_backend("claude-code", "1.2.3", [{"ref": "p1"}])
+
+    def _no_call(*args, **kwargs):  # noqa: ARG001
         raise AssertionError("subprocess.run should not be called")
 
     monkeypatch.setattr(mod.subprocess, "run", _no_call)
-    assert _codex_version() == ""
+    result = collect_version_snapshot(backend)
+    assert result["claude_code_version"] == "1.2.3"
 
 
-def test_codex_version_graceful_on_timeout(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
+def test_no_filesystem_read_with_backend(monkeypatch):
+    backend = _make_backend("claude-code", "1.2.3", [{"ref": "p1"}])
 
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+    def _no_read(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError("Path.home should not be called")
 
-    def _raise(*args, **kwargs):
-        raise subprocess.TimeoutExpired("codex", 5)
-
-    monkeypatch.setattr(mod.subprocess, "run", _raise)
-    assert _codex_version() == ""
-
-
-def test_codex_version_graceful_on_file_not_found_for_codex_backend(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
-
-    def _raise(*args, **kwargs):
-        raise FileNotFoundError("codex not found")
-
-    monkeypatch.setattr(mod.subprocess, "run", _raise)
-    assert _codex_version() == ""
-
-
-def test_codex_plugins_returns_empty_for_non_codex_backend(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "headless")
-
-    def _no_call(*args, **kwargs):
-        raise AssertionError("subprocess.run should not be called")
-
-    monkeypatch.setattr(mod.subprocess, "run", _no_call)
-    assert _codex_plugins() == []
-
-
-def test_codex_plugins_graceful_on_subprocess_error(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
-
-    def _raise(*args, **kwargs):
-        raise FileNotFoundError("codex not found")
-
-    monkeypatch.setattr(mod.subprocess, "run", _raise)
-    assert _codex_plugins() == []
-
-
-def test_codex_version_not_called_without_backend_env(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
-
-    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
-    called = []
-
-    def _fake_run(*args, **kwargs):
-        called.append(args)
-        raise FileNotFoundError("codex not found")
-
-    monkeypatch.setattr(mod.subprocess, "run", _fake_run)
-    assert _codex_version() == ""
-    assert len(called) == 0
+    monkeypatch.setattr(mod.Path, "home", staticmethod(_no_read))
+    result = collect_version_snapshot(backend)
+    assert result["plugins"] == [{"ref": "p1"}]

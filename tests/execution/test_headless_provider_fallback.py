@@ -99,7 +99,7 @@ class TestProviderFallbackLoop:
         )
         monkeypatch.setattr(
             "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
-            lambda: {},
+            lambda backend=None: {},  # noqa: ARG005
         )
         monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: None)  # noqa: ARG005
 

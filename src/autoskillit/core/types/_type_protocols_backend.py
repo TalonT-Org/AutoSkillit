@@ -71,6 +71,11 @@ class SessionLocator(Protocol):
 class CodingAgentBackend(Protocol):
     """Top-level protocol for a coding agent backend.
 
+    All concrete implementations are frozen dataclasses, which provides a
+    default ``__hash__`` method. Declaring it explicitly here allows call
+    sites that pass a ``CodingAgentBackend`` to ``functools.lru_cache``-wrapped
+    functions to type-check.
+
     Composes capabilities, command building, and the four sub-protocols
     (StreamParser, ResultParser, EnvPolicy, SessionLocator). Concrete
     implementations (e.g., ClaudeCodeBackend) satisfy this Protocol.
@@ -82,6 +87,8 @@ class CodingAgentBackend(Protocol):
         which bypasses ``AUTOSKILLIT_PRIVATE_ENV_VARS`` stripping. Enforced
         by ``tests/arch/test_mcp_env_forward_coverage.py``.
     """
+
+    def __hash__(self) -> int: ...
 
     @property
     def name(self) -> str: ...

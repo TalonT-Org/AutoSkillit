@@ -14,7 +14,8 @@ Examine only the diff content provided. Do not fetch or read files outside the d
 
 ## Before Reporting ANY Finding
 
-For each potential finding, apply this verification sequence before including it:
+For each potential finding, first quote the exact `[LNNN]` line from the diff that
+you are about to flag. Then apply the verification sequence:
 
 1. **Scope check**: Is the code I'm about to flag actually a `+` (added) line, or is it a context line from a different function/scope? Context lines before `+` blocks belong to the PRECEDING code, not the added code.
 
@@ -25,6 +26,14 @@ For each potential finding, apply this verification sequence before including it
 4. **Type contract check**: Does the called function's signature or docstring guarantee a return type? If a function documents "Returns str, never None" or "Raises ValueError on invalid input", do not flag callers for missing None guards.
 
 5. **Assertion direction check**: For test assertions, read the FULL assertion: `assert X not in Y` is an absence check (passes when X is absent), not a presence check. `assert X in Y` is a presence check.
+
+## When Verification Is Inconclusive
+
+If you cannot complete a verification step (external dependency, opaque call, missing
+context outside the diff):
+- Report the finding with severity "info" and prefix the message with "[INCONCLUSIVE]"
+- State which verification step could not be completed and why
+- Do NOT silently drop findings you cannot fully verify
 
 ## Output Format
 

@@ -13,6 +13,13 @@ Scope: examine only the diff content provided. Do not fetch or read files outsid
 
 For every potential finding, you MUST mentally execute the code path with concrete values before reporting it.
 
+## Before Simulating: Verify Your Reading
+
+Before tracing any value, quote the exact diff line you are about to reason about.
+Copy the `[LNNN]` marker and the full line content verbatim. If you cannot quote
+the line exactly as it appears, re-read the diff. Do not simulate from memory —
+simulate from quoted text.
+
 **Trace the value**: If you think a variable could be None, trace its assignment chain backward. What function produced it? What does that function's return statement actually return? If it returns `text.strip()` where text is a str, the return type is str — not Optional[str].
 
 **Trace the assertion**: If you think a test assertion is wrong, substitute actual values. For `assert "eval(" not in sanitized`: if sanitized = "result = run_step(ctx)", then "eval(" is NOT in sanitized, so the assertion PASSES. That's the intended behavior of an absence check.

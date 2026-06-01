@@ -17,6 +17,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_ask_user_question_guard.py` | Tests for the ask_user_question_guard PreToolUse hook |
 | `test_branch_protection_guard.py` | Tests for hooks/branch_protection_guard.py — PreToolUse branch protection |
 | `test_claude_md_critical_rules.py` | Tests that CLAUDE.md contains required critical rules from friction analysis |
+| `test_check_pyi_stub_format.py` | Unit tests for scripts/check_pyi_stub_format.py pre-commit hook — validates FunctionDef, ClassDef, and non-relative import rejection |
 | `test_ci_dev_config.py` | Structural enforcement: CI workflow and pre-commit configuration must contain required quality gates |
 | `test_ci_workflow.py` | CI workflow structural tests |
 | `test_ci_shard_config.py` | Tests for CI shard directory configuration consistency |

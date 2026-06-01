@@ -173,7 +173,7 @@ _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
     }
 )
 
-# ── RULES tuple — 10 entries ──────────────────────────────────────────────────
+# ── RULES tuple — 11 entries ──────────────────────────────────────────────────
 
 RULES: tuple[RuleDescriptor, ...] = (
     RuleDescriptor(
@@ -354,6 +354,26 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-010",
+    ),
+    RuleDescriptor(
+        rule_id="ARCH-011",
+        name="pyi-stub-reexport-only",
+        lens="development",
+        description=(
+            "__init__.pyi stub files must contain only 'from .X import Y as Y' re-export lines. "
+            "No def, class, assign, or other statement types."
+        ),
+        rationale=(
+            "lazy_loader.attach_stub() uses _StubVisitor which only implements visit_ImportFrom. "
+            "Any other AST node type (FunctionDef, ClassDef, Assign, AnnAssign) is silently "
+            "ignored by ast.NodeVisitor.generic_visit — the symbol is absent from __all__ and "
+            "invisible at runtime. An agent inserting 'def foo(): ...' gets no feedback from "
+            "the existing tests (which only iterate ImportFrom nodes) and spirals through retries."
+            " This rule makes the constraint AST-enforceable at the development layer."
+        ),
+        exemptions=frozenset(),
+        severity="error",
+        defense_standard="DS-011",
     ),
 )
 

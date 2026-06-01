@@ -212,6 +212,8 @@ scripts/recipe_contract_freshness.py:
   - hooks/
 scripts/regen_contracts.py:
   - infra/
+scripts/check_pyi_stub_format.py:
+  - infra/
 scripts/sync_versions.py:
   - infra/
 

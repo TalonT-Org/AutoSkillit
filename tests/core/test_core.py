@@ -89,6 +89,16 @@ def test_core_pyi_uses_as_form():
 
     pyi = pkg_root() / "core" / "__init__.pyi"
     tree = ast.parse(pyi.read_text())
+
+    # Guard: no non-import statements allowed (lazy_loader ignores them)
+    for node in tree.body:
+        assert isinstance(node, ast.ImportFrom), (
+            f"core/__init__.pyi line {node.lineno}: {type(node).__name__} not allowed. "
+            f"Only 'from .module import Name as Name' lines are valid. "
+            f"lazy_loader.attach_stub() silently ignores {type(node).__name__} statements."
+        )
+
+    # Existing: verify all imports use 'as' form
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             for alias in node.names:

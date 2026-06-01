@@ -67,6 +67,13 @@ repos:
         files: ^src/autoskillit/recipes/(?!contracts/).*\.yaml$
         pass_filenames: false
 
+      - id: check-pyi-stub-format
+        name: Check __init__.pyi stub format
+        language: system
+        entry: python scripts/check_pyi_stub_format.py
+        files: __init__\.pyi$
+        pass_filenames: false
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

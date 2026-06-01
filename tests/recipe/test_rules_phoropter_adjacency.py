@@ -69,6 +69,24 @@ def test_synthesize_before_apply_produces_error():
     assert "expected phase 'apply'" in findings[0].message
 
 
+def test_wrong_order_dial_synthesize_apply():
+    """dial→synthesize→apply: synthesize arrives when apply is expected."""
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].step_name == "synthesize"
+    assert "expected phase 'apply'" in findings[0].message
+
+
 def test_no_phoropter_family_produces_no_phase_findings():
     import autoskillit.recipe  # noqa: F401
 
@@ -125,6 +143,24 @@ def test_non_family_step_between_dial_and_apply_produces_error():
             "dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
             "plain-step": RecipeStep(tool="run_cmd"),
             "apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-step-interleaving"]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].step_name == "plain-step"
+    assert "vis-lens" in findings[0].message
+
+
+def test_non_family_step_between_apply_and_synthesize_produces_error():
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "plain-step": RecipeStep(tool="run_cmd"),
             "synthesize": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
         }
     )

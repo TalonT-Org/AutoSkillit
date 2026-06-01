@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -87,6 +88,17 @@ def _extract_git_subcommand_and_remaining(
     return None
 
 
+_DELIMITERS_RE = re.compile(r"[\s,\[\]'\"()]+")
+
+
+def _tokenize_text(text: str) -> frozenset[str]:
+    """Split text on common delimiters for set-membership matching.
+
+    Prevents '.' from matching periods inside filenames like 'foo.py'.
+    """
+    return frozenset(t for t in _DELIMITERS_RE.split(text) if t)
+
+
 def _contains_blocked_git_op(cmd: str) -> tuple[str, ...] | None:
     """Return the matching blocked git op tuple, or None if no match.
 
@@ -119,19 +131,19 @@ def _contains_blocked_git_op(cmd: str) -> tuple[str, ...] | None:
 
     # Check for interpreter-wrapped invocations (python3 -c "subprocess.run(['git', ...])")
     if has_interpreter_wrapped_command(cmd, target_commands=["git"]):
-        cmd_lower = cmd.lower()
+        text_tokens = _tokenize_text(cmd.lower())
         for op_tuple in _BLOCKED_GIT_OPS:
-            if op_tuple[0] in cmd_lower and all(f in cmd_lower for f in op_tuple[1:]):
+            if op_tuple[0] in text_tokens and all(f in text_tokens for f in op_tuple[1:]):
                 return op_tuple
 
     # Check for nested shell invocations (bash -c "git commit --amend")
     if has_nested_shell(cmd):
-        cmd_lower = cmd.lower()
+        text_tokens = _tokenize_text(cmd.lower())
         for op_tuple in _BLOCKED_GIT_OPS:
             if (
-                "git" in cmd_lower
-                and op_tuple[0] in cmd_lower
-                and all(f in cmd_lower for f in op_tuple[1:])
+                "git" in text_tokens
+                and op_tuple[0] in text_tokens
+                and all(f in text_tokens for f in op_tuple[1:])
             ):
                 return op_tuple
 

@@ -29,7 +29,7 @@ _CLOSING_RE = re.compile(
     re.IGNORECASE,
 )
 
-_METADATA_CLOSING_RE = re.compile(r"^-\s*closing_issue:\s*(\S+)", re.MULTILINE)
+_METADATA_CLOSING_RE = re.compile(r"^-[ \t]*closing_issue:[ \t]*(\S+)", re.MULTILINE)
 
 
 def _extract_body_file_path(cmd: str) -> str | None:

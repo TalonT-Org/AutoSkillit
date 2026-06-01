@@ -863,7 +863,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
         "recipe/rules": 41,
         "server/tools": 24,  # _auto_overrides.py + _cancellation_shield.py
-        "hooks/guards": 27,  # +1: git_ops_guard.py for destructive git ops enforcement
+        "hooks/guards": 28,  # +1: git_ops_guard.py; +1: compose_pr_body_guard.py
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

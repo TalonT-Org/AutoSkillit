@@ -115,6 +115,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rule_helpers.py` | Unit tests for push_reachable and other rule helper functions |
 | `test_rule_decomposition.py` | Tests for semantic rule decomposition structure |
 | `test_rules_actions.py` | Tests for actions semantic validation rule |
+| `test_rules_audit_impl_topology.py` | Tests for audit-impl-diff-topology-mismatch semantic validation rule |
 | `test_rules_blocks.py` | Tests for blocks semantic validation rule |
 | `test_rules_bypass.py` | Tests for bypass semantic validation rule |
 | `test_rules_callable_inputs.py` | Tests for callable_inputs semantic validation rule |

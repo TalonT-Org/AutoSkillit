@@ -41,6 +41,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_packs.py` | Pack validation (names must exist in `PACK_REGISTRY`) |
 | `rules_phoropter_adjacency.py` | Phoropter phase-order and step-interleaving adjacency rules |
 | `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
+| `rules_audit_impl_topology.py` | audit-impl-diff-topology-mismatch semantic rule |
 | `rules_remediation.py` | audit-impl remediation_path capture routing rules |
 | `rules_recipe.py` | Sub-recipe reference validity and `with_args` hygiene |
 | `rules_route_gate.py` | Route gate shared-stop detection; fallback and primary path convergence |

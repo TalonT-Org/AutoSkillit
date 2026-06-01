@@ -99,9 +99,10 @@ Determine the diff source from `implementation_ref`:
 2. **Otherwise, detect whether `implementation_ref` is a commit SHA or branch name:**
    - Detect SHA: `echo "$implementation_ref" | grep -qE '^[0-9a-f]{40}$'`
    - **If SHA (pre-implementation base ref, preferred from pipeline):**
-     - Run: `git diff {implementation_ref}..{base_branch}` — two-dot, SHA on the left
-     - This shows all commits added to base_branch since the pre-implementation snapshot,
-       covering the full multi-group implementation across all merged worktrees.
+     - Run: `git diff {implementation_ref}..HEAD` — two-dot, SHA on the left
+     - This shows all commits added since the pre-implementation snapshot. HEAD is the
+       current branch tip (merge_target in pipeline context), which contains all
+       implementation commits regardless of whether they've been pushed to the remote.
    - **If branch name:**
      - Run: `git diff {base_branch}...{implementation_ref}` — three-dot (unchanged)
    - If git reports "unknown revision or path not in the working tree", abort with:
@@ -167,11 +168,11 @@ fi
   branches (empty diff is an unreliable guard; `--is-ancestor` is the correct tool).
 
 Launch one Explore subagent to retrieve the diff using the command form determined in
-Step 0 — do NOT hardcode HEAD:
+Step 0 — do NOT bypass the command form determined in Step 0:
 
-- **SHA ref:** `git diff {implementation_ref}..{base_branch} --stat` — file-level summary
-- **SHA ref:** `git log {implementation_ref}..{base_branch} --oneline` — commit history
-- **SHA ref:** `git diff {implementation_ref}..{base_branch}` — full diff
+- **SHA ref:** `git diff {implementation_ref}..HEAD --stat` — file-level summary
+- **SHA ref:** `git log {implementation_ref}..HEAD --oneline` — commit history
+- **SHA ref:** `git diff {implementation_ref}..HEAD` — full diff
 - **Branch ref:** `git diff {base_branch}...{implementation_ref} --stat` — file-level summary
 - **Branch ref:** `git log {base_branch}..{implementation_ref} --oneline` — commit history
 - **Branch ref:** `git diff {base_branch}...{implementation_ref}` — full diff
@@ -180,10 +181,10 @@ Step 0 — do NOT hardcode HEAD:
 
 - If the diff spans more than 20 files OR the raw diff exceeds 50,000 characters, switch to
   per-file-group chunking:
-  1. Run `git diff {implementation_ref}..{base_branch} --name-only` (SHA) or
+  1. Run `git diff {implementation_ref}..HEAD --name-only` (SHA) or
      `git diff {base_branch}...{implementation_ref} --name-only` (branch) to get the file list.
   2. Split the file list into groups of ~5 files each.
-  3. Fetch the raw unified diff for each group: `git diff {implementation_ref}..{base_branch} -- {file1} {file2} ...`
+  3. Fetch the raw unified diff for each group: `git diff {implementation_ref}..HEAD -- {file1} {file2} ...`
   4. Pass each batch (its group diff only) as a separate slice to the Step 3 subagents instead
      of the full diff.
 

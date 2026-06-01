@@ -186,7 +186,6 @@ steps:
       output_dir: "."
     capture:
       plan_path: "${{ result.plan_path }}"
-      all_plan_paths: "${{ result.plan_path }}"
       verdict: "${{ result.verdict }}"
     capture_list:
       plan_parts: "${{ result.plan_parts }}"

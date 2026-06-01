@@ -18,7 +18,7 @@ import pytest
 
 from autoskillit._test_filter import load_manifest
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MANIFEST_PATH = _REPO_ROOT / ".autoskillit" / "test-filter-manifest.yaml"

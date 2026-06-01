@@ -859,8 +859,8 @@ def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
     assert isinstance(api._path_mtime_ns(Path(".")), int), "_path_mtime_ns must return int"
 
 
-def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
-    """Registry hash changes when a YAML file's mtime changes."""
+def test_compute_registry_hash_content_based(tmp_path: Path) -> None:
+    """Registry hash is stable when content is identical regardless of mtime."""
     import os
 
     from autoskillit.recipe._api import _compute_registry_hash
@@ -876,7 +876,11 @@ def test_compute_registry_hash_changes_on_mtime(tmp_path: Path) -> None:
     os.utime(f, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))  # +1 second
     h2 = _compute_registry_hash(d)
 
-    assert h1 != h2
+    assert h1 == h2
+
+    f.write_text("name: changed\n")
+    h3 = _compute_registry_hash(d)
+    assert h1 != h3
 
 
 def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkeypatch):
@@ -1014,17 +1018,8 @@ def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
     monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
-
-    real_mtime = api_mod._path_mtime_ns
-
-    def fake_mtime(path):
-        from autoskillit.core import pkg_root
-
-        if path == pkg_root():
-            return 2000
-        return real_mtime(path)
-
-    monkeypatch.setattr(cache_mod, "_path_mtime_ns", fake_mtime)
+    monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", "fakehash_baseline")
+    monkeypatch.setattr(cache_mod, "_compute_content_hash", lambda: "fakehash_changed")
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -1070,17 +1065,8 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
     monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
-
-    real_mtime = api_mod._path_mtime_ns
-
-    def fake_mtime(path):
-        from autoskillit.core import pkg_root
-
-        if path == pkg_root():
-            return 2000
-        return real_mtime(path)
-
-    monkeypatch.setattr(cache_mod, "_path_mtime_ns", fake_mtime)
+    monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", "fakehash_baseline")
+    monkeypatch.setattr(cache_mod, "_compute_content_hash", lambda: "fakehash_changed")
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)

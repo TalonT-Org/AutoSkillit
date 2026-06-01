@@ -113,7 +113,7 @@ requires-dist = [
     { name = "api-simulator", marker = "sys_platform == 'linux' and extra == 'dev'", git = "https://github.com/TalonT-Org/api-simulator?subdirectory=crates%2Fapi-simulator-py&rev=8f711f958d4d93a8e53a3c3b51279fb420870f3a" },
     { name = "cyclopts", specifier = ">=4.0" },
     { name = "dynaconf", specifier = ">=3.2.13,<4.0" },
-    { name = "fastmcp", specifier = ">=3.2.0,<4.0" },
+    { name = "fastmcp", specifier = ">=3.3.1,<4.0" },
     { name = "httpx", specifier = ">=0.28,<1.0" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.1" },
     { name = "lazy-loader", specifier = ">=0.4" },

@@ -26,6 +26,7 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_coverage_audit.py` | Tests for scripts/compare-coverage-ast.py — AST extraction and coverage comparison |
 | `test_dependency_pins.py` | Dependency pin guards (REQ-DEP-001, REQ-DEP-002) — pytest 9.x, networkx bounds |
 | `test_docstring_labels.py` | Tests for correct docstring layer labels across the codebase |
+| `test_fastmcp_version_floor.py` | FastMCP version floor and internal API surface guard |
 | `test_filter_activation.py` | Infrastructure tests: verify test path filtering is activated in project config |
 | `test_fleet_dispatch_guard.py` | Tests for fleet_dispatch_guard.py PreToolUse hook |
 | `test_generated_file_write_guard.py` | Tests for generated_file_write_guard.py PreToolUse hook |

@@ -21,7 +21,7 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 if TYPE_CHECKING:
-    from autoskillit.core import GitHubFetcher, HeadlessExecutor
+    from autoskillit.core import GitHubFetcher, HeadlessExecutor, WriteBehaviorSpec
 
 logger = get_logger(__name__)
 
@@ -71,7 +71,10 @@ async def fetch_github_issue(
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="fetch_github_issue", issue_url=issue_url):
         try:
-            from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_config,
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             logger.info("fetch_github_issue", include_comments=include_comments)
 
@@ -134,7 +137,10 @@ async def get_issue_title(issue_url: str) -> str:
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_issue_title"):
         try:
-            from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_config,
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.github_client is None:
@@ -210,7 +216,10 @@ async def report_bug(
                 extra={"severity": severity, "cwd": cwd},
             )
 
-            from autoskillit.server import _get_config, _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_config,
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
             if tool_ctx.executor is None:
@@ -232,14 +241,14 @@ async def report_bug(
             report_provider_extras: dict[str, str] | None = None
             report_profile_name: str = ""
 
-            from autoskillit.core import is_feature_enabled
+            from autoskillit.core import is_feature_enabled  # circular-break
 
             if is_feature_enabled(
                 "providers",
                 config.features,
                 experimental_enabled=config.experimental_enabled,
             ):
-                from autoskillit.server._guards import (
+                from autoskillit.server._guards import (  # circular-break: server.__init__ cycle
                     _resolve_model_as_profile,
                     _resolve_provider_profile,
                 )
@@ -267,8 +276,6 @@ async def report_bug(
             expected_output_patterns: list[str] = []
             if tool_ctx.output_pattern_resolver:
                 expected_output_patterns = list(tool_ctx.output_pattern_resolver(skill_command))
-
-            from autoskillit.core import WriteBehaviorSpec
 
             write_spec: WriteBehaviorSpec | None = None
             if tool_ctx.write_expected_resolver:

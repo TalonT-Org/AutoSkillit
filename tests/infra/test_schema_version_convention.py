@@ -119,17 +119,17 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
     ("src/autoskillit/server/_lifespan.py", 64),
     # tools_kitchen.py — hook config, quota guard, git_ops_policy, ingredient locks overlay
-    ("src/autoskillit/server/tools/tools_kitchen.py", 132),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 151),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 185),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 809),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 869),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 140),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 162),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 199),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 833),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 893),
     # tools_pipeline_tracker.py — tracker_data dict
-    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 164),
+    ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 166),
     # tools_status.py — mcp_data dict
-    ("src/autoskillit/server/tools/tools_status.py", 513),
+    ("src/autoskillit/server/tools/tools_status.py", 529),
     # tools_github.py — bug report dict
-    ("src/autoskillit/server/tools/tools_github.py", 307),
+    ("src/autoskillit/server/tools/tools_github.py", 314),
     # _hooks.py — settings.json dict (co-owned with Claude CLI)
     ("src/autoskillit/cli/_hooks.py", 24),
     # _init_helpers.py — ~/.claude.json (co-owned)

@@ -56,7 +56,7 @@ async def reset_dispatch(
         )
 
     try:
-        from autoskillit.fleet import (
+        from autoskillit.fleet import (  # circular-break: lazy-load fleet
             _RESETTABLE_STATUSES,
             DispatchStatus,
             discover_campaign_state_files,
@@ -66,7 +66,7 @@ async def reset_dispatch(
             resolve_worktrees_dir,
             update_campaign_state,
         )
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import _get_ctx  # circular-break: server.__init__ cycle
 
         tool_ctx = _get_ctx()
         project_dir = tool_ctx.project_dir

@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 def _get_ctx():  # type: ignore[return]
     """Deferred import of _get_ctx from _state to avoid circular imports."""
-    from autoskillit.server._state import _get_ctx as _ctx_fn
+    from autoskillit.server._state import _get_ctx as _ctx_fn  # circular-break
 
     return _ctx_fn()
 
@@ -71,7 +71,7 @@ async def _run_subprocess(
     returncode, stdout, stderr = _process_runner_result(result, timeout)
 
     if is_gh:
-        from autoskillit.core import current_order_id, current_step_name
+        from autoskillit.core import current_order_id, current_step_name  # circular-break
 
         latency_ms = (time.monotonic() - start) * 1000.0
         log = _get_ctx().github_api_log

@@ -24,14 +24,14 @@ class ClaimDecision:
 
 
 def _get_campaign_state_paths(tool_ctx: ToolContext) -> list[Path]:
-    from autoskillit.fleet import discover_campaign_state_files  # noqa: PLC0415
+    from autoskillit.fleet import discover_campaign_state_files  # circular-break: lazy-load fleet
 
     return discover_campaign_state_files(tool_ctx.project_dir)
 
 
 def _mark_dispatch_labels_cleaned(dispatch_name: str, campaign_state_paths: list[Path]) -> None:
     """Persist labels_cleaned=True for a dispatch after claim-time label cleanup."""
-    from autoskillit.fleet import CampaignStateMutator  # noqa: PLC0415
+    from autoskillit.fleet import CampaignStateMutator  # circular-break: lazy-load fleet
 
     for state_path in campaign_state_paths:
         try:
@@ -68,7 +68,7 @@ async def _try_claim_with_liveness(
     indicating whether to proceed with the claim. When the owning dispatch session is
     dead, cleans up the stale label inline and returns claimed=True.
     """
-    from autoskillit.fleet import (  # noqa: PLC0415
+    from autoskillit.fleet import (  # circular-break: lazy-load fleet
         TERMINAL_UNCLEANED_STATUSES,
         cleanup_orphaned_labels,
         find_dispatch_for_issue,

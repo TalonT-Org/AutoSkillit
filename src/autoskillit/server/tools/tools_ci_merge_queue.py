@@ -63,7 +63,9 @@ async def toggle_auto_merge(
                 extra={"pr_number": pr_number, "target_branch": target_branch},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
 
@@ -136,7 +138,9 @@ async def enqueue_pr(
                 extra={"pr_number": pr_number, "target_branch": target_branch},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
 
@@ -255,7 +259,9 @@ async def wait_for_merge_queue(
                 extra={"pr_number": pr_number, "target_branch": target_branch},
             )
 
-            from autoskillit.server import _get_ctx
+            from autoskillit.server import (  # circular-break
+                _get_ctx,
+            )  # circular-break: server-internal circular dependency
 
             tool_ctx = _get_ctx()
 

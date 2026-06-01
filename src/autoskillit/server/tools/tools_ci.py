@@ -66,7 +66,9 @@ async def set_commit_status(
         )
 
     try:
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import (  # circular-break
+            _get_ctx,
+        )  # circular-break: server-internal circular dependency
 
         tool_ctx = _get_ctx()
         if cwd:
@@ -153,7 +155,9 @@ async def check_repo_merge_state(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import (  # circular-break
+            _get_ctx,
+        )  # circular-break: server-internal circular dependency
 
         tool_ctx = _get_ctx()
         _start = time.monotonic()

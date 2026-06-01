@@ -40,7 +40,7 @@ def _initialize(ctx: ToolContext) -> None:
     # (server/__init__.py imports from _state.py at module level).
     if ctx.config.subsets.disabled:
         try:
-            from autoskillit.server import mcp  # noqa: PLC0415
+            from autoskillit.server import mcp  # circular-break
 
             for subset in ctx.config.subsets.disabled:
                 mcp.disable(tags={subset})
@@ -56,11 +56,11 @@ def _initialize(ctx: ToolContext) -> None:
     # surfaces as an error rather than being silently swallowed as a middleware warning.
     # The _mcp_middleware_registered flag on the runner prevents double-registration
     # if _initialize() is called more than once with the same runner instance.
-    from autoskillit.execution import (  # noqa: PLC0415
+    from autoskillit.execution import (  # circular-break
         RecordingSubprocessRunner,
         ReplayingSubprocessRunner,
     )
-    from autoskillit.server import mcp  # noqa: PLC0415
+    from autoskillit.server import mcp  # circular-break
 
     if isinstance(ctx.runner, RecordingSubprocessRunner) and not getattr(
         ctx.runner, "_mcp_middleware_registered", False
@@ -100,7 +100,7 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
     """
     try:
         try:
-            from autoskillit.execution import recover_crashed_sessions  # noqa: PLC0415
+            from autoskillit.execution import recover_crashed_sessions  # circular-break
 
             cfg = ctx.config.linux_tracing
             n = recover_crashed_sessions(
@@ -115,7 +115,7 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
         try:
             from datetime import datetime, timedelta  # noqa: PLC0415
 
-            from autoskillit.execution import (  # noqa: PLC0415
+            from autoskillit.execution import (  # circular-break
                 read_telemetry_clear_marker,
                 resolve_log_dir,
             )
@@ -189,8 +189,8 @@ def _check_rerun(log_dir: str, composite_hash: str) -> dict[str, object] | None:
     """Check sessions.jsonl for prior runs with the same composite hash."""
     if not composite_hash:
         return None
-    from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
-    from autoskillit.recipe import check_rerun_detection  # noqa: PLC0415
+    from autoskillit.execution import resolve_log_dir  # circular-break
+    from autoskillit.recipe import check_rerun_detection  # circular-break
 
     sessions_path = resolve_log_dir(log_dir) / "sessions.jsonl"
     return check_rerun_detection(sessions_path, composite_hash=composite_hash)
@@ -198,7 +198,7 @@ def _check_rerun(log_dir: str, composite_hash: str) -> dict[str, object] | None:
 
 def version_info() -> dict:
     """Return version health information for the running server."""
-    from autoskillit.version import version_info as _compute_version
+    from autoskillit.version import version_info as _compute_version  # circular-break
 
     plugin_dir = _get_plugin_dir()
     return _compute_version(plugin_dir)

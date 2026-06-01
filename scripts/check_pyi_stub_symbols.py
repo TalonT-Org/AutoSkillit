@@ -77,9 +77,16 @@ def check_file(pyi_path: Path) -> list[str]:
             continue
 
         submod_all = _extract_all(submod_tree)
-        if submod_all is None:
-            continue
-        public_names = submod_all
+        if submod_all is not None:
+            public_names = submod_all
+        else:
+            public_names = set()
+            for stmt in submod_tree.body:
+                if isinstance(stmt, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if not stmt.name.startswith("_"):
+                        public_names.add(stmt.name)
+            if not public_names:
+                continue
 
         for name in sorted(public_names - stub_names):
             if name.startswith("_"):

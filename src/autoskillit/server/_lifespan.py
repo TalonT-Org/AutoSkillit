@@ -45,9 +45,9 @@ def run_startup_drift_check() -> None:
     try:
         import json
 
-        import autoskillit.core.paths as _core_paths
-        from autoskillit.core import atomic_write
-        from autoskillit.hook_registry import (
+        import autoskillit.core.paths as _core_paths  # circular-break
+        from autoskillit.core import atomic_write  # circular-break
+        from autoskillit.hook_registry import (  # circular-break
             HOOK_REGISTRY_HASH,
             generate_hooks_json,
             load_hooks_json_hash,
@@ -79,7 +79,7 @@ def run_startup_hook_health_check() -> list[str]:
     Returns list of broken hook commands. Any failure is logged and swallowed.
     """
     try:
-        from autoskillit.hook_registry import (
+        from autoskillit.hook_registry import (  # circular-break
             find_broken_hook_scripts,
             iter_all_scope_paths,
             validate_plugin_cache_hooks,
@@ -127,7 +127,7 @@ async def _run_drift_check_async() -> None:
 
 async def _run_retiring_sweep_async() -> None:
     """Offload blocking retiring cache sweep to a thread."""
-    from autoskillit.core import sweep_retiring_cache  # noqa: PLC0415
+    from autoskillit.core import sweep_retiring_cache  # circular-break
 
     loop = _asyncio.get_running_loop()
     await loop.run_in_executor(None, sweep_retiring_cache)
@@ -195,15 +195,18 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     logger.info("fleet_auto_gate_boot", gate_state="open", kitchen_id=ctx.kitchen_id)
 
     try:
-        from autoskillit.core import _collect_disabled_feature_tags, register_active_kitchen
-        from autoskillit.pipeline import create_background_task
-        from autoskillit.server import mcp as _mcp
-        from autoskillit.server._misc import (
+        from autoskillit.core import (  # circular-break
+            _collect_disabled_feature_tags,
+            register_active_kitchen,
+        )
+        from autoskillit.pipeline import create_background_task  # circular-break
+        from autoskillit.server import mcp as _mcp  # circular-break
+        from autoskillit.server._misc import (  # circular-break
             _prime_quota_cache,
             _quota_refresh_loop,
             resolve_provider,
         )
-        from autoskillit.server.tools.tools_kitchen import _write_hook_config
+        from autoskillit.server.tools.tools_kitchen import _write_hook_config  # circular-break
 
         _features = ctx.config.features if ctx.config is not None else {}
         _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
@@ -240,7 +243,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     _campaign_state_paths: list[Path] = []
     try:
-        from autoskillit.fleet import discover_campaign_state_files  # noqa: PLC0415
+        from autoskillit.fleet import discover_campaign_state_files  # circular-break
 
         _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
     except Exception:
@@ -248,7 +251,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     if _campaign_state_paths:
         try:
-            from autoskillit.fleet import reap_stale_dispatches_async  # noqa: PLC0415
+            from autoskillit.fleet import reap_stale_dispatches_async  # circular-break
 
             await reap_stale_dispatches_async(
                 _campaign_state_paths,
@@ -262,7 +265,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
     if _campaign_state_paths and ctx.github_client is not None:
         try:
-            from autoskillit.fleet import sweep_stale_dispatch_labels  # noqa: PLC0415
+            from autoskillit.fleet import sweep_stale_dispatch_labels  # circular-break
 
             create_background_task(
                 sweep_stale_dispatch_labels(_campaign_state_paths, ctx.github_client),
@@ -274,13 +277,13 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
 
 async def _pre_reveal_kitchen(ctx: Any) -> None:
     """Pre-reveal kitchen for non-notification backends (no tools/list_changed support)."""
-    from autoskillit.core import (  # noqa: PLC0415
+    from autoskillit.core import (  # circular-break
         _collect_disabled_feature_tags,
         register_active_kitchen,
     )
-    from autoskillit.server import mcp as _mcp  # noqa: PLC0415
-    from autoskillit.server._misc import _prime_quota_cache  # noqa: PLC0415
-    from autoskillit.server.tools.tools_kitchen import _write_hook_config  # noqa: PLC0415
+    from autoskillit.server import mcp as _mcp  # circular-break
+    from autoskillit.server._misc import _prime_quota_cache  # circular-break
+    from autoskillit.server.tools.tools_kitchen import _write_hook_config  # circular-break
 
     ctx.kitchen_id = resolve_kitchen_id()
     ctx.active_recipe_packs = frozenset()
@@ -305,18 +308,18 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS is set. No-ops for interactive
     ORCHESTRATOR sessions (open_kitchen handles the gate there).
     """
-    from autoskillit.core import (
+    from autoskillit.core import (  # circular-break
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
         HEADLESS_ENV_VAR,
         register_active_kitchen,
     )
-    from autoskillit.pipeline import create_background_task
-    from autoskillit.server._misc import (
+    from autoskillit.pipeline import create_background_task  # circular-break
+    from autoskillit.server._misc import (  # circular-break
         _prime_quota_cache,
         _quota_refresh_loop,
         resolve_provider,
     )
-    from autoskillit.server.tools.tools_kitchen import _write_hook_config
+    from autoskillit.server.tools.tools_kitchen import _write_hook_config  # circular-break
 
     if os.environ.get(HEADLESS_ENV_VAR) != "1":
         if ctx.backend is not None and not ctx.backend.capabilities.supports_tool_list_changed:
@@ -346,8 +349,8 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     )
 
     try:
-        from autoskillit.core import _collect_disabled_feature_tags
-        from autoskillit.server import mcp as _mcp
+        from autoskillit.core import _collect_disabled_feature_tags  # circular-break
+        from autoskillit.server import mcp as _mcp  # circular-break
 
         _features = ctx.config.features if ctx.config is not None else {}
         _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
@@ -384,7 +387,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
         logger.warning("food_truck_auto_gate_boot_registry_failed", exc_info=True)
 
     try:
-        from autoskillit.fleet import discover_campaign_state_files  # noqa: PLC0415
+        from autoskillit.fleet import discover_campaign_state_files  # circular-break
 
         _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
     except Exception:
@@ -393,12 +396,12 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     if _campaign_state_paths:
         try:
-            from autoskillit.fleet import reap_stale_dispatches_async  # noqa: PLC0415
+            from autoskillit.fleet import reap_stale_dispatches_async  # circular-break
 
             _skip: frozenset[str] | None = None
             _own_campaign_id: str | None = None
             try:
-                from autoskillit.core import (  # noqa: PLC0415
+                from autoskillit.core import (  # circular-break
                     CAMPAIGN_ID_ENV_VAR,
                     DISPATCH_ID_ENV_VAR,
                 )
@@ -422,7 +425,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
 
     try:
         if _campaign_state_paths and ctx.github_client is not None:
-            from autoskillit.fleet import sweep_stale_dispatch_labels  # noqa: PLC0415
+            from autoskillit.fleet import sweep_stale_dispatch_labels  # circular-break
 
             create_background_task(
                 sweep_stale_dispatch_labels(_campaign_state_paths, ctx.github_client),
@@ -440,7 +443,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     Omits quota-refresh loop and campaign state recovery — SKILL sessions
     are short-lived.
     """
-    from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
+    from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR  # circular-break
 
     if os.environ.get(HEADLESS_ENV_VAR) != "1":
         if ctx.backend is not None and not ctx.backend.capabilities.supports_tool_list_changed:
@@ -467,8 +470,8 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     )
 
     try:
-        from autoskillit.core import _collect_disabled_feature_tags
-        from autoskillit.server import mcp as _mcp
+        from autoskillit.core import _collect_disabled_feature_tags  # circular-break
+        from autoskillit.server import mcp as _mcp  # circular-break
 
         _features = ctx.config.features if ctx.config is not None else {}
         _exp_enabled = ctx.config.experimental_enabled if ctx.config is not None else False
@@ -478,21 +481,21 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
         logger.warning("skill_auto_gate_boot_feature_suppression_failed", exc_info=True)
 
     try:
-        from autoskillit.server.tools.tools_kitchen import _write_hook_config
+        from autoskillit.server.tools.tools_kitchen import _write_hook_config  # circular-break
 
         _write_hook_config()
     except Exception:
         logger.warning("skill_auto_gate_boot_hook_config_failed", exc_info=True)
 
     try:
-        from autoskillit.server._misc import _prime_quota_cache
+        from autoskillit.server._misc import _prime_quota_cache  # circular-break
 
         await _prime_quota_cache()
     except Exception:
         logger.warning("skill_auto_gate_boot_quota_cache_failed", exc_info=True)
 
     try:
-        from autoskillit.core import register_active_kitchen
+        from autoskillit.core import register_active_kitchen  # circular-break
 
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
@@ -509,7 +512,7 @@ _LIFESPAN_BOOT_REGISTRY: dict[SessionType, Callable[[Any], Awaitable[None]] | No
 async def _run_codex_mcp_registration_async() -> None:
     """Offload ensure_codex_mcp_registered() to a thread executor — fail-open."""
     try:
-        from autoskillit.execution import ensure_codex_mcp_registered  # noqa: PLC0415
+        from autoskillit.execution import ensure_codex_mcp_registered  # circular-break
 
         loop = _asyncio.get_running_loop()
         written = await loop.run_in_executor(None, ensure_codex_mcp_registered)
@@ -543,8 +546,8 @@ async def _autoskillit_lifespan(server: Any) -> Any:
     """
     bg_tasks: list[_asyncio.Task[None]] = []
     try:
-        from autoskillit.pipeline import create_background_task
-        from autoskillit.server import _state
+        from autoskillit.pipeline import create_background_task  # circular-break
+        from autoskillit.server import _state  # circular-break
 
         event = _asyncio.Event()
         _state._startup_ready = event
@@ -570,7 +573,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
                 )
             )
 
-        from autoskillit.core import session_type as _resolve_session_type
+        from autoskillit.core import session_type as _resolve_session_type  # circular-break
 
         _boot_fn = _LIFESPAN_BOOT_REGISTRY.get(_resolve_session_type())
         if _boot_fn is not None and _boot_ctx is not None:
@@ -587,7 +590,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         except Exception:
             logger.exception("lifespan sentinel cleanup error")
         try:
-            from autoskillit.core import clear_kitchens_for_pid  # noqa: PLC0415
+            from autoskillit.core import clear_kitchens_for_pid  # circular-break
 
             clear_kitchens_for_pid(os.getpid())
         except Exception:

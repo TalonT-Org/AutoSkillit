@@ -119,7 +119,7 @@ def _collect_order_params(
 
 
 def _validate_max_concurrent(value: int) -> str | None:
-    from autoskillit.config import _MAX_CONCURRENT_DISPATCHES
+    from autoskillit.config import _MAX_CONCURRENT_DISPATCHES  # circular-break: lazy-load config
 
     if value < 1 or value > _MAX_CONCURRENT_DISPATCHES:
         return (
@@ -130,7 +130,7 @@ def _validate_max_concurrent(value: int) -> str | None:
 
 
 def _replace_fleet_semaphore(ctx, max_concurrent: int, acquire_timeout_sec: float | None) -> None:
-    from autoskillit.fleet import FleetSemaphore
+    from autoskillit.fleet import FleetSemaphore  # circular-break: lazy-load fleet
 
     existing_timeout = ctx.fleet_lock.timeout if ctx.fleet_lock is not None else None
     timeout = acquire_timeout_sec if acquire_timeout_sec is not None else existing_timeout
@@ -171,7 +171,7 @@ async def configure_fleet(
     try:
         if (h := _require_orchestrator_exact("configure_fleet")) is not None:
             return h
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import _get_ctx  # circular-break
 
         ctx = _get_ctx()
 
@@ -266,7 +266,7 @@ async def configure_order(
     try:
         if (h := _require_orchestrator_exact("configure_order")) is not None:
             return h
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import _get_ctx  # circular-break
 
         ctx = _get_ctx()
 

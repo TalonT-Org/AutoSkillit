@@ -31,8 +31,13 @@ from autoskillit.core import (
     fast_dumps,
     find_latest_session_id,
     get_logger,
+    get_state_dir,
+    is_marker_fresh,
     pkg_root,
+    read_marker,
+    register_active_kitchen,
     resolve_kitchen_id,
+    unregister_active_kitchen,
 )
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
@@ -117,7 +122,10 @@ def _write_hook_config() -> None:
     The hook subprocess (quota_guard.py) reads this file to apply user settings
     without importing the autoskillit package.
     """
-    from autoskillit.server import _get_ctx, logger
+    from autoskillit.server import (  # circular-break
+        _get_ctx,
+        logger,
+    )  # circular-break: server-internal circular dependency
 
     ctx = _get_ctx()
     cfg = ctx.config.quota_guard
@@ -136,7 +144,10 @@ def _write_hook_config() -> None:
 
 def _update_hook_config_with_recipe() -> None:
     """Enrich .hook_config.json with recipe-level authorization after recipe loading."""
-    from autoskillit.server import _get_ctx, logger
+    from autoskillit.server import (  # circular-break
+        _get_ctx,
+        logger,
+    )  # circular-break: server-internal circular dependency
 
     ctx = _get_ctx()
     hook_cfg_path = _hook_config_path(ctx.project_dir)
@@ -161,7 +172,10 @@ def _update_hook_config_with_git_ops_policy() -> None:
     mechanism exists for future recipes that legitimately need destructive git ops
     (e.g. allow_push for a release automation recipe).
     """
-    from autoskillit.server import _get_ctx, logger
+    from autoskillit.server import (  # circular-break
+        _get_ctx,
+        logger,
+    )  # circular-break: server-internal circular dependency
 
     ctx = _get_ctx()
     hook_cfg_path = _hook_config_path(ctx.project_dir)
@@ -192,7 +206,10 @@ async def _open_kitchen_handler() -> str | None:
 
     Returns ``None`` on success, or a JSON failure envelope string on error.
     """
-    from autoskillit.server import _get_ctx, logger
+    from autoskillit.server import (  # circular-break
+        _get_ctx,
+        logger,
+    )  # circular-break: server-internal circular dependency
 
     ctx = _get_ctx()
     ctx.gate.enable()
@@ -233,8 +250,6 @@ async def _open_kitchen_handler() -> str | None:
         return _kitchen_failure_envelope(exc, stage="start_quota_refresh")
 
     try:
-        from autoskillit.core import register_active_kitchen  # noqa: PLC0415
-
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("open_kitchen_registry_failed", exc_info=True)
@@ -275,7 +290,10 @@ async def _redisable_subsets(
 
 def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
-    from autoskillit.server import _get_ctx, logger
+    from autoskillit.server import (  # circular-break
+        _get_ctx,
+        logger,
+    )  # circular-break: server-internal circular dependency
 
     ctx = _get_ctx()
     if ctx.quota_refresh_task is not None:
@@ -283,8 +301,6 @@ def _close_kitchen_handler() -> None:
         ctx.quota_refresh_task = None
     ctx.gate.disable()
     try:
-        from autoskillit.core import unregister_active_kitchen  # noqa: PLC0415
-
         unregister_active_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("close_kitchen_registry_failed", exc_info=True)
@@ -363,7 +379,9 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.server._state import _get_ctx_or_none
+    from autoskillit.server._state import (  # circular-break
+        _get_ctx_or_none,
+    )  # circular-break: server-internal circular dependency
 
     ctx = _get_ctx_or_none()
     match = ctx.recipes.find(name, ctx.project_dir) if ctx and ctx.recipes else None
@@ -448,7 +466,9 @@ async def open_kitchen(
                 }
             )
 
-        from autoskillit.server import _get_ctx  # noqa: PLC0415
+        from autoskillit.server import (  # circular-break
+            _get_ctx,
+        )  # circular-break: server-internal circular dependency
 
         disabled_subsets = _get_ctx().config.subsets.disabled
 
@@ -628,7 +648,9 @@ async def open_kitchen(
                 logger.warning("open_kitchen_failure", stage="update_hook_config", exc_info=True)
 
             composite = result.get("composite_hash", "")
-            from autoskillit.server._state import _check_rerun  # noqa: PLC0415
+            from autoskillit.server._state import (  # circular-break
+                _check_rerun,
+            )  # circular-break: server-internal circular dependency
 
             rerun_suggestion = _check_rerun(tool_ctx.config.linux_tracing.log_dir, composite)
             if rerun_suggestion:
@@ -786,7 +808,9 @@ async def disable_quota_guard() -> str:
     try:
         if (h := _require_orchestrator_exact("disable_quota_guard")) is not None:
             return h
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import (  # circular-break
+            _get_ctx,
+        )  # circular-break: server-internal circular dependency
 
         ctx = _get_ctx()
         hook_cfg_path = _hook_config_path(ctx.project_dir)
@@ -939,7 +963,9 @@ async def lock_ingredients(
     try:
         if (h := _require_orchestrator_exact("lock_ingredients")) is not None:
             return h
-        from autoskillit.server import _get_ctx
+        from autoskillit.server import (  # circular-break
+            _get_ctx,
+        )  # circular-break: server-internal circular dependency
 
         ctx = _get_ctx()
         hook_cfg_path = _hook_config_path(ctx.project_dir)
@@ -1019,8 +1045,6 @@ async def lock_ingredients(
 
 def _find_session_id_for_reload(cwd: Path) -> str | None:
     """Return the session_id to use for reload; kitchen marker preferred, mtime fallback."""
-    from autoskillit.core import get_state_dir, is_marker_fresh, read_marker
-
     state_dir = get_state_dir()
     if state_dir.is_dir():
 

@@ -225,9 +225,9 @@ def make_context(
     backend = get_backend(config.agent_backend.backend)
 
     if runner is not None and os.environ.get(REPLAY_SCENARIO_ENV):
-        if config.agent_backend.backend != "claude-code":
+        if not backend.capabilities.replay_capable:
             logger.warning(
-                "REPLAY_SCENARIO is set but agent_backend=%r is not claude-code "
+                "REPLAY_SCENARIO is set but backend %r is not replay-capable "
                 "— skipping replay runner construction",
                 config.agent_backend.backend,
             )
@@ -246,9 +246,9 @@ def make_context(
                 runner = build_replay_runner(replay_dir)
 
     elif runner is not None and os.environ.get(RECORD_SCENARIO_ENV):
-        if config.agent_backend.backend != "claude-code":
+        if not backend.capabilities.record_capable:
             logger.warning(
-                "RECORD_SCENARIO is set but agent_backend=%r is not claude-code "
+                "RECORD_SCENARIO is set but backend %r is not record-capable "
                 "— skipping record runner construction",
                 config.agent_backend.backend,
             )

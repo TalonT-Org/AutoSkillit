@@ -196,6 +196,61 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     mock_atexit.assert_not_called()
 
 
+# --- T-REPLAY-CODEX: codex backend is not replay-capable, so replay runner wrapping is skipped ---
+
+
+def test_make_context_replay_skipped_for_codex_backend(monkeypatch, tmp_path):
+    """REPLAY_SCENARIO with codex backend must NOT wrap runner in ReplayingSubprocessRunner."""
+    from autoskillit.config import AutomationConfig
+    from autoskillit.config._config_dataclasses import AgentBackendConfig
+    from autoskillit.execution import DefaultSubprocessRunner
+    from autoskillit.execution.recording import ReplayingSubprocessRunner
+    from autoskillit.server._factory import make_context
+
+    replay_dir = tmp_path / "replay"
+    replay_dir.mkdir()
+
+    monkeypatch.setenv("REPLAY_SCENARIO", "1")
+    monkeypatch.setenv("REPLAY_SCENARIO_DIR", str(replay_dir))
+    monkeypatch.delenv("RECORD_SCENARIO", raising=False)
+
+    config = AutomationConfig()
+    config.agent_backend = AgentBackendConfig(backend="codex")
+
+    ctx = make_context(config, plugin_dir=str(tmp_path), project_dir=tmp_path)
+
+    assert isinstance(ctx.runner, DefaultSubprocessRunner)
+    assert not isinstance(ctx.runner, ReplayingSubprocessRunner)
+
+
+# --- T-RECORD-CODEX: codex backend is not record-capable, so record runner wrapping is skipped ---
+
+
+def test_make_context_record_skipped_for_codex_backend(monkeypatch, tmp_path):
+    """RECORD_SCENARIO with codex backend must NOT wrap runner in RecordingSubprocessRunner."""
+    from autoskillit.config import AutomationConfig
+    from autoskillit.config._config_dataclasses import AgentBackendConfig
+    from autoskillit.execution import DefaultSubprocessRunner
+    from autoskillit.execution.recording import RecordingSubprocessRunner
+    from autoskillit.server._factory import make_context
+
+    scenario_dir = tmp_path / "record"
+    scenario_dir.mkdir()
+
+    monkeypatch.setenv("RECORD_SCENARIO", "1")
+    monkeypatch.setenv("RECORD_SCENARIO_DIR", str(scenario_dir))
+    monkeypatch.setenv("RECORD_SCENARIO_RECIPE", "smoke-test")
+    monkeypatch.delenv("REPLAY_SCENARIO", raising=False)
+
+    config = AutomationConfig()
+    config.agent_backend = AgentBackendConfig(backend="codex")
+
+    ctx = make_context(config, plugin_dir=str(tmp_path), project_dir=tmp_path)
+
+    assert isinstance(ctx.runner, DefaultSubprocessRunner)
+    assert not isinstance(ctx.runner, RecordingSubprocessRunner)
+
+
 # --- T-BUILD-REPLAY-SNAP: build_replay_runner scans and surfaces skill_snapshots ---
 
 

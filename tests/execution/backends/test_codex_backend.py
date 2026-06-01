@@ -156,6 +156,12 @@ class TestCodexBackend:
             {MCP_CLIENT_BACKEND_ENV_VAR}
         )
 
+    def test_capabilities_replay_capable_false(self) -> None:
+        assert CodexBackend().capabilities.replay_capable is False
+
+    def test_capabilities_record_capable_false(self) -> None:
+        assert CodexBackend().capabilities.record_capable is False
+
     def test_binary_name(self) -> None:
         assert CodexBackend().binary_name() == "codex"
 

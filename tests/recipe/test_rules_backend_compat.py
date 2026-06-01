@@ -168,8 +168,8 @@ class TestBackendNameThreadingAPI:
             "test-compat", tmp_path, backend_name="codex", lister=resolver
         )
 
-        semantic = result.get("semantic", [])
-        compat_findings = [f for f in semantic if f.get("rule") == "backend-incompatible-skill"]
+        suggestions = result.get("suggestions", [])
+        compat_findings = [f for f in suggestions if f.get("rule") == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
         assert compat_findings[0]["severity"] == "error"
 
@@ -184,8 +184,8 @@ class TestBackendNameThreadingAPI:
 
         result = validate_from_path(recipe_path, backend_name="codex", lister=resolver)
 
-        semantic = result.get("semantic", [])
-        compat_findings = [f for f in semantic if f.get("rule") == "backend-incompatible-skill"]
+        findings = result.get("findings", [])
+        compat_findings = [f for f in findings if f.get("rule") == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
 
     def test_cache_key_varies_by_backend_name(self, tmp_path, monkeypatch):

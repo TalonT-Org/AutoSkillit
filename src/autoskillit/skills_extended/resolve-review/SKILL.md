@@ -294,7 +294,7 @@ After saving the raw review responses, check for the handoff file from review-pr
 
 ```bash
 # Read review-pr artifacts from the iteration-scoped directory
-REVIEW_PR_DIR=$(dirname "${AUTOSKILLIT_ALLOWED_WRITE_PREFIX:-{{AUTOSKILLIT_TEMP}}/review-pr}")
+REVIEW_PR_DIR="${AUTOSKILLIT_TEMP}/review-pr"
 # If iter_N directory exists under review-pr/, use the latest iteration
 REVIEW_PR_ITER_DIR=$(ls -d "${REVIEW_PR_DIR}"/iter_* 2>/dev/null | sort -V | tail -1)
 REVIEW_PR_OUTPUT="${REVIEW_PR_ITER_DIR:-${REVIEW_PR_DIR}}"

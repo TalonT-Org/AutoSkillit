@@ -41,6 +41,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
   Using ONLY classDef styles from the mermaid skill (no invented colors).
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Generate, fabricate, or create any diagrams or mermaid code blocks — the ONLY diagrams permitted in the PR body are those read from `all_diagram_paths` files that passed ★/● marker validation in Step 2. If no diagram paths are provided or all fail validation, the Architecture Impact section must not exist in the output.
 - NEVER re-derive, override, or substitute `task_title` from any source other than the prep file's `## Title` section. The title in the prep file is authoritative — do NOT use issue metadata, branch names, or ambient context to modify it.
 
 **ALWAYS:**
@@ -111,6 +112,8 @@ For each path:
    - If not found → discard silently
 
 If `all_diagram_paths` is empty or all diagrams fail → `validated_diagrams = []`.
+
+**HARD RULE — Do not generate, fabricate, or create diagrams.** Every mermaid block in the PR body must originate from a file in `all_diagram_paths` that passed ★/● validation above. If `validated_diagrams` is empty, omit the entire Architecture Impact section — no placeholder, no generated, fabricated, or created diagrams, no mermaid blocks of any kind.
 
 ### Step 3: Compose PR Body (SINGLE MESSAGE)
 

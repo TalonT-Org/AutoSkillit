@@ -174,7 +174,7 @@ class TestModuleCascadeCore:
 
     def test_type_protocols_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_protocols_backend"] == frozenset(
-            {"core", "execution", "pipeline", "cli", "workspace"}
+            {"core", "execution", "pipeline", "cli", "workspace", "_llm_triage"}
         )
 
     def test_json_cascade(self) -> None:

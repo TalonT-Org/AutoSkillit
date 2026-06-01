@@ -491,7 +491,7 @@ tasks:
           echo ""
           echo "ERROR: sudo failed — ensure passwordless sudo is configured, or run manually:"
           echo "  sudo sh -c 'sync && echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory'"
-          exit 0
+          exit 1
         }
 
         AFTER=$(awk '/MemAvailable/ {printf "%.0f", $2/1024}' /proc/meminfo 2>/dev/null || echo "?")

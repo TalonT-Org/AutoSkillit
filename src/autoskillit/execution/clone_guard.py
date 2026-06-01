@@ -109,13 +109,12 @@ class CloneGuardPolicy:
     """Structured session permission policy for the clone guard."""
 
     _fire_on_success: bool
+    _fire_on_failure: bool
     selective_revert: bool
     should_snapshot: bool
 
     def should_fire(self, success: bool) -> bool:
-        if not success:
-            return True
-        return self._fire_on_success
+        return self._fire_on_success if success else self._fire_on_failure
 
 
 def build_clone_guard_policy(
@@ -133,10 +132,12 @@ def build_clone_guard_policy(
         and not writes_under_exclude
         and (readonly_skill or has_write_scope)
     )
+    fire_on_failure = not is_clone_commit and not is_worktree
     selective_revert = readonly_skill or has_write_scope
     should_snapshot = is_worktree or readonly_skill or has_write_scope
     return CloneGuardPolicy(
         _fire_on_success=fire_on_success,
+        _fire_on_failure=fire_on_failure,
         selective_revert=selective_revert,
         should_snapshot=should_snapshot,
     )

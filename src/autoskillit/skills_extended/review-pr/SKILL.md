@@ -49,6 +49,7 @@ by the recipe pipeline after `open_pr_step` opens the PR.
 - Modify any source code
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Specify `subagent_type` when spawning audit subagents — these are ephemeral agents, not registered agent definitions. Use `Agent(model="sonnet")` exactly as shown, with no `subagent_type` parameter.
 
 **ALWAYS:**
 - Find the PR by feature branch at invocation time (not from a pre-captured URL)

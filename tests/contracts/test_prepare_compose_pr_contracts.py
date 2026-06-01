@@ -181,3 +181,27 @@ def test_prepare_pr_plan_summary_prohibits_nested_heading():
         "prepare-pr/SKILL.md must contain a proximity-anchored prohibition: "
         "'do NOT include the ## Summary heading' or 'NEVER include the ## Summary heading'"
     )
+
+
+def test_compose_pr_never_fabricate_diagrams():
+    """compose-pr NEVER block must contain unconditional diagram fabrication prohibition."""
+    text = COMPOSE_PR.read_text()
+    never_idx = text.find("**NEVER:**")
+    always_idx = text.find("**ALWAYS:**")
+    assert never_idx != -1 and always_idx != -1
+    never_block = text[never_idx:always_idx]
+    assert "fabricat" in never_block.lower(), (
+        "NEVER block must contain an unconditional prohibition against fabricating diagrams"
+    )
+
+
+def test_compose_pr_unconditional_diagram_gate_before_step3():
+    """compose-pr must have an unconditional no-fabrication rule between Step 2 and Step 3."""
+    text = COMPOSE_PR.read_text()
+    step2_idx = text.find("### Step 2")
+    step3_idx = text.find("### Step 3")
+    assert step2_idx != -1 and step3_idx != -1
+    between = text[step2_idx:step3_idx]
+    assert "do not" in between.lower() and (
+        "generat" in between.lower() or "fabricat" in between.lower() or "creat" in between.lower()
+    ), "Must have unconditional no-fabrication instruction between Step 2 and Step 3"

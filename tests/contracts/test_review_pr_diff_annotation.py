@@ -156,3 +156,15 @@ def test_annotate_pr_diff_callable_contract_has_head_sha() -> None:
     )
     names = [o["name"] for o in outputs]
     assert "head_sha" in names, "annotate_pr_diff contract must declare head_sha output"
+
+
+def test_review_pr_never_specify_subagent_type() -> None:
+    """review-pr NEVER block must prohibit specifying subagent_type on audit subagents."""
+    text = _SKILL_MD.read_text()
+    never_idx = text.find("**NEVER:**")
+    always_idx = text.find("**ALWAYS:**")
+    assert never_idx != -1 and always_idx != -1
+    never_block = text[never_idx:always_idx]
+    assert "subagent_type" in never_block, (
+        "NEVER block must contain explicit prohibition against specifying subagent_type"
+    )

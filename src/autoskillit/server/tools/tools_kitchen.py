@@ -39,6 +39,7 @@ from autoskillit.core import (
     resolve_kitchen_id,
     unregister_active_kitchen,
 )
+from autoskillit.fleet import FleetSemaphore
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_orchestrator_exact
@@ -122,10 +123,7 @@ def _write_hook_config() -> None:
     The hook subprocess (quota_guard.py) reads this file to apply user settings
     without importing the autoskillit package.
     """
-    from autoskillit.server import (  # circular-break
-        _get_ctx,
-        logger,
-    )  # circular-break: server-internal circular dependency
+    from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
     cfg = ctx.config.quota_guard
@@ -144,10 +142,7 @@ def _write_hook_config() -> None:
 
 def _update_hook_config_with_recipe() -> None:
     """Enrich .hook_config.json with recipe-level authorization after recipe loading."""
-    from autoskillit.server import (  # circular-break
-        _get_ctx,
-        logger,
-    )  # circular-break: server-internal circular dependency
+    from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
     hook_cfg_path = _hook_config_path(ctx.project_dir)
@@ -172,10 +167,7 @@ def _update_hook_config_with_git_ops_policy() -> None:
     mechanism exists for future recipes that legitimately need destructive git ops
     (e.g. allow_push for a release automation recipe).
     """
-    from autoskillit.server import (  # circular-break
-        _get_ctx,
-        logger,
-    )  # circular-break: server-internal circular dependency
+    from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
     hook_cfg_path = _hook_config_path(ctx.project_dir)
@@ -206,10 +198,7 @@ async def _open_kitchen_handler() -> str | None:
 
     Returns ``None`` on success, or a JSON failure envelope string on error.
     """
-    from autoskillit.server import (  # circular-break
-        _get_ctx,
-        logger,
-    )  # circular-break: server-internal circular dependency
+    from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
     ctx.gate.enable()
@@ -290,10 +279,7 @@ async def _redisable_subsets(
 
 def _close_kitchen_handler() -> None:
     """Clear the tools-enabled flag. Extracted for testability."""
-    from autoskillit.server import (  # circular-break
-        _get_ctx,
-        logger,
-    )  # circular-break: server-internal circular dependency
+    from autoskillit.server import _get_ctx, logger  # circular-break
 
     ctx = _get_ctx()
     if ctx.quota_refresh_task is not None:
@@ -334,8 +320,6 @@ def _close_kitchen_handler() -> None:
         logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
     ctx.fleet_lock = None
     try:
-        from autoskillit.fleet import FleetSemaphore  # noqa: PLC0415
-
         ctx.fleet_lock = FleetSemaphore(
             max_concurrent=ctx.config.fleet.max_concurrent_dispatches,
             timeout=ctx.config.fleet.acquire_timeout_sec,
@@ -379,9 +363,7 @@ def _close_kitchen_handler() -> None:
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
     """Return recipe YAML for the orchestrating agent to follow."""
-    from autoskillit.server._state import (  # circular-break
-        _get_ctx_or_none,
-    )  # circular-break: server-internal circular dependency
+    from autoskillit.server._state import _get_ctx_or_none  # circular-break
 
     ctx = _get_ctx_or_none()
     match = ctx.recipes.find(name, ctx.project_dir) if ctx and ctx.recipes else None
@@ -466,9 +448,7 @@ async def open_kitchen(
                 }
             )
 
-        from autoskillit.server import (  # circular-break
-            _get_ctx,
-        )  # circular-break: server-internal circular dependency
+        from autoskillit.server import _get_ctx  # circular-break
 
         disabled_subsets = _get_ctx().config.subsets.disabled
 
@@ -648,9 +628,7 @@ async def open_kitchen(
                 logger.warning("open_kitchen_failure", stage="update_hook_config", exc_info=True)
 
             composite = result.get("composite_hash", "")
-            from autoskillit.server._state import (  # circular-break
-                _check_rerun,
-            )  # circular-break: server-internal circular dependency
+            from autoskillit.server._state import _check_rerun  # circular-break
 
             rerun_suggestion = _check_rerun(tool_ctx.config.linux_tracing.log_dir, composite)
             if rerun_suggestion:
@@ -808,9 +786,7 @@ async def disable_quota_guard() -> str:
     try:
         if (h := _require_orchestrator_exact("disable_quota_guard")) is not None:
             return h
-        from autoskillit.server import (  # circular-break
-            _get_ctx,
-        )  # circular-break: server-internal circular dependency
+        from autoskillit.server import _get_ctx  # circular-break
 
         ctx = _get_ctx()
         hook_cfg_path = _hook_config_path(ctx.project_dir)
@@ -963,9 +939,7 @@ async def lock_ingredients(
     try:
         if (h := _require_orchestrator_exact("lock_ingredients")) is not None:
             return h
-        from autoskillit.server import (  # circular-break
-            _get_ctx,
-        )  # circular-break: server-internal circular dependency
+        from autoskillit.server import _get_ctx  # circular-break
 
         ctx = _get_ctx()
         hook_cfg_path = _hook_config_path(ctx.project_dir)

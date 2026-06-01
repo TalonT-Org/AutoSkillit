@@ -210,11 +210,23 @@ async def configure_fleet(
             _replace_fleet_semaphore(ctx, effective_max, acquire_timeout_sec)
             if ctx.fleet_lock is not None:
                 if max_concurrent_dispatches is not None:
-                    assert ctx.fleet_lock.max_concurrent == max_concurrent_dispatches
+                    if ctx.fleet_lock.max_concurrent != max_concurrent_dispatches:
+                        raise RuntimeError(
+                            f"fleet_lock.max_concurrent {ctx.fleet_lock.max_concurrent!r} "
+                            f"!= requested {max_concurrent_dispatches!r}"
+                        )
                 if acquire_timeout_sec is not None:
-                    assert ctx.fleet_lock.timeout == acquire_timeout_sec
+                    if ctx.fleet_lock.timeout != acquire_timeout_sec:
+                        raise RuntimeError(
+                            f"fleet_lock.timeout {ctx.fleet_lock.timeout!r} "
+                            f"!= requested {acquire_timeout_sec!r}"
+                        )
                 else:
-                    assert ctx.fleet_lock.timeout == _pre_timeout
+                    if ctx.fleet_lock.timeout != _pre_timeout:
+                        raise RuntimeError(
+                            f"fleet_lock.timeout {ctx.fleet_lock.timeout!r} "
+                            f"!= pre-replace value {_pre_timeout!r}"
+                        )
 
         assert isinstance(result, dict)
         snapshot = _build_config_snapshot(ctx.config, "fleet", result, fleet_lock=ctx.fleet_lock)

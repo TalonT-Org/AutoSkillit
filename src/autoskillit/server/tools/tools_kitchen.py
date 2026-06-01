@@ -316,6 +316,7 @@ def _close_kitchen_handler() -> None:
         overlay_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
+    ctx.fleet_lock = None
     try:
         from autoskillit.fleet import FleetSemaphore  # noqa: PLC0415
 

@@ -562,8 +562,11 @@ async def create_and_publish_branch(
             base_name = _compute_branch_name(issue_slug, run_name, issue_number)
             compute_ms = int((time.monotonic() - _compute_start) * 1000)
 
+            from autoskillit.server._misc import resolve_remote_name
+
             _branch_start = time.monotonic()
-            branch_result = await _resolve_and_create_branch(base_name, "origin", work_dir)
+            resolved_remote = await resolve_remote_name(work_dir)
+            branch_result = await _resolve_and_create_branch(base_name, resolved_remote, work_dir)
             branch_create_ms = int((time.monotonic() - _branch_start) * 1000)
 
             if "error" in branch_result:

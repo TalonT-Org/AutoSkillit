@@ -18,6 +18,7 @@ Sub-packages: types/ (see types/CLAUDE.md) and runtime/ (see runtime/CLAUDE.md).
 | `_version_snapshot.py` | Process-scoped version snapshot for session telemetry (`lru_cache`'d) |
 | `branch_guard.py` | Branch protection helpers |
 | `claude_conventions.py` | Skill discovery directory layout constants |
+| `git_remote.py` | `resolve_clone_remote_name_sync`, `REMOTE_PRECEDENCE` — IL-0 canonical remote precedence |
 | `github_url.py` | `parse_github_repo` |
 | `_plugin_cache.py` | Plugin cache lifecycle: retiring cache, install locking, kitchen registry |
 | `_plugin_ids.py` | `DIRECT_PREFIX`, `MARKETPLACE_PREFIX`, `detect_autoskillit_mcp_prefix` (stdlib-only) |

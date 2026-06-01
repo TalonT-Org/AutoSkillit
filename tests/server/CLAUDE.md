@@ -124,6 +124,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_track_response_size.py` | Tests for the track_response_size decorator in autoskillit.server._notify |
 | `test_wire_compat.py` | Wire compatibility tests |
 
+| `test_tools_git_branch_isolation.py` | Integration tests for create_and_publish_branch with clone-isolated origin topology |
 | `test_tools_observability_scope.py` | Tests for bound_contextvars exception scope completeness: exception-path coverage, AST structural guard, any() assertion ban |
 ## Architecture Notes
 

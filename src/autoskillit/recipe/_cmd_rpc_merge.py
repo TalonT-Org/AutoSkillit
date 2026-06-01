@@ -136,11 +136,11 @@ def create_persistent_integration(
 ) -> dict[str, str]:
     """Create and push persistent integration branch from default branch."""
     remote = _detect_remote(work_dir)
-    result = run_git(["symbolic-ref", "refs/remotes/origin/HEAD"], cwd=work_dir)
+    result = run_git(["symbolic-ref", f"refs/remotes/{remote}/HEAD"], cwd=work_dir)
     default_branch = "main"
     if result.returncode == 0:
         ref = result.stdout.strip()
-        default_branch = ref.replace("refs/remotes/origin/", "")
+        default_branch = ref.replace(f"refs/remotes/{remote}/", "")
     run_git(["checkout", default_branch], cwd=work_dir, check=True)
     run_git(["pull"], cwd=work_dir, check=True)
     run_git(["checkout", "-b", base_branch], cwd=work_dir, check=True)

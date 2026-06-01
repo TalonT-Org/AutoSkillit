@@ -22,7 +22,7 @@ backends/ (see backends/CLAUDE.md).
 | `quota.py` | `QuotaStatus`, cache, `check_and_sleep_if_needed` |
 | `ci.py` | GitHub Actions CI watcher (httpx, never raises) |
 | `github.py` | GitHub issue fetcher |
-| `remote_resolver.py` | Upstream > origin, clone-aware remote resolution |
+| `remote_resolver.py` | Upstream > origin, clone-aware remote resolution (`REMOTE_PRECEDENCE` imported from `core/git_remote.py`) |
 | `testing.py` | Pytest output parsing, pass/fail adjudication, output condensation |
 | `clone_guard.py` | Clone contamination guard — detect and revert direct changes to clone CWD |
 | `pr_analysis.py` | `extract_linked_issues`, `DOMAIN_PATHS`, `partition_files_by_domain` |

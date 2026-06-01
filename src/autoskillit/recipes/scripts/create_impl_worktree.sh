@@ -58,9 +58,10 @@ os.replace(tmp, str(sidecar_file))
 " >/dev/null 2>&1
 
 # Detect remote and set upstream tracking (non-fatal).
-REMOTE=$(git remote get-url origin >/dev/null 2>&1 && echo origin || echo "")
+# Prefer upstream (real GitHub URL) over origin (may be file:// in clones).
+REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo "")
 if [ -z "$REMOTE" ]; then
-    REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo "")
+    REMOTE=$(git remote get-url origin 2>/dev/null | grep -qv "^file://" && echo origin || echo "")
 fi
 
 if [ -n "$REMOTE" ]; then

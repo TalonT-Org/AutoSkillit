@@ -10,4 +10,13 @@ if [ "${OUTPUT_MODE}" = "local" ]; then
     exit 0
 fi
 
-cd "${WORKTREE_PATH}" && git push -u origin HEAD
+cd "${WORKTREE_PATH}"
+
+# Prefer upstream (real GitHub URL) over origin (may be file:// in clones).
+REMOTE=$(git remote get-url upstream 2>/dev/null | grep -qv "^file://" && echo upstream || echo "")
+if [ -z "$REMOTE" ]; then
+    REMOTE=$(git remote get-url origin 2>/dev/null | grep -qv "^file://" && echo origin || echo "")
+fi
+: "${REMOTE:=origin}"
+
+git push -u "$REMOTE" HEAD

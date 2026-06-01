@@ -21,6 +21,26 @@ import sys
 REMOVE_CLONE_DENY_TRIGGER: str = "Clone at"
 
 
+def _resolve_push_remote(clone_path: str) -> str:
+    """Return the git remote name for real (non-file://) push operations."""
+    for name in ("upstream", "origin"):
+        try:
+            result = subprocess.run(
+                ["git", "-C", clone_path, "remote", "get-url", name],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode != 0:
+                continue
+            if result.stdout.strip().startswith("file://"):
+                continue
+            return name
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+    return "origin"
+
+
 def _git(clone_path: str, *args: str, timeout: int = 10) -> tuple[int, str]:
     """Run a git command in clone_path. Returns (returncode, stdout.strip())."""
     try:
@@ -63,8 +83,14 @@ def _check_sync(clone_path: str) -> tuple[bool, str]:
     rc, count_str = _git(clone_path, "rev-list", "--count", "@{upstream}..HEAD")
     if rc != 0:
         # No tracking branch — try ls-remote fallback to check if branch exists on remote
+        resolved_remote = _resolve_push_remote(clone_path)
         ls_rc, ls_out = _git(
-            clone_path, "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}", timeout=15
+            clone_path,
+            "ls-remote",
+            "--exit-code",
+            resolved_remote,
+            f"refs/heads/{branch}",
+            timeout=15,
         )
         if ls_rc == 0:
             # Branch is on remote — compare SHA to verify fully pushed
@@ -79,7 +105,7 @@ def _check_sync(clone_path: str) -> tuple[bool, str]:
         return False, (
             f"Clone at {clone_path!r} (branch: {branch!r}) has no remote "
             "tracking branch. Push the branch first before removing the clone:\n"
-            f"  git -C {clone_path} push -u origin {branch}"
+            f"  git -C {clone_path} push -u {resolved_remote} {branch}"
         )
 
     try:

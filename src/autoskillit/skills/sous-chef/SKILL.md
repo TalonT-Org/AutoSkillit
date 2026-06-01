@@ -682,6 +682,38 @@ When a `run_skill` call is DENIED with "QUOTA BUDGET EXCEEDED":
 
 ---
 
+## FLEET DISPATCH RESUME DISCIPLINE — MANDATORY
+
+When `dispatch_food_truck` returns with `dispatch_status: "resumable"`:
+
+1. **Extract resume fields** from the result envelope:
+   - `dispatched_session_id` → pass as `resume_session_id`
+   - `dispatch_id` → pass as `prior_dispatch_id`
+   - `resume_checkpoint` → pass as `resume_checkpoint` (if present)
+
+2. **Re-dispatch with resume parameters:**
+   ```
+   dispatch_food_truck(
+     recipe=<same recipe>,
+     task=<same task>,
+     resume_session_id=<dispatched_session_id from prior result>,
+     prior_dispatch_id=<dispatch_id from prior result>,
+     resume_checkpoint=<resume_checkpoint from prior result>,
+     ingredients=<same ingredients with allow_reentry=true>,
+   )
+   ```
+
+3. **NEVER start a fresh dispatch** for an issue that already has an `in-progress` label
+   from a prior dispatch. A PreToolUse guard will block the call. If you receive a deny
+   from `fleet_claim_guard`, retrieve the prior dispatch result and use its
+   `dispatched_session_id` and `dispatch_id` for resume.
+
+4. **Escalate, don't retry blind.** If the prior session is unrecoverable (missing session
+   log, corrupt state), this is a **human intervention** scenario. Emit the L3 result
+   sentinel with `success=false` and `reason=resume_unrecoverable`, then halt.
+
+---
+
 ## STEP EXECUTION IS NOT DISCRETIONARY — MANDATORY
 
 You MUST execute every step the pipeline routes you to. The recipe step graph is the

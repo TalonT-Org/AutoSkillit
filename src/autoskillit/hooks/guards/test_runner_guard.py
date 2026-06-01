@@ -106,11 +106,22 @@ def _is_direct_pytest(cmd: str) -> bool:
 
         # uv run pytest / uv run path/to/pytest (flags between run and command are skipped).
         if os.path.basename(token) == "uv" and len(tokens) >= 2 and tokens[1] == "run":
-            for run_tok in tokens[2:]:
+            run_tokens = tokens[2:]
+            for idx, run_tok in enumerate(run_tokens):
                 if run_tok.startswith("-"):
                     continue
-                if os.path.basename(run_tok) in _PYTEST_NAMES:
+                run_basename = os.path.basename(run_tok)
+                if run_basename in _PYTEST_NAMES:
                     return True
+                # uv run python -m pytest / uv run python3 -m py.test
+                if re.match(r"python3?$", run_basename):
+                    remaining = run_tokens[idx + 1 :]
+                    if (
+                        len(remaining) >= 2
+                        and remaining[0] == "-m"
+                        and remaining[1] in _PYTEST_NAMES
+                    ):
+                        return True
                 break
 
     return False

@@ -3741,6 +3741,7 @@
     "tests/server/test_tools_recipe.py"
   ],
   "src/autoskillit/hooks/_command_classification.py": [
+    "tests/hooks/test_command_classification_git.py",
     "tests/hooks/test_hook_registry.py",
     "tests/hooks/test_planner_gh_discovery_guard.py",
     "tests/hooks/test_pr_create_guard.py",
@@ -3813,6 +3814,11 @@
   "src/autoskillit/hooks/guards/fleet_dispatch_guard.py": [
     "tests/hooks/test_hook_registry.py",
     "tests/infra/test_fleet_dispatch_guard.py"
+  ],
+  "src/autoskillit/hooks/guards/git_ops_guard.py": [
+    "tests/hooks/test_hook_registry.py",
+    "tests/infra/test_git_ops_guard.py",
+    "tests/infra/test_risky_git_ops_coverage.py"
   ],
   "src/autoskillit/hooks/guards/generated_file_write_guard.py": [
     "tests/hooks/test_hook_registry.py"

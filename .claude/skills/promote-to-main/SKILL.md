@@ -322,9 +322,10 @@ repository-access, scenarios, security, state-lifecycle
 
 Return 1-3 lens names. Apply the same selection criteria as open-pr:
 
-**Development lens guard:** Only select `development` if at least one changed file matches:
-`pyproject.toml`, `Taskfile*`, `conftest.py`, `.github/workflows/*`, `Makefile`,
-`setup.cfg`, `setup.py`, `tox.ini`, `noxfile.py`, or files under `ci/`.
+**Development lens criteria:** Select `development` when the changed files include
+build configuration, test infrastructure, CI/CD pipeline definitions, quality gate
+configuration, or developer tooling setup. Assess by file purpose, not filename —
+the codebase may use any build system, CI platform, or test framework.
 
 For a promotion PR, prefer lenses that show the broadest architectural impact:
 - `module-dependency` if changes span multiple packages

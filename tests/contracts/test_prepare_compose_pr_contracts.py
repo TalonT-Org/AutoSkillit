@@ -183,6 +183,85 @@ def test_prepare_pr_plan_summary_prohibits_nested_heading():
     )
 
 
+def test_prepare_pr_no_hardcoded_lens_file_patterns():
+    """Development lens selection must not enumerate specific build tool filenames."""
+    text = PREPARE_PR.read_text()
+    for pattern in ["pyproject.toml", "Taskfile*", "setup.cfg", "tox.ini", "noxfile.py"]:
+        assert pattern not in text, (
+            f"prepare-pr must not contain hardcoded file pattern '{pattern}' — "
+            "lens selection should use codebase-agnostic criteria"
+        )
+
+
+def test_prepare_pr_codebase_agnostic_development_lens_criteria():
+    """Development lens prompt must use intent-based criteria, not filenames."""
+    text = PREPARE_PR.read_text().lower()
+    assert "build configuration" in text
+    assert "test infrastructure" in text
+    assert "ci" in text
+    assert "quality gate" in text
+    assert "file purpose" in text or "purpose, not filename" in text
+
+
+def test_prepare_pr_documents_arch_lenses_argument():
+    """prepare-pr must document arch_lenses as a positional argument."""
+    text = PREPARE_PR.read_text()
+    args_idx = text.find("## Arguments")
+    step0_idx = text.find("### Step 0")
+    assert args_idx != -1 and step0_idx != -1
+    args_section = text[args_idx:step0_idx]
+    assert "arch_lenses" in args_section, (
+        "prepare-pr Arguments section must document the arch_lenses parameter"
+    )
+
+
+def test_prepare_pr_skips_lens_work_when_arch_lenses_false():
+    """prepare-pr must skip Steps 5-6 when arch_lenses is not true."""
+    text = PREPARE_PR.read_text()
+    step5_idx = text.find("### Step 5")
+    step7_idx = text.find("### Step 7")
+    assert step5_idx != -1 and step7_idx != -1
+    step5_section = text[step5_idx:step7_idx]
+    assert "arch_lenses" in step5_section, "Step 5 must reference arch_lenses for the skip gate"
+    assert "none" in step5_section.lower(), "Step 5 skip path must emit 'none' for lens tokens"
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation.yaml",
+        "remediation.yaml",
+        "implementation-groups.yaml",
+    ],
+)
+def test_recipe_prepare_pr_passes_arch_lenses(recipe_name: str) -> None:
+    """Every recipe's prepare_pr step must pass arch_lenses and issue_number in skill_command."""
+    from autoskillit.core.io import load_yaml
+
+    data = load_yaml(RECIPES_DIR / recipe_name)
+    skill_command = data["steps"]["prepare_pr"]["with"]["skill_command"]
+    assert "${{ inputs.arch_lenses }}" in skill_command, (
+        f"{recipe_name}: prepare_pr skill_command must include "
+        "${{ inputs.arch_lenses }} as a positional argument"
+    )
+    assert "${{ context.issue_number }}" in skill_command, (
+        f"{recipe_name}: prepare_pr skill_command must include "
+        "${{ context.issue_number }} as a positional argument, "
+        "not in a separate with: key (ADR-0003)"
+    )
+
+
+def test_prepare_pr_contract_includes_arch_lenses_input() -> None:
+    """prepare-pr contract must declare arch_lenses as an optional input."""
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    manifest = load_bundled_manifest()
+    inputs = manifest["skills"]["prepare-pr"]["inputs"]
+    assert any(i["name"] == "arch_lenses" for i in inputs), (
+        "prepare-pr must declare arch_lenses in skill_contracts.yaml inputs"
+    )
+
+
 def test_compose_pr_never_fabricate_diagrams():
     """compose-pr NEVER block must contain unconditional diagram fabrication prohibition."""
     text = COMPOSE_PR.read_text()

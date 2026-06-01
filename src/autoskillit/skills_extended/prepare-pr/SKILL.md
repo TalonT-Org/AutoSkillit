@@ -22,13 +22,15 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 
 ## Arguments
 
-`/autoskillit:prepare-pr {plan_paths} {run_name} {base_branch} [closing_issue] [conflict_report_path]`
+`/autoskillit:prepare-pr {plan_paths} {run_name} {base_branch} [closing_issue] [arch_lenses] [conflict_report_path]`
 
 - **plan_paths** — Comma-separated absolute paths to implementation plan markdown files
 - **run_name** — Branch name prefix (e.g. `impl`, `feature/123`, `fix/653`); determines
   `[FEATURE]`/`[FIX]` prefix
 - **base_branch** — PR target branch
 - **closing_issue** (optional) — GitHub issue number for requirements fetch + `Closes #N`
+- **arch_lenses** (optional) — `true` or `false`; when not `true`, lens selection
+  (Steps 5–6) is skipped and `none` is emitted for lens tokens. Defaults to `false`.
 - **conflict_report_path** (optional) — Absolute path to conflict resolution report
 
 ## Critical Constraints
@@ -67,7 +69,8 @@ Parse positional arguments:
 - arg[2] = `run_name`
 - arg[3] = `base_branch`
 - arg[4] = `closing_issue` (optional — may be absent or empty string)
-- arg[5] = `conflict_report_path` (optional — may be absent or empty string)
+- arg[5] = `arch_lenses` (optional — `true` or `false`; defaults to `false`)
+- arg[6] = `conflict_report_path` (optional — may be absent or empty string)
 
 Derive `feature_branch` (`git rev-parse --abbrev-ref HEAD`).
 Create temp dir (relative to the current working directory):
@@ -135,6 +138,10 @@ Store as separate lists: `new_files` (added, ★) and `modified_files` (modified
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
+**arch_lenses gate:** If `arch_lenses` is not `true`, skip Steps 5 and 6 — set
+`selected_lenses` to `none` and `lens_context_paths` to `none`, then proceed directly
+to Step 7.
+
 Spawn a subagent via `Agent(model="sonnet")` with the list of changed file paths and the
 following lens menu:
 
@@ -147,11 +154,10 @@ repository-access, scenarios, security, state-lifecycle
 Instruct the subagent to return 1–3 lens slugs. Only include a lens if at least one
 changed file maps to that lens's concern.
 
-**Development lens guard:** The `development` lens must ONLY be selected if at least one
-changed file matches a build/test configuration pattern: `pyproject.toml`, `Taskfile*`,
-`conftest.py`, `.github/workflows/*`, `Makefile`, `setup.cfg`, `setup.py`, `tox.ini`,
-`noxfile.py`, or files under a `ci/` directory. If no changed file matches these patterns,
-do NOT select the `development` lens regardless of other criteria.
+**Development lens criteria:** Select `development` when the changed files include
+build configuration, test infrastructure, CI/CD pipeline definitions, quality gate
+configuration, or developer tooling setup. Assess by file purpose, not
+filename. The codebase may use any build system, CI platform, or test framework.
 
 Output: comma-separated slug list → `selected_lens_slugs`.
 

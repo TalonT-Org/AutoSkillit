@@ -70,6 +70,22 @@ class TestPromoteToMainProjectLocal:
             "for review-promotion's analysis report"
         )
 
+    def test_no_hardcoded_lens_file_patterns(self):
+        """Project-local promote-to-main dev lens must not enumerate build tool filenames."""
+        content = self._content()
+        marker = "**Development lens"
+        start = content.find(marker)
+        assert start != -1, "promote-to-main must have a 'Development lens' section"
+        end = content.find("\n\n", start)
+        if end == -1:
+            end = len(content)
+        section = content[start:end]
+        patterns = ["pyproject.toml", "Taskfile*", "setup.cfg", "tox.ini", "noxfile.py"]
+        for pattern in patterns:
+            assert pattern not in section, (
+                f"lens section must not contain hardcoded file pattern '{pattern}'"
+            )
+
 
 class TestReviewPromotionProjectLocal:
     def _content(self) -> str:
@@ -137,3 +153,19 @@ class TestPromoteToMainCanonical:
         assert "Subagent Autonomy Grant" not in content
         assert "spawn additional subagents" not in content.lower()
         assert "spawn their own sub-subagents" not in content.lower()
+
+    def test_no_hardcoded_lens_file_patterns(self):
+        """Canonical promote-to-main dev lens section must not enumerate build tool filenames."""
+        content = self._content()
+        marker = "**Development lens"
+        start = content.find(marker)
+        assert start != -1, "promote-to-main must have a 'Development lens' section"
+        end = content.find("\n\n", start)
+        if end == -1:
+            end = len(content)
+        section = content[start:end]
+        patterns = ["pyproject.toml", "Taskfile*", "setup.cfg", "tox.ini", "noxfile.py"]
+        for pattern in patterns:
+            assert pattern not in section, (
+                f"lens section must not contain hardcoded file pattern '{pattern}'"
+            )

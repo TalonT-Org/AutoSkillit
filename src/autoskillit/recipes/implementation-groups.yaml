@@ -726,11 +726,10 @@ steps:
     tool: run_skill
     model: ""
     with:
-      skill_command: "/autoskillit:prepare-pr ${{ context.all_plan_paths }} ${{ inputs.run_name }} ${{ inputs.base_branch }}"
+      skill_command: "/autoskillit:prepare-pr ${{ context.all_plan_paths }} ${{ inputs.run_name }} ${{ inputs.base_branch }} ${{ context.issue_number }} ${{ inputs.arch_lenses }}"
       cwd: "${{ context.work_dir }}"
       output_dir: '.'
       step_name: "prepare_pr"
-      issue_number: "${{ context.issue_number }}"
     capture:
       prep_path: "${{ result.prep_path }}"
       selected_lenses: "${{ result.selected_lenses }}"
@@ -746,10 +745,9 @@ steps:
     optional: true
     skip_when_false: "inputs.open_pr"
     note: >
-      Reads plan(s), runs git diff, classifies changed files, selects 1–3 arch-lens slugs,
-      writes one PR context file per lens, and writes a PR prep file. Does NOT invoke
-      arch-lens skills. If context.issue_number is a non-empty string, append it as the
-      4th positional argument so prepare-pr fetches requirements from the closing issue.
+      Reads plan(s), runs git diff, classifies changed files, selects 1–3 arch-lens slugs
+      (or skips lens selection when arch_lenses is false), writes one PR context file per
+      lens, and writes a PR prep file. Does NOT invoke arch-lens skills.
       MULTI-GROUP: context.all_plan_paths may contain comma-separated plan paths
       accumulated across group iterations.
 

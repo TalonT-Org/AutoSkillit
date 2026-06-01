@@ -1293,6 +1293,7 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # recipe tests — recipe layer is IL-2 and may use workspace (IL-1 sibling)
     "tests/recipe/test_contracts.py": frozenset({"autoskillit.workspace"}),
     "tests/recipe/test_rules_skill_content.py": frozenset({"autoskillit.workspace"}),
+    "tests/recipe/test_rules_stamp_ownership.py": frozenset({"autoskillit.workspace"}),
     # review loop routing integration imports root-level smoke_utils
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),
     # migration tests — migration engine integrates with execution.session

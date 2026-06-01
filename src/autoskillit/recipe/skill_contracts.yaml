@@ -477,11 +477,11 @@ skills:
     - name: closing_issue
       type: string
       required: false
-    - name: conflict_report_path
-      type: file_path
-      required: false
     - name: arch_lenses
       type: string
+      required: false
+    - name: conflict_report_path
+      type: file_path
       required: false
     outputs:
     - name: prep_path

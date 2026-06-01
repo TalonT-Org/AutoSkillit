@@ -34,6 +34,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_pr_create_guard.py` | Tests for pr_create_guard.py interpreter bypass detection |
 | `test_planner_gh_discovery_guard.py` | Tests for planner_gh_discovery_guard.py interpreter bypass detection |
 | `test_ingredient_lock_guard.py` | Tests for ingredient_lock_guard.py PreToolUse hook: deny/allow, fail-open, pipeline scoping |
+| `test_remove_clone_guard_isolation.py` | Integration tests for remove_clone_guard _check_sync with clone-isolated origin topology |
 | `test_pipeline_step_post_hook.py` | Tests for pipeline_step_post_hook.py PostToolUse hook — step completion marking, progress banner, fail-open paths |
 | `test_pipeline_step_guard.py` | Tests for pipeline_step_guard.py PreToolUse advisory guard — dep-unmet warning, fail-open paths |
 

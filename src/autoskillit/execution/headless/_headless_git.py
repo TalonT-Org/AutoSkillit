@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import subprocess
 
-from autoskillit.core import get_logger
+from autoskillit.core import get_logger, resolve_clone_remote_name_sync
 
 logger = get_logger(__name__)
 
@@ -90,7 +90,8 @@ def _detect_branch_divergence(cwd: str) -> bool:
     remaining refs are only tried when merge-base or rev-list fails.
     Returns False on any error or non-git directory.
     """
-    for ref in ("origin/HEAD", "origin/main", "origin/master"):
+    remote = resolve_clone_remote_name_sync(cwd)
+    for ref in (f"{remote}/HEAD", f"{remote}/main", f"{remote}/master"):
         try:
             mb = subprocess.run(
                 ["git", "merge-base", "HEAD", ref],

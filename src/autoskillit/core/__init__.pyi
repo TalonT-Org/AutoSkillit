@@ -43,6 +43,8 @@ from .claude_conventions import (
 from .claude_conventions import validate_worktree_path as validate_worktree_path
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
+from .git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
+from .git_remote import resolve_clone_remote_name_sync as resolve_clone_remote_name_sync
 from .github_url import _parse_issue_ref as _parse_issue_ref
 from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo

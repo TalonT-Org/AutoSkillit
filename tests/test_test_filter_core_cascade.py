@@ -107,6 +107,7 @@ class TestModuleCascadeCore:
             "_type_exceptions",
             "_step_context",
             "_execution_marker",
+            "git_remote",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

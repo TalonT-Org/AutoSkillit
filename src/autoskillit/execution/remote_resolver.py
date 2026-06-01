@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import asyncio
 
-from autoskillit.core import get_logger, normalize_owner_repo, parse_github_repo
+from autoskillit.core import (
+    REMOTE_PRECEDENCE,
+    get_logger,
+    normalize_owner_repo,
+    parse_github_repo,
+)
 
 logger = get_logger(__name__)
-
-# Canonical remote precedence order: upstream before origin encodes the clone
-# isolation contract (upstream = real GitHub URL; origin = file:// local path).
-REMOTE_PRECEDENCE: tuple[str, ...] = ("upstream", "origin")
 
 
 async def resolve_remote_repo(

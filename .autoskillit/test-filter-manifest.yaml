@@ -214,6 +214,8 @@ scripts/regen_contracts.py:
   - infra/
 scripts/check_pyi_stub_format.py:
   - infra/
+scripts/check_pyi_stub_symbols.py:
+  - infra/
 scripts/sync_versions.py:
   - infra/
 

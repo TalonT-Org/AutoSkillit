@@ -131,29 +131,189 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
         )
 
 
-async def test_unknown_override_key_ignored(tmp_path: Path) -> None:
-    """Overrides for undefined ingredients are silently ignored (no crash)."""
-    from autoskillit.recipe._api import _build_active_recipe
+async def test_unknown_override_key_warned(tmp_path: Path) -> None:
+    """open_kitchen warns about override keys that don't match declared ingredients."""
     from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 
-    recipe = Recipe(
+    mock_recipe = Recipe(
         name="test",
         description="test",
-        ingredients={
-            "task": RecipeIngredient(description="Task", required=True),
-        },
+        ingredients={"audit": RecipeIngredient(description="audit gate", default="true")},
         steps={
-            "do_it": RecipeStep(
+            "audit_impl": RecipeStep(
                 tool="run_cmd",
                 with_args={"cmd": "echo hi"},
                 on_success="done",
                 on_exhausted="escalate",
-            )
+            ),
         },
-        kitchen_rules=["no native tools"],
+        kitchen_rules=[],
     )
-    # Override for an ingredient that doesn't exist
-    active, combined = _build_active_recipe(recipe, {"nonexistent_key": "true"}, tmp_path)
-    # Should not crash, recipe unchanged
-    assert active is recipe
-    assert combined is None
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = tmp_path / "test.yaml"
+
+    mock_recipes = _make_mock_recipes({"content": "name: test", "valid": True, "suggestions": []})
+    mock_recipes.find.return_value = mock_recipe_info
+    mock_recipes.load.return_value = mock_recipe
+
+    mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    mock_mcp_ctx = AsyncMock()
+
+    with (
+        patch(
+            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
+        patch("autoskillit.config.resolve_ingredient_defaults", return_value={}),
+        patch(
+            "autoskillit.server._misc._apply_triage_gate",
+            new_callable=AsyncMock,
+            return_value={"content": "test", "valid": True, "suggestions": []},
+        ),
+        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
+        patch("autoskillit.server.tools.tools_kitchen._update_hook_config_with_recipe"),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
+            return_value=None,
+        ),
+        patch("autoskillit.server._state._check_rerun", return_value=None),
+    ):
+        from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
+
+        result_str = await _open_kitchen_tool(
+            name="test",
+            overrides={"audit_impl": "false"},  # "audit_impl" not a declared ingredient
+            ctx=mock_mcp_ctx,
+        )
+    result = json.loads(result_str)
+    assert result.get("kitchen") == "open"
+    warnings = result.get("warnings", [])
+    assert warnings, f"Expected warnings for unknown override key, got result: {result}"
+    assert any("audit_impl" in w for w in warnings)
+
+
+async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
+    """open_kitchen emits no warnings when all override keys match declared ingredients."""
+    from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+
+    mock_recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={"audit": RecipeIngredient(description="audit gate", default="true")},
+        steps={
+            "audit_impl": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo hi"},
+                on_success="done",
+                on_exhausted="escalate",
+            ),
+        },
+        kitchen_rules=[],
+    )
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = tmp_path / "test.yaml"
+
+    mock_recipes = _make_mock_recipes({"content": "name: test", "valid": True, "suggestions": []})
+    mock_recipes.find.return_value = mock_recipe_info
+    mock_recipes.load.return_value = mock_recipe
+
+    mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    mock_mcp_ctx = AsyncMock()
+
+    with (
+        patch(
+            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
+        patch("autoskillit.config.resolve_ingredient_defaults", return_value={}),
+        patch(
+            "autoskillit.server._misc._apply_triage_gate",
+            new_callable=AsyncMock,
+            return_value={"content": "test", "valid": True, "suggestions": []},
+        ),
+        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
+        patch("autoskillit.server.tools.tools_kitchen._update_hook_config_with_recipe"),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
+            return_value=None,
+        ),
+        patch("autoskillit.server._state._check_rerun", return_value=None),
+    ):
+        from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
+
+        result_str = await _open_kitchen_tool(
+            name="test",
+            overrides={"audit": "false"},  # "audit" IS a declared ingredient
+            ctx=mock_mcp_ctx,
+        )
+    result = json.loads(result_str)
+    assert result.get("kitchen") == "open"
+    assert "warnings" not in result, f"Expected no warnings, got: {result.get('warnings')}"
+
+
+async def test_unknown_override_key_warned_deferred_recall(tmp_path: Path) -> None:
+    """open_kitchen deferred-recall path also warns about unknown override keys."""
+    from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+
+    mock_recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={"audit": RecipeIngredient(description="audit gate", default="true")},
+        steps={
+            "audit_impl": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo hi"},
+                on_success="done",
+                on_exhausted="escalate",
+            ),
+        },
+        kitchen_rules=[],
+    )
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = tmp_path / "test.yaml"
+
+    mock_recipes = _make_mock_recipes({"content": "name: test", "valid": True, "suggestions": []})
+    mock_recipes.find.return_value = mock_recipe_info
+    mock_recipes.load.return_value = mock_recipe
+
+    mock_tool_ctx = _make_mock_ctx(mock_recipes)
+    # Simulate kitchen already open with recipe "test" loaded → deferred-recall path
+    mock_tool_ctx.gate.enabled = True
+    mock_tool_ctx.recipe_name = "test"
+    mock_mcp_ctx = AsyncMock()
+
+    with (
+        patch(
+            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
+        ),
+        patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
+        patch("autoskillit.config.resolve_ingredient_defaults", return_value={}),
+        patch(
+            "autoskillit.server._misc._apply_triage_gate",
+            new_callable=AsyncMock,
+            return_value={"content": "test", "valid": True, "suggestions": []},
+        ),
+        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
+    ):
+        from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
+
+        result_str = await _open_kitchen_tool(
+            name="test",
+            overrides={"audit_impl": "false"},  # unknown key on deferred-recall path
+            ctx=mock_mcp_ctx,
+        )
+    result = json.loads(result_str)
+    assert result.get("kitchen") == "open"
+    warnings = result.get("warnings", [])
+    assert warnings, f"Expected warnings on deferred-recall path, got result: {result}"
+    assert any("audit_impl" in w for w in warnings)

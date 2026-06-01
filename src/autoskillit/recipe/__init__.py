@@ -109,6 +109,9 @@ from autoskillit.recipe.rules import rules_features as _rules_features  # noqa: 
 from autoskillit.recipe.rules import rules_fixing as _rules_fixing  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_flake_loop as _rules_flake_loop  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_food_truck as _rules_food_truck  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_ingredient_step_name as _rules_ingredient_step_name,
+)
 from autoskillit.recipe.rules import rules_inline_script as _rules_inline_script  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa: E402 F401

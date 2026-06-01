@@ -31,7 +31,7 @@ ingredients:
       for triage — addressable findings loop back, structural findings halt the
       pipeline. When 'false', skip directly to create_worktree.
     default: "true"
-  review_pr:
+  review_research_pr:
     description: >
       When 'true', run the review-research-pr skill after the research PR
       is opened. Posts inline review comments on research quality dimensions
@@ -58,7 +58,7 @@ ingredients:
       When 'true' (the default), run test_check after report generation.
       Set to 'false' for de novo worktrees without test infrastructure.
     default: "true"
-  audit:
+  audit_impl:
     description: >
       When 'true' (the default), run audit-impl after phase iteration to verify
       all decomposed phases have corresponding implementation commits. Catches
@@ -573,14 +573,14 @@ steps:
     - route: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
-    skip_when_false: "inputs.audit"
+    skip_when_false: "inputs.audit_impl"
     note: >
       Post-implementation quality gate. Diffs impl_base_sha..HEAD and verifies
       all decomposed phases from group_files have corresponding implementation
       commits. Catches silent group abandonment when on_context_limit fires
       mid-iteration — reports exactly which phases were completed vs. skipped.
       On GO, proceeds to run_experiment. On NO GO, escalates with a remediation
-      report detailing which phases are missing. If false (inputs.audit=false),
+      report detailing which phases are missing. If false (inputs.audit_impl=false),
       skip directly to run_experiment.
 
   # --- EXPERIMENT + REPORT PHASE ---
@@ -896,13 +896,13 @@ steps:
     capture:
       review_verdict: "${{ result.verdict }}"
     pass_through: [verdict]
-    skip_when_false: inputs.review_pr
+    skip_when_false: inputs.review_research_pr
     on_context_limit: audit_claims
     on_failure: audit_claims
     on_result:
     - route: audit_claims
     note: >
-      Optional research PR review step, gated by the review_pr ingredient.
+      Optional research PR review step, gated by the review_research_pr ingredient.
       Verdict captured as review_verdict for deferred routing. All paths
       (skip, success, failure, context-limit) route to audit_claims so both
       gates complete before any resolution step begins. When on_context_limit

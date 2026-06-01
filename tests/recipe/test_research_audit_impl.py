@@ -22,15 +22,15 @@ class TestResearchRecipesAuditImpl:
         return load_recipe(builtin_recipes_dir() / "research-implement.yaml")
 
     def test_has_audit_ingredient_defaulting_true(self, recipe) -> None:
-        assert "audit" in recipe.ingredients
-        assert recipe.ingredients["audit"].default == "true"
+        assert "audit_impl" in recipe.ingredients
+        assert recipe.ingredients["audit_impl"].default == "true"
 
     def test_has_audit_impl_step(self, recipe) -> None:
         assert "audit_impl" in recipe.steps
 
     def test_audit_impl_skip_when_false(self, recipe) -> None:
         step = recipe.steps["audit_impl"]
-        assert step.skip_when_false == "inputs.audit"
+        assert step.skip_when_false == "inputs.audit_impl"
 
     def test_audit_impl_on_context_limit_escalates(self, recipe) -> None:
         """audit_impl on_context_limit must route to escalate_stop."""
@@ -228,14 +228,14 @@ class TestResearchCampaignAuditIngredient:
 
     def test_campaign_has_audit_ingredient(self, campaign) -> None:
         """research-campaign.yaml must declare an audit ingredient."""
-        assert "audit" in campaign.ingredients
+        assert "audit_impl" in campaign.ingredients
 
     def test_campaign_audit_default_true(self, campaign) -> None:
         """research-campaign.yaml audit ingredient must default to 'true'."""
-        assert campaign.ingredients["audit"].default == "true"
+        assert campaign.ingredients["audit_impl"].default == "true"
 
     def test_campaign_passes_audit_to_run_implement(self, campaign) -> None:
-        """run-implement dispatch must pass audit: "${{ inputs.audit }}"."""
+        """run-implement dispatch must pass audit_impl: "${{ inputs.audit_impl }}"."""
         run_implement = next(d for d in campaign.dispatches if d.name == "run-implement")
-        assert "audit" in run_implement.ingredients
-        assert run_implement.ingredients["audit"] == "${{ inputs.audit }}"
+        assert "audit_impl" in run_implement.ingredients
+        assert run_implement.ingredients["audit_impl"] == "${{ inputs.audit_impl }}"

@@ -210,6 +210,119 @@ class TestUnlockRebuildsLockedSteps:
         assert result2["locked_steps"] == {}
 
 
+class TestLockIngredientsUnknownKeyValidation:
+    """Tests for unknown ingredient key rejection in lock_ingredients."""
+
+    @pytest.mark.anyio
+    async def test_lock_unknown_ingredient_key_rejected(self, tmp_path):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        ctx = _make_mock_ctx()
+        ctx.project_dir = tmp_path
+        ctx.active_recipe_steps = {
+            "audit_impl": _make_step_mock("inputs.audit_impl"),
+        }
+        ctx.active_recipe_ingredients = frozenset(["audit_impl"])
+
+        with patch("autoskillit.server._get_ctx", return_value=ctx):
+            from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+            result = json.loads(await lock_ingredients(locked={"audit": "false"}, pipeline_id="a"))
+
+        assert result["success"] is False
+        assert "audit_impl" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_lock_with_valid_ingredient_key_succeeds(self, tmp_path):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        ctx = _make_mock_ctx()
+        ctx.project_dir = tmp_path
+        ctx.active_recipe_steps = {
+            "audit_impl": _make_step_mock("inputs.audit_impl"),
+        }
+        ctx.active_recipe_ingredients = frozenset(["audit_impl"])
+
+        with patch("autoskillit.server._get_ctx", return_value=ctx):
+            from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+            result = json.loads(
+                await lock_ingredients(locked={"audit_impl": "false"}, pipeline_id="a")
+            )
+
+        assert result["success"] is True
+        assert result["locked_steps"].get("audit_impl") is False
+
+    @pytest.mark.anyio
+    async def test_lock_suggests_close_match(self, tmp_path):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        ctx = _make_mock_ctx()
+        ctx.project_dir = tmp_path
+        ctx.active_recipe_steps = {
+            "audit_impl": _make_step_mock("inputs.audit_impl"),
+        }
+        ctx.active_recipe_ingredients = frozenset(["audit_impl"])
+
+        with patch("autoskillit.server._get_ctx", return_value=ctx):
+            from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+            result = json.loads(
+                await lock_ingredients(locked={"auditt": "false"}, pipeline_id="a")
+            )
+
+        assert result["success"] is False
+        assert "audit_impl" in str(result.get("suggestions", {}))
+
+    @pytest.mark.anyio
+    async def test_unlock_unknown_ingredient_key_rejected(self, tmp_path):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        ctx = _make_mock_ctx()
+        ctx.project_dir = tmp_path
+        ctx.active_recipe_steps = {
+            "audit_impl": _make_step_mock("inputs.audit_impl"),
+        }
+        ctx.active_recipe_ingredients = frozenset(["audit_impl"])
+
+        with patch("autoskillit.server._get_ctx", return_value=ctx):
+            from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+            result = json.loads(await lock_ingredients(unlock=["audit"], pipeline_id="a"))
+
+        assert result["success"] is False
+        assert "audit_impl" in result["error"]
+
+    @pytest.mark.anyio
+    async def test_unlock_valid_ingredient_key_succeeds(self, tmp_path):
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        ctx = _make_mock_ctx()
+        ctx.project_dir = tmp_path
+        ctx.active_recipe_steps = {
+            "audit_impl": _make_step_mock("inputs.audit_impl"),
+        }
+        ctx.active_recipe_ingredients = frozenset(["audit_impl"])
+
+        with patch("autoskillit.server._get_ctx", return_value=ctx):
+            from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+            await lock_ingredients(locked={"audit_impl": "false"}, pipeline_id="a")
+            result = json.loads(await lock_ingredients(unlock=["audit_impl"], pipeline_id="a"))
+
+        assert result["success"] is True
+
+
 class TestLockIngredientsConcurrentFlock:
     """Test 16: concurrent flock."""
 

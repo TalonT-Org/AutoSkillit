@@ -33,7 +33,7 @@
       "description": "Research approaches first",
       "default": "false"
     },
-    "audit": {
+    "audit_impl": {
       "description": "Post-merge quality gate",
       "default": "false"
     },
@@ -791,8 +791,8 @@
       "on_failure": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
       "optional": true,
-      "skip_when_false": "inputs.audit",
-      "note": "Only execute if inputs.audit is 'true'. If false, skip directly to push. Captures verdict and remediation_path. Routes GO → push, NO GO → remediate which re-enters the plan step with the remediation file. All groups and parts have been merged at this point — no worktree exists. Uses context.base_sha (a stable commit SHA captured before any merge began) as implementation_ref. A SHA names a git object and survives git branch -D unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the left) covers the full implementation across all plan groups.\n"
+      "skip_when_false": "inputs.audit_impl",
+      "note": "Only execute if inputs.audit_impl is 'true'. If false, skip directly to push. Captures verdict and remediation_path. Routes GO → push, NO GO → remediate which re-enters the plan step with the remediation file. All groups and parts have been merged at this point — no worktree exists. Uses context.base_sha (a stable commit SHA captured before any merge began) as implementation_ref. A SHA names a git object and survives git branch -D unconditionally. The diff git diff base_sha..base_branch (two-dot, SHA on the left) covers the full implementation across all plan groups.\n"
     },
     "remediate": {
       "action": "route",

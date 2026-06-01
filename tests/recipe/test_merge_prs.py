@@ -84,9 +84,9 @@ def test_pmp_check_impl_plans_has_fallthrough_to_audit_impl(recipe) -> None:
 
 
 def test_pmp_audit_impl_has_skip_when_false(recipe) -> None:
-    """audit_impl must still declare skip_when_false: inputs.audit (user-level toggle)."""
+    """audit_impl must still declare skip_when_false: inputs.audit_impl ."""
     step = recipe.steps["audit_impl"]
-    assert step.skip_when_false == "inputs.audit"
+    assert step.skip_when_false == "inputs.audit_impl"
 
 
 def test_pmp_audit_impl_is_optional(recipe) -> None:

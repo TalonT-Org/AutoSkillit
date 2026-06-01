@@ -17,20 +17,20 @@ class TestResearchRecipeStructure:
 
     def test_research_has_review_pr_ingredient(self, recipe) -> None:
         """research.yaml must declare a review_pr ingredient with default 'false'."""
-        assert "review_pr" in recipe.ingredients, (
-            "research.yaml must declare a 'review_pr' ingredient to gate the optional "
+        assert "review_research_pr" in recipe.ingredients, (
+            "research.yaml must declare a 'review_research_pr' ingredient to gate the optional "
             "review-research-pr step"
         )
-        assert recipe.ingredients["review_pr"].default == "false"
+        assert recipe.ingredients["review_research_pr"].default == "false"
 
     def test_research_has_review_research_pr_step(self, recipe) -> None:
         """research.yaml must include a review_research_pr step."""
         assert "review_research_pr" in recipe.steps
 
     def test_research_review_step_skip_when_false(self, recipe) -> None:
-        """review_research_pr step must use skip_when_false: inputs.review_pr."""
+        """review_research_pr step must use skip_when_false: inputs.review_research_pr."""
         step = recipe.steps["review_research_pr"]
-        assert step.skip_when_false == "inputs.review_pr"
+        assert step.skip_when_false == "inputs.review_research_pr"
 
     def test_research_no_issue_number_ingredient(self, recipe) -> None:
         """Removed: issue_number is the phase-2 gate."""

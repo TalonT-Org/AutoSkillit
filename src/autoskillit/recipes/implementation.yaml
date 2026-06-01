@@ -28,7 +28,7 @@ ingredients:
   review_approach:
     description: Research approaches first
     default: 'false'
-  audit:
+  audit_impl:
     description: Post-merge quality gate
     default: 'true'
   open_pr:
@@ -776,8 +776,8 @@ steps:
     on_failure: register_clone_failure
     on_context_limit: register_clone_failure
     optional: true
-    skip_when_false: inputs.audit
-    note: 'Only execute if inputs.audit is ''true''. If false, skip directly to check_has_commits.
+    skip_when_false: inputs.audit_impl
+    note: 'Only execute if inputs.audit_impl is ''true''. If false, skip directly to check_has_commits.
       Captures verdict and remediation_path. Routes GO → push, NO GO → remediate which
       re-enters the plan step with the remediation file. All parts have been merged
       at this point — no worktree exists. Uses context.base_sha (a stable commit SHA

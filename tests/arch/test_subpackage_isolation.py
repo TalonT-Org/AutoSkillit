@@ -857,7 +857,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 12,
         "pipeline": 12,
         "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
-        "recipe/rules": 36,
+        "recipe/rules": 37,
         "server/tools": 24,  # _auto_overrides.py + _cancellation_shield.py
         "hooks/guards": 26,  # +1: background_exec_guard.py for ADR-0001 runtime enforcement
     }
@@ -942,6 +942,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
         "co-located with the execution engine that calls them",
+    ),
+    "tools_kitchen.py": (
+        1100,
+        "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
+        "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
+        "for ingredient key validation; splitting would cross import-layer boundaries",
     ),
 }
 
@@ -1134,6 +1140,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "active_recipe_packs",
         "active_recipe_features",
         "active_recipe_steps",
+        "active_recipe_ingredients",
         "temp_dir",
         "project_dir",
         "ephemeral_root",

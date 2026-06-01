@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 from datetime import UTC, datetime
@@ -164,6 +165,7 @@ async def _open_kitchen_handler() -> str | None:
     ctx.active_recipe_packs = frozenset()
     ctx.active_recipe_features = frozenset()
     ctx.active_recipe_steps = {}
+    ctx.active_recipe_ingredients = frozenset()
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
 
     try:
@@ -254,6 +256,7 @@ def _close_kitchen_handler() -> None:
     ctx.active_recipe_packs = None
     ctx.active_recipe_features = None
     ctx.active_recipe_steps = None
+    ctx.active_recipe_ingredients = None
     ctx.recipe_name = ""
     ctx.recipe_content_hash = ""
     ctx.recipe_composite_hash = ""
@@ -334,6 +337,23 @@ def _build_tool_category_listing(
     ):
         lines.append(f"  {name}: {', '.join(tools)}")
     return "\n".join(lines)
+
+
+def _check_override_keys(
+    overrides: dict[str, str] | None,
+    declared: frozenset[str],
+    session_keys: set[str],
+) -> list[str]:
+    if not overrides:
+        return []
+    user_keys = set(overrides.keys()) - session_keys - SERVER_AUTHORITATIVE_INGREDIENTS
+    unknown = user_keys - declared
+    if not unknown:
+        return []
+    return [
+        f"Unknown override keys ignored: {sorted(unknown)}. "
+        f"Valid ingredient keys: {sorted(declared)}"
+    ]
 
 
 @mcp.tool(
@@ -487,21 +507,29 @@ async def open_kitchen(
                 tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
                 tool_ctx.recipe_version = result.get("recipe_version") or ""
                 recipe_info = None
+                _deferred_recipe_obj = None
                 try:
                     recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
                 except Exception:
                     logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
                     tool_ctx.active_recipe_steps = None
+                    tool_ctx.active_recipe_ingredients = None
                 else:
                     if recipe_info is not None:
                         try:
                             recipe_obj = tool_ctx.recipes.load(recipe_info.path)
+                            _deferred_recipe_obj = recipe_obj
                             tool_ctx.active_recipe_steps = dict(recipe_obj.steps)
+                            tool_ctx.active_recipe_ingredients = frozenset(
+                                recipe_obj.ingredients.keys()
+                            )
                         except Exception:
                             logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
                             tool_ctx.active_recipe_steps = None
+                            tool_ctx.active_recipe_ingredients = None
                     else:
                         tool_ctx.active_recipe_steps = None
+                        tool_ctx.active_recipe_ingredients = None
                 result["success"] = True
                 result["kitchen"] = "open"
                 result["version"] = __version__
@@ -514,6 +542,14 @@ async def open_kitchen(
                         "open_kitchen_failure", stage="apply_triage_gate", exc_info=True
                     )
                     return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
+                if _deferred_recipe_obj is not None:
+                    _override_warnings = _check_override_keys(
+                        overrides,
+                        frozenset(_deferred_recipe_obj.ingredients.keys()),
+                        set(_session_overrides.keys()),
+                    )
+                    if _override_warnings:
+                        result["warnings"] = _override_warnings
                 return json.dumps(result)
             try:
                 result = tool_ctx.recipes.load_and_validate(
@@ -558,15 +594,20 @@ async def open_kitchen(
                 logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="recipe_find")
 
+            _normal_recipe_obj = None
             if recipe_info is not None:
                 try:
                     recipe_obj = tool_ctx.recipes.load(recipe_info.path)
+                    _normal_recipe_obj = recipe_obj
                     tool_ctx.active_recipe_steps = dict(recipe_obj.steps)
+                    tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
                 except Exception:
                     logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
                     tool_ctx.active_recipe_steps = None
+                    tool_ctx.active_recipe_ingredients = None
             else:
                 tool_ctx.active_recipe_steps = None
+                tool_ctx.active_recipe_ingredients = None
 
             try:
                 result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
@@ -583,6 +624,15 @@ async def open_kitchen(
 
             if "ingredients_table" not in result or not result["ingredients_table"]:
                 result["ingredients_table"] = None
+
+            if _normal_recipe_obj is not None:
+                _override_warnings = _check_override_keys(
+                    overrides,
+                    frozenset(_normal_recipe_obj.ingredients.keys()),
+                    set(_session_overrides.keys()),
+                )
+                if _override_warnings:
+                    result["warnings"] = _override_warnings
 
             try:
                 warning = _build_hook_diagnostic_warning()
@@ -806,6 +856,18 @@ def _apply_unlock_keys(current_pipeline_li: dict[str, str], unlock_keys: list[st
         current_pipeline_li.pop(key, None)
 
 
+def _build_ingredient_key_suggestions(
+    unknown: set[str], declared: frozenset[str]
+) -> dict[str, list[str]]:
+    suggestions: dict[str, list[str]] = {}
+    declared_sorted = sorted(declared)
+    for key in sorted(unknown):
+        matches = difflib.get_close_matches(key, declared_sorted, n=2, cutoff=0.5)
+        if matches:
+            suggestions[key] = list(matches)
+    return suggestions
+
+
 @mcp.tool(
     tags={"autoskillit"}, annotations={"readOnlyHint": True}, meta={"anthropic/alwaysLoad": True}
 )
@@ -867,6 +929,27 @@ async def lock_ingredients(
             )
 
         active_steps = getattr(ctx, "active_recipe_steps", None) or {}
+        declared_ingredients = ctx.active_recipe_ingredients
+        if declared_ingredients is not None:
+            all_supplied_keys: set[str] = set()
+            if locked:
+                all_supplied_keys |= set(locked.keys())
+            if unlock:
+                all_supplied_keys |= set(unlock)
+            unknown = all_supplied_keys - declared_ingredients - SERVER_AUTHORITATIVE_INGREDIENTS
+            if unknown:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": (
+                            f"Unknown ingredient keys: {sorted(unknown)}. "
+                            f"Valid keys: {sorted(declared_ingredients)}."
+                        ),
+                        "suggestions": _build_ingredient_key_suggestions(
+                            unknown, declared_ingredients
+                        ),
+                    }
+                )
 
         success, updated = _write_ingredient_locks(
             ctx.project_dir,

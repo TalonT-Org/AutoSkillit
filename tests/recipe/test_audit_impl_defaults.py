@@ -18,10 +18,10 @@ _RECIPES_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "autoskil
     ["implementation", "remediation"],
 )
 def test_audit_ingredient_defaults_to_true(recipe_name: str):
-    """implementation.yaml and remediation.yaml must default inputs.audit to 'true'."""
+    """implementation.yaml and remediation.yaml must default inputs.audit_impl to 'true'."""
     recipe = load_recipe(_RECIPES_DIR / f"{recipe_name}.yaml")
-    ingredient = recipe.ingredients.get("audit")
-    assert ingredient is not None, f"{recipe_name}.yaml has no 'audit' ingredient"
+    ingredient = recipe.ingredients.get("audit_impl")
+    assert ingredient is not None, f"{recipe_name}.yaml has no 'audit_impl' ingredient"
     assert ingredient.default == "true", (
-        f"{recipe_name}.yaml: inputs.audit default is {ingredient.default!r}, expected 'true'"
+        f"{recipe_name}.yaml: inputs.audit_impl default is {ingredient.default!r}, expected 'true'"
     )

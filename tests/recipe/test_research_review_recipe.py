@@ -54,7 +54,7 @@ class TestResearchReviewRecipe:
             "source_dir",
             "base_branch",
             "output_mode",
-            "review_pr",
+            "review_research_pr",
             "audit_claims",
             "issue_url",
         } <= names
@@ -72,7 +72,7 @@ class TestResearchReviewRecipe:
         assert recipe.ingredients["output_mode"].default == "local"
 
     def test_review_pr_default(self, recipe) -> None:
-        assert recipe.ingredients["review_pr"].default == "false"
+        assert recipe.ingredients["review_research_pr"].default == "false"
 
     def test_audit_claims_default(self, recipe) -> None:
         assert recipe.ingredients["audit_claims"].default == "false"

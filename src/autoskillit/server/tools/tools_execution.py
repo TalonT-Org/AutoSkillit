@@ -43,7 +43,6 @@ from autoskillit.server._misc import (
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.workspace.skills import SkillInfo
 
 logger = get_logger(__name__)
 
@@ -60,9 +59,9 @@ def _is_absolute_path(path: str) -> bool:
     return Path(path).is_absolute()
 
 
-def _is_backend_incompatible(skill_info: SkillInfo, effective_backend: str) -> bool:
+def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool:
     """Return True if skill's backend_requirements exclude effective_backend."""
-    reqs = skill_info.backend_requirements
+    reqs = getattr(skill_info, "backend_requirements", None)
     return bool(reqs and effective_backend not in reqs)
 
 

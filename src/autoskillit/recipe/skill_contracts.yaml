@@ -500,6 +500,13 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - "prep_path[ \\t]*=[ \\t]*/.+"
+    source_pin_fields:
+    - field: task_title
+      required_source: "plan file # heading"
+      prohibited_sources:
+      - "issue title"
+      - "issue body"
+      - "closing_issue"
 
   compose-pr:
     inputs:
@@ -528,6 +535,13 @@ skills:
     write_behavior: conditional
     write_expected_when:
     - "pr_url[ \\t]*=[ \\t]*https://"
+    source_pin_fields:
+    - field: task_title
+      required_source: "prep file ## Title section"
+      prohibited_sources:
+      - "issue metadata"
+      - "branch names"
+      - "ambient context"
 
   open-integration-pr:
     inputs:

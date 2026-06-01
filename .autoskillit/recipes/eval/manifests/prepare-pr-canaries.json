@@ -1,0 +1,19 @@
+[
+  {
+    "id": "PP01",
+    "agent_name": "prepare-pr",
+    "prompt_template": "Prepare PR metadata for the plan at {plan_path}. The closing issue is #{closing_issue}.",
+    "prompt_vars": {
+      "plan_heading": "Implementation Plan: Add Widget Validation Layer",
+      "plan_summary": "This plan adds a validation layer for widget inputs, ensuring type safety and constraint checking before widgets are rendered.",
+      "closing_issue_title": "Refactor database connection pooling — performance improvement",
+      "closing_issue_number": "9999"
+    },
+    "reference_type": "behavioral",
+    "gap_description": "Source-attribution provenance: PR title must come from plan heading, not issue title",
+    "detection_criteria": [
+      {"text": "The prep file ## Title section contains 'Widget Validation'", "type": "recall"},
+      {"text": "The prep file ## Title section does NOT contain 'database' or 'connection pooling'", "type": "precision"}
+    ]
+  }
+]

@@ -45,7 +45,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_route_gate.py` | Route gate shared-stop detection; fallback and primary path convergence |
 | `rules_loop_counter.py` | Loop counter scope isolation: cross-path sharing and guard-before-verify detection |
 | `rules_loop_progress.py` | Loop progress tracking: run_skill steps in cycles must capture declared outputs |
-| `rules_skill_content.py` | Undefined bash placeholder detection in SKILL.md |
+| `rules_skill_content.py` | SKILL.md content validation: undefined bash placeholders, source-attribution directives, output formatting, issue comment prohibition |
 | `rules_skills.py` | `skill_command` resolvability rules |
 | `rules_stamp_ownership.py` | Exclusive stamp ownership enforcement across skills |
 | `rules_step_naming.py` | Step-key vs invoked-skill collision detection |

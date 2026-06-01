@@ -40,6 +40,7 @@ in the decomposed PR flow (prepare → run_arch_lenses → compose).
 - Fail if closing_issue is absent or gh is unavailable — degrade gracefully
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
+- Do NOT use the issue title, issue body, or any closing_issue metadata for `task_title` or `## Title`. These MUST come exclusively from plan file `# ` headings (Step 2). Step 1 output (`requirements_section`) must NOT influence the title derivation.
 
 **ALWAYS:**
 - Emit all three output tokens (`prep_path`, `selected_lenses`, `lens_context_paths`)

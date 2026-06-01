@@ -107,6 +107,61 @@ def test_prepare_pr_skill_command_includes_issue_number() -> None:
     )
 
 
+def test_prepare_pr_title_source_attribution():
+    """Step 2 must explicitly prohibit using issue metadata for task_title."""
+    import regex as re
+
+    text = PREPARE_PR.read_text()
+    pattern = re.compile(
+        r"(?:NOT|NEVER)[\s\S]*?(?:issue\s+title|issue\s+body|issue\s+metadata|closing_issue)"
+        r"[\s\S]*?(?:task_title|PR\s+title|## Title)",
+        re.IGNORECASE,
+    )
+    assert pattern.search(text), (
+        "prepare-pr/SKILL.md Step 2 must contain a proximity-anchored prohibition: "
+        "'Do NOT use the issue title/body/metadata for task_title/PR title'"
+    )
+
+
+def test_compose_pr_title_source_attribution():
+    """Step 1 must prohibit re-deriving task_title from non-prep-file sources."""
+    import regex as re
+
+    text = COMPOSE_PR.read_text()
+    pattern = re.compile(
+        r"(?:NOT|NEVER)[\s\S]*?(?:re-?deriv|overrid|substitut|replac)[\s\S]*?(?:task_title|title)"
+        r"|task_title[\s\S]*?(?:ONLY|exclusively|solely)[\s\S]*?(?:prep\s+file|## Title)",
+        re.IGNORECASE,
+    )
+    assert pattern.search(text), (
+        "compose-pr/SKILL.md must prohibit re-deriving task_title from non-prep-file sources"
+    )
+
+
+def test_prepare_pr_source_pin_fields_in_manifest():
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    manifest = load_bundled_manifest()
+    skill_data = manifest["skills"]["prepare-pr"]
+    assert "source_pin_fields" in skill_data, (
+        "prepare-pr must declare source_pin_fields in skill_contracts.yaml"
+    )
+    fields = skill_data["source_pin_fields"]
+    assert any(f["field"] == "task_title" for f in fields)
+
+
+def test_compose_pr_source_pin_fields_in_manifest():
+    from autoskillit.recipe.contracts import load_bundled_manifest
+
+    manifest = load_bundled_manifest()
+    skill_data = manifest["skills"]["compose-pr"]
+    assert "source_pin_fields" in skill_data, (
+        "compose-pr must declare source_pin_fields in skill_contracts.yaml"
+    )
+    fields = skill_data["source_pin_fields"]
+    assert any(f["field"] == "task_title" for f in fields)
+
+
 def test_prepare_pr_plan_summary_prohibits_nested_heading():
     """Plan Summary placeholder must prohibit including the ## Summary heading.
 

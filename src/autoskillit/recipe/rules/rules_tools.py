@@ -587,4 +587,23 @@ def _check_run_python_requires_work_dir(ctx: ValidationContext) -> list[RuleFind
                     ),
                 )
             )
+        work_dir_val = with_args.get("work_dir")
+        if (
+            isinstance(work_dir_val, str)
+            and work_dir_val
+            and "${{" not in work_dir_val
+            and not PurePosixPath(work_dir_val).is_absolute()
+        ):
+            findings.append(
+                RuleFinding(
+                    rule="run-python-requires-work-dir",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}' has work_dir='{work_dir_val}' "
+                        "which is not absolute and not a template — "
+                        "use an absolute path or template expression"
+                    ),
+                )
+            )
     return findings

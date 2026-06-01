@@ -262,7 +262,7 @@ Processing X issues:
    - `run_name`: `"feature"` (implementation) or `"fix"` (remediation)
    - `base_branch`: `"develop"` (or read `git rev-parse --abbrev-ref HEAD`)
    - `open_pr`: `"true"`
-   - `audit`: `"true"`
+   - `audit_impl`: `"true"`
    - `review_approach`: the value of `review_approach_detected` (set in step 5)
    - `investigate`: the value of `investigate_resolved` (set in step 6)
    - `upfront_claimed`: `"true"`        ← always set for upfront-claimed issues

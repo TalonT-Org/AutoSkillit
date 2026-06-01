@@ -753,6 +753,8 @@ persist for the entire session.
 - User says "skip investigate" → `lock_ingredients(locked={"investigate": "false"}, pipeline_id="<pid>")`
 - User says "turn on review_approach" → `lock_ingredients(locked={"review_approach": "true"}, pipeline_id="<pid>")`
 - User says "go straight to rectify" → `lock_ingredients(locked={"investigate": "false"}, pipeline_id="<pid>")`
+- User says "skip the audit" → `lock_ingredients(locked={"audit_impl": "false"}, pipeline_id="<pid>")`
+  (Note: the ingredient key is `audit_impl`, matching the step name it gates — not `audit`)
 
 ### Pipeline ID
 

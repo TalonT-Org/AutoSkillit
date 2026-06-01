@@ -492,7 +492,7 @@ class TestImplementationPipelineStructure:
         violations = [f for f in findings if f.rule == "push-before-audit"]
         assert len(violations) >= 1, (
             "push-before-audit must fire: audit_impl has skip_when_false so push is "
-            "reachable via the audit=false bypass path"
+            "reachable via the audit_impl=false bypass path"
         )
         assert all(v.severity == Severity.WARNING for v in violations)
 
@@ -502,9 +502,9 @@ class TestImplementationPipelineStructure:
         assert compose_pr.skip_when_false == "inputs.open_pr"
 
     def test_ip_audit_impl_has_skip_when_false(self, recipe) -> None:
-        """audit_impl must declare skip_when_false: inputs.audit."""
+        """audit_impl must declare skip_when_false: inputs.audit_impl."""
         audit_step = recipe.steps["audit_impl"]
-        assert audit_step.skip_when_false == "inputs.audit"
+        assert audit_step.skip_when_false == "inputs.audit_impl"
 
     def test_ip_create_branch_has_skip_when_false(self, recipe) -> None:
         """create_and_publish must declare skip_when_false: inputs.open_pr."""

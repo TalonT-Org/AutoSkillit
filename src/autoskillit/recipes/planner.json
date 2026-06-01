@@ -378,10 +378,10 @@
         "output_dir": "${{ context.planner_dir }}",
         "consolidated_wps_path": "${{ context.consolidated_wps_path }}"
       },
-      "on_success": "assess_review_approach_step",
+      "on_success": "planner_assess_review_approach",
       "on_failure": "escalate_stop"
     },
-    "assess_review_approach_step": {
+    "planner_assess_review_approach": {
       "tool": "run_skill",
       "model": "",
       "optional": true,

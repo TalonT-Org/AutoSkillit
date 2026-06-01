@@ -59,7 +59,7 @@ ingredients:
       When 'true' (the default), run test_check after report generation.
       Set to 'false' for de novo worktrees without test infrastructure.
     default: "true"
-  audit:
+  audit_impl:
     description: >
       When 'true' (the default), run audit-impl after phase iteration to verify
       all decomposed phases have corresponding implementation commits.
@@ -335,7 +335,7 @@ steps:
     - route: remediate
     on_failure: escalate_stop
     on_context_limit: escalate_stop
-    skip_when_false: "inputs.audit"
+    skip_when_false: "inputs.audit_impl"
     note: >
       Diffs base_branch...HEAD and verifies all decomposed phases from group_files
       have corresponding implementation commits. Catches silent group abandonment
@@ -343,7 +343,7 @@ steps:
       were completed vs. skipped. On GO, proceeds to run_experiment. On error,
       escalates immediately. On NO GO, routes to remediate which re-enters
       plan_phase via check_audit_retry_loop (max 2 cycles).
-      If false (inputs.audit=false), skip directly to run_experiment.
+      If false (inputs.audit_impl=false), skip directly to run_experiment.
 
   remediate:
     action: route

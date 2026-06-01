@@ -26,7 +26,7 @@
       "default": "",
       "authority": "config"
     },
-    "audit": {
+    "audit_impl": {
       "description": "Post-merge quality gate",
       "default": "false"
     },
@@ -1300,8 +1300,8 @@
       "on_failure": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
       "optional": true,
-      "skip_when_false": "inputs.audit",
-      "note": "DEPENDENCY: context.all_plan_paths is only populated if the plan step executed at least once. The check_impl_plans gate ensures this step is only reached when implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths is guaranteed to be set when audit_impl runs. Gated by check_impl_plans — only reached when implementation plan files exist in plans_dir. Only execute if inputs.audit is 'true'; if false, skip directly to open_integration_pr. Passes context.all_plan_paths (comma-separated list of plan file paths accumulated across the PR loop) as plans_input. audit-impl splits on commas and audits each plan file. implementation_ref is context.batch_branch (no worktree remains). GO → open_integration_pr. NO GO → remediate (re-enters plan with remediation file).\n"
+      "skip_when_false": "inputs.audit_impl",
+      "note": "DEPENDENCY: context.all_plan_paths is only populated if the plan step executed at least once. The check_impl_plans gate ensures this step is only reached when implementation plan files exist (i.e. make-plan was invoked), so all_plan_paths is guaranteed to be set when audit_impl runs. Gated by check_impl_plans — only reached when implementation plan files exist in plans_dir. Only execute if inputs.audit_impl is 'true'; if false, skip directly to open_integration_pr. Passes context.all_plan_paths (comma-separated list of plan file paths accumulated across the PR loop) as plans_input. audit-impl splits on commas and audits each plan file. implementation_ref is context.batch_branch (no worktree remains). GO → open_integration_pr. NO GO → remediate (re-enters plan with remediation file).\n"
     },
     "remediate": {
       "action": "route",

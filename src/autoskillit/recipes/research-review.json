@@ -32,7 +32,7 @@
       "description": "Where research outputs land. 'local' produces a self-contained bundle. 'pr' opens a GitHub PR alongside the bundle.\n",
       "default": "local"
     },
-    "review_pr": {
+    "review_research_pr": {
       "description": "When 'true', run the review-research-pr skill after the research PR is opened.\n",
       "default": "false"
     },
@@ -216,7 +216,7 @@
       "pass_through": [
         "verdict"
       ],
-      "skip_when_false": "inputs.review_pr",
+      "skip_when_false": "inputs.review_research_pr",
       "on_context_limit": "audit_claims",
       "on_failure": "audit_claims",
       "on_result": [
@@ -224,7 +224,7 @@
           "route": "audit_claims"
         }
       ],
-      "note": "Optional research PR review step, gated by the review_pr ingredient. Verdict captured as review_verdict for deferred routing. All paths (skip, success, failure, context-limit) route to audit_claims so both gates complete before any resolution step begins. When on_context_limit or on_failure fires, the capture block does not execute and context.review_verdict remains absent; the recipe engine treats absent context variables as empty string in comparisons, so downstream route_review_resolve safely falls through to route_claims_resolve.\n"
+      "note": "Optional research PR review step, gated by the review_research_pr ingredient. Verdict captured as review_verdict for deferred routing. All paths (skip, success, failure, context-limit) route to audit_claims so both gates complete before any resolution step begins. When on_context_limit or on_failure fires, the capture block does not execute and context.review_verdict remains absent; the recipe engine treats absent context variables as empty string in comparisons, so downstream route_review_resolve safely falls through to route_claims_resolve.\n"
     },
     "audit_claims": {
       "tool": "run_skill",

@@ -421,7 +421,7 @@ def test_research_campaign_ingredients_match_research_yaml():
     assert campaign_recipe.ingredients["issue_url"].default is None
     assert campaign_recipe.ingredients["base_branch"].default == "main"
     assert campaign_recipe.ingredients["review_design"].default == "true"
-    assert campaign_recipe.ingredients["review_pr"].default == "false"
+    assert campaign_recipe.ingredients["review_research_pr"].default == "false"
     assert campaign_recipe.ingredients["audit_claims"].default == "false"
     assert campaign_recipe.ingredients["output_mode"].default == "local"
 
@@ -505,7 +505,7 @@ def test_research_campaign_run_implement_ingredients():
         "issue_url",
         "output_mode",
         "test_check_enabled",
-        "audit",
+        "audit_impl",
     }
     assert d.ingredients["task"] == "${{ inputs.task }}"
     assert d.ingredients["worktree_path"] == "${{ campaign.worktree_path }}"
@@ -521,7 +521,7 @@ def test_research_campaign_run_implement_ingredients():
     assert d.ingredients["issue_url"] == "${{ inputs.issue_url }}"
     assert d.ingredients["output_mode"] == "${{ inputs.output_mode }}"
     assert d.ingredients["test_check_enabled"] == "${{ inputs.test_check_enabled }}"
-    assert d.ingredients["audit"] == "${{ inputs.audit }}"
+    assert d.ingredients["audit_impl"] == "${{ inputs.audit_impl }}"
 
 
 def test_research_campaign_run_implement_capture():
@@ -554,7 +554,7 @@ def test_research_campaign_run_review_ingredients():
         "base_branch",
         "issue_url",
         "output_mode",
-        "review_pr",
+        "review_research_pr",
         "audit_claims",
     }
     assert d.ingredients["task"] == "${{ inputs.task }}"
@@ -562,7 +562,7 @@ def test_research_campaign_run_review_ingredients():
     assert d.ingredients["base_branch"] == "${{ inputs.base_branch }}"
     assert d.ingredients["issue_url"] == "${{ inputs.issue_url }}"
     assert d.ingredients["output_mode"] == "${{ inputs.output_mode }}"
-    assert d.ingredients["review_pr"] == "${{ inputs.review_pr }}"
+    assert d.ingredients["review_research_pr"] == "${{ inputs.review_research_pr }}"
     assert d.ingredients["audit_claims"] == "${{ inputs.audit_claims }}"
     assert (
         d.ingredients["research_dir"]

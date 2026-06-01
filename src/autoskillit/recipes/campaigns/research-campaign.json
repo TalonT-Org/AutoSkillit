@@ -40,7 +40,7 @@
       "description": "When 'true' (the default), run the review-design skill after plan_experiment to validate the experiment plan before execution. When 'false', skip directly to create_worktree.",
       "default": "true"
     },
-    "review_pr": {
+    "review_research_pr": {
       "description": "When 'true', run the review-research-pr skill after the research PR is opened. Defaults to 'false' — the research PR is for human review.",
       "default": "false"
     },
@@ -58,7 +58,7 @@
       "description": "When 'true' (the default), run test_check in the implementation phase. Set to 'false' for de novo worktrees without test infrastructure.\n",
       "default": "true"
     },
-    "audit": {
+    "audit_impl": {
       "description": "When 'true' (the default), run audit-impl after phase iteration to verify all decomposed phases have corresponding implementation commits. Catches silent group abandonment when context_limit fires mid-iteration.\n",
       "default": "true"
     },
@@ -108,7 +108,7 @@
         "issue_url": "${{ inputs.issue_url }}",
         "output_mode": "${{ inputs.output_mode }}",
         "test_check_enabled": "${{ inputs.test_check_enabled }}",
-        "audit": "${{ inputs.audit }}"
+        "audit_impl": "${{ inputs.audit_impl }}"
       },
       "capture": {
         "worktree_path": "${{ result.worktree_path }}",
@@ -137,7 +137,7 @@
         "base_branch": "${{ inputs.base_branch }}",
         "issue_url": "${{ inputs.issue_url }}",
         "output_mode": "${{ inputs.output_mode }}",
-        "review_pr": "${{ inputs.review_pr }}",
+        "review_research_pr": "${{ inputs.review_research_pr }}",
         "audit_claims": "${{ inputs.audit_claims }}"
       },
       "capture": {

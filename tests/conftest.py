@@ -35,16 +35,26 @@ _LAYER_DIRS: frozenset[str] = frozenset(
 
 _SIZE_DIRS: frozenset[str] = frozenset(
     {
+        "arch",
+        "assets",
         "cli",
         "config",
+        "contracts",
         "core",
+        "docs",
         "execution",
         "fleet",
+        "hooks",
+        "infra",
+        "integration",
         "migration",
         "pipeline",
         "planner",
         "recipe",
+        "report",
         "server",
+        "skills",
+        "skills_extended",
         "workspace",
     }
 )

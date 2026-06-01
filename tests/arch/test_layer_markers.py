@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 TESTS_ROOT = Path(__file__).resolve().parent.parent
 
 LAYER_DIRECTORIES: dict[str, str] = {

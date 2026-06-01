@@ -410,7 +410,6 @@ class TestPrepFileParsing:
 
     def test_uses_most_recent_prep_file(self, monkeypatch, tmp_path):
         import os
-        import time
 
         monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
         monkeypatch.chdir(tmp_path)
@@ -428,7 +427,6 @@ class TestPrepFileParsing:
             encoding="utf-8",
         )
         os.utime(old, (1000, 1000))
-        time.sleep(0.05)
         os.utime(new, (2000, 2000))
         body = _setup_body_file(tmp_path, "No closing reference here")
         cmd = f"gh pr create --body-file {body} --base main"

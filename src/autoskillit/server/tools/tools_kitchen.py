@@ -929,10 +929,7 @@ async def lock_ingredients(
             )
 
         active_steps = getattr(ctx, "active_recipe_steps", None) or {}
-        _raw_decl = getattr(ctx, "active_recipe_ingredients", None)
-        declared_ingredients: frozenset[str] | None = (
-            _raw_decl if isinstance(_raw_decl, frozenset) else None
-        )
+        declared_ingredients = ctx.active_recipe_ingredients
         if declared_ingredients is not None:
             all_supplied_keys: set[str] = set()
             if locked:

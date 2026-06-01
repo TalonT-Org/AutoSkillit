@@ -24,6 +24,7 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _CONTEXT_TEMPLATE_RE = re.compile(r"\$\{\{\s*context\.[^}]+\}\}")
 _AUTOSKILLIT_TEMP_RE = re.compile(r"\{\{AUTOSKILLIT_TEMP\}\}")
+_AUTOSKILLIT_TEMP_LITERAL_RE = re.compile(r"\.autoskillit/temp(?=/|$)")
 
 
 def _static_base_prefix(output_dir: str) -> str:
@@ -49,8 +50,10 @@ def _has_iteration_scoping(output_dir: str) -> bool:
 
 
 def _normalise_path(path: str) -> str:
-    """Normalise a path for comparison by replacing {{AUTOSKILLIT_TEMP}} uniformly."""
-    return _AUTOSKILLIT_TEMP_RE.sub("{{AUTOSKILLIT_TEMP}}", path).rstrip("/")
+    """Normalise a path for comparison by replacing both template and resolved temp prefixes."""
+    path = _AUTOSKILLIT_TEMP_LITERAL_RE.sub("{{AUTOSKILLIT_TEMP}}", path)
+    path = _AUTOSKILLIT_TEMP_RE.sub("{{AUTOSKILLIT_TEMP}}", path)
+    return path.rstrip("/")
 
 
 @semantic_rule(

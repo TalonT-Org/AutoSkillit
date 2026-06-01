@@ -6,10 +6,14 @@ import os
 import time
 from pathlib import Path
 
+import pytest
+
 from tests._test_filter import (
     FilterMode,
     build_test_scope,
 )
+
+pytestmark = [pytest.mark.medium]
 
 
 class TestBuildTestScopeStep7:

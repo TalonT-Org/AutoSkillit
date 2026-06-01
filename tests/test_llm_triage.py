@@ -10,6 +10,8 @@ import pytest
 from autoskillit.execution.backends import ClaudeCodeBackend
 from autoskillit.recipe.contracts import StaleItem
 
+pytestmark = [pytest.mark.medium]
+
 # ---------------------------------------------------------------------------
 # T-P1-7-A: SKILL.md cached per unique skill
 # ---------------------------------------------------------------------------

@@ -18,6 +18,8 @@ from tests._test_filter import (
     build_test_scope,
 )
 
+pytestmark = [pytest.mark.medium]
+
 # ---------------------------------------------------------------------------
 # Content-Aware Bucket A Tests (T1)
 # ---------------------------------------------------------------------------

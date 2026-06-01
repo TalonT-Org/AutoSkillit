@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests._test_filter import FilterMode, FullRunReason, build_test_scope
+
+pytestmark = [pytest.mark.medium]
 
 
 def test_scope_script_py_manifest_match(tmp_path: Path) -> None:

@@ -14,6 +14,8 @@ from tests._test_filter import (
     build_test_scope,
 )
 
+pytestmark = [pytest.mark.medium]
+
 
 class TestCoreUniversalModules:
     """REQ-CORE-001: _CORE_UNIVERSAL_MODULES must exist and contain the right stems."""

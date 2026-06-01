@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.types import SubprocessResult, TerminationReason
+
+pytestmark = [pytest.mark.medium]
 
 
 def test_tool_ctx_provides_isolated_gate(tool_ctx):

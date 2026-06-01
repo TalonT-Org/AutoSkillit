@@ -1409,7 +1409,7 @@ def _write_skill_and_run_rules(tmp_path: Path, skill_md_content: str) -> list[ob
     recipe_path = tmp_path / "recipe.yaml"
     recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
     recipe = load_recipe(recipe_path)
-    with patch.object(_rsc, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         return run_semantic_rules(recipe)
 
 

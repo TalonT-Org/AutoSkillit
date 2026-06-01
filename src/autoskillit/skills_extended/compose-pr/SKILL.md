@@ -113,7 +113,7 @@ For each path:
 
 If `all_diagram_paths` is empty or all diagrams fail → `validated_diagrams = []`.
 
-**HARD RULE — Do not generate diagrams.** Every mermaid block in the PR body must originate from a file in `all_diagram_paths` that passed ★/● validation above. If `validated_diagrams` is empty, omit the entire Architecture Impact section — no placeholder, no generated diagrams, no mermaid blocks of any kind.
+**HARD RULE — Do not generate, fabricate, or create diagrams.** Every mermaid block in the PR body must originate from a file in `all_diagram_paths` that passed ★/● validation above. If `validated_diagrams` is empty, omit the entire Architecture Impact section — no placeholder, no generated, fabricated, or created diagrams, no mermaid blocks of any kind.
 
 ### Step 3: Compose PR Body (SINGLE MESSAGE)
 

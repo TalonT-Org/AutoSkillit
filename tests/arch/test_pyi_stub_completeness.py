@@ -33,6 +33,7 @@ def test_pyi_stub_covers_submodule_public_symbols() -> None:
             names = {alias.name for alias in node.names}
             stub_by_submod.setdefault(node.module, set()).update(names)
 
+    assert hasattr(core, "_PRIVATE_REEXPORTS"), "core._PRIVATE_REEXPORTS must exist"
     private_reexports: frozenset[str] = getattr(core, "_PRIVATE_REEXPORTS")
 
     missing: list[str] = []

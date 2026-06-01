@@ -107,36 +107,43 @@ async def reset_dispatch_artifacts(
     report = ResetReport(dispatch_name=dispatch.name, branch_name=dispatch.name)
     remove_labels, add_labels = compute_reset_labels(target_state)
 
-    if dispatch.sidecar_path is None or github_client is None:
-        report.labels_reset = True
-    else:
+    sidecar_result = None
+    if dispatch.sidecar_path is not None:
         try:
             sidecar_result = read_sidecar_from_path(Path(dispatch.sidecar_path))
         except Exception as exc:
             logger.warning("sidecar_read_failed", error=str(exc))
             report.errors.append(f"sidecar_read: {exc}")
-            sidecar_result = None
 
-        if sidecar_result is not None and sidecar_result.source == SidecarReadStatus.FOUND:
-            all_ok = True
-            for entry in sidecar_result.entries:
-                try:
-                    owner, repo, number = _parse_issue_ref(entry.issue_url)
-                except ValueError as exc:
-                    report.errors.append(f"parse_issue_ref({entry.issue_url}): {exc}")
+    if dispatch.sidecar_path is None:
+        report.labels_reset = True
+    elif github_client is None:
+        report.labels_reset = False
+        report.errors.append("github_client unavailable — label swap skipped")
+    elif sidecar_result is not None and sidecar_result.source == SidecarReadStatus.FOUND:
+        all_ok = True
+        for entry in sidecar_result.entries:
+            try:
+                owner, repo, number = _parse_issue_ref(entry.issue_url)
+            except ValueError as exc:
+                report.errors.append(f"parse_issue_ref({entry.issue_url}): {exc}")
+                all_ok = False
+                continue
+            try:
+                result = await github_client.swap_labels(
+                    owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
+                )
+                if not result.get("success"):
                     all_ok = False
-                    continue
-                try:
-                    result = await github_client.swap_labels(
-                        owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
+                    logger.warning(
+                        "swap_labels_unsuccessful", issue=entry.issue_url, result=result
                     )
-                    if not result.get("success"):
-                        all_ok = False
-                except Exception as exc:
-                    logger.warning("swap_labels_failed", issue=entry.issue_url, error=str(exc))
-                    report.errors.append(f"swap_labels({entry.issue_url}): {exc}")
-                    all_ok = False
-            report.labels_reset = all_ok
+                    report.errors.append(f"swap_labels_unsuccessful({entry.issue_url}): {result}")
+            except Exception as exc:
+                logger.warning("swap_labels_failed", issue=entry.issue_url, error=str(exc))
+                report.errors.append(f"swap_labels({entry.issue_url}): {exc}")
+                all_ok = False
+        report.labels_reset = all_ok
 
     worktree_path = worktrees_dir / dispatch.name
     try:
@@ -154,14 +161,8 @@ async def reset_dispatch_artifacts(
         report.errors.append(f"remove_sidecar: {exc}")
 
     pr_urls: list[str] = []
-    if dispatch.sidecar_path is not None:
-        try:
-            sr = read_sidecar_from_path(Path(dispatch.sidecar_path))
-            if sr.source == SidecarReadStatus.FOUND:
-                pr_urls = [e.pr_url for e in sr.entries if e.pr_url is not None]
-        except Exception as exc:
-            logger.warning("sidecar_pr_read_failed", error=str(exc))
-            report.errors.append(f"sidecar_pr_read: {exc}")
+    if sidecar_result is not None and sidecar_result.source == SidecarReadStatus.FOUND:
+        pr_urls = [e.pr_url for e in sidecar_result.entries if e.pr_url is not None]
 
     if not pr_urls and dispatch.sidecar_path is not None:
         try:

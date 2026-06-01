@@ -119,7 +119,9 @@ def test_deny_when_no_tracking_branch():
             (0, ".git"),  # rev-parse --git-dir
             (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
             (128, ""),  # rev-list --count (no upstream)
-            (2, ""),  # ls-remote --exit-code origin (no matching ref)
+            (128, ""),  # _resolve_push_remote: get-url upstream (not found)
+            (0, "https://github.com/example/repo.git"),  # _resolve_push_remote: get-url origin
+            (2, ""),  # ls-remote --exit-code resolved_remote (no matching ref)
         ],
     )
     data = json.loads(out)
@@ -192,7 +194,9 @@ def test_approve_when_no_upstream_but_sha_matches_remote():
             (0, ".git"),  # rev-parse --git-dir
             (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
             (128, ""),  # rev-list --count @{upstream}..HEAD → no upstream
-            (0, f"{sha}\trefs/heads/feat/thing\n"),  # ls-remote --exit-code origin
+            (128, ""),  # _resolve_push_remote: get-url upstream (not found)
+            (0, "https://github.com/example/repo.git"),  # _resolve_push_remote: get-url origin
+            (0, f"{sha}\trefs/heads/feat/thing\n"),  # ls-remote --exit-code resolved_remote
             (0, sha),  # rev-parse HEAD → matches remote
         ],
     )
@@ -208,7 +212,9 @@ def test_deny_when_no_upstream_and_not_on_remote():
             (0, ".git"),  # rev-parse --git-dir
             (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
             (128, ""),  # rev-list --count → no upstream
-            (2, ""),  # ls-remote --exit-code origin (rc=2: no matching ref)
+            (128, ""),  # _resolve_push_remote: get-url upstream (not found)
+            (0, "https://github.com/example/repo.git"),  # _resolve_push_remote: get-url origin
+            (2, ""),  # ls-remote --exit-code resolved_remote (rc=2: no matching ref)
         ],
     )
     data = json.loads(out)

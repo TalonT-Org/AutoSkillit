@@ -40,7 +40,7 @@ decomposed PR flow (prepare → run_arch_lenses → compose).
   Using ONLY classDef styles from the mermaid skill (no invented colors).
 - Run subagents in the background (`run_in_background: true` is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
-- Re-derive, override, or substitute `task_title` from any source other than the prep file's `## Title` section. The title in the prep file is authoritative — do NOT use issue metadata, branch names, or ambient context to modify it.
+- NEVER re-derive, override, or substitute `task_title` from any source other than the prep file's `## Title` section. The title in the prep file is authoritative — do NOT use issue metadata, branch names, or ambient context to modify it.
 
 **ALWAYS:**
 - Check `gh auth status` before attempting GitHub operations

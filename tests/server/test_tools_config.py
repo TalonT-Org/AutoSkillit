@@ -7,6 +7,7 @@ import json
 import pytest
 
 from autoskillit.config import AutomationConfig
+from autoskillit.fleet._semaphore import FleetSemaphore
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -28,6 +29,7 @@ async def test_configure_fleet_writes_overlay(tmp_path, monkeypatch) -> None:
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.config = AutomationConfig()
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -50,7 +52,6 @@ async def test_configure_fleet_writes_overlay(tmp_path, monkeypatch) -> None:
 @pytest.mark.anyio
 async def test_configure_fleet_replaces_semaphore(tmp_path, monkeypatch) -> None:
     """configure_fleet replaces ctx.fleet_lock with resized FleetSemaphore."""
-    from autoskillit.fleet._semaphore import FleetSemaphore
     from autoskillit.server import _state
 
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
@@ -91,6 +92,7 @@ async def test_configure_fleet_preserves_existing_overlay(tmp_path, monkeypatch)
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.config = AutomationConfig()
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -240,6 +242,7 @@ async def test_configure_fleet_no_params_returns_defaults(tmp_path, monkeypatch)
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.config = AutomationConfig()
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
@@ -309,7 +312,6 @@ async def test_configure_fleet_semaphore_null_fleet_lock(tmp_path, monkeypatch) 
 @pytest.mark.anyio
 async def test_configure_fleet_snapshot_matches_live_semaphore(tmp_path, monkeypatch) -> None:
     """Snapshot max_concurrent_dispatches must equal ctx.fleet_lock.max_concurrent."""
-    from autoskillit.fleet._semaphore import FleetSemaphore
     from autoskillit.server import _state
 
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
@@ -339,7 +341,6 @@ async def test_configure_fleet_acquire_timeout_only_updates_semaphore(
     tmp_path, monkeypatch
 ) -> None:
     """acquire_timeout_sec-only call must update the live semaphore."""
-    from autoskillit.fleet._semaphore import FleetSemaphore
     from autoskillit.server import _state
 
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
@@ -367,7 +368,6 @@ async def test_configure_fleet_acquire_timeout_only_updates_semaphore(
 @pytest.mark.anyio
 async def test_configure_fleet_snapshot_reads_semaphore_not_overlay(tmp_path, monkeypatch) -> None:
     """Snapshot acquire_timeout_sec must reflect the live semaphore's carried-forward timeout."""
-    from autoskillit.fleet._semaphore import FleetSemaphore
     from autoskillit.server import _state
 
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
@@ -399,7 +399,6 @@ async def test_configure_fleet_close_reopen_resets_semaphore_to_defaults(
     """After close/reopen, semaphore must return to config defaults."""
     from unittest.mock import patch
 
-    from autoskillit.fleet._semaphore import FleetSemaphore
     from autoskillit.server import _state
 
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
@@ -452,7 +451,6 @@ async def test_configure_fleet_close_reopen_resets_semaphore_to_defaults(
 )
 async def test_configure_fleet_snapshot_semaphore_invariant(tmp_path, monkeypatch, calls) -> None:
     """Snapshot must always match the live semaphore for semaphore-managed fields."""
-    from autoskillit.fleet._semaphore import FleetSemaphore
     from autoskillit.server import _state
 
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)

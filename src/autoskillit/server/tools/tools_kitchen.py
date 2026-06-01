@@ -316,12 +316,15 @@ def _close_kitchen_handler() -> None:
         overlay_path.unlink(missing_ok=True)
     except OSError:
         logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
-    from autoskillit.fleet import FleetSemaphore  # noqa: PLC0415
+    try:
+        from autoskillit.fleet import FleetSemaphore  # noqa: PLC0415
 
-    ctx.fleet_lock = FleetSemaphore(
-        max_concurrent=ctx.config.fleet.max_concurrent_dispatches,
-        timeout=ctx.config.fleet.acquire_timeout_sec,
-    )
+        ctx.fleet_lock = FleetSemaphore(
+            max_concurrent=ctx.config.fleet.max_concurrent_dispatches,
+            timeout=ctx.config.fleet.acquire_timeout_sec,
+        )
+    except (TypeError, ValueError):
+        logger.warning("fleet_lock_reset_skipped")
     tracker_dir = _pipeline_tracker_dir(ctx.project_dir)
     try:
         if tracker_dir.is_dir():

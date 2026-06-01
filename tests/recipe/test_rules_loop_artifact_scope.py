@@ -88,7 +88,7 @@ def test_rule_does_not_fire_when_output_dir_is_iter_scoped() -> None:
 
 
 def test_rule_does_not_fire_for_run_python_in_cycle_with_static_output_dir() -> None:
-    """Rule does NOT fire for run_python steps (they use atomic_write, not the Write tool)."""
+    """Rule does NOT fire for run_python steps (run_python is not in SKILL_TOOLS)."""
     recipe = _make_recipe(
         {
             "start": RecipeStep(

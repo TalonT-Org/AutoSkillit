@@ -219,7 +219,7 @@ from autoskillit.recipe.validator import (  # noqa: E402
     validate_recipe_structure,
 )
 
-_reg._finalize_registry()  # pyright: ignore[reportAttributeAccessIssue]
+_reg._finalize_registry()  # pyright: ignore[reportAttributeAccessIssue]  # lazy-registry: method added by _register_rule_module() side effects
 del _reg
 
 __all__ = [

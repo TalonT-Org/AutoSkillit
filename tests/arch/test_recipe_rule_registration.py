@@ -71,7 +71,7 @@ def test_load_cache_entry_has_rule_registry_hash_guard() -> None:
 def test_rule_registry_hash_nonempty_after_recipe_import() -> None:
     """RULE_REGISTRY_HASH must be non-empty after `import autoskillit.recipe`."""
     from autoskillit.recipe.registry import (
-        RULE_REGISTRY_HASH,  # pyright: ignore[reportAttributeAccessIssue]
+        RULE_REGISTRY_HASH,  # pyright: ignore[reportAttributeAccessIssue]  # lazy-registry: global-mutated var
     )
 
     assert RULE_REGISTRY_HASH, (

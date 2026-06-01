@@ -81,6 +81,7 @@ def test_backend_capabilities_field_count():
         "required_session_files",
         "session_dir_symlinks",
         "applicable_guards",
+        "mcp_env_forward_vars",
     }
     assert str_fields == {"min_version", "version_check_command", "process_name", "skills_subdir"}
     assert tuple_fields == {"env_denylist_prefixes"}
@@ -115,6 +116,7 @@ def test_backend_capabilities_field_names_locked():
         "process_name",
         "skills_subdir",
         "supports_tool_list_changed",
+        "mcp_env_forward_vars",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected
@@ -148,10 +150,11 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.process_name == "claude"
     assert CLAUDE_CODE_CAPABILITIES.skills_subdir == ".claude/skills"
     assert CLAUDE_CODE_CAPABILITIES.supports_tool_list_changed is True
+    assert CLAUDE_CODE_CAPABILITIES.mcp_env_forward_vars == frozenset()
 
 
 def test_backend_capabilities_frozenset_defaults():
-    """Four new frozenset[str] fields default to frozenset()."""
+    """Five new frozenset[str] fields default to frozenset()."""
     from autoskillit.core import BackendCapabilities
 
     instance = BackendCapabilities(
@@ -172,6 +175,7 @@ def test_backend_capabilities_frozenset_defaults():
         "required_session_files",
         "session_dir_symlinks",
         "applicable_guards",
+        "mcp_env_forward_vars",
     }
     field_names = {f.name for f in dataclasses.fields(instance)}
     hints = typing.get_type_hints(BackendCapabilities)

@@ -325,6 +325,7 @@ class CodexBackend:
             version_check_command="codex --version",
             process_name="codex",
             skills_subdir="skills",
+            mcp_env_forward_vars=frozenset({MCP_CLIENT_BACKEND_ENV_VAR}),
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
@@ -656,7 +657,9 @@ class CodexBackend:
         for d in add_dirs:
             builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
         base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        merged_extras: dict[str, str] = dict(env_extras) if env_extras else {}
+        merged_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        if env_extras:
+            merged_extras.update(env_extras)
         merged_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         if add_dirs:
             merged_extras.setdefault("CODEX_HOME", str(add_dirs[0]))

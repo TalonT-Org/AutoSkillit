@@ -25,6 +25,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_audit_feature_gates_skill.py` | Structural integrity tests for the audit-feature-gates skill |
 | `test_eval_agent_skill.py` | Structural integrity tests for the eval-agent skill |
 | `test_env_symmetry.py` | Architectural invariant: skill and food-truck builders must set the same required base env vars |
+| `test_mcp_env_forward_coverage.py` | Architectural invariant: mcp_env_forward_vars must appear in CmdSpec.env for all cmd-builders |
 | `test_judge_eval_skill.py` | Structural integrity tests for the judge-eval skill |
 | `test_agent_prompt_structure.py` | Structural validation: agent definition MUST-gate fallback and empty-array documentation |
 | `test_boot_step_symmetry.py` | AST guard: both boot functions (_fleet_auto_gate_boot, _food_truck_auto_gate_boot) must call sweep_stale_dispatch_labels |

@@ -82,6 +82,8 @@ class BackendCapabilities:
     process_name: str = ""
     # Relative path from session root to the skills directory
     skills_subdir: str = ""
+    # Env vars that must appear in CmdSpec.env for all cmd-builders (MCP forwarding)
+    mcp_env_forward_vars: frozenset[str] = field(default_factory=frozenset)
 
 
 CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(

@@ -149,6 +149,13 @@ class TestCodexBackend:
     def test_capabilities_skills_subdir(self) -> None:
         assert CodexBackend().capabilities.skills_subdir == "skills"
 
+    def test_capabilities_mcp_env_forward_vars(self) -> None:
+        from autoskillit.core import MCP_CLIENT_BACKEND_ENV_VAR
+
+        assert CodexBackend().capabilities.mcp_env_forward_vars == frozenset(
+            {MCP_CLIENT_BACKEND_ENV_VAR}
+        )
+
     def test_binary_name(self) -> None:
         assert CodexBackend().binary_name() == "codex"
 

@@ -73,7 +73,7 @@ commit protocol during the fix loop.
 
 **Before every test run and before emitting structured output tokens:**
 1. Run `git -C {worktree_path} status --porcelain`
-2. If any files are dirty: `git -C {worktree_path} add -- <files you modified> && git -C {worktree_path} commit -m "fix: commit pending changes before context limit"`
+2. If any files are dirty: `git -C {worktree_path} add -- <files you modified> && git -C {worktree_path} commit -m "fix: commit pending changes before context limit"` — do NOT use `--amend`.
 3. Only then proceed with the test or structured output
 
 This ensures that even if context exhaustion interrupts the fix loop, all applied
@@ -121,7 +121,7 @@ Read the configured test command(s) from `.autoskillit/config.yaml`: check `test
 2. If output is non-empty (dirty tree):
    - If more than 10 files are dirty, log a warning listing all files before staging
    - Run `git -C {worktree_path} add -- <files you modified>` (never use `add -A`)
-   - Run `git -C {worktree_path} commit -m "chore: commit auto-generated files"`
+   - Run `git -C {worktree_path} commit -m "chore: commit auto-generated files"` — do NOT use `--amend`.
    - Log: "Committed {N} uncommitted file(s) before test run"
 3. If output is empty: continue (worktree is clean)
 
@@ -238,7 +238,7 @@ the failure could not be reproduced locally, which is a flaky-test signal.
 3. Commit ALL modified files (not just intentionally changed ones):
    a. If the project has pre-commit hooks, run `pre-commit run --all-files` first
    b. Run `git -C {worktree_path} status --porcelain` to capture the full set of modified files, including any auto-fixed by hooks
-   c. Stage and commit: `git -C {worktree_path} add -- <files you modified> && git -C {worktree_path} commit -m "fix: {what was wrong and why}"`
+   c. Stage and commit: `git -C {worktree_path} add -- <files you modified> && git -C {worktree_path} commit -m "fix: {what was wrong and why}"` — do NOT use `--amend`.
    d. Run `git -C {worktree_path} status --porcelain` again to verify the tree is clean; if any files remain dirty, stage and commit them too
 4. Write a fix log entry to `{{AUTOSKILLIT_TEMP}}/resolve-failures/` (relative to
    the current working directory) to satisfy the write_behavior contract

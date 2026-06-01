@@ -66,7 +66,7 @@ not yet committed. The recipe routes to `on_context_limit`, preserving the workt
 
 **Before emitting structured output tokens:**
 1. Run `git -C {WORKTREE_PATH} status --porcelain`
-2. If any files are dirty: `git -C {WORKTREE_PATH} add -- <files you modified> && git -C {WORKTREE_PATH} commit -m "chore: commit pending changes before context limit"`
+2. If any files are dirty: `git -C {WORKTREE_PATH} add -- <files you modified> && git -C {WORKTREE_PATH} commit -m "chore: commit pending changes before context limit"` — do NOT use `--amend`.
 3. Only then emit the `worktree_path`, `branch_name`, and `phases_implemented` tokens
 
 This ensures that all implementation progress is committed and the downstream

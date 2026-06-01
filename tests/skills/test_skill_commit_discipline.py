@@ -37,13 +37,19 @@ _NEW_COMMIT_RE = re.compile(
 )
 
 
+_GIT_COMMIT_INSTRUCTION_RE = re.compile(
+    r"git\s+(?:-C\s+\S+\s+)?commit\s+-m",
+)
+
+
 @pytest.mark.parametrize("skill_dir", _SKILL_DIRS, ids=lambda d: d.name)
 def test_skill_commit_prohibits_amend(skill_dir: Path) -> None:
-    """Skills with 'git commit' instructions must explicitly prohibit --amend or require
-    new commits.  Skills with no commit instructions are considered low-risk and pass."""
+    """Skills with 'git commit -m' instructions must explicitly prohibit --amend or require
+    new commits.  Skills with no commit instructions (or only descriptive mentions without
+    -m flag) are considered low-risk and pass."""
     text = (skill_dir / "SKILL.md").read_text()
 
-    if "git commit" not in text:
+    if not _GIT_COMMIT_INSTRUCTION_RE.search(text):
         return
 
     has_prohibition = bool(_AMEND_PROHIBITION_RE.search(text))

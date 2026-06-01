@@ -22,6 +22,7 @@ Mandatory instructions for AI-assisted development in this repository.
   * **Naming convention — `*Def` vs `*Spec` suffixes**:
     - `*Def` — static definition of a registered entity (e.g., `HookDef`, `PackDef`, `FeatureDef`, `RuleDef`). Typically a `NamedTuple` or `@dataclass(frozen=True)`, used as elements in a registry or lookup table. Typically lives in `core/`; stdlib-only types importable from hook scripts may live at the package root (e.g., `HookDef` in `hook_registry.py`).
     - `*Spec` — behavioral specification or validation rule (e.g., `ExperimentTypeSpec`, `WriteBehaviorSpec`). Typically a `@dataclass` or `TypedDict` configuring a pipeline or validation stage. Typically lives in `recipe/` or domain layers; `*Spec` types used by IL-0 core protocols live in `core/` (e.g., `WriteBehaviorSpec` in `core/types/_type_results.py`).
+  * **Commit discipline**: Always create NEW commits. Never use `git commit --amend`, `--fixup`, or `--squash` unless the active recipe or SKILL.md explicitly requires it. This applies to all session types including headless sessions.
 
 ## CLAUDE.md Modifications
 

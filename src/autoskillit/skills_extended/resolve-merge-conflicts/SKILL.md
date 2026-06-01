@@ -273,6 +273,13 @@ If pre-commit fails, apply all auto-fixable hooks in a single pass before re-run
 After applying all applicable fixes, re-stage any remaining modified files with
 `git -C {worktree_path} add -u` and re-run `pre-commit run --all-files`.
 
+When `pre-commit run --all-files` passes after applying fixes, commit the staged changes as
+a new commit — **NEVER use `--amend`**:
+
+```bash
+git -C {worktree_path} commit -m 'fix: resolve pre-commit violations'
+```
+
 If `pre-commit run --all-files` still fails after this second pass, check whether all
 flagged violations are pre-existing on the integration target before escalating:
 

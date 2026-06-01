@@ -175,6 +175,11 @@ cd "${WORKTREE_PATH}" && pre-commit run --all-files
 
 Fix any formatting or linting issues. Do NOT run the full test suite.
 
+If pre-commit auto-fixes files, stage them and create a **new** commit (do NOT use `--amend`):
+```bash
+git add -u && git commit -m 'style: apply pre-commit auto-fixes'
+```
+
 ### Step 5.5: Completeness Self-Check (Conflict Resolution Plans Only)
 
 If the plan contains a `PR Changes Inventory` section, perform a completeness check before
@@ -225,4 +230,4 @@ off-recipe.
 
 - **Worktree creation fails** — check `git worktree list`, suggest `git worktree prune`
 - **Phase fails** — report which phase and why, offer to fix/retry, skip (if optional), or abort. Do NOT clean up the worktree.
-- **Pre-commit fails** — fix formatting/linting issues and re-commit
+- **Pre-commit fails** — fix formatting/linting issues and create a new commit (do NOT use `--amend`)

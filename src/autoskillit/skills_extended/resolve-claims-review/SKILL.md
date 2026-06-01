@@ -314,6 +314,7 @@ git -C "$worktree_path" add {file}
 # If pre-commit hooks exist:
 pre-commit run --files {file} && git -C "$worktree_path" add {file}
 git -C "$worktree_path" commit -m "fix(claims-review): {description} [{dimension}]"
+# Do NOT use --amend — always create new commits.
 ```
 Append `thread_node_id` to `addressed_thread_ids` (if not `None`).
 

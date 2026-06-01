@@ -100,7 +100,6 @@ def test_session_skill_manager_creates_ephemeral_dir(
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
         backend = MagicMock()
-        backend.name = "codex"
         backend.capabilities = _CODEX_CAPABILITIES
         backend.ensure_pre_launch.return_value = []
 
@@ -140,7 +139,6 @@ def test_session_manager_injects_disable_for_tier2(
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
         backend = MagicMock()
-        backend.name = "codex"
         backend.capabilities = _CODEX_CAPABILITIES
         backend.ensure_pre_launch.return_value = []
 
@@ -345,12 +343,11 @@ def test_init_session_backend_none_uses_claude_skills_subdir(tmp_path: Path) -> 
 def test_init_session_codex_backend_uses_codex_skills_subdir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When backend.name == 'codex', skills_base resolves to skills/ (not .claude/skills/)."""
+    """When capabilities.skills_subdir == 'skills', skills_base resolves to skills/."""
 
     from autoskillit.workspace.session_skills import CODEX_SKILLS_SUBDIR
 
     codex_backend = MagicMock()
-    codex_backend.name = "codex"
     codex_backend.capabilities = _CODEX_CAPABILITIES
     codex_backend.ensure_pre_launch.return_value = []
 

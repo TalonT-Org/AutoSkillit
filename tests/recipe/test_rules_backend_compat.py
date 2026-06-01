@@ -135,6 +135,19 @@ steps:
 """
 
 
+class _FakeSkillResolver:
+    """Minimal resolver satisfying both SkillLister and SkillResolver protocols."""
+
+    def __init__(self, skill_info: SimpleNamespace | None) -> None:
+        self._info = skill_info
+
+    def list_all(self) -> list[SimpleNamespace]:
+        return [self._info] if self._info else []
+
+    def resolve(self, name: str) -> SimpleNamespace | None:
+        return self._info if self._info and self._info.name == name else None
+
+
 class TestBackendNameThreadingAPI:
     """Integration tests verifying backend_name reaches semantic rules via API."""
 
@@ -149,33 +162,27 @@ class TestBackendNameThreadingAPI:
         (recipes_dir / "test-compat.yaml").write_text(_RECIPE_WITH_SKILL_STEP_YAML)
 
         skill_info = _make_skill_info()
+        resolver = _FakeSkillResolver(skill_info)
 
-        from autoskillit.workspace import DefaultSkillResolver
-
-        monkeypatch.setattr(DefaultSkillResolver, "list_all", lambda self: [skill_info])
-        monkeypatch.setattr(DefaultSkillResolver, "resolve", lambda self, name: skill_info)
-
-        result = api_mod.load_and_validate("test-compat", tmp_path, backend_name="codex")
+        result = api_mod.load_and_validate(
+            "test-compat", tmp_path, backend_name="codex", lister=resolver
+        )
 
         semantic = result.get("semantic", [])
         compat_findings = [f for f in semantic if f.get("rule") == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
         assert compat_findings[0]["severity"] == "error"
 
-    def test_validate_from_path_threads_backend_name(self, tmp_path, monkeypatch):
+    def test_validate_from_path_threads_backend_name(self, tmp_path):
         from autoskillit.recipe._api_listing import validate_from_path
 
         recipe_path = tmp_path / "test-compat.yaml"
         recipe_path.write_text(_RECIPE_WITH_SKILL_STEP_YAML)
 
         skill_info = _make_skill_info()
+        resolver = _FakeSkillResolver(skill_info)
 
-        from autoskillit.workspace import DefaultSkillResolver
-
-        monkeypatch.setattr(DefaultSkillResolver, "list_all", lambda self: [skill_info])
-        monkeypatch.setattr(DefaultSkillResolver, "resolve", lambda self, name: skill_info)
-
-        result = validate_from_path(recipe_path, backend_name="codex")
+        result = validate_from_path(recipe_path, backend_name="codex", lister=resolver)
 
         semantic = result.get("semantic", [])
         compat_findings = [f for f in semantic if f.get("rule") == "backend-incompatible-skill"]
@@ -192,14 +199,10 @@ class TestBackendNameThreadingAPI:
         (recipes_dir / "test-compat.yaml").write_text(_RECIPE_WITH_SKILL_STEP_YAML)
 
         skill_info = _make_skill_info()
+        resolver = _FakeSkillResolver(skill_info)
 
-        from autoskillit.workspace import DefaultSkillResolver
-
-        monkeypatch.setattr(DefaultSkillResolver, "list_all", lambda self: [skill_info])
-        monkeypatch.setattr(DefaultSkillResolver, "resolve", lambda self, name: skill_info)
-
-        api_mod.load_and_validate("test-compat", tmp_path, backend_name=None)
-        api_mod.load_and_validate("test-compat", tmp_path, backend_name="codex")
+        api_mod.load_and_validate("test-compat", tmp_path, backend_name=None, lister=resolver)
+        api_mod.load_and_validate("test-compat", tmp_path, backend_name="codex", lister=resolver)
 
         cache = cache_mod._LOAD_CACHE
         assert len(cache._store) == 2

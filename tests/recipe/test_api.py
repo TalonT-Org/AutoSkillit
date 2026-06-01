@@ -421,6 +421,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         temp_dir=None,
         temp_dir_relpath=None,
         defer_unresolved=False,
+        backend_name=None,
     ):
         captured["recipe_info"] = recipe_info
         captured["recipe_list"] = recipe_list
@@ -435,6 +436,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             temp_dir=temp_dir,
             temp_dir_relpath=temp_dir_relpath,
             defer_unresolved=defer_unresolved,
+            backend_name=backend_name,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)

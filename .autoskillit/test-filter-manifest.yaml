@@ -231,6 +231,11 @@ src/autoskillit/core/__init__.pyi:
   - arch/
   - contracts/
 
+src/autoskillit/core/_version_snapshot.pyi:
+  - core/
+  - arch/
+  - contracts/
+
 tests/**/CLAUDE.md: []
 
 # Eval framework files

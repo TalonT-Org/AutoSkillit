@@ -350,6 +350,15 @@ class CodexBackend:
     def binary_name(self) -> str:
         return "codex"
 
+    def translate_model(self, model: str) -> str:
+        from autoskillit.core import (
+            CODEX_MODEL_ALIASES,
+            strip_context_window_suffix,
+        )
+
+        base = strip_context_window_suffix(model)
+        return CODEX_MODEL_ALIASES.get(base, base)
+
     def version_cmd(self) -> tuple[str, ...]:
         return ("codex", "--version")
 
@@ -369,7 +378,7 @@ class CodexBackend:
             "workspace-write",
         ]
         if model:
-            cmd += [CodexFlags.MODEL, model]
+            cmd += [CodexFlags.MODEL, self.translate_model(model)]
         for d in add_dirs:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
@@ -506,7 +515,7 @@ class CodexBackend:
             "never",
         ]
         if model:
-            cmd += [CodexFlags.MODEL, model]
+            cmd += [CodexFlags.MODEL, self.translate_model(model)]
         if resume_session_id:
             cmd.append(CodexFlags.RESUME_SUBCOMMAND)
             cmd.append(resume_session_id)
@@ -611,7 +620,7 @@ class CodexBackend:
             "web_search=disabled",
         ]
         if model:
-            cmd += [CodexFlags.MODEL, model]
+            cmd += [CodexFlags.MODEL, self.translate_model(model)]
         if resume_session_id:
             cmd.append(CodexFlags.RESUME_SUBCOMMAND)
             cmd.append(resume_session_id)
@@ -649,7 +658,7 @@ class CodexBackend:
                 builder.mode_flag(CodexFlags.RESUME_SUBCOMMAND)
                 builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
         if model:
-            builder.kv_flag(CodexFlags.MODEL, model)
+            builder.kv_flag(CodexFlags.MODEL, self.translate_model(model))
         if system_prompt is not None and isinstance(resume_spec, NoResume):
             builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, f"developer_instructions={system_prompt}")
         if initial_prompt is not None:

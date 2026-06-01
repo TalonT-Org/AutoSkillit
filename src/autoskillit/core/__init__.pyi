@@ -130,9 +130,11 @@ from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
+from .types import CLAUDE_MODEL_ALIASES as CLAUDE_MODEL_ALIASES
 from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_MARKER
 from .types import CODEX_INTERACTIVE_REQUIRED_ENV as CODEX_INTERACTIVE_REQUIRED_ENV
 from .types import CODEX_MCP_ENV_FORWARD_VARS as CODEX_MCP_ENV_FORWARD_VARS
+from .types import CODEX_MODEL_ALIASES as CODEX_MODEL_ALIASES
 from .types import CODEX_SCHEMA_VERSION as CODEX_SCHEMA_VERSION
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
@@ -327,5 +329,6 @@ from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
+from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
 from .types import validate_label_transition as validate_label_transition

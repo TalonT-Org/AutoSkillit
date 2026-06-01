@@ -67,7 +67,6 @@ _MODEL_SHORT_ALIASES: dict[str, str] = {
 
 
 _DATE_SUFFIX_RE = _re.compile(r"-\d{8}$")
-_CONTEXT_WINDOW_SUFFIX_RE = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
 
 
 def normalize_model_id(model: str) -> str:
@@ -82,7 +81,9 @@ def normalize_model_id(model: str) -> str:
 
     Non-Anthropic model names pass through unchanged.
     """
-    stripped = _CONTEXT_WINDOW_SUFFIX_RE.sub("", model)
+    from autoskillit.core import strip_context_window_suffix
+
+    stripped = strip_context_window_suffix(model)
     expanded = _MODEL_SHORT_ALIASES.get(stripped, stripped)
     return _DATE_SUFFIX_RE.sub("", expanded)
 

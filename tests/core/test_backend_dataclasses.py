@@ -184,6 +184,8 @@ def test_backend_module_all_exhaustive():
     assert set(__all__) == {
         "BackendCapabilities",
         "CLAUDE_CODE_CAPABILITIES",
+        "CLAUDE_MODEL_ALIASES",
+        "CODEX_MODEL_ALIASES",
         "CmdOrigin",
         "CmdSpec",
         "SkillSessionConfig",
@@ -191,6 +193,7 @@ def test_backend_module_all_exhaustive():
         "CodexEventData",
         "SessionEvent",
         "AgentSessionResult",
+        "strip_context_window_suffix",
     }
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re as _re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -14,6 +15,8 @@ from ._type_results import ValidatedAddDir
 __all__ = [
     "BackendCapabilities",
     "CLAUDE_CODE_CAPABILITIES",
+    "CLAUDE_MODEL_ALIASES",
+    "CODEX_MODEL_ALIASES",
     "CmdOrigin",
     "CmdSpec",
     "SkillSessionConfig",
@@ -21,6 +24,7 @@ __all__ = [
     "CodexEventData",
     "SessionEvent",
     "AgentSessionResult",
+    "strip_context_window_suffix",
 ]
 
 
@@ -85,6 +89,25 @@ class BackendCapabilities:
     skills_subdir: str = ""
     # Env vars that must appear in CmdSpec.env for all cmd-builders (MCP forwarding)
     mcp_env_forward_vars: frozenset[str] = field(default_factory=frozenset)
+
+
+_CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
+
+CLAUDE_MODEL_ALIASES: dict[str, str] = {
+    "sonnet": "sonnet",
+    "opus": "opus",
+    "haiku": "haiku",
+}
+
+CODEX_MODEL_ALIASES: dict[str, str] = {
+    "sonnet": "o4-mini",
+    "opus": "o3",
+    "haiku": "gpt-4o-mini",
+}
+
+
+def strip_context_window_suffix(model: str) -> str:
+    return _CONTEXT_WINDOW_SUFFIX_RE.sub("", model)
 
 
 CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(

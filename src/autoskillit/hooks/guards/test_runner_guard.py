@@ -14,13 +14,6 @@ import os
 import re
 import shlex
 import sys
-from pathlib import Path
-
-_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
-if _HOOKS_DIR not in sys.path:
-    sys.path.insert(0, _HOOKS_DIR)
-
-from _command_classification import _SHELL_OPS  # type: ignore[import-not-found]  # noqa: E402
 
 TEST_RUNNER_DENY_TRIGGER: str = "Direct pytest invocation is prohibited"
 
@@ -57,6 +50,12 @@ _READ_ONLY_MULTIWORD_PREFIXES: tuple[tuple[str, ...], ...] = (("uv", "pip"),)
 
 _PYTEST_NAMES: frozenset[str] = frozenset({"pytest", "py.test"})
 
+# Splits a shell command string on common shell operators (&&, ||, ;, |) so each
+# segment can be analyzed independently with shlex.split. This is necessary because
+# shlex does not treat ; as a metacharacter, so "echo foo; pytest" tokenizes as
+# ["echo", "foo;", "pytest"] — the semicolon stays attached to the preceding token.
+_SHELL_SEG_RE: re.Pattern[str] = re.compile(r"&&|\|\||;|\|")
+
 
 def _is_read_only_prefix(token: str) -> bool:
     """Return True if token names a known read-only command (possibly with a path prefix)."""
@@ -66,35 +65,28 @@ def _is_read_only_prefix(token: str) -> bool:
 
 def _is_direct_pytest(cmd: str) -> bool:
     """Return True if cmd contains a direct pytest invocation in command position."""
-    try:
-        tokens = shlex.split(cmd)
-    except ValueError:
-        return False  # unclosed quotes → fail-open
-
-    i = 0
-    while i < len(tokens):
-        token = tokens[i]
-
-        # Only check tokens in command position (start or after shell op).
-        if i > 0 and tokens[i - 1] not in _SHELL_OPS:
-            i += 1
+    for segment in _SHELL_SEG_RE.split(cmd):
+        segment = segment.strip()
+        if not segment:
+            continue
+        try:
+            tokens = shlex.split(segment)
+        except ValueError:
+            continue  # unclosed quotes → fail-open
+        if not tokens:
             continue
 
-        # Read-only single-word prefixes: skip to next shell op.
+        token = tokens[0]
+
+        # Read-only single-word prefixes: never a pytest invocation.
         if _is_read_only_prefix(token):
-            i += 1
-            while i < len(tokens) and tokens[i] not in _SHELL_OPS:
-                i += 1
             continue
 
         # Read-only multi-word prefixes (e.g. "uv pip").
         multiword_matched = False
         for parts in _READ_ONLY_MULTIWORD_PREFIXES:
             head, tail = parts[0], parts[1]
-            if os.path.basename(token) == head and i + 1 < len(tokens) and tokens[i + 1] == tail:
-                i += 2
-                while i < len(tokens) and tokens[i] not in _SHELL_OPS:
-                    i += 1
+            if os.path.basename(token) == head and len(tokens) > 1 and tokens[1] == tail:
                 multiword_matched = True
                 break
         if multiword_matched:
@@ -107,15 +99,13 @@ def _is_direct_pytest(cmd: str) -> bool:
 
         # python -m pytest / python3 -m py.test.
         if re.match(r"python3?$", basename):
-            if i + 2 < len(tokens) and tokens[i + 1] == "-m" and tokens[i + 2] in _PYTEST_NAMES:
+            if len(tokens) >= 3 and tokens[1] == "-m" and tokens[2] in _PYTEST_NAMES:
                 return True
 
         # uv run pytest / uv run path/to/pytest.
-        if token == "uv" and i + 1 < len(tokens) and tokens[i + 1] == "run":
-            if i + 2 < len(tokens) and os.path.basename(tokens[i + 2]) in _PYTEST_NAMES:
+        if token == "uv" and len(tokens) >= 3 and tokens[1] == "run":
+            if os.path.basename(tokens[2]) in _PYTEST_NAMES:
                 return True
-
-        i += 1
 
     return False
 

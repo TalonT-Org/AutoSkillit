@@ -20,6 +20,11 @@ from autoskillit.fleet.state import (
     read_state,
     reset_blocking_dispatch,
 )
+from autoskillit.workspace import (
+    WORKTREES_DIR,
+    remove_git_worktree,
+    remove_worktree_sidecar,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, SubprocessRunner
@@ -31,7 +36,9 @@ __all__ = [
     "ResetReport",
     "find_dispatch_in_campaigns",
     "compute_reset_labels",
+    "format_resettable_statuses",
     "reset_dispatch_artifacts",
+    "resolve_worktrees_dir",
     "update_campaign_state",
     "_RESETTABLE_STATUSES",
 ]
@@ -78,6 +85,16 @@ def compute_reset_labels(target_state: IssueLabelState) -> tuple[list[str], list
     return remove, add
 
 
+def format_resettable_statuses() -> str:
+    return str(sorted(s.value for s in _RESETTABLE_STATUSES))
+
+
+def resolve_worktrees_dir(project_dir: Path, worktree_root: str | None) -> Path:
+    if worktree_root:
+        return Path(worktree_root)
+    return project_dir.parent / WORKTREES_DIR
+
+
 async def reset_dispatch_artifacts(
     dispatch: DispatchRecord,
     *,
@@ -96,6 +113,7 @@ async def reset_dispatch_artifacts(
         try:
             sidecar_result = read_sidecar_from_path(Path(dispatch.sidecar_path))
         except Exception as exc:
+            logger.warning("sidecar_read_failed", error=str(exc))
             report.errors.append(f"sidecar_read: {exc}")
             sidecar_result = None
 
@@ -115,25 +133,24 @@ async def reset_dispatch_artifacts(
                     if not result.get("success"):
                         all_ok = False
                 except Exception as exc:
+                    logger.warning("swap_labels_failed", issue=entry.issue_url, error=str(exc))
                     report.errors.append(f"swap_labels({entry.issue_url}): {exc}")
                     all_ok = False
             report.labels_reset = all_ok
 
     worktree_path = worktrees_dir / dispatch.name
     try:
-        from autoskillit.workspace.worktree import remove_git_worktree
-
         wt_result = await remove_git_worktree(worktree_path, project_dir, runner)
         report.worktree_removed = bool(wt_result.deleted) or bool(wt_result.skipped)
     except Exception as exc:
+        logger.warning("remove_worktree_failed", error=str(exc))
         report.errors.append(f"remove_worktree: {exc}")
 
     try:
-        from autoskillit.workspace.worktree import remove_worktree_sidecar
-
         sc_result = remove_worktree_sidecar(project_dir, dispatch.name)
         report.sidecar_removed = bool(sc_result.deleted) or bool(sc_result.skipped)
     except Exception as exc:
+        logger.warning("remove_sidecar_failed", error=str(exc))
         report.errors.append(f"remove_sidecar: {exc}")
 
     pr_urls: list[str] = []
@@ -143,6 +160,7 @@ async def reset_dispatch_artifacts(
             if sr.source == SidecarReadStatus.FOUND:
                 pr_urls = [e.pr_url for e in sr.entries if e.pr_url is not None]
         except Exception as exc:
+            logger.warning("sidecar_pr_read_failed", error=str(exc))
             report.errors.append(f"sidecar_pr_read: {exc}")
 
     if not pr_urls and dispatch.sidecar_path is not None:
@@ -156,6 +174,7 @@ async def reset_dispatch_artifacts(
                 parsed = json.loads(gh_result.stdout)
                 pr_urls = [item["url"] for item in parsed if "url" in item]
         except Exception as exc:
+            logger.warning("pr_fallback_search_failed", error=str(exc))
             report.errors.append(f"pr_fallback_search: {exc}")
 
     for pr_url in pr_urls:
@@ -177,6 +196,7 @@ async def reset_dispatch_artifacts(
             else:
                 report.errors.append(f"pr_close({pr_url}): {close_result.stderr}")
         except Exception as exc:
+            logger.warning("pr_close_failed", pr_url=pr_url, error=str(exc))
             report.errors.append(f"pr_close({pr_url}): {exc}")
 
     try:
@@ -187,6 +207,7 @@ async def reset_dispatch_artifacts(
         )
         report.local_branch_deleted = branch_result.returncode == 0
     except Exception as exc:
+        logger.warning("local_branch_delete_failed", error=str(exc))
         report.errors.append(f"local_branch_delete: {exc}")
 
     try:
@@ -197,6 +218,7 @@ async def reset_dispatch_artifacts(
         )
         report.remote_branch_deleted = push_result.returncode == 0
     except Exception as exc:
+        logger.warning("remote_branch_delete_failed", error=str(exc))
         report.errors.append(f"remote_branch_delete: {exc}")
 
     return report

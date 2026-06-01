@@ -19,10 +19,13 @@ from ._liveness import is_dispatch_session_alive
 from ._outcome import classify_dispatch_outcome
 from ._prompts import _build_admiral_dispatch_block as _build_admiral_dispatch_block
 from ._prompts import _build_food_truck_prompt as _build_food_truck_prompt
+from ._reset import _RESETTABLE_STATUSES as _RESETTABLE_STATUSES
 from ._reset import (
     ResetReport,
     find_dispatch_in_campaigns,
+    format_resettable_statuses,
     reset_dispatch_artifacts,
+    resolve_worktrees_dir,
     update_campaign_state,
 )
 from ._semaphore import FleetSemaphore
@@ -167,6 +170,8 @@ __all__ = [
     "sidecar_path",
     "ResetReport",
     "find_dispatch_in_campaigns",
+    "format_resettable_statuses",
     "reset_dispatch_artifacts",
+    "resolve_worktrees_dir",
     "update_campaign_state",
 ]

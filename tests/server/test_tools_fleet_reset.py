@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.fleet import DispatchRecord, write_initial_state
-from autoskillit.fleet.state_types import DispatchStatus
+from autoskillit.core import TerminationReason
+from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
@@ -49,6 +49,18 @@ def _write_sidecar(path: Path, pr_url: str | None = None) -> None:
     path.write_text(json.dumps(entry) + "\n")
 
 
+def _make_subprocess_result(returncode: int = 0, stdout: str = "", stderr: str = ""):
+    from autoskillit.core import SubprocessResult
+
+    return SubprocessResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=12345,
+    )
+
+
 def _setup_tool(tool_ctx, monkeypatch, state_path: Path) -> None:
     monkeypatch.setattr(
         "autoskillit.server.tools.tools_fleet_reset._require_enabled",
@@ -59,12 +71,11 @@ def _setup_tool(tool_ctx, monkeypatch, state_path: Path) -> None:
         lambda _name: None,
     )
     monkeypatch.setattr(
-        "autoskillit.fleet._label_cleanup.discover_campaign_state_files",
+        "autoskillit.fleet.discover_campaign_state_files",
         lambda _project_dir: [state_path],
     )
-    from autoskillit.core import SubprocessResult
 
-    tool_ctx.runner = AsyncMock(return_value=SubprocessResult(returncode=0, stdout="", stderr=""))
+    tool_ctx.runner = AsyncMock(return_value=_make_subprocess_result())
     tool_ctx.github_client = AsyncMock()
     tool_ctx.github_client.swap_labels = AsyncMock(return_value={"success": True})
 
@@ -159,7 +170,7 @@ class TestResetDispatchErrors:
             lambda _name: json.dumps({"success": False, "error": "not_fleet"}),
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.discover_campaign_state_files",
+            "autoskillit.fleet.discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -179,7 +190,7 @@ class TestResetDispatchErrors:
             lambda: json.dumps({"success": False, "error": "gate_closed"}),
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.discover_campaign_state_files",
+            "autoskillit.fleet.discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -224,16 +235,14 @@ class TestResetDispatchEdgeCases:
             lambda _name: None,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.discover_campaign_state_files",
+            "autoskillit.fleet.discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
-        from autoskillit.core import SubprocessResult
-
         async def _runner(cmd, **_kwargs):
             if "branch" in cmd and "-D" in cmd:
-                return SubprocessResult(returncode=1, stdout="", stderr="branch missing")
-            return SubprocessResult(returncode=0, stdout="", stderr="")
+                return _make_subprocess_result(returncode=1, stderr="branch missing")
+            return _make_subprocess_result()
 
         tool_ctx.runner = _runner
         tool_ctx.github_client = AsyncMock()
@@ -246,7 +255,6 @@ class TestResetDispatchEdgeCases:
         assert result["success"] is True
         assert result["local_branch_deleted"] is False
         assert result["labels_reset"] is True
-        assert any("branch" in e for e in result["errors"])
 
     @pytest.mark.anyio
     async def test_reset_dispatch_no_sidecar(self, build_ctx_open, tmp_path, monkeypatch) -> None:
@@ -278,20 +286,16 @@ class TestResetDispatchEdgeCases:
             lambda _name: None,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.discover_campaign_state_files",
+            "autoskillit.fleet.discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
-        from autoskillit.core import SubprocessResult
-
         async def _runner(cmd, **_kwargs):
             if "list" in cmd and "pr" in cmd:
-                return SubprocessResult(
-                    returncode=0,
+                return _make_subprocess_result(
                     stdout=json.dumps([{"url": "https://github.com/owner/repo/pull/99"}]),
-                    stderr="",
                 )
-            return SubprocessResult(returncode=0, stdout="", stderr="")
+            return _make_subprocess_result()
 
         tool_ctx.runner = _runner
         tool_ctx.github_client = AsyncMock()

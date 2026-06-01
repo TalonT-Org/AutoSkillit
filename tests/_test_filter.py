@@ -711,6 +711,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_run_skill_backend_compat.py",
             "server/test_tools_workspace.py",
             "cli",
+            "fleet",
             "skills",
             "_llm_triage",
         }

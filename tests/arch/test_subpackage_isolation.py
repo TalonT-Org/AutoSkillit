@@ -860,9 +860,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli": 21,
         "hooks": 12,
         "pipeline": 12,
-        "fleet": 21,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py
+        "fleet": 22,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py; +_reset.py
         "recipe/rules": 42,  # +1: rules_skill_write_path_alignment.py
-        "server/tools": 24,  # _auto_overrides.py + _cancellation_shield.py
+        "server/tools": 25,  # _auto_overrides.py + _cancellation_shield.py + tools_fleet_reset.py
         "hooks/guards": 28,  # +1: git_ops_guard.py; +1: compose_pr_body_guard.py
     }
     violations: list[str] = []

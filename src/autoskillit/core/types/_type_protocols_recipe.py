@@ -37,6 +37,7 @@ class RecipeRepository(Protocol):
         temp_dir: Path | None = None,
         temp_dir_relpath: str | None = None,
         defer_unresolved: bool = False,
+        backend_name: str | None = None,
     ) -> dict[str, Any]:
         """Load and validate a recipe.
 
@@ -45,7 +46,11 @@ class RecipeRepository(Protocol):
         ...
 
     def validate_from_path(
-        self, script_path: Any, temp_dir_relpath: str = ".autoskillit/temp"
+        self,
+        script_path: Any,
+        temp_dir_relpath: str = ".autoskillit/temp",
+        *,
+        backend_name: str | None = None,
     ) -> dict[str, Any]: ...
 
     def list_all(

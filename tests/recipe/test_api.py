@@ -304,6 +304,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         "_user_exp_hash": 7,
         "_method_traditions_hash": 8,
         "_user_method_traditions_hash": 9,
+        "backend_name": 10,
     }
 
     missing_params: list[str] = []

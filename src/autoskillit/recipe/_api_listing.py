@@ -73,6 +73,7 @@ def validate_from_path(
     temp_dir_relpath: str = ".autoskillit/temp",
     *,
     lister: SkillLister | None = None,
+    backend_name: str | None = None,
 ) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
 
@@ -121,7 +122,10 @@ def validate_from_path(
     errors = validate_recipe_structure(recipe)
     known_skills = frozenset(s.name for s in lister.list_all())
     ctx = make_validation_context(
-        recipe, available_skills=known_skills, skill_resolver=_skill_resolver
+        recipe,
+        available_skills=known_skills,
+        skill_resolver=_skill_resolver,
+        backend_name=backend_name,
     )
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)

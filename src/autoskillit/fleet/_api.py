@@ -340,6 +340,7 @@ async def _run_dispatch(
             tool_ctx.project_dir,
             suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
             temp_dir=tool_ctx.temp_dir,
+            backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
         )
     except ProcessStaleError as exc:
         return DispatchResult(

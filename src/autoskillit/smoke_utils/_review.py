@@ -346,7 +346,7 @@ def pre_iteration_cleanup(
             continue
         if patterns and any(fnmatch.fnmatch(f.name, p) for p in patterns):
             continue
-        f.unlink()
+        f.unlink(missing_ok=True)
         removed += 1
 
     return {"cleaned": "true", "removed_count": str(removed)}

@@ -52,7 +52,7 @@ def test_impl_plan_routes_plan_to_review_approach(impl_recipe):
     plan_routes = [
         c
         for c in step.on_result.conditions
-        if c.when and "plan" in c.when and "false_positive" not in c.when
+        if c.when and "== plan" in c.when and "false_positive" not in c.when
     ]
     assert len(plan_routes) == 1
     assert plan_routes[0].route == "review_approach"
@@ -108,7 +108,7 @@ def test_remed_make_plan_routes_plan_to_dry_walkthrough(remed_recipe):
     plan_routes = [
         c
         for c in step.on_result.conditions
-        if c.when and "plan" in c.when and "false_positive" not in c.when
+        if c.when and "== plan" in c.when and "false_positive" not in c.when
     ]
     assert len(plan_routes) == 1
     assert plan_routes[0].route == "dry_walkthrough"

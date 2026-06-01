@@ -783,8 +783,10 @@ ALWAYS_WRITE_SKILLS = {
     "run-experiment",
     "scope",
     "select-directions",
+    "select-vis-lenses",
     "setup-environment",
     "stage-data",
+    "synthesize-vis-plan",
     "troubleshoot-experiment",
     "write-recipe",
 }

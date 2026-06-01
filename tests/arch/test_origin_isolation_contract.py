@@ -35,20 +35,22 @@ PYTHON_ALLOWLIST: set[tuple[str, str]] = {
     ("_clone_remote.py", "_add_or_set_upstream"),
 }
 
-SHELL_SCAN_DIR = SRC_ROOT / "recipes" / "scripts"
+SHELL_SCAN_DIRS = (
+    SRC_ROOT / "recipes" / "scripts",
+    Path(__file__).parent.parent.parent / "scripts" / "recipe",
+)
 
 
 def _find_enclosing_function(node: ast.AST, tree: ast.Module) -> str:
-    """Walk parents to find the enclosing function name."""
-    for parent in ast.walk(tree):
-        for child in ast.iter_child_nodes(parent):
-            if child is node and isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                return parent.name
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                for desc in ast.walk(child):
-                    if desc is node:
-                        return child.name
-    return "<module>"
+    """Return the innermost enclosing function name for *node*."""
+    result = "<module>"
+    for item in ast.walk(tree):
+        if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for desc in ast.walk(item):
+            if desc is node:
+                result = item.name
+    return result
 
 
 def _is_git_remote_context(node: ast.AST, tree: ast.Module) -> bool:
@@ -150,7 +152,7 @@ class TestShellScriptRemotePrecedence:
 
     @pytest.mark.parametrize(
         "script",
-        sorted(SHELL_SCAN_DIR.glob("*.sh")) if SHELL_SCAN_DIR.exists() else [],
+        sorted(s for d in SHELL_SCAN_DIRS if d.exists() for s in d.glob("*.sh")),
         ids=lambda p: p.name,
     )
     def test_no_origin_before_upstream(self, script: Path) -> None:
@@ -167,7 +169,7 @@ class TestShellScriptRemotePrecedence:
 
     @pytest.mark.parametrize(
         "script",
-        sorted(SHELL_SCAN_DIR.glob("*.sh")) if SHELL_SCAN_DIR.exists() else [],
+        sorted(s for d in SHELL_SCAN_DIRS if d.exists() for s in d.glob("*.sh")),
         ids=lambda p: p.name,
     )
     def test_no_bare_push_origin(self, script: Path) -> None:

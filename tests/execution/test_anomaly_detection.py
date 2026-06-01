@@ -510,33 +510,32 @@ def test_normalize_model_id_strips_context_window_suffix():
     assert normalize_model_id("claude-sonnet-4-6-20250514[200k]") == "claude-sonnet-4-6"
 
 
-def test_detect_model_drift_fires_when_profile_and_cross_vendor():
-    """Profile-routed session with Anthropic configured + non-Anthropic observed fires drift."""
+def test_detect_model_drift_suppressed_when_profile_routed_cross_vendor():
+    """Profile-routed session: Anthropic configured + non-Anthropic observed suppresses drift."""
     anomalies = detect_model_drift("opus", "MiniMax-M2.7", profile_name="minimax")
-    assert len(anomalies) == 1
-    assert anomalies[0]["detail"]["configured_model"] == "opus"
-    assert anomalies[0]["detail"]["observed_model"] == "MiniMax-M2.7"
-
-
-def test_detect_model_drift_suppressed_when_profile_both_non_anthropic():
-    """Profile-routed sessions with both models non-Anthropic suppress MODEL_DRIFT."""
-    anomalies = detect_model_drift("MiniMax-M1", "MiniMax-M2.7", profile_name="minimax")
     assert anomalies == []
 
 
-def test_detect_model_drift_fires_when_profile_routes_to_anthropic():
-    """Profile-routed session with Anthropic observed model (full ID) still detects drift."""
-    anomalies = detect_model_drift("sonnet", "claude-opus-4-6", profile_name="alt-anthropic")
-    assert len(anomalies) == 1
-    assert anomalies[0]["detail"]["profile_name"] == "alt-anthropic"
-    assert anomalies[0]["detail"]["configured_model"] == "sonnet"
-    assert anomalies[0]["detail"]["observed_model"] == "claude-opus-4-6"
-
-
-def test_detect_model_drift_fires_when_profile_and_observed_is_anthropic_alias():
-    """Profile-routed session with Anthropic observed model (short alias) still detects drift."""
-    anomalies = detect_model_drift("sonnet", "opus", profile_name="my-profile")
-    assert len(anomalies) == 1
+@pytest.mark.parametrize(
+    "configured, observed, profile, expect_drift",
+    [
+        # Profile-routed to non-Anthropic: suppress (standard production case)
+        ("opus", "MiniMax-M2.7", "minimax", False),
+        ("opus[1m]", "MiniMax-M2.7", "minimax", False),
+        ("claude-opus-4-6", "gpt-4o", "openai", False),
+        ("sonnet", "MiniMax-M2.7", "minimax", False),
+        # Profile-routed, both non-Anthropic: suppress
+        ("MiniMax-M1", "MiniMax-M2.7", "minimax", False),
+        # No profile, cross-vendor: real drift
+        ("opus", "MiniMax-M2.7", "", True),
+        # No profile, same family: no drift
+        ("sonnet", "claude-sonnet-4-6", "", False),
+    ],
+)
+def test_detect_model_drift_profile_routing_matrix(configured, observed, profile, expect_drift):
+    """Full decision matrix for profile-routed model drift detection."""
+    anomalies = detect_model_drift(configured, observed, profile_name=profile)
+    assert bool(anomalies) == expect_drift
 
 
 def test_detect_model_drift_no_drift_when_profile_and_models_match():

@@ -478,7 +478,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | CLI prompts via timed_prompt | `test_input_tty_contracts.py` | `input()` calls in `src/autoskillit/cli/` not routed through `timed_prompt()` |
 | Interactive ordering gate | `test_interactive_ordering_gate.py` | Interactive launch sites that skip `assert_interactive_ordering()` before `_session_launch` |
 | Kitchen guard scoping | `test_kitchen_guard_scoping.py` | `any_kitchen_open()` call sites not passing `project_path` — must use scoped check |
-| Model identity contract | `test_model_identity_contract.py` | `detect_model_drift()` using raw string comparison instead of `normalize_model_id()` and `_models_match()`, or missing `profile_name` suppression guard with `normalize_model_id` normalization |
+| Model identity contract | `test_model_identity_contract.py` | `detect_model_drift()` using raw string comparison instead of `normalize_model_id()` and `_models_match()`, missing `profile_name` suppression guard with `normalize_model_id` normalization, or `profile_name` guard calling `_is_non_anthropic` more than once or on `configured_model` instead of `observed_model` (over-restriction that kills the guard for the standard Anthropic-configured + non-Anthropic-observed production path) |
 | No error-dict returns | `test_no_error_dict_return.py` | `load_and_validate()` returning `{"error": ...}` dict — errors must propagate via exceptions |
 | No inline requestId dedup | `test_no_inline_jsonl_request_id_dedup.py` | `seen_request_ids` variable in `session_log.py` or `tool_sequence_analysis.py` |
 | No Path.cwd() in server tools | `test_no_path_cwd_in_tools.py` | `Path.cwd()` in server tool handlers — use injected project path instead |

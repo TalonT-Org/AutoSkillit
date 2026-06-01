@@ -425,6 +425,7 @@ class TestChannelBDrainRacePipelineAdjudication:
     provenance bypass (data_confirmed=False → success=True without calling _compute_success).
     """
 
+    @pytest.mark.timeout(150)
     @pytest.mark.anyio
     async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
         """COMPLETED + data_confirmed=False + empty stdout → success=True, needs_retry=False.

@@ -5,6 +5,10 @@ import json
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
+import pytest
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+
 
 def _run_hook(event: dict) -> str:
     """Run main() with the given event JSON, return captured stdout."""

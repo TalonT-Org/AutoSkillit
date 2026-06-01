@@ -13,6 +13,8 @@ import pytest
 
 from autoskillit.hook_registry import HOOKS_DIR, generate_hooks_json
 
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
 DISPATCH_SCRIPT = HOOKS_DIR / "_dispatch.py"
 
 

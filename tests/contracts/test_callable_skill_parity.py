@@ -7,7 +7,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from autoskillit.recipe.io import list_recipes, load_recipe
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _TESTS_DIR = Path(__file__).resolve().parent.parent
 

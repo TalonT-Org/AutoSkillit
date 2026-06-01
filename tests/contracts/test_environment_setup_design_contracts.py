@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 DESIGN_DOC = Path(__file__).resolve().parents[2] / "docs" / "design" / "env-setup-design.md"
 
 

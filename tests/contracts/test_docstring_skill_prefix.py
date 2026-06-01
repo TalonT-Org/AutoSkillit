@@ -7,9 +7,13 @@ names via --add-dir and must be referenced as /name, not /autoskillit:name.
 
 import re
 
+import pytest
+
 from autoskillit.core import SkillSource
 from autoskillit.core.paths import pkg_root
 from autoskillit.workspace.skills import DefaultSkillResolver
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _PKG = pkg_root()
 _SCAN_DIRS_AND_GLOBS: list[tuple[str, list[str]]] = [

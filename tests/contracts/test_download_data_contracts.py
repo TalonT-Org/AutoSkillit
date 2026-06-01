@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 SKILL_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "src"

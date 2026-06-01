@@ -162,8 +162,11 @@ class TestResetDispatchErrors:
     async def test_reset_dispatch_non_fleet_rejected(
         self, build_ctx_open, tmp_path, monkeypatch
     ) -> None:
+        from autoskillit.server import _state
+
         state_path = _setup_state(tmp_path)
-        build_ctx_open()
+        tool_ctx = build_ctx_open()
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
         monkeypatch.setattr(
             "autoskillit.server.tools.tools_fleet_reset._require_enabled",
             lambda: None,
@@ -186,8 +189,11 @@ class TestResetDispatchErrors:
 
     @pytest.mark.anyio
     async def test_reset_dispatch_gate_closed(self, build_ctx_open, tmp_path, monkeypatch) -> None:
+        from autoskillit.server import _state
+
         state_path = _setup_state(tmp_path)
-        build_ctx_open()
+        tool_ctx = build_ctx_open()
+        monkeypatch.setattr(_state, "_ctx", tool_ctx)
         monkeypatch.setattr(
             "autoskillit.server.tools.tools_fleet_reset._require_enabled",
             lambda: json.dumps({"success": False, "error": "gate_closed"}),

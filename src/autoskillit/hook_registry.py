@@ -58,6 +58,7 @@ class HookDef:
 # planner_gh_discovery_guard             | works-as-is
 # artifact_download_guard                | works-as-is
 # git_ops_guard                          | works-as-is
+# test_runner_guard                      | works-as-is
 # generated_file_write_guard             | works-as-is
 # write_guard                            | fix-required
 # planner_result_naming_guard            | works-as-is
@@ -154,6 +155,14 @@ HOOK_REGISTRY: list[HookDef] = [
         # Must stay in sync with _EXEMPT_SESSION_TYPES in guards/git_ops_guard.py —
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
+    ),
+    HookDef(  # codex: works-as-is
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
+        scripts=["guards/test_runner_guard.py"],
+        session_scope="headless_only",
+        # Must stay in sync with _EXEMPT_SKILLS in guards/test_runner_guard.py —
+        # stdlib-only boundary on hook scripts prevents a shared import.
+        exempt_skills=frozenset({"implement-experiment"}),
     ),
     HookDef(  # codex: works-as-is
         matcher=r"Write|Edit",
@@ -295,6 +304,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "pipeline_step_guard.py",
         "git_ops_guard.py",
         "compose_pr_body_guard.py",
+        "test_runner_guard.py",
     }
 )
 

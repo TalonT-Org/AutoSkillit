@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -22,7 +23,7 @@ def _make_skill_info(
     return SimpleNamespace(
         name=name,
         source=SkillSource.BUNDLED_EXTENDED,
-        path=MagicMock(),
+        path=Path("/nonexistent/SKILL.md"),
         categories=frozenset(),
         backend_requirements=backend_requirements,
     )

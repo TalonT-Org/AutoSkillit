@@ -26,6 +26,8 @@ from autoskillit.recipe.rules.rules_skill_content import (
     _PSEUDOCODE_ALLOWLIST as _PROD_PSEUDOCODE_ALLOWLIST,
 )
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _SKILL_DIRS = [
     _REPO_ROOT / "src" / "autoskillit" / "skills",

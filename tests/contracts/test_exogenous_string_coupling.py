@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 def test_quota_guard_deny_trigger_coupled_to_prompt():
     """QUOTA_GUARD_DENY_TRIGGER constant in quota_guard must appear verbatim

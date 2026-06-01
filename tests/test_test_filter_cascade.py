@@ -13,6 +13,8 @@ from tests._test_filter import (
     load_manifest,
 )
 
+pytestmark = [pytest.mark.medium]
+
 
 class TestCascadeNewEntries:
     """REQ-FILT-003: four new packages must not force a full test run."""

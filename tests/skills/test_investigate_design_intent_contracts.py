@@ -11,6 +11,8 @@ import pytest
 from tests._helpers import strip_markdown_code_regions
 from tests.skills.conftest import extract_step_section
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 @pytest.fixture(scope="module")
 def standard_workflow_section(skill_text: str) -> str:

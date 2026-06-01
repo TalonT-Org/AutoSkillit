@@ -9,6 +9,8 @@ import pytest
 
 from tests.skills.conftest import extract_step_section
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 @pytest.fixture(scope="module")
 def deep_mode_section(skill_text: str) -> str:

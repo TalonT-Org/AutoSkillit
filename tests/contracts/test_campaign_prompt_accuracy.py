@@ -6,6 +6,8 @@ import pytest
 
 from autoskillit.cli._prompts_campaign import _build_dynamic_dispatch_section
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 MCP_PREFIX = "autoskillit__"
 
 

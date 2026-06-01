@@ -8,7 +8,11 @@ These encode behavioral contracts derived from friction analysis (issue #250):
 - FRICT-5-3: external repo path validation
 """
 
+import pytest
+
 from autoskillit.workspace.skills import DefaultSkillResolver
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 def _skill_md(skill_name: str) -> str:

@@ -10,6 +10,8 @@ import pytest
 
 from autoskillit.core.io import load_yaml
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 def _skill_md_text() -> str:
     skill_md = (

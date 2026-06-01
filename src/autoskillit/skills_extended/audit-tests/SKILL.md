@@ -158,10 +158,10 @@ Tests and configuration that maintain the path-based test filter's correctness. 
 - Manifest patterns that match zero tracked files (orphaned entries)
 
 **Size marker correctness:**
-- Always-run directories (`arch/`, `contracts/`) that have zero size markers — these are fully deselected by aggressive mode's size filter, nullifying the always-run safety net
 - `small`-marked tests that spawn subprocesses or perform real filesystem I/O (should be `medium`)
 - `medium`-marked tests that access the network (should be `large`)
 - `_SIZE_DIRS` in `conftest.py` diverging from `SIZE_DIRECTORIES` in `tests/arch/test_size_markers.py`
+- Root-level `test_*.py` files missing size markers (covered by `test_root_test_files_have_size_marker`)
 
 **Bucket A discipline:**
 - Files in `BUCKET_A_PATTERNS` that could be narrowed to specific test directories via the manifest instead of triggering a full run

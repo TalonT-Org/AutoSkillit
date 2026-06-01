@@ -18,6 +18,8 @@ import pytest
 
 from autoskillit.hook_registry import HOOK_REGISTRY, HOOKS_DIR, HookDef
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+
 
 def test_hookdef_has_session_scope() -> None:
     """HookDef must have a session_scope field."""

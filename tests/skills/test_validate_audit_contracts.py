@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import functools
 
+import pytest
+
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import DefaultSkillResolver
 from tests.skills.conftest import (
     assert_ticket_grouper_has_effort_based_splitting,
     assert_ticket_grouper_has_minimum_group_floor,
 )
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 @functools.cache

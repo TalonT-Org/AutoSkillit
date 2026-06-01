@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 SKILLS_EXTENDED = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "skills_extended"
 
 

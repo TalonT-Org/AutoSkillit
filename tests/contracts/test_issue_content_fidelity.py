@@ -16,7 +16,11 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from autoskillit.workspace.skills import bundled_skills_dir
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
 def _all_skill_mds() -> list[tuple[str, str]]:

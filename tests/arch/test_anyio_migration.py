@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tests.arch._helpers import (
     PROCESS_KILL_PY,
     PROCESS_MONITOR_PY,
@@ -9,6 +11,8 @@ from tests.arch._helpers import (
     PROCESS_RACE_PY,
     SRC_ROOT,
 )
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 class TestNoAsyncioRuntimePrimitives:

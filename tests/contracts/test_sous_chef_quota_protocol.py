@@ -2,6 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 def test_sous_chef_contains_quota_wait_protocol():
     """sous-chef/SKILL.md contains QUOTA WAIT PROTOCOL section."""

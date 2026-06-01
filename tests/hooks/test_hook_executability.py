@@ -18,6 +18,8 @@ import pytest
 from autoskillit.core import pkg_root
 from autoskillit.hooks import HOOK_REGISTRY, generate_hooks_json
 
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
 
 def _extract_hook_commands() -> list[str]:
     """Extract all command strings from generate_hooks_json() output."""

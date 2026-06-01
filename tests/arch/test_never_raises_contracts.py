@@ -15,12 +15,16 @@ import ast
 import re
 from pathlib import Path
 
+import pytest
+
 from tests.arch._helpers import (
     SRC_ROOT,
     _has_cancellation_shield,
     _has_toplevel_except_exception,
     _is_mcp_tool_decorator,
 )
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _NEVER_RAISES_RE = re.compile(r"never raises", re.IGNORECASE)
 

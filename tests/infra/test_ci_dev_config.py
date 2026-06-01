@@ -15,6 +15,8 @@ import pytest
 
 from autoskillit.core.io import load_yaml
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 REPO_ROOT = Path(__file__).parent.parent.parent
 PRECOMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"

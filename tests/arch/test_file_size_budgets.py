@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 
 def test_pretty_output_below_budget() -> None:
     """REQ-FILE-001: hooks/pretty_output_hook.py must stay under 350 lines after

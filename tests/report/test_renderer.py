@@ -4,6 +4,8 @@ import pytest
 
 import autoskillit.report.renderer as _renderer
 
+pytestmark = [pytest.mark.small]
+
 
 def test_renderer_exits_nonzero_on_too_few_args(monkeypatch: pytest.MonkeyPatch) -> None:
     """renderer.main() must exit non-zero when called with fewer than 3 arguments."""

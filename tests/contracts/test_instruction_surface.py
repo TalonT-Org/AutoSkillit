@@ -19,6 +19,8 @@ from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent

@@ -8,7 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.paths import pkg_root
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 
 def _run_guard(

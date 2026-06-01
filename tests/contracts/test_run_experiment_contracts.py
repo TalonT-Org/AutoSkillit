@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.io import load_yaml
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 SKILL_PATH = (
     Path(__file__).resolve().parent.parent.parent

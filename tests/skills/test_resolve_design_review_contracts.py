@@ -6,6 +6,8 @@ parallel subagents, conditional guidance emission, and structured output tokens.
 
 from pathlib import Path
 
+import pytest
+
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
     / "src"
@@ -15,6 +17,8 @@ SKILL_PATH = (
     / "SKILL.md"
 )
 SKILL_TEXT = SKILL_PATH.read_text()
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 def test_addressable_structural_discuss_classifications():

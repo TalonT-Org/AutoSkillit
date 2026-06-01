@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests._test_filter import (
     MODULE_CASCADE_CONFIG,
     FilterMode,
     build_test_scope,
 )
+
+pytestmark = [pytest.mark.medium]
 
 _ALL_DIRS = [
     "core",

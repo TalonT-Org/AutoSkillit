@@ -10,8 +10,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _LOCAL_SKILLS = _REPO_ROOT / ".claude" / "skills"
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 class TestPromoteToMainProjectLocal:

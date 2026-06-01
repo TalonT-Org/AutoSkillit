@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 # ---------------------------------------------------------------------------
 # T5 — Renamed protocols are importable from autoskillit.core
 # ---------------------------------------------------------------------------

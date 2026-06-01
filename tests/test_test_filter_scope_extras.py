@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests._test_filter import FilterMode, build_test_scope
+
+pytestmark = [pytest.mark.medium]
 
 
 def test_build_test_scope_includes_file_entries_from_manifest(tmp_path: Path) -> None:

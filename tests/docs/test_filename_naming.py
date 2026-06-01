@@ -25,6 +25,8 @@ ALLOWLIST = {
     },
 }
 
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
+
 # overrides.md is a list-like file (collection of override sites) and is exempt;
 # subsets.md and catalog.md are explicitly list files per REQ-DOC-085 rule 5.
 CONCEPT_FILES_MUST_BE_SINGULAR = {

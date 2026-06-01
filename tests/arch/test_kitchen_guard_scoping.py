@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("arch")]
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SRC_ROOT = Path(__file__).parents[2] / "src" / "autoskillit"
 _TEST_ROOT = Path(__file__).parents[2] / "tests"

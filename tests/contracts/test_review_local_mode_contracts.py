@@ -9,7 +9,11 @@ Verifies that:
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.io import load_yaml
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 CONTRACTS_YAML = (
     Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipe" / "skill_contracts.yaml"

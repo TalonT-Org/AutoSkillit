@@ -26,6 +26,8 @@ from autoskillit.smoke_utils import (
 )
 from tests.infra._token_summary_helpers import _resolve_session_label
 
+pytestmark = [pytest.mark.medium]
+
 
 # T_SU1
 def test_returns_false_when_bug_report_missing(tmp_path: Path) -> None:

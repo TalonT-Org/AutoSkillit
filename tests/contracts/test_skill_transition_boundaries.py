@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from tests.contracts._anti_confirm_helpers import ANTI_CONFIRM_RE as _ANTI_CONFIRM_RE
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
 def _skill_text(skill_name: str) -> str:

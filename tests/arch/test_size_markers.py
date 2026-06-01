@@ -7,19 +7,31 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 TESTS_ROOT = Path(__file__).resolve().parent.parent
 
 SIZE_DIRECTORIES: dict[str, str] = {
+    "arch": "arch",
+    "assets": "assets",
     "cli": "cli",
     "config": "config",
+    "contracts": "contracts",
     "core": "core",
+    "docs": "docs",
     "execution": "execution",
     "fleet": "fleet",
+    "hooks": "hooks",
+    "infra": "infra",
+    "integration": "integration",
     "migration": "migration",
     "pipeline": "pipeline",
     "planner": "planner",
     "recipe": "recipe",
+    "report": "report",
     "server": "server",
+    "skills": "skills",
+    "skills_extended": "skills_extended",
     "workspace": "workspace",
 }
 
@@ -123,3 +135,13 @@ def test_size_marker_directories_match_conftest() -> None:
     assert set(SIZE_DIRECTORIES.keys()) == _SIZE_DIRS, (
         f"SIZE_DIRECTORIES keys {set(SIZE_DIRECTORIES.keys())} != conftest _SIZE_DIRS {_SIZE_DIRS}"
     )
+
+
+def test_root_test_files_have_size_marker() -> None:
+    """Every test_*.py directly in tests/ must have a size marker."""
+    missing = []
+    for f in sorted(TESTS_ROOT.glob("test_*.py")):
+        markers = _extract_size_markers(f)
+        if not markers:
+            missing.append(f.name)
+    assert not missing, f"Root test files missing size marker: {missing}"

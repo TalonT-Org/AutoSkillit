@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+pytestmark = [pytest.mark.medium]
+
 
 class TestVersionInfo:
     @pytest.fixture(autouse=True)

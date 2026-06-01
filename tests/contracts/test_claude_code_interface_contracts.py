@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 # ---------------------------------------------------------------------------
 # CC-DIR: ClaudeDirectoryConventions value pinning
 # Mirror of TestClaudeFlagValues in test_flag_contracts.py — same pattern.

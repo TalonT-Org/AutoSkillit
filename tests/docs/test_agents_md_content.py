@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

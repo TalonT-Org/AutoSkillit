@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 REPO_ROOT = Path(__file__).parent.parent.parent
 _SCRIPT = REPO_ROOT / "scripts" / "compare-coverage-ast.py"
 

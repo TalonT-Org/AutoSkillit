@@ -2,7 +2,11 @@
 
 import re
 
+import pytest
+
 from autoskillit.hook_registry import HOOK_REGISTRY
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 # Tools that perform destructive git operations and MUST have PreToolUse hooks.
 DESTRUCTIVE_TOOLS = [

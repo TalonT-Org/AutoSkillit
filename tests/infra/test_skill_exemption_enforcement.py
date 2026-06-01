@@ -19,6 +19,8 @@ import pytest
 
 from autoskillit.hook_registry import HOOK_REGISTRY, HOOKS_DIR, HookDef
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+
 
 def test_hookdef_has_exempt_skills() -> None:
     """HookDef must have an exempt_skills field of type frozenset[str]."""

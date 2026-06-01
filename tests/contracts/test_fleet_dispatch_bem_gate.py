@@ -6,6 +6,8 @@ import pytest
 
 from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 MCP_PREFIX = "autoskillit__"
 
 

@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from tests.contracts.conftest import _all_skill_mds
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 def _has_own_filing_instructions(content: str) -> bool:

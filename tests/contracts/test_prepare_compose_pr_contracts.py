@@ -2,6 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 PREPARE_PR = SKILLS_DIR / "prepare-pr/SKILL.md"
 COMPOSE_PR = SKILLS_DIR / "compose-pr/SKILL.md"

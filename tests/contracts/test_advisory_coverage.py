@@ -14,10 +14,14 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types._type_constants import SKILL_FILE_ADVISORY_MAP
 from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.workspace.skills import DefaultSkillResolver
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
 def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:

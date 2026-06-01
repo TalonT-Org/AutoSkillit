@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 @pytest.fixture
 def resolve_review_skill_md() -> str:

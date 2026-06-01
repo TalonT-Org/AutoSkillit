@@ -19,6 +19,8 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_step_sections,
 )
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _SKILLS_DIRS = [
     _REPO_ROOT / "src" / "autoskillit" / "skills",

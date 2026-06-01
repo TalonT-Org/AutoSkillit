@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 EXECUTION_DIR = Path(__file__).parent.parent / "execution"
 
 

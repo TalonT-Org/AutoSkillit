@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.io import load_yaml
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SKILL_DIR = _PROJECT_ROOT / ".autoskillit" / "skills" / "eval-agent"

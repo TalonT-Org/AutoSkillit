@@ -4,7 +4,11 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.paths import GENERATED_FILES, is_generated_path
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 

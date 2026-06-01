@@ -10,6 +10,8 @@ import json
 
 import pytest
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 # ---------------------------------------------------------------------------
 # PHK-E1/E2: End-to-end schema consistency tests
 # ---------------------------------------------------------------------------

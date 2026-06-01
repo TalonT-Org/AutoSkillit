@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.recipe.experiment_type_registry import load_all_experiment_types
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 SKILL_PATH = (
     Path(__file__).resolve().parent.parent.parent

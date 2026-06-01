@@ -10,6 +10,8 @@ import re
 
 import pytest
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 @pytest.fixture(scope="module")
 def step_35_section(skill_text: str) -> str:

@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 def test_no_retired_skill_name_has_a_live_directory() -> None:
     """No retired skill name may have a live directory under skills/ or skills_extended/."""

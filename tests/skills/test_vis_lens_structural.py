@@ -27,6 +27,8 @@ VIS_LENS_SLUGS = [
 
 COMPOSITE_SLUGS = {"always-on"}  # emits yaml:spec-index instead of yaml:figure-spec
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 
 def _read(slug: str) -> str:
     path = SKILLS_DIR / f"vis-lens-{slug}" / "SKILL.md"

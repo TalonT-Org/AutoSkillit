@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core.paths import pkg_root
 
 SKILL_MD = pkg_root() / "skills_extended" / "resolve-review" / "SKILL.md"
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 def test_resolve_review_no_blind_add() -> None:

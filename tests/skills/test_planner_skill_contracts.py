@@ -4,6 +4,8 @@ from autoskillit.core.io import load_yaml
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe.io import load_recipe
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 SKILLS_ROOT = pkg_root() / "skills_extended"
 RECIPES_ROOT = pkg_root() / "recipes"
 

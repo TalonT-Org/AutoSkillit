@@ -7,11 +7,15 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from autoskillit.fleet import (
     DispatchRecord,
     resume_campaign_from_state,
     write_initial_state,
 )
+
+pytestmark = [pytest.mark.medium]
 
 # -------------------------------------------------------------------
 # Cross-caller concurrency test (requires cli layer)

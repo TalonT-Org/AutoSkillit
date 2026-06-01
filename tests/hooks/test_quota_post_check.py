@@ -17,6 +17,8 @@ import pytest
 
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
 _LONG_PATTERNS = ("weekly", "sonnet", "opus")
 
 

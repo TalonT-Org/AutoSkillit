@@ -28,6 +28,8 @@ from tests.fakes import (
     MockSubprocessRunner,
 )
 
+pytestmark = [pytest.mark.small]
+
 # ---------------------------------------------------------------------------
 # T1: isinstance protocol conformance
 # ---------------------------------------------------------------------------

@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 SRC = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 PACKAGES = frozenset(
     [

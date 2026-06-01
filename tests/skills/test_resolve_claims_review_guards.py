@@ -6,6 +6,8 @@ classification rules, and needs_rerun structured output contract.
 
 from pathlib import Path
 
+import pytest
+
 SKILL_PATH = (
     Path(__file__).parent.parent.parent
     / "src"
@@ -15,6 +17,8 @@ SKILL_PATH = (
     / "SKILL.md"
 )
 SKILL_TEXT = SKILL_PATH.read_text() if SKILL_PATH.exists() else ""
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 def test_skill_path_exists() -> None:

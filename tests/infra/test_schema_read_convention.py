@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 
 def _scan_write_versioned_json_callers() -> set[str]:
     """AST-scan src/autoskillit/ for modules that call write_versioned_json.

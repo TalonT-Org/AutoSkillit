@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.io import load_yaml
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 def _repo_root() -> Path:

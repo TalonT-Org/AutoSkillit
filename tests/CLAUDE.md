@@ -77,7 +77,7 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 | `medium` | Filesystem and subprocess allowed. No network, no external services. | Tests spawning child processes, real file system operations |
 | `large` | Everything allowed. Full integration. Default for unannotated tests. | End-to-end tests, network calls, Claude API access |
 
-**In-scope directories:** core, pipeline (initial rollout). Other directories follow incrementally.
+**In-scope directories:** All test directories are in scope. Enforced by `tests/arch/test_size_markers.py` via AST scan. Root-level `test_*.py` files are covered by `test_root_test_files_have_size_marker`.
 
 **Aggressive filter behavior:** When `AUTOSKILLIT_TEST_FILTER=aggressive`, only `small` and `medium` tests run. Unannotated tests default to `large` and are deselected.
 

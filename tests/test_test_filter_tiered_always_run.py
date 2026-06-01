@@ -2,12 +2,16 @@
 
 from pathlib import Path
 
+import pytest
+
 from tests._test_filter import (
     _HOOKS_UNCONDITIONAL_FILES,
     _INFRA_UNCONDITIONAL_FILES,
     FilterMode,
     build_test_scope,
 )
+
+pytestmark = [pytest.mark.medium]
 
 
 def _make_tests_root(tmp_path: Path, dirs: list[str]) -> Path:

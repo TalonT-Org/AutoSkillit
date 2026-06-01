@@ -11,6 +11,8 @@ import pytest
 from autoskillit.recipe._skill_placeholder_parser import extract_bash_blocks
 from autoskillit.recipe.rules.rules_skill_content import _GIT_GREP_BRE_RE, _GREP_BRE_ALTERNATION_RE
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _SKILL_DIRS = [
     _REPO_ROOT / "src" / "autoskillit" / "skills",

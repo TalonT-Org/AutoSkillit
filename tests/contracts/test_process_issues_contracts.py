@@ -6,6 +6,8 @@ import pytest
 
 from autoskillit.workspace.skills import bundled_skills_extended_dir
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 
 @pytest.fixture
 def skill_text() -> str:

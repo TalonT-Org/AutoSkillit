@@ -9,8 +9,12 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 import autoskillit
 from autoskillit.core.io import load_yaml
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
 class TestVersionConsistency:

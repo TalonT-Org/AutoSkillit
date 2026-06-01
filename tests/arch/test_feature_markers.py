@@ -17,6 +17,8 @@ import pytest
 
 from autoskillit.core.io import load_yaml
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 _TESTS_ROOT = Path(__file__).parent.parent
 
 # Auto-discover all test files in the fleet directory — self-maintaining

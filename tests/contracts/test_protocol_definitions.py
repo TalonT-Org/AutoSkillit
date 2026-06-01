@@ -7,6 +7,10 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 def test_github_fetcher_has_update_issue_body() -> None:
     from autoskillit.core.types._type_protocols_github import GitHubFetcher

@@ -5,9 +5,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 CLAUDE_MD = Path(__file__).resolve().parents[2] / "CLAUDE.md"
 AGENTS_MD = Path(__file__).resolve().parents[2] / "AGENTS.md"
 _SERVER_DIR = CLAUDE_MD.parent / "src" / "autoskillit" / "server"
+
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
 
 
 def test_claude_md_starts_with_agents_import() -> None:

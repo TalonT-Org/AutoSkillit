@@ -4,7 +4,11 @@ import json
 from io import StringIO
 from unittest.mock import patch
 
+import pytest
+
 from autoskillit.hooks.guards.skill_cmd_guard import is_path_like_token, main
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 
 def _run_hook(tool_input: dict) -> dict | None:

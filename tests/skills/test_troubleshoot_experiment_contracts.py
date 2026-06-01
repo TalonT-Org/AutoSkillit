@@ -1,6 +1,10 @@
+import pytest
+
 from autoskillit.core.io import load_yaml
 from autoskillit.core.paths import pkg_root
 from autoskillit.workspace.skills import DefaultSkillResolver
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 def test_troubleshoot_experiment_skill_is_discoverable():

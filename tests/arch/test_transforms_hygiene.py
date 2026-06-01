@@ -10,6 +10,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 _TESTS_ROOT = Path(__file__).parent.parent
 _SRC_ROOT = _TESTS_ROOT.parent / "src" / "autoskillit"
 

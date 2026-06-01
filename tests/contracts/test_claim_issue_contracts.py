@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from autoskillit.core.types import GATED_TOOLS
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 def test_claim_issue_in_gated_tools() -> None:

@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.hook_registry import HOOK_REGISTRY
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
 

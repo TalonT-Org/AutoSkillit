@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 _PYPROJECT = Path(__file__).parent.parent.parent / "pyproject.toml"
 
 

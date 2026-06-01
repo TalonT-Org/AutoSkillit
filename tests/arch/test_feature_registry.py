@@ -7,6 +7,8 @@ from datetime import date
 
 import pytest
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 # ── Structural registry tests ─────────────────────────────────────────────────
 
 

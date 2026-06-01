@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.io import load_yaml
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/prepare-issue/SKILL.md"
 

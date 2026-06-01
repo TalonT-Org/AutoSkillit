@@ -32,6 +32,8 @@ from tests.arch._helpers import (
 )
 from tests.arch._rules import RuleDescriptor
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 # ── REQ-ARCH-002 descriptor ───────────────────────────────────────────────────
 
 ISOLATION_RULES: dict[str, RuleDescriptor] = {

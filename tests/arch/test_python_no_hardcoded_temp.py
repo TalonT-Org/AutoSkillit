@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 # Each entry: relative path under src/autoskillit/ → justification.
 # When adding a new entry, document WHY the literal is allowed there.
 _TEMP_PATH_WHITELIST: dict[str, str] = {

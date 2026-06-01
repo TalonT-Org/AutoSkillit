@@ -9,6 +9,10 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
 SCRIPT = Path(__file__).resolve().parents[2] / "src/autoskillit/hooks/session_start_hook.py"
 
 

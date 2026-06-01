@@ -6,6 +6,10 @@ import subprocess
 from contextlib import redirect_stdout
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+
 
 def _make_proc(returncode: int, stdout: str) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
     proc = MagicMock(spec=subprocess.CompletedProcess)

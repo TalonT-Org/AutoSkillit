@@ -1,10 +1,14 @@
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).parents[2]
 assert (REPO_ROOT / "pyproject.toml").exists(), "REPO_ROOT detection broken"
 ORCH_DOC = REPO_ROOT / "docs" / "orchestration-levels.md"
 GLOSSARY = REPO_ROOT / "docs" / "glossary.md"
+
+pytestmark = [pytest.mark.layer("docs"), pytest.mark.medium]
 
 
 def test_orchestration_levels_doc_exists():

@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import functools
 
+import pytest
+
 from autoskillit.core.types import SkillSource
 from autoskillit.workspace.skills import DefaultSkillResolver
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 @functools.cache

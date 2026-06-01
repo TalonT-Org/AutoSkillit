@@ -19,6 +19,8 @@ import pytest
 
 from tests.arch._helpers import SRC_ROOT, _runtime_import_froms
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
 # ---------------------------------------------------------------------------
 # REQ-GWAY-006: execution/__init__.py public surface
 # ---------------------------------------------------------------------------

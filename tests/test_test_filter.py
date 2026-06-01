@@ -29,6 +29,8 @@ from tests._test_filter import (
     load_manifest,
 )
 
+pytestmark = [pytest.mark.medium]
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = PROJECT_ROOT / ".autoskillit" / "test-filter-manifest.yaml"
 

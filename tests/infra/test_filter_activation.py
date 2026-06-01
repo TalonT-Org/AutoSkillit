@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 REPO_ROOT = Path(__file__).parent.parent.parent
 
 

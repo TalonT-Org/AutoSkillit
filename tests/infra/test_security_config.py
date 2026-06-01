@@ -5,7 +5,11 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).parent.parent.parent
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 
 def test_gitleaks_config_exists() -> None:

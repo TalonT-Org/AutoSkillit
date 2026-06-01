@@ -8,6 +8,8 @@ import pytest
 
 pytest_plugins = ["pytester"]
 
+pytestmark = [pytest.mark.medium]
+
 
 # ---------------------------------------------------------------------------
 # Conftest filter plugin – pytester integration tests (P1–P8)

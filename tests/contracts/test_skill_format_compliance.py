@@ -15,6 +15,8 @@ from autoskillit.workspace.skill_format import (
 )
 from tests.contracts.conftest import _all_skill_mds
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 try:
     _SKILL_MDS = _all_skill_mds()
 except Exception:

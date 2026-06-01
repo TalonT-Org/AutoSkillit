@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 REVIEW_FLAG_RE = re.compile(r"<!--\s*REVIEW-FLAG:\s*severity=(\w+)\s+dimension=(\w+)\s*-->")
 
 

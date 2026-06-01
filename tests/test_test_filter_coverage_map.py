@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests._test_filter import load_coverage_map
+
+pytestmark = [pytest.mark.medium]
 
 
 class TestLoadCoverageMap:

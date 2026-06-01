@@ -18,6 +18,8 @@ from autoskillit.hook_registry import (
     generate_hooks_json,
 )
 
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
 
 # HR-FILTER-1: command with "autoskillit" substring -> True
 def test_is_own_hook_autoskillit_substring() -> None:

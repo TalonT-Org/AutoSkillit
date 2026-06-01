@@ -26,6 +26,8 @@ from autoskillit.recipe.methodology_venue_appendix import (
 )
 from autoskillit.workspace.skills import DefaultSkillResolver
 
+pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
 EXPECTED_TRADITIONS: list[str] = [
     "controlled_intervention",
     "systematic_synthesis",

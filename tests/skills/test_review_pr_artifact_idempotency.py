@@ -28,13 +28,19 @@ _VULNERABLE_FILES = [
 _WINDOW = 600
 
 
-def _surrounding_text(text: str, target: str) -> str:
-    idx = text.find(target)
-    if idx == -1:
-        return ""
-    start = max(0, idx - _WINDOW)
-    end = min(len(text), idx + len(target) + _WINDOW)
-    return text[start:end]
+def _all_surrounding_windows(text: str, target: str) -> list[str]:
+    """Return surrounding text windows for all occurrences of target in text."""
+    windows: list[str] = []
+    start = 0
+    while True:
+        idx = text.find(target, start)
+        if idx == -1:
+            break
+        w_start = max(0, idx - _WINDOW)
+        w_end = min(len(text), idx + len(target) + _WINDOW)
+        windows.append(text[w_start:w_end])
+        start = idx + 1
+    return windows
 
 
 @pytest.mark.parametrize("filename_pattern", _VULNERABLE_FILES)
@@ -46,11 +52,14 @@ def test_write_instruction_includes_idempotent_guidance(filename_pattern: str) -
     explaining how to safely overwrite or skip pre-existing files.
     """
     text = _SKILL_PATH.read_text()
-    window = _surrounding_text(text, filename_pattern)
-    assert window, f"Pattern {filename_pattern!r} not found in review-pr/SKILL.md"
-    found = any(kw.lower() in window.lower() for kw in _IDEMPOTENT_KEYWORDS)
+    windows = _all_surrounding_windows(text, filename_pattern)
+    assert windows, f"Pattern {filename_pattern!r} not found in review-pr/SKILL.md"
+    found = any(
+        any(kw.lower() in window.lower() for kw in _IDEMPOTENT_KEYWORDS) for window in windows
+    )
     assert found, (
-        f"No idempotent-write guidance found near {filename_pattern!r} in review-pr/SKILL.md. "
-        f"Expected one of {sorted(_IDEMPOTENT_KEYWORDS)!r} within {_WINDOW} chars of the "
-        f"write instruction. Surrounding text: {window[:300]!r}"
+        f"No idempotent-write guidance found near any occurrence of {filename_pattern!r} in "
+        f"review-pr/SKILL.md. Expected one of {sorted(_IDEMPOTENT_KEYWORDS)!r} within "
+        f"{_WINDOW} chars of at least one occurrence. "
+        f"First window: {windows[0][:300]!r}"
     )

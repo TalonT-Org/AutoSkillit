@@ -822,7 +822,7 @@ steps:
       step_name: "extract_pr_number"
     capture:
       pr_number: "${{ result.stdout | trim }}"
-    on_success: annotate_pr_diff
+    on_success: init_review_loop_count
     on_failure: release_issue_failure
     optional: true
     skip_when_false: "inputs.open_pr"
@@ -830,13 +830,24 @@ steps:
       Extracts the integer PR number from the feature branch opened by compose_pr.
       pr_number is required by the queue finale steps (enqueue_to_queue, wait_for_queue).
 
+  init_review_loop_count:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.init_counter"
+      counter_value: "${{ context.review_loop_count }}"
+    capture:
+      review_loop_count: "${{ result.value }}"
+    on_success: annotate_pr_diff
+    on_failure: annotate_pr_diff
+    optional_context_refs:
+    - review_loop_count
   annotate_pr_diff:
     tool: run_python
     with:
       callable: "autoskillit.smoke_utils.annotate_pr_diff"
       pr_number: "${{ context.pr_number }}"
       cwd: "${{ context.work_dir }}"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}"
       base_branch: "${{ inputs.base_branch }}"
       local_review_rounds: "${{ inputs.local_review_rounds }}"
       current_iteration: "${{ context.review_loop_count }}"
@@ -865,7 +876,7 @@ steps:
       skill_command: "/autoskillit:review-pr ${{ context.merge_target }} ${{ inputs.base_branch }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }} diff_metrics_path=${{ context.diff_metrics_path }} mode=${{ context.review_mode }} pr_head_sha=${{ context.pr_head_sha }}"
       cwd: "${{ context.work_dir }}"
       step_name: "review_pr"
-      output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}"
     capture:
       review_verdict: "${{ result.verdict }}"
     on_result:
@@ -989,18 +1000,29 @@ steps:
       review_loop_count: "${{ result.next_iteration }}"
     on_result:
     - when: "${{ result.had_blocking }} == true and ${{ result.max_exceeded }} == false"
-      route: annotate_pr_diff
+      route: pre_review_cleanup
     - route: check_repo_ci_event
     on_failure: check_repo_ci_event
     optional_context_refs:
     - review_loop_count
     - review_verdict
     note: >
-      Compound iteration + blocking guard. Routes back to annotate_pr_diff only when
-      had_blocking=true AND max_exceeded=false. had_blocking is true when
-      previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds),
-      ensuring local review rounds are fully exhausted before exiting to CI.
+      Compound iteration + blocking guard. Routes back to pre_review_cleanup (then
+      annotate_pr_diff) only when had_blocking=true AND max_exceeded=false. had_blocking
+      is true when previous_verdict=changes_requested OR (local_review_rounds > 0 AND
+      iteration < local_review_rounds), ensuring local review rounds are fully exhausted
+      before exiting to CI.
 
+  pre_review_cleanup:
+    tool: run_python
+    with:
+      callable: "autoskillit.smoke_utils.pre_iteration_cleanup"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/review-pr/iter_${{ context.review_loop_count }}"
+      work_dir: "${{ context.work_dir }}"
+    on_success: annotate_pr_diff
+    on_failure: annotate_pr_diff
+    optional_context_refs:
+    - review_loop_count
   check_repo_ci_event:
     tool: check_repo_merge_state
     with:

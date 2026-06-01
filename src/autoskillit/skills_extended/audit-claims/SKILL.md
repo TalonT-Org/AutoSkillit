@@ -103,7 +103,7 @@ gh pr diff {pr_number} > {{AUTOSKILLIT_TEMP}}/audit-claims/diff_{pr_number}.txt
 ```
 
 Save the diff to `{{AUTOSKILLIT_TEMP}}/audit-claims/diff_{pr_number}.txt` (relative to the
-current working directory).
+current working directory). If this file already exists from a prior retry, overwrite it using a Bash redirect (`gh pr diff {pr_number} > path`) — the redirect clobbers the file safely.
 
 Do NOT run deterministic diff annotation — claim positions are report-level, not
 line-level. Subagents use section structure, not line markers.
@@ -158,7 +158,7 @@ Subagent prompt template:
 > {section_diff_content}
 
 Aggregate all extracted claims from all subagents. Save to
-`{{AUTOSKILLIT_TEMP}}/audit-claims/claims_{pr_number}.json`.
+`{{AUTOSKILLIT_TEMP}}/audit-claims/claims_{pr_number}.json`. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 #### Phase 2 — Evidence Matching (parallel subagents by claim type) (SINGLE MESSAGE)
 
@@ -211,7 +211,7 @@ Subagent prompt template:
 > Full PR diff:
 > {diff_content}
 
-Save findings to `{{AUTOSKILLIT_TEMP}}/audit-claims/findings_{pr_number}.json`.
+Save findings to `{{AUTOSKILLIT_TEMP}}/audit-claims/findings_{pr_number}.json`. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 ### Step 4: Aggregate and Deduplicate Findings
 

@@ -914,11 +914,14 @@ def test_enrich_diff_context_fills_empty_code_regions(tmp_path: Path) -> None:
             {"path": "src/app.py", "line": 42, "severity": "critical", "code_region": ""},
         ],
     )
-    result = enrich_diff_context(pr_number="123", project_dir=str(tmp_path))
+    review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
+    result = enrich_diff_context(
+        pr_number="123", project_dir=str(tmp_path), output_dir=str(review_dir)
+    )
     assert result["enriched"] == "true"
     assert result["enriched_count"] == "1"
 
-    handoff_path = tmp_path / ".autoskillit" / "temp" / "review-pr" / "diff_context_123.json"
+    handoff_path = review_dir / "diff_context_123.json"
     handoff = json.loads(handoff_path.read_text())
     assert "[L42]" in handoff["context_entries"][0]["code_region"]
 
@@ -938,11 +941,14 @@ def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> 
             {"path": "src/app.py", "line": 40, "severity": "warning", "code_region": ""},
         ],
     )
-    result = enrich_diff_context(pr_number="123", project_dir=str(tmp_path))
+    review_dir = tmp_path / ".autoskillit" / "temp" / "review-pr"
+    result = enrich_diff_context(
+        pr_number="123", project_dir=str(tmp_path), output_dir=str(review_dir)
+    )
     assert result["enriched"] == "true"
     assert result["enriched_count"] == "1"
 
-    handoff_path = tmp_path / ".autoskillit" / "temp" / "review-pr" / "diff_context_123.json"
+    handoff_path = review_dir / "diff_context_123.json"
     handoff = json.loads(handoff_path.read_text())
     assert handoff["context_entries"][0]["code_region"] == "pre-existing"
     assert "[L40]" in handoff["context_entries"][1]["code_region"]
@@ -951,7 +957,9 @@ def test_enrich_diff_context_preserves_existing_code_regions(tmp_path: Path) -> 
 # T_EDC3
 def test_enrich_diff_context_missing_handoff_file(tmp_path: Path) -> None:
     """enrich_diff_context returns gracefully when handoff file does not exist."""
-    result = enrich_diff_context(pr_number="999", project_dir=str(tmp_path))
+    result = enrich_diff_context(
+        pr_number="999", project_dir=str(tmp_path), output_dir=str(tmp_path)
+    )
     assert result["enriched"] == "false"
     assert result["reason"] == "handoff_not_found"
 
@@ -2352,7 +2360,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 21 public names."""
+    """smoke_utils.__all__ must list all 23 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2372,10 +2380,12 @@ def test_smoke_utils_all_exports_complete() -> None:
         "diagnose_merge_gate",
         "enrich_diff_context",
         "fetch_merge_queue_data",
+        "init_counter",
         "LOCAL_ROUND_EXEMPT_VERDICTS",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
         "patch_pr_token_summary",
+        "pre_iteration_cleanup",
         "try_load_json",
     }
     assert set(su.__all__) == expected
@@ -2400,9 +2410,11 @@ def test_smoke_utils_all_exports_complete() -> None:
         "diagnose_merge_gate",
         "enrich_diff_context",
         "fetch_merge_queue_data",
+        "init_counter",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
         "patch_pr_token_summary",
+        "pre_iteration_cleanup",
         "try_load_json",
     ],
 )
@@ -2441,7 +2453,7 @@ def test_callable_rejects_relative_output_dir(callable_name: str, minimal_args: 
 
 def test_enrich_diff_context_rejects_relative_project_dir() -> None:
     with pytest.raises(ValueError, match="absolute"):
-        enrich_diff_context(pr_number="1", project_dir="relative/path")
+        enrich_diff_context(pr_number="1", project_dir="relative/path", output_dir="/tmp")
 
 
 def test_check_bug_report_non_empty_rejects_relative_workspace() -> None:

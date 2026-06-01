@@ -257,6 +257,7 @@ def check_loop_with_progress(
 def enrich_diff_context(
     pr_number: str,
     project_dir: str,
+    output_dir: str,
     context_lines: str = "50",
 ) -> dict[str, str]:
     """Fill empty code_region fields in the review-pr diff_context handoff.
@@ -271,9 +272,11 @@ def enrich_diff_context(
 
     if not Path(project_dir).is_absolute():
         raise ValueError(f"project_dir must be absolute, got {project_dir!r}")
+    out = Path(output_dir)
+    if not out.is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
     ctx_lines = int(context_lines) if context_lines else 50
-    temp_dir = Path(project_dir) / ".autoskillit" / "temp"
-    handoff_path = temp_dir / "review-pr" / f"diff_context_{pr_number}.json"
+    handoff_path = out / f"diff_context_{pr_number}.json"
 
     if not handoff_path.exists():
         return {"enriched": "false", "reason": "handoff_not_found"}
@@ -281,7 +284,7 @@ def enrich_diff_context(
     handoff = json.loads(handoff_path.read_text())
     entries = handoff.get("context_entries", [])
 
-    annotated_path = temp_dir / "review-pr" / f"annotated_diff_{pr_number}.txt"
+    annotated_path = out / f"annotated_diff_{pr_number}.txt"
     if not annotated_path.exists():
         return {"enriched": "false", "reason": "annotated_diff_not_found"}
 
@@ -306,3 +309,44 @@ def enrich_diff_context(
         "enriched_count": str(enriched_count),
         "total_entries": str(len(entries)),
     }
+
+
+def init_counter(counter_value: str = "") -> dict[str, str]:
+    """Initialize a loop counter, defaulting to '0' when the value is absent or blank.
+
+    Called by run_python from the init_review_loop_count step to ensure
+    review_loop_count is always a valid integer string before annotate_pr_diff runs.
+    """
+    stripped = counter_value.strip()
+    return {"value": stripped if stripped else "0"}
+
+
+def pre_iteration_cleanup(
+    output_dir: str,
+    preserve_patterns: str = "",
+) -> dict[str, str]:
+    """Remove files from a prior iteration's output directory.
+
+    Called by run_python from the pre_review_cleanup step on the loop-back path.
+    With iteration-scoped directories this is defense-in-depth; the primary
+    isolation comes from writing to iter_N/ subdirectories.
+    """
+    import fnmatch  # noqa: PLC0415
+
+    out = Path(output_dir)
+    if not out.is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
+    if not out.exists():
+        return {"cleaned": "false", "reason": "not_found"}
+
+    patterns = [p.strip() for p in preserve_patterns.split(",") if p.strip()]
+    removed = 0
+    for f in out.iterdir():
+        if not f.is_file():
+            continue
+        if patterns and any(fnmatch.fnmatch(f.name, p) for p in patterns):
+            continue
+        f.unlink()
+        removed += 1
+
+    return {"cleaned": "true", "removed_count": str(removed)}

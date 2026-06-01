@@ -78,9 +78,9 @@ def test_check_review_loop_routes_to_annotate_pr_diff_when_had_blocking(
     review_conditions = [
         c
         for c in step.on_result.conditions
-        if c.when is not None and c.route == "annotate_pr_diff"
+        if c.when is not None and c.route == "pre_review_cleanup"
     ]
-    assert review_conditions, "No conditional route to annotate_pr_diff found"
+    assert review_conditions, "No conditional route to pre_review_cleanup found"
     cond = review_conditions[0].when
     assert "had_blocking" in cond
     assert "max_exceeded" in cond

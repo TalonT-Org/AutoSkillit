@@ -1070,7 +1070,7 @@ def test_run_python_steps_with_relative_output_dir_have_work_dir(recipe_yaml: Pa
         # Only flag explicit template placeholders and literal relative paths.
         # Context variable refs (${{ context.* }}) resolve at runtime and may be
         # absolute — do not flag them.
-        is_context_ref = output_dir.startswith("${{")
+        is_context_ref = "${{ context." in output_dir
         is_relative = not is_context_ref and (
             not output_dir.startswith("/") or "{{AUTOSKILLIT_TEMP}}" in output_dir
         )

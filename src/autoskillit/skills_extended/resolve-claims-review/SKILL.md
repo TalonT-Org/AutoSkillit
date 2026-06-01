@@ -162,6 +162,8 @@ Save to:
 - `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/reviews_{pr}.json`
 - `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/threads_{pr}.json`
 
+Use `jq -n` or the Write tool to create these files. If a file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`). Do not use inline Python one-liners or heredoc scripts with `open()` — these are blocked by the sandbox.
+
 ### Step 3: Parse, Classify, and Dimension-Group
 
 From **inline comments**, extract per comment:
@@ -203,7 +205,7 @@ Apply `DIMENSION_PATTERN` to each comment body to extract the dimension label.
 Note: `experimental` findings never appear — they are self-evidencing and generate no
 findings in `audit-claims`.
 
-Save `dimension_groups_{pr}.json` with findings keyed by group.
+Save `dimension_groups_{pr}.json` with findings keyed by group. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 ### Step 3.5: Intent Validation (Parallel Sub-Agents — BEFORE any code changes) (SINGLE MESSAGE)
 
@@ -276,7 +278,7 @@ failed group as `DISCUSS` and log the failure with the error message, domain gro
 and affected comment IDs.
 
 Merge results into `classification_map: dict[comment_id, verdict_entry]`.
-Save `classification_map_{pr}.json`.
+Save `classification_map_{pr}.json`. Use `jq -n` or the Write tool. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 Write analysis report to `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/analysis_{pr}_{ts}.md`
 with banner (BEFORE any code changes):
@@ -410,6 +412,8 @@ Schema:
 
 Save escalation records to:
 `{{AUTOSKILLIT_TEMP}}/resolve-claims-review/escalation_records_{pr}.json`
+
+Use `jq -n` or the Write tool to create this file. If the file already exists from a prior retry, either read it first (to satisfy the Write tool guard) or use a Bash redirect (`jq -n ... > path`).
 
 Each escalation record must include a `"strategy"` field set to the `fix_strategy` value
 (either `"rerun_required"` or `"design_flaw"`). This field is read by the structured

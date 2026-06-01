@@ -27,6 +27,8 @@ from autoskillit.smoke_utils._review import (
     check_loop_with_progress,
     check_review_loop,
     enrich_diff_context,
+    init_counter,
+    pre_iteration_cleanup,
 )
 from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch_pr_token_summary
 
@@ -48,8 +50,10 @@ __all__ = [
     "diagnose_merge_gate",
     "enrich_diff_context",
     "fetch_merge_queue_data",
+    "init_counter",
     "parse_agent_eval_manifests",
     "parse_eval_manifests",
     "patch_pr_token_summary",
+    "pre_iteration_cleanup",
     "try_load_json",
 ]

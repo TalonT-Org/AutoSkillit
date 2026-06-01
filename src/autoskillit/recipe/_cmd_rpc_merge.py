@@ -140,7 +140,7 @@ def create_persistent_integration(
     default_branch = "main"
     if result.returncode == 0:
         ref = result.stdout.strip()
-        default_branch = ref.replace(f"refs/remotes/{remote}/", "")
+        default_branch = ref.removeprefix(f"refs/remotes/{remote}/")
     run_git(["checkout", default_branch], cwd=work_dir, check=True)
     run_git(["pull"], cwd=work_dir, check=True)
     run_git(["checkout", "-b", base_branch], cwd=work_dir, check=True)

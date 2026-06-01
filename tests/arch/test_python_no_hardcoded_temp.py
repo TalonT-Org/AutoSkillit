@@ -68,6 +68,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     "hooks/skill_load_post_hook.py": "stdlib-only hook; cannot use resolve_temp_dir()",
     "hooks/guards/skill_load_guard.py": "stdlib-only guard; cannot use resolve_temp_dir()",
     "core/runtime/session_provenance.py": "IL-0 stdlib-only module; cannot use resolve_temp_dir()",
+    "workspace/skill_format.py": "write_paths validation accepts resolved canonical temp prefix",
 }
 
 _LITERAL = ".autoskillit/temp"

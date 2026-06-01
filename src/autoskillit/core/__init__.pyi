@@ -265,6 +265,7 @@ from .types import MergeFailedStep as MergeFailedStep
 from .types import MergeQueueWatcher as MergeQueueWatcher
 from .types import MergeState as MergeState
 from .types import MigrationService as MigrationService
+from .types import ModelIdentity as ModelIdentity
 from .types import ModelTotalEntry as ModelTotalEntry
 from .types import NamedResume as NamedResume
 from .types import NoResume as NoResume

@@ -657,6 +657,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_idle_output_env.py",
             "execution/test_write_evidence.py",
             "execution/test_zero_write_detection.py",
+            "execution/test_session_log_fields.py",
             "server",
             "infra",
             "cli",
@@ -819,6 +820,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_kitchen_gate.py",
             "server/test_tools_kitchen_gate_hook_config.py",
             "execution/test_quota_sleep.py",
+            "execution/test_session_log_fields.py",
         }
     ),
     "hook_registry": frozenset(

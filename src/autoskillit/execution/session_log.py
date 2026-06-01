@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 
 from autoskillit.core import (
+    ModelIdentity,
     atomic_write,
     claude_code_log_path,
     default_log_dir,
@@ -147,8 +148,7 @@ def flush_session_log(
     api_retry_last_status: int | None = None,
     api_retry_exhausted: bool = False,
     versions: dict[str, Any] | None = None,
-    model_identifier: str = "",
-    profile_name: str = "",
+    model_identity: ModelIdentity = ModelIdentity.unknown(),
     max_sessions: int | None = None,
     is_resume: bool = False,
     codex_log_path: Path | None = None,
@@ -306,9 +306,25 @@ def flush_session_log(
             }
         )
 
-    effective_model_id = model_identifier or _primary_model_identifier(token_usage)
+    effective_model_id = model_identity.effective_model or _primary_model_identifier(token_usage)
     _observed = _primary_model_identifier(token_usage) if token_usage else ""
-    anomalies.extend(detect_model_drift(model_identifier, _observed, profile_name=profile_name))
+    anomalies.extend(
+        detect_model_drift(
+            model_identity.configured_model, _observed, profile_name=model_identity.profile_name
+        )
+    )
+    if model_identity.profile_name and model_identity.profile_name != "anthropic":
+        if effective_model_id.startswith("claude-") or effective_model_id in (
+            "sonnet",
+            "opus",
+            "haiku",
+        ):
+            logger.warning(
+                "model_identity_mismatch",
+                effective_model_id=effective_model_id,
+                profile_name=model_identity.profile_name,
+                configured_model=model_identity.configured_model,
+            )
 
     # Write anomalies.jsonl (only if anomalies exist)
     if anomalies:
@@ -443,8 +459,8 @@ def flush_session_log(
             "turn_count": token_usage.get("turn_count", 0),
             "provider_used": provider_outcome.provider_used,
             "model_identifier": effective_model_id,
-            "configured_model": model_identifier,
-            "profile_name": profile_name,
+            "configured_model": model_identity.configured_model,
+            "profile_name": model_identity.profile_name,
             "dispatch_id": dispatch_id,
             "campaign_id": campaign_id,
         }
@@ -514,8 +530,8 @@ def flush_session_log(
         "api_retry_last_error": api_retry_last_error,
         "api_retry_last_status": api_retry_last_status,
         "model_identifier": effective_model_id,
-        "configured_model": model_identifier,
-        "profile_name": profile_name,
+        "configured_model": model_identity.configured_model,
+        "profile_name": model_identity.profile_name,
         "schema_version": 3,
     }
     index_path = log_root / "sessions.jsonl"

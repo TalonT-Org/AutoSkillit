@@ -321,7 +321,7 @@ def _subagent_assistant_ndjson(
 
 
 def _flush(tmp_path: Path, **overrides) -> None:
-    from autoskillit.core.types._type_results import ProviderOutcome
+    from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
     from autoskillit.core.types._type_results_execution import (
         RecipeIdentity,
         SessionTelemetry,
@@ -347,9 +347,24 @@ def _flush(tmp_path: Path, **overrides) -> None:
         "audit_record": None,
         "loc_insertions": 0,
         "loc_deletions": 0,
-        "profile_name": "",
+        "model_identity": ModelIdentity.unknown(),
     }
     defaults.update(overrides)
+
+    # Convert legacy model_identifier + profile_name to ModelIdentity if callers pass them
+    _model_identifier = defaults.pop("model_identifier", None)
+    _profile_name = defaults.pop("profile_name", None)
+    if _model_identifier is not None or _profile_name is not None:
+        _mid = _model_identifier or ""
+        _pn = _profile_name or ""
+        if _pn and _pn != "anthropic":
+            defaults["model_identity"] = ModelIdentity.for_provider(
+                configured=_mid, effective="", profile=_pn
+            )
+        elif _mid:
+            defaults["model_identity"] = ModelIdentity.anthropic(_mid)
+        else:
+            defaults["model_identity"] = ModelIdentity.unknown()
 
     # Extract telemetry kwargs and build SessionTelemetry before forwarding
     _github_api_log = defaults.pop("github_api_log")

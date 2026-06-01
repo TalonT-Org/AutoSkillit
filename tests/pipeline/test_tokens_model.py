@@ -293,3 +293,32 @@ def test_primary_model_warns_on_non_dict_breakdown() -> None:
         result = _primary_model(token_usage)
     assert result == "claude-opus-4-6"
     assert any("Unexpected model_breakdown entry type" in entry.get("event", "") for entry in cap)
+
+
+def test_load_from_log_dir_non_anthropic_model_uses_effective_model(tmp_path: Path) -> None:
+    """Non-Anthropic: load_from_log_dir prefers model_identifier over configured_model."""
+    sessions_dir = tmp_path / "sessions" / "s1"
+    sessions_dir.mkdir(parents=True)
+    (sessions_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "step_name": "implement",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+                "timing_seconds": 10.0,
+                "model_identifier": "MiniMax-M2.7-highspeed",
+                "configured_model": "sonnet",
+                "profile_name": "minimax",
+            }
+        )
+    )
+    index_entry = {"session_id": "s1", "dir_name": "s1", "timestamp": "2026-01-01T00:00:00Z"}
+    (tmp_path / "sessions.jsonl").write_text(json.dumps(index_entry) + "\n")
+
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path)
+    report = log.get_report()
+    assert len(report) == 1
+    assert report[0]["model"] == "MiniMax-M2.7-highspeed"

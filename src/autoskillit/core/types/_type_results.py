@@ -23,6 +23,7 @@ __all__ = [
     "InputSpec",
     "LoadReport",
     "LoadResult",
+    "ModelIdentity",
     "TestResult",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
@@ -205,6 +206,35 @@ class ProviderOutcome:
     def none_used(cls) -> ProviderOutcome:
         """Sentinel for paths where no provider selection occurred."""
         return cls(provider_used="", fallback_activated=False)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelIdentity:
+    """Typed bundle of model identity for a headless session.
+
+    Carries both the configured Anthropic alias and the effective provider model,
+    preventing provider-unaware resolution from silently producing wrong-but-truthy values.
+    """
+
+    configured_model: str
+    effective_model: str
+    profile_name: str
+
+    @property
+    def is_anthropic(self) -> bool:
+        return not self.profile_name or self.profile_name == "anthropic"
+
+    @classmethod
+    def anthropic(cls, model: str) -> ModelIdentity:
+        return cls(configured_model=model, effective_model=model, profile_name="")
+
+    @classmethod
+    def for_provider(cls, *, configured: str, effective: str, profile: str) -> ModelIdentity:
+        return cls(configured_model=configured, effective_model=effective, profile_name=profile)
+
+    @classmethod
+    def unknown(cls) -> ModelIdentity:
+        return cls(configured_model="", effective_model="", profile_name="")
 
 
 @dataclass(frozen=True, slots=True)

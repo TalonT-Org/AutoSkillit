@@ -318,7 +318,11 @@ class DefaultTokenLog:
             if key not in self._entries:
                 self._entries[key] = TokenEntry(step_name=step_name)
             e = self._entries[key]
-            _model = data.get("configured_model") or data.get("model_identifier", "")
+            _profile = data.get("profile_name", "")
+            if _profile and _profile != "anthropic":
+                _model = data.get("model_identifier", "") or data.get("configured_model", "")
+            else:
+                _model = data.get("configured_model") or data.get("model_identifier", "")
             if _model and not e.model:
                 e.model = _model
             e.input_tokens += data.get("input_tokens", 0)

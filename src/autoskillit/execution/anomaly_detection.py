@@ -81,7 +81,7 @@ def normalize_model_id(model: str) -> str:
 
     Non-Anthropic model names pass through unchanged.
     """
-    from autoskillit.core.types._type_backend import strip_context_window_suffix
+    from autoskillit.core import strip_context_window_suffix
 
     stripped = strip_context_window_suffix(model)
     expanded = _MODEL_SHORT_ALIASES.get(stripped, stripped)

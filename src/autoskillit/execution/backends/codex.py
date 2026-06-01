@@ -351,7 +351,7 @@ class CodexBackend:
         return "codex"
 
     def translate_model(self, model: str) -> str:
-        from autoskillit.core.types._type_backend import (
+        from autoskillit.core import (
             CODEX_MODEL_ALIASES,
             strip_context_window_suffix,
         )

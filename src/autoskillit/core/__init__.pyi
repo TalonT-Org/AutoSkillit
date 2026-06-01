@@ -298,7 +298,6 @@ from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSource as SkillSource
 from .types import StreamParser as StreamParser
-from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner
 from .types import SupportsDebug as SupportsDebug
@@ -328,5 +327,6 @@ from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill
 from .types import resume_spec_from_cli as resume_spec_from_cli
 from .types import session_type as session_type
+from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import truncate_text as truncate_text
 from .types import validate_label_transition as validate_label_transition

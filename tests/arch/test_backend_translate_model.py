@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import textwrap
 
 import pytest
 
@@ -34,7 +35,7 @@ def _get_terminal_model_methods(cls: type) -> list[str]:
         except (TypeError, OSError):
             continue
         try:
-            tree = ast.parse(source)
+            tree = ast.parse(textwrap.dedent(source))
         except SyntaxError:
             continue
         for node in ast.walk(tree):
@@ -53,7 +54,7 @@ def test_translate_model_called_at_terminal_model_sites() -> None:
         for method_name in terminal_methods:
             method = getattr(cls, method_name)
             source = inspect.getsource(method)
-            tree = ast.parse(source)
+            tree = ast.parse(textwrap.dedent(source))
             has_translate_call = False
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):

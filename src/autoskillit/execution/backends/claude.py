@@ -289,7 +289,7 @@ class ClaudeCodeBackend:
         return "claude"
 
     def translate_model(self, model: str) -> str:
-        from autoskillit.core.types._type_backend import (
+        from autoskillit.core import (
             CLAUDE_MODEL_ALIASES,
             strip_context_window_suffix,
         )

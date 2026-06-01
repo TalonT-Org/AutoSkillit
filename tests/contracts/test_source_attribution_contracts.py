@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 import regex as re
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 SKILLS_DIR = Path(__file__).parents[2] / "src/autoskillit/skills_extended"
 
 _SOURCE_ATTRIBUTION_PATTERN = re.compile(

@@ -89,6 +89,10 @@ class BackendCapabilities:
     skills_subdir: str = ""
     # Env vars that must appear in CmdSpec.env for all cmd-builders (MCP forwarding)
     mcp_env_forward_vars: frozenset[str] = field(default_factory=frozenset)
+    # True when backend supports api_simulator-based REPLAY_SCENARIO runner wrapping
+    replay_capable: bool = field(default=False)
+    # True when backend supports api_simulator-based RECORD_SCENARIO runner wrapping
+    record_capable: bool = field(default=False)
 
 
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
@@ -135,6 +139,8 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     version_check_command="claude --version",
     process_name="claude",
     skills_subdir=".claude/skills",
+    replay_capable=True,
+    record_capable=True,
 )
 
 

@@ -24,7 +24,8 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _CONTEXT_TEMPLATE_RE = re.compile(r"\$\{\{\s*context\.[^}]+\}\}")
 _AUTOSKILLIT_TEMP_RE = re.compile(r"\{\{AUTOSKILLIT_TEMP\}\}")
-_AUTOSKILLIT_TEMP_LITERAL_RE = re.compile(r"\.autoskillit/temp(?=/|$)")
+_TEMP_DIR_SUFFIX = "autoskillit/temp"
+_AUTOSKILLIT_TEMP_LITERAL_RE = re.compile(rf"\.{_TEMP_DIR_SUFFIX}(?=/|$)")
 
 
 def _static_base_prefix(output_dir: str) -> str:

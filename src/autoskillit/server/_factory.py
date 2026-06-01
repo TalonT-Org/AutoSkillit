@@ -18,7 +18,6 @@ from typing import Any
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     MARKETPLACE_PREFIX,
-    CodingAgentBackend,
     DirectInstall,
     FleetLock,
     MarketplaceInstall,
@@ -217,18 +216,13 @@ def make_context(
     _codex_feature_enabled = is_feature_enabled(
         "codex_backend", config.features, experimental_enabled=config.experimental_enabled
     )
-    if _codex_feature_enabled and config.agent_backend.backend == "codex":
-        from autoskillit.execution import CodexBackend
-
-        backend: CodingAgentBackend = CodexBackend()
-    else:
-        backend = get_backend(config.agent_backend.backend)
-        if _codex_feature_enabled:
-            logger.warning(
-                "codex_backend_flag_ignored",
-                reason="config.agent_backend.backend is not 'codex'",
-                configured_backend=config.agent_backend.backend,
-            )
+    if _codex_feature_enabled and config.agent_backend.backend != "codex":
+        logger.warning(
+            "codex_backend_flag_ignored",
+            reason="config.agent_backend.backend is not 'codex'",
+            configured_backend=config.agent_backend.backend,
+        )
+    backend = get_backend(config.agent_backend.backend)
 
     if runner is not None and os.environ.get(REPLAY_SCENARIO_ENV):
         if config.agent_backend.backend != "claude-code":

@@ -93,6 +93,9 @@ class BackendCapabilities:
     replay_capable: bool = field(default=False)
     # True when backend supports api_simulator-based RECORD_SCENARIO runner wrapping
     record_capable: bool = field(default=False)
+    # True when backend is the Anthropic provider (Claude Code) — used to gate
+    # provider-override routing in run_skill() on capability rather than backend name.
+    anthropic_provider_capable: bool = field(default=False)
 
 
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
@@ -141,6 +144,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     skills_subdir=".claude/skills",
     replay_capable=True,
     record_capable=True,
+    anthropic_provider_capable=True,
 )
 
 

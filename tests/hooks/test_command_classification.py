@@ -280,3 +280,61 @@ class TestExtractRedirectTargets:
     )
     def test_extract_redirect_targets(self, tokens, expected):
         assert extract_redirect_targets(tokens) == expected
+
+
+class TestResolveWriteTarget:
+    @pytest.mark.parametrize(
+        "path,cwd,expected",
+        [
+            ("/tmp/out.txt", "/workspace", "/tmp/out.txt"),
+            ("output.txt", "/workspace", "/workspace/output.txt"),
+            ("output.txt", "", None),
+            ("./output.txt", "/workspace", "/workspace/./output.txt"),
+            ("/tmp/out.txt", "", "/tmp/out.txt"),
+            ("", "/workspace", None),
+            ("", "", None),
+        ],
+        ids=[
+            "absolute_with_cwd",
+            "relative_with_cwd",
+            "relative_no_cwd",
+            "dotslash_relative_with_cwd",
+            "absolute_no_cwd",
+            "empty_path_with_cwd",
+            "empty_path_no_cwd",
+        ],
+    )
+    def test_resolve_write_target(self, path, cwd, expected):
+        from autoskillit.hooks._command_classification import resolve_write_target
+
+        assert resolve_write_target(path, cwd) == expected
+
+
+class TestExtractRedirectTargetsCwd:
+    @pytest.mark.parametrize(
+        "tokens,cwd,expected",
+        [
+            (["cmd", ">", "output.txt"], "/workspace", ["/workspace/output.txt"]),
+            (
+                ["cmd", ">>", ".autoskillit/temp/out.txt"],
+                "/workspace",
+                ["/workspace/.autoskillit/temp/out.txt"],
+            ),
+            (["cmd", "2>", "err.log"], "/workspace", ["/workspace/err.log"]),
+            (["cmd", ">", "output.txt"], "", []),
+            (["cmd", ">", "/abs/path"], "/workspace", ["/abs/path"]),
+            (["cmd", "2>output.txt"], "/workspace", ["/workspace/output.txt"]),
+        ],
+        ids=[
+            "relative_with_cwd",
+            "relative_append_with_cwd",
+            "relative_fd_with_cwd",
+            "relative_no_cwd",
+            "absolute_ignores_cwd",
+            "merged_relative_with_cwd",
+        ],
+    )
+    def test_extract_redirect_targets_with_cwd(self, tokens, cwd, expected):
+        from autoskillit.hooks._command_classification import extract_redirect_targets
+
+        assert extract_redirect_targets(tokens, cwd) == expected

@@ -96,6 +96,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_enqueue_ready_type_enforcement.py` | AST guard: mutation methods (_enqueue_direct, _enable_auto_merge_direct) must accept EnqueueReady, not str |
 | `test_origin_isolation_contract.py` | AST + shell lint guard: no hardcoded "origin" in git remote operations outside allowlist; shell scripts must try upstream before origin |
 | `test_skill_backend_annotations.py` | Architectural invariant: skills using Claude-Code-only features must declare backend_requirements: [claude-code] |
+| `test_write_guard_resolution.py` | Arch test: extract_redirect_targets must use resolve_write_target, not inline startswith |
 
 ## Architecture Notes
 

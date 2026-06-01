@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from autoskillit.core.types._type_results import ProviderOutcome
+from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
     SessionTelemetry,
@@ -1702,7 +1702,6 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path, monkeypatch):
 )
 def test_non_anthropic_provider_model_identity_round_trip(tmp_path, provider_model):
     """Non-Anthropic provider sessions must write the effective provider model, not the Anthropic alias."""
-    from autoskillit.core.types._type_results import ModelIdentity
 
     session_id = f"non-anthropic-rt-{provider_model[:8]}"
     _flush(
@@ -1729,3 +1728,56 @@ def test_non_anthropic_provider_model_identity_round_trip(tmp_path, provider_mod
     )
     assert data["configured_model"] == "sonnet"
     assert data["profile_name"] == "minimax"
+
+
+@pytest.mark.parametrize(
+    "model_identity,expected_model",
+    [
+        (
+            ModelIdentity.anthropic("claude-sonnet-4-6"),
+            "claude-sonnet-4-6",
+        ),
+        (
+            ModelIdentity.for_provider(configured="sonnet", effective="", profile="minimax"),
+            # effective model comes from model_breakdown argmax when effective=""
+            "MiniMax-M2.7-highspeed",
+        ),
+    ],
+)
+def test_model_identity_readers_agree(tmp_path, model_identity, expected_model):
+    """Both disk readers must produce the same model string after flush_session_log writes."""
+    from autoskillit.hooks.token_summary_hook import _load_sessions
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    session_id = f"reader-agree-{model_identity.profile_name or 'anthropic'}"
+    kitchen_id = f"kitchen-ra-{session_id}"
+    _flush(
+        tmp_path,
+        session_id=session_id,
+        proc_snapshots=None,
+        step_name="implement",
+        model_identity=model_identity,
+        token_usage={
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
+            "model_breakdown": {"MiniMax-M2.7-highspeed": {"output_tokens": 50}},
+        },
+        kitchen_id=kitchen_id,
+    )
+
+    log_root = tmp_path
+
+    disk_log = DefaultTokenLog()
+    disk_log.load_from_log_dir(log_root)
+    disk_entries = disk_log.get_report()
+    assert disk_entries, "DefaultTokenLog should have at least one entry"
+    disk_model = disk_entries[0]["model"]
+
+    hook_agg = _load_sessions(log_root, kitchen_id)
+    assert hook_agg, "_load_sessions should return at least one entry"
+    hook_model = next(iter(hook_agg.values()))["model"]
+
+    assert disk_model == hook_model, f"readers disagree: disk={disk_model!r}, hook={hook_model!r}"
+    assert disk_model == expected_model

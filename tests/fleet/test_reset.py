@@ -10,9 +10,9 @@ from autoskillit.core import IssueLabelState
 from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
+    compute_reset_labels,
     find_dispatch_in_campaigns,
 )
-from autoskillit.fleet._reset import compute_reset_labels
 from autoskillit.fleet.state import write_initial_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]

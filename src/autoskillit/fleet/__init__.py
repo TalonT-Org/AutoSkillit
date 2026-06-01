@@ -28,6 +28,9 @@ from ._reset import (
     resolve_worktrees_dir,
     update_campaign_state,
 )
+from ._reset import (
+    compute_reset_labels as compute_reset_labels,
+)
 from ._semaphore import FleetSemaphore
 from .result_parser import L3ParseResult, parse_l3_result_block
 from .sidecar import (
@@ -169,6 +172,7 @@ __all__ = [
     "read_sidecar_from_path",
     "sidecar_path",
     "ResetReport",
+    "compute_reset_labels",
     "find_dispatch_in_campaigns",
     "format_resettable_statuses",
     "reset_dispatch_artifacts",

@@ -164,6 +164,7 @@ def test_sha_pre_merge_fires_warning() -> None:
     assert len(findings) == 1
     assert findings[0].severity == Severity.WARNING
     assert findings[0].step_name == "audit_impl"
+    assert "merge_worktree" in findings[0].message
 
 
 def test_sha_post_merge_no_finding() -> None:

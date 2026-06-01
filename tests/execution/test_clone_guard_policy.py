@@ -56,6 +56,7 @@ def test_policy_for_normal_write_skill():
 
 
 def test_policy_for_worktree_skill():
+    """Worktree skill: fire_on_failure=False because is_worktree=True."""
     policy = build_clone_guard_policy(
         is_worktree=True,
         readonly_skill=False,

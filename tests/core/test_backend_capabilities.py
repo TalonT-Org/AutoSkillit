@@ -75,6 +75,7 @@ def test_backend_capabilities_field_count():
         "supports_tool_list_changed",
         "replay_capable",
         "record_capable",
+        "anthropic_provider_capable",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -121,6 +122,7 @@ def test_backend_capabilities_field_names_locked():
         "mcp_env_forward_vars",
         "replay_capable",
         "record_capable",
+        "anthropic_provider_capable",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected
@@ -157,6 +159,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.mcp_env_forward_vars == frozenset()
     assert CLAUDE_CODE_CAPABILITIES.replay_capable is True
     assert CLAUDE_CODE_CAPABILITIES.record_capable is True
+    assert CLAUDE_CODE_CAPABILITIES.anthropic_provider_capable is True
 
 
 def test_backend_capabilities_frozenset_defaults():

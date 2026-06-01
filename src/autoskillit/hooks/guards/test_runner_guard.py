@@ -85,6 +85,8 @@ def _is_direct_pytest(cmd: str) -> bool:
         # Read-only multi-word prefixes (e.g. "uv pip").
         multiword_matched = False
         for parts in _READ_ONLY_MULTIWORD_PREFIXES:
+            if len(parts) < 2:
+                continue
             head, tail = parts[0], parts[1]
             if os.path.basename(token) == head and len(tokens) > 1 and tokens[1] == tail:
                 multiword_matched = True
@@ -102,10 +104,14 @@ def _is_direct_pytest(cmd: str) -> bool:
             if len(tokens) >= 3 and tokens[1] == "-m" and tokens[2] in _PYTEST_NAMES:
                 return True
 
-        # uv run pytest / uv run path/to/pytest.
-        if token == "uv" and len(tokens) >= 3 and tokens[1] == "run":
-            if os.path.basename(tokens[2]) in _PYTEST_NAMES:
-                return True
+        # uv run pytest / uv run path/to/pytest (flags between run and command are skipped).
+        if os.path.basename(token) == "uv" and len(tokens) >= 2 and tokens[1] == "run":
+            for run_tok in tokens[2:]:
+                if run_tok.startswith("-"):
+                    continue
+                if os.path.basename(run_tok) in _PYTEST_NAMES:
+                    return True
+                break
 
     return False
 

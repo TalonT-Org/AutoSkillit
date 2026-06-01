@@ -18,6 +18,10 @@ import pathlib
 from datetime import UTC, datetime
 from unittest.mock import patch
 
+import pytest
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
+
 _ENV_VARS = (
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_PATH",
     "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE",

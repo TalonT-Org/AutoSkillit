@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 from autoskillit.cli._hooks_codex import (
     _is_autoskillit_hook_entry,
     generate_codex_hooks_config,
@@ -10,7 +12,7 @@ from autoskillit.cli._hooks_codex import (
 )
 from autoskillit.execution.backends._codex_config import _read_codex_config
 
-pytestmark = []
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 class TestNoThirdPartyToml:

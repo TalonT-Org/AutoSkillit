@@ -8,6 +8,10 @@ and tests/infra/test_token_summary_v1_compat.py.
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
 # ---------------------------------------------------------------------------
 # TSA-1: hook script exists on disk
 # ---------------------------------------------------------------------------

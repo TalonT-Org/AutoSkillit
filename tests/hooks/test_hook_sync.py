@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
+
 
 def test_hook_config_path_components_in_sync():
     """pretty_output._HOOK_CONFIG_PATH_COMPONENTS must resolve to the same path as

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
+
 
 class TestFmtCloneRepo:
     """Test 6: _fmt_clone_repo renders new discriminator keys."""

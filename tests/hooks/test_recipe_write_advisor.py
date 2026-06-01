@@ -10,7 +10,11 @@ import sys
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
+import pytest
+
 from autoskillit.core.paths import pkg_root
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 def _run_advisor(payload: dict, extra_env: dict[str, str] | None = None) -> tuple[int, str]:

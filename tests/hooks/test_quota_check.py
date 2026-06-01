@@ -12,7 +12,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
+
+pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 _LONG_PATTERNS = ("seven_day", "sonnet", "opus")
 

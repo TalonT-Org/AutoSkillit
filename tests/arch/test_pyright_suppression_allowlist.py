@@ -18,8 +18,8 @@ TESTS = Path(__file__).resolve().parent.parent
 _PYRIGHT_RE = re.compile(r"#\s*pyright:\s*ignore|#.*--\s*pyright:\s*ignore")
 
 PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
-    ("recipe/__init__.py", 222): "dynamic method on lazy-registry object",
-    ("recipe/_api.py", 256): "global-mutated variable set by _finalize_registry()",
+    ("recipe/__init__.py", 225): "dynamic method on lazy-registry object",
+    ("recipe/_api.py", 258): "global-mutated variable set by _finalize_registry()",
 }
 
 TEST_ALLOWLIST: dict[tuple[str, int], str] = {

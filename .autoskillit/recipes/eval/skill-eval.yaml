@@ -63,6 +63,7 @@ steps:
       canary_manifest: "${{ inputs.canary_manifest }}"
       variant_manifest: "${{ inputs.variant_manifest }}"
       output_dir: "${{ inputs.output_dir }}"
+      work_dir: "${{ context.work_dir }}"
     capture:
       eval_run_dir: "${{ result.eval_run_dir }}"
       canary_count: "${{ result.canary_count }}"

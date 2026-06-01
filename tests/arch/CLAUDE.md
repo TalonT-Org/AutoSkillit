@@ -26,7 +26,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_eval_agent_skill.py` | Structural integrity tests for the eval-agent skill |
 | `test_env_symmetry.py` | Architectural invariant: skill and food-truck builders must set the same required base env vars |
 | `test_judge_eval_skill.py` | Structural integrity tests for the judge-eval skill |
-| `test_agent_prompt_structure.py` | Structural validation: agent definition MUST-gate fallback and empty-array documentation |
+| `test_agent_prompt_structure.py` | Structural validation: agent definition MUST-gate fallback, quote-verification gates, inconclusive output format, and empty-array documentation |
 | `test_boot_step_symmetry.py` | AST guard: both boot functions (_fleet_auto_gate_boot, _food_truck_auto_gate_boot) must call sweep_stale_dispatch_labels |
 | `test_bundled_recipes_split.py` | Enforcement: test_bundled_recipes.py split structure guard |
 | `test_cascade_map_guard.py` | REQ-GUARD-001..003, 005: CI guard validating cascade maps against AST-derived reverse import graph |

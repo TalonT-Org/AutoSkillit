@@ -492,6 +492,10 @@ def test_eval_fixture_inventory() -> None:
         "impl_commit_b7fa51e2.patch",
         "RP10-diff.txt",
         "RP10-reference.md",
+        "RP11-diff.txt",
+        "RP11-reference.md",
+        "RP12-diff.txt",
+        "RP12-reference.md",
     ]
     expected_overlays = [
         "baseline.md",

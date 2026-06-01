@@ -92,6 +92,33 @@ def test_stamp_ownership_rule_passes_for_owner(tmp_path: Path) -> None:
     assert _RULE_ID not in rule_ids
 
 
+def test_stamp_ownership_rule_passes_for_backtick_reference(tmp_path: Path) -> None:
+    """Rule does NOT fire when the stamp is referenced in backticks (read/check context)."""
+    skill_dir = tmp_path / "checker-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            f"""\
+            # checker-skill
+
+            ## Steps
+
+            If it does not contain `{DRY_WALKTHROUGH_VERIFIED_MARKER}`:
+            - Display warning
+            """
+        )
+    )
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill("checker-skill"))
+    recipe = load_recipe(recipe_path)
+
+    with patch.object(_rso, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+
+    rule_ids = [f.rule for f in findings]
+    assert _RULE_ID not in rule_ids
+
+
 def test_stamp_ownership_rule_passes_for_unrelated_skill(tmp_path: Path) -> None:
     """Rule does NOT fire when a skill contains no registered stamps."""
     skill_dir = tmp_path / "clean-skill"

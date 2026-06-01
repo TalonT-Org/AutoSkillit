@@ -1177,6 +1177,9 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("recipe/rules/rules_skill_content.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback
+        Path("recipe/rules/rules_stamp_ownership.py"): {
+            "DefaultSkillResolver"
+        },  # deferred default factory fallback
         Path("recipe/rules/rules_skills.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback

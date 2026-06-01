@@ -732,6 +732,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             loop-guard-before-verify semantic rules, bringing the count to 51.
             Decomposition into campaign/, ci/, dataflow/, graph/ subdirectories moved
             files out of rules/, bringing the rules/ count to 35.
+            rules_stamp_ownership.py adds the exclusive-stamp-ownership enforcement
+            rule, bringing the rules/ count to 36.
             Exempt at 51 files.
           execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
             focused single-concern modules (_process_io, _process_kill, _process_race,

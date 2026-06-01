@@ -40,6 +40,19 @@ def _resolve_skill_md(skill_name: str, *, resolver: SkillResolver | None = None)
     return skill_info.path
 
 
+def _has_write_instruction(content: str, stamp: str) -> bool:
+    """Return True if the stamp appears in a write-instruction context."""
+    backtick_ref = f"`{stamp}`"
+    lines = content.splitlines()
+    for line in lines:
+        if stamp not in line:
+            continue
+        if backtick_ref in line:
+            continue
+        return True
+    return False
+
+
 @semantic_rule(
     name="exclusive-stamp-ownership",
     description=(
@@ -69,7 +82,9 @@ def _check_exclusive_stamp_ownership(ctx: ValidationContext) -> list[RuleFinding
         for stamp, owner in _STAMP_OWNERS.items():
             if skill_name == owner:
                 continue
-            if stamp in content:
+            if stamp not in content:
+                continue
+            if _has_write_instruction(content, stamp):
                 findings.append(
                     RuleFinding(
                         rule="exclusive-stamp-ownership",

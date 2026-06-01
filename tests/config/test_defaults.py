@@ -69,6 +69,16 @@ class TestAllDefaultsPassAllGates:
         )
 
 
+class TestImplementGateConfigDefaults:
+    """ImplementGateConfig defaults must stay in sync with canonical constants."""
+
+    def test_marker_references_canonical_constant(self) -> None:
+        from autoskillit.config._config_dataclasses import ImplementGateConfig
+        from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER
+
+        assert ImplementGateConfig().marker == DRY_WALKTHROUGH_VERIFIED_MARKER
+
+
 class TestDefaultsSyncYamlDataclass:
     """Numeric defaults in dataclasses must match defaults.yaml."""
 

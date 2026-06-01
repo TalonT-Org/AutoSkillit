@@ -38,7 +38,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_session_registry.py` | Tests for core/session_registry.py |
 | `test_session_type.py` | Tests for SessionType resolver and constants |
 | `test_skill_command_parsing.py` | Unit tests for extract_path_arg in core._type_helpers |
-| `test_stamp_constants.py` | Tests for DRY_WALKTHROUGH_VERIFIED_MARKER constant and ImplementGateConfig integration |
+| `test_stamp_constants.py` | Tests for DRY_WALKTHROUGH_VERIFIED_MARKER constant |
 | `test_tool_sequence_analysis.py` | Tool sequence analysis tests |
 | `test_type_helpers.py` | Tests for extract_positional_args helper |
 | `test_backend_capabilities.py` | Tests for BackendCapabilities frozen invariants and CLAUDE_CODE_CAPABILITIES field values |

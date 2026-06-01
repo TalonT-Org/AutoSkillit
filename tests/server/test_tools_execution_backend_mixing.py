@@ -60,10 +60,10 @@ async def test_codex_backend_minimax_profile_with_anthropic_base_url_derives_ove
 
 
 @pytest.mark.anyio
-async def test_codex_backend_non_anthropic_profile_without_base_url_no_override(
+async def test_anthropic_capable_backend_profile_without_base_url_no_override(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    """Codex backend + non-Anthropic profile without ANTHROPIC_BASE_URL -> no override."""
+    """Anthropic-capable backend + profile without ANTHROPIC_BASE_URL -> no override."""
     from unittest.mock import MagicMock
 
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend

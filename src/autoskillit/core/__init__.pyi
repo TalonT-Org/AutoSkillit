@@ -32,9 +32,7 @@ from ._step_context import current_step_name as current_step_name
 from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
-def collect_version_snapshot(
-    backend: CodingAgentBackend | None = None,
-) -> dict[str, object]: ...
+from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
 from .claude_conventions import LayoutError as LayoutError

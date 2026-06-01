@@ -54,6 +54,7 @@ class HookDef:
 # branch_protection_guard (push)         | works-as-is
 # unsafe_install_guard                   | works-as-is
 # pr_create_guard                        | works-as-is
+# compose_pr_body_guard                  | works-as-is
 # planner_gh_discovery_guard             | works-as-is
 # artifact_download_guard                | works-as-is
 # git_ops_guard                          | works-as-is
@@ -131,6 +132,11 @@ HOOK_REGISTRY: list[HookDef] = [
         # Must stay in sync with _EXEMPT_SESSION_TYPES in guards/pr_create_guard.py —
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
+    ),
+    HookDef(  # codex: works-as-is
+        matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
+        scripts=["guards/compose_pr_body_guard.py"],
+        session_scope="headless_only",
     ),
     HookDef(  # codex: works-as-is
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -288,6 +294,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "background_exec_guard.py",
         "pipeline_step_guard.py",
         "git_ops_guard.py",
+        "compose_pr_body_guard.py",
     }
 )
 

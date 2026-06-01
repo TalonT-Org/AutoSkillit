@@ -3,12 +3,41 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import regex as re
 
 from autoskillit.core import SkillLister
 
+if TYPE_CHECKING:
+    from autoskillit.core import SkillResolver
+
 _SKILL_TOKEN_RE = re.compile(r"/(?:autoskillit:)?(\S+)")
+
+SKILL_SEARCH_DIRS: list[Path] | None = None
+
+
+def _resolve_skill_md(skill_name: str, *, resolver: SkillResolver | None = None) -> Path | None:
+    """Resolve a skill name to its SKILL.md path.
+
+    When SKILL_SEARCH_DIRS is set (e.g., in tests), searches those directories.
+    Otherwise uses SkillResolver to find the bundled skill.
+    """
+    if SKILL_SEARCH_DIRS is not None:
+        for search_dir in SKILL_SEARCH_DIRS:
+            skill_md = search_dir / skill_name / "SKILL.md"
+            if skill_md.is_file():
+                return skill_md
+        return None
+    if resolver is None:
+        from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+        resolver = DefaultSkillResolver()
+    skill_info = resolver.resolve(skill_name)
+    if skill_info is None:
+        return None
+    return skill_info.path
 
 
 def _has_dynamic_skill_name(skill_cmd: str) -> bool:

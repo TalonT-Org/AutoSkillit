@@ -15,7 +15,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from tests._helpers import _flush_structlog_proxy_caches
+from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_caches
 
 _LAYER_DIRS: frozenset[str] = frozenset(
     {
@@ -72,38 +72,45 @@ class TimeoutTier:
     CHANNEL_B = 60  # Full session_log_dir + Channel B path
 
 
-@pytest.fixture(autouse=True)
-def _structlog_to_null():
-    """Prevent structlog from writing to stdout in any test.
+_structlog_proxies: list[object] = []
 
-    In the default state (before configure_logging() is called), structlog's
-    PrintLoggerFactory routes all log output to sys.stdout. Tests that use
-    capsys to inspect stdout are silently corrupted when a mock bypass causes
-    a real production function to log.
 
-    Two-layer isolation strategy:
+@pytest.fixture(scope="session", autouse=True)
+def _structlog_session_init():
+    """One-time structlog proxy cache flush and proxy inventory per worker session.
 
-    1. Primary: ``structlog.configure(cache_logger_on_first_use=False)`` — the
-       official structlog recommendation for test environments. Prevents proxy
-       caches from being populated during tests, so ``reset_defaults()`` is
-       sufficient after each test without manual cache surgery.
-
-    2. Secondary: ``_flush_structlog_proxy_caches()`` — repairs loggers that
-       were cached before this fixture ran (e.g., module-level loggers cached
-       at import time before the fixture had a chance to set
-       cache_logger_on_first_use=False).
-
-    Then wraps the test in ``capture_logs()`` to drop all log output.
-
-    Note: TestConfigureLogging in test_logging.py has its own class-scoped
-    ``_structlog_to_null`` no-op override and ``_reset_structlog`` fixture that
-    owns structlog state management for those tests.
+    Repairs module-level loggers cached at import time (before any fixture ran)
+    and collects all BoundLoggerLazyProxy instances for cheap per-test clearing.
     """
     import structlog
-    import structlog.testing
 
     structlog.configure(cache_logger_on_first_use=False)
     _flush_structlog_proxy_caches()
+    _structlog_proxies.clear()
+    _structlog_proxies.extend(_collect_structlog_proxies())
+
+
+@pytest.fixture(autouse=True)
+def _structlog_to_null():
+    """Suppress structlog output in every test.
+
+    Resets wrapper_class to BoundLogger (allowing all log levels through to
+    LogCapture — core/logging.py sets BoundLoggerFilteringAtInfo which silently
+    drops DEBUG events before processors see them). Clears cached ``bind``
+    methods on known proxies so tests that call configure_logging() don't
+    leak cached production loggers into subsequent tests.
+    """
+    import logging as _logging
+
+    import structlog
+    import structlog.testing
+
+    structlog.configure(
+        cache_logger_on_first_use=False,
+        wrapper_class=structlog.make_filtering_bound_logger(_logging.DEBUG),
+    )
+    for proxy in _structlog_proxies:
+        proxy.__dict__.pop("bind", None)
     structlog.contextvars.clear_contextvars()
     with structlog.testing.capture_logs():
         yield

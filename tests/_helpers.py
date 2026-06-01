@@ -20,6 +20,23 @@ def strip_markdown_code_regions(text: str) -> str:
     return text
 
 
+def _collect_structlog_proxies() -> list[object]:
+    """Return all BoundLoggerLazyProxy instances from autoskillit modules."""
+    import structlog._config as _sc
+
+    proxies: list[object] = []
+    for mod_name in list(sys.modules):
+        if not mod_name.startswith("autoskillit"):
+            continue
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        for val in vars(mod).values():
+            if isinstance(val, _sc.BoundLoggerLazyProxy):
+                proxies.append(val)
+    return proxies
+
+
 def _flush_structlog_proxy_caches() -> None:
     """Reconnect autoskillit module-level loggers to the current structlog config.
 

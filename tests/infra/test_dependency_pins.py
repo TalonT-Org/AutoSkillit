@@ -11,6 +11,10 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 

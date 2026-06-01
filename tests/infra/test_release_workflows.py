@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.core.io import load_yaml
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 VERSION_BUMP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "version-bump.yml"

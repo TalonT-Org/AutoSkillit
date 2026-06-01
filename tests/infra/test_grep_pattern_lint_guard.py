@@ -4,7 +4,11 @@ import json
 from io import StringIO
 from unittest.mock import patch
 
+import pytest
+
 from autoskillit.hooks.guards.grep_pattern_lint_guard import main
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 
 def _run_hook(tool_name: str, pattern: str) -> dict | None:

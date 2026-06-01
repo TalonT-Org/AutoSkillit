@@ -9,6 +9,8 @@ import importlib.metadata
 
 import pytest
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 
 # REQ-DEP-001: anyio is importable and meets the version constraint
 def test_anyio_importable():

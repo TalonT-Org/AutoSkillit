@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 
 def _scan_atomic_write_json_dict_sites() -> set[tuple[str, int]]:
     """AST-scan src/autoskillit/ for atomic_write(path, json.dumps({...})) calls.

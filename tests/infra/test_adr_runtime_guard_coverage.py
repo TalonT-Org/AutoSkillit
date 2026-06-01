@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from autoskillit.hook_registry import HOOK_REGISTRY, HOOKS_DIR
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 _DECISIONS_DIR = Path(__file__).parents[2] / "docs" / "decisions"
 _INFRA_TEST_DIR = Path(__file__).parent

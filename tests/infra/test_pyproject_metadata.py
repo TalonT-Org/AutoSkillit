@@ -3,6 +3,10 @@
 import tomllib
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
 PYPROJECT = Path(__file__).parent.parent.parent / "pyproject.toml"
 
 

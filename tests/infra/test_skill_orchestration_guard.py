@@ -13,6 +13,9 @@ import pytest
 _ORCHESTRATION_TOOLS = ["run_skill", "run_cmd", "run_python"]
 
 
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+
+
 def _run_guard(
     tool_input: dict,
     *,

@@ -5,6 +5,10 @@ import json
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
+import pytest
+
+pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+
 
 def _run_guard(cmd: str, raw_stdin: str | None = None) -> str:
     """Run the guard's main() in-process and return captured stdout."""

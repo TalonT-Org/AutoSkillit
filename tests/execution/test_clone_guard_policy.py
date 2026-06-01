@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.clone_guard import build_clone_guard_policy
+from autoskillit.execution.clone_guard import build_clone_guard_policy, is_clone_commit_skill
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -29,7 +29,7 @@ def test_policy_for_clone_commit_skill_success():
         is_worktree=False,
     )
     assert policy.should_fire(success=True) is False
-    assert policy.should_fire(success=False) is True
+    assert policy.should_fire(success=False) is False
 
 
 def test_policy_for_clone_commit_skill_readonly_success():
@@ -40,7 +40,7 @@ def test_policy_for_clone_commit_skill_readonly_success():
         is_worktree=False,
     )
     assert policy.should_fire(success=True) is False
-    assert policy.should_fire(success=False) is True
+    assert policy.should_fire(success=False) is False
 
 
 def test_policy_for_normal_write_skill():
@@ -56,6 +56,7 @@ def test_policy_for_normal_write_skill():
 
 
 def test_policy_for_worktree_skill():
+    """Worktree skill: fire_on_failure=False because is_worktree=True."""
     policy = build_clone_guard_policy(
         is_worktree=True,
         readonly_skill=False,
@@ -63,7 +64,7 @@ def test_policy_for_worktree_skill():
         is_clone_commit=False,
     )
     assert policy.should_fire(success=True) is False
-    assert policy.should_fire(success=False) is True
+    assert policy.should_fire(success=False) is False
 
 
 def test_policy_should_snapshot():
@@ -182,3 +183,48 @@ def test_policy_output_dir_outside_cwd_does_not_suppress_guard():
     )
     assert policy.should_fire(success=True) is True
     assert policy.should_fire(success=False) is True
+
+
+def test_policy_for_worktree_skill_failure_no_fire():
+    """Worktree skill must not fire the guard on failure regardless of write scope."""
+    policy = build_clone_guard_policy(
+        is_worktree=True,
+        readonly_skill=False,
+        has_write_scope=False,
+        is_clone_commit=False,
+    )
+    assert policy.should_fire(success=False) is False
+
+
+class TestIsCloneCommitSkillPositive:
+    def test_resolve_failures(self):
+        assert is_clone_commit_skill("/autoskillit:resolve-failures")
+
+    def test_resolve_failures_with_args(self):
+        assert is_clone_commit_skill("/autoskillit:resolve-failures issue=42")
+
+    def test_resolve_review(self):
+        assert is_clone_commit_skill("/autoskillit:resolve-review")
+
+    def test_resolve_review_with_args(self):
+        assert is_clone_commit_skill("/autoskillit:resolve-review pr=99")
+
+    def test_resolve_merge_conflicts(self):
+        assert is_clone_commit_skill("/autoskillit:resolve-merge-conflicts")
+
+    def test_resolve_merge_conflicts_with_args(self):
+        assert is_clone_commit_skill("/autoskillit:resolve-merge-conflicts branch=main")
+
+
+class TestIsCloneCommitSkillNegative:
+    def test_resolve_ci(self):
+        assert not is_clone_commit_skill("/autoskillit:resolve-ci")
+
+    def test_review_pr(self):
+        assert not is_clone_commit_skill("/autoskillit:review-pr")
+
+    def test_rectify(self):
+        assert not is_clone_commit_skill("/autoskillit:rectify plan.md")
+
+    def test_plain_resolve(self):
+        assert not is_clone_commit_skill("resolve")

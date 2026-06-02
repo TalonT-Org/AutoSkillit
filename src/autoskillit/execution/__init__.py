@@ -81,6 +81,7 @@ from autoskillit.execution.pr_analysis import (
 )
 from autoskillit.execution.process import (
     DefaultSubprocessRunner,
+    _has_active_execution_marker,  # noqa: F401 — re-exported for cli/app.py signal guard
     async_kill_process_tree,
     kill_process_tree,
     run_managed_async,

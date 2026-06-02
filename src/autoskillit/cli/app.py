@@ -23,7 +23,7 @@ from autoskillit.cli._init_helpers import (
     _register_all,
 )
 from autoskillit.cli._serve_guard import serve_with_signal_guard
-from autoskillit.execution.process import _has_active_execution_marker
+from autoskillit.execution import _has_active_execution_marker
 
 if TYPE_CHECKING:
     from autoskillit.core import FleetLock

@@ -315,3 +315,20 @@ def test_system_prompt_forwarded_to_backend(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(ClaudeCodeBackend, "build_interactive_cmd", spy)
     build_interactive_cmd(system_prompt="forwarded-prompt")
     assert captured["system_prompt"] == "forwarded-prompt"
+
+
+class TestShimDeprecationWarnings:
+    def test_build_interactive_cmd_warns(self) -> None:
+        with pytest.warns(DeprecationWarning) as rec:
+            build_interactive_cmd()
+        assert "build_interactive_cmd() is deprecated" in str(rec.list[0].message)
+
+    def test_build_headless_cmd_warns(self) -> None:
+        with pytest.warns(DeprecationWarning) as rec:
+            build_headless_cmd("test prompt")
+        assert "build_headless_cmd() is deprecated" in str(rec.list[0].message)
+
+    def test_build_headless_resume_cmd_warns(self) -> None:
+        with pytest.warns(DeprecationWarning) as rec:
+            build_headless_resume_cmd(resume_session_id="abc", prompt="go")
+        assert "build_headless_resume_cmd() is deprecated" in str(rec.list[0].message)

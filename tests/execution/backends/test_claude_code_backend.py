@@ -50,7 +50,8 @@ class TestClaudeCodeBackend:
 
         backend = ClaudeCodeBackend()
         skill_cmd = "say hello"
-        direct = build_headless_cmd(skill_cmd)
+        with pytest.warns(DeprecationWarning):
+            direct = build_headless_cmd(skill_cmd)
         result = backend.build_cmd(skill_cmd, str(tmp_path))
         assert tuple(direct.cmd) == result.cmd
         assert direct.env == result.env

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,6 +61,12 @@ def build_interactive_cmd(
     tools: Sequence[str] = (),
 ) -> ClaudeInteractiveCmd:
     """Deprecated shim. Use ClaudeCodeBackend().build_interactive_cmd() directly."""
+    warnings.warn(
+        "build_interactive_cmd() is deprecated. "
+        "Use ClaudeCodeBackend().build_interactive_cmd() directly.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     spec = ClaudeCodeBackend().build_interactive_cmd(
         initial_prompt=initial_prompt,
         model=model,
@@ -82,6 +89,12 @@ def build_headless_cmd(
     base: Mapping[str, str] | None = None,
 ) -> CmdSpec:
     """Deprecated shim. Use ClaudeCodeBackend().build_headless_cmd() directly."""
+    warnings.warn(
+        "build_headless_cmd() is deprecated. "
+        "Use ClaudeCodeBackend().build_headless_cmd() directly.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     spec = ClaudeCodeBackend().build_headless_cmd(
         prompt,
         model=model,
@@ -100,6 +113,12 @@ def build_headless_resume_cmd(
     env_extras: Mapping[str, str] | None = None,
 ) -> CmdSpec:
     """Deprecated shim. Use ClaudeCodeBackend().build_resume_cmd() directly."""
+    warnings.warn(
+        "build_headless_resume_cmd() is deprecated. "
+        "Use ClaudeCodeBackend().build_resume_cmd() directly.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     spec = ClaudeCodeBackend().build_resume_cmd(
         resume_session_id=resume_session_id,
         prompt=prompt,

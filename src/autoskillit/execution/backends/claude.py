@@ -271,7 +271,6 @@ class ClaudeCodeBackend:
     @property
     def conventions(self) -> BackendConventions:
         return BackendConventions(
-            skills_subdir=Path(".claude/skills"),
             project_local_skill_search_dirs=(".claude/skills", ".autoskillit/skills"),
         )
 

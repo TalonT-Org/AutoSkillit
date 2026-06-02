@@ -198,6 +198,26 @@ def test_backend_module_all_exhaustive():
     }
 
 
+def test_backend_conventions_frozen_slots_fields():
+    import typing
+    from dataclasses import FrozenInstanceError
+
+    from autoskillit.core.types._type_backend import BackendConventions
+
+    assert hasattr(BackendConventions, "__slots__")
+
+    inst = BackendConventions(
+        project_local_skill_search_dirs=(".claude/skills",),
+    )
+    assert inst.project_local_skill_search_dirs == (".claude/skills",)
+
+    with pytest.raises(FrozenInstanceError):
+        inst.project_local_skill_search_dirs = (".other/skills",)  # type: ignore[misc]
+
+    hints = typing.get_type_hints(BackendConventions)
+    assert hints["project_local_skill_search_dirs"] == tuple[str, ...]
+
+
 def test_no_autoskillit_imports_in_backend():
     from autoskillit.core import paths
 

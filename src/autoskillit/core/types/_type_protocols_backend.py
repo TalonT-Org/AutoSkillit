@@ -9,6 +9,7 @@ from typing import Any, Protocol, runtime_checkable
 from ._type_backend import (
     AgentSessionResult,
     BackendCapabilities,
+    BackendConventions,
     CmdSpec,
     SessionEvent,
     SkillSessionConfig,
@@ -169,3 +170,8 @@ class CodingAgentBackend(Protocol):
     def translate_model(self, model: str) -> str: ...
 
     def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec: ...
+
+    @property
+    def conventions(self) -> BackendConventions: ...
+
+    def setup_session_dir(self, session_dir: Path) -> None: ...

@@ -164,3 +164,25 @@ def test_all_backends_implement_build_inspector_cmd():
         assert callable(getattr(cls, "build_inspector_cmd")), (
             f"{name} backend build_inspector_cmd must be callable"
         )
+
+
+def test_coding_agent_backend_protocol_includes_conventions():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert hasattr(CodingAgentBackend, "conventions"), (
+        "CodingAgentBackend protocol must define conventions"
+    )
+    assert isinstance(CodingAgentBackend.__dict__["conventions"], property), (
+        "conventions must be a property"
+    )
+
+
+def test_coding_agent_backend_protocol_includes_setup_session_dir():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert hasattr(CodingAgentBackend, "setup_session_dir"), (
+        "CodingAgentBackend protocol must define setup_session_dir"
+    )
+    assert callable(getattr(CodingAgentBackend, "setup_session_dir")), (
+        "setup_session_dir must be callable"
+    )

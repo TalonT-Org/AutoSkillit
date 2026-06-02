@@ -36,6 +36,18 @@ def test_coding_agent_backend_has_capabilities_property():
     assert isinstance(CodingAgentBackend.__dict__["capabilities"], property)
 
 
+def test_coding_agent_backend_has_conventions_property():
+    from autoskillit.core import CodingAgentBackend
+
+    assert isinstance(CodingAgentBackend.__dict__["conventions"], property)
+
+
+def test_coding_agent_backend_has_setup_session_dir_method():
+    from autoskillit.core import CodingAgentBackend
+
+    assert callable(getattr(CodingAgentBackend, "setup_session_dir", None))
+
+
 def test_no_autoskillit_imports_in_protocols_backend():
     from autoskillit.core import paths
 
@@ -64,6 +76,7 @@ def test_stub_class_satisfies_coding_agent_backend():
 
     from autoskillit.core import (
         BackendCapabilities,
+        BackendConventions,
         CmdSpec,
         CodingAgentBackend,
         EnvPolicy,
@@ -155,6 +168,11 @@ def test_stub_class_satisfies_coding_agent_backend():
 
         def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
             return CmdSpec(cmd=(), env={})
+
+        @property
+        def conventions(self) -> BackendConventions: ...
+
+        def setup_session_dir(self, session_dir: Path) -> None: ...
 
     assert isinstance(_Backend(), CodingAgentBackend)
 

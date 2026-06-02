@@ -227,6 +227,8 @@ def test_yaml_file_cache_none_loader_result(tmp_path):
 
 def test_yaml_file_cache_invalidates_on_mtime_change(tmp_path):
     """YamlFileCache re-reads when file mtime changes."""
+    import os
+
     from autoskillit.recipe._api_cache import YamlFileCache
 
     yaml_path = tmp_path / "data.yaml"
@@ -236,9 +238,16 @@ def test_yaml_file_cache_invalidates_on_mtime_change(tmp_path):
     r1 = cache.get_or_load(yaml_path, lambda p: p.read_text())
     assert r1 == "v1"
 
-    yaml_path.write_text("v2")
+    yaml_path.write_text("v2-longer-content")
+    os.utime(
+        yaml_path,
+        ns=(
+            yaml_path.stat().st_atime_ns + 1_000_000_000,
+            yaml_path.stat().st_mtime_ns + 1_000_000_000,
+        ),
+    )
     r2 = cache.get_or_load(yaml_path, lambda p: p.read_text())
-    assert r2 == "v2"
+    assert r2 == "v2-longer-content"
 
 
 def test_manifest_mtime_change_forces_fresh_read(tmp_path, monkeypatch):

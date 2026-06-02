@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import inspect
 
-from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, SKILL_TOOLS, Severity
+from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
@@ -13,6 +13,8 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+logger = get_logger(__name__)
 
 
 def _get_provided_args(with_args: dict) -> set[str]:
@@ -215,4 +217,55 @@ def _check_nullable_optional_context_ref(ctx: ValidationContext) -> list[RuleFin
                             ),
                         )
                     )
+    return findings
+
+
+@semantic_rule(
+    name="work-dir-arg-misplacement",
+    description=(
+        "run_python step has work_dir inside args but the callable does not accept "
+        "a work_dir parameter — likely intended as a top-level tool parameter for "
+        "path anchoring"
+    ),
+    severity=Severity.WARNING,
+)
+def _check_work_dir_arg_misplacement(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        nested = step.with_args.get("args")
+        if not isinstance(nested, dict) or "work_dir" not in nested:
+            continue
+        callable_path = step.with_args.get("callable", "")
+        if not callable_path:
+            continue
+        try:
+            module_path, attr_name = callable_path.rsplit(".", 1)
+            mod = importlib.import_module(module_path)
+            func = getattr(mod, attr_name)
+            sig = inspect.signature(func)
+        except (ImportError, AttributeError, ValueError):
+            logger.debug(
+                "work-dir-arg-misplacement: skipping step — import/inspection failed",
+                step=step_name,
+                callable=callable_path,
+                exc_info=True,
+            )
+            continue
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+            continue
+        if "work_dir" not in sig.parameters:
+            findings.append(
+                RuleFinding(
+                    rule="work-dir-arg-misplacement",
+                    severity=Severity.WARNING,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' has work_dir inside args but "
+                        f"'{callable_path}' does not accept a work_dir parameter. "
+                        f"Move work_dir to the top-level with: block for path anchoring."
+                    ),
+                )
+            )
     return findings

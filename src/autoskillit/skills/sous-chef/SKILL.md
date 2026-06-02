@@ -513,6 +513,55 @@ This provides defense-in-depth: the server resolves parameters server-side, AND 
 
 ---
 
+## RUN_PYTHON PARAMETER PARTITIONING — MANDATORY
+
+The `run_python` tool has two distinct parameter scopes. Confusing them causes path
+anchoring failures.
+
+**Tool-level parameters** (top-level arguments to `run_python` itself):
+- `callable` — dotted path to the Python function
+- `args` — dict of keyword arguments forwarded to the callable
+- `timeout` — max seconds before abort
+- `work_dir` — anchor directory for resolving relative path-like args (`output_dir`, `workspace`, `diagnostics_log_dir`)
+
+**Callable parameters** (keys inside the `args` dict, forwarded to the function):
+- Everything the target function's signature declares
+
+`work_dir` appears in BOTH scopes across the recipe — some callables accept `work_dir` as
+a function parameter (inside `args`), while others use it only for tool-level path anchoring
+(outside `args`). Use the recipe step's YAML structure to determine which scope applies:
+
+**Top-level `work_dir` (path anchoring — NOT forwarded to callable):**
+```yaml
+annotate_pr_diff:
+  tool: run_python
+  with:
+    callable: autoskillit.smoke_utils.annotate_pr_diff
+    work_dir: ${{ context.work_dir }}          # ← tool-level, anchors output_dir
+    output_dir: review-pr/iter_0
+    cwd: ${{ context.work_dir }}
+    pr_number: ${{ context.pr_number }}
+```
+Call: `run_python(callable=..., work_dir="/abs/path", args={"output_dir": "...", "cwd": "...", "pr_number": "..."})`
+
+**Nested `work_dir` (callable kwarg — forwarded to function):**
+```yaml
+pre_review_rebase:
+  tool: run_python
+  with:
+    callable: autoskillit.recipe._cmd_rpc.review_path_rebase
+    args:
+      work_dir: ${{ context.work_dir }}        # ← callable kwarg, NOT tool-level
+      base_branch: ${{ inputs.base_branch }}
+```
+Call: `run_python(callable=..., args={"work_dir": "/abs/path", "base_branch": "main"})`
+
+**NEVER place `work_dir` inside `args` when the callable does not accept it.** Doing so
+leaves the tool-level `work_dir` empty and causes `validate_path_arg_anchoring` to reject
+the call with: `"arg 'output_dir' is a relative path but work_dir was not provided"`.
+
+---
+
 ## MODEL PROPAGATION — MANDATORY
 
 **MODEL PROPAGATION** — When the user specifies a model (e.g. "use opus"), apply it to the `model` parameter of ALL `run_skill` calls for steps that declare a `model:` field — including follow-on steps (retry_worktree, fix, resolve_review, resolve_ci, conflict resolution). All `run_skill` steps in orchestrated recipes must declare a `model:` field; steps that omit it are ineligible for propagation and silently bypass user model selection.

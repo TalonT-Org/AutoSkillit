@@ -22,6 +22,12 @@ def validate_path_arg_anchoring(args: dict[str, object] | None, work_dir: str) -
     for key in _PATH_LIKE_ARGS:
         val = args.get(key)
         if isinstance(val, str) and val and not Path(val).is_absolute() and not work_dir:
+            if "work_dir" in args:
+                return (
+                    f"run_python: arg '{key}' is a relative path ({val!r}) "
+                    f"and work_dir appears inside args instead of as a top-level "
+                    f"parameter — move work_dir to the top-level run_python call"
+                )
             return (
                 f"run_python: arg '{key}' is a relative path ({val!r}) "
                 f"but work_dir was not provided — pass work_dir to anchor it"
@@ -37,6 +43,31 @@ def resolve_relative_path_args(args: dict[str, object], work_dir: str) -> dict[s
         if isinstance(val, str) and val and not Path(val).is_absolute():
             resolved[key] = str(Path(work_dir) / val)
     return resolved
+
+
+def maybe_promote_work_dir(args: dict[str, object] | None, work_dir: str) -> str:
+    """Promote work_dir from args to tool level if misplaced by the LLM.
+
+    Returns the (possibly updated) work_dir value. Does not modify args —
+    the caller is responsible for removing the key from args after promotion.
+    """
+    if not args or work_dir or "work_dir" not in args:
+        return work_dir
+    candidate = args["work_dir"]
+    if isinstance(candidate, str) and candidate:
+        return candidate
+    return work_dir
+
+
+def strip_work_dir_from_args(args: dict[str, object] | None) -> dict[str, object] | None:
+    """Return a new args dict without the work_dir key, if present.
+
+    Returns the input unchanged when args is None. Preserves input args when
+    work_dir is not a key (no copy needed).
+    """
+    if args is None or "work_dir" not in args:
+        return args
+    return {k: v for k, v in args.items() if k != "work_dir"}
 
 
 def _coerce_scalar(val: object, annotation: object) -> object:

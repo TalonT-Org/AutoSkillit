@@ -97,7 +97,8 @@ def test_synthesize_on_failure_escalate_stop(recipe) -> None:
 def test_review_design_go_routes_to_dial(recipe) -> None:
     """review_design GO verdict must route to dial (not plan_visualization)."""
     step = recipe.steps["review_design"]
-    go_condition = next(c for c in step.on_result.conditions if c.when and "GO" in c.when)
+    go_condition = next((c for c in step.on_result.conditions if c.when and "GO" in c.when), None)
+    assert go_condition is not None, "Missing GO route in review_design"
     assert go_condition.route == "dial"
 
 

@@ -95,9 +95,9 @@ CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    # Delay must exceed _session_id_timeout + Phase 1 poll so the monitor
-    # discovers the file and initializes Phase 2 before the marker arrives.
-    time.sleep(1.0)
+    # Delay must exceed session_id_timeout + Phase 1 poll so Phase 2 initializes
+    # scan_pos from discovery boundary before the marker arrives.
+    time.sleep(2.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}

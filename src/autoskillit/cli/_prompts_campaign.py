@@ -357,6 +357,35 @@ On FAILURE:
 NEVER retry the same dispatch_name on non-quota failures. For stale-artifact recovery,
 always use a NEW dispatch_name (see STALE-ARTIFACT RECOVERY below).
 
+## INFRASTRUCTURE FAILURE RECOVERY
+
+Exception to FAILURE RECOVERY: when a dispatch returns dispatch_status="failure"
+and the reason is an infrastructure code — any of:
+  fleet_l3_no_result_block, fleet_l3_timeout, fleet_l3_startup_or_crash,
+  fleet_l3_parse_failed, fleet_acquire_timeout, fleet_process_stale,
+  fleet_hard_refusal_headless, fleet_cleanup_failed,
+  fleet_resume_session_missing
+
+These are TRANSIENT infrastructure failures, not logic errors. Do not halt
+the campaign and do not mark the dispatch as permanently failed. No reset or
+cleanup is needed — infrastructure already cleaned up.
+
+Action:
+- Retry the dispatch fresh for the same issue with a new dispatch_name and
+  the same ingredients. Do not pass resume_session_id.
+- Example: if dispatch returns fleet_l3_timeout, immediately retry with
+  dispatch_name="<original>-retry" and the same ingredients.
+- If fleet_claim_guard blocks, attempt resume with the prior dispatch's
+  dispatched_session_id first. Only call {mcp_prefix}reset_dispatch as a
+  last resort if the prior session is unrecoverable.
+- If the retry also fails with an infrastructure code: mark dispatch failed
+  and apply continue_on_failure={campaign_recipe.continue_on_failure} policy.
+- Emit %%FLEET_PROGRESS%% with state=retry on the first attempt, state=failure
+  only if the retry also fails.
+
+This exception takes priority over the generic FAILURE RECOVERY rules above.
+For quota failures, follow QUOTA RETRY below instead.
+
 ## QUOTA RETRY
 
 Trigger: a dispatch returns reason=quota_exhausted OR

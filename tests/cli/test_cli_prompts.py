@@ -740,6 +740,106 @@ def test_fleet_dispatch_prompt_includes_reset_dispatch():
     assert "reset_dispatch" in prompt
 
 
+def test_fleet_dispatch_prompt_includes_infrastructure_failure_section():
+    """T1: Ad-hoc fleet prompt has an INFRASTRUCTURE FAILURE section."""
+    from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
+
+    prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
+    assert "INFRASTRUCTURE FAILURE" in prompt
+
+
+def test_fleet_dispatch_prompt_lists_infrastructure_codes():
+    """T2: Ad-hoc fleet prompt lists representative infrastructure error codes."""
+    from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
+
+    prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
+    assert "fleet_l3_no_result_block" in prompt
+    assert "fleet_l3_timeout" in prompt
+    assert "fleet_l3_startup_or_crash" in prompt
+
+
+def test_fleet_dispatch_infrastructure_section_prescribes_fresh_retry():
+    """T3: Infrastructure failure section prescribes fresh retry as recovery action."""
+    from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
+
+    prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
+    start = prompt.index("INFRASTRUCTURE FAILURE")
+    next_section = prompt.find("\n## ", start + 1)
+    section = prompt[start:next_section] if next_section != -1 else prompt[start:]
+    assert "No reset or cleanup is needed" in section
+
+
+def test_campaign_prompt_includes_infrastructure_failure_section():
+    """T4: Campaign prompt has an INFRASTRUCTURE FAILURE section."""
+    from autoskillit.cli._prompts import _build_fleet_campaign_prompt
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        kind=RecipeKind.CAMPAIGN,
+        dispatches=[CampaignDispatch(name="d1", recipe="impl", task="do it")],
+        continue_on_failure=False,
+    )
+    prompt = _build_fleet_campaign_prompt(
+        campaign_recipe=recipe,
+        manifest_yaml="dispatches:\n  - name: d1",
+        completed_dispatches="",
+        mcp_prefix="mcp__autoskillit__",
+        campaign_id="test-123",
+    )
+    assert "INFRASTRUCTURE FAILURE" in prompt
+
+
+def test_campaign_prompt_lists_infrastructure_codes():
+    """T5: Campaign prompt lists representative infrastructure error codes."""
+    from autoskillit.cli._prompts import _build_fleet_campaign_prompt
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        kind=RecipeKind.CAMPAIGN,
+        dispatches=[CampaignDispatch(name="d1", recipe="impl", task="do it")],
+        continue_on_failure=False,
+    )
+    prompt = _build_fleet_campaign_prompt(
+        campaign_recipe=recipe,
+        manifest_yaml="dispatches:\n  - name: d1",
+        completed_dispatches="",
+        mcp_prefix="mcp__autoskillit__",
+        campaign_id="test-123",
+    )
+    assert "fleet_l3_no_result_block" in prompt
+    assert "fleet_l3_timeout" in prompt
+    assert "fleet_l3_startup_or_crash" in prompt
+
+
+def test_campaign_prompt_infrastructure_section_says_do_not_halt():
+    """T6: Infrastructure failure section tells campaign not to halt."""
+    from autoskillit.cli._prompts import _build_fleet_campaign_prompt
+    from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        kind=RecipeKind.CAMPAIGN,
+        dispatches=[CampaignDispatch(name="d1", recipe="impl", task="do it")],
+        continue_on_failure=False,
+    )
+    prompt = _build_fleet_campaign_prompt(
+        campaign_recipe=recipe,
+        manifest_yaml="dispatches:\n  - name: d1",
+        completed_dispatches="",
+        mcp_prefix="mcp__autoskillit__",
+        campaign_id="test-123",
+    )
+    start = prompt.index("INFRASTRUCTURE FAILURE")
+    next_section = prompt.find("\n## ", start + 1)
+    section = prompt[start:next_section] if next_section != -1 else prompt[start:]
+    assert "do not halt" in section.lower()
+
+
 def test_campaign_prompt_includes_gate_dispatch_handling_section():
     """Campaign prompt includes GATE DISPATCH HANDLING section when a gate dispatch is present."""
     from autoskillit.cli._prompts import _build_fleet_campaign_prompt

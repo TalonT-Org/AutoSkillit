@@ -221,10 +221,10 @@ def test_all_backends_have_init_hook():
         for node in ast.walk(tree)
     )
     assert has_execution_import, (
-        "cli/_init_helpers.py does not import from 'autoskillit.execution.backends'. "
-        "After P4-A2, _register_all must dispatch via BACKEND_REGISTRY — "
-        "add 'from autoskillit.execution.backends import BACKEND_REGISTRY' "
-        "to cli/_init_helpers.py."
+        "cli/_init_helpers.py does not import from 'autoskillit.execution'. "
+        "After P4-A2, _register_all must dispatch via the execution layer — "
+        "ensure an import from 'autoskillit.execution.*' is present "
+        "in cli/_init_helpers.py."
     )
 
 

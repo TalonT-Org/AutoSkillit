@@ -1004,12 +1004,24 @@ class TestWriteGuardVerbFdRedirect:
         result = _extract_bash_write_targets("tee 2>&1")
         assert result is None or result == []
 
-    def test_sed_with_fd_redirect_not_blocked(self, monkeypatch: pytest.MonkeyPatch):
+    def test_sed_with_only_fd_redirect_not_blocked(self, monkeypatch: pytest.MonkeyPatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("sed -i 2>&1")
+        assert result is None or result == []
+
+    def test_sed_with_sub_pattern_and_fd_redirect_treats_pattern_as_target(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("sed -i 's/x/y/' 2>&1")
-        assert result is None or result == []
+        assert result is not None and len(result) > 0, (
+            "sed substitution pattern is indistinguishable from a filename — "
+            "conservative guard should treat it as a write target"
+        )
 
     def test_sed_with_real_path_and_fd_redirect_detects_real_path(
         self, monkeypatch: pytest.MonkeyPatch

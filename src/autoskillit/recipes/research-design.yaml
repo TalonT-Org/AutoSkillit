@@ -161,7 +161,7 @@ steps:
     model: ""
     phoropter_family: vis-lens
     with:
-      skill_command: "/autoskillit:synthesize-vis-plan"
+      skill_command: "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/apply"
       cwd: "${{ inputs.source_dir }}"
       step_name: synthesize
       output_dir: "{{AUTOSKILLIT_TEMP}}/synthesize"

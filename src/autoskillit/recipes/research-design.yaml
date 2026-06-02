@@ -11,7 +11,7 @@ description: >
   artifacts. Dispatched as a food truck by campaign recipes that separate
   design from execution.
 dispatch_only: true
-summary: scope > plan > [review?] > visualize > design_complete
+summary: scope > plan > [review?] > dial > apply > synthesize > design_complete
 
 ingredients:
   task:
@@ -32,7 +32,7 @@ ingredients:
       REVISE loops back to plan_experiment with revision guidance (bounded by
       check_design_review_loop at 3 iterations), STOP triggers resolve_design_review
       for triage — addressable findings loop back, structural findings halt the
-      pipeline. When 'false', skip directly to plan_visualization.
+      pipeline. When 'false', skip directly to dial.
     default: "true"
   issue_url:
     description: >
@@ -113,36 +113,64 @@ steps:
     pass_through: [experiment_type]
     skip_when_false: inputs.review_design
     retries: 2
-    on_exhausted: plan_visualization
-    on_context_limit: plan_visualization
-    on_failure: plan_visualization
+    on_exhausted: dial
+    on_context_limit: dial
+    on_failure: dial
     on_result:
     - when: "${{ result.verdict }} == GO"
-      route: plan_visualization
+      route: dial
     - when: "${{ result.verdict }} == REVISE"
       route: revise_design
     - when: "${{ result.verdict }} == STOP"
       route: resolve_design_review
-    - route: plan_visualization
+    - route: dial
 
-  plan_visualization:
+  dial:
     tool: run_skill
     model: ""
+    phoropter_family: vis-lens
     with:
-      skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
+      skill_command: "/autoskillit:select-vis-lenses ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
-      step_name: plan_visualization
-      output_dir: "{{AUTOSKILLIT_TEMP}}/plan-visualization"
+      step_name: dial
+      output_dir: "{{AUTOSKILLIT_TEMP}}/dial"
+    capture:
+      selected_lenses: "${{ result.selected_lenses }}"
+      lens_context_paths: "${{ result.lens_context_paths }}"
+    on_success: apply
+    on_failure: escalate_stop
+
+  apply:
+    tool: run_skill
+    model: ""
+    phoropter_family: vis-lens
+    with:
+      skill_command: "/autoskillit:vis-lens-{slug} {context_path} ${{ context.experiment_plan }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: apply
+      output_dir: "{{AUTOSKILLIT_TEMP}}/apply"
+    capture_list:
+      all_figure_spec_paths: "${{ result.figure_spec_path }}"
+    optional_context_refs: [selected_lenses, lens_context_paths]
+    retries: 0
+    on_success: synthesize
+    on_failure: synthesize
+
+  synthesize:
+    tool: run_skill
+    model: ""
+    phoropter_family: vis-lens
+    with:
+      skill_command: "/autoskillit:synthesize-vis-plan"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: synthesize
+      output_dir: "{{AUTOSKILLIT_TEMP}}/synthesize"
     capture:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
       report_plan_path: "${{ result.report_plan_path }}"
       visualization_plan_trace_path: "${{ result.visualization_plan_trace_path }}"
     on_success: create_worktree
     on_failure: escalate_stop
-    note: >
-      Selects 2–4 vis-lens skills via three-tier logic, runs them in parallel, and
-      synthesizes outputs into visualization-plan.md and report-plan.md.
-      Runs before worktree creation so outputs can be committed into the research dir.
 
   revise_design:
     action: route
@@ -159,16 +187,16 @@ steps:
       design_review_count: "${{ result.next_iteration }}"
     on_result:
     - when: "${{ result.max_exceeded }} == true"
-      route: plan_visualization
+      route: dial
     - route: plan_experiment
-    on_failure: plan_visualization
+    on_failure: dial
     optional_context_refs:
     - design_review_count
     note: >
       Iteration guard for the review_design → revise_design → plan_experiment cycle.
       Caps design revision loops at 3 iterations. Both REVISE and
       STOP→resolve→revised paths flow through revise_design and hit this guard.
-      On exhaustion, proceeds to plan_visualization with the best available design.
+      On exhaustion, proceeds to dial with the best available design.
 
   resolve_design_review:
     tool: run_skill

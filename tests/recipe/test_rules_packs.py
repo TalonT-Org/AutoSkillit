@@ -214,5 +214,5 @@ class TestUndeclaredPackRequirement:
         ]
         assert len(findings) >= 1, "Expected vis-lens to be flagged as missing"
         vis_lens_findings = [f for f in findings if "vis-lens" in f.message]
-        assert len(vis_lens_findings) == 1
-        assert vis_lens_findings[0].severity == Severity.ERROR
+        assert len(vis_lens_findings) == 2
+        assert all(f.severity == Severity.ERROR for f in vis_lens_findings)

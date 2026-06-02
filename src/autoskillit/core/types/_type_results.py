@@ -561,7 +561,7 @@ class SessionIndexEntry(TypedDict):
     order_id: str
     campaign_id: str
     dispatch_id: str
-    claude_code_log: str
+    claude_code_log: str | None  # path to Claude Code JSONL, or None for non-Claude-Code sessions
     codex_log: str | None  # path to Codex rollout NDJSON, or None for non-Codex sessions
     skill_command: str
     success: bool

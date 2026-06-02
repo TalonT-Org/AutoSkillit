@@ -139,7 +139,7 @@ class TestCheckMcpServerRegisteredBackendGuard:
     def test_mcp_config_capable_backend_uses_specialized_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """mcp_config_capable backend enters the specialized codex branch (line 65)."""
+        """mcp_config_capable backend enters the specialized codex branch."""
         from autoskillit.cli.doctor._doctor_mcp import _check_mcp_server_registered
         from autoskillit.core import Severity
 

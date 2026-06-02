@@ -172,14 +172,6 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
 
 
 @dataclass(frozen=True, slots=True)
-class BackendConventions:
-    """Backend-specific directory conventions for skill and session layout."""
-
-    skills_subdir: Path
-    project_local_skill_search_dirs: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class CmdOrigin:
     """Provenance metadata for a CmdSpec, capturing the structural role of each element."""
 

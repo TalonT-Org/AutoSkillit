@@ -74,6 +74,15 @@ class TestExtractBashWriteTargets:
         result = extract_bash_write_targets("cat file | tee /path/a /path/b")
         assert result == ["/path/a", "/path/b"]
 
+    def test_shell_variable_unknown_failopen(self):
+        result = extract_bash_write_targets("echo x > $UNKNOWN_DIR/out.txt", cwd="/workspace")
+        assert result == []
+
+    def test_shell_variable_known_expands(self, monkeypatch):
+        monkeypatch.setenv("MY_DIR", "/workspace/.autoskillit/temp")
+        result = extract_bash_write_targets("echo x > $MY_DIR/out.txt", cwd="/workspace")
+        assert result == ["/workspace/.autoskillit/temp/out.txt"]
+
 
 _PARITY_CORPUS: list[tuple[str, str]] = [
     ("echo x > /path/out.txt", "/workspace"),
@@ -98,6 +107,9 @@ _PARITY_CORPUS: list[tuple[str, str]] = [
     ("unlink /path/file.txt", "/workspace"),
     ("cp /a /outside/dest > /log", "/workspace"),
     ("cat file | tee /path/a /path/b", "/workspace"),
+    ("echo x > $MY_OUTPUT_DIR/out.txt", "/workspace"),
+    ("tee $MY_OUTPUT_DIR/out.txt", "/workspace"),
+    ("REVIEW_OUTPUT_DIR='.autoskillit/temp' && echo x > $REVIEW_OUTPUT_DIR/out.txt", "/workspace"),
 ]
 
 

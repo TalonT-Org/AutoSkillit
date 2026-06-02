@@ -1068,6 +1068,7 @@ class TestWriteGuardCrossProductMatrix:
             ("/workspace/src/main.py", "/workspace/src/main.py"),
             ("src/main.py", "/workspace/src/main.py"),
             ("./src/main.py", "/workspace/./src/main.py"),
+            ("$MY_VAR/src/main.py", None),
         ],
     )
     def test_all_write_mechanisms_resolve_all_path_types(
@@ -1076,7 +1077,47 @@ class TestWriteGuardCrossProductMatrix:
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        monkeypatch.delenv("MY_VAR", raising=False)
         cmd = cmd_template.format(path=path_type)
         result = _extract_bash_write_targets(cmd)
-        assert result is not None, f"Expected write detection for: {cmd}"
-        assert expected_resolved in result, f"Expected {expected_resolved} in {result} for: {cmd}"
+        if expected_resolved is None:
+            assert result is None or result == [], f"Expected fail-open for: {cmd}, got: {result}"
+        else:
+            assert result is not None, f"Expected write detection for: {cmd}"
+            assert expected_resolved in result, (
+                f"Expected {expected_resolved} in {result} for: {cmd}"
+            )
+
+
+class TestShellVariableWriteGuardIntegration:
+    def test_redirect_with_env_var_in_environ_allowed(self, monkeypatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.setenv("MY_DIR", "/workspace/.autoskillit/temp/review-pr")
+        result = _extract_bash_write_targets('echo x > "$MY_DIR/out.txt"')
+        assert result is not None
+        assert "/workspace/.autoskillit/temp/review-pr/out.txt" in result
+
+    def test_redirect_with_unknown_var_failopen(self, monkeypatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.delenv("UNKNOWN_DIR", raising=False)
+        result = _extract_bash_write_targets('echo x > "$UNKNOWN_DIR/out.txt"')
+        assert result is None or result == []
+
+    def test_redirect_with_inline_assignment_failopen(self, monkeypatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "/workspace/.autoskillit/temp")
+        monkeypatch.delenv("REVIEW_OUTPUT_DIR", raising=False)
+        cmd = (
+            'REVIEW_OUTPUT_DIR=".autoskillit/temp/review-pr/iter_0"'
+            ' && echo x > "$REVIEW_OUTPUT_DIR/out.txt"'
+        )
+        result = _extract_bash_write_targets(cmd)
+        assert result is None or result == []

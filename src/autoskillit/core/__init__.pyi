@@ -1,4 +1,3 @@
-from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from ._claude_env import build_agent_env as build_agent_env
 from ._claude_env import build_claude_env as build_claude_env
 from ._cmd_runner import CmdRunner as CmdRunner
@@ -34,6 +33,7 @@ from ._terminal_table import TerminalColumn as TerminalColumn
 from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
+from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
 from .claude_conventions import LayoutError as LayoutError

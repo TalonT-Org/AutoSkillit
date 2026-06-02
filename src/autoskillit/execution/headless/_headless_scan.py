@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 
-from autoskillit.core.bash_write_targets import extract_bash_write_targets
+from autoskillit.core import extract_bash_write_targets
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
 _WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})

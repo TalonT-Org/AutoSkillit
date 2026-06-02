@@ -230,11 +230,6 @@ src/autoskillit/recipes/scripts/*.sh:
 scripts/recipe/*.sh:
   - recipe/
 
-src/autoskillit/core/bash_write_targets.py:
-  - core/
-  - arch/
-  - contracts/
-
 src/autoskillit/core/__init__.pyi:
   - core/
   - arch/

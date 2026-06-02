@@ -1002,14 +1002,14 @@ class TestWriteGuardVerbFdRedirect:
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("tee 2>&1")
-        assert result is None or result == []
+        assert result == []
 
     def test_sed_with_only_fd_redirect_not_blocked(self, monkeypatch: pytest.MonkeyPatch):
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
         result = _extract_bash_write_targets("sed -i 2>&1")
-        assert result is None or result == []
+        assert result == []
 
     def test_sed_with_sub_pattern_and_fd_redirect_treats_pattern_as_target(
         self, monkeypatch: pytest.MonkeyPatch

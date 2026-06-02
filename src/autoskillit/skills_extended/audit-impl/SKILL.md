@@ -83,9 +83,10 @@ requirements, scope creep, and unexpected changes. Produces a GO or NO GO verdic
 After extraction, validate the manifest (only when a non-empty path was provided):
 1. File exists (use `ls` or `Glob` to confirm)
 2. Valid JSON with `schema_version` equal to `1`
-3. `plan_path` in the manifest matches **any one** of the resolved plan file paths loaded in Step 1 (stale manifest guard — a manifest referencing a different plan is silently ignored)
 
-If any validation check fails, log a warning and proceed without the manifest (Step 3.5 will be skipped).
+If either check fails, log a warning and proceed without the manifest (Step 3.5 will be skipped).
+
+3. **Deferred to after Step 1:** Once plan file paths are resolved, verify that `plan_path` in the manifest matches **any one** of the resolved plan file paths (stale manifest guard — a manifest referencing a different plan is silently ignored). If this check fails, log a warning and discard the manifest.
 
 Resolve `plans_input`:
 

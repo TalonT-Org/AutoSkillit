@@ -31,6 +31,21 @@ __all__ = [
 
 
 @dataclass(frozen=True, slots=True)
+class BackendConventions:
+    """Per-backend filesystem layout conventions for skill discovery.
+
+    Distinct from :class:`BackendCapabilities` (which declares behavioral
+    capability flags). Conventions describe directory layout: where the
+    backend looks for skills, and which project-local directories to scan.
+    """
+
+    #: Subpath appended to the session/plugin root to locate skills.
+    skills_subdir: Path = Path("skills")
+    #: Project-relative directories to scan for project-local skills.
+    project_local_skill_search_dirs: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class BackendCapabilities:
     """Per-backend capability declaration consumed by runtime gates.
 

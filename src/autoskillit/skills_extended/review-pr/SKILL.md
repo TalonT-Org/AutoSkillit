@@ -151,7 +151,7 @@ gh api graphql \
   -F owner="$OWNER" \
   -F repo="$REPO" \
   -F number=$PR_NUMBER \
-  -F after=""
+  -f after=null
 ```
 
 Build two lists from the thread nodes. Do not output prose between iterations. For each thread, resolve line via:

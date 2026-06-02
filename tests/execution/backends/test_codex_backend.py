@@ -6,6 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 
 import pytest
+import structlog.testing
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -1367,8 +1368,13 @@ class TestCodexBackendSetupSessionDir:
 
     def test_absent_auth_logs_warning_no_raise(self) -> None:
         (self.codex_home / "config.toml").write_text("[mcp]\n")
-        CodexBackend().setup_session_dir(self.session_dir)
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().setup_session_dir(self.session_dir)
         assert not (self.session_dir / "auth.json").exists()
+        assert any(
+            e.get("event") == "codex_auth_copy_missing" and e.get("log_level") == "warning"
+            for e in cap_logs
+        )
 
     def test_auth_symlink_oserror_logs_warning_no_raise(
         self, monkeypatch: pytest.MonkeyPatch

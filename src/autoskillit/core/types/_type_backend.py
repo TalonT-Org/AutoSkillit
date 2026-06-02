@@ -119,19 +119,6 @@ class BackendCapabilities:
     inspector_capable: bool = field(default=False)
 
 
-@dataclass(frozen=True, slots=True)
-class BackendConventions:
-    """Per-backend directory layout and discovery conventions.
-
-    Holds backend-specific filesystem conventions used by skill resolution and
-    session setup. Constructed as a self-contained data object by each
-    CodingAgentBackend.conventions property.
-    """
-
-    skills_subdir: Path
-    project_local_skill_search_dirs: tuple[str, ...]
-
-
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
 
 CLAUDE_MODEL_ALIASES: dict[str, str] = {

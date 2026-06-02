@@ -6,7 +6,7 @@ import ast
 
 import pytest
 
-pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
 
 def test_capability_queries_match_command_backend(minimal_ctx):

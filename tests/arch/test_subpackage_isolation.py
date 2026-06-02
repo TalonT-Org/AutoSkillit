@@ -861,12 +861,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 21,
         "core/types": 28,
         "cli": 21,
-        "hooks": 12,
+        "hooks": 13,
         "pipeline": 12,
         "fleet": 22,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py; +_reset.py
         "recipe/rules": 42,  # +1: rules_skill_write_path_alignment.py
         "server/tools": 25,  # _auto_overrides.py + _cancellation_shield.py + tools_fleet_reset.py
-        "hooks/guards": 30,  # +fleet_claim_guard
+        "hooks/guards": 31,  # +fleet_claim_guard, +reset_resume_gate
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

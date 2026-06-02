@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+from pathlib import Path
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -31,6 +34,36 @@ _VALID_RESET_TARGETS: dict[str, IssueLabelState] = {
 }
 
 
+def _cleanup_resume_gate_state(project_dir: Path, dispatch_id: str) -> None:
+    """Remove the resume_attempted entry for a dispatch after reset."""
+    state_file = project_dir / ".autoskillit" / "temp" / "resume_gate_state.json"
+    if not state_file.is_file():
+        return
+    try:
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return
+        ra = state.get("resume_attempted", {})
+        ra.pop(dispatch_id, None)
+        content = json.dumps(state)
+        fd, tmp = tempfile.mkstemp(dir=state_file.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, state_file)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+    except Exception:
+        logger.debug("resume_gate_state cleanup failed", dispatch_id=dispatch_id)
+
+
 @mcp.tool(
     tags={"autoskillit", "kitchen-core", "fleet"},
     annotations={"readOnlyHint": True},
@@ -40,6 +73,7 @@ _VALID_RESET_TARGETS: dict[str, IssueLabelState] = {
 async def reset_dispatch(
     dispatch_id: str,
     reset_to: str = "queued",
+    force: bool = False,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Reset a failed L2 dispatch, cleaning up all git/PR artifacts.
@@ -50,6 +84,7 @@ async def reset_dispatch(
     Args:
         dispatch_id: The dispatch ID (UUID) or dispatch name to reset.
         reset_to: Target state — "queued" (fresh retry) or "fail" (abandon).
+        force: Bypass the resume-attempt gate when resume is known to be impossible.
 
     Never raises.
     """
@@ -120,6 +155,10 @@ async def reset_dispatch(
             reset_to_queued=(reset_to == "queued"),
         )
         report.state_updated = state_updated
+
+        _cleanup_resume_gate_state(project_dir, dispatch_id)
+        if dispatch.dispatch_id and dispatch.dispatch_id != dispatch_id:
+            _cleanup_resume_gate_state(project_dir, dispatch.dispatch_id)
 
         return json.dumps(
             {

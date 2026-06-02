@@ -216,7 +216,7 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
-_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5})
+_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6})
 
 
 def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
@@ -370,7 +370,10 @@ def mark_dispatch_running(
                 d.retry_reason = ""
                 d.infra_exit_category = ""
                 _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
+                was_resumable = d.status == DispatchStatus.RESUMABLE
                 d.status = DispatchStatus.RUNNING
+                if was_resumable:
+                    d.resume_count += 1
                 d.dispatch_id = dispatch_id
                 d.dispatched_pid = dispatched_pid
                 d.dispatched_starttime_ticks = starttime_ticks

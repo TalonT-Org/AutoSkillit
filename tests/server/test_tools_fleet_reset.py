@@ -83,6 +83,13 @@ def _setup_tool(tool_ctx, monkeypatch, state_path: Path) -> None:
     tool_ctx.github_client.swap_labels = AsyncMock(return_value={"success": True})
 
 
+def _write_resume_gate_state(tmp_path: Path, resume_attempted: dict[str, bool]) -> Path:
+    state_path = tmp_path / ".autoskillit" / "temp" / "resume_gate_state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({"resume_attempted": resume_attempted}))
+    return state_path
+
+
 class TestResetDispatchHappyPath:
     @pytest.mark.anyio
     async def test_reset_dispatch_happy_path_queued(
@@ -127,6 +134,24 @@ class TestResetDispatchHappyPath:
         assert result["labels_reset"] is True
         assert result["state_updated"] is True
         assert result["reset_to"] == "fail"
+
+    @pytest.mark.anyio
+    async def test_reset_dispatch_accepts_force_true(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url="https://github.com/owner/repo/pull/1")
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123", force=True)
+        result = json.loads(raw)
+
+        assert result["success"] is True
+        assert result["reset_to"] == "queued"
 
 
 class TestResetDispatchErrors:
@@ -322,3 +347,51 @@ class TestResetDispatchEdgeCases:
         result = json.loads(raw)
         assert result["success"] is True
         assert "https://github.com/owner/repo/pull/99" in result["prs_closed"]
+
+    @pytest.mark.anyio
+    async def test_reset_dispatch_cleans_up_resume_gate_state(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url="https://github.com/owner/repo/pull/1")
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        resume_state_path = _write_resume_gate_state(
+            tmp_path, {"d-abc123": True, "other-id": True}
+        )
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123")
+        result = json.loads(raw)
+        assert result["success"] is True
+
+        state = json.loads(resume_state_path.read_text())
+        assert "d-abc123" not in state["resume_attempted"]
+        assert state["resume_attempted"]["other-id"] is True
+
+    @pytest.mark.anyio
+    async def test_reset_dispatch_cleans_up_both_name_and_uuid(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url="https://github.com/owner/repo/pull/1")
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        resume_state_path = _write_resume_gate_state(
+            tmp_path, {"d-abc123": True, "impl-issue-42": True}
+        )
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="impl-issue-42")
+        result = json.loads(raw)
+        assert result["success"] is True
+
+        state = json.loads(resume_state_path.read_text())
+        assert "impl-issue-42" not in state["resume_attempted"]
+        assert "d-abc123" not in state["resume_attempted"]

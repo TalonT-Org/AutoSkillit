@@ -13,7 +13,7 @@ from autoskillit.core import FleetErrorCode, RetryReason
 
 _resume_lock = threading.Lock()
 
-FLEET_STATE_SCHEMA_VERSION = 6
+FLEET_STATE_SCHEMA_VERSION = 7
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -24,6 +24,7 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "caller_session_id",
         "attempt_history",
         "session_chain",
+        "resume_count",
     }
 )
 
@@ -125,6 +126,7 @@ class DispatchRecord:
     resume_checkpoint: dict[str, Any] = field(default_factory=dict)
     wait_seconds: float | None = None
     resets_at: str = ""
+    resume_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -156,6 +158,7 @@ class DispatchRecord:
             "resume_checkpoint": dict(self.resume_checkpoint),
             "wait_seconds": self.wait_seconds,
             "resets_at": self.resets_at,
+            "resume_count": self.resume_count,
         }
 
     @classmethod
@@ -213,6 +216,7 @@ class DispatchRecord:
             resume_checkpoint=d.get("resume_checkpoint", {}),
             wait_seconds=d.get("wait_seconds"),
             resets_at=d.get("resets_at", ""),
+            resume_count=d.get("resume_count", 0),
         )
 
     @classmethod

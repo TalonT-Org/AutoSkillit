@@ -96,6 +96,8 @@ _PRINT_EXEMPT = frozenset(
         "_dispatch.py",
         "pipeline_step_guard.py",
         "pipeline_step_post_hook.py",
+        "resume_gate_post_hook.py",
+        "reset_resume_gate.py",
     }
 )
 
@@ -118,6 +120,8 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "token_summary_hook.py",
         "skill_load_post_hook.py",
         "skill_load_guard.py",
+        "resume_gate_post_hook.py",
+        "reset_resume_gate.py",
     }
 )
 

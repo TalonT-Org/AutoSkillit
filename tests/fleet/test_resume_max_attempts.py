@@ -30,7 +30,7 @@ class TestMaxResumeAttemptsGuard:
             ),
         ]
         state = CampaignState(
-            schema_version=6,
+            schema_version=7,
             campaign_id="test-id",
             campaign_name="test",
             manifest_path="manifest.yaml",
@@ -61,7 +61,7 @@ class TestMaxResumeAttemptsGuard:
             ),
         ]
         state = CampaignState(
-            schema_version=6,
+            schema_version=7,
             campaign_id="test-id",
             campaign_name="test",
             manifest_path="manifest.yaml",
@@ -94,7 +94,7 @@ class TestMaxResumeAttemptsGuard:
             ),
         ]
         state = CampaignState(
-            schema_version=6,
+            schema_version=7,
             campaign_id="test-id",
             campaign_name="test",
             manifest_path="manifest.yaml",

@@ -15,6 +15,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_analyze_pipeline_health_contracts.py` | Contract tests for the analyze-pipeline-health skill — output patterns and delimiter |
 | `test_api_surface_alignment.py` | REQ-C8-01 / C2-01: API surface alignment tests |
 | `test_backend_protocol.py` | Protocol conformance for CodingAgentBackend, StreamParser, ResultParser, and ClaudeCodeBackend |
+| `test_backend_compliance.py` | Return-type and protocol conformance for all BACKEND_REGISTRY entries |
 | `test_claim_issue_contracts.py` | Contract tests for claim_issue and release_issue MCP tools |
 | `test_claude_code_interface_contracts.py` | Contract tests for Claude Code external interface conventions |
 | `test_collapse_issues_contracts.py` | Contract tests for the collapse-issues skill SKILL.md |

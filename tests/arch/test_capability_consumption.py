@@ -49,14 +49,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         rationale="Health Inspector capability gating — production consumer in #3574",
         added_date=date(2026, 6, 1),
     ),
-    "skills_subdir": ForwardDeclaredField(
-        issue=3134,
-        rationale=(
-            "read site migrated to backend.conventions.skills_subdir — "
-            "capabilities field retained on BackendCapabilities for schema consistency"
-        ),
-        added_date=date(2026, 6, 2),
-    ),
     "required_session_files": ForwardDeclaredField(
         issue=3134,
         rationale=(

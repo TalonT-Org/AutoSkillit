@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -49,7 +50,7 @@ def test_codex_init_session_delegates_to_setup_session_dir(
 ) -> None:
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    codex_env.backend.setup_session_dir.assert_called_once_with(session_path)
+    codex_env.backend.setup_session_dir.assert_called_once_with(Path(str(session_path)))
 
 
 def test_no_backend_skips_setup_session_dir(make_session_skill_manager) -> None:

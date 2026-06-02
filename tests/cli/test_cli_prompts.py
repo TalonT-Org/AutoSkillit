@@ -704,28 +704,6 @@ def test_campaign_prompt_tool_list_still_enumerates_seven_tools():
     assert "reset_dispatch" in prompt
 
 
-def test_campaign_prompt_tool_list_includes_reset_dispatch():
-    """reset_dispatch must appear in the campaign prompt tool allowlist."""
-    from unittest.mock import MagicMock
-
-    from autoskillit.cli._prompts import _build_fleet_campaign_prompt
-
-    recipe = MagicMock()
-    recipe.name = "test-campaign"
-    recipe.description = "Test"
-    recipe.dispatches = [MagicMock()]
-    recipe.continue_on_failure = False
-
-    prompt = _build_fleet_campaign_prompt(
-        campaign_recipe=recipe,
-        manifest_yaml="dispatches: []",
-        completed_dispatches="",
-        mcp_prefix="mcp__autoskillit__",
-        campaign_id="abc-123",
-    )
-    assert "reset_dispatch" in prompt
-
-
 def test_campaign_prompt_has_stale_artifact_recovery_section():
     """STALE-ARTIFACT RECOVERY must be a top-level section with reset_dispatch instruction."""
     from unittest.mock import MagicMock

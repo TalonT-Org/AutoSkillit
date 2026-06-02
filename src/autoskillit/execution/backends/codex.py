@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ from autoskillit.core import (
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
     BackendCapabilities,
+    BackendConventions,
     BareResume,
     ClaudeDirectoryConventions,
     CmdSpec,
@@ -331,6 +333,12 @@ class CodexBackend:
             record_capable=False,
             anthropic_provider_capable=False,
             inspector_capable=True,
+        )
+
+    @property
+    def conventions(self) -> BackendConventions:
+        return BackendConventions(
+            project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
@@ -747,6 +755,47 @@ class CodexBackend:
             errors.append(f"sessions/ must be a symlink, not a regular directory: {sessions_path}")
 
         return errors
+
+    def setup_session_dir(self, session_dir: Path) -> None:
+        codex_home_source = Path.home() / ".codex"
+
+        try:
+            shutil.copy2(
+                codex_home_source / "config.toml",
+                session_dir / "config.toml",
+            )
+        except FileNotFoundError:
+            logger.error(
+                "codex_config_copy_missing",
+                src=str(codex_home_source / "config.toml"),
+            )
+            raise
+
+        auth_source = codex_home_source / "auth.json"
+        auth_dest = session_dir / "auth.json"
+        if auth_source.exists():
+            try:
+                auth_dest.symlink_to(auth_source.resolve())
+                logger.debug(
+                    "codex_auth_symlink",
+                    src=str(auth_source),
+                    dest=str(auth_dest),
+                )
+            except OSError:
+                logger.warning("codex_auth_symlink_failed", src=str(auth_source))
+        else:
+            logger.warning("codex_auth_copy_missing", src=str(auth_source))
+
+        env_source = codex_home_source / ".env"
+        if env_source.exists():
+            shutil.copy2(env_source, session_dir / ".env")
+
+        sessions_target = default_log_dir() / "codex-sessions"
+        sessions_target.mkdir(parents=True, exist_ok=True)
+        try:
+            (session_dir / "sessions").symlink_to(sessions_target)
+        except OSError:
+            logger.warning("codex_sessions_symlink_failed", target=str(sessions_target))
 
     def validate_skill_content(self, content: str) -> list[str]:
         return []

@@ -31,6 +31,21 @@ __all__ = [
 
 
 @dataclass(frozen=True, slots=True)
+class BackendConventions:
+    """Per-backend filesystem layout conventions for skill discovery.
+
+    Distinct from :class:`BackendCapabilities` (which declares behavioral
+    capability flags). Conventions describe directory layout: where the
+    backend looks for skills, and which project-local directories to scan.
+    """
+
+    #: Subpath appended to the session/plugin root to locate skills.
+    skills_subdir: Path = Path("skills")
+    #: Project-relative directories to scan for project-local skills.
+    project_local_skill_search_dirs: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class BackendCapabilities:
     """Per-backend capability declaration consumed by runtime gates.
 
@@ -102,19 +117,6 @@ class BackendCapabilities:
     plugin_install_capable: bool = field(default=False)
     # True when backend supports Health Inspector LLM-callback idle detection
     inspector_capable: bool = field(default=False)
-
-
-@dataclass(frozen=True, slots=True)
-class BackendConventions:
-    """Per-backend directory layout and discovery conventions.
-
-    Holds backend-specific filesystem conventions used by skill resolution and
-    session setup. Constructed as a self-contained data object by each
-    CodingAgentBackend.conventions property.
-    """
-
-    skills_subdir: Path
-    project_local_skill_search_dirs: tuple[str, ...]
 
 
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)

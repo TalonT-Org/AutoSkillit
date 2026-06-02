@@ -6,6 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 
 import pytest
+import structlog.testing
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -15,6 +16,7 @@ from autoskillit.core import (
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     BackendCapabilities,
+    BackendConventions,
     CmdSpec,
     CodingAgentBackend,
     DirectInstall,
@@ -1313,3 +1315,93 @@ class TestCodexMcpClientBackendRequired:
     def test_food_truck_raises_without_mcp_client_backend(self, _strip_mcp_env: None) -> None:
         with pytest.raises(ValueError, match="MCP_CLIENT_BACKEND"):
             CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+
+
+class TestCodexBackendConventions:
+    def test_conventions_returns_backend_conventions_instance(self) -> None:
+        assert isinstance(CodexBackend().conventions, BackendConventions)
+
+    def test_skills_subdir_is_skills(self) -> None:
+        assert CodexBackend().conventions.skills_subdir == Path("skills")
+
+    def test_codex_skills_in_project_local_dirs(self) -> None:
+        assert ".codex/skills" in CodexBackend().conventions.project_local_skill_search_dirs
+
+    def test_agents_skills_in_project_local_dirs(self) -> None:
+        assert ".agents/skills" in CodexBackend().conventions.project_local_skill_search_dirs
+
+
+class TestCodexBackendSetupSessionDir:
+    @pytest.fixture(autouse=True)
+    def _setup_dirs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.fake_home = tmp_path / "fakehome"
+        self.codex_home = self.fake_home / ".codex"
+        self.codex_home.mkdir(parents=True)
+        self.session_dir = tmp_path / "session"
+        self.session_dir.mkdir()
+        self.fake_log_dir = tmp_path / "logs"
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: self.fake_home))
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.default_log_dir",
+            lambda: self.fake_log_dir,
+        )
+
+    def _write_all_source_files(self) -> None:
+        (self.codex_home / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+        (self.codex_home / "auth.json").write_text("{}")
+        (self.codex_home / ".env").write_text("KEY=val\n")
+
+    def test_happy_path_all_files_provisioned(self) -> None:
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        assert (self.session_dir / "config.toml").is_file()
+        assert (self.session_dir / "auth.json").is_symlink()
+        assert (self.session_dir / ".env").is_file()
+        assert (self.session_dir / "sessions").is_symlink()
+        assert (self.session_dir / "sessions").resolve() == (
+            self.fake_log_dir / "codex-sessions"
+        ).resolve()
+
+    def test_missing_config_raises_and_logs_error(self) -> None:
+        with pytest.raises(FileNotFoundError):
+            CodexBackend().setup_session_dir(self.session_dir)
+
+    def test_absent_auth_logs_warning_no_raise(self) -> None:
+        (self.codex_home / "config.toml").write_text("[mcp]\n")
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().setup_session_dir(self.session_dir)
+        assert not (self.session_dir / "auth.json").exists()
+        assert any(
+            e.get("event") == "codex_auth_copy_missing" and e.get("log_level") == "warning"
+            for e in cap_logs
+        )
+
+    def test_auth_symlink_oserror_logs_warning_no_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (self.codex_home / "config.toml").write_text("[mcp]\n")
+        (self.codex_home / "auth.json").write_text("{}")
+        # Pre-create auth.json as a regular file to block symlink creation
+        (self.session_dir / "auth.json").write_text("blocker")
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().setup_session_dir(self.session_dir)
+        # Verify auth.json is still a regular file (symlink failed silently)
+        assert not (self.session_dir / "auth.json").is_symlink()
+        assert any(
+            e.get("event") == "codex_auth_symlink_failed" and e.get("log_level") == "warning"
+            for e in cap_logs
+        )
+
+    def test_absent_env_silently_skipped(self) -> None:
+        (self.codex_home / "config.toml").write_text("[mcp]\n")
+        CodexBackend().setup_session_dir(self.session_dir)
+        assert not (self.session_dir / ".env").exists()
+
+    def test_sessions_symlink_oserror_swallowed(self) -> None:
+        (self.codex_home / "config.toml").write_text("[mcp]\n")
+        (self.codex_home / "auth.json").write_text("{}")
+        # Pre-create sessions/ as a directory to block symlink creation
+        (self.session_dir / "sessions").mkdir()
+        CodexBackend().setup_session_dir(self.session_dir)
+        # Verify sessions is still a directory (symlink failed silently)
+        assert not (self.session_dir / "sessions").is_symlink()

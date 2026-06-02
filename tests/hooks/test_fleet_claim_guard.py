@@ -253,3 +253,42 @@ def test_fleet_claim_guard_registered() -> None:
     assert found_in_scripts, "guards/fleet_claim_guard.py not in dispatch_food_truck scripts"
 
     assert "fleet_claim_guard.py" in NEW_SUBDIR_BASENAMES
+
+
+def test_fleet_claim_guard_checks_singular_issue_url() -> None:
+    """T14: Guard must also check the singular 'issue_url' ingredient key."""
+    event = {
+        "tool_name": "dispatch_food_truck",
+        "tool_input": {
+            "ingredients": {
+                "issue_url": "https://github.com/org/repo/issues/42",
+            },
+        },
+    }
+    with mock.patch(
+        "autoskillit.hooks.guards.fleet_claim_guard.subprocess.run",
+        _mock_gh({"https://github.com/org/repo/issues/42": [{"name": "in-progress"}]}),
+    ):
+        output = _run_guard(event)
+    assert output
+    result = json.loads(output)
+    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_fleet_claim_guard_deny_includes_reset_dispatch_guidance() -> None:
+    """T15: Deny message must mention reset_dispatch as a recovery option."""
+    event = {
+        "tool_name": "dispatch_food_truck",
+        "tool_input": {
+            "ingredients": {
+                "issue_urls": _ISSUE_URL,
+            },
+        },
+    }
+    with mock.patch(
+        "autoskillit.hooks.guards.fleet_claim_guard.subprocess.run",
+        _mock_gh({_ISSUE_URL: [{"name": "in-progress"}]}),
+    ):
+        output = _run_guard(event)
+    reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "reset_dispatch" in reason

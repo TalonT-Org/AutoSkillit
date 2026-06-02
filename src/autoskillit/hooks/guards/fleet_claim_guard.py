@@ -86,6 +86,8 @@ def main() -> None:
         sys.exit(0)
     issue_urls_raw = ingredients.get("issue_urls", "")
     if not issue_urls_raw:
+        issue_urls_raw = ingredients.get("issue_url", "")
+    if not issue_urls_raw:
         sys.exit(0)
 
     urls = [u.strip() for u in issue_urls_raw.split(",") if u.strip()]
@@ -101,7 +103,8 @@ def main() -> None:
                 f"You must resume the prior session — pass resume_session_id (from "
                 f"dispatched_session_id in the prior result) and prior_dispatch_id (from "
                 f"dispatch_id in the prior result) to dispatch_food_truck. If the prior "
-                f"session is unrecoverable, ask the human operator to remove the label."
+                f"session is unrecoverable, call reset_dispatch(dispatch_id="
+                f"<prior_dispatch_id>) to clean stale artifacts, then re-dispatch fresh."
             )
             sys.exit(0)
 

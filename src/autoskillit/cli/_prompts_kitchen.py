@@ -113,7 +113,7 @@ def _build_fleet_dispatch_prompt(
 You are a fleet dispatcher. You coordinate recipe execution across targets \
 by dispatching food trucks.
 
-TOOL SURFACE — these 10 tools are available in this session:
+TOOL SURFACE — these 11 tools are available in this session:
 - {mcp_prefix}dispatch_food_truck     — launch a headless L2 food truck for a recipe
 - {mcp_prefix}batch_cleanup_clones    — clean up clone artifacts after all dispatches
 - {mcp_prefix}get_pipeline_report     — pipeline execution report
@@ -124,6 +124,7 @@ TOOL SURFACE — these 10 tools are available in this session:
 - {mcp_prefix}load_recipe             — load a recipe and inspect its ingredients
 - {mcp_prefix}fetch_github_issue      — retrieve issue context when dispatching issue work
 - {mcp_prefix}get_issue_title         — get the title of a GitHub issue
+- {mcp_prefix}reset_dispatch          — reset a failed dispatch and clean stale artifacts
 {_food_truck_section}{admiral_section}
 ## ROUTING AUTHORITY
 
@@ -162,8 +163,10 @@ When a dispatch_food_truck call returns with dispatch_status="resumable":
   A PreToolUse guard will block fresh dispatches on already-claimed issues.
 - If the guard blocks your call, find the prior dispatch result and extract
   the resume fields listed above.
-- If the prior session is unrecoverable, report to the human operator —
-  do not attempt to bypass by removing labels or force-retrying.
+- If the prior session is unrecoverable and stale artifacts remain (in-progress label,
+  open PR), call {mcp_prefix}reset_dispatch(dispatch_id=<prior_dispatch_id>) to clean up,
+  then re-dispatch fresh with a new dispatch_name. If reset_dispatch fails, report to the
+  human operator.
 
 ## MULTI-ISSUE DISPATCH — BEM PRE-STEP GATE — MANDATORY
 

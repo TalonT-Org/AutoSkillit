@@ -1578,6 +1578,34 @@ def test_graphql_rule_does_not_fire_when_bash_invocation_present(tmp_path: Path)
     assert _GRAPHQL_RULE_ID not in rule_ids
 
 
+def test_graphql_rule_fires_for_case_mismatched_variable_bindings(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ### Step 1
+        ```graphql
+        query($owner:String!, $repo:String!, $number:Int!) {
+          repository(owner:$owner, name:$repo) {
+            pullRequest(number:$number) { title }
+          }
+        }
+        ```
+
+        ```bash
+        gh api graphql \\
+          -f query='...' \\
+          -F OWNER="$OWNER" \\
+          -F REPO="$REPO" \\
+          -F NUMBER=$NUMBER
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
 def test_graphql_rule_does_not_fire_for_display_only_fragment(tmp_path: Path) -> None:
     skill_md = textwrap.dedent(
         """\

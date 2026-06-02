@@ -8,7 +8,7 @@ from pathlib import Path
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.config import load_config
 from autoskillit.core import Severity, get_logger, is_feature_enabled
-from autoskillit.execution import BACKEND_REGISTRY
+from autoskillit.execution import get_backend
 
 from ._doctor_config import (
     _check_config_layers_for_secrets,
@@ -76,10 +76,14 @@ def run_doctor(*, output_json: bool = False) -> None:
     cfg = load_config(Path.cwd())
     results: list[DoctorResult] = []
 
-    _backend_cls = BACKEND_REGISTRY.get(cfg.agent_backend.backend)
-    if _backend_cls is None and cfg.agent_backend.backend:
-        logger.warning("unknown_backend_fallback", backend=cfg.agent_backend.backend)
-    _backend = _backend_cls() if _backend_cls is not None else None
+    if cfg.agent_backend.backend:
+        try:
+            _backend = get_backend(cfg.agent_backend.backend)
+        except ValueError:
+            logger.warning("unknown_backend_fallback", backend=cfg.agent_backend.backend)
+            _backend = None
+    else:
+        _backend = None
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
     results.extend(_check_stale_mcp_servers(Path.home() / ".claude.json", backend=_backend))
@@ -149,7 +153,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_quota_cache_schema())
 
     # Check 15: claude process state breakdown
-    results.append(_check_claude_process_state_breakdown(backend=cfg.agent_backend.backend))
+    results.append(_check_claude_process_state_breakdown(backend=_backend))
 
     # Check 16: Install classification from direct_url.json
     results.append(_check_install_classification())
@@ -198,7 +202,7 @@ def run_doctor(*, output_json: bool = False) -> None:
         results.append(_check_fleet_state_schema())
 
     # Check 30: Codex CLI version gate
-    results.append(_check_codex_version(backend=cfg.agent_backend.backend))
+    results.append(_check_codex_version(backend=_backend))
 
     # Check 31: script(1) PTY binary availability
     results.append(_check_script_binary())

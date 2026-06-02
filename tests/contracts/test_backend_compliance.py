@@ -118,3 +118,52 @@ class TestBackendCompliance:
 
         for cls in BACKEND_REGISTRY.values():
             assert isinstance(cls().conventions, BackendConventions)
+
+    def test_backend_conventions_skills_subdir_non_empty(self):
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            assert len(str(cls().conventions.skills_subdir)) > 0
+
+    def test_claude_backend_validate_session_layout_accepts_valid_dir(self, tmp_path):
+        from autoskillit.execution.backends import ClaudeCodeBackend
+
+        skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
+        assert ClaudeCodeBackend().validate_session_layout(tmp_path) == []
+
+    def test_codex_backend_validate_session_layout_accepts_valid_dir(self, tmp_path):
+        from autoskillit.execution.backends import CodexBackend
+
+        skill_dir = tmp_path / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
+        (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+        assert CodexBackend().validate_session_layout(tmp_path) == []
+
+    def test_validate_session_layout_empty_dir_returns_errors(self, tmp_path):
+        from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+
+        for backend_cls in [ClaudeCodeBackend, CodexBackend]:
+            errors = backend_cls().validate_session_layout(tmp_path)
+            assert len(errors) > 0, f"{backend_cls.__name__} should report errors on empty dir"
+
+    def test_backend_conventions_skills_subdir_matches_validate_session_layout(self, tmp_path):
+        from autoskillit.execution.backends import BACKEND_REGISTRY, CodexBackend
+        from autoskillit.execution.backends.codex import (
+            CodexBackend as _CodexBackend,  # noqa: F401
+        )
+
+        for cls in BACKEND_REGISTRY.values():
+            work_dir = tmp_path / cls.__name__
+            work_dir.mkdir()
+            skills_subdir = cls().conventions.skills_subdir
+            skill_dir = work_dir / str(skills_subdir) / "test-skill"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
+            if issubclass(cls, CodexBackend):
+                (work_dir / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+            errors = cls().validate_session_layout(work_dir)
+            assert errors == [], f"{cls.__name__}: {errors}"

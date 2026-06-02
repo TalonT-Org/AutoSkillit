@@ -49,6 +49,7 @@ def _mock_backend(**kw: Any) -> Mock:
     backend.list_plugins.return_value = []
     backend.validate_skill_content.return_value = []
     backend.validate_session_layout.return_value = []
+    backend.setup_session_dir.return_value = None
     return backend
 
 

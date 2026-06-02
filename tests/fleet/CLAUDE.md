@@ -15,7 +15,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_api_dispatch_marker.py` | Tests for _run_dispatch marker lifecycle via execution_marker context manager |
 | `test_campaign_capture.py` | Tests for campaign capture extraction and ingredient interpolation (Group J) |
 | `test_capture_roundtrip.py` | Tests for prompt-extractor field name alignment — verifies sentinel examples use bare names matching `_extract_captures` expectations |
-| `test_checkpoint_bridge.py` | Tests for checkpoint_from_sidecar converting IssueSidecarEntry to SessionCheckpoint |
+| `test_checkpoint_bridge.py` | Tests for checkpoint_from_sidecar and checkpoint_from_tracker converting progress sources to SessionCheckpoint |
 | `test_dispatch_failure_semantics.py` | Group F: Core failure path semantics — timeout, no-sentinel, completed-dirty, completed-clean |
 | `test_dispatch_envelope_fields.py` | Dispatch envelope field persistence — elapsed_seconds and dispatch_status |
 | `test_dispatch_stderr_forwarding.py` | Stderr envelope forwarding and truncation tests |

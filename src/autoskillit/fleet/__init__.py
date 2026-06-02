@@ -7,7 +7,7 @@ Gateway exports per REQ-IMP-001 — consumers import from
 from ._api import _write_pid as _write_pid
 from ._api import execute_dispatch
 from ._capture import CaptureCompletenessError
-from ._checkpoint_bridge import checkpoint_from_sidecar
+from ._checkpoint_bridge import checkpoint_from_sidecar, checkpoint_from_tracker
 from ._dispatch_reaper import reap_stale_dispatches, reap_stale_dispatches_async
 from ._expressions import evaluate_skip_when
 from ._label_cleanup import (
@@ -161,6 +161,7 @@ __all__ = [
     "derive_orchestrator_resume_spec",
     "find_dispatch_for_issue",
     "checkpoint_from_sidecar",
+    "checkpoint_from_tracker",
     "is_dispatch_session_alive",
     "reap_stale_dispatches",
     "reap_stale_dispatches_async",

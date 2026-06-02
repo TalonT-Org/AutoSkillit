@@ -390,7 +390,7 @@ def test_non_codex_backend_still_denies(tmp_path):
 
 
 def test_absent_backend_still_denies(tmp_path):
-    """T2-20: AUTOSKILLIT_APPLICABLE_GUARDS absent — guard exits early (guard name not in [''])."""
+    """T2-20: AUTOSKILLIT_APPLICABLE_GUARDS absent: '' → [''] via split(','), exits early."""
     out = _run_guard(
         _make_event("Read"),
         tmp_dir=tmp_path,

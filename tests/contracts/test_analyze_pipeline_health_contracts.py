@@ -62,3 +62,12 @@ def test_analyze_pipeline_health_pattern_examples_match_delimiter():
         assert _check_expected_patterns(example, [_OUTPUT_DELIMITER]), (
             f"pattern_example must match '{_OUTPUT_DELIMITER}' after normalization: {example!r}"
         )
+
+
+def test_analyze_pipeline_health_skill_has_codex_guidance():
+    """SKILL.md must contain guidance for Codex session handling."""
+    from autoskillit.core import pkg_root
+
+    skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
+    content = skill_path.read_text()
+    assert "codex_log" in content, "SKILL.md must reference codex_log for Codex session handling"

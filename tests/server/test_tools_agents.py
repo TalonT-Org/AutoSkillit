@@ -448,6 +448,14 @@ def test_pipeline_health_scanner_agent_exists():
     assert "scan_result:" in body, (
         "pipeline-health-scanner.md body must contain a 'scan_result:' structured completion token"
     )
+    assert "codex_log" in body, (
+        "pipeline-health-scanner.md body must contain Codex log guidance "
+        "(codex_log data source section)"
+    )
+    assert "turn.failed" in body, (
+        "pipeline-health-scanner.md body must reference turn.failed event type "
+        "(Codex error detection guidance)"
+    )
 
 
 # DIAG_C7: plan-registry-tracer maxTurns >= 80

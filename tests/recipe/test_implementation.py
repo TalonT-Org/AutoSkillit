@@ -307,7 +307,7 @@ def test_fix_captures_deviation_manifest_path(recipe) -> None:
     step = recipe.steps["fix"]
     capture = step.capture or {}
     assert "deviation_manifest_path" in capture
-    assert "deviation_manifest_path" in capture["deviation_manifest_path"].from_
+    assert capture["deviation_manifest_path"].from_ == "${{ result.deviation_manifest_path }}"
     assert capture["deviation_manifest_path"].value_type == "optional_string"
 
 
@@ -317,7 +317,7 @@ def test_retry_worktree_captures_deviation_manifest_path(recipe) -> None:
     step = recipe.steps["retry_worktree"]
     capture = step.capture or {}
     assert "deviation_manifest_path" in capture
-    assert "deviation_manifest_path" in capture["deviation_manifest_path"].from_
+    assert capture["deviation_manifest_path"].from_ == "${{ result.deviation_manifest_path }}"
     assert capture["deviation_manifest_path"].value_type == "optional_string"
 
 

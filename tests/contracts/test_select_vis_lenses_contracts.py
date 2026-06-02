@@ -131,7 +131,12 @@ def test_skill_path_exists() -> None:
 def test_tier_b_experiment_type_table_section_present() -> None:
     """SKILL.md must contain the Tier B experiment-type lookup table heading and rows."""
     table_text = _extract_lens_table_section(SKILL_PATH.read_text())
-    assert len(table_text.strip()) > 0
+    data_rows = [
+        ln
+        for ln in table_text.splitlines()
+        if ln.strip().startswith("|") and "---" not in ln and "experiment" not in ln.lower()
+    ]
+    assert len(data_rows) >= 1, "Tier B experiment-type table must contain at least one data row"
 
 
 def test_required_output_tokens_present() -> None:

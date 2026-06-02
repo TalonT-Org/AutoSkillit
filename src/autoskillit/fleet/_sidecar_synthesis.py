@@ -5,6 +5,12 @@ from __future__ import annotations
 from autoskillit.fleet.result_parser import L3ParseResult
 from autoskillit.fleet.sidecar import IssueSidecarEntry
 
+_FAILURE_TERMINAL_PATTERNS = frozenset({"escalate", "failure", "error", "reject"})
+
+
+def _is_failure_terminal(step_name: str) -> bool:
+    return any(pat in step_name for pat in _FAILURE_TERMINAL_PATTERNS)
+
 
 def synthesize_from_sidecar(
     parsed: L3ParseResult,
@@ -17,6 +23,8 @@ def synthesize_from_sidecar(
         return parsed
     completed = [e for e in sidecar_entries if e.status == "completed"]
     if len(completed) != dispatched_issue_count:
+        return parsed
+    if any(e.terminal_step and _is_failure_terminal(e.terminal_step) for e in completed):
         return parsed
     if not any(e.pr_url for e in completed):
         return parsed

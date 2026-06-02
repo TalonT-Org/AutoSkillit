@@ -159,6 +159,9 @@ from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_stamp_ownership as _rules_stamp_ownership,
 )
 from autoskillit.recipe.rules import rules_step_naming as _rules_step_naming  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_stop_sentinel_direction as _rules_stop_sentinel_direction,
+)
 from autoskillit.recipe.rules import rules_temp_path as _rules_temp_path  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402
     rules_terminal_convergence as _rules_terminal_convergence,  # noqa: F401

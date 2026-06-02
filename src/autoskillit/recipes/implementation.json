@@ -681,6 +681,7 @@
       ],
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "optional_context_refs": [
         "merge_gate_ci_conclusion",
         "merge_gate_diagnosis_path"
@@ -753,6 +754,7 @@
       ],
       "on_failure": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "optional_context_refs": [
         "merge_gate_ci_conclusion",
         "merge_gate_diagnosis_path"

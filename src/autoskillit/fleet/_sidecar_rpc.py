@@ -19,6 +19,7 @@ def write_sidecar_entry(
     pr_url: str = "",
     reason: str = "",
     project_dir: str = "",
+    terminal_step: str = "",
 ) -> dict[str, str]:
     """Append one completion entry; callable via run_python. Returns {"ok": "true"} on success."""
     if status not in ("completed", "failed"):
@@ -29,6 +30,7 @@ def write_sidecar_entry(
         ts=datetime.now(tz=UTC).isoformat(),
         pr_url=pr_url or None,
         reason=reason or None,
+        terminal_step=terminal_step or None,
     )
     root = Path(project_dir) if project_dir else Path.cwd()
     try:

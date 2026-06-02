@@ -178,10 +178,11 @@ steps:
          - Success: call run_python with callable
            "autoskillit.fleet._sidecar_rpc.write_sidecar_entry",
            args: dispatch_id=$AUTOSKILLIT_DISPATCH_ID, issue_url=<url>,
-           status="completed", pr_url=<pr_url>
+           status="completed", pr_url=<pr_url>, terminal_step="done"
          - Failure: call run_python with callable
            "autoskillit.fleet._sidecar_rpc.write_sidecar_entry",
-           args: status="failed", reason=<error summary>.
+           args: status="failed", reason=<error summary>,
+           terminal_step="escalate_stop".
            Then call release_issue for that URL to remove the in-progress label.
            Continue to next issue — do NOT stop the batch.
 

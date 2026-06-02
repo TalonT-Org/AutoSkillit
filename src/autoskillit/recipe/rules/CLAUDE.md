@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (36 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis (37 flat rule files + 4 subdirectories).
 
 ## Subdirectories
 
@@ -53,6 +53,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_skill_write_path_alignment.py` | Cross-layer validation: SKILL.md declared write scope must align with recipe step output_dir; fires ERROR when iteration-scoped output_dir is narrower than SKILL.md NEVER block path and the skill doesn't use a dynamic write variable |
 | `rules_skills.py` | `skill_command` resolvability rules |
 | `rules_stamp_ownership.py` | Exclusive stamp ownership enforcement across skills |
+| `rules_stop_sentinel_direction.py` | Stop terminals must emit the correct success direction based on their graph position |
 | `rules_step_naming.py` | Step-key vs invoked-skill collision detection |
 | `rules_skip_inviting_notes.py` | Flags note: fields with skip-inviting phrases on optional steps |
 | `rules_temp_path.py` | Rejects bare `{{AUTOSKILLIT_TEMP}}/` without scope prefix |

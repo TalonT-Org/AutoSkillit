@@ -183,6 +183,8 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_temp_path.py` | Tests for temp_path semantic validation rule |
 | `test_rules_terminal_convergence.py` | Tests for success-stop-reason-uniqueness semantic validation rule |
 | `test_rules_failure_verdict_bypass.py` | Tests for failure-verdict-bypass-reachable semantic rule |
+| `test_rules_rate_limit_parity.py` | Tests for on_rate_limit parity with on_context_limit across bundled recipes |
+| `test_rules_stop_sentinel_direction.py` | Tests for stop-sentinel-success-mismatch semantic validation rule |
 | `test_rules_tools.py` | Tests for tools semantic validation rule |
 | `test_rules_unreachable_model.py` | Tests for unreachable_model semantic validation rule |
 | `test_rules_unsatisfied_input.py` | Tests for unsatisfied_input semantic validation rule |

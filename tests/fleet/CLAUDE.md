@@ -52,6 +52,9 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_reset.py` | Tests for `find_dispatch_in_campaigns`, `compute_reset_labels` |
 | `test_skip_when.py` | Unit tests for `evaluate_skip_when` — campaign/inputs ref resolution, expression validation, quote stripping |
 | `test_sidecar.py` | Sidecar tests |
+| `test_sidecar_rpc_terminal_step.py` | Tests for `write_sidecar_entry` `terminal_step` parameter — write, omit, compatibility |
+| `test_sidecar_synthesis_terminal_guard.py` | Tests for synthesis terminal-step guard — failure terminal blocks, success terminal allows |
+| `test_sidecar_terminal_step.py` | Tests for `terminal_step` field on `IssueSidecarEntry` — roundtrip, default, serialization |
 | `test_startup_label_recovery.py` | Tests for sweep_stale_dispatch_labels — dead dispatch label cleanup, alive dispatch skip, missing sidecar, multi-campaign |
 | `test_find_dispatch_for_issue.py` | Tests for find_dispatch_for_issue — running dispatch sidecar lookup, non-running skip, missing sidecar, empty state, corrupt state |
 | `test_staleness_propagation.py` | Tests that fleet dispatch proceeds despite process staleness — L2 subprocess revalidates independently |
@@ -61,6 +64,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_state_recovery.py` | Tests for derive_orchestrator_resume_spec in state_recovery module |
 | `test_state_schema.py` | Tests for DispatchRecord schema v2 fields and backward compatibility (Group J) |
 | `test_summary.py` | Tests for fleet campaign summary schema v1 (Group S) |
+| `test_verdict_dispatch_chain.py` | Integration tests for verdict → sidecar synthesis → dispatch status chain |
 
 ## Architecture Notes
 

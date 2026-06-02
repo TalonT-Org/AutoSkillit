@@ -223,7 +223,7 @@ def test_fleet_claim_deny_trigger_constant_exists() -> None:
 
 
 def test_fleet_claim_deny_trigger_appears_in_deny_message() -> None:
-    """T12: The trigger string appears in the deny message."""
+    """T13: The trigger string appears in the deny message."""
     event = {
         "tool_name": "dispatch_food_truck",
         "tool_input": {"ingredients": {"issue_urls": _ISSUE_URL}},

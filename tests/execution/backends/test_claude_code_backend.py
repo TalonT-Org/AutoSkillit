@@ -94,22 +94,11 @@ class TestClaudeCodeBackend:
         backend = ClaudeCodeBackend()
         assert backend.write_tool_names() == frozenset({"Write", "Edit"})
 
-    def test_conventions_returns_backend_conventions_instance(self) -> None:
+    def test_conventions_returns_backend_conventions(self) -> None:
         result = ClaudeCodeBackend().conventions
         assert isinstance(result, BackendConventions)
-
-    def test_conventions_skills_subdir_value(self) -> None:
-        result = ClaudeCodeBackend().conventions
         assert str(result.skills_subdir) == ".claude/skills"
-
-    def test_conventions_project_local_skill_search_dirs_value(self) -> None:
-        result = ClaudeCodeBackend().conventions
         assert result.project_local_skill_search_dirs == (".claude/skills", ".autoskillit/skills")
-
-    def test_setup_session_dir_is_callable(self) -> None:
-        backend = ClaudeCodeBackend()
-        assert hasattr(backend, "setup_session_dir")
-        assert callable(backend.setup_session_dir)
 
     def test_setup_session_dir_returns_none(self, tmp_path: Path) -> None:
         result = ClaudeCodeBackend().setup_session_dir(tmp_path)

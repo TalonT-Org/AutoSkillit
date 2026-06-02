@@ -340,6 +340,9 @@ async def run_python(
                 "autoskillit.run_python",
                 extra={"callable": callable},
             )
+            anchor_err = validate_path_arg_anchoring(args, work_dir)
+            if anchor_err:
+                return json.dumps({"success": False, "error": anchor_err})
             promoted = maybe_promote_work_dir(args, work_dir)
             if promoted != work_dir:
                 logger.warning(
@@ -356,9 +359,6 @@ async def run_python(
                         "error": f"run_python: work_dir must be absolute, got {work_dir!r}",
                     }
                 )
-            anchor_err = validate_path_arg_anchoring(args, work_dir)
-            if anchor_err:
-                return json.dumps({"success": False, "error": anchor_err})
             resolved_args = args
             if work_dir:
                 resolved_args = resolve_relative_path_args(args or {}, work_dir)

@@ -21,29 +21,14 @@ RULE_NAME = "stop-sentinel-success-mismatch"
 def _is_failure_path_stop(step_name: str, ctx: ValidationContext) -> bool:
     """Return True if the stop step is on a failure path.
 
-    A stop is on a failure path if:
-    (a) its name contains a failure keyword, OR
-    (b) it is reachable from an on_failure edge of any step, OR
-    (c) it is the target of a failure-verdict on_result condition.
+    Uses name-based detection only: a stop whose name contains a failure
+    keyword (escalate, failure, error, reject) is a failure-path stop.
+    Routing analysis (on_failure edges, on_result conditions) is
+    unreliable because recipes legitimately route non-critical step
+    failures (e.g. post-run diagnostics) to success terminals.
     """
-    if any(pat in step_name for pat in _FAILURE_NAME_PATTERNS):
-        return True
-
-    for _name, step in ctx.recipe.steps.items():
-        if step.on_failure == step_name:
-            return True
-
-        if step.on_result and step.on_result.conditions:
-            for cond in step.on_result.conditions:
-                if cond.route != step_name:
-                    continue
-                if not cond.when:
-                    continue
-                for keyword in _FAILURE_NAME_PATTERNS:
-                    if keyword in cond.when:
-                        return True
-
-    return False
+    del ctx
+    return any(pat in step_name for pat in _FAILURE_NAME_PATTERNS)
 
 
 @semantic_rule(

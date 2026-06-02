@@ -76,19 +76,13 @@ class TestStopSentinelDirection:
                     "tool": "run_python",
                     "with": {"callable": "test"},
                     "on_success": "done",
-                    "on_failure": "handle_error",
-                },
-                "handle_error": {
-                    "tool": "run_python",
-                    "with": {"callable": "cleanup"},
-                    "on_success": "bad_stop",
-                    "on_failure": "bad_stop",
+                    "on_failure": "error_stop",
                 },
                 "done": {
                     "action": "stop",
                     "message": 'Emit sentinel: {"success": true, "reason": "done"}',
                 },
-                "bad_stop": {
+                "error_stop": {
                     "action": "stop",
                     "message": 'Emit sentinel: {"success": true, "reason": "oops"}',
                 },
@@ -97,7 +91,7 @@ class TestStopSentinelDirection:
         findings = run_semantic_rules(recipe)
         matched = [f for f in findings if f.rule == RULE_NAME]
         assert len(matched) >= 1
-        assert any(f.step_name == "bad_stop" for f in matched)
+        assert any(f.step_name == "error_stop" for f in matched)
 
     def test_allows_failure_path_stop_with_success_false(self) -> None:
         recipe = _make_workflow(

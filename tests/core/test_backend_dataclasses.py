@@ -201,24 +201,20 @@ def test_backend_module_all_exhaustive():
 def test_backend_conventions_frozen_slots_fields():
     import typing
     from dataclasses import FrozenInstanceError
-    from pathlib import Path
 
     from autoskillit.core.types._type_backend import BackendConventions
 
     assert hasattr(BackendConventions, "__slots__")
 
     inst = BackendConventions(
-        skills_subdir=Path("/claude/skills"),
         project_local_skill_search_dirs=(".claude/skills",),
     )
-    assert inst.skills_subdir == Path("/claude/skills")
     assert inst.project_local_skill_search_dirs == (".claude/skills",)
 
     with pytest.raises(FrozenInstanceError):
-        inst.skills_subdir = Path("/other")  # type: ignore[misc]
+        inst.project_local_skill_search_dirs = (".other/skills",)  # type: ignore[misc]
 
     hints = typing.get_type_hints(BackendConventions)
-    assert hints["skills_subdir"] is Path
     assert hints["project_local_skill_search_dirs"] == tuple[str, ...]
 
 

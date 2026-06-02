@@ -5,7 +5,6 @@ from __future__ import annotations
 import re as _re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
@@ -39,8 +38,6 @@ class BackendConventions:
     backend looks for skills, and which project-local directories to scan.
     """
 
-    #: Subpath appended to the session/plugin root to locate skills.
-    skills_subdir: Path = Path("skills")
     #: Project-relative directories to scan for project-local skills.
     project_local_skill_search_dirs: tuple[str, ...] = ()
 

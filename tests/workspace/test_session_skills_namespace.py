@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import ClaudeDirectoryConventions
 from autoskillit.workspace.session_skills import (
-    _SKILLS_SUBDIR,
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     _rewrite_skill_namespace_refs,
@@ -95,7 +95,13 @@ def test_activate_with_deps_materialised_content_has_namespace_rewritten(
         config=config,
     )
 
-    mermaid_md = tmp_path / "session-ns-activate" / _SKILLS_SUBDIR / "mermaid" / "SKILL.md"
+    mermaid_md = (
+        tmp_path
+        / "session-ns-activate"
+        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        / "mermaid"
+        / "SKILL.md"
+    )
     assert not mermaid_md.exists()
 
     result = mgr.activate_skill_deps("session-ns-activate", "mermaid")

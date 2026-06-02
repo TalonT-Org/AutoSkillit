@@ -10,10 +10,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from autoskillit.core import ClaudeDirectoryConventions
 from autoskillit.core.io import load_yaml
 from autoskillit.workspace.session_skills import (
-    _SKILLS_SUBDIR,
-    CODEX_SKILLS_SUBDIR,
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     resolve_ephemeral_root,
@@ -80,8 +79,8 @@ def test_provider_does_not_inject_for_cook_session() -> None:
 @pytest.mark.parametrize(
     ("backend_name", "skills_subdir"),
     [
-        pytest.param(None, _SKILLS_SUBDIR, id="claude-code"),
-        pytest.param("codex", CODEX_SKILLS_SUBDIR, id="codex"),
+        pytest.param(None, ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR, id="claude-code"),
+        pytest.param("codex", ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR, id="codex"),
     ],
 )
 def test_session_skill_manager_creates_ephemeral_dir(
@@ -110,14 +109,14 @@ def test_session_skill_manager_creates_ephemeral_dir(
     skill_files = list((session_path / skills_subdir).glob("*/SKILL.md"))
     assert len(skill_files) > 0
     if backend_name == "codex":
-        assert not (session_path / _SKILLS_SUBDIR).exists()
+        assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
 
 
 @pytest.mark.parametrize(
     ("backend_name", "skills_subdir"),
     [
-        pytest.param(None, _SKILLS_SUBDIR, id="claude-code"),
-        pytest.param("codex", CODEX_SKILLS_SUBDIR, id="codex"),
+        pytest.param(None, ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR, id="claude-code"),
+        pytest.param("codex", ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR, id="codex"),
     ],
 )
 def test_session_manager_injects_disable_for_tier2(
@@ -156,7 +155,7 @@ def test_session_manager_injects_disable_for_tier2(
     mermaid_dir = session_path / skills_subdir / "mermaid"
     assert not mermaid_dir.exists()
     if backend_name == "codex":
-        assert not (session_path / _SKILLS_SUBDIR).exists()
+        assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
 
 
 def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
@@ -173,7 +172,9 @@ def test_session_manager_no_flag_for_cook_session(tmp_path: Path) -> None:
         )
     )
     session_path = mgr.init_session("cook-session-123", cook_session=True, config=config)
-    mermaid_md = session_path / _SKILLS_SUBDIR / "mermaid" / "SKILL.md"
+    mermaid_md = (
+        session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR / "mermaid" / "SKILL.md"
+    )
     assert mermaid_md.exists()
 
 
@@ -197,7 +198,13 @@ def test_activate_skill_deps_removes_flag(tmp_path: Path) -> None:
     )
     result = mgr.activate_skill_deps("session-toggle", "mermaid")
     assert result is True
-    mermaid_md = tmp_path / "session-toggle" / _SKILLS_SUBDIR / "mermaid" / "SKILL.md"
+    mermaid_md = (
+        tmp_path
+        / "session-toggle"
+        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        / "mermaid"
+        / "SKILL.md"
+    )
     content = mermaid_md.read_text()
     fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
     assert fm_match
@@ -220,7 +227,13 @@ def test_activate_with_deps_materialises_absent_skill(
         )
     )
     mgr.init_session("session-materialise", cook_session=False, config=config)
-    mermaid_md = tmp_path / "session-materialise" / _SKILLS_SUBDIR / "mermaid" / "SKILL.md"
+    mermaid_md = (
+        tmp_path
+        / "session-materialise"
+        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        / "mermaid"
+        / "SKILL.md"
+    )
     assert not mermaid_md.exists()
 
     result = mgr.activate_skill_deps("session-materialise", "mermaid")
@@ -254,7 +267,13 @@ def test_activate_with_deps_already_present_removes_flag(
         config=config,
         allow_only=frozenset({"mermaid"}),
     )
-    mermaid_md = tmp_path / "session-flag-remove" / _SKILLS_SUBDIR / "mermaid" / "SKILL.md"
+    mermaid_md = (
+        tmp_path
+        / "session-flag-remove"
+        / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        / "mermaid"
+        / "SKILL.md"
+    )
     assert mermaid_md.exists()
 
     content = mermaid_md.read_text()
@@ -284,7 +303,7 @@ def test_init_session_gated_tier2_skill_dir_absent(tmp_path: Path) -> None:
         )
     )
     session_path = mgr.init_session("test-absent", cook_session=False, config=config)
-    skills_base = session_path / _SKILLS_SUBDIR
+    skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
     # Tier2 directory absent
     assert not (skills_base / "mermaid").exists()
     # Non-gated BUNDLED_EXTENDED skills are written (BUNDLED skills go via --plugin-dir, not here)
@@ -310,7 +329,7 @@ def test_init_session_tier2_skill_present_when_in_allow_only(tmp_path: Path) -> 
         config=config,
         allow_only=frozenset({"mermaid"}),
     )
-    skills_base = session_path / _SKILLS_SUBDIR
+    skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
     assert (skills_base / "mermaid" / "SKILL.md").exists()
     assert not (skills_base / "make-plan").exists()
 
@@ -334,7 +353,7 @@ def test_init_session_backend_none_uses_claude_skills_subdir(tmp_path: Path) -> 
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("test-backend-none", cook_session=True)
-    skills_dir = session_path / _SKILLS_SUBDIR
+    skills_dir = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
     assert skills_dir.is_dir()
     skill_files = list(skills_dir.glob("*/SKILL.md"))
     assert len(skill_files) > 0
@@ -344,8 +363,6 @@ def test_init_session_codex_backend_uses_codex_skills_subdir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When capabilities.skills_subdir == 'skills', skills_base resolves to skills/."""
-
-    from autoskillit.workspace.session_skills import CODEX_SKILLS_SUBDIR
 
     codex_backend = MagicMock()
     codex_backend.capabilities = _CODEX_CAPABILITIES
@@ -362,8 +379,8 @@ def test_init_session_codex_backend_uses_codex_skills_subdir(
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("test-codex-backend", cook_session=True, backend=codex_backend)
 
-    codex_skills = session_path / CODEX_SKILLS_SUBDIR
-    claude_skills = session_path / _SKILLS_SUBDIR
+    codex_skills = session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    claude_skills = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
     assert codex_skills.is_dir()
     skill_files = list(codex_skills.glob("*/SKILL.md"))
     assert len(skill_files) > 0

@@ -38,7 +38,6 @@ from autoskillit.workspace.clone_registry import (
     register_clone as register_clone,
 )
 from autoskillit.workspace.session_skills import (
-    CODEX_SKILLS_SUBDIR,
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
     collect_closure_write_paths,
@@ -81,7 +80,6 @@ __all__ = [
     "remove_worktree_sidecar",
     "write_worktree_sidecar",
     "RUNS_DIR",
-    "CODEX_SKILLS_SUBDIR",
     "DefaultSkillResolver",
     "SkillResolver",
     "SkillsDirectoryProvider",

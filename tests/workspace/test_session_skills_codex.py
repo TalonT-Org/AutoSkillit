@@ -7,11 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import ValidatedAddDir
-from autoskillit.workspace.session_skills import (
-    _SKILLS_SUBDIR,
-    CODEX_SKILLS_SUBDIR,
-)
+from autoskillit.core import ClaudeDirectoryConventions, ValidatedAddDir
 from tests.workspace._helpers import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -50,9 +46,11 @@ def codex_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, codex_env) -> None:
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    skill_files = list((session_path / CODEX_SKILLS_SUBDIR).glob("*/SKILL.md"))
+    skill_files = list(
+        (session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR).glob("*/SKILL.md")
+    )
     assert len(skill_files) > 0
-    assert not (session_path / _SKILLS_SUBDIR).exists()
+    assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
 
 
 def test_codex_init_session_copies_config_toml(make_session_skill_manager, codex_env) -> None:
@@ -143,9 +141,11 @@ def test_codex_init_session_returns_validated_add_dir(
 def test_claude_backend_still_uses_dot_claude_layout(make_session_skill_manager) -> None:
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True)
-    skill_files = list((session_path / _SKILLS_SUBDIR).glob("*/SKILL.md"))
+    skill_files = list(
+        (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).glob("*/SKILL.md")
+    )
     assert len(skill_files) > 0
-    assert not (session_path / CODEX_SKILLS_SUBDIR).exists()
+    assert not (session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR).exists()
 
 
 def test_codex_init_session_sessions_symlink_respects_xdg(

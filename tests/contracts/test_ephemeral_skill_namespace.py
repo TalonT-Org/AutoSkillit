@@ -16,9 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import SkillSource
+from autoskillit.core import ClaudeDirectoryConventions, SkillSource
 from autoskillit.workspace.session_skills import (
-    _SKILLS_SUBDIR,
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
@@ -34,7 +33,7 @@ def test_ephemeral_skill_md_namespace_matches_session_delivery(tmp_path: Path) -
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)
     session_path = mgr.init_session("ns-check-session", cook_session=True)
 
-    skills_base = session_path / _SKILLS_SUBDIR
+    skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
     resolver = DefaultSkillResolver()
     violations: list[str] = []
 

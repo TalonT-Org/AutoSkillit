@@ -141,7 +141,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _marketplace.py — marketplace.json (co-owned)
     ("src/autoskillit/cli/_marketplace.py", 96),
     # _marketplace.py — hooks.json (co-owned)
-    ("src/autoskillit/cli/_marketplace.py", 188),
+    ("src/autoskillit/cli/_marketplace.py", 192),
     # tools_config.py — hook config overlay dict (session-scoped, not schema-versioned)
     ("src/autoskillit/server/tools/tools_config.py", 50),
     # _update_checks.py — dismissal state file

@@ -22,10 +22,10 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
 ### Tier 2 — Cook (Interactive Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (NOT plugin-scanned)
-- **Default members** (102 total):
+- **Default members** (104 total):
   `investigate`, `make-plan`, `implement-worktree`, `rectify`,
   `dry-walkthrough`, `make-groups`, `review-approach`, `mermaid`, `make-arch-diag`,
-  `make-experiment-diag`, `plan-visualization`,
+  `make-experiment-diag`, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan`,
   all 13 `arch-lens-*` skills, all 18 `exp-lens-*` skills, all 12 `vis-lens-*` skills,
   all 14 `planner-*` skills,
   `audit-arch`, `audit-cohesion`, `audit-tests`,
@@ -44,7 +44,7 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
 ### Tier 3 — Pipeline-Only (Automation Skills)
 
 - **Location**: `src/autoskillit/skills_extended/` (same directory as Tier 2)
-- **Default members** (29 total):
+- **Default members** (31 total):
   `prepare-pr`, `compose-pr`, `open-integration-pr`, `merge-pr`, `analyze-prs`,
   `review-pr`, `resolve-review`, `implement-worktree-no-merge`, `resolve-failures`,
   `retry-worktree`, `resolve-merge-conflicts`, `audit-impl`, `smoke-task`,
@@ -52,7 +52,8 @@ tiers. See [Subset Categories](subsets.md) for subset configuration.
   `compose-research-pr`, `prepare-research-pr`, `resolve-claims-review`,
   `resolve-design-review`, `resolve-research-review`, `review-research-pr`,
   `audit-claims`, `build-execution-map`, `promote-to-main`,
-  `review-design`, `troubleshoot-experiment`
+  `review-design`, `troubleshoot-experiment`,
+  `classify-experiment-type`, `apply-review-dimensions`
 - **Visible in**: cook and headless sessions
 - **Distinction from Tier 2**: semantic only — both tiers live in `skills_extended/` and
   are available in the same session modes. The tier distinction lets users reclassify

@@ -17,6 +17,11 @@ conflicts across their recommendations using the priority hierarchy, and writes
 three output files: a visualization plan with figure inventory, a report
 placement outline, and a Tier-C routing trace.
 
+The input lens outputs originate from three selection tiers defined by
+`select-vis-lenses`: Tier A (always-on mandatory lenses), Tier B
+(experiment-type-selected lenses), and Tier C (methodology-tradition-selected
+lens). The priority hierarchy in Step 1 maps directly to these tiers.
+
 ## When to Use
 
 - As the `synthesize` step of the vis-lens phoropter in the `research` recipe,

@@ -18,7 +18,7 @@ MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 | `tools_ci_merge_queue.py` | `toggle_auto_merge`, `enqueue_pr`, `wait_for_merge_queue` |
 | `tools_clone.py` | `clone_repo`, `remove_clone`, `push_to_remote`, `register_clone_status`, `batch_cleanup_clones`, `bootstrap_clone` |
 | `_claim_helpers.py` | `ClaimDecision`, `_try_claim_with_liveness`, `_get_campaign_state_paths` — shared claiming logic for `claim_issue` and `claim_and_resolve_issue` |
-| `_execution_helpers.py` | `_import_and_call`, `_coerce_scalar` subprocess coercion helpers (no MCP tools) |
+| `_execution_helpers.py` | `_import_and_call`, `_coerce_scalar`, `maybe_promote_work_dir`, `validate_path_arg_anchoring`, `resolve_relative_path_args` — execution helpers for `run_python` (no MCP tools) |
 | `tools_execution.py` | `run_cmd`, `run_python`, `run_skill` |
 | `tools_fleet_dispatch.py` | `dispatch_food_truck`, `record_gate_dispatch` |
 | `tools_fleet_reset.py` | `reset_dispatch` (full dispatch artifact cleanup) |

@@ -56,6 +56,7 @@ from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
+    maybe_promote_work_dir,
     resolve_relative_path_args,
     validate_path_arg_anchoring,
 )
@@ -338,6 +339,16 @@ async def run_python(
                 "autoskillit.run_python",
                 extra={"callable": callable},
             )
+            promoted = maybe_promote_work_dir(args, work_dir)
+            if promoted != work_dir:
+                logger.warning(
+                    "run_python auto-promoted work_dir from args to tool level",
+                    callable=callable,
+                    work_dir=promoted,
+                )
+                work_dir = promoted
+                if args and "work_dir" in args:
+                    args = {k: v for k, v in args.items() if k != "work_dir"}
             if work_dir and not Path(work_dir).is_absolute():
                 return json.dumps(
                     {

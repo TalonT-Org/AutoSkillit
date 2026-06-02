@@ -134,6 +134,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_dataflow_handoff.py` | Tests for dataflow handoff semantic validation rule |
 | `test_rules_dataflow_merge.py` | Tests for dataflow merge semantic validation rule |
 | `test_rules_dataflow_nullable.py` | Tests for dataflow nullable semantic validation rule |
+| `test_rules_work_dir_misplacement.py` | Tests for work-dir-arg-misplacement semantic rule: flags run_python steps with work_dir in args for callables that don't accept it |
 | `test_rules_dedup.py` | Tests for dedup semantic validation rule |
 | `test_rules_features.py` | Tests for features semantic validation rule |
 | `test_rules_flake_loop_deadlock.py` | Tests for flake-suspected-unwinnable-loop semantic validation rule |

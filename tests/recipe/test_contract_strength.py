@@ -44,10 +44,8 @@ _KNOWN_UNGAPPED_WRITE_ALWAYS = frozenset(
         "run-experiment",
         "scope",
         "select-directions",
-        "select-vis-lenses",
         "setup-environment",
         "stage-data",
-        "synthesize-vis-plan",
         "troubleshoot-experiment",
         "write-recipe",
     }

@@ -77,6 +77,8 @@ def run_doctor(*, output_json: bool = False) -> None:
     results: list[DoctorResult] = []
 
     _backend_cls = BACKEND_REGISTRY.get(cfg.agent_backend.backend)
+    if _backend_cls is None and cfg.agent_backend.backend:
+        logger.warning("unknown_backend_fallback", backend=cfg.agent_backend.backend)
     _backend = _backend_cls() if _backend_cls is not None else None
 
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths

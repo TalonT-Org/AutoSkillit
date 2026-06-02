@@ -102,6 +102,7 @@ class TestModuleCascadeCore:
             "_type_figure_spec",
             "_type_session_env",
             "_type_capture",
+            "_type_inspector",
             "_type_token",
             "_type_constants_env",
             "_type_constants_features",

@@ -25,7 +25,6 @@ from autoskillit.core import (
     TerminationReason,
 )
 from autoskillit.core.types import SubprocessResult
-from autoskillit.execution.process import RaceSignals
 from tests.conftest import make_stub_inspector
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
@@ -143,17 +142,6 @@ class TestSubprocessResultInspectorVerdict:
             inspector_verdict=v,
         )
         assert r.inspector_verdict is v
-
-
-class TestRaceSignalsInspectorVerdict:
-    def test_default_none(self):
-        rs = RaceSignals(
-            process_exited=True,
-            process_returncode=0,
-            channel_a_confirmed=False,
-            channel_b_status=None,
-        )
-        assert rs.inspector_verdict is None
 
 
 class TestBackendCapabilitiesInspectorCapable:

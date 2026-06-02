@@ -255,6 +255,19 @@ class TestRaceSignalsFieldCount:
         )
 
 
+class TestInspectorVerdictField:
+    """inspector_verdict field on RaceSignals defaults to None."""
+
+    def test_default_none(self) -> None:
+        rs = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+        )
+        assert rs.inspector_verdict is None
+
+
 class TestExitSnapshot:
     """exit_snapshot field on RaceAccumulator and RaceSignals."""
 

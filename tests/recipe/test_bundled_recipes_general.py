@@ -18,10 +18,10 @@ from autoskillit.recipe.validator import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SMOKE_RECIPE = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+SMOKE_RECIPE = _PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
 
-_ALL_RECIPE_PATHS = all_validated_recipe_paths(PROJECT_ROOT)
+_ALL_RECIPE_PATHS = all_validated_recipe_paths(_PROJECT_ROOT)
 _BUNDLED_ONLY = [p for p in _ALL_RECIPE_PATHS if "src/autoskillit/recipes" in str(p)]
 _BUNDLED_ROOT_ONLY = [p for p in _BUNDLED_ONLY if p.parent == builtin_recipes_dir()]
 

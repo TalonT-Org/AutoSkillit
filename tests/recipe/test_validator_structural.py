@@ -17,7 +17,7 @@ from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.recipe.validator import validate_recipe_structure
 from tests.recipe.conftest import VALID_RECIPE, _write_yaml
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -67,7 +67,7 @@ class TestValidateRecipe:
 
     # WF6
     def test_builtin_recipes_valid(self) -> None:
-        yamls = all_validated_recipe_paths(PROJECT_ROOT)
+        yamls = all_validated_recipe_paths(_PROJECT_ROOT)
         assert len(yamls) >= 4
         for f in yamls:
             wf = load_recipe(f)
@@ -293,7 +293,7 @@ class TestValidateRecipe:
     def test_bundled_recipes_have_kitchen_rules(self) -> None:
         _bundled_only = [
             p
-            for p in all_validated_recipe_paths(PROJECT_ROOT)
+            for p in all_validated_recipe_paths(_PROJECT_ROOT)
             if "src/autoskillit/recipes" in str(p)
         ]
         failures = []
@@ -430,7 +430,7 @@ class TestValidateRecipe:
 
 
 def _project_local_recipes() -> list[Path]:
-    base = PROJECT_ROOT / ".autoskillit" / "recipes"
+    base = _PROJECT_ROOT / ".autoskillit" / "recipes"
     paths: list[Path] = []
     for subdir in RECIPE_SCAN_DIRS:
         scan_dir = base / subdir

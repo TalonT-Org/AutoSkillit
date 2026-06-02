@@ -466,6 +466,7 @@ def pytest_configure(config: pytest.Config) -> None:
             FullRunReason,
             build_test_scope,
             git_changed_files,
+            git_changed_files_local,
             load_manifest,
         )
 
@@ -480,7 +481,10 @@ def pytest_configure(config: pytest.Config) -> None:
             return
 
         cli_base_ref = config.getoption("--filter-base-ref", default=None)
-        changed = git_changed_files(config.rootpath, base_ref=cli_base_ref)
+        if mode == FilterMode.AGGRESSIVE:
+            changed = git_changed_files_local(config.rootpath)
+        else:
+            changed = git_changed_files(config.rootpath, base_ref=cli_base_ref)
 
         # Resolve the actual base_ref used (env fallback mirrors git_changed_files logic)
         resolved_base_ref = cli_base_ref or os.environ.get(
@@ -704,11 +708,21 @@ def pytest_collection_modifyitems(
     # --- Size-based deselection (aggressive mode only) ---
     filter_mode = config.stash.get(_filter_mode_key, None)
     if filter_mode == "aggressive":
+        from tests._test_filter import ALWAYS_RUN_AGGRESSIVE
+
+        tests_root = config.rootpath / "tests"
         _SIZE_MARKERS = {"small", "medium", "large"}
         size_selected: list[pytest.Item] = []
         size_deselected: list[pytest.Item] = []
 
         for item in items:
+            try:
+                first_part = item.path.relative_to(tests_root).parts[0]
+            except (ValueError, IndexError):
+                first_part = ""
+            if first_part in ALWAYS_RUN_AGGRESSIVE:
+                size_selected.append(item)
+                continue
             size_marks = [m.name for m in item.iter_markers() if m.name in _SIZE_MARKERS]
             effective_size = size_marks[0] if size_marks else "large"
             if effective_size in ("small", "medium"):

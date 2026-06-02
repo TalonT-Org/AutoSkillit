@@ -133,7 +133,7 @@ _DOCS_TRIGGER_FILES: frozenset[str] = frozenset({"README.md", "CLAUDE.md"})
 # cannot silently alter conservative behavior.
 _ALWAYS_RUN_CONSERVATIVE_UNCONDITIONAL: frozenset[str] = frozenset({"arch", "contracts"})
 
-_LARGE_CHANGESET_THRESHOLD: int = 30
+_LARGE_CHANGESET_THRESHOLD_CONSERVATIVE: int = 30
 
 # ---------------------------------------------------------------------------
 # core/ module-level cascade classification
@@ -1107,6 +1107,56 @@ def git_changed_files(
     return files
 
 
+def git_changed_files_local(
+    cwd: str | Path,
+) -> set[str] | None:
+    """Return files changed in working tree vs HEAD, or None on failure.
+
+    Uses ``git diff HEAD --name-only`` (staged + unstaged vs last commit)
+    plus ``git ls-files --others --exclude-standard`` (untracked).
+    """
+    try:
+        diff_result = subprocess.run(
+            ["git", "diff", "HEAD", "--name-only"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        warnings.warn(
+            f"git diff HEAD failed (exit {exc.returncode}): {exc.stderr or ''}", stacklevel=2
+        )
+        return None
+    except subprocess.TimeoutExpired:
+        warnings.warn("git diff HEAD timed out after 10s", stacklevel=2)
+        return None
+    except FileNotFoundError:
+        warnings.warn("git binary not found on PATH", stacklevel=2)
+        return None
+
+    files: set[str] = set()
+    for line in diff_result.stdout.strip().splitlines():
+        if line.strip():
+            files.add(line.strip())
+
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if untracked.returncode == 0:
+        for line in untracked.stdout.strip().splitlines():
+            if line.strip():
+                files.add(line.strip())
+
+    return files
+
+
 def check_bucket_a(changed_files: set[str]) -> bool:
     """Return True if any changed file triggers a full test run."""
     for f in changed_files:
@@ -1448,7 +1498,7 @@ def build_test_scope(
 
     Algorithm:
     1. None changed_files -> FullRunReason.GIT_UNAVAILABLE (fail-open)
-    2. >30 files -> FullRunReason.LARGE_CHANGESET (large changeset)
+    2. Conservative + >30 files -> FullRunReason.LARGE_CHANGESET (aggressive mode: no threshold)
     3. Bucket A triggered -> FullRunReason.BUCKET_A (full run)
     4. Classify: src Python -> cascade, test Python -> direct, non-Python -> manifest
     5. Compute always-run set for mode (includes arch/contracts for both modes)
@@ -1462,7 +1512,10 @@ def build_test_scope(
     if changed_files is None:
         return FullRunReason.GIT_UNAVAILABLE
 
-    if len(changed_files) > _LARGE_CHANGESET_THRESHOLD:
+    if (
+        mode == FilterMode.CONSERVATIVE
+        and len(changed_files) > _LARGE_CHANGESET_THRESHOLD_CONSERVATIVE
+    ):
         return FullRunReason.LARGE_CHANGESET
 
     if cwd is not None and base_ref is not None:

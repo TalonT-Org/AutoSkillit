@@ -121,8 +121,9 @@ changed files. Controlled by env var + CLI flags:
 
 1. **Fail-open gate**: If env var is unset/falsy, all tests run. On any error, all tests run.
 2. **Changed files**: `git merge-base HEAD base_ref` → SHA, then `git diff --name-only <sha>` (working tree vs merge-base: committed + staged + unstaged tracked) + `git ls-files --others --exclude-standard` (new untracked files). Union of all three — a strict superset of the old three-dot form. **Known limitation**: `git rm --cached` (stage-only deletions) are not captured — the file still exists on disk so the working-tree diff misses the deletion. This is acceptable given the fail-open design.
+   - **Aggressive mode override**: Uses `git diff HEAD --name-only` (working-tree-only) instead of merge-base diff. This prevents committed-but-old files from inflating the changed set.
 3. **Bucket A**: If any "global impact" file changed (conftest.py, pyproject.toml, etc.) -> full run
-4. **Large changeset**: >30 files -> full run
+4. **Large changeset**: >30 files -> full run (conservative only; disabled in aggressive mode)
 5. **Classification**: src Python -> layer cascade, test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup
 6. **Always-run**: `arch/` + `contracts/` always included (+ `infra/` + `docs/` in conservative mode)
 7. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
@@ -134,6 +135,21 @@ changed files. Controlled by env var + CLI flags:
 | `conservative` | Wide (L0 core -> all layers) | arch, contracts, infra, docs | CI, merge gates |
 | `aggressive` | Narrow (each package -> itself) | arch, contracts | Local dev |
 | `none` | N/A | N/A | Full run (default) |
+
+### Aggressive Mode Behavioral Notes
+
+**Commit-then-test escape window:** After committing a file, `git diff HEAD` no longer
+shows it, so tests for that file won't run locally in aggressive mode until it's modified
+again. This is by design — committed changes are validated by CI on the PR. To test
+committed-but-unpushed changes locally, use `task test-filtered` (conservative mode with
+merge-base diff) or push to trigger CI.
+
+**Stash behavior:** After `git stash`, the working tree is clean — only always-run tests
+(arch/, contracts/) execute. Pop the stash before testing.
+
+**Size filter exemption:** In aggressive mode, tests under `arch/` and `contracts/` are
+exempt from the size-based deselection filter. All other directories follow the standard
+rule: unannotated tests default to `large` and are deselected.
 
 ## Coverage Audit
 

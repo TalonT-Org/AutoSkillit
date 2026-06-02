@@ -108,6 +108,24 @@ class TestTaskfile:
         data = self._load()
         assert "coverage-audit" in data["tasks"], "coverage-audit task missing from Taskfile.yml"
 
+    def test_test_local_task_exists(self):
+        """TF-13 — test-local task exists in Taskfile.yml."""
+        data = self._load()
+        assert "test-local" in data["tasks"], "test-local task missing from Taskfile.yml"
+
+    def test_test_local_defaults_to_aggressive(self):
+        """TF-14 — test-local defaults AUTOSKILLIT_TEST_FILTER to aggressive."""
+        data = self._load()
+        cmds = " ".join(str(c) for c in data["tasks"]["test-local"].get("cmds", []))
+        assert "AUTOSKILLIT_TEST_FILTER" in cmds
+        assert "aggressive" in cmds
+
+    def test_test_local_delegates_to_test_check(self):
+        """TF-15 — test-local delegates to test-check."""
+        data = self._load()
+        cmds = " ".join(str(c) for c in data["tasks"]["test-local"].get("cmds", []))
+        assert "test-check" in cmds
+
     def test_regen_contracts_task_exists(self):
         """TF-12 — regen-contracts task exists in Taskfile.yml."""
         data = self._load()

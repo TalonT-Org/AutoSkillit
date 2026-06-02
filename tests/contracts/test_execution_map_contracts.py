@@ -403,3 +403,163 @@ def test_bem_contract_pattern_example_includes_new_tokens() -> None:
     assert "has_deferred" in example
     assert "deferred_count" in example
     assert "dispatched_count" in example
+
+
+def test_bem_has_verification_checklist_step() -> None:
+    """SKILL.md must contain a Step 3a verification checklist."""
+    text = _skill_md_text()
+    assert "Step 3a" in text, "SKILL.md must define Step 3a verification checklist"
+    lower = text.lower()
+    assert "verif" in lower, "Step 3a must be a verification step"
+
+
+def test_bem_verification_checklist_covers_dependency_direction() -> None:
+    """Step 3a must enforce that dependencies are in earlier groups."""
+    text = _skill_md_text()
+    step3a_start = text.find("Step 3a")
+    assert step3a_start != -1
+    next_heading = text.find("\n###", step3a_start + 1)
+    if next_heading == -1:
+        next_heading = text.find("\n#### Step 3b", step3a_start + 1)
+    step3a = text[step3a_start:next_heading] if next_heading != -1 else text[step3a_start:]
+    lower = step3a.lower()
+    assert "dependency" in lower, "Step 3a must check dependency direction"
+    assert (
+        "lower-numbered group" in lower or "earlier group" in lower or "numerically lower" in lower
+    ), "Step 3a must specify that dependencies go in earlier/lower-numbered groups"
+
+
+def test_bem_verification_checklist_covers_transitivity() -> None:
+    """Step 3a must enforce transitive ordering."""
+    text = _skill_md_text()
+    step3a_start = text.find("Step 3a")
+    assert step3a_start != -1
+    next_heading = text.find("\n###", step3a_start + 1)
+    if next_heading == -1:
+        next_heading = text.find("\n#### Step 3b", step3a_start + 1)
+    step3a = text[step3a_start:next_heading] if next_heading != -1 else text[step3a_start:]
+    assert "transitiv" in step3a.lower(), "Step 3a must check transitive ordering"
+
+
+def test_bem_verification_checklist_covers_no_duplicates() -> None:
+    """Step 3a must enforce no issue appears in multiple groups."""
+    text = _skill_md_text()
+    step3a_start = text.find("Step 3a")
+    assert step3a_start != -1
+    next_heading = text.find("\n###", step3a_start + 1)
+    if next_heading == -1:
+        next_heading = text.find("\n#### Step 3b", step3a_start + 1)
+    step3a = text[step3a_start:next_heading] if next_heading != -1 else text[step3a_start:]
+    lower = step3a.lower()
+    assert "more than one group" in lower or "duplicate" in lower, (
+        "Step 3a must prohibit duplicate issue assignments"
+    )
+
+
+def test_bem_merge_order_language_unambiguous() -> None:
+    """Step 3 merge-order language must not use 'most foundational...merges last' phrasing."""
+    text = _skill_md_text()
+    step3_start = text.find("### Step 3")
+    assert step3_start != -1
+    step3b_start = text.find("#### Step 3", step3_start + 10)
+    step3_section = text[step3_start:step3b_start] if step3b_start != -1 else text[step3_start:]
+    assert "most foundational" not in step3_section.lower(), (
+        "Step 3 must not use ambiguous 'most foundational' merge-order language"
+    )
+
+
+def test_bem_no_dangling_step_reference() -> None:
+    """SKILL.md must not contain a dangling 'Step 0.5' reference."""
+    text = _skill_md_text()
+    assert "Step 0.5" not in text, "SKILL.md must not reference non-existent Step 0.5"
+
+
+@pytest.fixture()
+def sample_bem_json_with_dependency_ordering() -> str:
+    return json.dumps(
+        {
+            "total_issues": 3,
+            "dispatched_count": 3,
+            "deferred_count": 0,
+            "has_deferred": False,
+            "group_count": 2,
+            "groups": [
+                {
+                    "group": 1,
+                    "parallel": False,
+                    "issues": [{"number": 100, "title": "Foundation"}],
+                },
+                {
+                    "group": 2,
+                    "parallel": True,
+                    "issues": [
+                        {"number": 101, "title": "Consumer A"},
+                        {"number": 102, "title": "Consumer B"},
+                    ],
+                },
+            ],
+            "merge_order": [100, 101, 102],
+            "pairwise_assessments": [
+                {
+                    "pair": [100, 101],
+                    "parallel_safe": False,
+                    "confidence": "high",
+                    "reasoning": "#101 depends on #100's API changes",
+                },
+                {
+                    "pair": [100, 102],
+                    "parallel_safe": False,
+                    "confidence": "high",
+                    "reasoning": "#102 depends on #100's API changes",
+                },
+                {
+                    "pair": [101, 102],
+                    "parallel_safe": True,
+                    "confidence": "high",
+                    "reasoning": "Independent consumers of #100",
+                },
+            ],
+            "deferred_groups": [],
+            "deferred_merge_order": [],
+        }
+    )
+
+
+def test_bem_merge_order_invariant_dependency_direction(
+    sample_bem_json_with_dependency_ordering: str,
+) -> None:
+    """merge_order must place dependencies before their dependents."""
+    data = json.loads(sample_bem_json_with_dependency_ordering)
+    merge_order = data["merge_order"]
+    for assessment in data["pairwise_assessments"]:
+        if not assessment["parallel_safe"]:
+            a, b = assessment["pair"]
+            a_group = next(
+                g["group"] for g in data["groups"] for i in g["issues"] if i["number"] == a
+            )
+            b_group = next(
+                g["group"] for g in data["groups"] for i in g["issues"] if i["number"] == b
+            )
+            if a_group < b_group:
+                assert merge_order.index(a) < merge_order.index(b)
+            elif b_group < a_group:
+                assert merge_order.index(b) < merge_order.index(a)
+
+
+def test_bem_deferred_merge_order_not_advisory() -> None:
+    """Schema notes must not describe deferred_merge_order as advisory."""
+    text = _skill_md_text()
+    dmo_start = text.find("deferred_merge_order")
+    assert dmo_start != -1
+    schema_notes_start = text.find("Schema notes:", dmo_start - 500)
+    if schema_notes_start == -1:
+        schema_notes_start = text.find("Note on `deferred_merge_order`")
+    assert schema_notes_start != -1
+    next_section = text.find("\n##", schema_notes_start + 1)
+    notes_section = (
+        text[schema_notes_start:next_section] if next_section != -1 else text[schema_notes_start:]
+    )
+    assert "advisory" not in notes_section.lower(), (
+        "deferred_merge_order must not be described as advisory; "
+        "it follows the same ordering rule as merge_order"
+    )

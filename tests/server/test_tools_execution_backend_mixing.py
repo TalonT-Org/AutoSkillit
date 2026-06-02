@@ -270,6 +270,7 @@ async def test_backend_override_emits_structured_log_provider_profile(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
     fake_backend.capabilities.anthropic_provider_capable = False
     tool_ctx_kitchen_open.backend = fake_backend
     tool_ctx_kitchen_open.session_skill_manager = None
@@ -303,4 +304,6 @@ async def test_backend_override_emits_structured_log_provider_profile(
         entry for entry in log_list if entry.get("event") == "backend_override_activated"
     ]
     assert len(override_logs) == 1
-    assert override_logs[0]["reason"] == "provider_profile"
+    log = override_logs[0]
+    assert log["reason"] == "provider_profile"
+    assert log["original_backend"] == "codex"

@@ -28,6 +28,8 @@ def checkpoint_from_tracker(tracker_data: dict[str, Any] | None) -> SessionCheck
     if tracker_data is None:
         return None
     steps = tracker_data.get("steps", {})
+    if not isinstance(steps, dict):
+        return None
     completed = [
         name
         for name, info in steps.items()
@@ -40,7 +42,7 @@ def checkpoint_from_tracker(tracker_data: dict[str, Any] | None) -> SessionCheck
     last_step_name = completed_with_ts[-1][0]
     last_ts = completed_with_ts[-1][1]
     return SessionCheckpoint(
-        completed_items=completed,
+        completed_items=[name for name, _ in completed_with_ts],
         step_name=last_step_name,
         progress_pct=len(completed) / len(steps),
         ts=last_ts,

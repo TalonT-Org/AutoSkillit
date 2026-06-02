@@ -1708,3 +1708,26 @@ def test_graphql_rule_fires_for_prose_in_different_section_than_invocation(
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
     rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
     assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_fires_for_documentation_schema_reference_without_invocation(
+    tmp_path: Path,
+) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Schema Reference
+
+        ```graphql
+        type PullRequest {
+          title: String!
+          mergedAt: DateTime
+          reviews(first: Int): ReviewConnection!
+        }
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids

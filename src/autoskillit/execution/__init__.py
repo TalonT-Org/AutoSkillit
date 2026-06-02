@@ -18,6 +18,7 @@ from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
 )
 from autoskillit.execution.backends import (
+    BACKEND_REGISTRY,
     ClaudeCodeBackend,
     CodexBackend,
     _is_autoskillit_registered,
@@ -222,6 +223,7 @@ __all__ = [
     "read_starttime_ticks",
     "start_linux_tracing",
     # backends
+    "BACKEND_REGISTRY",
     "ClaudeCodeBackend",
     "CodexBackend",
     "_is_autoskillit_registered",

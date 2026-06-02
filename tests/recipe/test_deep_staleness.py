@@ -170,14 +170,15 @@ def test_registry_hash_content_based(tmp_path):
 
 
 def test_staleness_scan_covers_recipe_top_level(monkeypatch):
-    """_STALENESS_SCAN_DIRS must include recipe/ root, not just recipe/rules/."""
+    """_STALENESS_SCAN_DIRS must include recipe/ and recipes/."""
     import autoskillit.recipe._api_cache as cache_mod
 
     assert "recipe" in cache_mod._STALENESS_SCAN_DIRS
+    assert "recipes" in cache_mod._STALENESS_SCAN_DIRS
 
 
-def test_yaml_only_change_invisible_to_staleness_detector(tmp_path, monkeypatch):
-    """YAML-only change does NOT trigger _compute_content_hash (it only hashes *.py)."""
+def test_yaml_change_detected_by_staleness_detector(tmp_path, monkeypatch):
+    """YAML-only change triggers _compute_content_hash (it hashes *.py and *.yaml)."""
     import autoskillit.recipe._api_cache as cache_mod
 
     rule_dir = tmp_path / "recipe"
@@ -198,7 +199,35 @@ def test_yaml_only_change_invisible_to_staleness_detector(tmp_path, monkeypatch)
     (rule_dir / "contracts.yaml").write_text("version: 2\n")
 
     current = cache_mod._compute_content_hash()
-    assert current == baseline, "YAML-only change should NOT change content hash (py-only)"
+    assert current != baseline, "YAML-only change MUST change content hash"
+
+
+def test_recipes_dir_yaml_change_detected(tmp_path, monkeypatch):
+    """YAML change under recipes/ triggers _compute_content_hash."""
+    import autoskillit.recipe._api_cache as cache_mod
+
+    recipe_dir = tmp_path / "recipe"
+    recipe_dir.mkdir()
+    (recipe_dir / "module_a.py").write_text("x = 1\n")
+
+    recipes_dir = tmp_path / "recipes"
+    recipes_dir.mkdir()
+    (recipes_dir / "folding.yaml").write_text("version: 1\n")
+
+    monkeypatch.setattr(cache_mod, "_STALENESS_SCAN_DIRS", ("recipe", "recipes"))
+    monkeypatch.setattr(cache_mod, "pkg_root", lambda: tmp_path)
+    monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", None)
+    monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", None)
+    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
+
+    cache_mod._get_process_start_mtime()
+    baseline = cache_mod._DEEP_CONTENT_BASELINE
+
+    (recipes_dir / "folding.yaml").write_text("version: 2\n")
+
+    current = cache_mod._compute_content_hash()
+    assert current != baseline, "YAML change under recipes/ MUST change content hash"
 
 
 def test_yaml_file_cache_none_loader_result(tmp_path):

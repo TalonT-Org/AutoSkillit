@@ -19,7 +19,7 @@ _STALENESS_LAST_CHECK: float = 0.0
 _STALENESS_IS_STALE: bool = False
 _STALENESS_CACHES_CLEARED: bool = False
 _STALENESS_TTL: float = 30.0
-_STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe",)
+_STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe", "recipes")
 _DEEP_CONTENT_BASELINE: str | None = None
 _STALENESS_LOCK = threading.Lock()
 
@@ -148,13 +148,16 @@ def _compute_registry_hash(experiment_types_dir: Path) -> str:
 
 
 def _compute_content_hash() -> str:
-    """Return SHA-256 hex digest of all .py files in staleness-scanned subdirectories."""
+    """Return SHA-256 hex digest of all .py/.yaml files in staleness-scanned subdirectories."""
     root = pkg_root()
     h = hashlib.sha256()
     for subdir in _STALENESS_SCAN_DIRS:
         d = root / subdir
         if d.is_dir():
-            for f in sorted(d.rglob("*.py")):
+            for f in sorted(
+                [*d.rglob("*.py"), *d.rglob("*.yaml")],
+                key=lambda p: p.relative_to(root),
+            ):
                 if f.is_file():
                     try:
                         rel = f.relative_to(root)
@@ -216,8 +219,8 @@ def _clear_stale_caches() -> None:
     global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
     from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
     from autoskillit.recipe._skill_helpers import (  # noqa: PLC0415
-        _get_bundled_skill_names,
-        _get_skill_category_map,
+        _SKILL_CATEGORY_CACHE,
+        _SKILL_NAMES_CACHE,
     )
     from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
         _ML_SUB_AREA_CACHE,
@@ -227,7 +230,27 @@ def _clear_stale_caches() -> None:
     _BUDGETS_CACHE.clear()
     _MANIFEST_CACHE.clear()
     _ML_SUB_AREA_CACHE.clear()
-    _get_bundled_skill_names.cache_clear()
-    _get_skill_category_map.cache_clear()
+    _SKILL_NAMES_CACHE.clear()
+    _SKILL_CATEGORY_CACHE.clear()
     _LOAD_CACHE.clear()
     _STALENESS_CACHES_CLEARED = True
+
+
+def _clear_all_yaml_caches() -> None:
+    """Clear ALL content-addressed caches and _LOAD_CACHE for test isolation."""
+    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
+    from autoskillit.recipe._skill_helpers import (  # noqa: PLC0415
+        _SKILL_CATEGORY_CACHE,
+        _SKILL_NAMES_CACHE,
+    )
+    from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
+        _ML_SUB_AREA_CACHE,
+    )
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE  # noqa: PLC0415
+
+    _MANIFEST_CACHE.clear()
+    _BUDGETS_CACHE.clear()
+    _ML_SUB_AREA_CACHE.clear()
+    _SKILL_NAMES_CACHE.clear()
+    _SKILL_CATEGORY_CACHE.clear()
+    _LOAD_CACHE.clear()

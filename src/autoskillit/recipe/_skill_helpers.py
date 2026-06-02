@@ -7,10 +7,33 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from autoskillit.core import SkillLister, pkg_root
+from autoskillit.core import SkillLister, get_logger, pkg_root
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
+
+
+def get_allowed_values_for_skill(skill_name: str) -> dict[str, list[str]]:
+    """Return {output_name: [allowed_value, ...]} for a skill's outputs with allowed_values."""
+    try:
+        from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
+
+        manifest = load_bundled_manifest()
+    except Exception:
+        logger.warning(
+            "get_allowed_values_for_skill: failed to load bundled manifest; skipping",
+            exc_info=True,
+        )
+        return {}
+    skill_contract = manifest.get("skills", {}).get(skill_name, {})
+    result: dict[str, list[str]] = {}
+    for output in skill_contract.get("outputs", []):
+        if "allowed_values" in output:
+            result[output["name"]] = output["allowed_values"]
+    return result
+
 
 _SKILL_TOKEN_RE = re.compile(r"/(?:autoskillit:)?(\S+)")
 

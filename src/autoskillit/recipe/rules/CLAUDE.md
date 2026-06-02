@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (35 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis (36 flat rule files + 4 subdirectories).
 
 ## Subdirectories
 
@@ -26,6 +26,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_clone.py` | Clone/push dataflow rules: missing remote URL, local-strategy capture |
 | `rules_cmd.py` | `run_cmd` echo-capture alignment; git remote command detection; bare git rebase without conflict routing detection; path-typed capture non-empty file guard detection |
 | `rules_contracts.py` | Skill contract completeness rules |
+| `rules_failure_verdict_bypass.py` | Detects bypass routes from verdict-gated steps reaching success stop terminals |
 | `rules_features.py` | Feature-gated tool/skill reference validation |
 | `rules_flake_loop.py` | Flake-suspected unwinnable loop detection for merge gate cycles |
 | `rules_food_truck.py` | Food-truck recipe validation: sentinel stop step requirement |

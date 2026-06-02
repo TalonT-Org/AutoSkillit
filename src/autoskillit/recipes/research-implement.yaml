@@ -606,7 +606,7 @@ steps:
     - when: "${{ context.verdict }} == 'no_test_infrastructure'"
       route: escalate_stop
     on_failure: escalate_stop
-    on_context_limit: retest
+    on_context_limit: escalate_stop
 
   retest:
     tool: test_check

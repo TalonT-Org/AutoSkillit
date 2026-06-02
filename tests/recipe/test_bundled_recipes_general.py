@@ -85,8 +85,8 @@ def test_pre_merge_test_fix_cycle_has_guard(recipe_name: str) -> None:
 
 
 @pytest.mark.parametrize("recipe_name", _PRE_MERGE_CYCLE_RECIPES)
-def test_pre_merge_fix_on_context_limit_routes_to_test(recipe_name: str) -> None:
-    """fix/assess on_context_limit must route to test (verify before guard)."""
+def test_pre_merge_fix_on_context_limit_routes_to_failure(recipe_name: str) -> None:
+    """fix/assess on_context_limit must route to release_issue_failure (safe default)."""
     recipe = load_recipe(_resolve_recipe_path(recipe_name))
     test_step = recipe.steps["test"]
     guard_name = test_step.on_failure
@@ -98,9 +98,9 @@ def test_pre_merge_fix_on_context_limit_routes_to_test(recipe_name: str) -> None
     )
     assert fix_step_name is not None
     fix_step = recipe.steps[fix_step_name]
-    assert fix_step.on_context_limit == "test", (
-        f"{recipe_name}: {fix_step_name}.on_context_limit must route to 'test' for "
-        f"verify-before-guard ordering, got: {fix_step.on_context_limit!r}"
+    assert fix_step.on_context_limit == "release_issue_failure", (
+        f"{recipe_name}: {fix_step_name}.on_context_limit must route to "
+        f"'release_issue_failure', got: {fix_step.on_context_limit!r}"
     )
 
 

@@ -966,15 +966,11 @@ class TestInvestigateFirstStructure:
             f"{[(f.step_name, f.message) for f in add_dir_dead]}"
         )
 
-    def test_remediation_assess_step_on_context_limit_routes_to_test(self, recipe) -> None:
-        """REQ-RCP-002: assess step must route on_context_limit to test (verify before guard).
-
-        assess runs resolve-failures inside an existing worktree. Partial fixes are committed
-        to disk. Routing to test verifies before the guard increments the counter.
-        """
+    def test_remediation_assess_step_on_context_limit_routes_to_failure(self, recipe) -> None:
+        """assess step must route on_context_limit to release_issue_failure (safe default)."""
         assess = recipe.steps["assess"]
-        assert assess.on_context_limit == "test", (
-            f"remediation.yaml assess step must declare on_context_limit: test, "
+        assert assess.on_context_limit == "release_issue_failure", (
+            f"remediation.yaml assess step must declare on_context_limit: release_issue_failure, "
             f"got: {assess.on_context_limit!r}"
         )
 

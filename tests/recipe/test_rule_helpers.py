@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.recipe._analysis import _build_step_graph
-from autoskillit.recipe._rule_helpers import push_reachable
+from autoskillit.recipe._rule_helpers import is_success_stop, push_reachable
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -100,6 +100,57 @@ def test_push_reachable_returns_false_for_run_cmd_push() -> None:
     reachable, push_step = push_reachable(graph, "skill_step", recipe)
     assert reachable is False
     assert push_step is None
+
+
+class TestIsSuccessStop:
+    def test_success_true_in_message(self) -> None:
+        step = RecipeStep(
+            action="stop",
+            message=(
+                "Output the following sentinel JSON:\n\n"
+                'Example sentinel: {"success": true, "reason": "done"}'
+            ),
+        )
+        assert is_success_stop(step) is True
+
+    def test_success_false_in_message(self) -> None:
+        step = RecipeStep(
+            action="stop",
+            message=(
+                "Output the following sentinel JSON:\n\n"
+                'Example sentinel: {"success": false, "reason": "failed"}'
+            ),
+        )
+        assert is_success_stop(step) is False
+
+    def test_success_equals_true_string(self) -> None:
+        step = RecipeStep(
+            action="stop",
+            message=(
+                "Output the following sentinel JSON:\n\n"
+                'Example sentinel: {"success": "true", "reason": "done"}'
+            ),
+        )
+        assert is_success_stop(step) is True
+
+    def test_non_stop_step(self) -> None:
+        step = RecipeStep(
+            tool="run_skill",
+            on_success="done",
+            with_args={"skill_command": "/x"},
+        )
+        assert is_success_stop(step) is False
+
+    def test_no_success_field(self) -> None:
+        step = RecipeStep(
+            action="stop",
+            message='Example sentinel: {"reason": "timeout"}',
+        )
+        assert is_success_stop(step) is False
+
+    def test_none_message(self) -> None:
+        step = RecipeStep(action="stop", message=None)
+        assert is_success_stop(step) is False
 
 
 def test_push_reachable_returns_false_for_run_python_push() -> None:

@@ -18,6 +18,7 @@ from autoskillit.fleet import (
     read_state,
     write_initial_state,
 )
+from autoskillit.fleet.state import _write_state, reset_blocking_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -72,8 +73,8 @@ class TestDispatchRecordSchemaV2:
         assert dispatch_raw["dispatched_starttime_ticks"] == 42
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
 
-    def test_schema_version_is_6(self) -> None:
-        assert FLEET_STATE_SCHEMA_VERSION == 6
+    def test_schema_version_is_7(self) -> None:
+        assert FLEET_STATE_SCHEMA_VERSION == 7
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""
@@ -388,6 +389,7 @@ class TestDispatchRecordToDict:
             "wait_seconds",
             "resets_at",
             "labels_cleaned",
+            "resume_count",
         }
 
     def test_dispatch_record_to_dict_token_usage_is_shallow_copy(self) -> None:
@@ -544,6 +546,81 @@ class TestAttemptHistoryFields:
         )
         roundtripped = DispatchRecord.from_dict(d.to_dict())
         assert roundtripped.attempt_history == [{"dispatch_id": "attempt-1", "status": "failure"}]
+
+
+class TestResumeCount:
+    def test_resume_count_default_zero(self) -> None:
+        """T5.1: DispatchRecord(name='x').resume_count defaults to 0."""
+        d = DispatchRecord(name="x")
+        assert d.resume_count == 0
+        assert isinstance(d.resume_count, int)
+
+    def test_resume_count_from_dict_defaults_zero_for_v6(self) -> None:
+        """T5.2: from_dict defaults resume_count to 0 when missing (v6 schema migration)."""
+        d = DispatchRecord.from_dict({"name": "x"})
+        assert d.resume_count == 0
+
+    def test_resume_count_in_to_dict(self) -> None:
+        """T5.3: to_dict() includes resume_count key."""
+        d = DispatchRecord(name="x", resume_count=3)
+        raw = d.to_dict()
+        assert raw["resume_count"] == 3
+
+    def test_resume_count_round_trips(self) -> None:
+        """resume_count survives to_dict/from_dict round-trip."""
+        d = DispatchRecord(name="x", resume_count=5)
+        roundtripped = DispatchRecord.from_dict(d.to_dict())
+        assert roundtripped.resume_count == 5
+
+    def test_mark_dispatch_running_increments_on_resumable(self, tmp_path: Path) -> None:
+        """T5.4: mark_dispatch_running increments resume_count when prior status is RESUMABLE."""
+        sp = _make_state(tmp_path, "a")
+        d0 = read_state(sp)
+        assert d0 is not None
+        d0.dispatches[0].status = DispatchStatus.RESUMABLE
+        _write_state(sp, d0)
+
+        mark_dispatch_running(
+            sp,
+            "a",
+            dispatch_id="did-new",
+            dispatched_pid=1234,
+        )
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].resume_count == 1
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+
+    def test_mark_dispatch_running_does_not_increment_on_pending(self, tmp_path: Path) -> None:
+        """T5.5: mark_dispatch_running does NOT increment resume_count for fresh PENDING."""
+        sp = _make_state(tmp_path, "a")
+        mark_dispatch_running(
+            sp,
+            "a",
+            dispatch_id="did-fresh",
+            dispatched_pid=5678,
+        )
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].resume_count == 0
+        assert state.dispatches[0].status == DispatchStatus.RUNNING
+
+    def test_clear_dispatch_for_retry_preserves_resume_count(self, tmp_path: Path) -> None:
+        """T5.6: _clear_dispatch_for_retry preserves resume_count across retry (identity field)."""
+        sp = _make_state(tmp_path, "a")
+        d0 = read_state(sp)
+        assert d0 is not None
+        d0.dispatches[0].status = DispatchStatus.FAILURE
+        d0.dispatches[0].resume_count = 4
+        _write_state(sp, d0)
+
+        reset = reset_blocking_dispatch(sp, "a")
+        assert reset is True
+
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].resume_count == 4
+        assert state.dispatches[0].status == DispatchStatus.PENDING
 
 
 class TestTerminalRecordDiagnosticInvariant:

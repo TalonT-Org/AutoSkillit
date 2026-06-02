@@ -370,6 +370,7 @@ Action:
 
 This is the ONLY condition where re-dispatching the same dispatch_name is permitted.
 Stale-artifact recovery uses a NEW dispatch_name — see STALE-ARTIFACT RECOVERY section.
+
 ## STALE-ARTIFACT RECOVERY
 
 Trigger: ANY dispatch (whether classified FAILURE or RESUMABLE) fails with a reason

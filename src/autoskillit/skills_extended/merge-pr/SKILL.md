@@ -47,7 +47,7 @@ conflicts from earlier merges in the queue.
 
 **ALWAYS:**
 - Run `git status` before any operation to verify clean state
-- Detect `autoMergeAllowed` via GraphQL before Step 2 (Step 1.8) to select the correct merge command
+- Detect `autoMergeAllowed` before Step 2 (Step 1.8) to select the correct merge command
 - Use `gh pr merge {pr_number} --squash --auto` when `autoMergeAllowed=true` — enforces required status checks before merge executes
 - Use `gh pr merge {pr_number} --squash` when `autoMergeAllowed=false` — GitHub merges synchronously without waiting for checks
 - Poll `gh pr view {pr_number} --json state,mergedAt` to confirm the merge completed

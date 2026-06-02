@@ -1072,7 +1072,7 @@ def test_reviews_post_requires_input_flag_rule_passes_with_input_flag(
 def test_reviews_post_rule_subsection_granularity(tmp_path: Path) -> None:
     """Rule uses ### granularity: --input - in a different ### step does not satisfy the guard.
 
-    If the implementation mistakenly used ## granularity (_extract_sections), --input - from
+    If the implementation mistakenly used ## granularity (extract_sections), --input - from
     any step in the same ## Workflow section would suppress the finding. This test catches
     that false-negative regression.
     """
@@ -1606,7 +1606,7 @@ def test_graphql_rule_fires_for_case_mismatched_variable_bindings(tmp_path: Path
     assert _GRAPHQL_RULE_ID in rule_ids
 
 
-def test_graphql_rule_does_not_fire_for_display_only_fragment(tmp_path: Path) -> None:
+def test_graphql_rule_fires_for_fragment_without_same_section_invocation(tmp_path: Path) -> None:
     skill_md = textwrap.dedent(
         """\
         # graphql-skill
@@ -1622,4 +1622,112 @@ def test_graphql_rule_does_not_fire_for_display_only_fragment(tmp_path: Path) ->
     )
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
     rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_does_not_fire_for_non_parameterized_block_with_invocation(
+    tmp_path: Path,
+) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ### Step 1
+        ```graphql
+        number title mergedAt
+        reviews(first: 100) {
+          nodes { author { login } body state submittedAt }
+        }
+        ```
+
+        ```bash
+        gh api graphql -f query="$BATCH_QUERY"
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
     assert _GRAPHQL_RULE_ID not in rule_ids
+
+
+def test_graphql_rule_fires_for_prose_without_same_section_invocation(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Workflow
+
+        Build batched GraphQL `createIssue` mutations with aliases.
+        Execute via `gh api graphql --input -`.
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_does_not_fire_for_prose_with_same_section_invocation(
+    tmp_path: Path,
+) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Workflow
+
+        Build batched GraphQL `createIssue` mutations with aliases.
+
+        ```bash
+        echo "$MUTATION_JSON" | gh api graphql --input -
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID not in rule_ids
+
+
+def test_graphql_rule_fires_for_prose_in_different_section_than_invocation(
+    tmp_path: Path,
+) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Step 5
+
+        Build batched GraphQL `createIssue` mutations with aliases.
+
+        ## Step 6
+
+        ```bash
+        echo "$MUTATION_JSON" | gh api graphql --input -
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_fires_for_documentation_schema_reference_without_invocation(
+    tmp_path: Path,
+) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ## Schema Reference
+
+        ```graphql
+        type PullRequest {
+          title: String!
+          mergedAt: DateTime
+          reviews(first: Int): ReviewConnection!
+        }
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids

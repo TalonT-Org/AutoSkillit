@@ -4,8 +4,8 @@ categories: [audit-pipeline]
 description: >-
   Batch-create GitHub issues from validated audit ticket body files. Discovers
   ticket bodies from the audit run directory, deduplicates against existing open
-  issues, creates via batched GraphQL mutations, applies labels and writes a
-  filed-issues manifest. Pipeline-only skill dispatched by the full-audit recipe.
+  issues, creates in batches, applies labels and writes a filed-issues manifest.
+  Pipeline-only skill dispatched by the full-audit recipe.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -58,7 +58,23 @@ permissions), abort immediately with a clear error message: `"Error: could not r
 — check GH_TOKEN and remote URL. Aborting."` Do not proceed with GraphQL mutations using an empty node_id.
 Resolve label IDs for `audit` and `recipe:implementation` labels (ensure they exist via `gh label create --force`).
 Build batched GraphQL `createIssue` mutations with aliases (`issue0`, `issue1`, ...), chunked at 20 per request.
-Execute via `gh api graphql --input -`. Sleep 1 second between chunks (per GitHub API discipline).
+
+```graphql
+mutation {
+  issue0: createIssue(input: {repositoryId: "<REPO_ID>", title: "<TITLE>", body: "<BODY>"}) {
+    issue { number url }
+  }
+  issue1: createIssue(input: {repositoryId: "<REPO_ID>", title: "<TITLE>", body: "<BODY>"}) {
+    issue { number url }
+  }
+}
+```
+
+```bash
+echo "$MUTATION_JSON" | gh api graphql --input -
+```
+
+Sleep 1 second between chunks (per GitHub API discipline).
 Collect created issue URLs and numbers.
 
 ## Step 6 — Apply Source-Specific Labels
@@ -66,6 +82,18 @@ Collect created issue URLs and numbers.
 Parse the source from each ticket body filename (`ticket_body_{source}_{N}_{ts}.md`). For each unique
 source, ensure a label exists (e.g., `audit:tests`, `audit:arch`, `audit:cohesion`, etc.).
 Batch-apply source labels via GraphQL `addLabelsToLabelable` mutation with aliases.
+
+```graphql
+mutation {
+  l0: addLabelsToLabelable(input: {labelableId: "<ISSUE_ID>", labelIds: ["<LABEL_ID>"]}) {
+    labelable { ... on Issue { number } }
+  }
+}
+```
+
+```bash
+echo "$LABEL_MUTATION" | gh api graphql --input -
+```
 
 ## Step 7 — Write Filed Issues Manifest
 
@@ -96,7 +124,7 @@ issue_count = 0
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Use `gh issue comment` — all issue content goes in the body via `--body-file`
-- Create issues individually via REST — always batch via GraphQL `createIssue` mutations
+- Create issues individually via REST — always use batched `createIssue` mutations
 - Skip the 1-second sleep between consecutive mutating GitHub API calls
 - Use `--body` inline for large content — always write to temp file and use `--body-file`
 - Prompt interactively when `AUTOSKILLIT_HEADLESS` is `1` — execute all steps directly

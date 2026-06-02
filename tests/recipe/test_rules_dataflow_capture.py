@@ -154,6 +154,73 @@ class TestCaptureOutputCoverageRule:
         )
 
 
+def test_undeclared_capture_key_with_stale_manifest(tmp_path, monkeypatch):
+    """YamlFileCache in load_bundled_manifest re-reads skill_contracts.yaml on disk change."""
+    import yaml
+
+    import autoskillit.recipe._contracts_manifest as manifest_mod
+    from autoskillit.recipe._api_cache import YamlFileCache
+
+    monkeypatch.setattr(manifest_mod, "_MANIFEST_CACHE", YamlFileCache())
+    monkeypatch.setattr(manifest_mod, "pkg_root", lambda: tmp_path)
+
+    recipe_dir = tmp_path / "recipe"
+    recipe_dir.mkdir()
+    manifest_path = recipe_dir / "skill_contracts.yaml"
+
+    manifest_v1 = {
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [{"name": "worktree_path", "type": "directory_path"}],
+            }
+        }
+    }
+    manifest_path.write_text(yaml.dump(manifest_v1))
+
+    recipe_yaml = textwrap.dedent("""\
+        name: stale-manifest-test
+        description: test
+        steps:
+          run:
+            tool: run_skill
+            with:
+              skill_command: /autoskillit:test-skill arg
+            capture:
+              verdict: "${{ result.verdict }}"
+            on_success: done
+            on_failure: done
+          done:
+            action: stop
+            message: Done
+    """)
+    recipe = _parse_recipe(load_yaml(recipe_yaml))
+    findings = run_semantic_rules(recipe)
+    undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
+    assert len(undeclared) == 1
+    assert undeclared[0].severity == Severity.ERROR
+    assert "verdict" in undeclared[0].message
+
+    manifest_v2 = {
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [
+                    {"name": "worktree_path", "type": "directory_path"},
+                    {"name": "verdict", "type": "string"},
+                ],
+            }
+        }
+    }
+    manifest_path.write_text(yaml.dump(manifest_v2))
+
+    findings2 = run_semantic_rules(recipe)
+    undeclared2 = [f for f in findings2 if f.rule == "undeclared-capture-key"]
+    assert undeclared2 == [], (
+        f"YamlFileCache should have re-read skill_contracts.yaml after disk change: {undeclared2}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # TestDeadOutputRule
 # ---------------------------------------------------------------------------

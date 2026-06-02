@@ -832,7 +832,7 @@ async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
         lambda *a, **kw: object(),
     )
 
-    minimal_ctx.backend = _mock_backend(channel_b_capable=False)
+    minimal_ctx.backend = _mock_backend(food_truck_capable=True, channel_b_capable=False)
 
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 

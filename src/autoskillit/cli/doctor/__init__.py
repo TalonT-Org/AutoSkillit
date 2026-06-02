@@ -8,7 +8,7 @@ from pathlib import Path
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.config import load_config
 from autoskillit.core import Severity, get_logger, is_feature_enabled
-from autoskillit.execution.backends import BACKEND_REGISTRY
+from autoskillit.execution import BACKEND_REGISTRY
 
 from ._doctor_config import (
     _check_config_layers_for_secrets,

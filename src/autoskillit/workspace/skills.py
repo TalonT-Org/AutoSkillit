@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from autoskillit.core import (
+    ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
     KNOWN_BACKEND_NAMES,
     RETIRED_SKILL_NAMES,
     SkillSource,
@@ -58,12 +59,18 @@ def read_skill_categories(path: Path) -> frozenset[str]:
 
 _INTERNAL_SKILLS: frozenset[str] = frozenset({"sous-chef"})
 
-_OVERRIDE_SEARCH_DIRS: tuple[str, ...] = (
-    ".claude/skills",
-    ".autoskillit/skills",
-    ".codex/skills",
-    ".agents/skills",
-)
+_OVERRIDE_SEARCH_DIRS = ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+
+
+class ProjectLocalOverride(NamedTuple):
+    name: str
+    search_dir: str
+    skill_path: Path
+
+
+def override_names(overrides: frozenset[ProjectLocalOverride]) -> frozenset[str]:
+    return frozenset(o.name for o in overrides)
+
 
 _LIST_ALL_CACHE: list[SkillInfo] | None = None
 _LIST_ALL_CACHE_KEY: tuple[float, float] = (0.0, 0.0)
@@ -77,15 +84,15 @@ def _dir_mtime(path: Path) -> float:
         return 0.0
 
 
-def detect_project_local_overrides(project_dir: Path) -> frozenset[str]:
-    """Return the set of bundled skill names overridden by project-local SKILL.md files.
+def detect_project_local_overrides(project_dir: Path) -> frozenset[ProjectLocalOverride]:
+    """Return project-local skill overrides with path provenance.
 
-    Scans .claude/skills/<name>/SKILL.md, .autoskillit/skills/<name>/SKILL.md,
-    .codex/skills/<name>/SKILL.md, and .agents/skills/<name>/SKILL.md under
-    project_dir. Returns a frozenset of skill names that have a project-local
-    override. Returns an empty frozenset if project_dir does not exist.
+    Scans all directories in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS under
+    project_dir. First-match-wins: if a skill name appears under multiple
+    search dirs, only the first (by tuple order) is returned.
     """
-    overrides: set[str] = set()
+    overrides: set[ProjectLocalOverride] = set()
+    seen: set[str] = set()
     for subdir in _OVERRIDE_SEARCH_DIRS:
         search_root = project_dir / subdir
         if not search_root.is_dir():
@@ -95,8 +102,15 @@ def detect_project_local_overrides(project_dir: Path) -> frozenset[str]:
         except OSError:
             continue
         for entry in entries:
-            if entry.is_dir() and (entry / "SKILL.md").is_file():
-                overrides.add(entry.name)
+            if entry.is_dir() and entry.name not in seen and (entry / "SKILL.md").is_file():
+                seen.add(entry.name)
+                overrides.add(
+                    ProjectLocalOverride(
+                        name=entry.name,
+                        search_dir=subdir,
+                        skill_path=entry / "SKILL.md",
+                    )
+                )
     return frozenset(overrides)
 
 

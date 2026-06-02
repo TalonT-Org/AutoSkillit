@@ -271,7 +271,11 @@ class ClaudeCodeBackend:
     @property
     def conventions(self) -> BackendConventions:
         return BackendConventions(
-            project_local_skill_search_dirs=(".claude/skills", ".autoskillit/skills"),
+            project_local_skill_search_dirs=(
+                ".claude/skills",
+                ".autoskillit/skills",
+                ".agents/skills",
+            ),
         )
 
     def setup_session_dir(self, session_dir: Path) -> None:

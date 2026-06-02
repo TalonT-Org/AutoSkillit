@@ -51,9 +51,11 @@ from autoskillit.workspace.skill_format import (
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
+    ProjectLocalOverride,
     bundled_skills_dir,
     bundled_skills_extended_dir,
     detect_project_local_overrides,
+    override_names,
 )
 from autoskillit.workspace.worktree import (
     WORKTREES_DIR,
@@ -88,6 +90,8 @@ __all__ = [
     "bundled_skills_dir",
     "bundled_skills_extended_dir",
     "detect_project_local_overrides",
+    "override_names",
+    "ProjectLocalOverride",
     "clone_repo",
     "CloneSourceResolution",
     "collect_closure_write_paths",

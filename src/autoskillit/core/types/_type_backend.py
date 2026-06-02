@@ -13,6 +13,7 @@ from ._type_plugin_source import PluginSource
 from ._type_results import ValidatedAddDir
 
 __all__ = [
+    "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS",
     "BackendCapabilities",
     "BackendConventions",
     "CLAUDE_CODE_CAPABILITIES",
@@ -114,6 +115,14 @@ class BackendCapabilities:
     plugin_install_capable: bool = field(default=False)
     # True when backend supports Health Inspector LLM-callback idle detection
     inspector_capable: bool = field(default=False)
+
+
+ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
+    ".claude/skills",
+    ".autoskillit/skills",
+    ".codex/skills",
+    ".agents/skills",
+)
 
 
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)

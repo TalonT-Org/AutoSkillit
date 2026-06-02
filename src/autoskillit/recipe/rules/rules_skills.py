@@ -110,9 +110,12 @@ def _check_project_local_skill_override(ctx: ValidationContext) -> list[RuleFind
     if ctx.overridden_skills is not None:
         overrides = ctx.overridden_skills
     else:
-        from autoskillit.workspace import detect_project_local_overrides  # noqa: PLC0415
+        from autoskillit.workspace import (  # noqa: PLC0415
+            detect_project_local_overrides,
+            override_names,
+        )
 
-        overrides = detect_project_local_overrides(ctx.project_dir)
+        overrides = override_names(detect_project_local_overrides(ctx.project_dir))
     if not overrides:
         return []
     findings: list[RuleFinding] = []

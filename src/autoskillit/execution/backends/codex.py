@@ -338,7 +338,7 @@ class CodexBackend:
     @property
     def conventions(self) -> BackendConventions:
         return BackendConventions(
-            project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
+            project_local_skill_search_dirs=(".codex/skills",),
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:

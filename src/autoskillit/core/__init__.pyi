@@ -38,9 +38,6 @@ from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
 from .claude_conventions import LayoutError as LayoutError
 from .claude_conventions import validate_add_dir as validate_add_dir
-from .claude_conventions import (
-    validate_project_local_skill_dir as validate_project_local_skill_dir,
-)
 from .claude_conventions import validate_worktree_path as validate_worktree_path
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
@@ -120,6 +117,7 @@ from .tool_sequence_analysis import (
 from .tool_sequence_analysis import render_adjacency_table as render_adjacency_table
 from .tool_sequence_analysis import render_dot as render_dot
 from .tool_sequence_analysis import render_mermaid as render_mermaid
+from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from .types import ADMIRAL_DISPATCH_SECTIONS as ADMIRAL_DISPATCH_SECTIONS
 from .types import AGENT_BACKEND_CLAUDE_CODE as AGENT_BACKEND_CLAUDE_CODE
 from .types import AGENT_BACKEND_CODEX as AGENT_BACKEND_CODEX

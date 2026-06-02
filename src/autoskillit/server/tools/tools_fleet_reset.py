@@ -153,6 +153,7 @@ async def reset_dispatch(
             dispatch.name,
             state_path,
             reset_to_queued=(reset_to == "queued"),
+            labels_reset=report.labels_reset is True,
         )
         report.state_updated = state_updated
 
@@ -165,7 +166,7 @@ async def reset_dispatch(
                 "success": True,
                 "dispatch_name": report.dispatch_name,
                 "branch_name": report.branch_name,
-                "labels_reset": report.labels_reset,
+                "labels_reset": report.labels_reset is True,
                 "worktree_removed": report.worktree_removed,
                 "sidecar_removed": report.sidecar_removed,
                 "local_branch_deleted": report.local_branch_deleted,

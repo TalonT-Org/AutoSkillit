@@ -307,6 +307,30 @@ class TestResetDispatchEdgeCases:
         assert result["labels_reset"] is True
 
     @pytest.mark.anyio
+    async def test_reset_dispatch_missing_sidecar_fail_does_not_mark_labels_cleaned(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        sidecar = tmp_path / "gone_sidecar.jsonl"
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123", reset_to="fail")
+        result = json.loads(raw)
+        assert result["success"] is True
+        assert result["labels_reset"] is False
+        assert len(result["errors"]) > 0
+
+        from autoskillit.fleet.state import read_state
+
+        state = read_state(state_path)
+        assert state is not None
+        d = next(d for d in state.dispatches if d.name == "impl-issue-42")
+        assert d.labels_cleaned is False
+
+    @pytest.mark.anyio
     async def test_reset_dispatch_pr_fallback_search(
         self, build_ctx_open, tmp_path, monkeypatch
     ) -> None:

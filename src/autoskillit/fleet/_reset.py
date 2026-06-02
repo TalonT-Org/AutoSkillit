@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.core import (
     LABEL_LIFECYCLE_REGISTRY,
@@ -13,7 +13,7 @@ from autoskillit.core import (
     _parse_issue_ref,
     get_logger,
 )
-from autoskillit.fleet.sidecar import SidecarReadStatus, read_sidecar_from_path
+from autoskillit.fleet.sidecar import SidecarReadResult, SidecarReadStatus, read_sidecar_from_path
 from autoskillit.fleet.state import (
     CampaignStateMutator,
     DispatchStatus,
@@ -52,7 +52,7 @@ _RESETTABLE_STATUSES: frozenset[DispatchStatus] = frozenset(
 class ResetReport:
     dispatch_name: str = ""
     branch_name: str = ""
-    labels_reset: bool = False
+    labels_reset: bool | None = None
     worktree_removed: bool = False
     sidecar_removed: bool = False
     local_branch_deleted: bool = False
@@ -95,6 +95,66 @@ def resolve_worktrees_dir(project_dir: Path, worktree_root: str | None) -> Path:
     return project_dir.parent / WORKTREES_DIR
 
 
+async def _handle_sidecar_label_swap(
+    dispatch: DispatchRecord,
+    sidecar_result: SidecarReadResult | None,
+    github_client: GitHubFetcher | None,
+    remove_labels: list[str],
+    add_labels: list[str],
+    report: ResetReport,
+) -> None:
+    if dispatch.sidecar_path is None:
+        report.labels_reset = True
+        return
+    if github_client is None:
+        report.labels_reset = False
+        report.errors.append("github_client unavailable — label swap skipped")
+        return
+    if sidecar_result is None:
+        report.labels_reset = False
+        return
+
+    match sidecar_result.source:
+        case SidecarReadStatus.FOUND:
+            all_ok = True
+            for entry in sidecar_result.entries:
+                try:
+                    owner, repo, number = _parse_issue_ref(entry.issue_url)
+                except ValueError as exc:
+                    report.errors.append(f"parse_issue_ref({entry.issue_url}): {exc}")
+                    all_ok = False
+                    continue
+                try:
+                    result = await github_client.swap_labels(
+                        owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
+                    )
+                    if not result.get("success"):
+                        all_ok = False
+                        logger.warning(
+                            "swap_labels_unsuccessful", issue=entry.issue_url, result=result
+                        )
+                        report.errors.append(
+                            f"swap_labels_unsuccessful({entry.issue_url}): {result}"
+                        )
+                except Exception as exc:
+                    logger.warning("swap_labels_failed", issue=entry.issue_url, error=str(exc))
+                    report.errors.append(f"swap_labels({entry.issue_url}): {exc}")
+                    all_ok = False
+            report.labels_reset = all_ok
+        case SidecarReadStatus.MISSING:
+            report.labels_reset = False
+            report.errors.append(
+                f"sidecar file missing at {dispatch.sidecar_path} — label swap skipped"
+            )
+        case SidecarReadStatus.ERROR:
+            report.labels_reset = False
+            report.errors.append(
+                f"sidecar file unreadable at {dispatch.sidecar_path} — label swap skipped"
+            )
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 async def reset_dispatch_artifacts(
     dispatch: DispatchRecord,
     *,
@@ -115,35 +175,9 @@ async def reset_dispatch_artifacts(
             logger.warning("sidecar_read_failed", error=str(exc))
             report.errors.append(f"sidecar_read: {exc}")
 
-    if dispatch.sidecar_path is None:
-        report.labels_reset = True
-    elif github_client is None:
-        report.labels_reset = False
-        report.errors.append("github_client unavailable — label swap skipped")
-    elif sidecar_result is not None and sidecar_result.source == SidecarReadStatus.FOUND:
-        all_ok = True
-        for entry in sidecar_result.entries:
-            try:
-                owner, repo, number = _parse_issue_ref(entry.issue_url)
-            except ValueError as exc:
-                report.errors.append(f"parse_issue_ref({entry.issue_url}): {exc}")
-                all_ok = False
-                continue
-            try:
-                result = await github_client.swap_labels(
-                    owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
-                )
-                if not result.get("success"):
-                    all_ok = False
-                    logger.warning(
-                        "swap_labels_unsuccessful", issue=entry.issue_url, result=result
-                    )
-                    report.errors.append(f"swap_labels_unsuccessful({entry.issue_url}): {result}")
-            except Exception as exc:
-                logger.warning("swap_labels_failed", issue=entry.issue_url, error=str(exc))
-                report.errors.append(f"swap_labels({entry.issue_url}): {exc}")
-                all_ok = False
-        report.labels_reset = all_ok
+    await _handle_sidecar_label_swap(
+        dispatch, sidecar_result, github_client, remove_labels, add_labels, report
+    )
 
     worktree_path = worktrees_dir / dispatch.name
     try:
@@ -226,7 +260,7 @@ async def reset_dispatch_artifacts(
 
 
 async def update_campaign_state(
-    dispatch_name: str, state_path: Path, *, reset_to_queued: bool
+    dispatch_name: str, state_path: Path, *, reset_to_queued: bool, labels_reset: bool = False
 ) -> bool:
     if reset_to_queued:
         try:
@@ -243,7 +277,7 @@ async def update_campaign_state(
                 return False
             for d in m.state.dispatches:
                 if d.name == dispatch_name:
-                    d.labels_cleaned = True
+                    d.labels_cleaned = labels_reset
                     m.mark_dirty()
                     return True
         return False

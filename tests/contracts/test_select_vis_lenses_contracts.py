@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core.io import load_yaml
+
 pytestmark = [pytest.mark.small]
 
 SKILL_PATH = (
@@ -21,6 +23,13 @@ EXPERIMENT_TYPES_DIR = (
     / "autoskillit"
     / "recipes"
     / "experiment-types"
+)
+CONTRACTS_YAML = (
+    Path(__file__).resolve().parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "recipe"
+    / "skill_contracts.yaml"
 )
 
 
@@ -112,3 +121,37 @@ class TestSelectVisLensesOutputDirectory:
                 f"SKILL.md references '{{{{AUTOSKILLIT_TEMP}}}}/{ref}/' "
                 f"but should only reference select-vis-lenses/"
             )
+
+
+def test_skill_path_exists() -> None:
+    """select-vis-lenses/SKILL.md must exist at the expected path."""
+    assert SKILL_PATH.exists(), f"Expected SKILL.md at {SKILL_PATH}"
+
+
+def test_tier_b_experiment_type_table_section_present() -> None:
+    """SKILL.md must contain the Tier B experiment-type lookup table heading and rows."""
+    table_text = _extract_lens_table_section(SKILL_PATH.read_text())
+    assert len(table_text.strip()) > 0
+
+
+def test_required_output_tokens_present() -> None:
+    """SKILL.md must mention all five structured output tokens."""
+    text = SKILL_PATH.read_text()
+    for token in (
+        "selected_lenses",
+        "lens_context_paths",
+        "disambiguation_rule_applied",
+        "tier_c_lens",
+        "methodology_tradition",
+    ):
+        assert token in text, f"select-vis-lenses SKILL.md missing required output token '{token}'"
+
+
+def test_write_behavior_always_declared() -> None:
+    """skill_contracts.yaml must declare write_behavior='always' for select-vis-lenses."""
+    data = load_yaml(CONTRACTS_YAML)
+    entry = data["skills"].get("select-vis-lenses")
+    assert entry is not None, "select-vis-lenses not found in skill_contracts.yaml"
+    assert entry.get("write_behavior") == "always", (
+        f"Expected write_behavior='always', got '{entry.get('write_behavior')}'"
+    )

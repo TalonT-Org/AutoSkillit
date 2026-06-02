@@ -168,3 +168,28 @@ def test_applied_union_rules_from_arguments_not_recipe() -> None:
     assert "applied_union_rules" in text
     assert "select-vis-lenses" in text
     assert "not from recipe context" in text
+
+
+def test_synthesize_vis_plan_emits_visualization_plan_path_token() -> None:
+    assert "visualization_plan_path =" in _text()
+
+
+def test_synthesize_vis_plan_emits_report_plan_path_token() -> None:
+    assert "report_plan_path =" in _text()
+
+
+def test_synthesize_vis_plan_emits_visualization_plan_trace_path_token() -> None:
+    assert "visualization_plan_trace_path =" in _text()
+
+
+def test_synthesize_vis_plan_write_behavior_always() -> None:
+    """SKILL.md must document that outputs are always written."""
+    assert "always written" in _text()
+
+
+def test_synthesize_vis_plan_documents_tier_identity_rule() -> None:
+    """SKILL.md must reference all three tier identities."""
+    text = _text()
+    assert "Tier A" in text
+    assert "Tier B" in text
+    assert "Tier C" in text

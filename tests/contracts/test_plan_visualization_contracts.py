@@ -1,4 +1,4 @@
-"""Contract tests for plan-visualization SKILL.md — experiment type vocabulary."""
+"""Contract tests for select-vis-lenses SKILL.md — experiment type vocabulary."""
 
 import re
 from pathlib import Path
@@ -12,7 +12,7 @@ SKILL_PATH = (
     / "src"
     / "autoskillit"
     / "skills_extended"
-    / "plan-visualization"
+    / "select-vis-lenses"
     / "SKILL.md"
 )
 EXPERIMENT_TYPES_DIR = (
@@ -31,7 +31,7 @@ def _extract_lens_table_section(text: str) -> str:
         text,
         re.IGNORECASE,
     )
-    assert m, "Tier B experiment-type table not found in plan-visualization SKILL.md"
+    assert m, "Tier B experiment-type table not found in select-vis-lenses SKILL.md"
     return m.group(0).lower()
 
 

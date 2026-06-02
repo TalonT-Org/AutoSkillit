@@ -11,7 +11,6 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
     {
         "execution/backends/__init__.py",  # BACKEND_REGISTRY lookup
         "server/_factory.py",  # Feature-gated backend swap (pre-capabilities)
-        "cli/doctor/_doctor_runtime.py",  # Binary existence checks
         "cli/_marketplace.py",  # Marketplace — Claude Code-only install guard
         "execution/recording.py",  # Replay setup: fmt == "codex" Compare for player selection
         "execution/headless/_headless_evidence.py",  # Claude-specific evidence extraction

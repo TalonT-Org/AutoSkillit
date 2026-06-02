@@ -50,7 +50,7 @@ runs:
 `report-bug`, `pipeline-summary`, `diagnose-ci`, `analyze-pipeline-health`, `file-audit-issues`, `verify-diag`,
 `resolve-claims-review`, `resolve-design-review`, `resolve-research-review`,
 `compose-research-pr`, `prepare-research-pr`, `review-research-pr`,
-`promote-to-main`
+`promote-to-main`, `classify-experiment-type`, `apply-review-dimensions`
 
 ## arch-lens family (13)
 
@@ -100,9 +100,9 @@ answers a specific question about the system:
 
 ## vis-lens family (12)
 
-12 visualization-planning lenses orchestrated by `plan-visualization`, under
-`skills_extended/vis-lens-*/`. Each answers a specific question about a figure or the
-figure set:
+12 visualization-planning lenses under `skills_extended/vis-lens-*/`, orchestrated
+via the decomposed phoropter pipeline: `select-vis-lenses` → `run_vis_lenses` →
+`synthesize-vis-plan`. Each answers a specific question about a figure or the figure set:
 
 | # | Skill | Cognitive Mode | Primary Question | Priority |
 |---|-------|---------------|------------------|----------|

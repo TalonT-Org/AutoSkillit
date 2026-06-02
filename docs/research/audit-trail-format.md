@@ -8,7 +8,7 @@ research recipe pipeline.
 ```
 research/{YYYY-MM-DD}-{slug}/
 ├── audit/
-│   ├── design-review-dashboard.md    ← copied from AUTOSKILLIT_TEMP/review-design/
+│   ├── design-review-dashboard.md    ← copied from AUTOSKILLIT_TEMP/apply-review-dimensions/
 │   └── visualization-plan-trace.md   ← copied from AUTOSKILLIT_TEMP/plan-visualization/
 ├── report.md                         ← references audit/ via YAML frontmatter
 ├── scripts/
@@ -21,7 +21,7 @@ research/{YYYY-MM-DD}-{slug}/
 
 ### `audit/design-review-dashboard.md`
 
-**Source:** `{{AUTOSKILLIT_TEMP}}/review-design/evaluation_dashboard_{slug}_{timestamp}.md`
+**Source:** `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/evaluation_dashboard_{slug}_{timestamp}.md`
 **Copied by:** `scripts/recipe/create_worktree.sh`
 **When:** During the `create_worktree` recipe step
 
@@ -38,7 +38,7 @@ Contains:
 
 ### `audit/visualization-plan-trace.md`
 
-**Source:** `{{AUTOSKILLIT_TEMP}}/plan-visualization/visualization-plan-trace.md`
+**Source:** `{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan/visualization-plan-trace.md`
 **Copied by:** `scripts/recipe/create_worktree.sh`
 **When:** During the `create_worktree` recipe step
 

@@ -66,7 +66,7 @@ results are valid findings, not failures.
 
 In addition to the arguments above, this skill reads from the worktree:
 - `${RESEARCH_DIR}/visualization-plan.md` — figure inventory and `yaml:figure-spec`
-  blocks produced by `plan-visualization`. Read in Step 2.5 to drive plot generation.
+  blocks produced by `synthesize-vis-plan`. Read in Step 2.5 to drive plot generation.
 - `${RESEARCH_DIR}/report-plan.md` — section outline mapping figure IDs to report
   sections. Read in Step 3 to place figure references correctly.
 

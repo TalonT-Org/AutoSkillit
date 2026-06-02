@@ -67,7 +67,7 @@ class HookDef:
 # mcp_health_advisor                     | degraded
 # skill_orchestration_guard              | works-as-is
 # background_exec_guard                  | works-as-is
-# fleet_dispatch_guard (+ resume_own.)   | works-as-is
+# fleet_dispatch_guard (+ resume_own. + fleet_claim)   | works-as-is
 # pretty_output_hook                     | works-as-is
 # token_summary_hook (+ quota_post)       | works-as-is
 # review_gate_post_hook                  | works-as-is
@@ -209,6 +209,7 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/fleet_dispatch_guard.py",
             "guards/resume_ownership_guard.py",
             "guards/ingredient_lock_guard.py",
+            "guards/fleet_claim_guard.py",
         ],
     ),
     HookDef(  # codex: works-as-is
@@ -305,6 +306,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "git_ops_guard.py",
         "compose_pr_body_guard.py",
         "test_runner_guard.py",
+        "fleet_claim_guard.py",
     }
 )
 

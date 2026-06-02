@@ -148,6 +148,23 @@ issue context when the task involves a GitHub issue.
   pass it as caller_instructions. This free-text is injected into the L2 system prompt
   as authoritative guidance from the dispatcher.
 
+## DISPATCH RESUME PROTOCOL
+
+When a dispatch_food_truck call returns with dispatch_status="resumable":
+
+- The dispatch was interrupted mid-run with partial progress.
+- You MUST re-dispatch using the resume fields from the prior result:
+  resume_session_id = <dispatched_session_id from prior result>
+  prior_dispatch_id = <dispatch_id from prior result>
+  resume_checkpoint = <resume_checkpoint from prior result, if present>
+  Add allow_reentry=true to ingredients.
+- NEVER start a fresh dispatch for the same issue without resume parameters.
+  A PreToolUse guard will block fresh dispatches on already-claimed issues.
+- If the guard blocks your call, find the prior dispatch result and extract
+  the resume fields listed above.
+- If the prior session is unrecoverable, report to the human operator —
+  do not attempt to bypass by removing labels or force-retrying.
+
 ## MULTI-ISSUE DISPATCH — BEM PRE-STEP GATE — MANDATORY
 
 **CRITICAL**: BEM (build-execution-map) is what determines whether issues are independent \

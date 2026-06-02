@@ -215,7 +215,6 @@ def test_skill_session_required_env_hygiene_coverage() -> None:
 
     always_injected = {
         AGENT_BACKEND_ENV_VAR,
-        "AUTOSKILLIT_APPLICABLE_GUARDS",
         "MCP_CONNECTION_NONBLOCKING",
     }
     allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected

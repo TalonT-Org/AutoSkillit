@@ -234,23 +234,3 @@ def _clear_stale_caches() -> None:
     _SKILL_CATEGORY_CACHE.clear()
     _LOAD_CACHE.clear()
     _STALENESS_CACHES_CLEARED = True
-
-
-def _clear_all_yaml_caches() -> None:
-    """Clear ALL content-addressed caches and _LOAD_CACHE for test isolation."""
-    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
-    from autoskillit.recipe._skill_helpers import (  # noqa: PLC0415
-        _SKILL_CATEGORY_CACHE,
-        _SKILL_NAMES_CACHE,
-    )
-    from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
-        _ML_SUB_AREA_CACHE,
-    )
-    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE  # noqa: PLC0415
-
-    _MANIFEST_CACHE.clear()
-    _BUDGETS_CACHE.clear()
-    _ML_SUB_AREA_CACHE.clear()
-    _SKILL_NAMES_CACHE.clear()
-    _SKILL_CATEGORY_CACHE.clear()
-    _LOAD_CACHE.clear()

@@ -9,7 +9,6 @@ import pytest
 from autoskillit.core import VARIADIC_CLAUDE_FLAGS, ClaudeFlags
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.execution.backends.codex import CodexFlags
-from autoskillit.execution.commands import build_interactive_cmd
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -23,7 +22,9 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
     ],
 )
 def test_positional_precedes_all_variadic_flags(variadic_kwargs):
-    result = build_interactive_cmd(initial_prompt="test prompt", **variadic_kwargs)
+    result = ClaudeCodeBackend().build_interactive_cmd(
+        initial_prompt="test prompt", **variadic_kwargs
+    )
     prompt_idx = result.cmd.index("test prompt")
     for flag in VARIADIC_CLAUDE_FLAGS:
         if flag in result.cmd:

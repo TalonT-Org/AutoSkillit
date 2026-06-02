@@ -10,10 +10,7 @@ one place, and all tests catch the ripple.
 import pytest
 
 from autoskillit.core import ClaudeFlags
-from autoskillit.execution.commands import (
-    build_headless_cmd,
-    build_interactive_cmd,
-)
+from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -66,14 +63,14 @@ class TestClaudeFlagValues:
 KNOWN_CLAUDE_FLAGS: frozenset[str] = frozenset(ClaudeFlags)
 
 
-def _extract_flags(cmd: list[str]) -> set[str]:
+def _extract_flags(cmd: tuple[str, ...] | list[str]) -> set[str]:
     """Return the set of CLI flag tokens from a command list."""
     return {tok for tok in cmd if tok.startswith("-")}
 
 
 class TestFlagRegistryAudit:
     def test_interactive_cmd_flags_are_all_registered(self):
-        result = build_interactive_cmd(model="claude-sonnet-4-6")
+        result = ClaudeCodeBackend().build_interactive_cmd(model="claude-sonnet-4-6")
         unknown = _extract_flags(result.cmd) - KNOWN_CLAUDE_FLAGS
         assert not unknown, (
             f"build_interactive_cmd() produced unregistered flags: {unknown!r}. "
@@ -81,7 +78,7 @@ class TestFlagRegistryAudit:
         )
 
     def test_headless_cmd_flags_are_all_registered(self):
-        result = build_headless_cmd("test prompt", model="claude-sonnet-4-6")
+        result = ClaudeCodeBackend().build_headless_cmd("test prompt", model="claude-sonnet-4-6")
         unknown = _extract_flags(result.cmd) - KNOWN_CLAUDE_FLAGS
         assert not unknown, (
             f"build_headless_cmd() produced unregistered flags: {unknown!r}. "
@@ -89,11 +86,11 @@ class TestFlagRegistryAudit:
         )
 
     def test_interactive_cmd_uses_correct_permission_flag(self):
-        result = build_interactive_cmd()
+        result = ClaudeCodeBackend().build_interactive_cmd()
         assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
         assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS not in result.cmd
 
     def test_headless_cmd_uses_correct_permission_flag(self):
-        result = build_headless_cmd("test prompt")
+        result = ClaudeCodeBackend().build_headless_cmd("test prompt")
         assert ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS in result.cmd
         assert ClaudeFlags.ALLOW_DANGEROUSLY_SKIP_PERMISSIONS not in result.cmd

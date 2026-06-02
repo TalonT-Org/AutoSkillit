@@ -57,7 +57,8 @@ class TestNoRawSignalHandler:
         ]
         assert not bad_calls, (
             f"Found {len(bad_calls)} raw signal.signal(SIGTERM, ...) call(s) in cli/app.py. "
-            "Use anyio.open_signal_receiver instead — see _serve_with_signal_guard."
+            "Use anyio.open_signal_receiver instead "
+            "— see serve_with_signal_guard in cli/_serve_guard.py."
         )
 
     def test_grep_no_signal_signal_sigterm_in_src(self):
@@ -72,5 +73,6 @@ class TestNoRawSignalHandler:
         assert not violations, (
             "Found raw signal.signal(SIGTERM, ...) usage in src/autoskillit:\n"
             + "\n".join(f"  {v}" for v in violations)
-            + "\nUse anyio.open_signal_receiver(signal.SIGTERM) — see _serve_with_signal_guard."
+            + "\nUse anyio.open_signal_receiver(signal.SIGTERM) "
+            "— see serve_with_signal_guard in cli/_serve_guard.py."
         )

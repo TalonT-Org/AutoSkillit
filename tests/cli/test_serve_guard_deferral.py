@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import inspect
 import os
 import signal
+import time
+import uuid
+from pathlib import Path
 
 import anyio
 import pytest
 
 from autoskillit.cli._serve_guard import serve_with_signal_guard
+from autoskillit.cli.app import is_server_active
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
@@ -40,13 +45,13 @@ class TestServeGuardDeferral:
             tg.start_soon(_send_signal_then_release)
             await serve_with_signal_guard(
                 server,
-                dispatch_activity_check=lambda: _active[0],
+                activity_check=lambda: _active[0],
                 deferral_timeout=3.0,
             )
 
         elapsed = anyio.current_time() - started_at
         assert elapsed >= 1.5
-        assert not _active[0], "dispatch_activity_check should report inactive after deferral"
+        assert not _active[0], "activity_check should report inactive after deferral"
 
     @pytest.mark.anyio
     async def test_cancels_immediately_when_no_dispatch(self) -> None:
@@ -62,7 +67,7 @@ class TestServeGuardDeferral:
             tg.start_soon(_send_signal)
             await serve_with_signal_guard(
                 server,
-                dispatch_activity_check=lambda: False,
+                activity_check=lambda: False,
                 deferral_timeout=3.0,
             )
 
@@ -85,9 +90,50 @@ class TestServeGuardDeferral:
             tg.start_soon(_send_signal)
             await serve_with_signal_guard(
                 server,
-                dispatch_activity_check=lambda: True,
+                activity_check=lambda: True,
                 deferral_timeout=2.0,
             )
 
         elapsed = anyio.current_time() - started_at
         assert 2.0 <= elapsed < 3.5
+
+
+class TestActivityCheckCompleteness:
+    def test_activity_check_true_when_execution_marker_exists(self, tmp_path: Path) -> None:
+        marker_name = f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
+        (tmp_path / marker_name).touch()
+        assert is_server_active(marker_dir=tmp_path, fleet_lock=None) is True
+
+    @pytest.mark.anyio
+    async def test_activity_check_true_when_fleet_lock_active(self) -> None:
+        from autoskillit.fleet import FleetSemaphore
+
+        sem = FleetSemaphore()
+        await sem.acquire()
+        try:
+            assert is_server_active(marker_dir=None, fleet_lock=sem) is True
+        finally:
+            sem.release()
+
+    def test_activity_check_false_when_both_idle(self, tmp_path: Path) -> None:
+        from autoskillit.fleet import FleetSemaphore
+
+        assert is_server_active(marker_dir=tmp_path, fleet_lock=FleetSemaphore()) is False
+
+    def test_activity_check_true_when_marker_within_age(self, tmp_path: Path) -> None:
+        marker = tmp_path / f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
+        marker.touch()
+        os.utime(marker, (time.time() - 50, time.time() - 50))
+        assert is_server_active(marker_dir=tmp_path, fleet_lock=None) is True
+
+    def test_activity_check_false_when_marker_expired(self, tmp_path: Path) -> None:
+        marker = tmp_path / f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
+        marker.touch()
+        os.utime(marker, (time.time() - 120, time.time() - 120))
+        assert is_server_active(marker_dir=tmp_path, fleet_lock=None) is False
+
+
+class TestParameterNaming:
+    def test_serve_with_signal_guard_accepts_activity_check_param(self) -> None:
+        sig = inspect.signature(serve_with_signal_guard)
+        assert "activity_check" in sig.parameters

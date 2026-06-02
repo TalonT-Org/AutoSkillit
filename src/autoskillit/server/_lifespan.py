@@ -505,7 +505,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
 
     Readiness model: the sentinel file is written as the first statement inside
     the ``try:`` block. By the time the lifespan body runs,
-    ``_serve_with_signal_guard()`` in ``cli/app.py`` has already armed the anyio
+    ``serve_with_signal_guard()`` in ``cli/_serve_guard.py`` has already armed the anyio
     signal receiver via ``tg.start()``. A SIGTERM delivered after the sentinel
     appears is guaranteed to be caught by the armed receiver — no race window.
 

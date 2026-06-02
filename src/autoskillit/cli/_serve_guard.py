@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 async def serve_with_signal_guard(
     mcp_server: Any,
     *,
-    dispatch_activity_check: Callable[[], bool] | None = None,
+    activity_check: Callable[[], bool] | None = None,
     deferral_timeout: float = 30.0,
 ) -> None:
     """Run the MCP server with event-loop-routed SIGTERM/SIGINT handling.
@@ -46,17 +46,17 @@ async def serve_with_signal_guard(
             task_status.started()  # signal receiver is now armed
             async for sig in signals:
                 logger.info("serve_with_signal_guard: received %s — initiating shutdown", sig.name)
-                if dispatch_activity_check is not None and dispatch_activity_check():
+                if activity_check is not None and activity_check():
                     logger.info(
-                        "serve_with_signal_guard: dispatch active — deferring up to %.0fs",
+                        "serve_with_signal_guard: activity detected — deferring up to %.0fs",
                         deferral_timeout,
                     )
                     deadline = anyio.current_time() + deferral_timeout
                     while anyio.current_time() < deadline:
                         await anyio.sleep(1.0)
-                        if not dispatch_activity_check():
+                        if not activity_check():
                             logger.info(
-                                "serve_with_signal_guard: dispatch completed — shutting down"
+                                "serve_with_signal_guard: activity completed — shutting down"
                             )
                             break
                     else:

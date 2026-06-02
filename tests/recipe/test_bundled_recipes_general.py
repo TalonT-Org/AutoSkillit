@@ -12,7 +12,7 @@ from autoskillit.recipe._analysis import build_recipe_graph
 from autoskillit.recipe._rule_helpers import _MAX_HOPS
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_paths, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.rules.rules_merge import _is_commit_guard
 from autoskillit.recipe.validator import run_semantic_rules
 
@@ -20,6 +20,9 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SMOKE_RECIPE = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
+
+_ALL_RECIPE_PATHS = all_validated_recipe_paths(PROJECT_ROOT)
+_BUNDLED_ONLY = [p for p in _ALL_RECIPE_PATHS if "src/autoskillit/recipes" in str(p)]
 
 
 def _resolve_recipe_path(name: str) -> Path:
@@ -30,17 +33,15 @@ def _resolve_recipe_path(name: str) -> Path:
 
 
 _ALL_CLONE_RECIPE_PATHS: list[Path] = []
-for _dir in (builtin_recipes_dir(), PROJECT_ROOT / ".autoskillit" / "recipes"):
-    if _dir.is_dir():
-        for _p in sorted(_dir.glob("*.yaml")):
-            _wf = load_recipe(_p)
-            if any(s.tool == "clone_repo" for s in _wf.steps.values()):
-                _ALL_CLONE_RECIPE_PATHS.append(_p)
+for _p in _ALL_RECIPE_PATHS:
+    _wf = load_recipe(_p)
+    if any(s.tool == "clone_repo" for s in _wf.steps.values()):
+        _ALL_CLONE_RECIPE_PATHS.append(_p)
 
 
 @pytest.mark.parametrize(
     "recipe_yaml",
-    sorted(builtin_recipes_dir().glob("*.yaml")),
+    _ALL_RECIPE_PATHS,
     ids=lambda p: p.stem,
 )
 def test_no_unbounded_cycle_findings_in_bundled_recipes(recipe_yaml: Path) -> None:
@@ -104,14 +105,14 @@ def test_pre_merge_fix_on_context_limit_routes_to_test(recipe_name: str) -> None
 
 def test_every_bundled_recipe_declares_requires_packs() -> None:
     """All top-level bundled recipes must declare a non-empty requires_packs."""
-    for path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for path in _BUNDLED_ONLY:
         recipe = load_recipe(path)
         assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
 
 
 @pytest.mark.parametrize(
     "recipe_yaml",
-    sorted(builtin_recipes_dir().glob("*.yaml")),
+    _ALL_RECIPE_PATHS,
     ids=lambda p: p.stem,
 )
 def test_bundled_recipes_capture_list_retries_zero(recipe_yaml: Path) -> None:
@@ -177,7 +178,7 @@ def test_all_predicate_steps_have_on_failure() -> None:
 
 def test_all_tool_steps_have_on_failure() -> None:
     """Every tool/python step in every bundled recipe must have on_failure."""
-    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_file in _BUNDLED_ONLY:
         recipe = load_recipe(yaml_file)
         for step_name, step in recipe.steps.items():
             if step.tool is not None or step.python is not None:
@@ -278,7 +279,7 @@ def test_make_groups_skill_md_emits_group_files() -> None:
 
 def test_bundled_recipes_pass_uncaptured_handoff_consumer() -> None:
     """1i: all bundled recipes must produce zero uncaptured-handoff-consumer findings."""
-    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_file in _BUNDLED_ONLY:
         recipe = load_recipe(yaml_file)
         findings = run_semantic_rules(recipe)
         handoff_findings = [f for f in findings if f.rule == "uncaptured-handoff-consumer"]
@@ -305,7 +306,7 @@ def test_telemetry_before_open_pr_rule_not_in_registry() -> None:
 
 def test_bundled_recipes_pass_unrouted_verdict_value_rule() -> None:
     """All bundled recipes must pass the unrouted-verdict-value semantic rule."""
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in _BUNDLED_ONLY:
         recipe = load_recipe(yaml_path)
         findings = run_semantic_rules(recipe)
         verdict_errors = [f for f in findings if f.rule == "unrouted-verdict-value"]
@@ -374,7 +375,7 @@ class TestImplementationRecipeMergeQueueRule:
         )
 
 
-_BUNDLED_RECIPE_PATHS = sorted(builtin_recipes_dir().glob("*.yaml"))
+_BUNDLED_RECIPE_PATHS = _BUNDLED_ONLY
 
 
 @pytest.mark.parametrize("recipe_path", _BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
@@ -588,11 +589,10 @@ def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
     """
     import re
 
-    recipes_dir = builtin_recipes_dir()
     bare_temp = re.compile(r"(?<!\.autoskillit/)temp/")
 
     violations: list[str] = []
-    for yaml_file in sorted(recipes_dir.glob("*.yaml")):
+    for yaml_file in _BUNDLED_ONLY:
         text = yaml_file.read_text()
         for lineno, line in enumerate(text.splitlines(), start=1):
             if bare_temp.search(line):
@@ -736,7 +736,7 @@ def test_re_push_steps_have_force_true(recipe_name: str) -> None:
 
 def test_bundled_recipes_have_no_ci_hardcoded_workflow() -> None:
     """No bundled recipe should hardcode workflow in wait_for_ci steps."""
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in _BUNDLED_ONLY:
         recipe = load_recipe(yaml_path)
         findings = run_semantic_rules(recipe)
         wf_findings = [f for f in findings if f.rule == "ci-hardcoded-workflow"]
@@ -752,7 +752,7 @@ def test_merge_worktree_has_commit_guard_predecessor() -> None:
     """
     from autoskillit.recipe.validator import make_validation_context
 
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in _BUNDLED_ONLY:
         recipe = load_recipe(yaml_path)
         merge_steps = [n for n, s in recipe.steps.items() if s.tool == "merge_worktree"]
         if not merge_steps:
@@ -785,7 +785,7 @@ def test_resolve_failures_steps_have_on_context_limit() -> None:
     on_failure, discarding all uncommitted edits and losing partial progress.
     """
 
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in _BUNDLED_ONLY:
         recipe = load_recipe(yaml_path)
         for step_name, step in recipe.steps.items():
             if step.tool not in SKILL_TOOLS:
@@ -810,7 +810,7 @@ def test_resolve_review_steps_have_on_context_limit() -> None:
     be the corresponding re_push step (e.g. re_push_review).
     """
 
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in _BUNDLED_ONLY:
         recipe = load_recipe(yaml_path)
         for step_name, step in recipe.steps.items():
             if step.tool not in SKILL_TOOLS:
@@ -937,7 +937,7 @@ def test_requires_packs_covers_all_default_disabled_skill_categories() -> None:
     default_disabled = frozenset(
         name for name, pdef in PACK_REGISTRY.items() if not pdef.default_enabled
     )
-    for path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for path in _BUNDLED_ONLY:
         try:
             recipe = load_recipe(path)
         except Exception as exc:
@@ -963,7 +963,7 @@ def _dispatchable_recipe_names() -> list[str]:
     from autoskillit.recipe.rules.rules_food_truck import _DISPATCHABLE_KINDS
 
     names = []
-    for yaml_file in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_file in _BUNDLED_ONLY:
         recipe = load_recipe(yaml_file)
         if recipe.kind in _DISPATCHABLE_KINDS:
             names.append(recipe.name)
@@ -1002,7 +1002,7 @@ def test_optional_output_with_string_capture_type_flagged() -> None:
     manifest = load_bundled_manifest()
     violations: list[str] = []
 
-    for recipe_file in builtin_recipes_dir().glob("*.yaml"):
+    for recipe_file in _BUNDLED_ONLY:
         recipe = load_recipe(recipe_file)
         for step_name, step in recipe.steps.items():
             if step.tool != "run_skill" or not step.capture:
@@ -1055,7 +1055,7 @@ def test_recipe_all_stop_steps_have_sentinel_instructions(recipe_name: str) -> N
 
 @pytest.mark.parametrize(
     "recipe_yaml",
-    sorted(builtin_recipes_dir().glob("*.yaml")),
+    _ALL_RECIPE_PATHS,
     ids=lambda p: p.stem,
 )
 def test_run_python_steps_with_relative_output_dir_have_work_dir(recipe_yaml: Path) -> None:

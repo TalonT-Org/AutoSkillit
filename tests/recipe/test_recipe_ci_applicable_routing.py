@@ -8,11 +8,12 @@ wait_for_ci. This prevents 600s timeout waste when no CI workflows apply.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
 from autoskillit.core.io import load_yaml
-from autoskillit.recipe.io import builtin_recipes_dir
+from autoskillit.recipe.io import all_validated_recipe_paths, builtin_recipes_dir
 
 from .conftest import (
     PRIMARY_CI_EVENT_KEYS,
@@ -25,7 +26,8 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _CI_APPLICABLE_RE = re.compile(r"ci_applicable")
 
-RECIPE_FILES = sorted(builtin_recipes_dir().glob("*.yaml"))
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+RECIPE_FILES = all_validated_recipe_paths(_PROJECT_ROOT)
 
 
 @pytest.fixture(params=RECIPE_FILES, ids=lambda p: p.stem)

@@ -7,12 +7,13 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import load_yaml
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-_BUNDLED_RECIPE_PATHS: list[Path] = sorted(builtin_recipes_dir().glob("*.yaml"))
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_BUNDLED_RECIPE_PATHS: list[Path] = all_validated_recipe_paths(_PROJECT_ROOT)
 
 
 @pytest.mark.parametrize("recipe_path", _BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)

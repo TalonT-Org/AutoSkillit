@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import inspect
 
-from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, SKILL_TOOLS, Severity
+from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
     _CONTEXT_REF_RE,
@@ -13,6 +13,8 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
 )
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+logger = get_logger(__name__)
 
 
 def _get_provided_args(with_args: dict) -> set[str]:
@@ -244,6 +246,12 @@ def _check_work_dir_arg_misplacement(ctx: ValidationContext) -> list[RuleFinding
             func = getattr(mod, attr_name)
             sig = inspect.signature(func)
         except (ImportError, AttributeError, ValueError):
+            logger.debug(
+                "work-dir-arg-misplacement: skipping step — import/inspection failed",
+                step=step_name,
+                callable=callable_path,
+                exc_info=True,
+            )
             continue
         if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
             continue

@@ -66,11 +66,16 @@ class TestAgentBackendConfigField:
         with structlog.testing.capture_logs() as cap_logs:
             cfg = AgentBackendConfig(backend="aider")
         assert cfg.backend == "aider"
-        warning_events = [e for e in cap_logs if e.get("log_level") == "warning"]
-        assert any(
-            e.get("event") == "unknown_backend" and e.get("backend") == "aider"
-            for e in warning_events
-        ), f"Expected unknown_backend warning for 'aider', got: {cap_logs}"
+        unknown_backend_events = [
+            e
+            for e in cap_logs
+            if e.get("log_level") == "warning"
+            and e.get("event") == "unknown_backend"
+            and e.get("backend") == "aider"
+        ]
+        assert len(unknown_backend_events) == 1, (
+            f"Expected exactly one unknown_backend warning for 'aider', got: {cap_logs}"
+        )
 
 
 class TestAgentBackendConfigLoading:
@@ -97,22 +102,14 @@ class TestAgentBackendConfigLoading:
         assert cfg.agent_backend.backend == "codex"
 
     def test_agent_backend_yaml_override(self, tmp_path, monkeypatch) -> None:
-        import structlog.testing
-
         from autoskillit.config import load_config
 
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(yaml.dump({"agent_backend": {"backend": "aider"}}))
-        with structlog.testing.capture_logs() as cap_logs:
-            cfg = load_config(tmp_path)
+        cfg = load_config(tmp_path)
         assert cfg.agent_backend.backend == "aider"
-        warning_events = [e for e in cap_logs if e.get("log_level") == "warning"]
-        assert any(
-            e.get("event") == "unknown_backend" and e.get("backend") == "aider"
-            for e in warning_events
-        ), f"Expected unknown_backend warning for 'aider', got: {cap_logs}"
 
     def test_agent_backend_key_accepted_by_schema_validator(self, tmp_path) -> None:
         from autoskillit.config import load_config

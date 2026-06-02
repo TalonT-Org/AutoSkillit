@@ -738,7 +738,7 @@ async def _run_dispatch(
             )
 
             tracker_checkpoint = checkpoint_from_tracker(_tracker_data)
-        except (OSError, ValueError):
+        except (OSError, ValueError, TypeError, AttributeError):
             logger.debug("tracker read failed for %s", dispatch_id, exc_info=True)
 
     if dispatch_checkpoint is None and tracker_checkpoint is not None:

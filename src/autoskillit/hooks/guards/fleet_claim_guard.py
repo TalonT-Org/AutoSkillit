@@ -100,11 +100,13 @@ def main() -> None:
         if has_label is True:
             _deny(
                 f"Issue {url} already has an in-progress label from a prior dispatch. "
-                f"You must resume the prior session — pass resume_session_id (from "
+                f"You MUST resume the prior session — pass resume_session_id (from "
                 f"dispatched_session_id in the prior result) and prior_dispatch_id (from "
-                f"dispatch_id in the prior result) to dispatch_food_truck. If the prior "
-                f"session is unrecoverable, call reset_dispatch(dispatch_id="
-                f"<prior_dispatch_id>) to clean stale artifacts, then re-dispatch fresh."
+                f"dispatch_id in the prior result) to dispatch_food_truck. "
+                f"LAST RESORT ONLY — if the prior session's JSONL log is missing or "
+                f"corrupt and the session cannot be resumed: call reset_dispatch("
+                f"dispatch_id=<prior_dispatch_id>) to clean stale artifacts, then "
+                f"re-dispatch fresh with a new dispatch_name."
             )
             sys.exit(0)
 

@@ -168,6 +168,41 @@ When a dispatch_food_truck call returns with dispatch_status="resumable":
   then re-dispatch fresh with a new dispatch_name. If reset_dispatch fails, report to the
   human operator.
 
+## INFRASTRUCTURE FAILURE RECOVERY
+
+When a dispatch_food_truck call returns with dispatch_status="failure" and
+the reason is an infrastructure code — any of:
+  fleet_l3_no_result_block, fleet_l3_timeout, fleet_l3_startup_or_crash,
+  fleet_l3_parse_failed, fleet_acquire_timeout, fleet_process_stale,
+  fleet_hard_refusal_headless, fleet_cleanup_failed,
+  fleet_resume_session_missing
+
+These are TRANSIENT infrastructure failures (L3 session disconnections,
+process crashes, timeouts). They are NOT logic errors in the dispatched work.
+
+The correct and complete recovery action is to retry the dispatch fresh for
+the same issue. No reset or cleanup is needed — infrastructure already
+cleaned up.
+
+Action:
+- Retry the dispatch fresh with a new dispatch_name and the same ingredients.
+  Do not pass resume_session_id (there is no session to resume). Do not halt
+  or mark the issue as failed.
+- Example: if dispatch returns fleet_l3_timeout for issue #42, immediately
+  call dispatch_food_truck with dispatch_name="issue-42-retry" and the same
+  ingredients.
+- If fleet_claim_guard blocks the fresh dispatch (because an in-progress label
+  remains from the failed session), first attempt to resume using the prior
+  dispatch's dispatched_session_id as resume_session_id and prior dispatch_id
+  as prior_dispatch_id. If the prior session is truly unrecoverable,
+  THEN call {mcp_prefix}reset_dispatch(dispatch_id=<prior_dispatch_id>) and
+  re-dispatch fresh with a new dispatch_name.
+- If the retry also fails with an infrastructure code: report to the human
+  operator. Do not retry more than once.
+
+For quota_exhausted or fleet_quota_exhausted failures, these have a separate
+retry mechanism — do not apply this section.
+
 ## MULTI-ISSUE DISPATCH — BEM PRE-STEP GATE — MANDATORY
 
 **CRITICAL**: BEM (build-execution-map) is what determines whether issues are independent \

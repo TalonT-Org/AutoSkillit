@@ -22,6 +22,8 @@ from autoskillit.workspace import (
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 def _make_session(
     tmp_path: Path,
@@ -180,10 +182,9 @@ class TestAllRecipeSkillCommandsInvocable:
         resolver = DefaultSkillResolver()
         provider = SkillsDirectoryProvider()
 
-        _project_root = Path(__file__).resolve().parent.parent.parent
         _bundled_only = [
             p
-            for p in all_validated_recipe_paths(_project_root)
+            for p in all_validated_recipe_paths(_PROJECT_ROOT)
             if "src/autoskillit/recipes" in str(p)
         ]
         for yaml_path in _bundled_only:

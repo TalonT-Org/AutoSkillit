@@ -16,6 +16,8 @@ from autoskillit.recipe.schema import RecipeKind
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 class TestListRecipes:
     """TestListRecipes: discovery from project and builtin sources."""
@@ -441,8 +443,7 @@ def test_all_builtin_recipe_yamls_are_discoverable(tmp_path: Path) -> None:
     missing = expected_paths - discovered_paths
     assert not missing, f"Recipe YAMLs not discoverable by list_recipes: {missing}"
 
-    project_root = Path(__file__).resolve().parent.parent.parent
-    project_base = project_root / ".autoskillit" / "recipes"
+    project_base = _PROJECT_ROOT / ".autoskillit" / "recipes"
     if project_base.is_dir():
         project_expected: set[Path] = set()
         for subdir in RECIPE_SCAN_DIRS:
@@ -452,7 +453,7 @@ def test_all_builtin_recipe_yamls_are_discoverable(tmp_path: Path) -> None:
                     if f.suffix in (".yaml", ".yml") and f.is_file():
                         project_expected.add(f)
 
-        result_full = list_recipes(project_root)
+        result_full = list_recipes(_PROJECT_ROOT)
         project_discovered = {
             r.path for r in result_full.items if r.source == RecipeSource.PROJECT
         }
@@ -480,8 +481,7 @@ def test_non_recipe_dirs_covers_all_excluded_subdirs(tmp_path: Path) -> None:
         f"or NON_RECIPE_DIRS (if not)."
     )
 
-    project_root = Path(__file__).resolve().parent.parent.parent
-    project_base = project_root / ".autoskillit" / "recipes"
+    project_base = _PROJECT_ROOT / ".autoskillit" / "recipes"
     if project_base.is_dir():
         project_subdirs = {d.name for d in project_base.iterdir() if d.is_dir()}
         project_unregistered = project_subdirs - registered
@@ -502,10 +502,8 @@ def test_all_discoverable_recipes_are_validated() -> None:
     """
     from autoskillit.recipe.io import RECIPE_SCAN_DIRS, builtin_recipes_dir
 
-    project_root = Path(__file__).resolve().parent.parent.parent
-
     fs_paths: set[Path] = set()
-    for base in (builtin_recipes_dir(), project_root / ".autoskillit" / "recipes"):
+    for base in (builtin_recipes_dir(), _PROJECT_ROOT / ".autoskillit" / "recipes"):
         if not base.is_dir():
             continue
         for subdir in RECIPE_SCAN_DIRS:
@@ -515,7 +513,7 @@ def test_all_discoverable_recipes_are_validated() -> None:
                     if f.suffix in (".yaml", ".yml") and f.is_file():
                         fs_paths.add(f.resolve())
 
-    discovered = list_recipes(project_root)
+    discovered = list_recipes(_PROJECT_ROOT)
     lr_paths = {r.path.resolve() for r in discovered.items}
 
     on_disk_not_discovered = fs_paths - lr_paths
@@ -548,8 +546,7 @@ def test_eval_fixture_inventory() -> None:
     This is a regression guard: if a file is accidentally deleted or moved back to temp/,
     this test fails immediately rather than silently breaking the eval pipeline.
     """
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    eval_dir = repo_root / ".autoskillit" / "recipes" / "eval"
+    eval_dir = _PROJECT_ROOT / ".autoskillit" / "recipes" / "eval"
 
     expected_canaries = [
         "C1-task.md",
@@ -605,8 +602,7 @@ def test_eval_manifest_paths_point_to_recipes_eval() -> None:
     """
     import json
 
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    manifests_dir = repo_root / ".autoskillit" / "recipes" / "eval" / "manifests"
+    manifests_dir = _PROJECT_ROOT / ".autoskillit" / "recipes" / "eval" / "manifests"
 
     canary_manifest = json.loads((manifests_dir / "make-plan-canaries.json").read_text())
     for entry in canary_manifest:

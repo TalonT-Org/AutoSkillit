@@ -734,10 +734,9 @@ class TestContextLimitBehaviorContract:
         assert manifest is not None, "load_bundled_manifest() returned None"
         skills = manifest.get("skills", {})
 
-        _project_root = Path(__file__).resolve().parent.parent.parent
         _bundled_only = [
             p
-            for p in all_validated_recipe_paths(_project_root)
+            for p in all_validated_recipe_paths(_project_root())
             if "src/autoskillit/recipes" in str(p)
         ]
 

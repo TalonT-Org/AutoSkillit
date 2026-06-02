@@ -14,7 +14,6 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "cli/doctor/_doctor_runtime.py",  # Binary existence checks
         "cli/doctor/_doctor_mcp.py",  # MCP config path checks
         "cli/_init_helpers.py",  # CLI init — string config, no CodingAgentBackend
-        "cli/_marketplace.py",  # Marketplace — Claude Code-only install guard
         "execution/recording.py",  # Replay setup: fmt == "codex" Compare for player selection
         "execution/headless/_headless_evidence.py",  # Claude-specific evidence extraction
         "execution/headless/_headless_result.py",  # Claude-specific result parsing

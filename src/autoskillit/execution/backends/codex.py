@@ -329,6 +329,7 @@ class CodexBackend:
             replay_capable=False,
             record_capable=False,
             anthropic_provider_capable=False,
+            plugin_install_capable=False,
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:

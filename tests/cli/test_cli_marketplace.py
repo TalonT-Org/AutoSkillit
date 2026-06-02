@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -66,3 +68,79 @@ def test_upgrade_is_registered_as_cli_command():
 def test_marketplace_module_still_importable():
     """_marketplace module is still importable (not deleted)."""
     import autoskillit.cli._marketplace  # noqa: F401
+
+
+class TestInstallPluginInstallCapableGuard:
+    """Verify install() gates on backend.capabilities.plugin_install_capable."""
+
+    def test_install_rejects_when_plugin_install_not_capable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from autoskillit.config import AgentBackendConfig, AutomationConfig
+
+        mock_cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="test-backend"))
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.plugin_install_capable = False
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda _: mock_backend)
+
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
+
+        from autoskillit.cli._marketplace import install
+
+        result = install(scope="user")
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "plugin_install_capable" in captured.out
+        assert "test-backend" in captured.out
+
+    def test_install_passes_guard_when_plugin_install_capable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import importlib
+        import subprocess
+        from unittest.mock import MagicMock
+
+        from autoskillit.config import AgentBackendConfig, AutomationConfig
+
+        mock_cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="claude-code"))
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.plugin_install_capable = True
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda _: mock_backend)
+
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/claude")
+
+        _app_mod = importlib.import_module("autoskillit.cli._marketplace")
+        monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
+        monkeypatch.setattr(_app_mod, "evict_direct_mcp_entry", lambda _: False)
+        monkeypatch.setattr(
+            "autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None
+        )
+        monkeypatch.setattr(_app_mod, "generate_hooks_json", lambda: {})
+        monkeypatch.setattr(_app_mod, "atomic_write", lambda *a, **kw: None)
+
+        called = []
+        monkeypatch.setattr(
+            "subprocess.run",
+            lambda *a, **kw: (
+                called.append(a),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="ok", stderr=""),
+            )[1],
+        )
+
+        from autoskillit.cli._marketplace import install
+
+        result = install(scope="user")
+
+        assert result is True
+        assert len(called) >= 1

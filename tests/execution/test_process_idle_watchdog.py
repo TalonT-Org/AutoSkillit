@@ -17,6 +17,7 @@ from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     _watch_stdout_idle,
 )
+from tests.conftest import make_stub_inspector
 
 
 @pytest.mark.anyio
@@ -692,3 +693,221 @@ async def test_stdout_idle_NOT_fired_when_execution_marker_active(
 
 
 # test write
+
+
+@pytest.mark.anyio
+async def test_inspector_callback_kill_fires_idle_stall(tmp_path: anyio.Path) -> None:
+    """KILL verdict from inspector callback sets acc.inspector_verdict + idle_stall."""
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    timeout_scope_ref: list[anyio.CancelScope | None] = [None]
+
+    async def set_scope() -> None:
+        with anyio.move_on_after(30.0) as scope:
+            timeout_scope_ref[0] = scope
+            await trigger.wait()
+        if not trigger.is_set():
+            trigger.set()
+
+    with anyio.fail_after(2.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(set_scope)
+            await anyio.sleep(0.05)
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.2,
+                    acc,
+                    trigger,
+                    0.05,
+                    inspector_callback=make_stub_inspector("KILL"),
+                    timeout_scope_ref=timeout_scope_ref,
+                )
+            )
+            await trigger.wait()
+
+    assert acc.inspector_verdict is not None
+    assert acc.inspector_verdict.action == "KILL"
+    assert acc.idle_stall is True
+    assert trigger.is_set()
+
+
+@pytest.mark.anyio
+async def test_inspector_callback_spare_resets_timer(tmp_path: anyio.Path) -> None:
+    """SPARE verdict resets last_growth_time and continues polling without firing kill."""
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    timeout_scope_ref: list[anyio.CancelScope | None] = [None]
+    callback_calls: list[int] = [0]
+
+    async def killing_callback(evidence):  # type: ignore[no-untyped-def]
+        callback_calls[0] += 1
+        from autoskillit.core import InspectorVerdict
+
+        if callback_calls[0] == 1:
+            return InspectorVerdict(
+                action="SPARE", reasoning="first", confidence="high", elapsed_seconds=0.0
+            )
+        trigger.set()
+        return InspectorVerdict(
+            action="KILL", reasoning="second", confidence="high", elapsed_seconds=0.0
+        )
+
+    async def set_scope() -> None:
+        with anyio.move_on_after(30.0) as scope:
+            timeout_scope_ref[0] = scope
+            await anyio.sleep(2.0)
+        if not trigger.is_set():
+            trigger.set()
+
+    with anyio.fail_after(3.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(set_scope)
+            await anyio.sleep(0.05)
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.2,
+                    acc,
+                    trigger,
+                    0.05,
+                    inspector_callback=killing_callback,
+                    timeout_scope_ref=timeout_scope_ref,
+                )
+            )
+            await trigger.wait()
+
+    assert callback_calls[0] >= 2
+    assert acc.inspector_verdict is not None
+    assert acc.inspector_verdict.action == "KILL"
+
+
+@pytest.mark.anyio
+async def test_inspector_callback_none_preserves_behavior(tmp_path: anyio.Path) -> None:
+    """inspector_callback=None preserves backward-compatible IDLE_STALL behavior."""
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    with anyio.fail_after(2.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.2,
+                    acc,
+                    trigger,
+                    0.05,
+                )
+            )
+            await trigger.wait()
+
+    assert acc.inspector_verdict is None
+    assert acc.idle_stall is True
+    assert trigger.is_set()
+
+
+@pytest.mark.anyio
+async def test_inspector_skipped_when_insufficient_time(tmp_path: anyio.Path) -> None:
+    """Inspector is skipped when CancelScope has < CLEANUP_BUDGET remaining."""
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    callback_called: list[bool] = [False]
+
+    async def tracking_callback(evidence):  # type: ignore[no-untyped-def]
+        callback_called[0] = True
+        from autoskillit.core import InspectorVerdict
+
+        return InspectorVerdict(
+            action="KILL", reasoning="should not fire", confidence="high", elapsed_seconds=0.0
+        )
+
+    timeout_scope_ref: list[anyio.CancelScope | None] = [None]
+
+    async def set_short_scope() -> None:
+        with anyio.move_on_after(0.05) as scope:
+            timeout_scope_ref[0] = scope
+            await trigger.wait()
+        if not trigger.is_set():
+            trigger.set()
+
+    with anyio.fail_after(2.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(set_short_scope)
+            await anyio.sleep(0.01)
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.1,
+                    acc,
+                    trigger,
+                    0.05,
+                    inspector_callback=tracking_callback,
+                    timeout_scope_ref=timeout_scope_ref,
+                )
+            )
+            await trigger.wait()
+
+    assert callback_called[0] is False
+    assert acc.inspector_verdict is None
+    assert acc.idle_stall is True
+
+
+@pytest.mark.anyio
+async def test_inspector_skipped_when_scope_none(tmp_path: anyio.Path) -> None:
+    """Inspector is skipped when timeout_scope_ref element is None (scope not yet set)."""
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    callback_called: list[bool] = [False]
+
+    async def tracking_callback(evidence):  # type: ignore[no-untyped-def]
+        callback_called[0] = True
+        from autoskillit.core import InspectorVerdict
+
+        return InspectorVerdict(
+            action="KILL", reasoning="should not fire", confidence="high", elapsed_seconds=0.0
+        )
+
+    timeout_scope_ref: list[anyio.CancelScope | None] = [None]
+
+    with anyio.fail_after(2.0):
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(
+                functools.partial(
+                    _watch_stdout_idle,
+                    stdout_file,
+                    0.1,
+                    acc,
+                    trigger,
+                    0.05,
+                    inspector_callback=tracking_callback,
+                    timeout_scope_ref=timeout_scope_ref,
+                )
+            )
+            await trigger.wait()
+
+    assert callback_called[0] is False
+    assert acc.inspector_verdict is None
+    assert acc.idle_stall is True

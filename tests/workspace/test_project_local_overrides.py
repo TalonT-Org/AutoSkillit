@@ -197,8 +197,10 @@ def test_init_session_subset_and_override_compose(tmp_path):
     config = make_test_config(subsets=make_subsetsconfig(disabled=["github"]))
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-004", config=config, project_dir=project_dir)
-    # "open-pr" absent due to subset; "review-pr" absent due to override
-    assert not (skills_dir / ".claude" / "skills" / "review-pr" / "SKILL.md").exists()
+    # "open-pr" absent due to subset; "review-pr" present via Channel 2 project-local copy
+    delivered = skills_dir / ".claude" / "skills" / "review-pr" / "SKILL.md"
+    assert delivered.exists(), "project-local override must be copied into ephemeral dir"
+    assert "# custom" in delivered.read_text()
     assert not (skills_dir / ".claude" / "skills" / "open-pr" / "SKILL.md").exists()
 
 

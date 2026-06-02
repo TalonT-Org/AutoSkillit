@@ -97,7 +97,11 @@ class TestClaudeCodeBackend:
     def test_conventions_returns_backend_conventions(self) -> None:
         result = ClaudeCodeBackend().conventions
         assert isinstance(result, BackendConventions)
-        assert result.project_local_skill_search_dirs == (".claude/skills", ".autoskillit/skills")
+        assert result.project_local_skill_search_dirs == (
+            ".claude/skills",
+            ".autoskillit/skills",
+            ".agents/skills",
+        )
 
     def test_setup_session_dir_returns_none(self, tmp_path: Path) -> None:
         result = ClaudeCodeBackend().setup_session_dir(tmp_path)

@@ -156,7 +156,9 @@ class TestModuleCascadeCore:
         )
 
     def test_type_backend_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_backend"] == frozenset({"core", "execution", "cli"})
+        assert MODULE_CASCADE_CORE["_type_backend"] == frozenset(
+            {"core", "execution", "cli", "workspace"}
+        )
 
     def test_type_dispatch_identity_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_dispatch_identity"] == frozenset(
@@ -476,7 +478,8 @@ class TestBuildTestScopeCoreCascade:
         dir_names = {p.name for p in result}
         assert "core" in dir_names
         assert "execution" in dir_names
-        for excluded in ["config", "pipeline", "fleet", "migration", "workspace"]:
+        assert "workspace" in dir_names
+        for excluded in ["config", "pipeline", "fleet", "migration"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_capture_narrow_cascade(self, tmp_path: Path) -> None:

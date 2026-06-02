@@ -23,10 +23,6 @@ from autoskillit.cli._init_helpers import (
     _register_all,
 )
 from autoskillit.cli._serve_guard import serve_with_signal_guard
-from autoskillit.execution import _has_active_execution_marker
-
-if TYPE_CHECKING:
-    from autoskillit.core import FleetLock
 from autoskillit.cli._sessions import sessions_app
 from autoskillit.cli._validate import validate_app
 from autoskillit.cli.fleet import fleet_app
@@ -37,6 +33,10 @@ from autoskillit.core import (
     atomic_write,
     claude_code_project_dir,
 )
+from autoskillit.execution import _has_active_execution_marker
+
+if TYPE_CHECKING:
+    from autoskillit.core import FleetLock
 
 app = App(
     name="autoskillit",

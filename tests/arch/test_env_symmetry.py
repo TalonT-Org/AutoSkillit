@@ -8,6 +8,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _REQUIRED_IN_BOTH: frozenset[str] = frozenset(
     {
+        "AUTOSKILLIT_APPLICABLE_GUARDS",
         "AUTOSKILLIT_HEADLESS",
         "AUTOSKILLIT_SESSION_TYPE",
         "MAX_MCP_OUTPUT_TOKENS",

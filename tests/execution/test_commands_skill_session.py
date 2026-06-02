@@ -66,3 +66,16 @@ class TestBuildSkillSessionCmdSharedBehavior:
             "/autoskillit:investigate", "/repo", completion_marker="DONE"
         )
         assert "AUTOSKILLIT_AGENT_BACKEND" in spec.env
+
+    @pytest.mark.parametrize(
+        ("backend", "expected"),
+        [
+            (ClaudeCodeBackend(), "skill_load_guard"),
+            (CodexBackend(), ""),
+        ],
+    )
+    def test_applicable_guards_env_set(self, backend, expected) -> None:
+        spec = backend.build_skill_session_cmd(
+            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+        )
+        assert spec.env["AUTOSKILLIT_APPLICABLE_GUARDS"] == expected

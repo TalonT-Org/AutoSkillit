@@ -16,6 +16,7 @@ import zstandard
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AGENT_BACKEND_ENV_VAR,
+    AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
     CODEX_INTERACTIVE_REQUIRED_ENV,
@@ -469,7 +470,7 @@ class CodexBackend:
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
             MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            "AUTOSKILLIT_APPLICABLE_GUARDS": " ".join(sorted(self.capabilities.applicable_guards)),
+            AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
             "MCP_CONNECTION_NONBLOCKING": "0",
         }
         if scenario_step_name:
@@ -581,6 +582,7 @@ class CodexBackend:
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
             MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
+            AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
             "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
             "MCP_CONNECTION_NONBLOCKING": "0",
         }

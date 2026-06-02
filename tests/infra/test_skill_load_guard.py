@@ -23,7 +23,6 @@ def _run_guard(
     provider_profile: str | None = None,
     headless: bool = False,
     session_type: str | None = None,
-    agent_backend: str | None = None,
     applicable_guards: str | None = None,
 ) -> str:
     """Run skill_load_guard.main(), return stdout."""
@@ -48,11 +47,6 @@ def _run_guard(
         env_updates["AUTOSKILLIT_SESSION_TYPE"] = session_type
     else:
         env_removals.append("AUTOSKILLIT_SESSION_TYPE")
-
-    if agent_backend is not None:
-        env_updates["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
-    else:
-        env_removals.append("AUTOSKILLIT_AGENT_BACKEND")
 
     if applicable_guards is not None:
         env_updates["AUTOSKILLIT_APPLICABLE_GUARDS"] = applicable_guards
@@ -105,6 +99,7 @@ def test_denies_read_when_flag_absent_and_non_anthropic_headless_skill(tmp_path)
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -120,6 +115,7 @@ def test_allows_read_when_flag_exists(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -132,6 +128,7 @@ def test_allows_silently_when_provider_profile_empty(tmp_path):
         provider_profile=None,
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -144,6 +141,7 @@ def test_allows_silently_when_provider_is_anthropic(tmp_path):
         provider_profile="anthropic",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -156,6 +154,7 @@ def test_allows_silently_when_not_headless(tmp_path):
         provider_profile="minimax",
         headless=False,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -168,6 +167,7 @@ def test_allows_silently_when_session_type_not_skill(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="orchestrator",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -181,6 +181,7 @@ def test_denies_all_guarded_tools(tmp_path, tool_name):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -194,6 +195,7 @@ def test_survives_malformed_stdin(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -206,6 +208,7 @@ def test_deny_message_contains_directive_keywords(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     reason = json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
     assert "MANDATORY" in reason
@@ -221,6 +224,7 @@ def test_allows_silently_for_anthropic_case_insensitive(tmp_path):
         provider_profile="Anthropic",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -233,6 +237,7 @@ def test_allows_when_agent_id_present(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -245,6 +250,7 @@ def test_denies_when_agent_id_is_empty_string(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -264,6 +270,7 @@ def test_flag_found_via_ancestor_walk_when_cwd_is_subdirectory(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -277,6 +284,7 @@ def test_denies_when_no_autoskillit_dir_in_ancestors(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -298,6 +306,7 @@ def test_guard_auto_exempts_after_deny_count_threshold(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     assert not out.strip()
 
@@ -315,6 +324,7 @@ def test_guard_records_denial_when_below_threshold(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
+        applicable_guards="skill_load_guard",
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -332,7 +342,6 @@ def test_codex_backend_early_exit(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
-        agent_backend="codex",
         applicable_guards="",
     )
     assert not out.strip()
@@ -347,7 +356,6 @@ def test_codex_backend_ignores_provider_profile(tmp_path, provider_profile):
         provider_profile=provider_profile,
         headless=True,
         session_type="skill",
-        agent_backend="codex",
         applicable_guards="",
     )
     assert not out.strip()
@@ -361,7 +369,6 @@ def test_applicable_guards_includes_skill_load_guard_proceeds(tmp_path):
         provider_profile="minimax",
         headless=True,
         session_type="skill",
-        agent_backend="codex",
         applicable_guards="skill_load_guard",
     )
     response = json.loads(out)
@@ -369,28 +376,41 @@ def test_applicable_guards_includes_skill_load_guard_proceeds(tmp_path):
 
 
 def test_non_codex_backend_still_denies(tmp_path):
-    """T2-19: claude-code backend does NOT trigger early exit - deny proceeds."""
+    """T2-19: Guard name IS in AUTOSKILLIT_APPLICABLE_GUARDS — deny proceeds."""
     out = _run_guard(
         _make_event("Read"),
         tmp_dir=tmp_path,
         provider_profile="minimax",
         headless=True,
         session_type="skill",
-        agent_backend="claude-code",
+        applicable_guards="skill_load_guard",
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_absent_backend_still_denies(tmp_path):
-    """T2-20: Missing AUTOSKILLIT_AGENT_BACKEND does NOT trigger early exit."""
+    """T2-20: AUTOSKILLIT_APPLICABLE_GUARDS absent: '' → [''] via split(','), exits early."""
     out = _run_guard(
         _make_event("Read"),
         tmp_dir=tmp_path,
         provider_profile="minimax",
         headless=True,
         session_type="skill",
-        agent_backend=None,
+        applicable_guards=None,
+    )
+    assert not out.strip()
+
+
+def test_applicable_guards_comma_delimited_multi_guard(tmp_path):
+    """T2-21: Comma-delimited multi-guard value correctly identifies skill_load_guard."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+        applicable_guards="other_guard,skill_load_guard",
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"

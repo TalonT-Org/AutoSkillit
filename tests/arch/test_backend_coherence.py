@@ -131,8 +131,8 @@ def test_triage_uses_capability_field():
     assert not has_string_compare, "_apply_triage_gate must not compare backend name strings"
 
 
-def test_skills_subdir_uses_capability_field():
-    """session_skills.py must read backend.capabilities.skills_subdir, not module constants."""
+def test_skills_subdir_uses_conventions_field():
+    """session_skills.py must read backend.conventions.skills_subdir, not module constants."""
     import inspect
     import textwrap
 
@@ -143,7 +143,7 @@ def test_skills_subdir_uses_capability_field():
     has_skills_subdir = any(
         isinstance(node, ast.Attribute) and node.attr == "skills_subdir" for node in ast.walk(tree)
     )
-    assert has_skills_subdir, "init_session must read .skills_subdir capability field"
+    assert has_skills_subdir, "init_session must read .skills_subdir conventions field"
 
 
 def test_applicable_guards_uses_capability_field():

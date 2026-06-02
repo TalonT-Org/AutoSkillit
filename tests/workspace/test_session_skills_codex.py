@@ -1,8 +1,7 @@
-"""Tests for Codex-specific session skill layout and config file copying."""
+"""Tests for Codex-specific session skill layout delegation."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,28 +15,20 @@ pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 def _make_codex_backend() -> MagicMock:
     b = MagicMock()
     b.capabilities = _CODEX_CAPABILITIES
+    b.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
     b.ensure_pre_launch.return_value = []
     return b
 
 
 @pytest.fixture
-def codex_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Fake ~/.codex/ home and codex backend mock."""
-    fake_home = tmp_path / "fakehome"
-    codex_dir = fake_home / ".codex"
-    codex_dir.mkdir(parents=True)
-    (codex_dir / "config.toml").write_text("[codex]\nmodel = 'o3'\n")
-
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
-
+def codex_env():
+    """Codex backend mock for delegation-contract tests."""
     backend = _make_codex_backend()
 
     return type(
         "CodexEnv",
         (),
         {
-            "fake_home": fake_home,
-            "codex_dir": codex_dir,
             "backend": backend,
         },
     )()
@@ -53,80 +44,18 @@ def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, co
     assert not (session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR).exists()
 
 
-def test_codex_init_session_copies_config_toml(make_session_skill_manager, codex_env) -> None:
-    mgr = make_session_skill_manager()
-    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    copied = session_path / "config.toml"
-    assert copied.exists()
-    assert copied.read_text() == "[codex]\nmodel = 'o3'\n"
-
-
-def test_codex_init_session_symlinks_auth_json(make_session_skill_manager, codex_env) -> None:
-    (codex_env.codex_dir / "auth.json").write_text('{"token": "test"}')
-    mgr = make_session_skill_manager()
-    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    auth = session_path / "auth.json"
-    assert auth.is_symlink()
-    assert auth.resolve() == (codex_env.codex_dir / "auth.json").resolve()
-    assert auth.read_text() == '{"token": "test"}'
-
-
-def test_codex_init_session_auth_json_symlink_target_absent(
+def test_codex_init_session_delegates_to_setup_session_dir(
     make_session_skill_manager, codex_env
 ) -> None:
     mgr = make_session_skill_manager()
     session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    assert not (session_path / "auth.json").exists()
-    assert not (session_path / "auth.json").is_symlink()
+    codex_env.backend.setup_session_dir.assert_called_once_with(session_path)
 
 
-def test_codex_init_session_copies_env_if_present(make_session_skill_manager, codex_env) -> None:
-    (codex_env.codex_dir / ".env").write_text("API_KEY=secret\n")
+def test_no_backend_skips_setup_session_dir(make_session_skill_manager) -> None:
     mgr = make_session_skill_manager()
-    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    copied = session_path / ".env"
-    assert copied.exists()
-    assert copied.read_text() == "API_KEY=secret\n"
-
-
-def test_codex_init_session_skips_env_if_absent(make_session_skill_manager, codex_env) -> None:
-    mgr = make_session_skill_manager()
-    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    assert not (session_path / ".env").exists()
-
-
-def test_codex_init_session_auth_json_missing_no_crash(
-    make_session_skill_manager, codex_env
-) -> None:
-    mgr = make_session_skill_manager()
-    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    assert not (session_path / "auth.json").exists()
-
-
-def test_codex_init_session_creates_sessions_symlink(
-    make_session_skill_manager, codex_env
-) -> None:
-    mgr = make_session_skill_manager()
-    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    sessions_link = session_path / "sessions"
-    assert sessions_link.is_symlink()
-    target = sessions_link.resolve()
-    assert target.is_dir()
-    assert str(target).endswith("codex-sessions")
-
-
-def test_codex_init_session_config_toml_missing_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_session_skill_manager
-) -> None:
-    fake_home = tmp_path / "fakehome"
-    (fake_home / ".codex").mkdir(parents=True)
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
-
-    backend = _make_codex_backend()
-
-    mgr = make_session_skill_manager()
-    with pytest.raises(FileNotFoundError):
-        mgr.init_session("sid", cook_session=True, backend=backend)
+    result = mgr.init_session("sid", cook_session=True)
+    assert isinstance(result, ValidatedAddDir)
 
 
 def test_codex_init_session_returns_validated_add_dir(
@@ -146,20 +75,6 @@ def test_claude_backend_still_uses_dot_claude_layout(make_session_skill_manager)
     )
     assert len(skill_files) > 0
     assert not (session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR).exists()
-
-
-def test_codex_init_session_sessions_symlink_respects_xdg(
-    make_session_skill_manager, codex_env, monkeypatch, tmp_path
-):
-    xdg_dir = tmp_path / "custom_xdg"
-    monkeypatch.setenv("XDG_DATA_HOME", str(xdg_dir))
-    mgr = make_session_skill_manager()
-    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
-    sessions_link = session_path / "sessions"
-    assert sessions_link.is_symlink()
-    target = sessions_link.resolve()
-    expected = xdg_dir / "autoskillit" / "logs" / "codex-sessions"
-    assert target == expected
 
 
 def test_codex_init_session_calls_ensure_pre_launch(make_session_skill_manager, codex_env) -> None:

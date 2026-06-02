@@ -84,22 +84,15 @@ def test_provider_does_not_inject_for_cook_session() -> None:
     ],
 )
 def test_session_skill_manager_creates_ephemeral_dir(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     make_session_skill_manager,
     backend_name: str | None,
     skills_subdir: Path,
 ) -> None:
     backend = None
     if backend_name == "codex":
-        fake_home = tmp_path / "fakehome"
-        codex_dir = fake_home / ".codex"
-        codex_dir.mkdir(parents=True)
-        (codex_dir / "config.toml").write_text("[codex]\n")
-        monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
-
         backend = MagicMock()
         backend.capabilities = _CODEX_CAPABILITIES
+        backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
         backend.ensure_pre_launch.return_value = []
 
     mgr = make_session_skill_manager()
@@ -120,8 +113,6 @@ def test_session_skill_manager_creates_ephemeral_dir(
     ],
 )
 def test_session_manager_injects_disable_for_tier2(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     make_session_skill_manager,
     backend_name: str | None,
     skills_subdir: Path,
@@ -131,14 +122,9 @@ def test_session_manager_injects_disable_for_tier2(
 
     backend = None
     if backend_name == "codex":
-        fake_home = tmp_path / "fakehome"
-        codex_dir = fake_home / ".codex"
-        codex_dir.mkdir(parents=True)
-        (codex_dir / "config.toml").write_text("[codex]\n")
-        monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
-
         backend = MagicMock()
         backend.capabilities = _CODEX_CAPABILITIES
+        backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
         backend.ensure_pre_launch.return_value = []
 
     mgr = make_session_skill_manager()
@@ -360,20 +346,14 @@ def test_init_session_backend_none_uses_claude_skills_subdir(tmp_path: Path) -> 
 
 
 def test_init_session_codex_backend_uses_codex_skills_subdir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
-    """When capabilities.skills_subdir == 'skills', skills_base resolves to skills/."""
+    """When conventions.skills_subdir == Path('skills'), skills_base resolves to skills/."""
 
     codex_backend = MagicMock()
     codex_backend.capabilities = _CODEX_CAPABILITIES
+    codex_backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
     codex_backend.ensure_pre_launch.return_value = []
-
-    fake_home = tmp_path / "fakehome"
-    codex_dir = fake_home / ".codex"
-    codex_dir.mkdir(parents=True)
-    (codex_dir / "config.toml").write_text("[codex]\n")
-
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
     provider = SkillsDirectoryProvider()
     mgr = DefaultSessionSkillManager(provider, ephemeral_root=tmp_path)

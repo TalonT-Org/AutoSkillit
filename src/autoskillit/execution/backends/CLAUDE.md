@@ -25,7 +25,7 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 3. **Register in `BACKEND_REGISTRY`** — add a `'<name>': <NameBackend>` entry to the `BACKEND_REGISTRY` dict in `execution/backends/__init__.py`.
 
 4. **Declare hook sync and MCP registration via capability fields** — populate the relevant capability fields on `BackendCapabilities` (e.g., `mcp_config_capable`) so that the `init`-time helpers in `cli/_init_helpers.py` and the `ensure_pre_launch()` protocol method discover the backend through data-driven dispatch. Do not add new conditional branches in `cli/_init_helpers.py`.
-   *Enforced by `test_all_backends_have_init_hook` in `tests/arch/test_backend_coherence.py`.*
+   *Enforced by `test_all_backends_have_init_hook` in `tests/arch/test_backend_coherence.py` (verifies `cli/_init_helpers.py` imports from the execution layer — the connectivity prerequisite for capability-field dispatch).*
 
 5. **Populate doctor fields** — set `version_check_command`, `process_name`, and `min_version` on `BackendCapabilities`. Do not add a new `_check_<name>_version()` function.
    *Enforced by `test_backend_doctor_coverage` in `tests/arch/test_backend_coherence.py`.*

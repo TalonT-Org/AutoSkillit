@@ -112,6 +112,8 @@ skills:
         - no_test_infrastructure
     - name: fixes_applied
       type: integer
+    - name: deviation_manifest_path
+      type: optional_string
     write_behavior: conditional
     write_expected_when:
     - "verdict[ \\t]*=[ \\t]*real_fix"
@@ -342,6 +344,8 @@ skills:
       type: string
     - name: phases_implemented
       type: integer
+    - name: deviation_manifest_path
+      type: optional_string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"

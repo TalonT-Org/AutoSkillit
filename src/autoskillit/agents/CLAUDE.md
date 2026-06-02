@@ -17,6 +17,7 @@ Bundled agent definition markdown files that serve as both **plugin agents**
 | `pr-review-auditor-v1-precision.md` | PR review agent: precision-focused with 5-step verification checklist |
 | `pr-review-auditor-v2-contrastive.md` | PR review agent: junior/senior contrastive framing |
 | `pr-review-auditor-v3-simulation.md` | PR review agent: simulation-first with inconclusive fallback |
+| `audit-impl-deviation-evaluator.md` | Pipeline agent: deviation evaluator — checks honesty, intent preservation, evidence quality for plan deviations |
 
 ## Layout
 
@@ -55,6 +56,7 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 | _(none)_ | _(none)_ | `wp-elaborator` | planner-elaborate-wps (subagent_type-only) |
 | _(none)_ | _(none)_ | `pipeline-health-scanner` | analyze-pipeline-health (subagent_type-only) |
 | _(none)_ | _(none)_ | `audit-impl-slice-auditor` | audit-impl Step 3 (subagent_type-only) |
+| _(none)_ | _(none)_ | `audit-impl-deviation-evaluator` | audit-impl Step 3.5 (subagent_type-only) |
 
 ## Adding Agents
 
@@ -70,4 +72,4 @@ agent definitions are readable via `ReadMcpResourceTool` at `agent://{pack}/{nam
 `agent://{pack}/{name}` resource path and can be skipped for packless agents.
 Current packless agents: `wp-elaborator`, `pipeline-health-scanner`, `audit-impl-slice-auditor`,
 `pr-review-auditor-baseline`, `pr-review-auditor-v1-precision`, `pr-review-auditor-v2-contrastive`,
-`pr-review-auditor-v3-simulation`.
+`pr-review-auditor-v3-simulation`, `audit-impl-deviation-evaluator`.

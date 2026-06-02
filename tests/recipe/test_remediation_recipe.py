@@ -327,3 +327,41 @@ def test_claim_and_resolve_captures_investigation_complete(recipe) -> None:
     step = recipe.steps["claim_and_resolve"]
     assert step.capture is not None
     assert "investigation_complete" in step.capture
+
+
+# T_DEV_REM1
+def test_assess_captures_deviation_manifest_path(recipe) -> None:
+    """assess must capture deviation_manifest_path as optional_string."""
+    step = recipe.steps["assess"]
+    capture = step.capture or {}
+    assert "deviation_manifest_path" in capture
+    assert capture["deviation_manifest_path"].from_ == "${{ result.deviation_manifest_path }}"
+    assert capture["deviation_manifest_path"].value_type == "optional_string"
+
+
+# T_DEV_REM2
+def test_retry_worktree_captures_deviation_manifest_path(recipe) -> None:
+    """retry_worktree must capture deviation_manifest_path as optional_string."""
+    step = recipe.steps["retry_worktree"]
+    capture = step.capture or {}
+    assert "deviation_manifest_path" in capture
+    assert capture["deviation_manifest_path"].from_ == "${{ result.deviation_manifest_path }}"
+    assert capture["deviation_manifest_path"].value_type == "optional_string"
+
+
+# T_DEV_REM3
+def test_audit_impl_forwards_deviation_manifest_path(recipe) -> None:
+    """audit_impl must forward deviation_manifest_path kwarg and declare it optional."""
+    step = recipe.steps["audit_impl"]
+    cmd = step.with_args.get("skill_command", "")
+    assert "deviation_manifest_path=" in cmd
+    assert "deviation_manifest_path" in (step.optional_context_refs or [])
+
+
+# T_DEV_REM4
+def test_merge_gate_assess_captures_deviation_manifest_path(recipe) -> None:
+    """merge_gate_assess must capture deviation_manifest_path (flows to audit_impl)."""
+    step = recipe.steps["merge_gate_assess"]
+    capture = step.capture or {}
+    assert "deviation_manifest_path" in capture
+    assert capture["deviation_manifest_path"].value_type == "optional_string"

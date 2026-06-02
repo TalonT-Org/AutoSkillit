@@ -112,6 +112,8 @@ Read the configured test command(s) from `.autoskillit/config.yaml`: check `test
    exist (e.g., plan file arguments, `{{AUTOSKILLIT_TEMP}}/investigate/` reports, external file references), use
    `Glob` or `ls` to confirm the path exists first. This prevents ENOENT errors that cascade into
    sibling parallel-call cancellations.
+
+   **Session timestamp:** Compute `SESSION_TS` as the current UTC timestamp in `YYYY-MM-DD_HHMMSS` format. This value is reused for deviation manifest naming across all fix loop iterations.
 4. Check for development environment in worktree, recreate if missing. Use the project's configured `worktree_setup.command`, or: `cd "${worktree_path}" && task install-worktree`
 
 5. **Test infrastructure check:** Run `test_check` once on the worktree. If the result contains `"infrastructure_missing": true`, emit verdict `no_test_infrastructure` with `fixes_applied = 0` and exit immediately. Do NOT enter the fix loop.
@@ -235,6 +237,34 @@ the failure could not be reproduced locally, which is a flaky-test signal.
 ### Step 3: Fix Loop (max 3 iterations)
 1. Analyze test failures against the plan to understand root cause
 2. Apply targeted fixes
+2b. **Deviation check:** If the fix you applied contradicts what the plan specified (e.g., the plan says to use algorithm X but you substituted algorithm Y because X caused test failures), record a deviation. If the fix aligns with the plan, skip this sub-step.
+
+   Ensure the output directory exists: `mkdir -p {{AUTOSKILLIT_TEMP}}/resolve-failures/` (idempotent — the directory may already exist from fix log writes).
+
+   Read the existing deviation manifest at `{{AUTOSKILLIT_TEMP}}/resolve-failures/deviation_manifest_{SESSION_TS}.json` (if it exists and is valid JSON), or start a new structure. Append a new entry to the `deviations` array and write the complete file:
+
+   ```json
+   {
+     "schema_version": 1,
+     "generated_by": "resolve-failures",
+     "generated_at": "<current UTC ISO 8601>",
+     "plan_path": "<plan_path from Step 0>",
+     "base_branch": "<base_branch from Step 0>",
+     "deviations": [
+       {
+         "what_the_plan_said": "<what the plan required>",
+         "what_i_did_instead": "<what you actually implemented>",
+         "why": "<why the plan's approach was infeasible — must be falsifiable>",
+         "evidence": "<test failure output or diagnostic reasoning>",
+         "files_affected": ["<relative paths of files changed>"]
+       }
+     ]
+   }
+   ```
+
+   Root-level fields (`schema_version`, `generated_by`, `generated_at`, `plan_path`, `base_branch`) are hardcoded infrastructure values. The LLM fills only the `deviations[*]` entry fields.
+
+   **Incremental write:** The manifest is written each time a deviation is recorded, not batched at session end. This ensures the file exists on disk even if the session is terminated by context-limit exhaustion.
 3. Commit ALL modified files (not just intentionally changed ones):
    a. If the project has pre-commit hooks, run `pre-commit run --all-files` first
    b. Run `git -C {worktree_path} status --porcelain` to capture the full set of modified files, including any auto-fixed by hooks
@@ -278,6 +308,12 @@ Then emit the structured output tokens on their own lines so the pipeline's
 verdict = {verdict}
 fixes_applied = {N}
 ```
+
+If deviations were recorded during the fix loop (i.e., the deviation manifest file exists at `{{AUTOSKILLIT_TEMP}}/resolve-failures/deviation_manifest_{SESSION_TS}.json`), also emit:
+
+`deviation_manifest_path = {absolute_path_to_deviation_manifest}`
+
+Only emit when the manifest file exists. Omit this line entirely when no deviations were recorded.
 
 Where:
 - `{verdict}` is one of: `real_fix`, `flake_suspected`, `ci_only_failure`, `no_test_infrastructure`

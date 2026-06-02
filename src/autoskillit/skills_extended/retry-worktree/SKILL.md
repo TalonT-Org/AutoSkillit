@@ -104,6 +104,8 @@ This is not a fallback — if worktree_path is empty, the recipe must be inspect
 to determine why the capture did not complete. A common cause is context exhaustion
 occurring before the skill reached its Step 6 handoff report.
 
+**Session timestamp:** Compute `SESSION_TS` as the current UTC timestamp in `YYYY-MM-DD_HHMMSS` format. This value is reused for deviation manifest naming.
+
 ### Step 1: Assess Current State
 
 Discover the base branch from git's upstream tracking (primary) or the explicit
@@ -187,6 +189,33 @@ cd {WORKTREE_PATH} && \
 
 If tests fail, fix the issue and re-run.
 
+**Deviation check:** If a fix applied in this step contradicts what the plan specified, record a deviation. If the fix aligns with the plan, skip this sub-step.
+
+Ensure the output directory exists: `mkdir -p {{AUTOSKILLIT_TEMP}}/retry-worktree/` (idempotent — the directory may not exist yet, unlike resolve-failures which already writes to its temp subdirectory).
+
+Read the existing deviation manifest at `{{AUTOSKILLIT_TEMP}}/retry-worktree/deviation_manifest_{SESSION_TS}.json` (if it exists and is valid JSON), or start a new structure. Append a new entry to the `deviations` array and write the complete file:
+
+```json
+{
+  "schema_version": 1,
+  "generated_by": "retry-worktree",
+  "generated_at": "<current UTC ISO 8601>",
+  "plan_path": "<plan_path from Step 0>",
+  "base_branch": "<base_branch from Step 0>",
+  "deviations": [
+    {
+      "what_the_plan_said": "<what the plan required>",
+      "what_i_did_instead": "<what you actually implemented>",
+      "why": "<why the plan's approach was infeasible — must be falsifiable>",
+      "evidence": "<test failure output or diagnostic reasoning>",
+      "files_affected": ["<relative paths of files changed>"]
+    }
+  ]
+}
+```
+
+**Incremental write:** The manifest is written each time a deviation is recorded, not batched at session end. This ensures the file exists on disk even if the session is terminated by context-limit exhaustion.
+
 ### Step 5: Rebase for Squash-and-Merge
 
 ```bash
@@ -217,6 +246,12 @@ worktree_path = ${WORKTREE_PATH}
 branch_name = ${CURRENT_BRANCH}
 phases_implemented = ${PHASES_IMPLEMENTED}
 ```
+
+If deviations were recorded during Step 4 (i.e., the deviation manifest file exists at `{{AUTOSKILLIT_TEMP}}/retry-worktree/deviation_manifest_{SESSION_TS}.json`), also emit:
+
+`deviation_manifest_path = ${DEVIATION_MANIFEST_PATH}`
+
+Only emit when the manifest file exists. Omit this line entirely when no deviations were recorded.
 
 Where `PHASES_IMPLEMENTED` is the count from Step 3. If Step 3 was skipped entirely
 (all phases already complete), emit `phases_implemented = 0`.

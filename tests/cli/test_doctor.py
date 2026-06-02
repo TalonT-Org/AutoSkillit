@@ -117,7 +117,7 @@ class TestCLIDoctor:
             ),
             patch(
                 "subprocess.run",
-                return_value=type("R", (), {"returncode": 0, "stdout": local_bin})(),
+                return_value=type("R", (), {"returncode": 0, "stdout": local_bin, "stderr": ""})(),
             ),
         ):
             cli.doctor_cmd()

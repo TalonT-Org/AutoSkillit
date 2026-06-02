@@ -174,3 +174,167 @@ def test_staleness_scan_covers_recipe_top_level(monkeypatch):
     import autoskillit.recipe._api_cache as cache_mod
 
     assert "recipe" in cache_mod._STALENESS_SCAN_DIRS
+
+
+def test_yaml_only_change_invisible_to_staleness_detector(tmp_path, monkeypatch):
+    """YAML-only change does NOT trigger _compute_content_hash (it only hashes *.py)."""
+    import autoskillit.recipe._api_cache as cache_mod
+
+    rule_dir = tmp_path / "recipe"
+    rule_dir.mkdir()
+    (rule_dir / "module_a.py").write_text("x = 1\n")
+    (rule_dir / "contracts.yaml").write_text("version: 1\n")
+
+    monkeypatch.setattr(cache_mod, "_STALENESS_SCAN_DIRS", ("recipe",))
+    monkeypatch.setattr(cache_mod, "pkg_root", lambda: tmp_path)
+    monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", None)
+    monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", None)
+    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
+
+    cache_mod._get_process_start_mtime()
+    baseline = cache_mod._DEEP_CONTENT_BASELINE
+
+    (rule_dir / "contracts.yaml").write_text("version: 2\n")
+
+    current = cache_mod._compute_content_hash()
+    assert current == baseline, "YAML-only change should NOT change content hash (py-only)"
+
+
+def test_yaml_file_cache_none_loader_result(tmp_path):
+    """YamlFileCache correctly caches None loader results without re-calling."""
+    from autoskillit.recipe._api_cache import YamlFileCache
+
+    yaml_path = tmp_path / "empty.yaml"
+    yaml_path.write_text("")
+
+    call_count = 0
+
+    def loader(path):
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    cache = YamlFileCache()
+    r1 = cache.get_or_load(yaml_path, loader)
+    assert r1 is None
+    assert call_count == 1
+
+    r2 = cache.get_or_load(yaml_path, loader)
+    assert r2 is None
+    assert call_count == 1
+
+
+def test_yaml_file_cache_invalidates_on_mtime_change(tmp_path):
+    """YamlFileCache re-reads when file mtime changes."""
+    from autoskillit.recipe._api_cache import YamlFileCache
+
+    yaml_path = tmp_path / "data.yaml"
+    yaml_path.write_text("v1")
+
+    cache = YamlFileCache()
+    r1 = cache.get_or_load(yaml_path, lambda p: p.read_text())
+    assert r1 == "v1"
+
+    yaml_path.write_text("v2")
+    r2 = cache.get_or_load(yaml_path, lambda p: p.read_text())
+    assert r2 == "v2"
+
+
+def test_manifest_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
+    """load_bundled_manifest re-reads when skill_contracts.yaml changes on disk."""
+    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE, load_bundled_manifest
+
+    recipe_dir = tmp_path / "recipe"
+    recipe_dir.mkdir()
+    manifest_path = recipe_dir / "skill_contracts.yaml"
+    manifest_path.write_text("skills:\n  old-skill:\n    inputs: []\n    outputs: []\n")
+
+    monkeypatch.setattr("autoskillit.recipe._contracts_manifest.pkg_root", lambda: tmp_path)
+    _MANIFEST_CACHE.clear()
+
+    r1 = load_bundled_manifest()
+    assert "old-skill" in r1.get("skills", {})
+
+    manifest_path.write_text(
+        "skills:\n  old-skill:\n    inputs: []\n    outputs: []\n"
+        "  new-skill:\n    inputs: []\n    outputs: []\n"
+    )
+
+    r2 = load_bundled_manifest()
+    assert "new-skill" in r2.get("skills", {}), "Manifest should reflect on-disk change"
+
+
+def test_block_budgets_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
+    """_block_budgets re-reads when block_budgets.yaml changes on disk."""
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE, _block_budgets
+
+    recipe_dir = tmp_path / "recipe"
+    recipe_dir.mkdir()
+    budgets_path = recipe_dir / "block_budgets.yaml"
+    budgets_path.write_text("DEFAULT:\n  run_cmd: 5\n")
+
+    monkeypatch.setattr("autoskillit.recipe.rules.rules_blocks.pkg_root", lambda: tmp_path)
+    _BUDGETS_CACHE.clear()
+
+    r1 = _block_budgets()
+    assert r1.get("DEFAULT", {}).get("run_cmd") == 5
+
+    budgets_path.write_text("DEFAULT:\n  run_cmd: 10\n")
+
+    r2 = _block_budgets()
+    assert r2.get("DEFAULT", {}).get("run_cmd") == 10
+
+
+def test_block_budgets_missing_file_returns_empty_dict(tmp_path, monkeypatch):
+    """_block_budgets returns {} when block_budgets.yaml does not exist."""
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE, _block_budgets
+
+    monkeypatch.setattr("autoskillit.recipe.rules.rules_blocks.pkg_root", lambda: tmp_path)
+    _BUDGETS_CACHE.clear()
+
+    result = _block_budgets()
+    assert result == {}
+
+
+def test_ml_sub_area_folding_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
+    """load_ml_sub_area_folding re-reads when YAML changes on disk."""
+    from autoskillit.recipe.methodology_venue_appendix import (
+        _ML_SUB_AREA_CACHE,
+        load_ml_sub_area_folding,
+    )
+
+    yaml_content_v1 = (
+        "ml_sub_area_folding:\n"
+        "  - sub_area: nlp\n"
+        "    display_name: NLP\n"
+        "    primary_parent: machine-learning\n"
+        "    alternate_parents: []\n"
+    )
+    yaml_content_v2 = (
+        "ml_sub_area_folding:\n"
+        "  - sub_area: nlp\n"
+        "    display_name: NLP\n"
+        "    primary_parent: machine-learning\n"
+        "    alternate_parents: []\n"
+        "  - sub_area: cv\n"
+        "    display_name: Computer Vision\n"
+        "    primary_parent: machine-learning\n"
+        "    alternate_parents: []\n"
+    )
+    yaml_path = tmp_path / "_ml_sub_area_folding.yaml"
+    yaml_path.write_text(yaml_content_v1)
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.methodology_venue_appendix.BUNDLED_METHODOLOGY_TRADITIONS_DIR",
+        tmp_path,
+    )
+    _ML_SUB_AREA_CACHE.clear()
+
+    r1 = load_ml_sub_area_folding()
+    assert len(r1) == 1
+
+    yaml_path.write_text(yaml_content_v2)
+
+    r2 = load_ml_sub_area_folding()
+    assert len(r2) == 2, "Should re-read and pick up the new entry"

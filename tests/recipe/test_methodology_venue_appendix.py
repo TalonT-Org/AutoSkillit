@@ -452,14 +452,13 @@ class TestEdgeCases:
 class TestFoldingCaching:
     @pytest.fixture(autouse=True)
     def _clear_cache(self) -> None:  # type: ignore[misc]
-        load_ml_sub_area_folding.cache_clear()
-        yield  # type: ignore[misc]
-        load_ml_sub_area_folding.cache_clear()
+        from autoskillit.recipe.methodology_venue_appendix import _ML_SUB_AREA_CACHE
 
-    def test_result_is_cached_via_lru_cache(self) -> None:
+        _ML_SUB_AREA_CACHE.clear()
+        yield  # type: ignore[misc]
+        _ML_SUB_AREA_CACHE.clear()
+
+    def test_result_is_cached_via_yaml_file_cache(self) -> None:
         r1 = load_ml_sub_area_folding()
         r2 = load_ml_sub_area_folding()
         assert r1 is r2
-        info = load_ml_sub_area_folding.cache_info()
-        assert info.hits >= 1
-        assert info.misses == 1

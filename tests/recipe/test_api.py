@@ -1047,22 +1047,27 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
 
 
 def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
-    """Staleness detection clears lru_cache helpers."""
+    """Staleness detection clears YamlFileCache + lru_cache helpers."""
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import ProcessStaleError
+    from autoskillit.recipe._api_cache import _MISSING
+    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE
     from autoskillit.recipe.contracts import load_bundled_manifest
-    from autoskillit.recipe.methodology_venue_appendix import load_ml_sub_area_folding
-    from autoskillit.recipe.rules.rules_blocks import _block_budgets
+    from autoskillit.recipe.methodology_venue_appendix import (
+        _ML_SUB_AREA_CACHE,
+        load_ml_sub_area_folding,
+    )
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE, _block_budgets
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     _block_budgets()
     load_bundled_manifest()
     load_ml_sub_area_folding()
-    assert _block_budgets.cache_info().currsize > 0
-    assert load_bundled_manifest.cache_info().currsize > 0
-    assert load_ml_sub_area_folding.cache_info().currsize > 0
+    assert _BUDGETS_CACHE._value is not _MISSING
+    assert _MANIFEST_CACHE._value is not _MISSING
+    assert _ML_SUB_AREA_CACHE._value is not _MISSING
 
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
@@ -1078,6 +1083,6 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     with pytest.raises(ProcessStaleError):
         api_mod.load_and_validate("myrecipe", tmp_path)
 
-    assert _block_budgets.cache_info().currsize == 0
-    assert load_bundled_manifest.cache_info().currsize == 0
-    assert load_ml_sub_area_folding.cache_info().currsize == 0
+    assert _BUDGETS_CACHE._value is _MISSING
+    assert _MANIFEST_CACHE._value is _MISSING
+    assert _ML_SUB_AREA_CACHE._value is _MISSING

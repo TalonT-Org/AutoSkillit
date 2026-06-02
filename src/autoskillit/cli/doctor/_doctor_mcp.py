@@ -113,10 +113,6 @@ def _check_mcp_server_registered(
                     "Run 'autoskillit init' to register."
                 ),
             )
-    if backend is not None and backend.capabilities.mcp_config_capable:
-        return DoctorResult(
-            Severity.OK, "mcp_server_registered", f"Skipped (backend={backend.name})"
-        )
     if claude_json_path is None:
         claude_json_path = Path.home() / ".claude.json"
 

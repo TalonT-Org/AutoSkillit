@@ -16,7 +16,6 @@ from autoskillit.core import (
     SessionCheckpoint,
     SkillSessionConfig,
 )
-from autoskillit.execution import commands
 from autoskillit.execution.backends import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -41,80 +40,6 @@ FOOD_TRUCK_BASE: dict[str, Any] = {
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
-
-
-class TestBuildHeadlessCmdEquivalence:
-    def test_minimal_prompt(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_headless_cmd("say hello")
-        shim = commands.build_headless_cmd("say hello")
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_model(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_headless_cmd("x", model="opus")
-        shim = commands.build_headless_cmd("x", model="opus")
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_env_extras(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_headless_cmd("x", env_extras={"FOO": "bar"})
-        shim = commands.build_headless_cmd("x", env_extras={"FOO": "bar"})
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_base_env(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_headless_cmd("x", base={"PATH": "/usr/bin"})
-        shim = commands.build_headless_cmd("x", base={"PATH": "/usr/bin"})
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-
-class TestBuildInteractiveCmdEquivalence:
-    def test_minimal(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd()
-        shim = commands.build_interactive_cmd()
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_initial_prompt(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(initial_prompt="hello")
-        shim = commands.build_interactive_cmd(initial_prompt="hello")
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_named_resume(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(resume_spec=NamedResume(session_id="s1"))
-        shim = commands.build_interactive_cmd(resume_spec=NamedResume(session_id="s1"))
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_bare_resume(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(resume_spec=BareResume())
-        shim = commands.build_interactive_cmd(resume_spec=BareResume())
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_direct_install(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(plugin_source=DirectInstall(plugin_dir=Path("/pkg")))
-        shim = commands.build_interactive_cmd(plugin_source=DirectInstall(plugin_dir=Path("/pkg")))
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_model(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_interactive_cmd(model="sonnet")
-        shim = commands.build_interactive_cmd(model="sonnet")
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
 
 
 class TestBuildInteractiveCmdSystemPrompt:
@@ -150,52 +75,6 @@ class TestBuildInteractiveCmdSystemPrompt:
         backend = ClaudeCodeBackend()
         spec = backend.build_interactive_cmd(system_prompt=None, resume_spec=NoResume())
         assert ClaudeFlags.APPEND_SYSTEM_PROMPT not in spec.cmd
-
-
-class TestBuildHeadlessResumeCmdEquivalence:
-    def test_minimal(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_resume_cmd(resume_session_id="s1", prompt="continue")
-        shim = commands.build_headless_resume_cmd(resume_session_id="s1", prompt="continue")
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_stream_json_format(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_resume_cmd(
-            resume_session_id="s1", prompt="continue", output_format=OutputFormat.STREAM_JSON
-        )
-        shim = commands.build_headless_resume_cmd(
-            resume_session_id="s1", prompt="continue", output_format=OutputFormat.STREAM_JSON
-        )
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_direct_install(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_resume_cmd(
-            resume_session_id="s1",
-            prompt="continue",
-            plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
-        )
-        shim = commands.build_headless_resume_cmd(
-            resume_session_id="s1",
-            prompt="continue",
-            plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
-        )
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
-
-    def test_with_env_extras(self) -> None:
-        backend = ClaudeCodeBackend()
-        spec = backend.build_resume_cmd(
-            resume_session_id="s1", prompt="continue", env_extras={"X": "1"}
-        )
-        shim = commands.build_headless_resume_cmd(
-            resume_session_id="s1", prompt="continue", env_extras={"X": "1"}
-        )
-        assert spec.cmd == tuple(shim.cmd)
-        assert spec.env == shim.env
 
 
 class TestResumePromptPreservation:

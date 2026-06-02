@@ -31,7 +31,6 @@ from autoskillit.core import (
     is_feature_enabled,
     resolve_target_skill,
     truncate_text,
-    validate_project_local_skill_dir,
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
@@ -804,7 +803,7 @@ async def run_skill(
                     session_id,
                     cook_session=False,
                     config=tool_ctx.config,
-                    project_dir=Path(cwd),
+                    project_dir=tool_ctx.project_dir,
                     recipe_packs=tool_ctx.active_recipe_packs,
                     recipe_features=tool_ctx.active_recipe_features,
                     allow_only=allow_only,
@@ -870,10 +869,6 @@ async def run_skill(
                         "read_only_skill_no_target_name",
                         skill_command=skill_command[:SKILL_COMMAND_DISPLAY_MAX],
                     )
-
-            _local_dir = validate_project_local_skill_dir(Path(cwd), tool_ctx.backend)
-            if _local_dir is not None:
-                skill_add_dirs.append(_local_dir)
 
             _sn_token = _current_step_name.set(_canonical_step_name(step_name))
             _oid_token = _current_order_id.set(effective_order_id)

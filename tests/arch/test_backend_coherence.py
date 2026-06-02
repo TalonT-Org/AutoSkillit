@@ -6,7 +6,7 @@ import ast
 
 import pytest
 
-pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
 
 def test_capability_queries_match_command_backend(minimal_ctx):
@@ -225,6 +225,24 @@ def test_all_backends_have_init_hook():
         "After P4-A2, _register_all must dispatch via the execution layer — "
         "ensure an import from 'autoskillit.execution.*' is present "
         "in cli/_init_helpers.py."
+    )
+
+
+def test_all_project_local_search_dirs_has_production_reader():
+    """ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS must have at least one production reader."""
+    from pathlib import Path
+
+    src_dir = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+    found = False
+    for py_file in src_dir.rglob("*.py"):
+        if py_file.name == "_type_backend.py":
+            continue
+        if "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS" in py_file.read_text():
+            found = True
+            break
+    assert found, (
+        "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS has no production reader outside its definition. "
+        "This means it is dead metadata — wire it into suppression or delivery code."
     )
 
 

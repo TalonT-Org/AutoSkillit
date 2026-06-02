@@ -182,6 +182,7 @@ def test_backend_module_all_exhaustive():
     from autoskillit.core.types._type_backend import __all__
 
     assert set(__all__) == {
+        "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS",
         "BackendCapabilities",
         "BackendConventions",
         "CLAUDE_CODE_CAPABILITIES",

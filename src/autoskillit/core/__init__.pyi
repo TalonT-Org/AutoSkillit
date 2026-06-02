@@ -38,9 +38,6 @@ from .branch_guard import is_protected_branch as is_protected_branch
 from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
 from .claude_conventions import LayoutError as LayoutError
 from .claude_conventions import validate_add_dir as validate_add_dir
-from .claude_conventions import (
-    validate_project_local_skill_dir as validate_project_local_skill_dir,
-)
 from .claude_conventions import validate_worktree_path as validate_worktree_path
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
@@ -125,6 +122,7 @@ from .types import AGENT_BACKEND_CLAUDE_CODE as AGENT_BACKEND_CLAUDE_CODE
 from .types import AGENT_BACKEND_CODEX as AGENT_BACKEND_CODEX
 from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
+from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
 from .types import AUTOSKILLIT_APPLICABLE_GUARDS as AUTOSKILLIT_APPLICABLE_GUARDS
 from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSION

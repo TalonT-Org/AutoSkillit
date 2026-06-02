@@ -37,8 +37,10 @@ from autoskillit.workspace.skill_format import (
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
+    ProjectLocalOverride,
     SkillInfo,
     detect_project_local_overrides,
+    override_names,
 )
 
 if TYPE_CHECKING:
@@ -601,9 +603,13 @@ class DefaultSessionSkillManager:
         )
 
         # Compute project-local overrides (REQ-OVR-001..004)
-        overrides: frozenset[str] = (
-            detect_project_local_overrides(project_dir) if project_dir is not None else frozenset()
+        _plsc = backend is None or backend.capabilities.project_local_skills_capable
+        overrides: frozenset[ProjectLocalOverride] = (
+            detect_project_local_overrides(project_dir)
+            if project_dir is not None and _plsc
+            else frozenset()
         )
+        _override_name_set: frozenset[str] = override_names(overrides)
         self._skills_subdir = (
             Path(backend.capabilities.skills_subdir)
             if backend is not None and backend.capabilities.skills_subdir
@@ -673,7 +679,7 @@ class DefaultSessionSkillManager:
                 continue
             if not _should_inject_skill(
                 skill_info,
-                overrides=overrides,
+                overrides=_override_name_set,
                 effective_disabled=effective_disabled,
                 effective_custom_tags=effective_custom_tags,
                 features=session_features,
@@ -687,7 +693,7 @@ class DefaultSessionSkillManager:
             ):
                 if skill_info.source == SkillSource.BUNDLED:
                     logger.debug("init_session_plugin_dir_skip", skill=skill_info.name)
-                elif skill_info.name in overrides:
+                elif skill_info.name in _override_name_set:
                     logger.debug("init_session_override_skip", skill=skill_info.name)
                 else:
                     logger.debug("init_session_subset_skip", skill=skill_info.name)
@@ -717,13 +723,36 @@ class DefaultSessionSkillManager:
             skill_dir = skills_base / skill_info.name
             skill_dir.mkdir(exist_ok=True)
             atomic_write(skill_dir / "SKILL.md", content)
+        for override in overrides:
+            if allow_only is not None and allow_only and override.name not in allow_only:
+                logger.debug("init_session_override_allow_only_skip", skill=override.name)
+                continue
+            dest_dir = skills_base / override.name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(override.skill_path, dest_dir / "SKILL.md")
+            except OSError:
+                logger.warning(
+                    "init_session_project_local_copy_failed",
+                    skill=override.name,
+                    source=str(override.skill_path),
+                )
+                continue
+            logger.debug(
+                "init_session_project_local_copy",
+                skill=override.name,
+                source=str(override.skill_path),
+                search_dir=override.search_dir,
+            )
         if allow_only is not None and allow_only:
             written = {p.name for p in skills_base.iterdir() if p.is_dir()}
             bundled_names = {
                 s.name for s in self._provider.list_skills() if s.source == SkillSource.BUNDLED
             }
             gated_omitted = tier2_skills & allow_only
-            achievable = allow_only - overrides - bundled_names - gated_omitted - format_rejected
+            achievable = (
+                allow_only - _override_name_set - bundled_names - gated_omitted - format_rejected
+            )
             if achievable and not (written & achievable):
                 raise RuntimeError(
                     f"init_session: allow_only={sorted(allow_only)!r} specified but "

@@ -168,8 +168,10 @@ class TestInitSessionAllowOnly:
         )
 
         skills_base = session_path / ".claude" / "skills"
-        # alpha is suppressed by channel-dedup (project-local override exists)
-        assert not (skills_base / "alpha").exists()
+        # alpha bundled copy suppressed; project-local copy delivered via Channel 2
+        delivered = skills_base / "alpha" / "SKILL.md"
+        assert delivered.exists(), "project-local override must be copied into ephemeral dir"
+        assert "local" in delivered.read_text()
         assert (skills_base / "beta" / "SKILL.md").exists()
 
     def test_allow_only_logs_debug_skip(self, tmp_path: Path) -> None:

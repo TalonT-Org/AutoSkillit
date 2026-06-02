@@ -88,6 +88,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_dry_walkthrough_transformation_extent.py` | Contract test: dry-walkthrough SKILL.md Step 2 must check transformation extent/scope |
 | `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 | `test_source_attribution_contracts.py` | Cross-skill contract: source-attribution prohibition in dual-source skills |
+| `test_project_local_skill_delivery_contract.py` | Symmetric delivery contract tests for project-local skill overrides |
 
 ## Architecture Notes
 

@@ -175,34 +175,70 @@ steps:
     on_failure: create_worktree
     on_result:
     - when: "${{ result.verdict }} == GO"
-      route: plan_visualization
+      route: dial
     - when: "${{ result.verdict }} == REVISE"
       route: revise_design
     - when: "${{ result.verdict }} == STOP"
       route: resolve_design_review
     - route: create_worktree
 
-  plan_visualization:
+  dial:
     tool: run_skill
     model: ""
+    phoropter_family: vis-lens
     with:
-      skill_command: "/autoskillit:plan-visualization ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
+      skill_command: "/autoskillit:select-vis-lenses ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
-      step_name: plan_visualization
-      output_dir: "{{AUTOSKILLIT_TEMP}}/plan-visualization"
+      step_name: dial
+      output_dir: "{{AUTOSKILLIT_TEMP}}/select-vis-lenses"
     capture:
-      visualization_plan_path: "${{ result.visualization_plan_path }}"
-      report_plan_path: "${{ result.report_plan_path }}"
+      selected_lenses: "${{ result.selected_lenses }}"
+      lens_context_paths: "${{ result.lens_context_paths }}"
       disambiguation_rule_applied: "${{ result.disambiguation_rule_applied }}"
       tier_c_lens: "${{ result.tier_c_lens }}"
       methodology_tradition: "${{ result.methodology_tradition }}"
+    on_success: apply
+    on_failure: escalate_stop
+
+  apply:
+    tool: run_skill
+    model: ""
+    phoropter_family: vis-lens
+    with:
+      skill_command: "/autoskillit:vis-lens-{slug} {context_path}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: apply
+      output_dir: "{{AUTOSKILLIT_TEMP}}/run-vis-lenses"
+    capture_list:
+      vis_lens_output_paths: "${{ result.diagram_path }}"
+    retries: 0
+    on_success: synthesize
+    on_failure: escalate_stop
+    note: >
+      LENS ITERATION: context.selected_lenses contains comma-separated vis-lens
+      slugs (e.g. "always-on,chart-select"). context.lens_context_paths contains
+      the corresponding comma-separated context file paths (same order as slugs).
+      For each lens slug, run:
+        /autoskillit:vis-lens-{slug} {matching_context_path}
+      Run all selected lenses in parallel (all run_skill calls in a single message).
+      Accumulate each diagram_path value into context.vis_lens_output_paths via
+      capture_list. If a lens fails, continue with remaining lenses.
+
+  synthesize:
+    tool: run_skill
+    model: ""
+    phoropter_family: vis-lens
+    with:
+      skill_command: "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/run-vis-lenses --tier-c-lens=${{ context.tier_c_lens }} --methodology-tradition=${{ context.methodology_tradition }} --disambiguation-rule-applied=${{ context.disambiguation_rule_applied }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: synthesize
+      output_dir: "{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan"
+    capture:
+      visualization_plan_path: "${{ result.visualization_plan_path }}"
+      report_plan_path: "${{ result.report_plan_path }}"
       visualization_plan_trace_path: "${{ result.visualization_plan_trace_path }}"
     on_success: create_worktree
     on_failure: escalate_stop
-    note: >
-      Selects 2–4 vis-lens skills via three-tier logic, runs them in parallel, and
-      synthesizes outputs into visualization-plan.md and report-plan.md.
-      Runs before worktree creation so outputs can be committed into the research dir.
 
   revise_design:
     action: route

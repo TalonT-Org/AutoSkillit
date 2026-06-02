@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:810be9842d1e34a236f2ce1fc60f534a1fb67e90aab0153f5102233387b304c9 -->
+<!-- autoskillit-recipe-hash: sha256:88d0f9f65b2b9fc09968435229d21f6264c19a9b986d74a771f9fe4826d88085 -->
 <!-- autoskillit-diagram-format: v7 -->
 
 ## research
@@ -8,7 +8,9 @@ scope
 plan_experiment
 |
 review_design
-|   +-- [plan_visualization] (optional)
+|   +-- [dial] (optional)
+|   |    +-- [apply] (phoropter: vis-lens)
+|   |    |    +-- [synthesize] (phoropter: vis-lens)
 |   +-- [resolve_design_review] (on STOP verdict)
 |   x fail [-> escalate_stop]
 |

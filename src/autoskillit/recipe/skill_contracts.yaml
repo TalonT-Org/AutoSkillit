@@ -1387,6 +1387,73 @@ skills:
     - "visualization_plan_path = /tmp/plan-visualization/visualization-plan.md\nreport_plan_path = /tmp/plan-visualization/report-plan.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  select-vis-lenses:
+    inputs:
+    - name: source_dir
+      type: directory_path
+      required: true
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: scope_report_path
+      type: string
+      required: false
+    outputs:
+    - name: selected_lenses
+      type: string
+    - name: lens_context_paths
+      type: string
+    - name: disambiguation_rule_applied
+      type: string
+    - name: tier_c_lens
+      type: string
+    - name: methodology_tradition
+      type: string
+    pattern_examples:
+    - "selected_lenses = vis-lens-always-on,vis-lens-chart-select\nlens_context_paths = /tmp/select-vis-lenses/vis_ctx_always-on.md,/tmp/select-vis-lenses/vis_ctx_chart-select.md\ndisambiguation_rule_applied = null\ntier_c_lens = null\nmethodology_tradition = null\n%%ORDER_UP%%"
+    write_behavior: always
+
+  synthesize-vis-plan:
+    inputs:
+    - name: source_dir
+      type: directory_path
+      required: true
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: capture_dir
+      type: directory_path
+      required: true
+    - name: tier_c_lens
+      type: string
+      required: false
+    - name: methodology_tradition
+      type: string
+      required: false
+    - name: disambiguation_rule_applied
+      type: string
+      required: false
+    - name: applied_union_rules
+      type: string
+      required: false
+    - name: precedence_trace
+      type: string
+      required: false
+    outputs:
+    - name: visualization_plan_path
+      type: file_path
+    - name: report_plan_path
+      type: file_path
+    - name: visualization_plan_trace_path
+      type: file_path
+    expected_output_patterns:
+    - "visualization_plan_path[ \\t]*=[ \\t]*/.+"
+    - "report_plan_path[ \\t]*=[ \\t]*/.+"
+    - "visualization_plan_trace_path[ \\t]*=[ \\t]*/.+"
+    pattern_examples:
+    - "visualization_plan_path = /tmp/synthesize-vis-plan/visualization-plan.md\nreport_plan_path = /tmp/synthesize-vis-plan/report-plan.md\nvisualization_plan_trace_path = /tmp/synthesize-vis-plan/visualization-plan-trace.md\n%%ORDER_UP%%"
+    write_behavior: always
+
   stage-data:
     inputs:
     - name: experiment_plan

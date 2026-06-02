@@ -219,7 +219,7 @@ consumed by both review-design (this skill) and vis-lens-methodology-norms (#846
    warning_threshold: 0
    ```
 
-5. **Proceed to Step 8** (Emit Output Tokens) — the recipe routes to `plan_visualization`.
+5. **Proceed to Step 8** (Emit Output Tokens) — the recipe routes to `dial`.
 
 The advisory is appended to the evaluation dashboard file (which is later copied to
 `research/{slug}/audit/design-review-dashboard.md` by `create_worktree.sh`).

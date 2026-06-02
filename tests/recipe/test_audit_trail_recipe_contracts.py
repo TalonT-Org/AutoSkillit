@@ -11,11 +11,11 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 RECIPE_PATH = Path("src/autoskillit/recipes/research.yaml")
 
 
-def test_plan_visualization_captures_disambiguation_fields():
-    """plan_visualization step captures disambiguation_rule_applied and tier_c_lens."""
+def test_dial_captures_disambiguation_fields():
+    """dial step captures disambiguation_rule_applied and tier_c_lens."""
     recipe = load_yaml(RECIPE_PATH)
-    pv_step = recipe["steps"]["plan_visualization"]
-    captures = pv_step.get("capture", {})
+    dial_step = recipe["steps"]["dial"]
+    captures = dial_step.get("capture", {})
     assert "disambiguation_rule_applied" in captures
     assert "tier_c_lens" in captures
 

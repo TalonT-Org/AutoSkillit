@@ -292,3 +292,41 @@ def test_fleet_claim_guard_deny_includes_reset_dispatch_guidance() -> None:
         output = _run_guard(event)
     reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
     assert "reset_dispatch" in reason
+
+
+def test_fleet_claim_guard_deny_emphasizes_resume_primary() -> None:
+    """T7: Deny message makes resume unambiguously primary."""
+    event = {
+        "tool_name": "dispatch_food_truck",
+        "tool_input": {
+            "ingredients": {
+                "issue_urls": _ISSUE_URL,
+            },
+        },
+    }
+    with mock.patch(
+        "autoskillit.hooks.guards.fleet_claim_guard.subprocess.run",
+        _mock_gh({_ISSUE_URL: [{"name": "in-progress"}]}),
+    ):
+        output = _run_guard(event)
+    reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "MUST resume" in reason
+
+
+def test_fleet_claim_guard_deny_labels_reset_as_last_resort() -> None:
+    """T8: Deny message labels reset_dispatch as last resort."""
+    event = {
+        "tool_name": "dispatch_food_truck",
+        "tool_input": {
+            "ingredients": {
+                "issue_urls": _ISSUE_URL,
+            },
+        },
+    }
+    with mock.patch(
+        "autoskillit.hooks.guards.fleet_claim_guard.subprocess.run",
+        _mock_gh({_ISSUE_URL: [{"name": "in-progress"}]}),
+    ):
+        output = _run_guard(event)
+    reason = json.loads(output)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "LAST RESORT" in reason

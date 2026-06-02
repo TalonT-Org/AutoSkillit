@@ -255,15 +255,29 @@ class TestCheckMcpServerRegisteredCodexBackend:
 
 
 class TestCheckClaudeProcessStateBreakdownBackendGuard:
-    def test_non_claude_code_backend_returns_ok_skip(self) -> None:
-        """Non-claude-code backend returns OK skip without subprocess access."""
+    def test_non_claude_code_backend_returns_ok_skip(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Backend with custom process_name uses capability-based derivation."""
+        import subprocess
+        from types import SimpleNamespace
+
         from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
         from autoskillit.core import Severity
 
-        result = _check_claude_process_state_breakdown(backend="aider")
+        stub = SimpleNamespace(capabilities=SimpleNamespace(process_name="testbot"))
+        header = "PID STAT %CPU COMMAND\n"
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: type(
+                "CP", (), {"returncode": 0, "stdout": header + "1234 S 0.5 python"}
+            )(),
+        )
+        result = _check_claude_process_state_breakdown(backend=stub)
         assert result.severity == Severity.OK
-        assert result.check == "claude_process_state"
-        assert "skipped" in result.message.lower()
+        assert result.check == "testbot_process_state"
+        assert "No testbot processes running" in result.message
 
     def test_none_backend_preserves_existing_behavior(
         self, monkeypatch: pytest.MonkeyPatch
@@ -294,6 +308,7 @@ class TestCheckClaudeProcessStateBreakdownBackendGuard:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
         header = "PID STAT %CPU COMMAND\n"
         monkeypatch.setattr(
@@ -303,7 +318,7 @@ class TestCheckClaudeProcessStateBreakdownBackendGuard:
                 "CP", (), {"returncode": 0, "stdout": header + "1234 S 0.5 claude"}
             )(),
         )
-        result = _check_claude_process_state_breakdown(backend="claude-code")
+        result = _check_claude_process_state_breakdown(backend=ClaudeCodeBackend())
         assert result.severity == Severity.OK
         assert "skipped" not in result.message.lower()
 
@@ -324,6 +339,7 @@ class TestCheckClaudeProcessStateBreakdownCodexBackend:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         header = "PID STAT %CPU COMMAND\n"
         monkeypatch.setattr(
@@ -331,7 +347,7 @@ class TestCheckClaudeProcessStateBreakdownCodexBackend:
             "run",
             lambda *a, **kw: self._ps_result(header + "1234 S 0.5 codex"),
         )
-        result = _check_claude_process_state_breakdown(backend="codex")
+        result = _check_claude_process_state_breakdown(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert result.check == "codex_process_state"
         assert "S=1" in result.message
@@ -342,6 +358,7 @@ class TestCheckClaudeProcessStateBreakdownCodexBackend:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         header = "PID STAT %CPU COMMAND\n"
         monkeypatch.setattr(
@@ -349,7 +366,7 @@ class TestCheckClaudeProcessStateBreakdownCodexBackend:
             "run",
             lambda *a, **kw: self._ps_result(header + "1234 D 99.0 codex"),
         )
-        result = _check_claude_process_state_breakdown(backend="codex")
+        result = _check_claude_process_state_breakdown(backend=CodexBackend())
         assert result.severity == Severity.WARNING
         assert result.check == "codex_process_state"
         assert "D=1" in result.message
@@ -362,6 +379,7 @@ class TestCheckClaudeProcessStateBreakdownCodexBackend:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         header = "PID STAT %CPU COMMAND\n"
         monkeypatch.setattr(
@@ -369,7 +387,7 @@ class TestCheckClaudeProcessStateBreakdownCodexBackend:
             "run",
             lambda *a, **kw: self._ps_result(header + "5678 S 0.1 python"),
         )
-        result = _check_claude_process_state_breakdown(backend="codex")
+        result = _check_claude_process_state_breakdown(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert result.check == "codex_process_state"
         assert result.message == "No codex processes running"
@@ -380,12 +398,13 @@ class TestCheckClaudeProcessStateBreakdownCodexBackend:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         def _raise(*a, **kw):
             raise FileNotFoundError("ps")
 
         monkeypatch.setattr(subprocess, "run", _raise)
-        result = _check_claude_process_state_breakdown(backend="codex")
+        result = _check_claude_process_state_breakdown(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert result.check == "codex_process_state"
         assert "ps unavailable" in result.message
@@ -402,13 +421,12 @@ class TestRunDoctorBackendWiring:
         from autoskillit.cli.doctor import run_doctor
         from autoskillit.cli.doctor._doctor_types import DoctorResult
         from autoskillit.core import Severity
-        from autoskillit.execution.backends.codex import CodexBackend
 
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
         (tmp_path / ".autoskillit").mkdir()
         (tmp_path / ".autoskillit" / "config.yaml").write_text(
-            "agent_backend:\n  backend: codex\n"
+            "agent_backend:\n  backend: aider\n"
         )
 
         captured_backends: list[object] = []
@@ -421,7 +439,7 @@ class TestRunDoctorBackendWiring:
             run_doctor()
 
         assert len(captured_backends) == 1
-        assert isinstance(captured_backends[0], CodexBackend)
+        assert captured_backends[0] is None
 
 
 class TestDoctorCorruptConfigDetail:
@@ -457,10 +475,13 @@ class TestCheckCodexVersion:
         )()
 
     def test_skip_for_non_codex_backend(self) -> None:
+        from types import SimpleNamespace
+
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
         from autoskillit.core import Severity
 
-        result = _check_codex_version(backend="claude-code")
+        stub = SimpleNamespace(capabilities=SimpleNamespace(version_check_command=""))
+        result = _check_codex_version(backend=stub)
         assert result.severity == Severity.OK
         assert "skipped" in result.message.lower()
 
@@ -469,12 +490,13 @@ class TestCheckCodexVersion:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         def _raise(*a, **kw):
             raise FileNotFoundError("codex")
 
         monkeypatch.setattr(subprocess, "run", _raise)
-        result = _check_codex_version()
+        result = _check_codex_version(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert "unavailable" in result.message.lower()
 
@@ -483,12 +505,13 @@ class TestCheckCodexVersion:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         def _raise(*a, **kw):
             raise subprocess.TimeoutExpired(cmd="codex", timeout=5)
 
         monkeypatch.setattr(subprocess, "run", _raise)
-        result = _check_codex_version()
+        result = _check_codex_version(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert "unavailable" in result.message.lower()
 
@@ -497,13 +520,14 @@ class TestCheckCodexVersion:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         monkeypatch.setattr(
             subprocess,
             "run",
             lambda *a, **kw: self._codex_result("Codex 0.129.0\n"),
         )
-        result = _check_codex_version()
+        result = _check_codex_version(backend=CodexBackend())
         assert result.severity == Severity.WARNING
         assert "0.129.0" in result.message
         assert "below minimum" in result.message
@@ -513,13 +537,14 @@ class TestCheckCodexVersion:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         monkeypatch.setattr(
             subprocess,
             "run",
             lambda *a, **kw: self._codex_result("Codex 0.130.0\n"),
         )
-        result = _check_codex_version()
+        result = _check_codex_version(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert "0.130.0" in result.message
 
@@ -528,12 +553,13 @@ class TestCheckCodexVersion:
 
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_version
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         monkeypatch.setattr(
             subprocess,
             "run",
             lambda *a, **kw: self._codex_result("Codex 0.131.0\n"),
         )
-        result = _check_codex_version()
+        result = _check_codex_version(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert "0.131.0" in result.message

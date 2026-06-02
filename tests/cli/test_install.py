@@ -176,13 +176,19 @@ class TestCLIInstall:
     def test_install_backend_guard_returns_false_for_non_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:
-        """install() returns False with message when backend != 'claude-code'."""
+        """install() returns False with message when capability is False."""
+        from unittest.mock import MagicMock
+
         from autoskillit.config import AgentBackendConfig, AutomationConfig
 
-        mock_cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
+        mock_cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="codex"))
         monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         monkeypatch.setattr(Path, "cwd", staticmethod(lambda: tmp_path))
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.plugin_install_capable = False
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
         from autoskillit.cli._marketplace import install
 
@@ -190,7 +196,7 @@ class TestCLIInstall:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "only supported with the claude-code backend" in captured.out.lower()
+        assert "plugin_install_capable" in captured.out
 
     def test_install_backend_guard_allows_claude_code(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture

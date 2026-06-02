@@ -795,7 +795,9 @@ class CodexBackend:
         try:
             (session_dir / "sessions").symlink_to(sessions_target)
         except OSError:
-            logger.warning("codex_sessions_symlink_failed", target=str(sessions_target))
+            logger.warning(
+                "codex_sessions_symlink_failed", target=str(sessions_target), exc_info=True
+            )
 
     def validate_skill_content(self, content: str) -> list[str]:
         return []

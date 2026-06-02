@@ -23,6 +23,7 @@ from autoskillit.core import (
     SKILL_SESSION_REQUIRED_ENV,
     AgentSessionResult,
     BackendCapabilities,
+    BackendConventions,
     BackendEventKind,
     BareResume,
     ClaudeDirectoryConventions,
@@ -266,6 +267,16 @@ class ClaudeCodeBackend:
     @property
     def capabilities(self) -> BackendCapabilities:
         return CLAUDE_CODE_CAPABILITIES
+
+    @property
+    def conventions(self) -> BackendConventions:
+        return BackendConventions(
+            skills_subdir=Path(".claude/skills"),
+            project_local_skill_search_dirs=(".claude/skills", ".autoskillit/skills"),
+        )
+
+    def setup_session_dir(self, session_dir: Path) -> None:
+        pass
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)

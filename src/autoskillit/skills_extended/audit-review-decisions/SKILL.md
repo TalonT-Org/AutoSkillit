@@ -129,7 +129,7 @@ implemented. Identify review debt before it compounds.
    ```
    Build the alias query string in a shell variable and invoke:
    ```bash
-   BATCH_QUERY="query { rateLimit { cost remaining resetAt } pr1: repository(owner:\"$OWNER\", name:\"$REPO\") { pullRequest(number:$N1) { number title mergedAt reviews(first:100){nodes{author{login}body state submittedAt}} reviewThreads(first:100){pageInfo{hasNextPage endCursor}nodes{isResolved comments(first:100){nodes{databaseId author{login}body path line createdAt}}}} } } pr2: repository(owner:\"$OWNER\", name:\"$REPO\") { pullRequest(number:$N2) { ... } } }"
+   BATCH_QUERY="query { rateLimit { cost remaining resetAt } pr1: repository(owner:\"$OWNER\", name:\"$REPO\") { pullRequest(number:$N1) { number title mergedAt reviews(first:100){nodes{author { login } body state submittedAt}} reviewThreads(first:100){pageInfo{hasNextPage endCursor}nodes{isResolved comments(first:100){nodes{databaseId author { login } body path line createdAt}}}} } } pr2: repository(owner:\"$OWNER\", name:\"$REPO\") { pullRequest(number:$N2) { ... } } }"
    gh api graphql -f query="$BATCH_QUERY"
    ```
    Include `rateLimit { cost remaining resetAt }` at query root.

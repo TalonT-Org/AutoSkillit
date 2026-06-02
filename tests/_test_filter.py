@@ -462,6 +462,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "arch/test_write_restriction_coverage.py",
             "skills/test_graphql_invocation_completeness.py",
             "skills/test_make_campaign_compliance.py",
+            "skills/test_review_pr_prior_thread_awareness.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_skill_tool_syntax_contracts.py",
             "skills/test_audit_impl_diff_discipline.py",

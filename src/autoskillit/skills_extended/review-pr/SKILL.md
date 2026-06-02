@@ -147,7 +147,7 @@ query($owner:String!, $repo:String!, $number:Int!, $after:String) {
 ```bash
 # Fetch all pages; repeat with after=$endCursor while hasNextPage is true
 gh api graphql \
-  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{isResolved path line originalLine comments(first:5){nodes{databaseId body author{login}}}}}}}}' \
+  -f query='query($owner:String!,$repo:String!,$number:Int!,$after:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}nodes{isResolved path line originalLine comments(first:5){nodes{databaseId body author { login }}}}}}}}' \
   -F owner="$OWNER" \
   -F repo="$REPO" \
   -F number=$PR_NUMBER \

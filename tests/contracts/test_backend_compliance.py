@@ -144,16 +144,17 @@ class TestBackendCompliance:
         assert CodexBackend().validate_session_layout(tmp_path) == []
 
     def test_validate_session_layout_empty_dir_returns_errors(self, tmp_path):
-        from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
 
-        for backend_cls in [ClaudeCodeBackend, CodexBackend]:
+        for backend_cls in BACKEND_REGISTRY.values():
             errors = backend_cls().validate_session_layout(tmp_path)
             assert len(errors) > 0, f"{backend_cls.__name__} should report errors on empty dir"
 
     def test_backend_conventions_skills_subdir_matches_validate_session_layout(self, tmp_path):
         from autoskillit.execution.backends import BACKEND_REGISTRY, CodexBackend
         from autoskillit.execution.backends.codex import (
-            CodexBackend as _CodexBackend,  # noqa: F401
+            CodexBackend as _CodexBackend,  # noqa: F401 — triggers CodexBackend registration in BACKEND_REGISTRY
         )
 
         for cls in BACKEND_REGISTRY.values():

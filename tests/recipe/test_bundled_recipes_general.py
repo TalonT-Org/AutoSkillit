@@ -23,6 +23,7 @@ SMOKE_RECIPE = PROJECT_ROOT / ".autoskillit" / "recipes" / "smoke-test.yaml"
 
 _ALL_RECIPE_PATHS = all_validated_recipe_paths(PROJECT_ROOT)
 _BUNDLED_ONLY = [p for p in _ALL_RECIPE_PATHS if "src/autoskillit/recipes" in str(p)]
+_BUNDLED_ROOT_ONLY = [p for p in _BUNDLED_ONLY if p.parent == builtin_recipes_dir()]
 
 
 def _resolve_recipe_path(name: str) -> Path:
@@ -105,7 +106,7 @@ def test_pre_merge_fix_on_context_limit_routes_to_test(recipe_name: str) -> None
 
 def test_every_bundled_recipe_declares_requires_packs() -> None:
     """All top-level bundled recipes must declare a non-empty requires_packs."""
-    for path in _BUNDLED_ONLY:
+    for path in _BUNDLED_ROOT_ONLY:
         recipe = load_recipe(path)
         assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
 

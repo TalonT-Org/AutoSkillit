@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from fastmcp import Context
@@ -38,19 +39,29 @@ def _cleanup_resume_gate_state(project_dir: Path, dispatch_id: str) -> None:
     state_file = project_dir / ".autoskillit" / "temp" / "resume_gate_state.json"
     if not state_file.is_file():
         return
-    lock_path = state_file.with_suffix(".lock")
     try:
-        with open(lock_path, "wb") as fh:
-            fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return
+        ra = state.get("resume_attempted", {})
+        ra.pop(dispatch_id, None)
+        content = json.dumps(state)
+        fd, tmp = tempfile.mkstemp(dir=state_file.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, state_file)
+        except BaseException:
             try:
-                state = json.loads(state_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                return
-            ra = state.get("resume_attempted", {})
-            ra.pop(dispatch_id, None)
-            state_file.write_text(json.dumps(state), encoding="utf-8")
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
     except Exception:
-        pass
+        logger.debug("resume_gate_state cleanup failed", dispatch_id=dispatch_id)
 
 
 @mcp.tool(

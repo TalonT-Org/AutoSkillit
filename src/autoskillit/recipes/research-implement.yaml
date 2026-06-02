@@ -434,7 +434,7 @@ steps:
       route: ensure_results
     on_failure: troubleshoot_run_failure
     on_exhausted: ensure_results
-    on_context_limit: ensure_results
+    on_context_limit: escalate_stop
 
   troubleshoot_run_failure:
     tool: run_skill
@@ -481,7 +481,7 @@ steps:
     - when: "${{ result.verdict }} == BLOCKED"
       route: escalate_stop
     on_failure: ensure_results
-    on_context_limit: ensure_results
+    on_context_limit: escalate_stop
 
   check_run_fix_loop:
     tool: run_python

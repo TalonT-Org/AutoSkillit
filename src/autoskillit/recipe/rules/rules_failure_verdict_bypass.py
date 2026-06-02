@@ -50,7 +50,11 @@ def _check_failure_verdict_bypass_reachable(ctx: ValidationContext) -> list[Rule
                 for cond in conditions:
                     if cond.when and value in cond.when and cond.route:
                         target_step = ctx.recipe.steps.get(cond.route)
-                        if target_step and not is_success_stop(target_step):
+                        if (
+                            target_step
+                            and target_step.action == "stop"
+                            and not is_success_stop(target_step)
+                        ):
                             has_failure_verdict = True
                             break
                 if has_failure_verdict:

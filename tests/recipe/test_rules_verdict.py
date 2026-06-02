@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-import autoskillit.recipe.rules.rules_verdict as _rv
+import autoskillit.recipe.contracts as _contracts
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (
@@ -380,7 +380,7 @@ def test_on_result_values_in_allowed_values_fires_on_unregistered_route(
         verdict_route="approved_with_comments",
         allowed_values=["approved", "changes_requested"],
     )
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: manifest)
     findings = run_semantic_rules(recipe)
     rule_findings = [f for f in findings if f.rule == "on-result-values-in-allowed-values"]
     assert len(rule_findings) >= 1, (
@@ -399,7 +399,7 @@ def test_on_result_values_in_allowed_values_passes_when_consistent(
         verdict_route="approved",
         allowed_values=["approved", "changes_requested", "approved_with_comments", "needs_human"],
     )
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: manifest)
     findings = run_semantic_rules(recipe)
     rule_findings = [f for f in findings if f.rule == "on-result-values-in-allowed-values"]
     assert rule_findings == [], (
@@ -456,7 +456,7 @@ def test_on_result_values_in_allowed_values_ignores_non_verdict_conditions(
             ),
         }
     )
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: manifest)
+    monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: manifest)
     findings = run_semantic_rules(recipe)
     rule_findings = [f for f in findings if f.rule == "on-result-values-in-allowed-values"]
     assert rule_findings == [], (
@@ -584,7 +584,7 @@ _VERDICT_SKILL_MANIFEST: dict = {
 
 def test_verdict_output_requires_on_result_fires(monkeypatch: pytest.MonkeyPatch) -> None:
     """Rule must ERROR when a step uses on_success for a skill with verdict + allowed_values."""
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: _VERDICT_SKILL_MANIFEST)
+    monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: _VERDICT_SKILL_MANIFEST)
     findings = run_semantic_rules(_make_recipe(_on_success_recipe_with_verdict_skill()))
     rule_names = [f.rule for f in findings]
     assert "verdict-output-requires-on-result" in rule_names, (
@@ -601,7 +601,7 @@ def test_verdict_output_requires_on_result_passes_with_on_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Rule must not fire when step uses on_result with all verdict values covered."""
-    monkeypatch.setattr(_rv, "load_bundled_manifest", lambda: _VERDICT_SKILL_MANIFEST)
+    monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: _VERDICT_SKILL_MANIFEST)
     findings = run_semantic_rules(_make_recipe(_on_result_recipe_with_verdict_skill()))
     rule_names = [f.rule for f in findings]
     assert "verdict-output-requires-on-result" not in rule_names, (

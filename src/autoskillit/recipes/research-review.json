@@ -375,7 +375,7 @@
         }
       ],
       "on_failure": "re_push_research",
-      "on_context_limit": "re_push_research",
+      "on_context_limit": "escalate_stop",
       "note": "Targeted re-run of affected benchmarks after review resolution applied code fixes. Uses --adjust to read previous results and re-run only what changed. Intentionally shadows the experiment_results ingredient (L58): after this step, context.experiment_results holds the re-run results_path so re_generate_report uses fresh data. on_failure falls through to push as best-effort — the code fixes from resolve are already committed and should still be pushed.\n"
     },
     "re_generate_report": {

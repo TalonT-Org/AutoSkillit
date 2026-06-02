@@ -35,8 +35,10 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         skill_info = ctx.skill_resolver.resolve(skill_name)
         if skill_info is None:
             continue
-        reqs: frozenset[str] = getattr(skill_info, "backend_requirements", frozenset())
-        if reqs and ctx.backend_name not in reqs:
+        if (
+            skill_info.backend_requirements
+            and ctx.backend_name not in skill_info.backend_requirements
+        ):
             findings.append(
                 RuleFinding(
                     rule="backend-incompatible-skill",
@@ -44,7 +46,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': skill '{skill_name}' requires backend "
-                        f"{sorted(reqs)} but recipe targets "
+                        f"{sorted(skill_info.backend_requirements)} but recipe targets "
                         f"backend '{ctx.backend_name}'."
                     ),
                 )

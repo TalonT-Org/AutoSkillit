@@ -180,7 +180,7 @@ def test_interactive_session_reload_uses_named_resume(
     monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/claude")
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _make_result(0))
     monkeypatch.setattr("autoskillit.cli.ui._terminal.terminal_guard", _noop_terminal_guard)
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: True)
+    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
 
     from autoskillit.cli.session._session_launch import _run_interactive_session
 

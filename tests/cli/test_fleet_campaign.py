@@ -79,7 +79,7 @@ def test_fleet_run_exit_code_passthrough(monkeypatch: pytest.MonkeyPatch, tmp_pa
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: True)
+    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
     monkeypatch.setattr(
         subprocess,
         "run",

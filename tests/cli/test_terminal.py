@@ -440,7 +440,9 @@ class TestCookTerminalGuard:
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: False
+        )
         # is_first_run is imported inside cook() body — patch the source module
         monkeypatch.setattr("autoskillit.cli._onboarding.is_first_run", lambda _: False)
         # cook() calls input() for launch confirmation before subprocess.run
@@ -485,7 +487,9 @@ class TestCookTerminalGuard:
             lambda fd, when, attrs: tcsetattr_calls.append(attrs),
         )
         monkeypatch.setattr("autoskillit.cli.ui._terminal.termios.error", termios.error)
-        monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda: False)
+        monkeypatch.setattr(
+            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: False
+        )
         monkeypatch.setattr(
             "autoskillit.cli.session._session_launch.subprocess.run",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),

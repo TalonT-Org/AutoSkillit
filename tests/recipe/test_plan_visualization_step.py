@@ -17,11 +17,6 @@ def recipe():
     return load_recipe(RESEARCH_RECIPE_PATH)
 
 
-def test_plan_visualization_step_removed(recipe) -> None:
-    """plan_visualization must no longer exist — replaced by phoropter triple."""
-    assert "plan_visualization" not in recipe.steps
-
-
 def test_dial_step_exists(recipe) -> None:
     assert "dial" in recipe.steps
 
@@ -95,7 +90,7 @@ def test_synthesize_on_failure_escalate_stop(recipe) -> None:
 
 
 def test_review_design_go_routes_to_dial(recipe) -> None:
-    """review_design GO verdict must route to dial (not plan_visualization)."""
+    """review_design GO verdict must route to dial."""
     step = recipe.steps["review_design"]
     go_condition = next((c for c in step.on_result.conditions if c.when and "GO" in c.when), None)
     assert go_condition is not None, "Missing GO route in review_design"
@@ -110,17 +105,7 @@ def test_create_worktree_copies_viz_plan(recipe) -> None:
     assert "report_plan_path" in cmd
 
 
-def test_plan_visualization_skill_dir_exists() -> None:
-    """plan-visualization skill directory must still exist (not removed by this WP)."""
-    skill_path = pkg_root() / "skills_extended" / "plan-visualization" / "SKILL.md"
-    assert skill_path.exists()
-
-
-def test_select_vis_lenses_skill_dir_exists() -> None:
-    skill_path = pkg_root() / "skills_extended" / "select-vis-lenses" / "SKILL.md"
-    assert skill_path.exists()
-
-
-def test_synthesize_vis_plan_skill_dir_exists() -> None:
-    skill_path = pkg_root() / "skills_extended" / "synthesize-vis-plan" / "SKILL.md"
-    assert skill_path.exists()
+def test_select_vis_lenses_and_synthesize_vis_plan_skill_dirs_exist() -> None:
+    """Both phoropter skill directories must exist."""
+    assert (pkg_root() / "skills_extended" / "select-vis-lenses" / "SKILL.md").exists()
+    assert (pkg_root() / "skills_extended" / "synthesize-vis-plan" / "SKILL.md").exists()

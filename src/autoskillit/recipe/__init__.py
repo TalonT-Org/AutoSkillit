@@ -53,6 +53,8 @@ from autoskillit.recipe.identity import (  # noqa: E402
 )
 from autoskillit.recipe.io import (  # noqa: E402
     GROUP_LABELS,
+    all_validated_recipe_names,
+    all_validated_recipe_paths,
     builtin_sub_recipes_dir,
     find_campaign_by_name,
     find_recipe_by_name,
@@ -236,6 +238,8 @@ del _reg
 
 __all__ = [
     "GROUP_LABELS",
+    "all_validated_recipe_names",
+    "all_validated_recipe_paths",
     "group_rank",
     "ListRecipesResult",
     "LoadRecipeResult",

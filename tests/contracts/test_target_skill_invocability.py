@@ -13,7 +13,7 @@ import pytest
 from autoskillit.config import AutomationConfig, load_config
 from autoskillit.core import SkillSource, extract_skill_name, resolve_target_skill
 from autoskillit.recipe import load_recipe
-from autoskillit.recipe.io import builtin_recipes_dir
+from autoskillit.recipe.io import all_validated_recipe_paths
 from autoskillit.workspace import (
     DefaultSessionSkillManager,
     DefaultSkillResolver,
@@ -21,6 +21,8 @@ from autoskillit.workspace import (
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _make_session(
@@ -180,7 +182,12 @@ class TestAllRecipeSkillCommandsInvocable:
         resolver = DefaultSkillResolver()
         provider = SkillsDirectoryProvider()
 
-        for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+        _bundled_only = [
+            p
+            for p in all_validated_recipe_paths(_PROJECT_ROOT)
+            if "src/autoskillit/recipes" in str(p)
+        ]
+        for yaml_path in _bundled_only:
             recipe = load_recipe(yaml_path)
             for step_name, step in recipe.steps.items():
                 if step.tool != "run_skill":

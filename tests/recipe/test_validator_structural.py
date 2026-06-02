@@ -8,13 +8,16 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe.io import (
+    RECIPE_SCAN_DIRS,
     _parse_recipe,
-    builtin_recipes_dir,
+    all_validated_recipe_paths,
     load_recipe,
 )
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.recipe.validator import validate_recipe_structure
 from tests.recipe.conftest import VALID_RECIPE, _write_yaml
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -64,8 +67,7 @@ class TestValidateRecipe:
 
     # WF6
     def test_builtin_recipes_valid(self) -> None:
-        bd = builtin_recipes_dir()
-        yamls = list(bd.glob("*.yaml"))
+        yamls = all_validated_recipe_paths(_PROJECT_ROOT)
         assert len(yamls) >= 4
         for f in yamls:
             wf = load_recipe(f)
@@ -289,9 +291,13 @@ class TestValidateRecipe:
 
     # CON4
     def test_bundled_recipes_have_kitchen_rules(self) -> None:
-        wf_dir = builtin_recipes_dir()
+        _bundled_only = [
+            p
+            for p in all_validated_recipe_paths(_PROJECT_ROOT)
+            if "src/autoskillit/recipes" in str(p)
+        ]
         failures = []
-        for path in sorted(wf_dir.glob("*.yaml")):
+        for path in _bundled_only:
             wf = load_recipe(path)
             if not wf.kitchen_rules:
                 failures.append(f"{path.name}: missing kitchen_rules")
@@ -421,6 +427,23 @@ class TestValidateRecipe:
         )
         errors = validate_recipe_structure(recipe)
         assert not any("idle_output_timeout" in e for e in errors)
+
+
+def _project_local_recipes() -> list[Path]:
+    base = _PROJECT_ROOT / ".autoskillit" / "recipes"
+    paths: list[Path] = []
+    for subdir in RECIPE_SCAN_DIRS:
+        scan_dir = base / subdir
+        if scan_dir.is_dir():
+            paths.extend(sorted(scan_dir.glob("*.yaml")))
+    return paths
+
+
+@pytest.mark.parametrize("recipe_yaml", _project_local_recipes(), ids=lambda p: p.stem)
+def test_project_local_recipes_structurally_valid(recipe_yaml: Path) -> None:
+    wf = load_recipe(recipe_yaml)
+    errors = validate_recipe_structure(wf)
+    assert errors == [], f"Validation errors in {recipe_yaml.name}: {errors}"
 
 
 def test_validate_recipe_structure_importable() -> None:

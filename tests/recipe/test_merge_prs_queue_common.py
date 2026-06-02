@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
 from autoskillit.core import PRState
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
 from autoskillit.recipe.schema import Recipe
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 # pmp is excluded: pmp-specific assertions live in test_merge_prs_queue_pmp.py
@@ -36,7 +39,7 @@ def _discover_queue_recipe_fixtures() -> list[str]:
         "merge-prs": "pmp_recipe",
     }
     result = []
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in all_validated_recipe_paths(_PROJECT_ROOT):
         name = yaml_path.stem
         recipe = load_recipe(yaml_path)
         for step in recipe.steps.values():

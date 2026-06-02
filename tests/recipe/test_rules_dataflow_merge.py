@@ -2,24 +2,28 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core.types import Severity
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import _build_merge_worktree_recipe, _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_BUNDLED_ONLY = [
+    p for p in all_validated_recipe_paths(_PROJECT_ROOT) if "src/autoskillit/recipes" in str(p)
+]
+
 
 @pytest.fixture
 def all_bundled_recipes() -> list[tuple[str, Recipe]]:
     """Load all bundled recipe YAML files and return as (name, Recipe) pairs."""
-    result = []
-    for yaml_file in builtin_recipes_dir().glob("*.yaml"):
-        result.append((yaml_file.stem, load_recipe(yaml_file)))
-    return result
+    return [(p.stem, load_recipe(p)) for p in _BUNDLED_ONLY]
 
 
 def _make_stale_worktree_path_recipe() -> Recipe:
@@ -115,11 +119,9 @@ def test_merge_cleanup_uncaptured_rule_not_triggered_on_non_merge_step() -> None
 
 def test_bundled_recipes_capture_cleanup_succeeded() -> None:
     """N12: All bundled recipes with merge_worktree steps must capture cleanup_succeeded."""
-    wf_dir = builtin_recipes_dir()
-    yaml_files = list(wf_dir.glob("*.yaml"))
-    assert yaml_files
+    assert _BUNDLED_ONLY
 
-    for path in yaml_files:
+    for path in _BUNDLED_ONLY:
         wf = load_recipe(path)
         findings = run_semantic_rules(wf)
         uncaptured = [f for f in findings if f.rule == "merge-cleanup-uncaptured"]

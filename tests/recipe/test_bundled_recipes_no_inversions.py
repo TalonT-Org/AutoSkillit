@@ -7,15 +7,16 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import load_yaml
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_paths, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-_BUNDLED_RECIPE_PATHS: list[Path] = sorted(builtin_recipes_dir().glob("*.yaml"))
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_ALL_RECIPE_PATHS: list[Path] = all_validated_recipe_paths(_PROJECT_ROOT)
 
 
-@pytest.mark.parametrize("recipe_path", _BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
+@pytest.mark.parametrize("recipe_path", _ALL_RECIPE_PATHS, ids=lambda p: p.stem)
 def test_bundled_recipe_has_no_capture_inversions(recipe_path):
     """After Part B: all bundled recipes produce zero inversion findings. Before
     Part B: the four recipes with wait_for_ci event='push' fail this test."""
@@ -27,7 +28,7 @@ def test_bundled_recipe_has_no_capture_inversions(recipe_path):
     )
 
 
-@pytest.mark.parametrize("recipe_path", _BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)
+@pytest.mark.parametrize("recipe_path", _ALL_RECIPE_PATHS, ids=lambda p: p.stem)
 def test_diagnose_ci_skill_command_uses_captured_ci_event(recipe_path):
     """No skill_command step may pass a hardcoded trigger event as a positional.
     All /autoskillit:diagnose-ci invocations must thread ${{ context.ci_event }}."""

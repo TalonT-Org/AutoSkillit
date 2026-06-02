@@ -71,4 +71,5 @@ class TestCheckMcpServerRegisteredCodexBranch:
         )
         result = _check_mcp_server_registered(backend=_stub)
         assert result.severity == Severity.OK
+        assert result.check == "mcp_server_registered"
         assert "skipped" not in result.message.lower()

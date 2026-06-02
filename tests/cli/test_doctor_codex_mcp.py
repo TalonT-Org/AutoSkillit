@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -59,7 +60,11 @@ class TestCheckMcpServerRegisteredCodexBranch:
         result = _check_mcp_server_registered(backend=CodexBackend())
         assert result.severity == Severity.WARNING
 
-    def test_non_codex_backend_skip(self) -> None:
+    def test_non_codex_backend_skip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        (tmp_path / ".claude.json").write_text(
+            '{"mcpServers": {"autoskillit": {"command": "autoskillit"}}}'
+        )
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         _stub = SimpleNamespace(
             name="stub-no-mcp",
             capabilities=SimpleNamespace(mcp_config_capable=False),

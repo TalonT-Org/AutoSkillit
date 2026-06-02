@@ -27,6 +27,7 @@ Sub-packages: types/ (see types/CLAUDE.md) and runtime/ (see runtime/CLAUDE.md).
 | `_step_context.py` | `current_step_name`, `current_order_id` ContextVars for pipeline step attribution |
 | `feature_flags.py` | `is_feature_enabled()` — IL-0 feature gate resolution primitive |
 | `tool_sequence_analysis.py` | Cross-session tool call sequence DFG analysis (stdlib-only) |
+| `bash_write_targets.py` | Bash command write-target extraction (stdlib-only, IL-0) |
 
 ## Architecture Notes
 

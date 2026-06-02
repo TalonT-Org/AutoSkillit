@@ -11,15 +11,11 @@ from __future__ import annotations
 import json
 import os
 
-import regex as re
-
+from autoskillit.core.bash_write_targets import extract_bash_write_targets
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
 _WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
 _BASH_TOOL_NAME: str = "Bash"
-_ABS_PATH_PATTERN: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+:-]+))')
-# Exclude paths of 4 chars or fewer (/tmp, /etc, /bin, /var) as low-signal noise.
-_MIN_BASH_PATH_LEN: int = 5
 
 
 def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
@@ -77,15 +73,12 @@ def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
             elif tool_name == _BASH_TOOL_NAME:
                 command = inputs.get("command", "")
                 if isinstance(command, str):
-                    for match in _ABS_PATH_PATTERN.finditer(command):
-                        path = match.group(1)
-                        if (
-                            len(path) >= _MIN_BASH_PATH_LEN
-                            and not path.startswith(cwd_prefix)
-                            and path != cwd.rstrip("/")
-                        ):
+                    targets = extract_bash_write_targets(command, cwd)
+                    for path in targets:
+                        if not path.startswith(cwd_prefix) and path != cwd.rstrip("/"):
                             warnings.append(
-                                f"Bash command contained path '{path}' outside session cwd '{cwd}'"
+                                f"Bash command contained write target '{path}'"
+                                f" outside session cwd '{cwd}'"
                             )
 
     return warnings

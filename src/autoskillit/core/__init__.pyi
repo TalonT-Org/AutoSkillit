@@ -1,3 +1,4 @@
+from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from ._claude_env import build_agent_env as build_agent_env
 from ._claude_env import build_claude_env as build_claude_env
 from ._cmd_runner import CmdRunner as CmdRunner

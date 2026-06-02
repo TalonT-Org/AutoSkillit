@@ -97,6 +97,8 @@ class ExecutorCall:
     backend_override: str | None = None
     marker_dir: Path | None = None
     caller_session_id: str | None = None
+    inspector_eligible: bool = False
+    inspector_model: str = ""
 
 
 @dataclasses.dataclass
@@ -199,6 +201,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         backend_override: str | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
+        inspector_eligible: bool = False,
+        inspector_model: str = "",
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -235,6 +239,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 backend_override=backend_override,
                 marker_dir=marker_dir,
                 caller_session_id=caller_session_id,
+                inspector_eligible=inspector_eligible,
+                inspector_model=inspector_model,
             )
         )
         if self._queue:

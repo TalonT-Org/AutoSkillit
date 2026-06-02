@@ -587,6 +587,9 @@ async def run_skill(
             effective_model = model
 
             _cfg = _get_config()
+            _in_fleet_dispatch = bool(os.environ.get(DISPATCH_ID_ENV_VAR))
+            _inspector_model = _cfg.fleet.inspector_model if _in_fleet_dispatch else ""
+
             if not step_provider and step_name and tool_ctx.active_recipe_steps is not None:
                 _recipe_step_pre = tool_ctx.active_recipe_steps.get(step_name)
                 if _recipe_step_pre is not None and _recipe_step_pre.provider:
@@ -922,6 +925,8 @@ async def run_skill(
                         resume_session_id=resume_session_id,
                         marker_dir=_marker_dir,
                         caller_session_id=_orchestrator_sid,
+                        inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
+                        inspector_model=_inspector_model,
                     )
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)

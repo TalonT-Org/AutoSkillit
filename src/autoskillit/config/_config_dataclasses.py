@@ -415,6 +415,7 @@ class FleetConfig:
     idle_output_timeout: float = 1800
     acquire_timeout_sec: float = 300.0
     max_issues_per_food_truck: int = 3
+    inspector_model: str = ""
 
     def validate(self, feature_enabled: bool) -> None:
         """Validate only when the feature is active."""

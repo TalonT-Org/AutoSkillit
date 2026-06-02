@@ -9,7 +9,13 @@ from typing import TYPE_CHECKING, assert_never
 import anyio
 import anyio.abc
 
-from autoskillit.core import ChannelBStatus, ChannelConfirmation, TerminationReason, get_logger
+from autoskillit.core import (
+    ChannelBStatus,
+    ChannelConfirmation,
+    InspectorEvidence,
+    TerminationReason,
+    get_logger,
+)
 from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
@@ -21,9 +27,25 @@ from autoskillit.execution.process._process_monitor import (
 from autoskillit.execution.session._exit_classification import is_signal_death_code
 
 if TYPE_CHECKING:
-    from autoskillit.core import InspectorVerdict, StreamParser
+    from autoskillit.core import InspectorCallback, InspectorVerdict, StreamParser
 
 logger = get_logger(__name__)
+
+INSPECTOR_MAX_SECONDS: float = 60.0
+CLEANUP_BUDGET_SECONDS: float = 15.0
+
+
+def _package_evidence(
+    stdout_path: Path,
+    idle_seconds: float,
+    execution_marker_present: bool,
+) -> InspectorEvidence:
+    return InspectorEvidence(
+        idle_seconds=idle_seconds,
+        stdout_path=str(stdout_path),
+        jsonl_lines=(),
+        execution_marker_present=execution_marker_present,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +98,7 @@ class RaceAccumulator:
     channel_b_orphaned_tool_result: bool = False
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
     exit_snapshot: dict[str, object] | None = None
+    inspector_verdict: InspectorVerdict | None = None
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
@@ -89,6 +112,7 @@ class RaceAccumulator:
             channel_b_orphaned_tool_result=self.channel_b_orphaned_tool_result,
             process_exited_event=self.process_exited_event,
             exit_snapshot=self.exit_snapshot,
+            inspector_verdict=self.inspector_verdict,
         )
 
 
@@ -161,6 +185,8 @@ async def _watch_stdout_idle(
     marker_dir: Path | None = None,
     session_id: str | None = None,
     max_suppression_seconds: float = 1800.0,
+    inspector_callback: InspectorCallback | None = None,
+    timeout_scope_ref: list[anyio.CancelScope | None] | None = None,
 ) -> None:
     """Kill the child if stdout stops growing for idle_output_timeout seconds.
 
@@ -223,6 +249,50 @@ async def _watch_stdout_idle(
                 "stdout idle for %ss — firing IDLE_STALL",
                 idle_output_timeout,
             )
+            if inspector_callback is not None:
+                _invoke = True
+                _budget = INSPECTOR_MAX_SECONDS
+
+                _scope = timeout_scope_ref[0] if timeout_scope_ref else None
+                if _scope is not None:
+                    _remaining = _scope.deadline - _time.monotonic()
+                    _budget = min(INSPECTOR_MAX_SECONDS, _remaining - CLEANUP_BUDGET_SECONDS)
+                    if _budget <= 0:
+                        logger.debug("inspector_skipped_insufficient_time", remaining=_remaining)
+                        _invoke = False
+                elif timeout_scope_ref is not None:
+                    logger.debug("inspector_skipped_scope_not_ready")
+                    _invoke = False
+
+                if _invoke:
+                    _marker_present = marker_dir is not None and _has_active_execution_marker(
+                        marker_dir, session_id=session_id
+                    )
+                    _evidence = _package_evidence(
+                        stdout_path,
+                        idle_seconds=_time.monotonic() - last_growth_time,
+                        execution_marker_present=_marker_present,
+                    )
+                    try:
+                        with anyio.fail_after(_budget):
+                            _verdict = await inspector_callback(_evidence)
+                    except TimeoutError:
+                        logger.warning("inspector_callback_timed_out", budget=_budget)
+                        _verdict = None
+
+                    if _verdict is not None and _verdict.action == "SPARE":
+                        last_growth_time = _time.monotonic()
+                        logger.info(
+                            "inspector_spare",
+                            reasoning=_verdict.reasoning,
+                            confidence=_verdict.confidence,
+                            elapsed=_verdict.elapsed_seconds,
+                        )
+                        continue
+
+                    if _verdict is not None:
+                        acc.inspector_verdict = _verdict
+
             acc.idle_stall = True
             trigger.set()
             return
@@ -462,7 +532,10 @@ def resolve_termination(
         else:
             termination = TerminationReason.NATURAL_EXIT
     elif signals.idle_stall:
-        termination = TerminationReason.IDLE_STALL
+        if signals.inspector_verdict is not None:
+            termination = TerminationReason.HEALTH_INSPECTOR
+        else:
+            termination = TerminationReason.IDLE_STALL
     else:
         match signals.channel_b_status:
             case ChannelBStatus.STALE | ChannelBStatus.DIR_MISSING:

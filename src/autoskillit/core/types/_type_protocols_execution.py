@@ -71,6 +71,8 @@ class HeadlessExecutor(Protocol):
         backend_override: str | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
+        inspector_eligible: bool = False,
+        inspector_model: str = "",
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

@@ -85,6 +85,7 @@ def _collect_fleet_params(
     acquire_timeout_sec: float | None,
     max_issues_per_food_truck: int | None,
     enable_deadline_extension: bool | None,
+    inspector_model: str | None = None,
 ) -> dict:
     params: dict = {}
     for name, val in [
@@ -96,6 +97,7 @@ def _collect_fleet_params(
         ("acquire_timeout_sec", acquire_timeout_sec),
         ("max_issues_per_food_truck", max_issues_per_food_truck),
         ("enable_deadline_extension", enable_deadline_extension),
+        ("inspector_model", inspector_model),
     ]:
         if val is not None:
             params[name] = val
@@ -149,6 +151,7 @@ async def configure_fleet(
     acquire_timeout_sec: float | None = None,
     max_issues_per_food_truck: int | None = None,
     enable_deadline_extension: bool | None = None,
+    inspector_model: str | None = None,
     default_model: str | None = None,
 ) -> str:
     """Configure fleet dispatch parameters for this kitchen session.
@@ -186,6 +189,7 @@ async def configure_fleet(
             acquire_timeout_sec,
             max_issues_per_food_truck,
             enable_deadline_extension,
+            inspector_model,
         )
 
         core_params = {"default_model": default_model} if default_model is not None else None

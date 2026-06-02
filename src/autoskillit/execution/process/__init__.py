@@ -218,6 +218,7 @@ async def run_managed_async(
     marker_dir: Path | None = None,
     session_id: str | None = None,
     stream_parser: StreamParser | None = None,
+    inspector_callback: InspectorCallback | None = None,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -386,6 +387,8 @@ async def run_managed_async(
                             marker_dir=marker_dir,
                             session_id=session_id,
                             max_suppression_seconds=max_suppression_seconds or 1800.0,
+                            inspector_callback=inspector_callback,
+                            timeout_scope_ref=timeout_scope_ref,
                         ),
                     )
                 tracing_handle = None
@@ -493,6 +496,7 @@ async def run_managed_async(
                 kill_reason=kill_reason,
                 tracked_comm=_tracked_comm,
                 orphaned_tool_result=signals.channel_b_orphaned_tool_result,
+                inspector_verdict=signals.inspector_verdict,
             )
             proc_log.debug(
                 "run_managed_async_result",
@@ -648,4 +652,5 @@ class DefaultSubprocessRunner:
             stream_parser=stream_parser,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
+            inspector_callback=inspector_callback,
         )

@@ -109,6 +109,8 @@ async def _execute_claude_headless(
     session_id: str | None = None,
     step_backend: CodingAgentBackend | None = None,
     model_identity: ModelIdentity = ModelIdentity.unknown(),
+    inspector_eligible: bool = False,
+    inspector_model: str = "",
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -259,6 +261,7 @@ async def _execute_claude_headless(
                 stream_parser=_stream_parser,
                 completion_record_types=_step_backend.capabilities.completion_record_types,
                 session_record_types=_step_backend.capabilities.session_record_types,
+                inspector_callback=None,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)

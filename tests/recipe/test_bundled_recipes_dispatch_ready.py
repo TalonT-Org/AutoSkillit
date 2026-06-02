@@ -14,19 +14,17 @@ from autoskillit.recipe.contracts import (
     generate_recipe_card,
     validate_recipe_cards,
 )
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_names, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import RecipeKind
 from autoskillit.recipe.validator import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RECIPES_DIR = builtin_recipes_dir()
 _CONTRACTS_DIR = _RECIPES_DIR / "contracts"
-# Include top-level *.yaml and campaigns/*.yaml (campaign recipes live in subdir)
-_RECIPE_STEMS = sorted(
-    list(p.stem for p in _RECIPES_DIR.glob("*.yaml"))
-    + list(p.stem for p in _RECIPES_DIR.glob("campaigns/*.yaml"))
-)
+# Unified discovery: covers builtin, campaigns, eval, and project-local recipes
+_RECIPE_STEMS = all_validated_recipe_names(_PROJECT_ROOT)
 _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 
 
@@ -37,7 +35,7 @@ _KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {
 
 @pytest.mark.parametrize("recipe_name", _RECIPE_STEMS)
 def test_bundled_recipe_dispatch_ready(recipe_name: str) -> None:
-    result = load_and_validate(recipe_name)
+    result = load_and_validate(recipe_name, project_dir=_PROJECT_ROOT)
     assert "error" not in result, f"Recipe '{recipe_name}' failed to load: {result.get('error')}"
     excluded = _KNOWN_NON_CONFORMING_RULES.get(recipe_name, set())
     if not excluded:

@@ -272,6 +272,27 @@ def iter_steps_with_context(
             available.update(step.capture_list.keys())
 
 
+def all_validated_recipe_names(project_dir: Path) -> list[str]:
+    """Return all recipe names discoverable by the runtime.
+
+    Use this as the parametrize source for recipe validation tests
+    that call load_and_validate(name). Uses RecipeInfo.name (the YAML
+    name: field), not Path.stem.
+    """
+    result = list_recipes(project_dir)
+    return sorted(r.name for r in result.items)
+
+
+def all_validated_recipe_paths(project_dir: Path) -> list[Path]:
+    """Return all recipe YAML paths discoverable by the runtime.
+
+    Use this as the parametrize source for tests that need file paths
+    (e.g., validate_recipe_structure which takes a loaded Recipe).
+    """
+    result = list_recipes(project_dir)
+    return sorted(r.path for r in result.items)
+
+
 def find_recipe_by_name(name: str, project_dir: Path) -> RecipeInfo | None:
     """Find a recipe by name from project and built-in sources.
 

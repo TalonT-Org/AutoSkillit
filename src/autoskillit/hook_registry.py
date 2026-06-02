@@ -71,10 +71,12 @@ class HookDef:
 # pretty_output_hook                     | works-as-is
 # token_summary_hook (+ quota_post)       | works-as-is
 # review_gate_post_hook                  | works-as-is
+# resume_gate_post_hook                  | works-as-is
 # lint_after_edit_hook                   | degraded
 # skill_load_post_hook                   | not-applicable
 # skill_load_guard                       | fix-required
 # review_loop_gate                       | works-as-is
+# reset_resume_gate                      | works-as-is
 # session_start_hook                     | works-as-is
 # ---------------------------------------------------------------------------
 
@@ -227,6 +229,11 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_python).*",
         scripts=["review_gate_post_hook.py"],
     ),
+    HookDef(  # codex: works-as-is
+        event_type="PostToolUse",
+        matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
+        scripts=["resume_gate_post_hook.py"],
+    ),
     HookDef(  # codex: degraded
         event_type="PostToolUse",
         matcher=r"Write|Edit",
@@ -246,6 +253,10 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(  # codex: works-as-is
         matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
         scripts=["guards/review_loop_gate.py"],
+    ),
+    HookDef(  # codex: works-as-is
+        matcher=r"(mcp__.*autoskillit.*__)?reset_dispatch",
+        scripts=["guards/reset_resume_gate.py"],
     ),
     HookDef(  # codex: works-as-is
         event_type="SessionStart",
@@ -307,6 +318,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "compose_pr_body_guard.py",
         "test_runner_guard.py",
         "fleet_claim_guard.py",
+        "reset_resume_gate.py",
     }
 )
 

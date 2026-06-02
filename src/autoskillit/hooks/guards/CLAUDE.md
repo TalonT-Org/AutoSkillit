@@ -30,6 +30,7 @@ PreToolUse guard scripts — standalone Python processes enforcing tool-call pol
 | `recipe_write_advisor.py` | Non-blocking advisory for recipe YAML writes |
 | `remove_clone_guard.py` | Blocks `remove_clone` if branch has unpushed commits |
 | `review_loop_gate.py` | Blocks `wait_for_ci`/`enqueue_pr` until `check_review_loop` is called |
+| `reset_resume_gate.py` | PreToolUse guard: denies `reset_dispatch` unless a resume was attempted on the dispatch (or `force=true`); resolves name→UUID via campaign state scan; bypasses REFUSED dispatches |
 | `resume_ownership_guard.py` | Validates `resume_session_id` ownership at resume time; blocks unowned or L3 session resume |
 | `skill_cmd_guard.py` | Validates `skill_command` path argument format |
 | `skill_command_guard.py` | Blocks `run_skill` with non-slash `skill_command` |

@@ -11,6 +11,7 @@ import pytest
 from autoskillit.core.types import (
     ChannelBStatus,
     ChannelConfirmation,
+    InspectorVerdict,
     TerminationReason,
 )
 from autoskillit.execution.process._process_race import (
@@ -266,6 +267,95 @@ class TestInspectorVerdictField:
             channel_b_status=None,
         )
         assert rs.inspector_verdict is None
+
+    def test_to_race_signals_copies_inspector_verdict(self) -> None:
+        acc = RaceAccumulator()
+        verdict = InspectorVerdict(
+            action="KILL", reasoning="stuck", confidence="high", elapsed_seconds=5.0
+        )
+        acc.inspector_verdict = verdict
+        signals = acc.to_race_signals()
+        assert signals.inspector_verdict is verdict
+
+
+class TestRaceAccumulatorFieldCount:
+    """Sentinel test: breaks when RaceAccumulator fields change."""
+
+    def test_race_accumulator_field_count(self) -> None:
+        n = len(dataclasses.fields(RaceAccumulator))
+        assert n == 11, (
+            f"RaceAccumulator has {n} fields (expected 11). Update tests for new fields."
+        )
+
+
+class TestResolveTerminationInspector:
+    """resolve_termination produces HEALTH_INSPECTOR when inspector_verdict + idle_stall."""
+
+    def test_inspector_verdict_with_idle_stall_gives_health_inspector(self) -> None:
+        signals = RaceSignals(
+            process_exited=False,
+            process_returncode=None,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+            channel_b_session_id="",
+            stdout_session_id=None,
+            idle_stall=True,
+            inspector_verdict=InspectorVerdict(
+                action="KILL", reasoning="stuck", confidence="high", elapsed_seconds=5.0
+            ),
+        )
+        termination, _ = resolve_termination(signals)
+        assert termination == TerminationReason.HEALTH_INSPECTOR
+
+    def test_idle_stall_without_verdict_gives_idle_stall(self) -> None:
+        signals = RaceSignals(
+            process_exited=False,
+            process_returncode=None,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+            channel_b_session_id="",
+            stdout_session_id=None,
+            idle_stall=True,
+            inspector_verdict=None,
+        )
+        termination, _ = resolve_termination(signals)
+        assert termination == TerminationReason.IDLE_STALL
+
+    def test_process_exit_takes_priority_over_inspector(self) -> None:
+        signals = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+            channel_b_session_id="",
+            stdout_session_id=None,
+            idle_stall=True,
+            inspector_verdict=InspectorVerdict(
+                action="KILL", reasoning="stuck", confidence="high", elapsed_seconds=5.0
+            ),
+        )
+        termination, _ = resolve_termination(signals)
+        assert termination == TerminationReason.NATURAL_EXIT
+
+
+class TestSubprocessResultInspectorVerdict:
+    """SubprocessResult.inspector_verdict is populated from signals."""
+
+    def test_subprocess_result_accepts_inspector_verdict(self) -> None:
+        from autoskillit.core import SubprocessResult
+
+        verdict = InspectorVerdict(
+            action="KILL", reasoning="stuck", confidence="high", elapsed_seconds=5.0
+        )
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.HEALTH_INSPECTOR,
+            pid=12345,
+            inspector_verdict=verdict,
+        )
+        assert result.inspector_verdict is verdict
 
 
 class TestExitSnapshot:

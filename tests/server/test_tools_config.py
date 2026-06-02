@@ -485,3 +485,33 @@ async def test_configure_fleet_snapshot_semaphore_invariant(tmp_path, monkeypatc
             payload["config"]["fleet"]["acquire_timeout_sec"]
             == mock_ctx.config.fleet.acquire_timeout_sec
         )
+
+
+@pytest.mark.anyio
+async def test_configure_fleet_passes_inspector_model_through(tmp_path, monkeypatch) -> None:
+    """configure_fleet passes inspector_model to the session config overlay."""
+    from autoskillit.server import _state
+    from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
+
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
+    hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    hook_cfg_path.write_text(json.dumps({}))
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.project_dir = tmp_path
+    mock_ctx.config = AutomationConfig()
+    mock_ctx.fleet_lock = FleetSemaphore(max_concurrent=3)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(_state, "_ctx", mock_ctx)
+
+    from autoskillit.server.tools.tools_config import configure_fleet
+
+    result = await configure_fleet(inspector_model="claude-haiku-4-5-20251001")
+    payload = json.loads(result)
+
+    assert payload["success"] is True
+    overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
+    overlay = json.loads(overlay_path.read_text())
+    assert overlay["fleet"]["inspector_model"] == "claude-haiku-4-5-20251001"
+    assert payload["config"]["fleet"]["inspector_model"] == "claude-haiku-4-5-20251001"

@@ -276,3 +276,14 @@ def test_config_resolution_fleet_enabled_via_experimental(tmp_path) -> None:
         is_feature_enabled("fleet", cfg.features, experimental_enabled=cfg.experimental_enabled)
         is True
     )
+
+
+class TestFleetConfigInspectorModel:
+    """FleetConfig.inspector_model field defaults and overrides."""
+
+    def test_inspector_model_default_empty(self) -> None:
+        assert FleetConfig().inspector_model == ""
+
+    def test_inspector_model_override(self) -> None:
+        cfg = FleetConfig(inspector_model="claude-haiku-4-5-20251001")
+        assert cfg.inspector_model == "claude-haiku-4-5-20251001"

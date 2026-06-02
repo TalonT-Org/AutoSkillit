@@ -525,3 +525,49 @@ async def test_run_skill_succeeds_when_cleanup_session_raises(
 
     mock_ssm.cleanup_session.assert_called_once()
     assert result.get("success") is True
+
+
+@pytest.mark.anyio
+async def test_run_skill_passes_inspector_eligible_when_fleet_dispatch(
+    tool_ctx_kitchen_open, monkeypatch
+) -> None:
+    """When DISPATCH_ID_ENV_VAR is set and fleet has inspector_model, run_skill passes params."""
+
+    from autoskillit.core import DISPATCH_ID_ENV_VAR
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    monkeypatch.setenv(DISPATCH_ID_ENV_VAR, "test-dispatch-id-123")
+
+    from autoskillit.config import AutomationConfig
+
+    cfg = AutomationConfig()
+    cfg.fleet.inspector_model = "claude-haiku-4-5-20251001"
+    tool_ctx_kitchen_open.config = cfg
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/test skill", "/tmp")
+
+    assert len(executor.calls) == 1
+    assert executor.calls[0].inspector_eligible is True
+    assert executor.calls[0].inspector_model == "claude-haiku-4-5-20251001"
+
+
+@pytest.mark.anyio
+async def test_run_skill_no_inspector_outside_dispatch(tool_ctx_kitchen_open, monkeypatch) -> None:
+    """When DISPATCH_ID_ENV_VAR is absent, inspector_eligible=False."""
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    monkeypatch.delenv("AUTOSKILLIT_DISPATCH_ID", raising=False)
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/test skill", "/tmp")
+
+    assert len(executor.calls) == 1
+    assert executor.calls[0].inspector_eligible is False
+    assert executor.calls[0].inspector_model == ""

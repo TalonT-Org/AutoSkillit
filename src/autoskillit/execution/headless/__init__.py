@@ -139,6 +139,8 @@ async def run_headless_core(
     backend_override: str | None = None,
     marker_dir: Path | None = None,
     caller_session_id: str | None = None,
+    inspector_eligible: bool = False,
+    inspector_model: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -245,6 +247,8 @@ async def run_headless_core(
             model_identity=model_identity,
             marker_dir=marker_dir,
             session_id=caller_session_id,
+            inspector_eligible=inspector_eligible,
+            inspector_model=inspector_model,
         )
 
 
@@ -290,6 +294,8 @@ class DefaultHeadlessExecutor:
         backend_override: str | None = None,
         marker_dir: Path | None = None,
         caller_session_id: str | None = None,
+        inspector_eligible: bool = False,
+        inspector_model: str = "",
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -329,6 +335,8 @@ class DefaultHeadlessExecutor:
             backend_override=backend_override,
             marker_dir=marker_dir,
             caller_session_id=caller_session_id,
+            inspector_eligible=inspector_eligible,
+            inspector_model=inspector_model,
         )
 
     async def dispatch_food_truck(

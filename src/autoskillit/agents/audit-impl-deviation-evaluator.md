@@ -65,6 +65,8 @@ Reason: {one-sentence justification}
 
 If no finding matches (`NO_MATCH`), emit `Verdict: NO_MATCH` — the note is informational only and does not affect any audit finding.
 
+If you are unable to determine honesty or intent preservation (e.g., `git show` cannot access the referenced files, or the plan section is uncertain), emit `Verdict: REJECT` with an explanation of what could not be verified.
+
 ## Scope Guard
 
 Do not modify any files. Do not suggest fixes. Evaluate only.

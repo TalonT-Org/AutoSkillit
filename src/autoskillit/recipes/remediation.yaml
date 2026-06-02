@@ -353,7 +353,9 @@ steps:
       worktree_path: ${{ result.worktree_path }}
       branch_name: ${{ result.branch_name }}
       phases_implemented: ${{ result.phases_implemented }}
-      deviation_manifest_path: ${{ result.deviation_manifest_path }}
+      deviation_manifest_path:
+        from: ${{ result.deviation_manifest_path }}
+        type: optional_string
     on_result:
     - when: ${{ result.phases_implemented }} > 0
       route: check_changes

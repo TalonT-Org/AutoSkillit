@@ -308,7 +308,10 @@
       "capture": {
         "worktree_path": "${{ result.worktree_path }}",
         "phases_implemented": "${{ result.phases_implemented }}",
-        "deviation_manifest_path": "${{ result.deviation_manifest_path }}"
+        "deviation_manifest_path": {
+          "from": "${{ result.deviation_manifest_path }}",
+          "type": "optional_string"
+        }
       },
       "on_result": [
         {

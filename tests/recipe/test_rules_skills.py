@@ -14,17 +14,14 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 @pytest.fixture(autouse=True)
 def _clear_skill_helper_caches():
-    """Clear lru_cache on skill helpers between tests."""
-    from autoskillit.recipe._skill_helpers import (
-        _get_bundled_skill_names,
-        _get_skill_category_map,
-    )
+    """Clear dict caches on skill helpers between tests."""
+    from autoskillit.recipe._skill_helpers import _SKILL_CATEGORY_CACHE, _SKILL_NAMES_CACHE
 
-    _get_bundled_skill_names.cache_clear()
-    _get_skill_category_map.cache_clear()
+    _SKILL_NAMES_CACHE.clear()
+    _SKILL_CATEGORY_CACHE.clear()
     yield
-    _get_bundled_skill_names.cache_clear()
-    _get_skill_category_map.cache_clear()
+    _SKILL_NAMES_CACHE.clear()
+    _SKILL_CATEGORY_CACHE.clear()
 
 
 def _make_recipe(skill_command: str) -> Recipe:
@@ -96,18 +93,13 @@ def test_non_skill_step_not_checked() -> None:
     assert not unknown, "run_cmd steps must not trigger unknown-skill-command"
 
 
-def test_get_bundled_skill_names_is_lru_cached() -> None:
-    """_get_bundled_skill_names uses @lru_cache for call-site memoization."""
-    from autoskillit.recipe._skill_helpers import (
-        _get_bundled_skill_names,
-        _get_skill_category_map,
-    )
+def test_get_bundled_skill_names_is_cached() -> None:
+    """_get_bundled_skill_names uses dict-based caching."""
+    from autoskillit.recipe import _skill_helpers
 
-    assert hasattr(_get_bundled_skill_names, "cache_clear"), (
-        "_get_bundled_skill_names must be lru_cache-decorated"
-    )
-    assert hasattr(_get_skill_category_map, "cache_clear"), (
-        "_get_skill_category_map must be lru_cache-decorated"
+    assert isinstance(_skill_helpers._SKILL_NAMES_CACHE, dict), "_SKILL_NAMES_CACHE must be a dict"
+    assert isinstance(_skill_helpers._SKILL_CATEGORY_CACHE, dict), (
+        "_SKILL_CATEGORY_CACHE must be a dict"
     )
 
 

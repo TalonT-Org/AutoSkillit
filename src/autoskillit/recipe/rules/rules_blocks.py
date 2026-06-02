@@ -11,17 +11,17 @@ Budget values are loaded from block_budgets.yaml at import time (lru_cache).
 from __future__ import annotations
 
 from collections.abc import Mapping
-from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from autoskillit.core import Severity, load_yaml, pkg_root
+from autoskillit.recipe._api_cache import YamlFileCache
 from autoskillit.recipe.registry import BlockContext, RuleFinding, block_rule
 
+_BUDGETS_CACHE = YamlFileCache()
 
-@lru_cache(maxsize=1)
-def _block_budgets() -> Mapping[str, Mapping[str, Any]]:
-    """Load block_budgets.yaml, cached for the lifetime of the process."""
-    path = pkg_root() / "recipe" / "block_budgets.yaml"
+
+def _load_budgets_yaml(path: Path) -> Mapping[str, Mapping[str, Any]]:
     try:
         data = load_yaml(path)
     except FileNotFoundError:
@@ -29,6 +29,12 @@ def _block_budgets() -> Mapping[str, Mapping[str, Any]]:
     if not isinstance(data, dict):
         return {}
     return data  # type: ignore[return-value]
+
+
+def _block_budgets() -> Mapping[str, Mapping[str, Any]]:
+    """Load block_budgets.yaml, cached with content-addressed invalidation."""
+    path = pkg_root() / "recipe" / "block_budgets.yaml"
+    return _BUDGETS_CACHE.get_or_load(path, _load_budgets_yaml)
 
 
 def _budget_for(block_name: str) -> dict[str, Any]:

@@ -236,6 +236,15 @@ def load_and_validate(
     _user_method_traditions_dir = _pdir / ".autoskillit" / "methodology-traditions"
     _user_method_traditions_hash = _api_cache._compute_registry_hash(_user_method_traditions_dir)
     _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
+    _manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
+    _budgets_path = pkg_root() / "recipe" / "block_budgets.yaml"
+    _ml_sub_area_path = BUNDLED_METHODOLOGY_TRADITIONS_DIR / "_ml_sub_area_folding.yaml"
+    _manifest_mtime = _api_cache._path_mtime_ns(_manifest_path)
+    _manifest_size = _api_cache._file_size(_manifest_path)
+    _budgets_mtime = _api_cache._path_mtime_ns(_budgets_path)
+    _budgets_size = _api_cache._file_size(_budgets_path)
+    _ml_sub_area_mtime = _api_cache._path_mtime_ns(_ml_sub_area_path)
+    _ml_sub_area_size = _api_cache._file_size(_ml_sub_area_path)
     cache_key = (
         name,
         _temp_relpath,
@@ -248,6 +257,12 @@ def load_and_validate(
         _method_traditions_hash,
         _user_method_traditions_hash,
         backend_name,
+        _manifest_mtime,
+        _manifest_size,
+        _budgets_mtime,
+        _budgets_size,
+        _ml_sub_area_mtime,
+        _ml_sub_area_size,
     )
 
     cached = _api_cache._LOAD_CACHE.get(cache_key)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any
@@ -19,7 +19,7 @@ _STALENESS_LAST_CHECK: float = 0.0
 _STALENESS_IS_STALE: bool = False
 _STALENESS_CACHES_CLEARED: bool = False
 _STALENESS_TTL: float = 30.0
-_STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe",)
+_STALENESS_SCAN_DIRS: tuple[str, ...] = ("recipe", "recipes")
 _DEEP_CONTENT_BASELINE: str | None = None
 _STALENESS_LOCK = threading.Lock()
 
@@ -79,6 +79,39 @@ class LoadCache:
 
 _LOAD_CACHE = LoadCache()
 
+_MISSING = object()
+
+
+class YamlFileCache:
+    """Thread-safe single-file cache keyed on (mtime_ns, size).
+
+    Replaces @lru_cache(maxsize=1) for YAML-backed functions.
+    Staleness is structurally impossible: the cache key changes
+    with the file, forcing a re-read.
+    """
+
+    def __init__(self) -> None:
+        self._key: tuple[int, int] = (0, 0)
+        self._value: Any = _MISSING
+        self._lock = threading.Lock()
+
+    def get_or_load(self, path: Path, loader: Callable[[Path], Any]) -> Any:
+        mtime = _path_mtime_ns(path)
+        size = _file_size(path)
+        key = (mtime, size)
+        with self._lock:
+            if key == self._key and self._value is not _MISSING:
+                return self._value
+            value = loader(path)
+            self._key = key
+            self._value = value
+            return value
+
+    def clear(self) -> None:
+        with self._lock:
+            self._key = (0, 0)
+            self._value = _MISSING
+
 
 def _path_mtime_ns(path: Path) -> int:
     try:
@@ -115,13 +148,16 @@ def _compute_registry_hash(experiment_types_dir: Path) -> str:
 
 
 def _compute_content_hash() -> str:
-    """Return SHA-256 hex digest of all .py files in staleness-scanned subdirectories."""
+    """Return SHA-256 hex digest of all .py/.yaml files in staleness-scanned subdirectories."""
     root = pkg_root()
     h = hashlib.sha256()
     for subdir in _STALENESS_SCAN_DIRS:
         d = root / subdir
         if d.is_dir():
-            for f in sorted(d.rglob("*.py")):
+            for f in sorted(
+                [*d.rglob("*.py"), *d.rglob("*.yaml")],
+                key=lambda p: p.relative_to(root),
+            ):
                 if f.is_file():
                     try:
                         rel = f.relative_to(root)
@@ -179,22 +215,42 @@ def _refresh_staleness_baseline() -> None:
 
 
 def _clear_stale_caches() -> None:
-    """Clear all lru_cache helpers and the load cache when staleness is detected."""
+    """Clear all caches and the load cache when staleness is detected."""
     global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
+    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
     from autoskillit.recipe._skill_helpers import (  # noqa: PLC0415
-        _get_bundled_skill_names,
-        _get_skill_category_map,
+        _SKILL_CATEGORY_CACHE,
+        _SKILL_NAMES_CACHE,
     )
-    from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
     from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
-        load_ml_sub_area_folding,
+        _ML_SUB_AREA_CACHE,
     )
-    from autoskillit.recipe.rules.rules_blocks import _block_budgets  # noqa: PLC0415
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE  # noqa: PLC0415
 
-    _block_budgets.cache_clear()
-    load_bundled_manifest.cache_clear()
-    load_ml_sub_area_folding.cache_clear()
-    _get_bundled_skill_names.cache_clear()
-    _get_skill_category_map.cache_clear()
+    _BUDGETS_CACHE.clear()
+    _MANIFEST_CACHE.clear()
+    _ML_SUB_AREA_CACHE.clear()
+    _SKILL_NAMES_CACHE.clear()
+    _SKILL_CATEGORY_CACHE.clear()
     _LOAD_CACHE.clear()
     _STALENESS_CACHES_CLEARED = True
+
+
+def _clear_all_yaml_caches() -> None:
+    """Clear ALL content-addressed caches and _LOAD_CACHE for test isolation."""
+    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
+    from autoskillit.recipe._skill_helpers import (  # noqa: PLC0415
+        _SKILL_CATEGORY_CACHE,
+        _SKILL_NAMES_CACHE,
+    )
+    from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
+        _ML_SUB_AREA_CACHE,
+    )
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE  # noqa: PLC0415
+
+    _MANIFEST_CACHE.clear()
+    _BUDGETS_CACHE.clear()
+    _ML_SUB_AREA_CACHE.clear()
+    _SKILL_NAMES_CACHE.clear()
+    _SKILL_CATEGORY_CACHE.clear()
+    _LOAD_CACHE.clear()

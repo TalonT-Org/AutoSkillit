@@ -1047,22 +1047,27 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
 
 
 def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
-    """Staleness detection clears lru_cache helpers."""
+    """Staleness detection clears YamlFileCache + lru_cache helpers."""
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import ProcessStaleError
+    from autoskillit.recipe._api_cache import _MISSING
+    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE
     from autoskillit.recipe.contracts import load_bundled_manifest
-    from autoskillit.recipe.methodology_venue_appendix import load_ml_sub_area_folding
-    from autoskillit.recipe.rules.rules_blocks import _block_budgets
+    from autoskillit.recipe.methodology_venue_appendix import (
+        _ML_SUB_AREA_CACHE,
+        load_ml_sub_area_folding,
+    )
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE, _block_budgets
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     _block_budgets()
     load_bundled_manifest()
     load_ml_sub_area_folding()
-    assert _block_budgets.cache_info().currsize > 0
-    assert load_bundled_manifest.cache_info().currsize > 0
-    assert load_ml_sub_area_folding.cache_info().currsize > 0
+    assert _BUDGETS_CACHE._value is not _MISSING
+    assert _MANIFEST_CACHE._value is not _MISSING
+    assert _ML_SUB_AREA_CACHE._value is not _MISSING
 
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
@@ -1078,6 +1083,90 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     with pytest.raises(ProcessStaleError):
         api_mod.load_and_validate("myrecipe", tmp_path)
 
-    assert _block_budgets.cache_info().currsize == 0
-    assert load_bundled_manifest.cache_info().currsize == 0
-    assert load_ml_sub_area_folding.cache_info().currsize == 0
+    assert _BUDGETS_CACHE._value is _MISSING
+    assert _MANIFEST_CACHE._value is _MISSING
+    assert _ML_SUB_AREA_CACHE._value is _MISSING
+
+
+def test_mid_process_yaml_only_update(tmp_path, monkeypatch):
+    """YAML-only change to skill_contracts.yaml produces different load_and_validate results."""
+    import yaml
+
+    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._contracts_manifest as manifest_mod
+    from autoskillit.recipe._api_cache import YamlFileCache
+
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
+    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
+    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
+    monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
+    monkeypatch.setattr(manifest_mod, "_MANIFEST_CACHE", YamlFileCache())
+
+    fake_pkg = tmp_path / "pkg"
+    recipe_pkg_dir = fake_pkg / "recipe"
+    recipe_pkg_dir.mkdir(parents=True)
+    manifest_path = recipe_pkg_dir / "skill_contracts.yaml"
+
+    manifest_v1 = {
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [{"name": "worktree_path", "type": "directory_path"}],
+            }
+        }
+    }
+    manifest_path.write_text(yaml.dump(manifest_v1))
+
+    monkeypatch.setattr(manifest_mod, "pkg_root", lambda: fake_pkg)
+    monkeypatch.setattr(api_mod, "pkg_root", lambda: fake_pkg)
+
+    recipe_content = """\
+name: yaml-update-test
+description: test yaml-only update
+autoskillit_version: "0.2.0"
+kitchen_rules:
+  - Never use native tools
+steps:
+  run:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:test-skill arg
+    capture:
+      verdict: "${{ result.verdict }}"
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: done
+"""
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "yaml-update-test.yaml").write_text(recipe_content)
+
+    result1 = api_mod.load_and_validate("yaml-update-test", tmp_path)
+    suggestions1 = result1.get("suggestions", [])
+    undeclared1 = [s for s in suggestions1 if s.get("rule") == "undeclared-capture-key"]
+    assert len(undeclared1) >= 1, (
+        f"Expected undeclared-capture-key before YAML update: {suggestions1}"
+    )
+
+    manifest_v2 = {
+        "skills": {
+            "test-skill": {
+                "inputs": [],
+                "outputs": [
+                    {"name": "worktree_path", "type": "directory_path"},
+                    {"name": "verdict", "type": "string"},
+                ],
+            }
+        }
+    }
+    manifest_path.write_text(yaml.dump(manifest_v2))
+
+    result2 = api_mod.load_and_validate("yaml-update-test", tmp_path)
+    suggestions2 = result2.get("suggestions", [])
+    undeclared2 = [s for s in suggestions2 if s.get("rule") == "undeclared-capture-key"]
+    assert undeclared2 == [], (
+        f"Expected no undeclared-capture-key after YAML-only update: {undeclared2}"
+    )

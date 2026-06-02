@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import regex as re
 
-from autoskillit.core import SkillLister
+from autoskillit.core import SkillLister, pkg_root
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
@@ -57,22 +56,47 @@ def _has_dynamic_skill_name(skill_cmd: str) -> bool:
 
 MULTIPART_SKILL_NAMES: frozenset[str] = frozenset({"make-plan", "rectify"})
 
+_SKILL_CATEGORY_CACHE: dict[tuple[int, int, int], dict[str, frozenset[str]]] = {}
+_SKILL_NAMES_CACHE: dict[tuple[int, int, int], frozenset[str]] = {}
 
-@lru_cache(maxsize=1)
+
 def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, frozenset[str]]:
     """Return {skill_name: categories} for all bundled skills."""
+    from autoskillit.recipe._api_cache import _path_mtime_ns  # noqa: PLC0415
+
+    key = (
+        id(lister),
+        _path_mtime_ns(pkg_root() / "skills"),
+        _path_mtime_ns(pkg_root() / "skills_extended"),
+    )
+    if key in _SKILL_CATEGORY_CACHE:
+        return _SKILL_CATEGORY_CACHE[key]
     if lister is None:
         from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
         lister = DefaultSkillResolver()
-    return {s.name: s.categories for s in lister.list_all()}
+    result = {s.name: s.categories for s in lister.list_all()}
+    _SKILL_CATEGORY_CACHE.clear()
+    _SKILL_CATEGORY_CACHE[key] = result
+    return result
 
 
-@lru_cache(maxsize=1)
 def _get_bundled_skill_names(lister: SkillLister | None = None) -> frozenset[str]:
     """Return the set of all bundled skill names."""
+    from autoskillit.recipe._api_cache import _path_mtime_ns  # noqa: PLC0415
+
+    key = (
+        id(lister),
+        _path_mtime_ns(pkg_root() / "skills"),
+        _path_mtime_ns(pkg_root() / "skills_extended"),
+    )
+    if key in _SKILL_NAMES_CACHE:
+        return _SKILL_NAMES_CACHE[key]
     if lister is None:
         from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
         lister = DefaultSkillResolver()
-    return frozenset(s.name for s in lister.list_all())
+    result = frozenset(s.name for s in lister.list_all())
+    _SKILL_NAMES_CACHE.clear()
+    _SKILL_NAMES_CACHE[key] = result
+    return result

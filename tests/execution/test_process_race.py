@@ -335,7 +335,7 @@ class TestResolveTerminationInspector:
             ),
         )
         termination, _ = resolve_termination(signals)
-        assert termination in (TerminationReason.NATURAL_EXIT, TerminationReason.SIGNAL_DEATH)
+        assert termination == TerminationReason.NATURAL_EXIT
 
 
 class TestSubprocessResultInspectorVerdict:

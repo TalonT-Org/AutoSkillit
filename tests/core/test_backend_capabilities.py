@@ -50,23 +50,22 @@ def test_backend_capabilities_slots():
 
 
 def test_backend_capabilities_all_false_empty_constructible() -> None:
-    """BackendCapabilities() with zero args yields all-False/empty defaults."""
+    """BackendCapabilities() with zero args yields the declared default for every field."""
     from autoskillit.core import BackendCapabilities
 
     caps = BackendCapabilities()
-    # 9 original bool fields
-    assert caps.channel_b_capable is False
-    assert caps.pty_required is False
-    assert caps.session_resume_capable is False
-    assert caps.skill_injection_capable is False
-    assert caps.supports_thinking_blocks is False
-    assert caps.supports_claude_format_stdout is False
-    assert caps.exit_code_is_terminal is False
-    assert caps.mcp_config_capable is False
-    assert caps.food_truck_capable is False
-    # 2 original frozenset fields
-    assert caps.completion_record_types == frozenset()
-    assert caps.session_record_types == frozenset()
+    fields = dataclasses.fields(BackendCapabilities)
+    hints = typing.get_type_hints(BackendCapabilities)
+
+    for f in fields:
+        hint = hints.get(f.name)
+        actual = getattr(caps, f.name)
+        if hint is bool:
+            assert actual is f.default, (
+                f"{f.name!r}: zero-arg yields {actual!r}, declared default is {f.default!r}"
+            )
+        elif hint == frozenset[str]:
+            assert actual == frozenset(), f"{f.name!r}: expected frozenset(), got {actual!r}"
 
 
 def test_backend_capabilities_field_count():

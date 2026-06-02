@@ -8,6 +8,7 @@ from pathlib import Path
 from autoskillit.cli._hooks import _claude_settings_path
 from autoskillit.config import load_config
 from autoskillit.core import Severity, get_logger, is_feature_enabled
+from autoskillit.execution.backends import BACKEND_REGISTRY
 
 from ._doctor_config import (
     _check_config_layers_for_secrets,
@@ -75,15 +76,16 @@ def run_doctor(*, output_json: bool = False) -> None:
     cfg = load_config(Path.cwd())
     results: list[DoctorResult] = []
 
+    _backend_cls = BACKEND_REGISTRY.get(cfg.agent_backend.backend)
+    _backend = _backend_cls() if _backend_cls is not None else None
+
     # Check 1: Stale MCP servers — dead binaries or nonexistent paths
-    results.extend(
-        _check_stale_mcp_servers(Path.home() / ".claude.json", backend=cfg.agent_backend.backend)
-    )
+    results.extend(_check_stale_mcp_servers(Path.home() / ".claude.json", backend=_backend))
 
     # Check 2: MCP server registered in ~/.claude.json or via plugin
     results.append(
         _check_mcp_server_registered(
-            claude_json_path=Path.home() / ".claude.json", backend=cfg.agent_backend.backend
+            claude_json_path=Path.home() / ".claude.json", backend=_backend
         )
     )
 

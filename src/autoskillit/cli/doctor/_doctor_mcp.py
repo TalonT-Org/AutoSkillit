@@ -6,20 +6,26 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, Severity, build_agent_env, get_logger
 
 from ._doctor_types import DoctorResult
 
+if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend
+
 logger = get_logger(__name__)
 
 
 def _check_stale_mcp_servers(
-    claude_json_path: Path | None = None, *, backend: str | None = None
+    claude_json_path: Path | None = None, *, backend: CodingAgentBackend | None = None
 ) -> list[DoctorResult]:
     """Check ~/.claude.json for stale autoskillit* MCP server entries with dead paths."""
-    if backend is not None and backend != "claude-code":
-        return [DoctorResult(Severity.OK, "stale_mcp_servers", f"Skipped (backend={backend})")]
+    if backend is not None and backend.capabilities.mcp_config_capable:
+        return [
+            DoctorResult(Severity.OK, "stale_mcp_servers", f"Skipped (backend={backend.name})")
+        ]
     _path = claude_json_path or (Path.home() / ".claude.json")
     if not _path.is_file():
         return [DoctorResult(Severity.OK, "stale_mcp_servers", "No stale MCP servers detected")]
@@ -59,10 +65,10 @@ def _check_stale_mcp_servers(
 
 
 def _check_mcp_server_registered(
-    claude_json_path: Path | None = None, *, backend: str | None = None
+    claude_json_path: Path | None = None, *, backend: CodingAgentBackend | None = None
 ) -> DoctorResult:
     """Check that autoskillit MCP server is registered (via mcpServers or plugin)."""
-    if backend == "codex":
+    if backend is not None and backend.capabilities.mcp_config_capable:
         from autoskillit.execution import (
             _is_autoskillit_registered,
             _read_codex_config,
@@ -107,8 +113,10 @@ def _check_mcp_server_registered(
                     "Run 'autoskillit init' to register."
                 ),
             )
-    if backend is not None and backend != "claude-code":
-        return DoctorResult(Severity.OK, "mcp_server_registered", f"Skipped (backend={backend})")
+    if backend is not None and backend.capabilities.mcp_config_capable:
+        return DoctorResult(
+            Severity.OK, "mcp_server_registered", f"Skipped (backend={backend.name})"
+        )
     if claude_json_path is None:
         claude_json_path = Path.home() / ".claude.json"
 

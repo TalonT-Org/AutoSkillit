@@ -60,7 +60,7 @@ class TestBackendIncompatibleSkillRule:
         findings = run_semantic_rules(ctx)
         compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
-        assert compat_findings[0].severity == Severity.ERROR
+        assert compat_findings[0].severity == Severity.WARNING
         assert "investigate" in compat_findings[0].message
         assert "codex" in compat_findings[0].message
 
@@ -171,7 +171,7 @@ class TestBackendNameThreadingAPI:
         suggestions = result.get("suggestions", [])
         compat_findings = [f for f in suggestions if f.get("rule") == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
-        assert compat_findings[0]["severity"] == "error"
+        assert compat_findings[0]["severity"] == "warning"
 
     def test_validate_from_path_threads_backend_name(self, tmp_path):
         from autoskillit.recipe._api_listing import validate_from_path
@@ -187,7 +187,7 @@ class TestBackendNameThreadingAPI:
         findings = result.get("findings", [])
         compat_findings = [f for f in findings if f.get("rule") == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
-        assert compat_findings[0]["severity"] == "error"
+        assert compat_findings[0]["severity"] == "warning"
 
     def test_cache_key_varies_by_backend_name(self, tmp_path, monkeypatch):
         import autoskillit.recipe._api as api_mod

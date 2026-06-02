@@ -15,7 +15,7 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
         "run_skill step references a skill whose backend_requirements "
         "exclude the recipe's target backend"
     ),
-    severity=Severity.ERROR,
+    severity=Severity.WARNING,
 )
 def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFinding]:
     if ctx.backend_name is None:
@@ -35,18 +35,16 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         skill_info = ctx.skill_resolver.resolve(skill_name)
         if skill_info is None:
             continue
-        if (
-            skill_info.backend_requirements
-            and ctx.backend_name not in skill_info.backend_requirements
-        ):
+        reqs: frozenset[str] = getattr(skill_info, "backend_requirements", frozenset())
+        if reqs and ctx.backend_name not in reqs:
             findings.append(
                 RuleFinding(
                     rule="backend-incompatible-skill",
-                    severity=Severity.ERROR,
+                    severity=Severity.WARNING,
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': skill '{skill_name}' requires backend "
-                        f"{sorted(skill_info.backend_requirements)} but recipe targets "
+                        f"{sorted(reqs)} but recipe targets "
                         f"backend '{ctx.backend_name}'."
                     ),
                 )

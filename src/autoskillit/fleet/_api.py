@@ -724,6 +724,26 @@ async def _run_dispatch(
         if sidecar_entries:
             dispatch_checkpoint = checkpoint_from_sidecar(sidecar_entries)
 
+    tracker_checkpoint: SessionCheckpoint | None = None
+    _tracker_path = (
+        tool_ctx.project_dir / ".autoskillit" / "temp" / "pipeline_tracker" / f"{dispatch_id}.json"
+    )
+    if _tracker_path.exists():
+        try:
+            import json as _json_mod  # noqa: PLC0415
+
+            _tracker_data = _json_mod.loads(_tracker_path.read_text())
+            from autoskillit.fleet._checkpoint_bridge import (
+                checkpoint_from_tracker,  # noqa: PLC0415
+            )
+
+            tracker_checkpoint = checkpoint_from_tracker(_tracker_data)
+        except (OSError, ValueError):
+            logger.debug("tracker read failed for %s", dispatch_id, exc_info=True)
+
+    if dispatch_checkpoint is None and tracker_checkpoint is not None:
+        dispatch_checkpoint = tracker_checkpoint
+
     extended_chain = prior_session_chain[:]
     additional_jsonl_paths: list[Path] = []
     if skill_result.subtype == "timeout":

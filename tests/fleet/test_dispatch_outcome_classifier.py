@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from autoskillit.core import FleetErrorCode, InfraOutcome, SkillResult
+from autoskillit.core import FleetErrorCode, InfraOutcome, SessionCheckpoint, SkillResult
 from autoskillit.fleet import DispatchStatus
 from autoskillit.fleet._outcome import classify_dispatch_outcome
 from autoskillit.fleet.result_parser import L3ParseResult
@@ -335,3 +335,44 @@ class TestClassifyDispatchOutcomeParsedNone:
         status, reason = classify_dispatch_outcome(None, skill_result, sidecar_exists=False)
         assert status == DispatchStatus.FAILURE
         assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+
+class TestCheckpointOnlyResumePolicy:
+    def test_process_killed_no_sidecar_with_checkpoint_is_resumable(self):
+        parsed, skill_result = _no_sentinel(session_id="sess-abc", lifespan_started=True)
+        skill_result = dataclasses.replace(
+            skill_result,
+            retry_reason="resume",
+            infra=InfraOutcome(exit_category="process_killed"),
+        )
+        checkpoint = SessionCheckpoint(
+            completed_items=["plan", "verify", "implement"],
+            step_name="implement",
+            progress_pct=0.375,
+            ts="2026-06-01T00:00:00Z",
+        )
+        status, reason = classify_dispatch_outcome(
+            parsed, skill_result, sidecar_exists=False, checkpoint=checkpoint
+        )
+        assert status == DispatchStatus.RESUMABLE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
+    def test_timeout_no_sidecar_with_checkpoint_is_resumable(self):
+        skill_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            session_id="sess-abc",
+            lifespan_started=True,
+            subtype="timeout",
+            retry_reason="resume",
+            infra=InfraOutcome(exit_category="process_killed"),
+        )
+        checkpoint = SessionCheckpoint(
+            completed_items=["plan"],
+            step_name="plan",
+            progress_pct=0.125,
+            ts="2026-06-01T00:00:00Z",
+        )
+        status, reason = classify_dispatch_outcome(
+            None, skill_result, sidecar_exists=False, checkpoint=checkpoint, subtype="timeout"
+        )
+        assert status == DispatchStatus.RESUMABLE

@@ -724,9 +724,20 @@ class DefaultSessionSkillManager:
             skill_dir.mkdir(exist_ok=True)
             atomic_write(skill_dir / "SKILL.md", content)
         for override in overrides:
+            if allow_only is not None and allow_only and override.name not in allow_only:
+                logger.debug("init_session_override_allow_only_skip", skill=override.name)
+                continue
             dest_dir = skills_base / override.name
             dest_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(override.skill_path, dest_dir / "SKILL.md")
+            try:
+                shutil.copy2(override.skill_path, dest_dir / "SKILL.md")
+            except OSError:
+                logger.warning(
+                    "init_session_project_local_copy_failed",
+                    skill=override.name,
+                    source=str(override.skill_path),
+                )
+                continue
             logger.debug(
                 "init_session_project_local_copy",
                 skill=override.name,

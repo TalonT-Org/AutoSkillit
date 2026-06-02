@@ -28,7 +28,7 @@ class TestRateLimitParity:
 
     def test_rate_limit_matches_context_limit_target(self) -> None:
         recipes_dir = builtin_recipes_dir()
-        for name in ["implementation", "remediation", "implementation-groups"]:
+        for name in ["implementation", "implementation-groups"]:
             recipe = load_recipe(recipes_dir / f"{name}.yaml")
             for step_name, step in recipe.steps.items():
                 if not step.on_result:

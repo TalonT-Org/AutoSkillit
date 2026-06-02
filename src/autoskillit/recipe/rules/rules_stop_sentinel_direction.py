@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections import deque
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
@@ -44,31 +43,7 @@ def _is_failure_path_stop(step_name: str, ctx: ValidationContext) -> bool:
                     if keyword in cond.when:
                         return True
 
-    on_failure_targets: set[str] = set()
-    for _name, step in ctx.recipe.steps.items():
-        if step.on_failure:
-            on_failure_targets.add(step.on_failure)
-
-    reachable_from_failure: set[str] = set()
-    queue: deque[str] = deque(on_failure_targets)
-    while queue:
-        node = queue.popleft()
-        if node in reachable_from_failure:
-            continue
-        reachable_from_failure.add(node)
-        n_step = ctx.recipe.steps.get(node)
-        if n_step is None:
-            continue
-        if n_step.on_success:
-            queue.append(n_step.on_success)
-        if n_step.on_failure:
-            queue.append(n_step.on_failure)
-        if n_step.on_result and n_step.on_result.conditions:
-            for cond in n_step.on_result.conditions:
-                if cond.route:
-                    queue.append(cond.route)
-
-    return step_name in reachable_from_failure
+    return False
 
 
 @semantic_rule(

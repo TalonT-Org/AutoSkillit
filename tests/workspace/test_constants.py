@@ -16,9 +16,3 @@ def test_worktrees_dir_constant_is_exported():
     from autoskillit.workspace import WORKTREES_DIR
 
     assert WORKTREES_DIR == "worktrees"
-
-
-def test_codex_skills_subdir_constant_is_exported():
-    from autoskillit.workspace import CODEX_SKILLS_SUBDIR
-
-    assert str(CODEX_SKILLS_SUBDIR) == "skills"

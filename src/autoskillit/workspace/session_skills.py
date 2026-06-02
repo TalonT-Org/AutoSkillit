@@ -56,9 +56,6 @@ _CANDIDATE_ROOTS: list[Path] = [
 
 _FM_PATTERN = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
 
-_SKILLS_SUBDIR = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
-CODEX_SKILLS_SUBDIR = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
-
 logger = get_logger(__name__)
 
 
@@ -497,7 +494,7 @@ class DefaultSessionSkillManager:
     ) -> None:
         self._provider = provider
         self._root = ephemeral_root
-        self._skills_subdir = _SKILLS_SUBDIR
+        self._skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
     def compute_skill_closure(self, skill_name: str) -> frozenset[str]:
         """Return the transitive activate_deps closure for ``skill_name``.
@@ -613,7 +610,7 @@ class DefaultSessionSkillManager:
         self._skills_subdir = (
             Path(backend.capabilities.skills_subdir)
             if backend is not None and backend.capabilities.skills_subdir
-            else _SKILLS_SUBDIR
+            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
         )
 
         session_skills_dir = self._root / session_id

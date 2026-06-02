@@ -71,7 +71,7 @@ class TestAddDirLayoutContract:
     """Guard: init_session must write .claude/skills/<name>/SKILL.md.
 
     CRITICAL: Path components (".claude", "skills", "SKILL.md") are literal
-    strings here. Do NOT replace them with _SKILLS_SUBDIR or
+    strings here. Do NOT replace them with
     ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR — that would re-create
     the "tests mirror implementation" failure mode this guard was designed
     to prevent. If the constant drifts, TestClaudeDirectoryConventions catches
@@ -96,7 +96,7 @@ class TestAddDirLayoutContract:
         assert len(discovered) > 0, (
             "init_session must write skills to .claude/skills/<name>/SKILL.md "
             "(Claude Code --add-dir convention). "
-            "If this fails, session_skills._SKILLS_SUBDIR has regressed."
+            "If this fails, the ADD_DIR_SKILLS_SUBDIR convention has regressed."
         )
 
     def test_init_session_no_flat_skills_at_session_root(self, tmp_path: Path) -> None:
@@ -187,7 +187,7 @@ class TestCookAddDirStructure:
     to verify the output structure matches what Claude Code requires.
 
     CRITICAL: Path components are HARDCODED STRING LITERALS. Do NOT use
-    ClaudeDirectoryConventions or _SKILLS_SUBDIR here.
+    ClaudeDirectoryConventions here.
 
     This test closes the double-mock gap in test_cook_interactive.py (all tests
     mock init_session and subprocess.run together, so no test verified

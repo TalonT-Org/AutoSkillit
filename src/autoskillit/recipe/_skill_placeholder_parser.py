@@ -1,4 +1,4 @@
-"""Shared parser helpers for SKILL.md bash-block and python-block analysis.
+"""Shared parser helpers for SKILL.md bash-block, python-block, and section analysis.
 
 Used by:
   - src/autoskillit/recipe/rules/rules_skill_content.py (semantic rules)
@@ -27,6 +27,24 @@ def extract_python_blocks(content: str) -> list[str]:
 
 def extract_graphql_blocks(content: str) -> list[str]:
     return extract_fenced_blocks(content, "graphql")
+
+
+def extract_sections(content: str) -> list[str]:
+    """Split SKILL.md content into heading-scoped sections at the ## level."""
+    parts = re.split(r"(?m)^(?=##\s)", content)
+    return [p for p in parts if p.strip()]
+
+
+_PROSE_GRAPHQL_EXECUTION_RE = re.compile(
+    r"(?:via|execute|run|use|build)\s+[^\n]{0,40}(?:GraphQL|graphql)\b"
+    r"|(?:GraphQL|graphql)\s+[^\n]{0,40}(?:mutation|query|request|call)\b",
+    re.IGNORECASE,
+)
+
+
+def has_prose_graphql_execution(text: str) -> bool:
+    """Return True if text contains prose references to executing a GraphQL operation."""
+    return bool(_PROSE_GRAPHQL_EXECUTION_RE.search(text))
 
 
 def extract_bash_placeholders(bash_blocks: list[str]) -> set[str]:

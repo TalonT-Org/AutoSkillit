@@ -58,7 +58,23 @@ permissions), abort immediately with a clear error message: `"Error: could not r
 — check GH_TOKEN and remote URL. Aborting."` Do not proceed with GraphQL mutations using an empty node_id.
 Resolve label IDs for `audit` and `recipe:implementation` labels (ensure they exist via `gh label create --force`).
 Build batched GraphQL `createIssue` mutations with aliases (`issue0`, `issue1`, ...), chunked at 20 per request.
-Execute via `gh api graphql --input -`. Sleep 1 second between chunks (per GitHub API discipline).
+
+```graphql
+mutation {
+  issue0: createIssue(input: {repositoryId: $repoId, title: $title0, body: $body0}) {
+    issue { number url }
+  }
+  issue1: createIssue(input: {repositoryId: $repoId, title: $title1, body: $body1}) {
+    issue { number url }
+  }
+}
+```
+
+```bash
+echo "$MUTATION_JSON" | gh api graphql --input -
+```
+
+Sleep 1 second between chunks (per GitHub API discipline).
 Collect created issue URLs and numbers.
 
 ## Step 6 — Apply Source-Specific Labels
@@ -66,6 +82,18 @@ Collect created issue URLs and numbers.
 Parse the source from each ticket body filename (`ticket_body_{source}_{N}_{ts}.md`). For each unique
 source, ensure a label exists (e.g., `audit:tests`, `audit:arch`, `audit:cohesion`, etc.).
 Batch-apply source labels via GraphQL `addLabelsToLabelable` mutation with aliases.
+
+```graphql
+mutation {
+  l0: addLabelsToLabelable(input: {labelableId: $issueId0, labelIds: [$labelId]}) {
+    labelable { ... on Issue { number } }
+  }
+}
+```
+
+```bash
+echo "$LABEL_MUTATION" | gh api graphql --input -
+```
 
 ## Step 7 — Write Filed Issues Manifest
 

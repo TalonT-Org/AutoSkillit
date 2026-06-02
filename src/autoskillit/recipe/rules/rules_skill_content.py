@@ -20,6 +20,8 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_declared_ingredients,
     extract_graphql_blocks,
     extract_python_blocks,
+    extract_sections,
+    has_prose_graphql_execution,
     shell_vars_assigned,
 )
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
@@ -567,12 +569,6 @@ _TRANSITION_ANTI_CONFIRM_RE: re.Pattern[str] = re.compile(
 )
 
 
-def _extract_sections(content: str) -> list[str]:
-    """Split SKILL.md content into heading-scoped sections at the ## level."""
-    parts = re.split(r"(?m)^(?=##\s)", content)
-    return [p for p in parts if p.strip()]
-
-
 def _extract_subsections(content: str) -> list[str]:
     """Split SKILL.md content into subsections at the ### level."""
     parts = re.split(r"(?m)^(?=###\s)", content)
@@ -607,7 +603,7 @@ def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list
         except OSError:
             continue
         unprotected: list[tuple[str, str]] = []
-        for section in _extract_sections(content):
+        for section in extract_sections(content):
             lines = section.splitlines()
             heading = lines[0].strip() if lines else ""
             for boundary_name, boundary_re in _TRANSITION_BOUNDARY_RES:
@@ -858,50 +854,57 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
         except OSError:
             continue
 
-        graphql_blocks = extract_graphql_blocks(content)
-        if not graphql_blocks:
-            continue
+        for section in extract_sections(content):
+            section_graphql = extract_graphql_blocks(section)
+            section_bash = extract_bash_blocks(section)
+            section_bash_graphql = [b for b in section_bash if _GH_API_GRAPHQL_BLOCK_RE.search(b)]
 
-        bash_blocks = extract_bash_blocks(content)
-        bash_with_graphql = [b for b in bash_blocks if _GH_API_GRAPHQL_BLOCK_RE.search(b)]
-
-        for block in graphql_blocks:
-            variable_names = set(_GRAPHQL_VARIABLE_RE.findall(block))
-            if not variable_names:
-                continue
-
-            if not bash_with_graphql:
-                findings.append(
-                    RuleFinding(
-                        rule="graphql-query-requires-shell-invocation",
-                        severity=Severity.ERROR,
-                        step_name=step_name,
-                        message=(
-                            f"Skill '{skill_name}' has a graphql block declaring variables "
-                            f"{sorted(variable_names)} but no bash block with a concrete "
-                            f"`gh api graphql` invocation. Add a bash block with individual "
-                            f"-F key=value flag bindings for each variable."
-                        ),
-                    )
-                )
-                break
-
-            for var in variable_names:
-                flag_found = any(
-                    re.search(rf"-[Ff]\s*{re.escape(var)}=", b) for b in bash_with_graphql
-                )
-                if not flag_found:
+            for block in section_graphql:
+                if not section_bash_graphql:
                     findings.append(
                         RuleFinding(
                             rule="graphql-query-requires-shell-invocation",
                             severity=Severity.ERROR,
                             step_name=step_name,
                             message=(
-                                f"Skill '{skill_name}' graphql variable '${var}' has no "
-                                f"'-F {var}=' or '-f {var}=' binding in any "
-                                f"`gh api graphql` bash block."
+                                f"Skill '{skill_name}' has a graphql block in a section "
+                                f"with no 'gh api graphql' bash block in the same section."
                             ),
                         )
                     )
+                    break
+
+                variable_names = set(_GRAPHQL_VARIABLE_RE.findall(block))
+                for var in variable_names:
+                    flag_found = any(
+                        re.search(rf"-[Ff]\s*{re.escape(var)}=", b) for b in section_bash_graphql
+                    )
+                    if not flag_found:
+                        findings.append(
+                            RuleFinding(
+                                rule="graphql-query-requires-shell-invocation",
+                                severity=Severity.ERROR,
+                                step_name=step_name,
+                                message=(
+                                    f"Skill '{skill_name}' graphql variable '${var}' has no "
+                                    f"'-F {var}=' or '-f {var}=' binding in any "
+                                    f"same-section `gh api graphql` bash block."
+                                ),
+                            )
+                        )
+
+            if has_prose_graphql_execution(section) and not section_bash_graphql:
+                findings.append(
+                    RuleFinding(
+                        rule="graphql-query-requires-shell-invocation",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Skill '{skill_name}' has a section referencing GraphQL "
+                            f"execution in prose but no 'gh api graphql' bash block "
+                            f"in the same section."
+                        ),
+                    )
+                )
 
     return findings

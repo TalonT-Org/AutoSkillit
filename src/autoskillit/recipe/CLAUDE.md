@@ -42,7 +42,7 @@ Sub-package: rules/ (see rules/CLAUDE.md).
 | `_analysis_detectors.py` | Dead outputs + ref invalidations + implicit handoffs |
 | `_git_helpers.py` | Shared git-remote regex (`_GIT_REMOTE_COMMAND_RE`, `_LITERAL_ORIGIN_RE`) for lint rules |
 | `_skill_helpers.py` | Shared helpers for skill-related semantic rules |
-| `_skill_placeholder_parser.py` | SKILL.md structural analysis: bash placeholder extraction, step section parsing, git command extraction |
+| `_skill_placeholder_parser.py` | SKILL.md structural analysis: bash placeholder extraction, step section parsing, section splitting, prose GraphQL detection, git command extraction |
 | `identity.py` | Recipe identity hashing — content and composite fingerprints |
 | `schema.py` | `Recipe`, `RecipeStep`, `DataFlowWarning` |
 | `staleness_cache.py` | Staleness cache for contract and diagram freshness checks |

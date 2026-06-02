@@ -158,3 +158,82 @@ def test_applicable_guards_uses_capability_field():
     assert 'casefold() == "codex"' not in source, (
         "skill_load_guard must not compare backend name directly"
     )
+
+
+def test_all_backends_have_name_constant():
+    """Every BACKEND_REGISTRY key must have a corresponding AGENT_BACKEND_* constant."""
+    import inspect
+
+    from autoskillit.core.types import _type_constants_env
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    source = inspect.getsource(_type_constants_env)
+    tree = ast.parse(source)
+    assignment_targets = {
+        target.id
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+        if isinstance(target, ast.Name)
+    }
+
+    for key in BACKEND_REGISTRY:
+        expected_name = f"AGENT_BACKEND_{key.upper().replace('-', '_')}"
+        assert expected_name in assignment_targets, (
+            f"BACKEND_REGISTRY key {key!r} has no matching constant in "
+            f"_type_constants_env.py — add {expected_name} = {key!r}"
+        )
+
+
+def test_backend_doctor_coverage():
+    """_doctor_runtime must use capability-field dispatch, not backend-name strings."""
+    import inspect
+
+    from autoskillit.cli.doctor import _doctor_runtime
+
+    source = inspect.getsource(_doctor_runtime)
+    tree = ast.parse(source)
+    has_capability_field = any(
+        isinstance(node, ast.Attribute) and node.attr in {"version_check_command", "process_name"}
+        for func_node in ast.walk(tree)
+        if isinstance(func_node, ast.FunctionDef)
+        and any(arg.arg == "backend" for arg in func_node.args.args + func_node.args.kwonlyargs)
+        for node in ast.walk(func_node)
+    )
+    assert has_capability_field, (
+        "Expected capability-driven dispatch (version_check_command/process_name) "
+        "in _doctor_runtime; backend-name string comparisons were replaced by P4."
+    )
+
+
+def test_all_backends_have_init_hook():
+    """cli/_init_helpers.py must import from the execution backends layer."""
+    import inspect
+
+    from autoskillit.cli import _init_helpers
+
+    source = inspect.getsource(_init_helpers)
+    tree = ast.parse(source)
+    has_execution_import = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module is not None
+        and node.module.startswith("autoskillit.execution")
+        for node in ast.walk(tree)
+    )
+    assert has_execution_import, (
+        "cli/_init_helpers.py does not import from 'autoskillit.execution'. "
+        "After P4-A2, _register_all must dispatch via the execution layer — "
+        "ensure an import from 'autoskillit.execution.*' is present "
+        "in cli/_init_helpers.py."
+    )
+
+
+def test_known_backend_names_matches_registry():
+    """KNOWN_BACKEND_NAMES (IL-0) must equal BACKEND_REGISTRY keys (IL-1)."""
+    from autoskillit.core import KNOWN_BACKEND_NAMES
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    assert set(BACKEND_REGISTRY.keys()) == KNOWN_BACKEND_NAMES, (
+        "When a new backend is added to BACKEND_REGISTRY, KNOWN_BACKEND_NAMES "
+        "in core/types/_type_constants_env.py must also be updated."
+    )

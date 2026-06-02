@@ -56,24 +56,25 @@ def test_maybe_promote_work_dir_noop_when_non_string():
     assert result == ""
 
 
-# T2a: run_python succeeds when work_dir misplaced inside args
+# T2a: run_python succeeds when work_dir misplaced inside args (no relative path-like conflict)
 @pytest.mark.anyio
 async def test_run_python_auto_promotes_work_dir_from_args(tool_ctx_kitchen_open, tmp_path):
     work_dir = tmp_path / "work"
     work_dir.mkdir()
+    output_dir = tmp_path / "output"  # absolute — validate passes, auto-promotion works
     result_json = await run_python(
         callable="autoskillit.smoke_utils.diagnose_merge_gate",
         args={
             "test_stdout": "FAILED test_foo",
             "test_stderr": "",
-            "output_dir": ".autoskillit/temp/test",
+            "output_dir": str(output_dir),
             "work_dir": str(work_dir),  # misplaced inside args
         },
         work_dir="",  # empty top-level
     )
     result = json.loads(result_json)
     assert result["success"] is True
-    expected = work_dir / ".autoskillit/temp/test" / "diagnosis.md"
+    expected = output_dir / "diagnosis.md"
     assert expected.exists()
 
 
@@ -95,7 +96,7 @@ async def test_run_python_strips_work_dir_from_args_after_promotion(
     result_json = await run_python(
         callable="some.module.func",
         args={
-            "output_dir": ".autoskillit/temp/test",
+            "output_dir": str(tmp_path / "output"),  # absolute — no relative-path conflict
             "work_dir": str(tmp_path),
         },
         work_dir="",
@@ -106,6 +107,24 @@ async def test_run_python_strips_work_dir_from_args_after_promotion(
         "work_dir must be removed from args after promotion to prevent leaking "
         "to the callable via _import_and_call"
     )
+
+
+# T2c: run_python surfaces diagnostic when work_dir is misplaced AND path-like arg is relative
+@pytest.mark.anyio
+async def test_run_python_surfaces_diagnostic_when_work_dir_misplaced_with_relative_path(
+    tool_ctx_kitchen_open, tmp_path
+):
+    result_json = await run_python(
+        callable="some.module.func",
+        args={
+            "output_dir": ".autoskillit/temp/test",  # relative — triggers diagnostic
+            "work_dir": str(tmp_path),  # misplaced inside args
+        },
+        work_dir="",
+    )
+    result = json.loads(result_json)
+    assert result["success"] is False
+    assert "inside args" in result["error"]
 
 
 # T3a: validate_path_arg_anchoring mentions misplaced work_dir in error

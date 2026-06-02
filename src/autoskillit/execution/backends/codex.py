@@ -329,6 +329,7 @@ class CodexBackend:
             replay_capable=False,
             record_capable=False,
             anthropic_provider_capable=False,
+            inspector_capable=True,
         )
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
@@ -777,3 +778,6 @@ class CodexBackend:
             return [f"Failed to ensure MCP registration: {exc}"]
 
         return _validate_codex_config()
+
+    def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
+        raise RuntimeError("build_inspector_cmd not yet implemented — lands in #3534")

@@ -856,7 +856,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 20,
-        "core/types": 27,
+        "core/types": 28,
         "cli": 21,
         "hooks": 12,
         "pipeline": 12,
@@ -1418,6 +1418,7 @@ class TestGroupCMigration:
             "process_exited_event",
             "channel_b_orphaned_tool_result",
             "exit_snapshot",
+            "inspector_verdict",
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):

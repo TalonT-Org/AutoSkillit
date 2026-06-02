@@ -249,10 +249,23 @@ class TestRaceSignalsFieldCount:
     """Sentinel test: breaks when RaceSignals fields change."""
 
     def test_race_signals_field_count(self) -> None:
-        assert len(dataclasses.fields(RaceSignals)) == 10, (
-            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 10). "
+        assert len(dataclasses.fields(RaceSignals)) == 11, (
+            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 11). "
             "Update tests to cover the new field."
         )
+
+
+class TestInspectorVerdictField:
+    """inspector_verdict field on RaceSignals defaults to None."""
+
+    def test_default_none(self) -> None:
+        rs = RaceSignals(
+            process_exited=True,
+            process_returncode=0,
+            channel_a_confirmed=False,
+            channel_b_status=None,
+        )
+        assert rs.inspector_verdict is None
 
 
 class TestExitSnapshot:

@@ -481,6 +481,7 @@ class TestAdjudicationCoverageMatrix:
             TerminationReason.STALE,  # TestStaleRecoveryPipelineAdjudication
             TerminationReason.TIMED_OUT,  # TestTimedOutPipelineAdjudication
             TerminationReason.IDLE_STALL,  # TestIdleStallWatchdog in test_process_run.py
+            TerminationReason.HEALTH_INSPECTOR,  # forward-declared — see issue #3574
         }
     )
 

@@ -84,6 +84,11 @@ def _compute_success(
         case TerminationReason.IDLE_STALL:
             return False
 
+        case TerminationReason.HEALTH_INSPECTOR:
+            # Inspector callback issued a KILL verdict; the subprocess did not
+            # complete its work and its output is not authoritative.
+            return False
+
         case TerminationReason.COMPLETED:
             # The process was killed by our own async_kill_process_tree
             # (signal -15 or -9), so a non-zero returncode is expected and

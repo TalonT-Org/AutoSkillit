@@ -795,3 +795,6 @@ class ClaudeCodeBackend:
 
     def ensure_pre_launch(self) -> list[str]:
         return []
+
+    def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
+        raise RuntimeError("build_inspector_cmd not yet implemented — lands in #3534")

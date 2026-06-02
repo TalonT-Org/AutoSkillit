@@ -153,6 +153,9 @@ def test_stub_class_satisfies_coding_agent_backend():
 
         def translate_model(self, model: str) -> str: ...
 
+        def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
+            return CmdSpec(cmd=(), env={})
+
     assert isinstance(_Backend(), CodingAgentBackend)
 
 

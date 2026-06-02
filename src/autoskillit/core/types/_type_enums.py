@@ -239,6 +239,7 @@ class TerminationReason(StrEnum):
     IDLE_STALL = "idle_stall"
     TIMED_OUT = "timed_out"
     SIGNAL_DEATH = "signal_death"
+    HEALTH_INSPECTOR = "health_inspector"
 
 
 class TerminationAction(StrEnum):
@@ -271,6 +272,7 @@ class KillReason(StrEnum):
     INFRA_KILL = "infra_kill"  # timeout / stall / stale
     EXCEPTION = "exception"  # runner raised an unhandled exception
     NOT_APPLICABLE = "not_applicable"  # no subprocess ran (gate/headless error)
+    HEALTH_INSPECTOR = "health_inspector"  # inspector callback issued KILL verdict
 
 
 class ChannelConfirmation(StrEnum):

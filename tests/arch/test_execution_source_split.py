@@ -102,8 +102,8 @@ SESSION_SIZE_BUDGETS = {
 }
 NEW_SESSION_FSM_MODULES = ["_retry_fsm.py", "_session_outcome.py"]
 SESSION_FSM_SIZE_BUDGETS = {
-    "session/_retry_fsm.py": 215,
-    "session/_session_outcome.py": 270,
+    "session/_retry_fsm.py": 221,
+    "session/_session_outcome.py": 273,
 }
 MQ_SIZE_BUDGETS = {
     "merge_queue/__init__.py": 590,

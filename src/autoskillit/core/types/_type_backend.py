@@ -98,6 +98,8 @@ class BackendCapabilities:
     anthropic_provider_capable: bool = field(default=False)
     # True when backend supports Claude plugin install/list CLI
     plugin_install_capable: bool = field(default=False)
+    # True when backend supports Health Inspector LLM-callback idle detection
+    inspector_capable: bool = field(default=False)
 
 
 _CONTEXT_WINDOW_SUFFIX_RE: _re.Pattern[str] = _re.compile(r"\[\d+[mk]?\]$", _re.IGNORECASE)
@@ -148,6 +150,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     record_capable=True,
     anthropic_provider_capable=True,
     plugin_install_capable=True,
+    inspector_capable=True,
 )
 
 

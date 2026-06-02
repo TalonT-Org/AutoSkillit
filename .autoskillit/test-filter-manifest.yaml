@@ -235,10 +235,6 @@ src/autoskillit/core/__init__.pyi:
   - arch/
   - contracts/
 
-src/autoskillit/core/bash_write_targets.py:
-  - core/
-  - execution/
-
 tests/**/CLAUDE.md: []
 
 # Eval framework files

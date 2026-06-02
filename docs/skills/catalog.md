@@ -102,7 +102,9 @@ answers a specific question about the system:
 
 12 visualization-planning lenses under `skills_extended/vis-lens-*/`, orchestrated
 via the decomposed phoropter pipeline: `select-vis-lenses` → `run_vis_lenses` →
-`synthesize-vis-plan`. Each answers a specific question about a figure or the figure set:
+`synthesize-vis-plan` (`plan-visualization` is the legacy single-skill predecessor,
+retained for backward compatibility). Each answers a specific question about a figure
+or the figure set:
 
 | # | Skill | Cognitive Mode | Primary Question | Priority |
 |---|-------|---------------|------------------|----------|

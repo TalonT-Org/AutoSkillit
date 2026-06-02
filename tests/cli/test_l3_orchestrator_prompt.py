@@ -356,7 +356,7 @@ class TestProgressMarkers:
 
 class TestToolSurface:
     @pytest.mark.parametrize("prefix", [DIRECT_PREFIX, MARKETPLACE_PREFIX])
-    def test_six_fleet_tools_listed(self, prefix: str) -> None:
+    def test_seven_fleet_tools_listed(self, prefix: str) -> None:
         prompt = _build(mcp_prefix=prefix)
         for tool in (
             "dispatch_food_truck",
@@ -365,6 +365,7 @@ class TestToolSurface:
             "get_token_summary",
             "get_timing_summary",
             "get_quota_events",
+            "reset_dispatch",
         ):
             assert f"{prefix}{tool}" in prompt, f"Missing tool: {prefix}{tool}"
 

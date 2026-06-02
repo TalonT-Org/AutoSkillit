@@ -224,6 +224,8 @@ This dispatch was interrupted mid-run with partial sidecar progress.
 Re-dispatch it using compute_remaining_issues(dispatch_id, original_urls, project_dir)
 to retrieve only the remaining issue URLs, then call dispatch_food_truck with{_reenter_clause}.
 Do NOT re-dispatch from the full original issue list.
+If the resume re-dispatch fails with a stale-artifact reason (in-progress label,
+claim failure), follow the STALE-ARTIFACT RECOVERY section.
 """
 
     _ing_section = ""
@@ -285,7 +287,8 @@ After startup, only these tools should be used for all campaign operations:
 - {mcp_prefix}get_pipeline_report
 - {mcp_prefix}get_token_summary
 - {mcp_prefix}get_timing_summary
-- {mcp_prefix}get_quota_events{gate_tool_line}
+- {mcp_prefix}get_quota_events
+- {mcp_prefix}reset_dispatch{gate_tool_line}
 
 Explicitly FORBIDDEN: open_kitchen, close_kitchen, run_skill, and all GitHub/CI tools.
 Use ONLY {mcp_prefix}dispatch_food_truck to dispatch — never run_skill.
@@ -348,8 +351,11 @@ On FAILURE:
   emit the %%FLEET_PROGRESS%% marker with state=failure, proceed to next dispatch.
 - If continue_on_failure={campaign_recipe.continue_on_failure} is false: halt campaign
   immediately (proceed to INTERRUPT/CLEANUP).
+- Exception: if the failure reason indicates stale artifacts (in-progress label,
+  claim failure), follow the STALE-ARTIFACT RECOVERY section instead of halting.
 
-NEVER retry the same dispatch_name on non-quota failures in v1.
+NEVER retry the same dispatch_name on non-quota failures. For stale-artifact recovery,
+always use a NEW dispatch_name (see STALE-ARTIFACT RECOVERY below).
 
 ## QUOTA RETRY
 
@@ -363,6 +369,25 @@ Action:
 3. If the retry still fails: halt campaign (proceed to INTERRUPT/CLEANUP).
 
 This is the ONLY condition where re-dispatching the same dispatch_name is permitted.
+Stale-artifact recovery uses a NEW dispatch_name — see STALE-ARTIFACT RECOVERY section.
+
+## STALE-ARTIFACT RECOVERY
+
+Trigger: ANY dispatch (whether classified FAILURE or RESUMABLE) fails with a reason
+mentioning "in-progress label", "could not claim", "stale artifact", or "already claimed"
+— indicating a prior failed session left unresolved artifacts (labels, PRs, branches).
+
+This section applies regardless of whether you reached it from FAILURE RECOVERY or from
+a failed RESUMABLE re-dispatch.
+
+Action:
+1. Identify the prior dispatch_id from the failure envelope (prior_dispatch_id field)
+   or from the campaign state (the dispatch that previously owned this issue).
+2. Call {mcp_prefix}reset_dispatch(dispatch_id=<prior_dispatch_id>) to clean up
+   stale artifacts (removes in-progress label, closes orphaned PR, deletes branch).
+3. Re-dispatch with a NEW dispatch_name (never reuse the original dispatch_name).
+4. If reset_dispatch fails or the re-dispatch still fails: halt campaign
+   (proceed to INTERRUPT/CLEANUP).
 {resume_section}{resumable_section}
 ## INTERRUPT/CLEANUP SEQUENCE
 

@@ -275,8 +275,8 @@ def test_build_fleet_dispatch_prompt_accepts_marketplace_prefix() -> None:
     assert MARKETPLACE_PREFIX + "dispatch_food_truck" in prompt
 
 
-def test_build_fleet_dispatch_prompt_lists_all_10_tools() -> None:
-    """Dispatch prompt must enumerate all 10 tools in the TOOL SURFACE section."""
+def test_build_fleet_dispatch_prompt_lists_all_11_tools() -> None:
+    """Dispatch prompt must enumerate all 11 tools in the TOOL SURFACE section."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX
     from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
 
@@ -300,6 +300,7 @@ def test_build_fleet_dispatch_prompt_lists_all_10_tools() -> None:
         "load_recipe",
         "fetch_github_issue",
         "get_issue_title",
+        "reset_dispatch",
     ):
         assert tool in tool_surface, (
             f"Expected tool {tool!r} in TOOL SURFACE section of dispatch prompt"

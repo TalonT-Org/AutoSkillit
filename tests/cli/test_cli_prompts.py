@@ -676,8 +676,8 @@ def test_orchestrator_prompt_contains_missing_on_failure_instruction():
     assert "recipe authoring error. Stop the pipeline and report the missing route." in prompt
 
 
-def test_campaign_prompt_tool_list_still_enumerates_six_tools():
-    """The 6 operational tools must still be listed in the campaign prompt after the fix."""
+def test_campaign_prompt_tool_list_still_enumerates_seven_tools():
+    """The 7 operational tools must still be listed in the campaign prompt after the fix."""
     from unittest.mock import MagicMock
 
     from autoskillit.cli._prompts import _build_fleet_campaign_prompt
@@ -701,6 +701,43 @@ def test_campaign_prompt_tool_list_still_enumerates_six_tools():
     assert "get_token_summary" in prompt
     assert "get_timing_summary" in prompt
     assert "get_quota_events" in prompt
+    assert "reset_dispatch" in prompt
+
+
+def test_campaign_prompt_has_stale_artifact_recovery_section():
+    """STALE-ARTIFACT RECOVERY must be a top-level section with reset_dispatch instruction."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.cli._prompts import _build_fleet_campaign_prompt
+
+    recipe = MagicMock()
+    recipe.name = "test-campaign"
+    recipe.description = "Test"
+    recipe.dispatches = [MagicMock()]
+    recipe.continue_on_failure = False
+
+    prompt = _build_fleet_campaign_prompt(
+        campaign_recipe=recipe,
+        manifest_yaml="dispatches: []",
+        completed_dispatches="",
+        mcp_prefix="mcp__autoskillit__",
+        campaign_id="abc-123",
+    )
+    assert "## STALE-ARTIFACT RECOVERY" in prompt
+    stale_idx = prompt.index("## STALE-ARTIFACT RECOVERY")
+    next_section_idx = prompt.find("\n## ", stale_idx + 1)
+    stale_section = (
+        prompt[stale_idx:next_section_idx] if next_section_idx != -1 else prompt[stale_idx:]
+    )
+    assert "reset_dispatch" in stale_section
+
+
+def test_fleet_dispatch_prompt_includes_reset_dispatch():
+    """Ad-hoc fleet dispatch prompt tool surface must include reset_dispatch."""
+    from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
+
+    prompt = _build_fleet_dispatch_prompt(mcp_prefix="mcp__autoskillit__")
+    assert "reset_dispatch" in prompt
 
 
 def test_campaign_prompt_includes_gate_dispatch_handling_section():

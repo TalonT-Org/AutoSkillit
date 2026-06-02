@@ -763,9 +763,16 @@ When `dispatch_food_truck` returns with `dispatch_status: "resumable"`:
    from `fleet_claim_guard`, retrieve the prior dispatch result and use its
    `dispatched_session_id` and `dispatch_id` for resume.
 
-4. **Escalate, don't retry blind.** If the prior session is unrecoverable (missing session
-   log, corrupt state), this is a **human intervention** scenario. Emit the L3 result
-   sentinel with `success=false` and `reason=resume_unrecoverable`, then halt.
+4. **Reset stale artifacts when resume is impossible.** If the prior session is
+   unrecoverable (missing session log, corrupt state) but left stale artifacts
+   (in-progress label, open PR, remote branch), call
+   `reset_dispatch(dispatch_id=<prior_dispatch_id>)` to clean up. Then re-dispatch
+   fresh with a new `dispatch_name`.
+
+5. **Escalate only after reset fails.** If `reset_dispatch` itself fails or the
+   re-dispatch after reset still fails, this is a **human intervention** scenario.
+   Emit the L3 result sentinel with `success=false` and `reason=resume_unrecoverable`,
+   then halt.
 
 ---
 

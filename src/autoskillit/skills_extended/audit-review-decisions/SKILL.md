@@ -48,8 +48,8 @@ implemented. Identify review debt before it compounds.
 
 **ALWAYS:**
 - Save raw PR JSON to temp before any analysis (Step 1)
-- Use GraphQL alias batching (~20 PRs per query) for data collection
-- Include `rateLimit { cost remaining resetAt }` in every GraphQL query
+- Batch data collection with aliases (~20 PRs per API call)
+- Include `rateLimit { cost remaining resetAt }` in every batched query
 - Sleep 1s between consecutive mutating GitHub API calls (Step 5 watermark posts)
 - Step 2 triage subagents read local JSON files only — zero API calls
 - Step 3 validation subagents grep the actual current codebase

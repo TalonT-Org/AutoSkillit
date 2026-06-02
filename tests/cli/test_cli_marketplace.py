@@ -66,3 +66,53 @@ def test_upgrade_is_registered_as_cli_command():
 def test_marketplace_module_still_importable():
     """_marketplace module is still importable (not deleted)."""
     import autoskillit.cli._marketplace  # noqa: F401
+
+
+class TestInstallPluginInstallCapableGuard:
+    def test_rejects_when_plugin_install_not_capable(self, monkeypatch, capsys):
+        """install() returns False with rejection message when capability is False."""
+        from unittest.mock import MagicMock
+
+        mock_cfg = MagicMock()
+        mock_cfg.agent_backend.backend = "some-backend"
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.plugin_install_capable = False
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
+
+        from autoskillit.cli._marketplace import install
+
+        result = install(scope="user")
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert (
+            "plugin_install_capable" in captured.out
+            or "plugin-install-capable" in captured.out.lower()
+        )
+
+    def test_passes_guard_when_plugin_install_capable(self, monkeypatch, capsys):
+        """install() does not reject at capability guard when True."""
+        from unittest.mock import MagicMock
+
+        mock_cfg = MagicMock()
+        mock_cfg.agent_backend.backend = "claude-code"
+        monkeypatch.setattr("autoskillit.config.load_config", lambda _: mock_cfg)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.plugin_install_capable = True
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
+
+        # Stub CLAUDECODE env to trigger the next guard (deferred exit)
+        monkeypatch.setenv("CLAUDECODE", "1")
+
+        from autoskillit.cli._marketplace import install
+
+        result = install(scope="user")
+
+        # Should reach the CLAUDECODE guard (returns False for deferred),
+        # NOT the capability guard
+        assert result is False
+        captured = capsys.readouterr()
+        assert "plugin_install_capable" not in captured.out

@@ -147,9 +147,13 @@ def install(*, scope: str = "user") -> bool:
     from autoskillit.config import load_config
 
     cfg = load_config(Path.cwd())
-    if cfg.agent_backend.backend != "claude-code":
+
+    from autoskillit.execution import get_backend
+
+    backend = get_backend(cfg.agent_backend.backend)
+    if not backend.capabilities.plugin_install_capable:
         print(
-            f"\nautoskillit install is only supported with the claude-code backend.\n"
+            f"\nPlugin install requires a plugin_install_capable backend.\n"
             f"Current backend: {cfg.agent_backend.backend!r}\n"
         )
         return False

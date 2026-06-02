@@ -169,15 +169,17 @@ def test_all_backends_have_name_constant():
 
     source = inspect.getsource(_type_constants_env)
     tree = ast.parse(source)
-    string_constants = {
-        node.value
+    assignment_targets = {
+        target.id
         for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+        if isinstance(target, ast.Name)
     }
 
     for key in BACKEND_REGISTRY:
         expected_name = f"AGENT_BACKEND_{key.upper().replace('-', '_')}"
-        assert key in string_constants, (
+        assert expected_name in assignment_targets, (
             f"BACKEND_REGISTRY key {key!r} has no matching constant in "
             f"_type_constants_env.py — add {expected_name} = {key!r}"
         )

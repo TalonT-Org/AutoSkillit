@@ -10,10 +10,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
 from autoskillit.config import write_config_layer
-from autoskillit.core import YAMLError, atomic_write, dump_yaml_str, get_logger, load_yaml
+from autoskillit.core import (
+    CLAUDE_CODE_CAPABILITIES,
+    YAMLError,
+    atomic_write,
+    dump_yaml_str,
+    get_logger,
+    load_yaml,
+)
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend
+    from autoskillit.core import BackendCapabilities, CodingAgentBackend
 
 logger = get_logger(__name__)
 
@@ -283,13 +290,13 @@ def _check_secret_scanning(project_dir: Path) -> _ScanResult:
     return _ScanResult(True, bypass_accepted=True)
 
 
-def _is_plugin_installed(*, agent_backend: str = "claude-code") -> bool:
+def _is_plugin_installed(*, capabilities: BackendCapabilities = CLAUDE_CODE_CAPABILITIES) -> bool:
     """Return True if autoskillit is installed as a Claude plugin.
 
     Returns False when claude CLI is not on PATH, times out, or is otherwise unavailable.
-    Non-claude-code backends return False immediately without subprocess.
+    Backends without plugin_install_capable return False immediately without subprocess.
     """
-    if agent_backend != "claude-code":
+    if not capabilities.plugin_install_capable:
         return False
     try:
         result = subprocess.run(
@@ -438,7 +445,8 @@ def _register_all(
         sync_hooks_to_settings,
     )
     from autoskillit.config import load_config
-    from autoskillit.core import AGENT_BACKEND_CODEX, ensure_project_temp
+    from autoskillit.core import ensure_project_temp
+    from autoskillit.execution import get_backend
 
     # Refuse to register from inside the autoskillit source tree — this would
     # plant source-tree absolute paths in the project scope.
@@ -469,12 +477,14 @@ def _register_all(
 
     try:
         _cfg = load_config(project_dir)
-        _backend_name = _cfg.agent_backend.backend
+        if backend is None:
+            backend = get_backend(_cfg.agent_backend.backend)
     except Exception:
-        logger.warning("load_config failed, defaulting to claude-code backend", exc_info=True)
-        _backend_name = "claude-code"
+        logger.warning("backend resolution failed, defaulting to claude-code", exc_info=True)
+        if backend is None:
+            backend = get_backend("claude-code")
 
-    if _backend_name == AGENT_BACKEND_CODEX:
+    if backend.capabilities.mcp_config_capable:
         from autoskillit.cli._hooks_codex import sync_hooks_to_codex_config
 
         sync_hooks_to_codex_config()
@@ -484,7 +494,7 @@ def _register_all(
         _evict_stale_autoskillit_hooks(settings_path)
         sync_hooks_to_settings(settings_path)
 
-        plugin_ok = _is_plugin_installed(agent_backend=_backend_name)
+        plugin_ok = _is_plugin_installed(capabilities=backend.capabilities)
         if not plugin_ok:
             _register_mcp_server(_user_claude_json_path())
         else:
@@ -537,7 +547,7 @@ def _register_all(
         print(f"  {_Y}{'gh auth':>12}{_R}  {_G}authenticated{_R}")
     else:
         print(f"  {_Y}{'gh auth':>12}{_R}  {_D}not found — run{_R} {_G}gh auth login{_R}")
-    if _backend_name == AGENT_BACKEND_CODEX:
+    if backend.capabilities.mcp_config_capable:
         print(f"  {_Y}{'hooks':>12}{_R}  {_G}synced{_R} {_D}(codex){_R}")
     else:
         if plugin_ok:

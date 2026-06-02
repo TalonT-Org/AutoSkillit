@@ -147,7 +147,7 @@ select = ["E", "F", "I", "UP", "TID251"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger" = {msg = "Use get_logger() from autoskillit._logging instead."}
-"signal.signal" = {msg = "Use anyio.open_signal_receiver instead of signal.signal — see _serve_with_signal_guard in cli/app.py."}
+"signal.signal" = {msg = "Use anyio.open_signal_receiver instead of signal.signal — see serve_with_signal_guard in cli/_serve_guard.py."}
 "yaml.safe_load" = {msg = "Use load_yaml() from autoskillit.core.io instead — CSafeLoader is 9-11x faster."}
 "yaml.safe_dump" = {msg = "Use dump_yaml_str() from autoskillit.core.io instead — CDumper is faster."}
 

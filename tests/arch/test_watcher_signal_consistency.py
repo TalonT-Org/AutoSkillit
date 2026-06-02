@@ -9,6 +9,7 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
+_CLI_APP = Path("src/autoskillit/cli/app.py")
 _PROCESS_RACE = Path("src/autoskillit/execution/process/_process_race.py")
 _PROCESS_MONITOR = Path("src/autoskillit/execution/process/_process_monitor.py")
 
@@ -48,4 +49,16 @@ def test_watcher_calls_has_active_execution_marker(watcher: str) -> None:
     assert watcher in all_callers, (
         f"{watcher} does not call _has_active_execution_marker. "
         f"Functions that do: {sorted(all_callers)}"
+    )
+
+
+_SIGNAL_GUARD_ACTIVITY_MUST_CHECK_MARKER = frozenset({"is_server_active"})
+
+
+@pytest.mark.parametrize("fn_name", sorted(_SIGNAL_GUARD_ACTIVITY_MUST_CHECK_MARKER))
+def test_signal_guard_activity_check_calls_has_active_execution_marker(fn_name: str) -> None:
+    callers = _functions_calling_predicate(_CLI_APP, "_has_active_execution_marker")
+    assert fn_name in callers, (
+        f"{fn_name} in cli/app.py does not call _has_active_execution_marker. "
+        f"Functions that do: {sorted(callers)}"
     )

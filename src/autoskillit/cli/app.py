@@ -8,7 +8,7 @@ import os
 import sys
 from datetime import UTC
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import anyio
 from cyclopts import App, Parameter
@@ -23,6 +23,10 @@ from autoskillit.cli._init_helpers import (
     _register_all,
 )
 from autoskillit.cli._serve_guard import serve_with_signal_guard
+from autoskillit.execution.process import _has_active_execution_marker
+
+if TYPE_CHECKING:
+    from autoskillit.core import FleetLock
 from autoskillit.cli._sessions import sessions_app
 from autoskillit.cli._validate import validate_app
 from autoskillit.cli.fleet import fleet_app
@@ -31,6 +35,7 @@ from autoskillit.cli.session._order import _recipes_dir_for, order
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
+    claude_code_project_dir,
 )
 
 app = App(
@@ -52,6 +57,17 @@ app.command(features_app)
 app.command(sessions_app)
 app.command(validate_app)
 app.command(order)
+
+
+def is_server_active(
+    marker_dir: Path | None,
+    fleet_lock: FleetLock | None,
+) -> bool:
+    if fleet_lock is not None and fleet_lock.active_count > 0:
+        return True
+    if marker_dir is not None and _has_active_execution_marker(marker_dir):
+        return True
+    return False
 
 
 class CliError(Exception):
@@ -136,13 +152,17 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     try:
         backend_options = {"use_uvloop": sys.platform != "win32"}
 
-        def _check_dispatch_active() -> bool:
-            if ctx.fleet_lock is None:
-                return False
-            return ctx.fleet_lock.active_count > 0
+        _marker_dir: Path | None = None
+        try:
+            _marker_dir = claude_code_project_dir(str(ctx.project_dir))
+        except OSError:
+            pass
 
         async def _guarded_serve() -> None:
-            await serve_with_signal_guard(mcp, dispatch_activity_check=_check_dispatch_active)
+            await serve_with_signal_guard(
+                mcp,
+                activity_check=lambda: is_server_active(_marker_dir, ctx.fleet_lock),
+            )
 
         anyio.run(
             _guarded_serve,

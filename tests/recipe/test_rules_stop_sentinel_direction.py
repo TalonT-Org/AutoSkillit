@@ -53,13 +53,13 @@ class TestStopSentinelDirection:
                     "tool": "run_python",
                     "with": {"callable": "test"},
                     "on_success": "done",
-                    "on_failure": "fail",
+                    "on_failure": "escalate_failure",
                 },
                 "done": {
                     "action": "stop",
                     "message": 'Emit sentinel: {"success": true, "reason": "done"}',
                 },
-                "fail": {
+                "escalate_failure": {
                     "action": "stop",
                     "message": 'Emit sentinel: {"success": false, "reason": "failed"}',
                 },

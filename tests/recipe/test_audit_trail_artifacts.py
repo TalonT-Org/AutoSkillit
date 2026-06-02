@@ -15,7 +15,7 @@ def test_create_worktree_creates_audit_directory(tmp_path: Path):
     dashboard = temp_dir / "evaluation_dashboard_test_2026-05-07_120000.md"
     dashboard.write_text("# Evaluation Dashboard\nverdict: GO\n")
 
-    vis_dir = tmp_path / "temp" / "plan-visualization"
+    vis_dir = tmp_path / "temp" / "synthesize-vis-plan"
     vis_dir.mkdir(parents=True)
     trace = vis_dir / "visualization-plan-trace.md"
     trace.write_text("# Visualization Plan Trace\nprimary_tradition: controlled_intervention\n")
@@ -49,7 +49,7 @@ def test_audit_dashboard_copied_to_audit_dir(tmp_path: Path):
 
 def test_visualization_trace_copied_to_audit_dir(tmp_path: Path):
     """visualization-plan-trace.md is copied to audit/ with content preserved."""
-    vis_dir = tmp_path / "temp" / "plan-visualization"
+    vis_dir = tmp_path / "temp" / "synthesize-vis-plan"
     vis_dir.mkdir(parents=True)
     trace = vis_dir / "visualization-plan-trace.md"
     trace.write_text("# Visualization Plan Trace\nprimary_tradition: controlled_intervention\n")

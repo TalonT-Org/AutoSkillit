@@ -174,7 +174,7 @@ requires_decision: false
 ```
 
 3. **Write** the advisory to `visualization-plan-trace.md` in the output directory
-   (`{{AUTOSKILLIT_TEMP}}/plan-visualization/visualization-plan-trace.md`), appended
+   (`{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan/visualization-plan-trace.md`), appended
    after any existing Tier-C routing metadata
 4. **Also write** the advisory into the vis_spec output file
    (`{{AUTOSKILLIT_TEMP}}/vis-lens-methodology-norms/vis_spec_methodology_norms_{timestamp}.md`)
@@ -426,7 +426,7 @@ Before creating the diagram, verify:
 
 ## Related Skills
 
-- `/autoskillit:plan-visualization` - Parent skill for lens selection
+- `/autoskillit:synthesize-vis-plan` - Parent skill for lens selection
 - `/autoskillit:mermaid` - MUST BE LOADED before creating diagram
 - `/autoskillit:vis-lens-multi-compare` - For multi-condition comparison layouts
 - `/autoskillit:vis-lens-reproducibility` - For reproducibility and data provenance checks

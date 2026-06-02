@@ -14,6 +14,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    _FD_REDIRECT_RE,
     command_verb,
     extract_interpreter_write_paths,
     extract_redirect_targets,
@@ -87,7 +88,11 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
                 found_write = True
     elif verb in _WRITE_VERBS:
         found_write = True
-        non_flag = [t for t in segment[1:] if not t.startswith("-")]
+        non_flag = [
+            t
+            for t in segment[1:]
+            if not t.startswith("-") and not t.startswith("&") and not _FD_REDIRECT_RE.match(t)
+        ]
         if verb == "sed":
             # -i flag must be present; last non-flag arg is the target
             flags = [t for t in segment[1:] if t.startswith("-")]

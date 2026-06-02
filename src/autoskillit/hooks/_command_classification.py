@@ -47,11 +47,14 @@ _SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
+_FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
 _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 
 
 def resolve_write_target(path: str, cwd: str = "") -> str | None:
     if not path:
+        return None
+    if path.startswith("&") or _FD_REDIRECT_RE.match(path):
         return None
     if os.path.isabs(path):
         return path

@@ -157,6 +157,7 @@ REQUIRED_WRITE_GUARD_TEST_FAMILIES = {
     "git_checkout",
     "git_reset",
     "gh_api",
+    "fd_redirect",
 }
 
 

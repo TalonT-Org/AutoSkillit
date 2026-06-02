@@ -467,6 +467,16 @@ class TestWriteGuardRealisticCommands:
         result = _run_hook(_build_bash_event("cmd | tee /dev/null"))
         assert result == ""
 
+    def test_combined_redirect_not_blocked_with_cwd(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _run_hook(_build_bash_event("cmd > /dev/null 2>&1"))
+        assert result == ""
+
+    def test_fd_redirect_only_not_blocked_with_cwd(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _run_hook(_build_bash_event("gh auth status 2>&1"))
+        assert result == ""
+
 
 class TestWriteGuardInterpreterBypass:
     """write_guard must detect interpreter-mediated writes (python3 heredocs, -c flag)."""
@@ -949,6 +959,79 @@ class TestGhCommandRedirectChecking:
         assert result == ""
 
 
+class TestWriteGuardFdRedirectImmunity:
+    """Cross-product: every fd-redirect form x every CWD state must not produce false targets."""
+
+    @pytest.mark.parametrize(
+        "redirect_form",
+        [
+            "cmd 2>&1",
+            "cmd > /dev/null 2>&1",
+            "cmd >&2",
+            "cmd 1>&2",
+            "cmd 2>>&1",
+            "cmd >&-",
+            "cmd 3>&1",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "cwd",
+        ["/workspace", ""],
+        ids=["cwd_set", "cwd_unset"],
+    )
+    def test_fd_redirect_never_produces_write_target(
+        self, redirect_form, cwd, monkeypatch: pytest.MonkeyPatch
+    ):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        if cwd:
+            monkeypatch.setenv("AUTOSKILLIT_CWD", cwd)
+        else:
+            monkeypatch.delenv("AUTOSKILLIT_CWD", raising=False)
+        result = _extract_bash_write_targets(redirect_form)
+        assert result is None or result == [], (
+            f"fd-redirect '{redirect_form}' with CWD='{cwd}' produced spurious targets: {result}"
+        )
+
+
+class TestWriteGuardVerbFdRedirect:
+    """Verb-argument fd-redirect tests with CWD set."""
+
+    def test_tee_with_fd_redirect_not_blocked(self, monkeypatch: pytest.MonkeyPatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("tee 2>&1")
+        assert result is None or result == []
+
+    def test_sed_with_fd_redirect_not_blocked(self, monkeypatch: pytest.MonkeyPatch):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("sed -i 's/x/y/' 2>&1")
+        assert result is None or result == []
+
+    def test_sed_with_real_path_and_fd_redirect_detects_real_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("sed -i 's/x/y/' /outside/file.py 2>&1")
+        assert result is not None
+        assert "/outside/file.py" in result
+
+    def test_mv_with_real_path_and_fd_redirect_detects_real_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
+
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/workspace")
+        result = _extract_bash_write_targets("mv /src /dst 2>&1")
+        assert result is not None
+        assert "/dst" in result
+
+
 class TestWriteGuardCrossProductMatrix:
     """Cross-product test: every write mechanism resolves every path type."""
 
@@ -962,6 +1045,9 @@ class TestWriteGuardCrossProductMatrix:
             "tee {path}",
             "mv /src {path}",
             "cp /src {path}",
+            "echo x > {path} 2>&1",
+            "sed -i 's/x/y/' {path} 2>&1",
+            "tee {path} 2>&1",
         ],
     )
     @pytest.mark.parametrize(

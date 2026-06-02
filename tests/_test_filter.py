@@ -441,6 +441,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "rules_skill_content": frozenset(
         {
             "recipe",
+            "skills/test_graphql_invocation_completeness.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_skill_tool_syntax_contracts.py",
             "contracts/test_no_interpreter_writes_in_skills.py",
@@ -459,6 +460,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "arch/test_write_restriction_coverage.py",
+            "skills/test_graphql_invocation_completeness.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_skill_tool_syntax_contracts.py",

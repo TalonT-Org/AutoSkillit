@@ -361,6 +361,12 @@ When dispatching from an execution map:
    }
    ```
 
+   Build the alias query from the `gated_by` issue numbers and invoke:
+   ```bash
+   LABEL_QUERY="query { $(for NUM in $BLOCKER_NUMS; do echo "i${NUM}: repository(owner:\"$OWNER\", name:\"$REPO\") { issue(number:${NUM}) { labels(first:20) { nodes { name } } } }"; done) }"
+   gh api graphql -f query="$LABEL_QUERY"
+   ```
+
    For each blocker, check whether the `in-progress` label is still present. If a
    blocker's label has been removed since the map was built, remove it from that deferred
    group's `gated_by` array. If all blockers for a deferred group have cleared,

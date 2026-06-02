@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.recipe._skill_placeholder_parser import extract_step_sections
+
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 SKILL_PATH = (
@@ -41,13 +43,16 @@ def test_skill_contains_step_1_5_section() -> None:
 def test_step_1_5_references_graphql_review_threads() -> None:
     """Step 1.5 must reference 'gh api graphql' and 'reviewThreads' for fetching threads."""
     text = _skill_text()
-    assert "reviewThreads" in text, (
+    step_sections = extract_step_sections(text)
+    step_1_5 = step_sections.get("Step 1.5", "")
+    assert "gh api graphql" in step_1_5, (
+        "review-pr/SKILL.md Step 1.5 must contain a concrete 'gh api graphql' "
+        "invocation template — not just the query schema. Without it, the agent "
+        "must improvise the invocation and may use the wrong variable-passing pattern."
+    )
+    assert "reviewThreads" in step_1_5, (
         "review-pr/SKILL.md Step 1.5 must reference 'reviewThreads' in the GraphQL "
         "query used to fetch prior review thread context."
-    )
-    # Step 1.5 should reference graphql (the query is embedded inline)
-    assert "graphql" in text.lower(), (
-        "review-pr/SKILL.md Step 1.5 must use a GraphQL query to fetch review threads."
     )
 
 

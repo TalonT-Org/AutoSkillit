@@ -18,6 +18,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_bash_blocks,
     extract_bash_placeholders,
     extract_declared_ingredients,
+    extract_graphql_blocks,
     extract_python_blocks,
     shell_vars_assigned,
 )
@@ -758,6 +759,9 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
     return findings
 
 
+_GRAPHQL_VARIABLE_RE = re.compile(r"\$([a-zA-Z_]\w*)")
+_GH_API_GRAPHQL_BLOCK_RE = re.compile(r"gh\s+api\s+graphql\b")
+
 _SOURCE_PROHIBITION_RE = re.compile(
     r"(?:NOT|NEVER|DO NOT)[\s\S]{0,120}?"
     r"(?:issue\s+title|issue\s+body|issue\s+metadata|closing_issue|"
@@ -818,4 +822,86 @@ def _check_source_attribution_directive(ctx: ValidationContext) -> list[RuleFind
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="graphql-query-requires-shell-invocation",
+    description=(
+        "A SKILL.md contains a ```graphql block with parameterized $variables "
+        "but no ```bash block with a concrete `gh api graphql` invocation. "
+        "Agents will improvise the invocation and may use the wrong variable-passing "
+        "pattern (-f variables=<json blob> instead of individual -F key=value flags)."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue
+
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        graphql_blocks = extract_graphql_blocks(content)
+        if not graphql_blocks:
+            continue
+
+        bash_blocks = extract_bash_blocks(content)
+        bash_with_graphql = [b for b in bash_blocks if _GH_API_GRAPHQL_BLOCK_RE.search(b)]
+
+        for block in graphql_blocks:
+            variable_names = set(_GRAPHQL_VARIABLE_RE.findall(block))
+            if not variable_names:
+                continue
+
+            if not bash_with_graphql:
+                findings.append(
+                    RuleFinding(
+                        rule="graphql-query-requires-shell-invocation",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Skill '{skill_name}' has a graphql block declaring variables "
+                            f"{sorted(variable_names)} but no bash block with a concrete "
+                            f"`gh api graphql` invocation. Add a bash block with individual "
+                            f"-F key=value flag bindings for each variable."
+                        ),
+                    )
+                )
+                continue
+
+            for var in variable_names:
+                flag_found = any(
+                    re.search(rf"-[Ff]\s+{re.escape(var)}=", b) for b in bash_with_graphql
+                )
+                if not flag_found:
+                    findings.append(
+                        RuleFinding(
+                            rule="graphql-query-requires-shell-invocation",
+                            severity=Severity.ERROR,
+                            step_name=step_name,
+                            message=(
+                                f"Skill '{skill_name}' graphql variable '${var}' has no "
+                                f"'-F {var}=' or '-f {var}=' binding in any "
+                                f"`gh api graphql` bash block."
+                            ),
+                        )
+                    )
+
     return findings

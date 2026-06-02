@@ -22,6 +22,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_deletion_regression_guards.py` | Structural guards for deletion regression detection in merge-pr and review-pr skills |
 | `test_dry_walkthrough_contracts.py` | Structural contracts for the dry-walkthrough historical regression check step |
 | `test_generate_report_guards.py` | Guards for generate-report SKILL.md: blind git add prevention |
+| `test_graphql_invocation_completeness.py` | SKILL.md GraphQL invocation completeness: every parameterized graphql block must have a matching `gh api graphql` bash invocation with individual -F flag bindings |
 | `test_file_audit_issues_contracts.py` | Contract tests for file-audit-issues SKILL.md behavioral invariants |
 | `test_investigate_contracts.py` | Structural contracts for the investigate historical recurrence check step |
 | `test_investigate_deep_mode_contracts.py` | Structural contracts for the investigate deep analysis mode |

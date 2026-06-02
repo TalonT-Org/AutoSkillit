@@ -3,6 +3,7 @@
 Used by:
   - src/autoskillit/recipe/rules/rules_skill_content.py (semantic rules)
   - tests/skills/test_skill_placeholder_contracts.py (structural linter)
+  - tests/skills/test_graphql_invocation_completeness.py (graphql invocation linter)
   - tests/contracts/test_no_interpreter_writes_in_skills.py (write safety linter)
 """
 
@@ -11,12 +12,21 @@ from __future__ import annotations
 import regex as re
 
 
+def extract_fenced_blocks(content: str, language: str) -> list[str]:
+    """Extract fenced code blocks for the given language identifier."""
+    return re.findall(rf"```{re.escape(language)}\s*\n(.*?)```", content, re.DOTALL)
+
+
 def extract_bash_blocks(content: str) -> list[str]:
-    return re.findall(r"```bash\s*\n(.*?)```", content, re.DOTALL)
+    return extract_fenced_blocks(content, "bash")
 
 
 def extract_python_blocks(content: str) -> list[str]:
-    return re.findall(r"```python\s*\n(.*?)```", content, re.DOTALL)
+    return extract_fenced_blocks(content, "python")
+
+
+def extract_graphql_blocks(content: str) -> list[str]:
+    return extract_fenced_blocks(content, "graphql")
 
 
 def extract_bash_placeholders(bash_blocks: list[str]) -> set[str]:

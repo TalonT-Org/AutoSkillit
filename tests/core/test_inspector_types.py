@@ -24,7 +24,8 @@ from autoskillit.core import (
     KillReason,
     TerminationReason,
 )
-from autoskillit.core.types import RaceSignals, SubprocessResult
+from autoskillit.core.types import SubprocessResult
+from autoskillit.execution.process import RaceSignals
 from tests.conftest import make_stub_inspector
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]

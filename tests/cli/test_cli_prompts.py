@@ -812,6 +812,7 @@ def test_campaign_prompt_lists_infrastructure_codes():
     )
     assert "fleet_l3_no_result_block" in prompt
     assert "fleet_l3_timeout" in prompt
+    assert "fleet_l3_startup_or_crash" in prompt
 
 
 def test_campaign_prompt_infrastructure_section_says_do_not_halt():

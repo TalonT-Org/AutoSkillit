@@ -23,6 +23,7 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "server/_session_type.py",  # Codex pre-reveal — env var dispatch, no capabilities
         "cli/session/_session_launch.py",  # Feature-gate backend-alignment fallback
         "recipe/rules/rules_backend_compat.py",  # Backend compatibility semantic rule
+        "server/tools/tools_execution.py",  # Skill-requirement: backend_requirements membership
     }
 )
 

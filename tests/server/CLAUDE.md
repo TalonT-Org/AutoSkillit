@@ -69,7 +69,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_execution_results.py` | Tests for run_skill result shapes, failure paths, timing, flush telemetry, and gate checks |
 | `test_tools_execution_routing.py` | Tests for run_skill routing, executor delegation, and session skill management |
 | `test_tools_execution_step_resolution.py` | Tests for server-side recipe step parameter resolution in run_skill (output_dir, stale_threshold, idle_output_timeout, step_provider auto-filled from cached recipe step definitions) |
-| `test_tools_execution_backend_mixing.py` | Integration tests for per-step backend mixing in run_skill() — Codex backend + ANTHROPIC_BASE_URL derives backend_override='claude-code' |
+| `test_tools_execution_backend_mixing.py` | Integration tests for per-step backend mixing in run_skill() — provider-profile and skill-requirement-driven backend_override derivation + structured log emission |
 | `test_tools_execution_write_prefix.py` | Tests for allowed_write_prefix computation decoupled from read_only |
 | `test_tools_fleet_reset.py` | Tests for the `reset_dispatch` MCP tool — happy paths, errors, edge cases |
 | `test_tools_git.py` | Tests for merge_worktree core flow: happy path, test gate, rebase abort, bypass prevention |

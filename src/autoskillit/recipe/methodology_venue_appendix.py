@@ -5,12 +5,13 @@ from __future__ import annotations
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import cache, lru_cache
+from functools import cache
 from pathlib import Path
 
 import regex as re
 
 from autoskillit.core import load_yaml
+from autoskillit.recipe._api_cache import YamlFileCache
 from autoskillit.recipe.methodology_tradition_registry import (
     BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     VenueAppendixDef,
@@ -67,9 +68,10 @@ def _has_keyword_match(text: str, keywords: tuple[str, ...] | list[str]) -> bool
     return any(_keyword_pattern(kw).search(text) for kw in keywords)
 
 
-@lru_cache(maxsize=1)
-def load_ml_sub_area_folding() -> tuple[MLSubAreaFoldingDef, ...]:
-    yaml_path = BUNDLED_METHODOLOGY_TRADITIONS_DIR / "_ml_sub_area_folding.yaml"
+_ML_SUB_AREA_CACHE = YamlFileCache()
+
+
+def _load_and_parse_ml_sub_area(yaml_path: Path) -> tuple[MLSubAreaFoldingDef, ...]:
     data = load_yaml(yaml_path)
     if not isinstance(data, dict):
         raise TypeError(f"Expected dict from {yaml_path}, got {type(data).__name__}")
@@ -129,6 +131,11 @@ def load_ml_sub_area_folding() -> tuple[MLSubAreaFoldingDef, ...]:
             )
         )
     return tuple(entries)
+
+
+def load_ml_sub_area_folding() -> tuple[MLSubAreaFoldingDef, ...]:
+    yaml_path = BUNDLED_METHODOLOGY_TRADITIONS_DIR / "_ml_sub_area_folding.yaml"
+    return _ML_SUB_AREA_CACHE.get_or_load(yaml_path, _load_and_parse_ml_sub_area)
 
 
 def _resolve_conditional_parent(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -14,6 +13,7 @@ from autoskillit.core import (
     pkg_root,
     resolve_skill_name,
 )
+from autoskillit.recipe._api_cache import YamlFileCache
 from autoskillit.recipe._contracts_types import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
@@ -28,12 +28,13 @@ from autoskillit.recipe._contracts_types import (
 
 logger = get_logger(__name__)
 
+_MANIFEST_CACHE = YamlFileCache()
 
-@lru_cache(maxsize=1)
+
 def load_bundled_manifest() -> dict[str, Any]:
     """Load the bundled skill_contracts.yaml from the package directory."""
     manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
-    return load_yaml(manifest_path)
+    return _MANIFEST_CACHE.get_or_load(manifest_path, load_yaml)
 
 
 def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContract | None:

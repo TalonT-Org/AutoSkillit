@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass as _dc
 from pathlib import Path
 from typing import Any
@@ -78,6 +78,39 @@ class LoadCache:
 
 
 _LOAD_CACHE = LoadCache()
+
+_MISSING = object()
+
+
+class YamlFileCache:
+    """Thread-safe single-file cache keyed on (mtime_ns, size).
+
+    Replaces @lru_cache(maxsize=1) for YAML-backed functions.
+    Staleness is structurally impossible: the cache key changes
+    with the file, forcing a re-read.
+    """
+
+    def __init__(self) -> None:
+        self._key: tuple[int, int] = (0, 0)
+        self._value: Any = _MISSING
+        self._lock = threading.Lock()
+
+    def get_or_load(self, path: Path, loader: Callable[[Path], Any]) -> Any:
+        mtime = _path_mtime_ns(path)
+        size = _file_size(path)
+        key = (mtime, size)
+        with self._lock:
+            if key == self._key and self._value is not _MISSING:
+                return self._value
+            value = loader(path)
+            self._key = key
+            self._value = value
+            return value
+
+    def clear(self) -> None:
+        with self._lock:
+            self._key = (0, 0)
+            self._value = _MISSING
 
 
 def _path_mtime_ns(path: Path) -> int:
@@ -179,21 +212,21 @@ def _refresh_staleness_baseline() -> None:
 
 
 def _clear_stale_caches() -> None:
-    """Clear all lru_cache helpers and the load cache when staleness is detected."""
+    """Clear all caches and the load cache when staleness is detected."""
     global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
+    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
     from autoskillit.recipe._skill_helpers import (  # noqa: PLC0415
         _get_bundled_skill_names,
         _get_skill_category_map,
     )
-    from autoskillit.recipe.contracts import load_bundled_manifest  # noqa: PLC0415
     from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
-        load_ml_sub_area_folding,
+        _ML_SUB_AREA_CACHE,
     )
-    from autoskillit.recipe.rules.rules_blocks import _block_budgets  # noqa: PLC0415
+    from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE  # noqa: PLC0415
 
-    _block_budgets.cache_clear()
-    load_bundled_manifest.cache_clear()
-    load_ml_sub_area_folding.cache_clear()
+    _BUDGETS_CACHE.clear()
+    _MANIFEST_CACHE.clear()
+    _ML_SUB_AREA_CACHE.clear()
     _get_bundled_skill_names.cache_clear()
     _get_skill_category_map.cache_clear()
     _LOAD_CACHE.clear()

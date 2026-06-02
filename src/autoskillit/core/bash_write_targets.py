@@ -21,6 +21,7 @@ _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
 _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
+_SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
 
 _PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
     {
@@ -52,6 +53,10 @@ def _resolve_write_target(path: str, cwd: str = "") -> str | None:
         return None
     if path.startswith("&") or _FD_REDIRECT_RE.match(path):
         return None
+    if _SHELL_VAR_RE.search(path):
+        path = os.path.expandvars(path)
+        if _SHELL_VAR_RE.search(path):
+            return None
     if os.path.isabs(path):
         return path
     if cwd:

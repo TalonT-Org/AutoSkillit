@@ -331,6 +331,36 @@ class TestResolveWriteTarget:
 
         assert resolve_write_target(path, cwd) == expected
 
+    @pytest.mark.parametrize(
+        "env_setup, path, cwd, expected",
+        [
+            (
+                {"TEST_EXPAND_DIR": "/resolved/dir"},
+                "$TEST_EXPAND_DIR/output.txt",
+                "/workspace",
+                "/resolved/dir/output.txt",
+            ),
+            ({}, "$REVIEW_OUTPUT_DIR/file.json", "/workspace", None),
+            ({}, "${REVIEW_OUTPUT_DIR}/file.json", "/workspace", None),
+            ({}, "$NONEXISTENT_VAR/path", "/workspace", None),
+            (
+                {"TEST_EXPAND_DIR": "/resolved/dir"},
+                "$TEST_EXPAND_DIR/$NONEXISTENT/file",
+                "/workspace",
+                None,
+            ),
+            ({}, "report$2026.txt", "/workspace", "/workspace/report$2026.txt"),
+        ],
+    )
+    def test_resolve_write_target_shell_vars(self, env_setup, path, cwd, expected, monkeypatch):
+        from autoskillit.hooks._command_classification import resolve_write_target
+
+        for var in ["TEST_EXPAND_DIR", "REVIEW_OUTPUT_DIR", "NONEXISTENT_VAR", "NONEXISTENT"]:
+            monkeypatch.delenv(var, raising=False)
+        for var, val in env_setup.items():
+            monkeypatch.setenv(var, val)
+        assert resolve_write_target(path, cwd) == expected
+
 
 class TestExtractRedirectTargetsCwd:
     @pytest.mark.parametrize(

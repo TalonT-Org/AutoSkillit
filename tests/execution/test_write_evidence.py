@@ -73,7 +73,7 @@ class TestMultiDirFsSnapshot:
             return _make_result()
 
         minimal_ctx.runner = mock_runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -242,7 +242,7 @@ class TestSubdirSnapshot:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -270,7 +270,7 @@ class TestSubdirSnapshot:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -370,7 +370,7 @@ class TestStatSnapshot:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -419,7 +419,7 @@ class TestPlannerSkillEndToEnd:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -457,7 +457,7 @@ class TestLateCreatedDirectoryDetection:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -505,7 +505,7 @@ class TestSentinelDisambiguation:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         proj = tmp_path / "proj"
         proj.mkdir()
 
@@ -545,7 +545,7 @@ class TestSentinelDisambiguation:
             return _make_result(returncode=0, stdout=_success_session_json("done"))
 
         minimal_ctx.runner = mock_runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
         proj = tmp_path / "proj"
         proj.mkdir()
 

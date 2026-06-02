@@ -40,7 +40,7 @@ async def test_headless_command_includes_headless_env_var(minimal_ctx, tmp_path:
         )
     )
 
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "test"),
         env={"AUTOSKILLIT_HEADLESS": "1"},

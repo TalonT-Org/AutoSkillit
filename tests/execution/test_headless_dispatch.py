@@ -436,7 +436,9 @@ class TestDispatchFoodTruckGuards:
         )
         minimal_ctx.runner = runner
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(
+            food_truck_capable=True, pty_required=True, channel_b_capable=True
+        )
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         result = await executor.dispatch_food_truck(

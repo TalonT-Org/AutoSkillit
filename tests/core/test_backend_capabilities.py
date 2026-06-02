@@ -49,6 +49,25 @@ def test_backend_capabilities_slots():
     assert not hasattr(CLAUDE_CODE_CAPABILITIES, "__dict__")
 
 
+def test_backend_capabilities_all_false_empty_constructible() -> None:
+    """BackendCapabilities() with zero args yields the declared default for every field."""
+    from autoskillit.core import BackendCapabilities
+
+    caps = BackendCapabilities()
+    fields = dataclasses.fields(BackendCapabilities)
+    hints = typing.get_type_hints(BackendCapabilities)
+
+    for f in fields:
+        hint = hints.get(f.name)
+        actual = getattr(caps, f.name)
+        if hint is bool:
+            assert actual is f.default, (
+                f"{f.name!r}: zero-arg yields {actual!r}, declared default is {f.default!r}"
+            )
+        elif hint == frozenset[str]:
+            assert actual == frozenset(), f"{f.name!r}: expected frozenset(), got {actual!r}"
+
+
 def test_backend_capabilities_field_count():
     """Field count by type must match the dataclass definition."""
     from autoskillit.core import BackendCapabilities

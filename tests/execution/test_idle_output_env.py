@@ -46,7 +46,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
         monkeypatch.setenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", "30")
         minimal_ctx.runner = MockSubprocessRunner()
         minimal_ctx.runner.set_default(_success_result())
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         await run_headless_core("/investigate foo", str(tmp_path), minimal_ctx)
 
@@ -73,7 +73,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
         minimal_ctx.config.run_skill.idle_output_timeout = 60
         minimal_ctx.runner = MockSubprocessRunner()
         minimal_ctx.runner.set_default(_success_result())
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         await run_headless_core(
             "/investigate foo", str(tmp_path), minimal_ctx, idle_output_timeout=15.0
@@ -120,7 +120,7 @@ class TestExecuteClaudeHeadlessIdleEnv:
         minimal_ctx.config.run_skill.idle_output_timeout = 0  # cfg also 0
         minimal_ctx.runner = MockSubprocessRunner()
         minimal_ctx.runner.set_default(_success_result())
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         await run_headless_core("/investigate foo", str(tmp_path), minimal_ctx)
 

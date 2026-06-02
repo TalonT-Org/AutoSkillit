@@ -34,7 +34,7 @@ async def test_run_headless_core_forwards_provider_extras_to_build_cmd(
 
     execute_kwargs: dict = {}
 
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "test"), env={}
     )
@@ -68,7 +68,7 @@ async def test_run_headless_core_defaults_provider_extras_none(
     from autoskillit.core import CmdSpec
     from autoskillit.execution.headless import run_headless_core
 
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "test"), env={}
     )
@@ -174,7 +174,7 @@ async def test_run_headless_core_forwards_provider_name_and_fallback_env(
 
     execute_kwargs: dict = {}
 
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "test"), env={}
     )
@@ -208,7 +208,7 @@ async def test_run_headless_core_bridges_profile_to_provider_when_empty(
 
     execute_kwargs: dict = {}
 
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "test"), env={}
     )
@@ -273,7 +273,7 @@ async def test_no_fallback_env_returns_empty_provider_used(
         return _sub_result
 
     minimal_ctx.runner = fake_runner
-    minimal_ctx.backend = _mock_backend()
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._build_skill_result",
@@ -315,7 +315,7 @@ async def test_provider_name_stamps_provider_used_on_result(
         return _sub_result
 
     minimal_ctx.runner = fake_runner
-    minimal_ctx.backend = _mock_backend()
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._build_skill_result",
@@ -458,7 +458,9 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
         lambda *a, **kw: object(),
     )
 
-    minimal_ctx.backend = _mock_backend()
+    minimal_ctx.backend = _mock_backend(
+        food_truck_capable=True, pty_required=True, channel_b_capable=True
+    )
     executor = DefaultHeadlessExecutor(minimal_ctx)
     marker = tmp_path / "markers"
     await executor.dispatch_food_truck(
@@ -529,7 +531,7 @@ async def test_execute_forwards_readonly_skill_to_build_result(
         return _sr(0, result_line)
 
     minimal_ctx.runner = fake_runner
-    minimal_ctx.backend = _mock_backend()
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
     spec = ClaudeHeadlessCmd(cmd=("echo", "test"), env={})
     await _execute_claude_headless(
@@ -584,7 +586,9 @@ async def test_dispatch_food_truck_derives_marker_dir_from_cwd(
         lambda *a, **kw: object(),
     )
 
-    minimal_ctx.backend = _mock_backend()
+    minimal_ctx.backend = _mock_backend(
+        food_truck_capable=True, pty_required=True, channel_b_capable=True
+    )
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.dispatch_food_truck(
         "prompt",
@@ -626,7 +630,9 @@ async def test_dispatch_food_truck_marker_dir_none_when_cwd_falsy(
 
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
-    minimal_ctx.backend = _mock_backend()
+    minimal_ctx.backend = _mock_backend(
+        food_truck_capable=True, pty_required=True, channel_b_capable=True
+    )
     executor = DefaultHeadlessExecutor(minimal_ctx)
     await executor.dispatch_food_truck(
         "prompt",
@@ -655,7 +661,7 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
         return _sr()
 
     minimal_ctx.runner = fake_runner
-    minimal_ctx.backend = _mock_backend()
+    minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
     monkeypatch.setattr(
         "autoskillit.execution.headless._headless_execute._build_skill_result",
         lambda *a, **kw: SkillResult(
@@ -826,7 +832,7 @@ async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
         lambda *a, **kw: object(),
     )
 
-    minimal_ctx.backend = _mock_backend(channel_b_capable=False)
+    minimal_ctx.backend = _mock_backend(food_truck_capable=True, channel_b_capable=False)
 
     from autoskillit.execution.headless import DefaultHeadlessExecutor
 
@@ -861,7 +867,7 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
     minimal_ctx.runner = fake_runner
 
     sentinel = object()
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.stream_parser.return_value = sentinel
     minimal_ctx.backend = backend
 
@@ -903,7 +909,7 @@ async def test_execute_claude_headless_stream_parser_receives_completion_marker(
 
     minimal_ctx.runner = fake_runner
 
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     minimal_ctx.backend = backend
 
     monkeypatch.setattr(
@@ -943,7 +949,7 @@ async def test_run_headless_core_forwards_marker_dir_and_caller_session_id(
     marker_dir = tmp_path / "markers"
     marker_dir.mkdir()
 
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "--print", "test"), env={}
     )

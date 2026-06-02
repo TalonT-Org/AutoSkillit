@@ -40,27 +40,27 @@ class BackendCapabilities:
     """
 
     # True when backend streams a side-channel JSONL log (Channel B)
-    channel_b_capable: bool
+    channel_b_capable: bool = field(default=False)
     # True when the subprocess needs a pseudo-TTY allocation
-    pty_required: bool
+    pty_required: bool = field(default=False)
     # True when backend supports --resume <session_id>
-    session_resume_capable: bool
+    session_resume_capable: bool = field(default=False)
     # True when backend accepts --add-dir / --plugin-dir skill injection
-    skill_injection_capable: bool
+    skill_injection_capable: bool = field(default=False)
     # Forward-declared: planned for thinking-block rendering
-    supports_thinking_blocks: bool
+    supports_thinking_blocks: bool = field(default=False)
     # True when backend stdout is Claude JSON format
-    supports_claude_format_stdout: bool
+    supports_claude_format_stdout: bool = field(default=False)
     # True when non-zero exit code definitively signals failure
-    exit_code_is_terminal: bool
+    exit_code_is_terminal: bool = field(default=False)
     # Forward-declared: planned for MCP config wiring
-    mcp_config_capable: bool
+    mcp_config_capable: bool = field(default=False)
     # True when backend can be used for food-truck (fleet) dispatches
-    food_truck_capable: bool
+    food_truck_capable: bool = field(default=False)
     # JSONL record types that signal session completion
-    completion_record_types: frozenset[str]
+    completion_record_types: frozenset[str] = field(default_factory=frozenset)
     # JSONL record types that constitute session activity
-    session_record_types: frozenset[str]
+    session_record_types: frozenset[str] = field(default_factory=frozenset)
     # True when backend supports LLM triage via claude -p
     triage_capable: bool = field(default=False)
     # Forward-declared: planned for context exhaustion handling

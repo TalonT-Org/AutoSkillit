@@ -1501,3 +1501,125 @@ def test_python_block_read_only_does_not_fire(tmp_path: Path) -> None:
     findings = _write_skill_and_run_rules(tmp_path, skill_md)
     rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
     assert _INTERP_WRITE_RULE_ID not in rule_ids
+
+
+# ---------------------------------------------------------------------------
+# graphql-query-requires-shell-invocation tests
+# ---------------------------------------------------------------------------
+
+_GRAPHQL_RULE_ID = "graphql-query-requires-shell-invocation"
+
+
+def _write_graphql_skill_and_run_rules(tmp_path: Path, skill_md_content: str) -> list[object]:
+    skill_name = "graphql-skill"
+    skill_dir = tmp_path / skill_name
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(skill_md_content)
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_make_recipe_for_skill(skill_name, {}))
+    recipe = load_recipe(recipe_path)
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+        return run_semantic_rules(recipe)
+
+
+def test_graphql_query_requires_shell_invocation_rule_registered() -> None:
+    import autoskillit.recipe.rules.rules_skill_content  # noqa: F401
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    rule_names = [r.name for r in _RULE_REGISTRY]
+    assert _GRAPHQL_RULE_ID in rule_names
+
+
+def test_graphql_rule_fires_when_no_bash_invocation(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ### Step 1
+        ```graphql
+        query($owner:String!, $repo:String!, $number:Int!) {
+          repository(owner:$owner, name:$repo) {
+            pullRequest(number:$number) { title }
+          }
+        }
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_does_not_fire_when_bash_invocation_present(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ### Step 1
+        ```graphql
+        query($owner:String!, $repo:String!, $number:Int!) {
+          repository(owner:$owner, name:$repo) {
+            pullRequest(number:$number) { title }
+          }
+        }
+        ```
+
+        ```bash
+        gh api graphql \\
+          -f query='...' \\
+          -F owner="$OWNER" \\
+          -F repo="$REPO" \\
+          -F number=$NUMBER
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID not in rule_ids
+
+
+def test_graphql_rule_fires_for_case_mismatched_variable_bindings(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ### Step 1
+        ```graphql
+        query($owner:String!, $repo:String!, $number:Int!) {
+          repository(owner:$owner, name:$repo) {
+            pullRequest(number:$number) { title }
+          }
+        }
+        ```
+
+        ```bash
+        gh api graphql \\
+          -f query='...' \\
+          -F OWNER="$OWNER" \\
+          -F REPO="$REPO" \\
+          -F NUMBER=$NUMBER
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID in rule_ids
+
+
+def test_graphql_rule_does_not_fire_for_display_only_fragment(tmp_path: Path) -> None:
+    skill_md = textwrap.dedent(
+        """\
+        # graphql-skill
+
+        ### Step 1
+        ```graphql
+        number title mergedAt
+        reviews(first: 100) {
+          nodes { author { login } body state submittedAt }
+        }
+        ```
+        """
+    )
+    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+    assert _GRAPHQL_RULE_ID not in rule_ids

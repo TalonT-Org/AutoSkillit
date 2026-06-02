@@ -441,6 +441,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "rules_skill_content": frozenset(
         {
             "recipe",
+            "skills/test_graphql_invocation_completeness.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_skill_tool_syntax_contracts.py",
             "contracts/test_no_interpreter_writes_in_skills.py",
@@ -459,7 +460,9 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         {
             "recipe",
             "arch/test_write_restriction_coverage.py",
+            "skills/test_graphql_invocation_completeness.py",
             "skills/test_make_campaign_compliance.py",
+            "skills/test_review_pr_prior_thread_awareness.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_skill_tool_syntax_contracts.py",
             "skills/test_audit_impl_diff_discipline.py",
@@ -765,7 +768,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # Other file-level entries:
             "infra/test_pretty_output_recipe.py",
             "infra/test_generated_files.py",
+            "skills/test_graphql_invocation_completeness.py",
             "skills/test_planner_skill_contracts.py",
+            "skills/test_review_pr_prior_thread_awareness.py",
             "skills/test_skill_placeholder_contracts.py",
             "skills/test_make_campaign_compliance.py",
             "skills/test_review_design_guards.py",

@@ -338,7 +338,6 @@ class CodexBackend:
     @property
     def conventions(self) -> BackendConventions:
         return BackendConventions(
-            skills_subdir=Path("skills"),
             project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
         )
 

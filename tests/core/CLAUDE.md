@@ -7,7 +7,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | File | Purpose |
 |------|---------|
 | `__init__.py` | empty |
-| `test_add_dir_validation.py` | Tests for ValidatedAddDir, validate_add_dir, and validate_project_local_skill_dir |
+| `test_add_dir_validation.py` | Tests for ValidatedAddDir and validate_add_dir |
 | `test_canonical_token_usage.py` | Tests for CanonicalTokenUsage frozen dataclass — factory methods, merge, and immutability |
 | `test_capture.py` | Tests for CaptureEntrySpec and resolve_payload_field |
 | `test_branch_guard.py` | Tests for core.branch_guard — protected-branch validation |

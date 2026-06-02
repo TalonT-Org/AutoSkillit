@@ -319,9 +319,10 @@ class TestMultiChannelSkillUniqueness:
 
     Channel 1: --plugin-dir (BUNDLED skills)
     Channel 2: --add-dir (ephemeral session dir, written by init_session)
-    Channel 3: CWD auto-discovery (project-local .claude/skills/)
 
-    Overlap between any two channels produces duplicate slash commands.
+    Channel 3 (CWD) is no longer used for skill delivery — all project-local
+    overrides are delivered via Channel 2.
+    Overlap between Channel 1 and Channel 2 would produce duplicate slash commands.
     """
 
     @pytest.mark.parametrize("cook_session", [True, False], ids=["cook", "headless"])
@@ -331,12 +332,8 @@ class TestMultiChannelSkillUniqueness:
             DefaultSessionSkillManager,
             SkillsDirectoryProvider,
         )
-        from autoskillit.workspace.skills import (
-            DefaultSkillResolver,
-            detect_project_local_overrides,
-        )
+        from autoskillit.workspace.skills import DefaultSkillResolver
 
-        # Set up a project dir with one override to exercise Channel 3
         project_dir = tmp_path / "project"
         (project_dir / ".claude" / "skills" / "investigate").mkdir(parents=True)
         (project_dir / ".claude" / "skills" / "investigate" / "SKILL.md").write_text("# custom")
@@ -350,7 +347,7 @@ class TestMultiChannelSkillUniqueness:
         resolver = DefaultSkillResolver()
         channel_1 = {s.name for s in resolver.list_all() if s.source == SkillSource.BUNDLED}
 
-        # Channel 2: skills written to ephemeral dir
+        # Channel 2: skills written to ephemeral dir (bundled extended + project-local overrides)
         skills_base = skills_dir / ".claude" / "skills"
         channel_2 = (
             {d.name for d in skills_base.iterdir() if d.is_dir()}
@@ -358,17 +355,10 @@ class TestMultiChannelSkillUniqueness:
             else set()
         )
 
-        # Channel 3: project-local overrides
-        channel_3 = set(detect_project_local_overrides(project_dir))
-
         overlap_1_2 = channel_1 & channel_2
-        overlap_2_3 = channel_2 & channel_3
 
         assert not overlap_1_2, (
             f"Channel 1 (--plugin-dir) ∩ Channel 2 (--add-dir) overlap: {sorted(overlap_1_2)}"
-        )
-        assert not overlap_2_3, (
-            f"Channel 2 (--add-dir) ∩ Channel 3 (CWD) overlap: {sorted(overlap_2_3)}"
         )
 
 

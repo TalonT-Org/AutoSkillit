@@ -110,3 +110,11 @@ class TestBackendCompliance:
 
         for cls in BACKEND_REGISTRY.values():
             assert isinstance(cls().validate_session_layout(tmp_path), list)
+
+    def test_all_backends_conventions_is_backend_conventions(self):
+        from autoskillit.core import BackendConventions
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            assert isinstance(cls().conventions, BackendConventions)

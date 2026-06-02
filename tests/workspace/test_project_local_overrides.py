@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import PACK_REGISTRY
+from autoskillit.workspace.skills import override_names
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -35,7 +36,7 @@ def test_detect_project_local_overrides_claude_skills(tmp_path):
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# review-pr")
     result = detect_project_local_overrides(tmp_path)
-    assert result == frozenset({"review-pr"})
+    assert override_names(result) == frozenset({"review-pr"})
 
 
 def test_detect_project_local_overrides_autoskillit_skills(tmp_path):
@@ -46,7 +47,7 @@ def test_detect_project_local_overrides_autoskillit_skills(tmp_path):
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# open-pr")
     result = detect_project_local_overrides(tmp_path)
-    assert result == frozenset({"open-pr"})
+    assert override_names(result) == frozenset({"open-pr"})
 
 
 def test_detect_project_local_overrides_union(tmp_path):
@@ -61,7 +62,7 @@ def test_detect_project_local_overrides_union(tmp_path):
         d.mkdir(parents=True)
         (d / "SKILL.md").write_text("# skill")
     result = detect_project_local_overrides(tmp_path)
-    assert result == frozenset({"review-pr", "open-pr"})
+    assert override_names(result) == frozenset({"review-pr", "open-pr"})
 
 
 def test_detect_project_local_overrides_ignores_missing_skill_md(tmp_path):
@@ -89,7 +90,7 @@ def test_detect_project_local_overrides_codex_skills(tmp_path):
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# codex-review")
     result = detect_project_local_overrides(tmp_path)
-    assert result == frozenset({"codex-review"})
+    assert override_names(result) == frozenset({"codex-review"})
 
 
 def test_detect_project_local_overrides_agents_skills(tmp_path):
@@ -100,7 +101,7 @@ def test_detect_project_local_overrides_agents_skills(tmp_path):
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# agent-deploy")
     result = detect_project_local_overrides(tmp_path)
-    assert result == frozenset({"agent-deploy"})
+    assert override_names(result) == frozenset({"agent-deploy"})
 
 
 def test_detect_project_local_overrides_union_four_paths(tmp_path):
@@ -117,7 +118,9 @@ def test_detect_project_local_overrides_union_four_paths(tmp_path):
         d.mkdir(parents=True)
         (d / "SKILL.md").write_text("# skill")
     result = detect_project_local_overrides(tmp_path)
-    assert result == frozenset({"review-pr", "open-pr", "codex-review", "agent-deploy"})
+    assert override_names(result) == frozenset(
+        {"review-pr", "open-pr", "codex-review", "agent-deploy"}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +141,8 @@ def test_init_session_no_override_when_project_dir_none(tmp_path):
     assert (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
 
 
-def test_init_session_excludes_overridden_skill(tmp_path):
-    """T-OVR-008: init_session() excludes bundled skill when project-local override exists."""
+def test_init_session_delivers_project_local_override(tmp_path):
+    """T-OVR-008: init_session() delivers project-local override into ephemeral dir."""
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
         SkillsDirectoryProvider,
@@ -152,7 +155,9 @@ def test_init_session_excludes_overridden_skill(tmp_path):
     (override / "SKILL.md").write_text("# custom investigate")
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-002", project_dir=project_dir)
-    assert not (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
+    delivered = skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    assert delivered.exists(), "project-local override must be copied into ephemeral dir"
+    assert "# custom investigate" in delivered.read_text()
 
 
 def test_init_session_includes_non_overridden_skills(tmp_path):
@@ -218,11 +223,11 @@ def test_init_session_logs_override_skip(tmp_path):
     assert any(e.get("skill") == "investigate" for e in skip_events)
 
 
-def test_init_session_cook_session_excludes_project_local_overrides(tmp_path):
-    """T-OVR-012: cook_session=True excludes skills with project-local overrides.
+def test_init_session_cook_session_delivers_project_local_overrides(tmp_path):
+    """T-OVR-012: cook_session=True delivers project-local overrides via Channel 2.
 
-    Project-local overrides are already visible via CWD auto-discovery (Channel 3),
-    so the ephemeral dir (Channel 2) must NOT contain them — regardless of session mode.
+    All project-local overrides are delivered via Channel 2 (copied into ephemeral dir).
+    Channel 3 (CWD) is no longer used for delivery.
     """
     from autoskillit.workspace.session_skills import (
         DefaultSessionSkillManager,
@@ -237,10 +242,11 @@ def test_init_session_cook_session_excludes_project_local_overrides(tmp_path):
 
     mgr = DefaultSessionSkillManager(SkillsDirectoryProvider(), tmp_path / "ephemeral")
     skills_dir = mgr.init_session("sess-cook", cook_session=True, project_dir=project_dir)
-    assert not (skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists(), (
-        "cook_session=True must NOT include 'investigate' when a project-local "
-        "override exists — CWD auto-discovery already provides it"
+    delivered = skills_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    assert delivered.exists(), (
+        "cook_session=True must deliver project-local override via Channel 2"
     )
+    assert "# custom investigate" in delivered.read_text()
 
 
 def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
@@ -260,12 +266,12 @@ def test_init_session_cook_session_ignores_disabled_subsets(tmp_path):
 
 
 def test_init_session_cook_full_skill_set_invariant(tmp_path):
-    """T-OVR-014: cook_session=True yields all BUNDLED_EXTENDED skills minus
-    project-local overrides and default-disabled pack skills — but never BUNDLED
-    (Tier 1) skills, which are already served by --plugin-dir.
+    """T-OVR-014: cook_session=True yields all BUNDLED_EXTENDED skills plus
+    project-local overrides, minus default-disabled pack skills — but never
+    BUNDLED (Tier 1) skills, which are already served by --plugin-dir.
 
-    The cook bypasses explicit subset-disable filtering but NOT channel deduplication
-    and NOT default pack gating.
+    Project-local overrides are delivered via Channel 2 (copied into ephemeral dir).
+    The cook bypasses explicit subset-disable filtering but NOT default pack gating.
     """
     from autoskillit.core.types import SkillSource
     from autoskillit.workspace.session_skills import (
@@ -275,7 +281,7 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
     from autoskillit.workspace.skills import DefaultSkillResolver
     from tests._helpers import make_subsetsconfig, make_test_config
 
-    # Override exactly one extended skill to test override exclusion
+    # Override exactly one extended skill
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     override = project_dir / ".claude" / "skills" / "investigate"
@@ -294,13 +300,14 @@ def test_init_session_cook_full_skill_set_invariant(tmp_path):
 
     resolver = DefaultSkillResolver()
     all_skills = resolver.list_all()
-    # Expected: all BUNDLED_EXTENDED skills except project-local overrides and
-    # skills whose categories are entirely in default-disabled packs.
+    # Expected: all BUNDLED_EXTENDED skills (excluding default-disabled packs)
+    # PLUS project-local overrides (delivered via Channel 2).
+    # "investigate" is overridden but still present — the project-local copy replaces the bundled.
     expected_names = {
         s.name
         for s in all_skills
         if s.source != SkillSource.BUNDLED and not (s.categories & _DEFAULT_DISABLED_TAGS)
-    } - {"investigate"}
+    }
     skills_base = skills_dir / ".claude" / "skills"
     actual_names = {d.name for d in skills_base.iterdir() if d.is_dir()}
     assert actual_names == expected_names, (
@@ -369,11 +376,11 @@ def test_cook_session_retains_non_colliding_extended_skills(tmp_path):
         s.name
         for s in resolver.list_all()
         if s.source != SkillSource.BUNDLED and not (s.categories & _DEFAULT_DISABLED_TAGS)
-    } - {"investigate"}
+    }
     skills_base = skills_dir / ".claude" / "skills"
     actual = {d.name for d in skills_base.iterdir() if d.is_dir()}
     missing = expected - actual
     assert not missing, (
-        f"cook_session=True must include all non-colliding extended skills. "
+        f"cook_session=True must include all extended skills (including project-local overrides). "
         f"Missing: {sorted(missing)}"
     )

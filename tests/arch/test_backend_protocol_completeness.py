@@ -177,6 +177,18 @@ def test_coding_agent_backend_protocol_includes_conventions():
     )
 
 
+def test_all_backends_implement_conventions():
+    from autoskillit.core import BackendConventions
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        instance = cls()
+        assert hasattr(instance, "conventions"), f"{name} backend must implement conventions"
+        assert isinstance(instance.conventions, BackendConventions), (
+            f"{name} backend conventions must return BackendConventions"
+        )
+
+
 def test_coding_agent_backend_protocol_includes_setup_session_dir():
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
 

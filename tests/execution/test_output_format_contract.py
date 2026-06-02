@@ -24,9 +24,6 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.commands import (
-    build_headless_resume_cmd,
-)
 from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -269,7 +266,7 @@ class TestAllBuildersEnforceOutputFormatFlags:
 
     @pytest.mark.parametrize("fmt", list(OutputFormat))
     def test_resume_builder_satisfies_format_requirements(self, fmt: OutputFormat):
-        spec = build_headless_resume_cmd(
+        spec = ClaudeCodeBackend().build_resume_cmd(
             resume_session_id="abc",
             prompt="Emit",
             output_format=fmt,

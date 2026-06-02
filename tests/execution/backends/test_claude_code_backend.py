@@ -46,14 +46,11 @@ class TestClaudeCodeBackend:
         assert isinstance(result.cmd, tuple)
 
     def test_build_cmd_matches_build_headless_cmd(self, tmp_path: Path) -> None:
-        from autoskillit.execution.commands import build_headless_cmd
-
         backend = ClaudeCodeBackend()
         skill_cmd = "say hello"
-        with pytest.warns(DeprecationWarning):
-            direct = build_headless_cmd(skill_cmd)
+        direct = backend.build_headless_cmd(skill_cmd)
         result = backend.build_cmd(skill_cmd, str(tmp_path))
-        assert tuple(direct.cmd) == result.cmd
+        assert direct.cmd == result.cmd
         assert direct.env == result.env
         assert result.cwd == str(tmp_path)
 

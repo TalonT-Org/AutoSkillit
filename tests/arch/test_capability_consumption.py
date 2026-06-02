@@ -39,11 +39,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         rationale="version validation via BackendCapabilities fields",
         added_date=date(2026, 5, 31),
     ),
-    "version_check_command": ForwardDeclaredField(
-        issue=3122,
-        rationale="version validation via BackendCapabilities fields",
-        added_date=date(2026, 5, 31),
-    ),
     "mcp_env_forward_vars": ForwardDeclaredField(
         issue=3458,
         rationale="MCP env forwarding — enforcement arch test exists, awaiting src/ consumer",

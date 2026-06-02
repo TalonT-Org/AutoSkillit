@@ -12,8 +12,6 @@ from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.commands import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
-    build_headless_resume_cmd,
-    build_interactive_cmd,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -27,7 +25,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
 @pytest.mark.parametrize(
     "builder_call",
     [
-        lambda: build_interactive_cmd(),
+        lambda: ClaudeCodeBackend().build_interactive_cmd(),
         lambda: ClaudeCodeBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
@@ -36,7 +34,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             plugin_source=None,
             output_format=OutputFormat.STREAM_JSON,
         ),
-        lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
+        lambda: ClaudeCodeBackend().build_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="You are an L3 orchestrator",
             plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
@@ -74,7 +72,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
 @pytest.mark.parametrize(
     "builder_call",
     [
-        lambda: build_interactive_cmd(),
+        lambda: ClaudeCodeBackend().build_interactive_cmd(),
         lambda: ClaudeCodeBackend().build_skill_session_cmd(
             "/investigate foo",
             cwd="/tmp",
@@ -83,7 +81,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
             plugin_source=None,
             output_format=OutputFormat.STREAM_JSON,
         ),
-        lambda: build_headless_resume_cmd(resume_session_id="abc", prompt="Emit"),
+        lambda: ClaudeCodeBackend().build_resume_cmd(resume_session_id="abc", prompt="Emit"),
         lambda: ClaudeCodeBackend().build_food_truck_cmd(
             orchestrator_prompt="You are an L3 orchestrator",
             plugin_source=DirectInstall(plugin_dir=Path("/plugins")),

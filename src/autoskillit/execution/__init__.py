@@ -32,10 +32,6 @@ from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import (
     _MAX_MCP_OUTPUT_TOKENS_VALUE,  # noqa: F401
     ClaudeHeadlessCmd,
-    ClaudeInteractiveCmd,
-    build_headless_cmd,
-    build_headless_resume_cmd,
-    build_interactive_cmd,
 )
 from autoskillit.execution.db import (
     DefaultDatabaseReader,
@@ -142,11 +138,7 @@ __all__ = [
     "async_kill_process_tree",
     # commands
     "CmdSpec",
-    "ClaudeInteractiveCmd",
     "ClaudeHeadlessCmd",
-    "build_interactive_cmd",
-    "build_headless_cmd",
-    "build_headless_resume_cmd",
     # process
     "DefaultSubprocessRunner",
     "run_managed_async",

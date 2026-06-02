@@ -8,7 +8,7 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import CodingAgentBackend, Severity, get_logger
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
 from ._doctor_types import DoctorResult
@@ -18,13 +18,13 @@ logger = get_logger(__name__)
 CODEX_MIN_VERSION: tuple[int, ...] = (0, 130, 0)
 
 
-def _check_codex_version(*, backend: str | None = None) -> DoctorResult:
+def _check_codex_version(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
     check_name = "codex_version"
-    if backend is not None and backend != "codex":
-        return DoctorResult(Severity.OK, check_name, f"Skipped (backend={backend})")
+    if backend is None or not backend.capabilities.version_check_command:
+        return DoctorResult(Severity.OK, check_name, "Skipped (no version check command)")
     try:
         result = subprocess.run(
-            ["codex", "--version"],
+            backend.capabilities.version_check_command.split(),
             capture_output=True,
             text=True,
             timeout=5,
@@ -95,18 +95,13 @@ def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:
     )
 
 
-def _check_claude_process_state_breakdown(*, backend: str | None = None) -> DoctorResult:
+def _check_claude_process_state_breakdown(
+    *, backend: CodingAgentBackend | None = None
+) -> DoctorResult:
     """Check current D-state and CPU usage of claude/codex processes via ps."""
-    if backend is None or backend == "claude-code":
-        check_name = "claude_process_state"
-        comm_filter = "claude"
-        process_label = "claude"
-    elif backend == "codex":
-        check_name = "codex_process_state"
-        comm_filter = "codex"
-        process_label = "codex"
-    else:
-        return DoctorResult(Severity.OK, "claude_process_state", f"Skipped (backend={backend})")
+    process_label = backend.capabilities.process_name if backend else "claude"
+    comm_filter = process_label
+    check_name = f"{process_label}_process_state"
 
     try:
         result = subprocess.run(

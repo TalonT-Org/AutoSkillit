@@ -73,7 +73,7 @@ it is a positive integer ≥ 1; if a non-positive or non-integer value is provid
 with `"Error: --max-parallel must be a positive integer"`. Validate the issue count:
 - **Zero issues**: abort immediately with `"Error: build-execution-map requires at least 1 issue number"` and exit non-zero.
 - **One issue**: emit a warning and write a trivial single-group map (single issue always gets `parallel: false`).
-- **Two or more issues**: proceed to Step 0.5.
+- **Two or more issues**: proceed to Step 1.
 
 ### Step 1 — Fetch Issue Data (parallel subagents) (SINGLE MESSAGE)
 
@@ -237,12 +237,31 @@ Using the pairwise assessments from Step 2, partition issues into dispatch group
   dependency direction (the issue that others depend on goes first)
 - Groups with a single issue get `parallel: false`
 
-Merge order within parallel groups: determined by which changes are most foundational (the
-AI decides based on issue content — the issue whose changes are most likely to affect
-others merges last).
+Merge order within parallel groups: the issue whose changes are depended upon by other
+issues in the group merges first; the issue whose changes build on top of others merges
+last. When no dependency relationship exists between issues in the same parallel group,
+order by estimated impact breadth (narrower-scope changes first).
 
 The `merge_order` list is the flattened sequence of issue numbers across groups in dispatch
 order.
+
+#### Step 3a — Verify Group Ordering Invariants
+
+Before proceeding to Step 3b, work through each check below. If any check fails, re-partition
+the groups to fix the violation before continuing.
+
+1. **Dependency direction**: For every `pairwise_assessment` with `parallel_safe: false`, the
+   issue identified as the dependency is in a numerically lower-numbered group than the issue
+   that depends on it.
+2. **Transitivity**: If A must precede B (from one assessment) and B must precede C (from
+   another assessment), then `group(A) < group(B) < group(C)`.
+3. **Merge order respects dependencies**: For every `pairwise_assessment` with
+   `parallel_safe: false` where both issues are in the same parallel group, the dependency
+   issue appears earlier in the group's `merge_order` position.
+4. **No duplicate assignments**: No issue appears in more than one group.
+5. **Group count consistency**: `group_count` equals the actual number of entries in `groups[]`.
+6. **Merge order completeness**: `merge_order` contains exactly the issue numbers from all
+   `groups[]` entries, with no omissions and no extras.
 
 #### Step 3b — Deferred Issue Partitioning
 
@@ -261,7 +280,7 @@ After assembling dispatch groups, partition them based on deferral status from S
 3. Re-number groups sequentially in both `groups[]` (starting from 1) and `deferred_groups[]`
    (starting from 1, independent numbering).
 4. Compute `merge_order` from `groups[]` and `deferred_merge_order` from `deferred_groups[]`,
-   both following the same foundational-first ordering principle from Step 3.
+   both following the same dependency-first ordering rule from Step 3.
 5. Compute:
    - `deferred_count` = total issues across all `deferred_groups[]` entries
    - `dispatched_count` = `total_issues` − `deferred_count`
@@ -286,6 +305,9 @@ After groups are assembled in Step 3, enforce the `max_parallel` cap:
    - The original group's `parallel_safe` ordering is preserved — do not re-sort.
    - Sequential groups (`parallel: false`) are never split — they are passed through unchanged
      regardless of size.
+   - When splitting, apply the dependency-first ordering rule from Step 3 to decide which
+     issues land in the first sub-group vs. later sub-groups: issues that others depend on
+     go in the first sub-group.
 
 2. Renumber all groups sequentially (1, 2, 3, …) after splitting. If original Group 1
    splits into 2 sub-groups and original Group 2 remains intact, the result is:
@@ -432,10 +454,9 @@ When `--assess-review-approach` is active, each issue object gains two additiona
 }
 ```
 
-Note on `deferred_merge_order`: This field is schema-only in the current plan — no downstream
-code path reads it. It is included for structural completeness and to support future supplementary
-BEM optimization (Step 6e can reuse pre-computed ordering). When deferred issues are re-dispatched
-via Step 6e, the supplementary BEM generates its own `merge_order`, so `deferred_merge_order`
-is advisory.
+Note on `deferred_merge_order`: No downstream code path currently reads this field. It is
+included for structural completeness and to support future supplementary BEM optimization
+(Step 6e can reuse pre-computed ordering). The ordering follows the same dependency-first
+rule as `merge_order` and is equally authoritative.
 
 When the flag is inactive, these fields are omitted entirely (not set to defaults).

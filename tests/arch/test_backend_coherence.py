@@ -195,7 +195,10 @@ def test_backend_doctor_coverage():
     tree = ast.parse(source)
     has_capability_field = any(
         isinstance(node, ast.Attribute) and node.attr in {"version_check_command", "process_name"}
-        for node in ast.walk(tree)
+        for func_node in ast.walk(tree)
+        if isinstance(func_node, ast.FunctionDef)
+        and any(arg.arg == "backend" for arg in func_node.args.args + func_node.args.kwonlyargs)
+        for node in ast.walk(func_node)
     )
     assert has_capability_field, (
         "Expected capability-driven dispatch (version_check_command/process_name) "

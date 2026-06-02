@@ -623,16 +623,46 @@ async def run_skill(
                         if _step_mo:
                             effective_model = _step_mo
 
-            backend_override: str | None = (
-                AGENT_BACKEND_CLAUDE_CODE
-                if (
-                    provider_extras
-                    and "ANTHROPIC_BASE_URL" in provider_extras
-                    and tool_ctx.backend is not None
-                    and not tool_ctx.backend.capabilities.anthropic_provider_capable
+            # Resolve correct namespace and prepare for tier2 activation.
+            # Must precede backend_override — _skill_info feeds skill-requirement check.
+            resolved_command = skill_command
+            target_name: str | None = None
+            if tool_ctx.skill_resolver is not None:
+                resolved_command, target_name = resolve_target_skill(
+                    skill_command, tool_ctx.skill_resolver
                 )
+            _skill_info = (
+                tool_ctx.skill_resolver.resolve(target_name)
+                if tool_ctx.skill_resolver and target_name
                 else None
             )
+
+            _provider_override = (
+                provider_extras
+                and "ANTHROPIC_BASE_URL" in provider_extras
+                and tool_ctx.backend is not None
+                and not tool_ctx.backend.capabilities.anthropic_provider_capable
+            )
+            _skill_requires_claude = (
+                _skill_info is not None
+                and "claude-code" in _skill_info.backend_requirements
+                and tool_ctx.backend is not None
+                and tool_ctx.backend.name != AGENT_BACKEND_CLAUDE_CODE
+            )
+            backend_override: str | None = (
+                AGENT_BACKEND_CLAUDE_CODE
+                if (_provider_override or _skill_requires_claude)
+                else None
+            )
+
+            if backend_override:
+                logger.info(
+                    "backend_override_activated",
+                    reason="skill_requirement" if _skill_requires_claude else "provider_profile",
+                    skill=skill_command,
+                    original_backend=tool_ctx.backend.name if tool_ctx.backend else "none",
+                    target_backend=backend_override,
+                )
 
             # Look up artifact validation patterns from skill contract
             expected_output_patterns: list[str] = []
@@ -647,29 +677,19 @@ async def run_skill(
             # Build validated add_dirs via DefaultSessionSkillManager
             from uuid import uuid4
 
-            # Resolve correct namespace and prepare for tier2 activation
-            resolved_command = skill_command
-            target_name: str | None = None
-            if tool_ctx.skill_resolver is not None:
-                resolved_command, target_name = resolve_target_skill(
-                    skill_command, tool_ctx.skill_resolver
-                )
-
             # Backend compatibility gate — fires before both replay and live session paths.
-            if target_name and tool_ctx.skill_resolver and tool_ctx.backend is not None:
-                _compat_skill_info = tool_ctx.skill_resolver.resolve(target_name)
-                if _compat_skill_info:
-                    _effective_backend = backend_override or tool_ctx.backend.name
-                    if _is_backend_incompatible(_compat_skill_info, _effective_backend):
-                        return SkillResult.crashed(
-                            exception=RuntimeError(
-                                f"Skill {target_name!r} requires backend "
-                                f"{sorted(_compat_skill_info.backend_requirements)} but session "
-                                f"backend is {_effective_backend!r}."
-                            ),
-                            skill_command=resolved_command,
-                            order_id=effective_order_id,
-                        ).to_json()
+            if _skill_info and tool_ctx.backend is not None:
+                _effective_backend = backend_override or tool_ctx.backend.name
+                if _is_backend_incompatible(_skill_info, _effective_backend):
+                    return SkillResult.crashed(
+                        exception=RuntimeError(
+                            f"Skill {target_name!r} requires backend "
+                            f"{sorted(_skill_info.backend_requirements)} but session "
+                            f"backend is {_effective_backend!r}."
+                        ),
+                        skill_command=resolved_command,
+                        order_id=effective_order_id,
+                    ).to_json()
             elif target_name and not tool_ctx.skill_resolver:
                 logger.debug("backend_compat_check_skipped_no_resolver")
 

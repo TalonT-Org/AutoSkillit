@@ -893,7 +893,11 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
                             )
                         )
 
-            if has_prose_graphql_execution(section) and not section_bash_graphql:
+            if (
+                not section_graphql
+                and has_prose_graphql_execution(section)
+                and not section_bash_graphql
+            ):
                 findings.append(
                     RuleFinding(
                         rule="graphql-query-requires-shell-invocation",

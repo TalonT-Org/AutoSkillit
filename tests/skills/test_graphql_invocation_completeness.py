@@ -13,10 +13,13 @@ Both detectors operate at ##-level section granularity.
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+import autoskillit.recipe._skill_helpers as _sh
 from autoskillit.core.paths import pkg_root
 from autoskillit.recipe._skill_placeholder_parser import (
     extract_bash_blocks,
@@ -24,6 +27,8 @@ from autoskillit.recipe._skill_placeholder_parser import (
     extract_sections,
     has_prose_graphql_execution,
 )
+from autoskillit.recipe.io import load_recipe
+from autoskillit.recipe.registry import run_semantic_rules
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -154,115 +159,122 @@ def test_graphql_blocks_use_individual_F_flags_not_json_blob() -> None:
 
 # --- Synthetic SKILL.md regression tests ---
 
+_GRAPHQL_RULE_ID = "graphql-query-requires-shell-invocation"
+
+
+def _write_graphql_skill_and_run_rules(tmp_path: Path, skill_md_content: str) -> list[object]:
+    skill_dir = tmp_path / "graphql-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(skill_md_content)
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(
+        "name: test-recipe\n"
+        "kitchen_rules:\n"
+        '  - "Use run_skill only."\n'
+        "steps:\n"
+        "  run_impl:\n"
+        "    tool: run_skill\n"
+        "    with:\n"
+        '      skill_command: "/autoskillit:graphql-skill"\n'
+        "    on_success: done\n"
+    )
+    recipe = load_recipe(recipe_path)
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+        return run_semantic_rules(recipe)
+
 
 class TestGraphqlBlockDetectionBroadened:
     """Verify that graphql blocks without $variable tokens are still caught."""
 
     def test_angle_bracket_placeholders_without_invocation_fails(self, tmp_path: Path) -> None:
-        skill_dir = tmp_path / "angle-bracket-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "# angle-bracket-skill\n\n"
-            "## Workflow\n\n"
-            "```graphql\n"
-            "query {\n"
-            '  repository(owner: "<OWNER>", name: "<REPO>") {\n'
-            "    issues(first: 10) { nodes { title } }\n"
-            "  }\n"
-            "}\n"
-            "```\n"
-        )
-        content = (skill_dir / "SKILL.md").read_text()
-        for section in extract_sections(content):
-            section_graphql = extract_graphql_blocks(section)
-            if section_graphql:
-                section_bash = extract_bash_blocks(section)
-                section_bash_graphql = [b for b in section_bash if _GH_API_GRAPHQL_RE.search(b)]
-                assert not section_bash_graphql
+        skill_md = textwrap.dedent("""\
+            # graphql-skill
+
+            ## Workflow
+
+            ```graphql
+            query {
+              repository(owner: "<OWNER>", name: "<REPO>") {
+                issues(first: 10) { nodes { title } }
+              }
+            }
+            ```
+        """)
+        findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+        rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+        assert _GRAPHQL_RULE_ID in rule_ids
 
     def test_angle_bracket_placeholders_with_invocation_passes(self, tmp_path: Path) -> None:
-        skill_dir = tmp_path / "angle-bracket-pass-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "# angle-bracket-pass-skill\n\n"
-            "## Workflow\n\n"
-            "```graphql\n"
-            "query {\n"
-            '  repository(owner: "<OWNER>", name: "<REPO>") {\n'
-            "    issues(first: 10) { nodes { title } }\n"
-            "  }\n"
-            "}\n"
-            "```\n\n"
-            "```bash\n"
-            'gh api graphql -f query="$QUERY"\n'
-            "```\n"
-        )
-        content = (skill_dir / "SKILL.md").read_text()
-        for section in extract_sections(content):
-            section_graphql = extract_graphql_blocks(section)
-            if section_graphql:
-                section_bash = extract_bash_blocks(section)
-                section_bash_graphql = [b for b in section_bash if _GH_API_GRAPHQL_RE.search(b)]
-                assert section_bash_graphql
+        skill_md = textwrap.dedent("""\
+            # graphql-skill
+
+            ## Workflow
+
+            ```graphql
+            query {
+              repository(owner: "<OWNER>", name: "<REPO>") {
+                issues(first: 10) { nodes { title } }
+              }
+            }
+            ```
+
+            ```bash
+            gh api graphql -f query="$QUERY"
+            ```
+        """)
+        findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+        rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+        assert _GRAPHQL_RULE_ID not in rule_ids
 
     def test_field_selection_fragment_without_invocation_fails(self, tmp_path: Path) -> None:
-        skill_dir = tmp_path / "fragment-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "# fragment-skill\n\n"
-            "## Workflow\n\n"
-            "```graphql\n"
-            "number title mergedAt\n"
-            "reviews(first: 100) {\n"
-            "  nodes { author { login } body state }\n"
-            "}\n"
-            "```\n"
-        )
-        content = (skill_dir / "SKILL.md").read_text()
-        for section in extract_sections(content):
-            section_graphql = extract_graphql_blocks(section)
-            if section_graphql:
-                section_bash = extract_bash_blocks(section)
-                section_bash_graphql = [b for b in section_bash if _GH_API_GRAPHQL_RE.search(b)]
-                assert not section_bash_graphql
+        skill_md = textwrap.dedent("""\
+            # graphql-skill
+
+            ## Workflow
+
+            ```graphql
+            number title mergedAt
+            reviews(first: 100) {
+              nodes { author { login } body state }
+            }
+            ```
+        """)
+        findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+        rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+        assert _GRAPHQL_RULE_ID in rule_ids
 
 
 class TestProseGraphqlDetection:
     """Verify that prose-described GraphQL operations are caught."""
 
     def test_prose_graphql_without_invocation_fails(self, tmp_path: Path) -> None:
-        skill_dir = tmp_path / "prose-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "# prose-skill\n\n"
-            "## Workflow\n\n"
-            "Build batched GraphQL `createIssue` mutations with aliases.\n"
-            "Execute via `gh api graphql --input -`.\n"
-        )
-        content = (skill_dir / "SKILL.md").read_text()
-        for section in extract_sections(content):
-            if has_prose_graphql_execution(section):
-                section_bash = extract_bash_blocks(section)
-                has_invocation = any(_GH_API_GRAPHQL_RE.search(b) for b in section_bash)
-                assert not has_invocation
+        skill_md = textwrap.dedent("""\
+            # graphql-skill
+
+            ## Workflow
+
+            Build batched GraphQL `createIssue` mutations with aliases.
+            Execute via `gh api graphql --input -`.
+        """)
+        findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+        rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+        assert _GRAPHQL_RULE_ID in rule_ids
 
     def test_prose_graphql_with_invocation_passes(self, tmp_path: Path) -> None:
-        skill_dir = tmp_path / "prose-pass-skill"
-        skill_dir.mkdir()
-        (skill_dir / "SKILL.md").write_text(
-            "# prose-pass-skill\n\n"
-            "## Workflow\n\n"
-            "Build batched GraphQL `createIssue` mutations with aliases.\n\n"
-            "```bash\n"
-            'echo "$MUTATION_JSON" | gh api graphql --input -\n'
-            "```\n"
-        )
-        content = (skill_dir / "SKILL.md").read_text()
-        for section in extract_sections(content):
-            if has_prose_graphql_execution(section):
-                section_bash = extract_bash_blocks(section)
-                has_invocation = any(_GH_API_GRAPHQL_RE.search(b) for b in section_bash)
-                assert has_invocation
+        skill_md = textwrap.dedent("""\
+            # graphql-skill
+
+            ## Workflow
+
+            Build batched GraphQL `createIssue` mutations with aliases.
+
+            ```bash
+            echo "$MUTATION_JSON" | gh api graphql --input -
+            ```
+        """)
+        findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+        rule_ids = [f.rule for f in findings]  # type: ignore[union-attr]
+        assert _GRAPHQL_RULE_ID not in rule_ids
 
     def test_prose_graphql_under_h2_heading_detected(self, tmp_path: Path) -> None:
         """Prose GraphQL under a ## heading (not ### Step N) is caught."""

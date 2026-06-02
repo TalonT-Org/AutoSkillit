@@ -141,3 +141,26 @@ def test_all_backends_implement_translate_model():
         assert callable(getattr(cls, "translate_model")), (
             f"{name} backend translate_model must be callable"
         )
+
+
+def test_coding_agent_backend_protocol_includes_build_inspector_cmd():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert hasattr(CodingAgentBackend, "build_inspector_cmd"), (
+        "CodingAgentBackend protocol must define build_inspector_cmd"
+    )
+    assert callable(getattr(CodingAgentBackend, "build_inspector_cmd")), (
+        "build_inspector_cmd must be callable"
+    )
+
+
+def test_all_backends_implement_build_inspector_cmd():
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        assert hasattr(cls, "build_inspector_cmd"), (
+            f"{name} backend must implement build_inspector_cmd"
+        )
+        assert callable(getattr(cls, "build_inspector_cmd")), (
+            f"{name} backend build_inspector_cmd must be callable"
+        )

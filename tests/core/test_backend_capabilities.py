@@ -77,6 +77,7 @@ def test_backend_capabilities_field_count():
         "record_capable",
         "anthropic_provider_capable",
         "plugin_install_capable",
+        "inspector_capable",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -125,6 +126,7 @@ def test_backend_capabilities_field_names_locked():
         "record_capable",
         "anthropic_provider_capable",
         "plugin_install_capable",
+        "inspector_capable",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected
@@ -163,6 +165,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.record_capable is True
     assert CLAUDE_CODE_CAPABILITIES.anthropic_provider_capable is True
     assert CLAUDE_CODE_CAPABILITIES.plugin_install_capable is True
+    assert CLAUDE_CODE_CAPABILITIES.inspector_capable is True
 
 
 def test_backend_capabilities_frozenset_defaults():

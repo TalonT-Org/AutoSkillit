@@ -459,6 +459,7 @@ class TestGroupDApiContractPreservation:
             "stream_parser",
             "completion_record_types",
             "session_record_types",
+            "inspector_callback",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
@@ -595,7 +596,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 15 canonical fields."""
+        """SubprocessResult must have exactly the 16 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -615,6 +616,7 @@ class TestGroupDApiContractPreservation:
             "kill_reason",
             "tracked_comm",
             "orphaned_tool_result",
+            "inspector_verdict",
         }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"
@@ -634,7 +636,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_006_termination_reason_members(self):
-        """TerminationReason must have exactly the 6 canonical values."""
+        """TerminationReason must have exactly the 7 canonical values."""
         from autoskillit.core.types import TerminationReason
 
         assert set(TerminationReason) == {
@@ -644,6 +646,7 @@ class TestGroupDApiContractPreservation:
             TerminationReason.IDLE_STALL,
             TerminationReason.TIMED_OUT,
             TerminationReason.SIGNAL_DEATH,
+            TerminationReason.HEALTH_INSPECTOR,
         }
 
     def test_req_api_006_termination_reason_string_values(self):

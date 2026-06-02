@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
+from ._type_inspector import InspectorCallback, InspectorVerdict
 
 __all__ = [
     "SubprocessResult",
@@ -121,6 +122,13 @@ class SubprocessResult:
     Diagnostic only — does not affect termination behavior.
     Always False for non-STALE outcomes.
     """
+    inspector_verdict: InspectorVerdict | None = None
+    """Verdict from the Health Inspector callback, or None if inspector did not run.
+
+    Populated by headless execution when an ``inspector_callback`` is provided to
+    ``SubprocessRunner.__call__`` and the callback completes before process exit.
+    Consumed downstream to annotate termination provenance.
+    """
 
 
 @runtime_checkable
@@ -165,4 +173,5 @@ class SubprocessRunner(Protocol):
         stream_parser: Any | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
+        inspector_callback: InspectorCallback | None = None,
     ) -> Awaitable[SubprocessResult]: ...

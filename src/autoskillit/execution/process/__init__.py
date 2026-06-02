@@ -67,7 +67,7 @@ if TYPE_CHECKING:
     import structlog
 
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.core import StreamParser
+    from autoskillit.core import InspectorCallback, StreamParser
     from autoskillit.execution.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
@@ -144,7 +144,12 @@ def decide_termination_action(
             return TerminationAction.NO_KILL
         case TerminationReason.COMPLETED:
             return TerminationAction.DRAIN_THEN_KILL_IF_ALIVE
-        case TerminationReason.IDLE_STALL | TerminationReason.STALE | TerminationReason.TIMED_OUT:
+        case (
+            TerminationReason.IDLE_STALL
+            | TerminationReason.STALE
+            | TerminationReason.TIMED_OUT
+            | TerminationReason.HEALTH_INSPECTOR
+        ):
             return TerminationAction.IMMEDIATE_KILL
         case _ as unreachable:
             assert_never(unreachable)
@@ -619,6 +624,7 @@ class DefaultSubprocessRunner:
         stream_parser: StreamParser | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
+        inspector_callback: InspectorCallback | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,

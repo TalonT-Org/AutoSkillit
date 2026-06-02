@@ -21,7 +21,7 @@ from autoskillit.execution.process._process_monitor import (
 from autoskillit.execution.session._exit_classification import is_signal_death_code
 
 if TYPE_CHECKING:
-    from autoskillit.core import StreamParser
+    from autoskillit.core import InspectorVerdict, StreamParser
 
 logger = get_logger(__name__)
 
@@ -49,6 +49,7 @@ class RaceSignals:
     channel_b_orphaned_tool_result: bool = False
     process_exited_event: anyio.Event = field(default_factory=anyio.Event)
     exit_snapshot: dict[str, object] | None = None
+    inspector_verdict: InspectorVerdict | None = None
 
 
 @dataclass

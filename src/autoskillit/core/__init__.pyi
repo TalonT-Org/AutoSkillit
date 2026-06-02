@@ -256,6 +256,9 @@ from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
 from .types import InputContractResolver as InputContractResolver
 from .types import InputSpec as InputSpec
+from .types import InspectorCallback as InspectorCallback
+from .types import InspectorEvidence as InspectorEvidence
+from .types import InspectorVerdict as InspectorVerdict
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef

@@ -45,6 +45,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_backend_event_kind.py` | Tests for BackendEventKind StrEnum — member exhaustiveness, values, importability |
 | `test_backend_dataclasses.py` | Tests for CmdSpec, SkillSessionConfig, ClaudeEventData, CodexEventData, SessionEvent, AgentSessionResult — frozen invariants, field types, defaults |
 | `test_backend_protocols.py` | Tests for StreamParser, ResultParser, EnvPolicy, SessionLocator, CodingAgentBackend — @runtime_checkable, isinstance conformance, IL-0 compliance |
+| `test_inspector_types.py` | Tests for Health Inspector IL-0 types: `InspectorEvidence`, `InspectorVerdict`, `make_stub_inspector`, `inspector_verdict`/`inspector_capable` fields (issue #3533) |
 | `test_type_constants.py` | Tests for PACK_REGISTRY and related constants in core._type_constants |
 | `test_type_protocol_shards.py` | Type protocol shards guard |
 | `test_types.py` | Tests for shared type contracts — enum exhaustiveness |

@@ -10,6 +10,7 @@ import pytest
 if TYPE_CHECKING:
     from autoskillit.config.settings import AutomationConfig
 
+from autoskillit.core import InspectorCallback, InspectorEvidence, InspectorVerdict
 from autoskillit.core.types import (
     ChannelConfirmation,
     SubprocessResult,
@@ -159,6 +160,25 @@ def _make_timeout_result(stdout: str = "", stderr: str = "") -> SubprocessResult
         pid=12345,
         channel_confirmation=ChannelConfirmation.UNMONITORED,
     )
+
+
+def make_stub_inspector(verdict: str = "SPARE") -> InspectorCallback:
+    """Return an InspectorCallback that always emits the given verdict action.
+
+    Used by tests that need to inject a deterministic inspector callback without
+    wiring up a real LLM. Default action is "SPARE" (no kill); pass "KILL" to
+    exercise the kill path.
+    """
+
+    async def _stub(evidence: InspectorEvidence) -> InspectorVerdict:
+        return InspectorVerdict(
+            action=verdict,
+            reasoning="stub",
+            confidence="high",
+            elapsed_seconds=0.0,
+        )
+
+    return _stub
 
 
 @pytest.fixture

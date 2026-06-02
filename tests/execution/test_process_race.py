@@ -249,8 +249,8 @@ class TestRaceSignalsFieldCount:
     """Sentinel test: breaks when RaceSignals fields change."""
 
     def test_race_signals_field_count(self) -> None:
-        assert len(dataclasses.fields(RaceSignals)) == 10, (
-            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 10). "
+        assert len(dataclasses.fields(RaceSignals)) == 11, (
+            f"RaceSignals has {len(dataclasses.fields(RaceSignals))} fields (expected 11). "
             "Update tests to cover the new field."
         )
 

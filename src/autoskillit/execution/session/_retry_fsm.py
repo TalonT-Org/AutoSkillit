@@ -208,5 +208,13 @@ def _compute_retry(
             logger.debug("compute_retry_result", termination="TIMED_OUT", needs_retry=False)
             return False, RetryReason.NONE
 
+        case TerminationReason.HEALTH_INSPECTOR:
+            logger.debug(
+                "compute_retry_result",
+                termination="HEALTH_INSPECTOR",
+                needs_retry=False,
+            )
+            return False, RetryReason.NONE
+
         case _ as unreachable:
             assert_never(unreachable)

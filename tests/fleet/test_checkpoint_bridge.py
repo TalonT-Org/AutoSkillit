@@ -68,7 +68,11 @@ class TestCheckpointFromTracker:
         }
         checkpoint = checkpoint_from_tracker(tracker_data)
         assert checkpoint is not None
-        assert checkpoint.completed_items == ["plan", "verify", "implement"]
+        assert checkpoint.completed_items == [
+            "plan",
+            "verify",
+            "implement",
+        ]  # sorted by completed_at
         assert checkpoint.step_name == "implement"
         assert checkpoint.progress_pct == pytest.approx(0.75)
 

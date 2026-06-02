@@ -536,3 +536,5 @@ class TestTrackerBridgeIntegration:
         record = _read_dispatch_record(tool_ctx)
         assert record["status"] == "resumable"
         assert record["reason"] == "fleet_l3_no_result_block"
+        assert record.get("resume_checkpoint") is not None
+        assert "plan" in record["resume_checkpoint"].get("completed_items", [])

@@ -71,7 +71,7 @@ def test_graphql_blocks_have_matching_bash_invocations() -> None:
 
             for var in variable_names:
                 flag_found = any(
-                    re.search(rf"-[Ff]\s+{re.escape(var)}=", b) for b in bash_with_graphql
+                    re.search(rf"-[Ff]\s*{re.escape(var)}=", b) for b in bash_with_graphql
                 )
                 if not flag_found:
                     failures.append(
@@ -105,7 +105,9 @@ def test_graphql_blocks_use_individual_F_flags_not_json_blob() -> None:
 
             skill_name = skill_dir.name
 
-            if re.search(r"-f\s+variables=", block) or re.search(r"--field\s+variables=", block):
+            if re.search(r"-[fF]\s+variables=", block) or re.search(
+                r"--field\s+variables=", block
+            ):
                 failures.append(
                     f"{skill_name}: gh api graphql uses '-f variables=' or "
                     f"'--field variables=' (json blob anti-pattern); use individual "

@@ -884,11 +884,11 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
                         ),
                     )
                 )
-                continue
+                break
 
             for var in variable_names:
                 flag_found = any(
-                    re.search(rf"-[Ff]\s+{re.escape(var)}=", b) for b in bash_with_graphql
+                    re.search(rf"-[Ff]\s*{re.escape(var)}=", b) for b in bash_with_graphql
                 )
                 if not flag_found:
                     findings.append(

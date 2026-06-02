@@ -47,7 +47,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_no_pagination_file_read.py` | Contract tests for no-pagination file read instruction in high-turn SKILL.md files |
 | `test_package_gateways.py` | Tests for Package Gateway API (groupC) — REQ-GWAY-001 through REQ-GWAY-008 |
 | `test_plan_experiment_contracts.py` | Contract tests for plan-experiment SKILL.md — data provenance lifecycle |
-| `test_plan_visualization_contracts.py` | Contract tests: plan-visualization SKILL.md experiment type vocabulary |
+| `test_plan_visualization_contracts.py` | Contract tests: select-vis-lenses Tier B experiment-type canonical names match registry |
 | `test_select_vis_lenses_contracts.py` | Contract tests: select-vis-lenses SKILL.md experiment type vocabulary and token emission |
 | `test_pr_traceability_contracts.py` | Cross-skill contract tests for requirement traceability across PR lifecycle skills |
 | `test_prepare_compose_pr_contracts.py` | Contract tests for prepare-pr and compose-pr skills |

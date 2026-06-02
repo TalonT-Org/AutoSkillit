@@ -19,6 +19,13 @@ SKILL_PATH = (
     / "synthesize-vis-plan"
     / "SKILL.md"
 )
+CONTRACTS_YAML = (
+    Path(__file__).resolve().parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "recipe"
+    / "skill_contracts.yaml"
+)
 
 
 def _text() -> str:
@@ -168,3 +175,39 @@ def test_applied_union_rules_from_arguments_not_recipe() -> None:
     assert "applied_union_rules" in text
     assert "select-vis-lenses" in text
     assert "not from recipe context" in text
+
+
+def test_synthesize_vis_plan_emits_visualization_plan_path_token() -> None:
+    assert re.search(r"visualization_plan_path\s*=", _text()), (
+        "synthesize-vis-plan SKILL.md must emit visualization_plan_path token"
+    )
+
+
+def test_synthesize_vis_plan_emits_report_plan_path_token() -> None:
+    assert re.search(r"report_plan_path\s*=", _text()), (
+        "synthesize-vis-plan SKILL.md must emit report_plan_path token"
+    )
+
+
+def test_synthesize_vis_plan_emits_visualization_plan_trace_path_token() -> None:
+    assert re.search(r"visualization_plan_trace_path\s*=", _text()), (
+        "synthesize-vis-plan SKILL.md must emit visualization_plan_trace_path token"
+    )
+
+
+def test_synthesize_vis_plan_write_behavior_always() -> None:
+    """skill_contracts.yaml must declare write_behavior='always' for synthesize-vis-plan."""
+    data = load_yaml(CONTRACTS_YAML)
+    entry = data["skills"].get("synthesize-vis-plan")
+    assert entry is not None, "synthesize-vis-plan not found in skill_contracts.yaml"
+    assert entry.get("write_behavior") == "always", (
+        f"Expected write_behavior='always', got '{entry.get('write_behavior')}'"
+    )
+
+
+def test_synthesize_vis_plan_documents_tier_identity_rule() -> None:
+    """SKILL.md must reference all three tier identities."""
+    text = _text()
+    assert "Tier A" in text
+    assert "Tier B" in text
+    assert "Tier C" in text

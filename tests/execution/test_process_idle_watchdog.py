@@ -14,6 +14,7 @@ import pytest
 import structlog.testing
 
 from autoskillit.execution.process._process_race import (
+    CLEANUP_BUDGET_SECONDS,
     RaceAccumulator,
     _watch_stdout_idle,
 )
@@ -842,7 +843,7 @@ async def test_inspector_skipped_when_insufficient_time(tmp_path: anyio.Path) ->
     timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
     async def set_short_scope() -> None:
-        with anyio.move_on_after(0.5) as scope:
+        with anyio.move_on_after(CLEANUP_BUDGET_SECONDS * 0.03) as scope:
             timeout_scope_ref[0] = scope
             await trigger.wait()
 

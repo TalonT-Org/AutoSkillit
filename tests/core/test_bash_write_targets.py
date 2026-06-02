@@ -60,6 +60,20 @@ class TestExtractBashWriteTargets:
         result = extract_bash_write_targets("rm /path/file.txt")
         assert result == ["/path/file.txt"]
 
+    def test_cp_with_redirect(self):
+        result = extract_bash_write_targets("cp /a /outside/dest > /log")
+        assert "/outside/dest" in result
+        assert "/log" in result
+
+    def test_mv_with_redirect(self):
+        result = extract_bash_write_targets("mv /a /outside/dest > /log")
+        assert "/outside/dest" in result
+        assert "/log" in result
+
+    def test_tee_multiple_targets(self):
+        result = extract_bash_write_targets("cat file | tee /path/a /path/b")
+        assert result == ["/path/a", "/path/b"]
+
 
 _PARITY_CORPUS: list[tuple[str, str]] = [
     ("echo x > /path/out.txt", "/workspace"),
@@ -82,21 +96,23 @@ _PARITY_CORPUS: list[tuple[str, str]] = [
     ("echo x > output.txt", "/workspace"),
     ("patch /path/file.txt < diff.patch", "/workspace"),
     ("unlink /path/file.txt", "/workspace"),
+    ("cp /a /outside/dest > /log", "/workspace"),
+    ("cat file | tee /path/a /path/b", "/workspace"),
 ]
 
 
 @pytest.mark.parametrize("command,cwd", _PARITY_CORPUS, ids=[c[0][:50] for c in _PARITY_CORPUS])
-def test_parity_with_command_classification(command: str, cwd: str) -> None:
+def test_parity_with_command_classification(
+    command: str, cwd: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Core and hooks implementations must produce identical write targets."""
     import shlex
-    import sys
     from pathlib import Path
 
     hooks_dir = str(
         Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "hooks"
     )
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
+    monkeypatch.syspath_prepend(hooks_dir)
 
     from _command_classification import (  # type: ignore[import-not-found]
         extract_redirect_targets as hooks_extract_redirect_targets,

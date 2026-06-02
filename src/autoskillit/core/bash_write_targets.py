@@ -184,11 +184,20 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
                 found_write = True
     elif verb in _WRITE_VERBS:
         found_write = True
-        non_flag = [
-            t
-            for t in segment[1:]
-            if not t.startswith("-") and not t.startswith("&") and not _FD_REDIRECT_RE.match(t)
-        ]
+        non_flag: list[str] = []
+        skip_next = False
+        for t in segment[1:]:
+            if skip_next:
+                skip_next = False
+                continue
+            if t.startswith("-") or t.startswith("&") or _FD_REDIRECT_RE.match(t):
+                continue
+            if _REDIRECT_OP_ONLY_RE.match(t):
+                skip_next = True
+                continue
+            if _REDIRECT_TOKEN_RE.match(t):
+                continue
+            non_flag.append(t)
         if verb == "sed":
             flags = [t for t in segment[1:] if t.startswith("-")]
             has_inplace = any(t.startswith("-i") or t == "--in-place" for t in flags)
@@ -198,9 +207,8 @@ def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
                 if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
                     targets.append(resolved)
         elif verb == "tee":
-            if non_flag:
-                path = non_flag[0]
-                resolved = _resolve_write_target(path, cwd)
+            for t in non_flag:
+                resolved = _resolve_write_target(t, cwd)
                 if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
                     targets.append(resolved)
         elif verb in ("mv", "cp"):

@@ -4,8 +4,8 @@ categories: [audit-pipeline]
 description: >-
   Batch-create GitHub issues from validated audit ticket body files. Discovers
   ticket bodies from the audit run directory, deduplicates against existing open
-  issues, creates via batched GraphQL mutations, applies labels and writes a
-  filed-issues manifest. Pipeline-only skill dispatched by the full-audit recipe.
+  issues, creates in batches, applies labels and writes a filed-issues manifest.
+  Pipeline-only skill dispatched by the full-audit recipe.
 hooks:
   PreToolUse:
     - matcher: "*"
@@ -61,10 +61,10 @@ Build batched GraphQL `createIssue` mutations with aliases (`issue0`, `issue1`, 
 
 ```graphql
 mutation {
-  issue0: createIssue(input: {repositoryId: $repoId, title: $title0, body: $body0}) {
+  issue0: createIssue(input: {repositoryId: "<REPO_ID>", title: "<TITLE>", body: "<BODY>"}) {
     issue { number url }
   }
-  issue1: createIssue(input: {repositoryId: $repoId, title: $title1, body: $body1}) {
+  issue1: createIssue(input: {repositoryId: "<REPO_ID>", title: "<TITLE>", body: "<BODY>"}) {
     issue { number url }
   }
 }
@@ -85,7 +85,7 @@ Batch-apply source labels via GraphQL `addLabelsToLabelable` mutation with alias
 
 ```graphql
 mutation {
-  l0: addLabelsToLabelable(input: {labelableId: $issueId0, labelIds: [$labelId]}) {
+  l0: addLabelsToLabelable(input: {labelableId: "<ISSUE_ID>", labelIds: ["<LABEL_ID>"]}) {
     labelable { ... on Issue { number } }
   }
 }
@@ -124,7 +124,7 @@ issue_count = 0
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
 - Use `gh issue comment` — all issue content goes in the body via `--body-file`
-- Create issues individually via REST — always batch via GraphQL `createIssue` mutations
+- Create issues individually via REST — always use batched `createIssue` mutations
 - Skip the 1-second sleep between consecutive mutating GitHub API calls
 - Use `--body` inline for large content — always write to temp file and use `--body-file`
 - Prompt interactively when `AUTOSKILLIT_HEADLESS` is `1` — execute all steps directly

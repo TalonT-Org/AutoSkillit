@@ -9,6 +9,7 @@ from typing import ClassVar
 
 from autoskillit.core import (
     DRY_WALKTHROUGH_VERIFIED_MARKER,
+    KNOWN_BACKEND_NAMES,
     LABEL_LIFECYCLE_REGISTRY,
     IssueLabelState,
     OutputFormat,
@@ -577,3 +578,9 @@ class AgentBackendConfig:
     def __post_init__(self) -> None:
         if not self.backend:
             raise ValueError("backend must not be empty")
+        elif self.backend not in KNOWN_BACKEND_NAMES:
+            logger.warning(
+                "unknown_backend",
+                backend=self.backend,
+                valid_names=sorted(KNOWN_BACKEND_NAMES),
+            )

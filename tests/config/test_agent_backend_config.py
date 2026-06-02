@@ -58,6 +58,25 @@ class TestAgentBackendConfigField:
         cfg = AgentBackendConfig(backend="codex")
         assert cfg.backend == "codex"
 
+    def test_agent_backend_config_warns_on_unknown_backend(self) -> None:
+        import structlog.testing
+
+        from autoskillit.config.settings import AgentBackendConfig
+
+        with structlog.testing.capture_logs() as cap_logs:
+            cfg = AgentBackendConfig(backend="aider")
+        assert cfg.backend == "aider"
+        unknown_backend_events = [
+            e
+            for e in cap_logs
+            if e.get("log_level") == "warning"
+            and e.get("event") == "unknown_backend"
+            and e.get("backend") == "aider"
+        ]
+        assert len(unknown_backend_events) == 1, (
+            f"Expected exactly one unknown_backend warning for 'aider', got: {cap_logs}"
+        )
+
 
 class TestAgentBackendConfigLoading:
     def test_load_config_agent_backend_defaults(self, tmp_path) -> None:

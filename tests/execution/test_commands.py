@@ -321,23 +321,14 @@ class TestShimDeprecationWarnings:
     def test_build_interactive_cmd_warns(self) -> None:
         with pytest.warns(DeprecationWarning) as rec:
             build_interactive_cmd()
-        assert any(
-            "deprecated" in str(w.message).lower() or "ClaudeCodeBackend" in str(w.message)
-            for w in rec.list
-        )
+        assert "build_interactive_cmd() is deprecated" in str(rec.list[0].message)
 
     def test_build_headless_cmd_warns(self) -> None:
         with pytest.warns(DeprecationWarning) as rec:
             build_headless_cmd("test prompt")
-        assert any(
-            "deprecated" in str(w.message).lower() or "ClaudeCodeBackend" in str(w.message)
-            for w in rec.list
-        )
+        assert "build_headless_cmd() is deprecated" in str(rec.list[0].message)
 
     def test_build_headless_resume_cmd_warns(self) -> None:
         with pytest.warns(DeprecationWarning) as rec:
             build_headless_resume_cmd(resume_session_id="abc", prompt="go")
-        assert any(
-            "deprecated" in str(w.message).lower() or "ClaudeCodeBackend" in str(w.message)
-            for w in rec.list
-        )
+        assert "build_headless_resume_cmd() is deprecated" in str(rec.list[0].message)

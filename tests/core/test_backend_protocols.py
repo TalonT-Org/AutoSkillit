@@ -101,7 +101,10 @@ def test_stub_class_satisfies_coding_agent_backend():
 
         @property
         def conventions(self) -> BackendConventions:
-            return BackendConventions(project_local_skill_search_dirs=())
+            return BackendConventions(
+                skills_subdir=Path("test/skills"),
+                project_local_skill_search_dirs=(),
+            )
 
         def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec: ...
 

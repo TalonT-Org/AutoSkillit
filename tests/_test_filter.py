@@ -251,6 +251,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_exceptions": frozenset({"core", "fleet", "recipe", "server"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
+    "bash_write_targets": frozenset({"core", "execution"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

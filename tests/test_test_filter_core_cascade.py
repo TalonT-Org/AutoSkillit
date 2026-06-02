@@ -111,6 +111,7 @@ class TestModuleCascadeCore:
             "_step_context",
             "_execution_marker",
             "git_remote",
+            "bash_write_targets",
         }
         assert set(MODULE_CASCADE_CORE.keys()) == expected_stems
 

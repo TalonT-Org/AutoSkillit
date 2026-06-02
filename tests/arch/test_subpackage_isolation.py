@@ -858,7 +858,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server": 14,
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
-        "core": 20,
+        "core": 21,
         "core/types": 28,
         "cli": 21,
         "hooks": 12,

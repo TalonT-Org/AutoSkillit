@@ -253,13 +253,13 @@ class TestScanJsonlWritePaths:
         assert len(warnings) == 1
         assert "Edit" in warnings[0]
 
-    def test_detects_bash_with_absolute_path_outside_cwd(self):
+    def test_detects_bash_with_redirect_outside_cwd(self):
         line = _make_tool_use_line(
             "Bash", {"command": "cat /source/repo/README.md > /tmp/out.txt"}
         )
         warnings = _scan_jsonl_write_paths(line, self.CWD)
-        assert len(warnings) >= 1
-        assert any("/source/repo" in w for w in warnings)
+        assert len(warnings) == 1
+        assert any("/tmp/out.txt" in w for w in warnings)
 
     def test_no_warnings_for_empty_stdout(self):
         assert _scan_jsonl_write_paths("", self.CWD) == []
@@ -300,6 +300,47 @@ class TestScanJsonlWritePaths:
     def test_no_warning_when_cwd_is_relative(self):
         line = _make_tool_use_line("Write", {"file_path": "/any/path/file.md", "content": "x"})
         assert _scan_jsonl_write_paths(line, "relative/path") == []
+
+    def test_no_warning_for_slash_command_token_in_bash(self):
+        line = _make_tool_use_line("Bash", {"command": "/autoskillit:test-skill-flat --some-arg"})
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_no_warning_for_gh_api_url_path_in_bash(self):
+        line = _make_tool_use_line(
+            "Bash", {"command": "gh api /repos/owner/repo/pulls --json number"}
+        )
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_no_warning_for_read_only_path_in_bash(self):
+        line = _make_tool_use_line("Bash", {"command": "cat /source/repo/README.md"})
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_no_warning_for_variable_assignment_path_in_bash(self):
+        line = _make_tool_use_line("Bash", {"command": "BASE_DIR=/source/repo/configs"})
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_bash_redirect_outside_cwd_detected(self):
+        line = _make_tool_use_line("Bash", {"command": "echo hello > /source/repo/out.txt"})
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) == 1
+        assert "/source/repo/out.txt" in warnings[0]
+
+    def test_bash_tee_outside_cwd_detected(self):
+        line = _make_tool_use_line("Bash", {"command": "cat file | tee /source/repo/out.txt"})
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) >= 1
+
+    def test_bash_redirect_inside_cwd_clean(self):
+        line = _make_tool_use_line("Bash", {"command": f"echo hello > {self.CWD}/out.txt"})
+        assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_exact_warning_count_for_mixed_bash(self):
+        line = _make_tool_use_line(
+            "Bash", {"command": "cat /source/repo/README.md > /other/dir/out.txt"}
+        )
+        warnings = _scan_jsonl_write_paths(line, self.CWD)
+        assert len(warnings) == 1
+        assert "/other/dir/out.txt" in warnings[0]
 
     def test_scan_jsonl_write_paths_excludes_subagent(self):
         """Subagent Write/Edit calls must not produce write-path warnings."""

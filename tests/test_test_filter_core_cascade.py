@@ -154,7 +154,7 @@ class TestModuleCascadeCore:
         )
 
     def test_type_backend_cascade(self) -> None:
-        assert MODULE_CASCADE_CORE["_type_backend"] == frozenset({"core", "execution"})
+        assert MODULE_CASCADE_CORE["_type_backend"] == frozenset({"core", "execution", "cli"})
 
     def test_type_dispatch_identity_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_dispatch_identity"] == frozenset(

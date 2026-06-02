@@ -17,10 +17,17 @@ class TestIsPluginInstalledBackendGuard:
     """Backend guard returns False without subprocess for non-claude-code."""
 
     def test_non_claude_code_backend_returns_false(self):
-        result = _is_plugin_installed(agent_backend="aider")
+        from dataclasses import replace
+
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+
+        caps = replace(CLAUDE_CODE_CAPABILITIES, plugin_install_capable=False)
+        result = _is_plugin_installed(capabilities=caps)
         assert result is False
 
     def test_claude_code_backend_calls_subprocess(self, monkeypatch):
+        from autoskillit.core import CLAUDE_CODE_CAPABILITIES
+
         called = []
 
         def fake_run(*args, **kwargs):
@@ -28,7 +35,7 @@ class TestIsPluginInstalledBackendGuard:
             return subprocess.CompletedProcess(args=[], returncode=0, stdout="autoskillit\n")
 
         monkeypatch.setattr(subprocess, "run", fake_run)
-        result = _is_plugin_installed(agent_backend="claude-code")
+        result = _is_plugin_installed(capabilities=CLAUDE_CODE_CAPABILITIES)
         assert result is True
         assert len(called) == 1
 
@@ -73,7 +80,9 @@ class TestRegisterAllBackendKwarg:
         (tmp_path / "pkg").mkdir()
 
         # Should not raise TypeError
-        _register_all("user", tmp_path, backend=MagicMock())
+        mock_backend = MagicMock()
+        mock_backend.capabilities.mcp_config_capable = False
+        _register_all("user", tmp_path, backend=mock_backend)
 
 
 class TestInitBackendResolution:
@@ -178,6 +187,11 @@ class TestRegisterAllBackendDispatch:
         mock_config = MagicMock()
         mock_config.agent_backend.backend = backend_name
         monkeypatch.setattr("autoskillit.config.load_config", lambda p=None: mock_config)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.mcp_config_capable = backend_name == "codex"
+        mock_backend.capabilities.plugin_install_capable = backend_name != "codex"
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
@@ -317,6 +331,11 @@ class TestRegisterAllCodexHookWiring:
         mock_config = MagicMock()
         mock_config.agent_backend.backend = backend_name
         monkeypatch.setattr("autoskillit.config.load_config", lambda p=None: mock_config)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.mcp_config_capable = backend_name == "codex"
+        mock_backend.capabilities.plugin_install_capable = backend_name != "codex"
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
@@ -505,6 +524,11 @@ class TestRegisterAllCodexMcpRegistration:
         mock_config.agent_backend.backend = backend_name
         monkeypatch.setattr("autoskillit.config.load_config", lambda p=None: mock_config)
 
+        mock_backend = MagicMock()
+        mock_backend.capabilities.mcp_config_capable = backend_name == "codex"
+        mock_backend.capabilities.plugin_install_capable = backend_name != "codex"
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
+
         if backend_name == "codex":
             monkeypatch.setattr(
                 "autoskillit.cli._hooks_codex.sync_hooks_to_codex_config",
@@ -584,6 +608,11 @@ class TestRegisterAllDualRegistration:
         mock_config = MagicMock()
         mock_config.agent_backend.backend = "claude-code"
         monkeypatch.setattr("autoskillit.config.load_config", lambda p=None: mock_config)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.mcp_config_capable = False
+        mock_backend.capabilities.plugin_install_capable = True
+        monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
         if isinstance(codex_side_effect, type) and issubclass(codex_side_effect, BaseException):
             codex_mock = MagicMock(side_effect=codex_side_effect("boom"))

@@ -338,6 +338,7 @@ class CodexBackend:
     @property
     def conventions(self) -> BackendConventions:
         return BackendConventions(
+            skills_subdir=ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR,
             project_local_skill_search_dirs=(".codex/skills", ".agents/skills"),
         )
 

@@ -49,6 +49,22 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         rationale="Health Inspector capability gating — production consumer in #3574",
         added_date=date(2026, 6, 1),
     ),
+    "required_session_files": ForwardDeclaredField(
+        issue=3134,
+        rationale=(
+            "production consumer moved to CodexBackend.setup_session_dir — "
+            "field retained for validate_session_layout"
+        ),
+        added_date=date(2026, 6, 2),
+    ),
+    "session_dir_symlinks": ForwardDeclaredField(
+        issue=3134,
+        rationale=(
+            "production consumer moved to CodexBackend.setup_session_dir — "
+            "field retained for validate_session_layout"
+        ),
+        added_date=date(2026, 6, 2),
+    ),
 }
 
 

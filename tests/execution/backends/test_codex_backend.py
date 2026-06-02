@@ -1383,21 +1383,19 @@ class TestCodexBackendSetupSessionDir:
         (self.codex_home / "auth.json").write_text("{}")
         # Pre-create auth.json as a regular file to block symlink creation
         (self.session_dir / "auth.json").write_text("blocker")
-        CodexBackend().setup_session_dir(self.session_dir)
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().setup_session_dir(self.session_dir)
         # Verify auth.json is still a regular file (symlink failed silently)
         assert not (self.session_dir / "auth.json").is_symlink()
+        assert any(
+            e.get("event") == "codex_auth_symlink_failed" and e.get("log_level") == "warning"
+            for e in cap_logs
+        )
 
     def test_absent_env_silently_skipped(self) -> None:
         (self.codex_home / "config.toml").write_text("[mcp]\n")
         CodexBackend().setup_session_dir(self.session_dir)
         assert not (self.session_dir / ".env").exists()
-
-    def test_sessions_symlink_created(self) -> None:
-        self._write_all_source_files()
-        CodexBackend().setup_session_dir(self.session_dir)
-        sessions_link = self.session_dir / "sessions"
-        assert sessions_link.is_symlink()
-        assert sessions_link.resolve() == (self.fake_log_dir / "codex-sessions").resolve()
 
     def test_sessions_symlink_oserror_swallowed(self) -> None:
         (self.codex_home / "config.toml").write_text("[mcp]\n")

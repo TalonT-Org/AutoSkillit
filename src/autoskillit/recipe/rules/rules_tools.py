@@ -223,6 +223,7 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
             "max_issues_per_food_truck",
             "enable_deadline_extension",
             "default_model",
+            "inspector_model",
         }
     ),
     "configure_order": frozenset(

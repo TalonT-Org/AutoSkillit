@@ -493,7 +493,7 @@ async def test_configure_fleet_passes_inspector_model_through(tmp_path, monkeypa
     from autoskillit.server import _state
     from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
 
-    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
+    hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_RELPATH)
     hook_cfg_path.parent.mkdir(parents=True, exist_ok=True)
     hook_cfg_path.write_text(json.dumps({}))
 

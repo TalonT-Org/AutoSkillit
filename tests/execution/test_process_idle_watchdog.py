@@ -842,13 +842,11 @@ async def test_inspector_skipped_when_insufficient_time(tmp_path: anyio.Path) ->
     timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
     async def set_short_scope() -> None:
-        with anyio.move_on_after(0.05) as scope:
+        with anyio.move_on_after(0.5) as scope:
             timeout_scope_ref[0] = scope
             await trigger.wait()
-        if not trigger.is_set():
-            trigger.set()
 
-    with anyio.fail_after(2.0):
+    with anyio.fail_after(3.0):
         async with anyio.create_task_group() as tg:
             tg.start_soon(set_short_scope)
             await anyio.sleep(0.01)

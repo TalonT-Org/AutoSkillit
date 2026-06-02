@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 @pytest.mark.anyio
 async def test_run_headless_core_uses_ctx_backend_for_command_construction(minimal_ctx):
-    backend = _mock_backend()
+    backend = _mock_backend(pty_required=True, channel_b_capable=True)
     minimal_ctx.backend = backend
 
     mock_runner = AsyncMock()
@@ -109,7 +109,7 @@ class TestBackendDispatchRouting:
 class TestStepBackendOverride:
     @pytest.mark.anyio
     async def test_step_backend_none_falls_back_to_ctx_backend(self, minimal_ctx):
-        backend = _mock_backend()
+        backend = _mock_backend(pty_required=True, channel_b_capable=True)
         minimal_ctx.backend = backend
         minimal_ctx.runner = AsyncMock(
             return_value=SubprocessResult(
@@ -146,7 +146,7 @@ class TestStepBackendOverride:
 
     @pytest.mark.anyio
     async def test_step_backend_override_routes_through_get_backend(self, minimal_ctx):
-        backend = _mock_backend()
+        backend = _mock_backend(pty_required=True, channel_b_capable=True)
         minimal_ctx.backend = backend
         minimal_ctx.runner = AsyncMock(
             return_value=SubprocessResult(
@@ -192,7 +192,7 @@ class TestStepBackendOverride:
 
     @pytest.mark.anyio
     async def test_step_backend_flows_to_stream_parser_and_build_result(self, minimal_ctx):
-        ctx_backend = _mock_backend()
+        ctx_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         step_backend_mock = _mock_backend(
             pty_required=False, channel_b_capable=False, process_name="codex"
         )
@@ -239,7 +239,7 @@ class TestStepBackendOverride:
 
     @pytest.mark.anyio
     async def test_backend_override_unknown_name_raises_valueerror(self, minimal_ctx):
-        backend = _mock_backend()
+        backend = _mock_backend(pty_required=True, channel_b_capable=True)
         minimal_ctx.backend = backend
         minimal_ctx.runner = AsyncMock()
         from autoskillit.execution.headless import run_headless_core
@@ -344,7 +344,7 @@ class TestCodexLogDispatch:
 
         fake_runner, flush_calls = _patch_for_flush(monkeypatch, tmp_path, result)
         minimal_ctx.runner = fake_runner  # type: ignore[assignment]
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         await _execute_claude_headless(
             CmdSpec(cmd=("codex", "--quiet", "test"), env={}),

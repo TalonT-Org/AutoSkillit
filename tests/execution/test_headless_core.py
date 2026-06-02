@@ -210,7 +210,7 @@ class TestRunHeadlessCoreFilesystemWrites:
         base_runner = MockSubprocessRunner()
         base_runner.set_default(_sr(0, _success_session_json("done"), ""))
         minimal_ctx.runner = _FileSideEffectRunner(base_runner, skill_temp / "output.txt")
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await run_headless_core(
             "/autoskillit:probe",
@@ -233,7 +233,7 @@ class TestRunHeadlessCoreFilesystemWrites:
         runner = MockSubprocessRunner()
         runner.set_default(_sr(0, _success_session_json("done"), ""))
         minimal_ctx.runner = runner
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await run_headless_core(
             "/autoskillit:probe",

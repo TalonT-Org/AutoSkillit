@@ -73,7 +73,7 @@ class TestProviderFieldsReachFlush:
             monkeypatch, tmp_path, _SUCCESS_RESULT, minimal_ctx
         )
         minimal_ctx.runner = fake_runner  # type: ignore[assignment]
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         await _execute_claude_headless(
             ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
@@ -151,7 +151,7 @@ class TestProviderFieldsReachFlush:
         monkeypatch.setattr(_sl_mod, "flush_session_log", lambda **kw: flush_calls.append(kw))
 
         minimal_ctx.runner = fake_runner  # type: ignore[assignment]
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await _execute_claude_headless(
             ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),
@@ -195,7 +195,7 @@ class TestProviderFieldsReachFlush:
             raise RuntimeError("disk crash")
 
         minimal_ctx.runner = raising_runner  # type: ignore[assignment]
-        minimal_ctx.backend = _mock_backend()
+        minimal_ctx.backend = _mock_backend(pty_required=True, channel_b_capable=True)
 
         result = await _execute_claude_headless(
             ClaudeHeadlessCmd(cmd=("echo", "test"), env={}),

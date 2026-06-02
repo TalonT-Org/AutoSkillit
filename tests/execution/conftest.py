@@ -6,14 +6,13 @@ import json
 import pathlib
 import textwrap
 from collections.abc import Callable
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import CLAUDE_CODE_CAPABILITIES, CmdSpec
+from autoskillit.core import BackendCapabilities, CmdSpec
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
@@ -25,21 +24,9 @@ CODEX_API_ERROR_SIGNAL_STRINGS: tuple[str, ...] = tuple(
 )
 
 
-def _mock_backend(
-    *,
-    pty_required: bool = True,
-    channel_b_capable: bool = True,
-    session_resume_capable: bool = True,
-    **kw: object,
-) -> Mock:
-    """Build a mock backend with configurable capabilities."""
-    caps = replace(
-        CLAUDE_CODE_CAPABILITIES,
-        pty_required=pty_required,
-        channel_b_capable=channel_b_capable,
-        session_resume_capable=session_resume_capable,
-        **kw,
-    )
+def _mock_backend(**kw: Any) -> Mock:
+    """Build a mock backend with all-False/empty capability baseline."""
+    caps = BackendCapabilities(**kw)
     backend = Mock()
     backend.name = "claude-code"
     backend.capabilities = caps
@@ -61,6 +48,7 @@ def _mock_backend(
     backend.version.return_value = ""
     backend.list_plugins.return_value = []
     backend.validate_skill_content.return_value = []
+    backend.validate_session_layout.return_value = []
     return backend
 
 

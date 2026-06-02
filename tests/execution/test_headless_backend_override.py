@@ -52,7 +52,7 @@ class TestBackendOverrideCommandRouting:
             )
         )
 
-        claude_code_backend = _mock_backend()
+        claude_code_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         claude_code_backend.name = "claude-code"
 
         with (
@@ -76,7 +76,7 @@ class TestBackendOverrideCommandRouting:
     @pytest.mark.anyio
     async def test_backend_override_none_uses_ctx_backend(self, minimal_ctx):
         """When backend_override=None, ctx.backend's build_skill_session_cmd is called."""
-        backend = _mock_backend()
+        backend = _mock_backend(pty_required=True, channel_b_capable=True)
         minimal_ctx.backend = backend
         minimal_ctx.runner = AsyncMock(
             return_value=SubprocessResult(
@@ -106,7 +106,7 @@ class TestBackendOverrideCommandRouting:
     @pytest.mark.anyio
     async def test_backend_override_codex_uses_codex_backend(self, minimal_ctx):
         """When backend_override='codex', codex mock's build_skill_session_cmd is called."""
-        claude_code_backend = _mock_backend()
+        claude_code_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         claude_code_backend.name = "claude-code"
         minimal_ctx.backend = claude_code_backend
         minimal_ctx.runner = AsyncMock(
@@ -153,7 +153,7 @@ class TestBackendOverrideEnvPolicy:
         codex_backend.name = "codex"
         minimal_ctx.backend = codex_backend
 
-        claude_code_backend = _mock_backend()
+        claude_code_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         claude_code_backend.name = "claude-code"
         claude_code_backend.build_skill_session_cmd.return_value = CmdSpec(
             cmd=("claude", "--print", "test-skill"),
@@ -201,7 +201,7 @@ class TestBackendOverrideEnvPolicy:
         """Codex override backend strips ANTHROPIC_API_KEY from spec.env."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        claude_code_backend = _mock_backend()
+        claude_code_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         claude_code_backend.name = "claude-code"
         minimal_ctx.backend = claude_code_backend
 
@@ -257,7 +257,7 @@ class TestBackendOverrideParserSelection:
         """When backend_override is set, step_backend.stream_parser is called."""
         ctx_backend = _mock_backend(pty_required=False, channel_b_capable=False)
         ctx_backend.name = "codex"
-        step_backend = _mock_backend()
+        step_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         step_backend.name = "claude-code"
         minimal_ctx.backend = ctx_backend
         minimal_ctx.runner = AsyncMock(

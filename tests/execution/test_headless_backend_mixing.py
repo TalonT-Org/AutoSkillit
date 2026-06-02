@@ -55,7 +55,7 @@ class TestBackendMixingCommandRouting:
             )
         )
 
-        claude_code_backend = _mock_backend()
+        claude_code_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         claude_code_backend.name = "claude-code"
 
         with (
@@ -91,7 +91,7 @@ class TestBackendMixingEnvPolicy:
         codex_backend.name = "codex"
         minimal_ctx.backend = codex_backend
 
-        claude_code_backend = _mock_backend()
+        claude_code_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         claude_code_backend.name = "claude-code"
         claude_code_backend.build_skill_session_cmd.return_value = CmdSpec(
             cmd=("claude", "--print", "test-skill"),
@@ -161,7 +161,7 @@ class TestDefaultExecutorBackendMixing:
             )
         )
 
-        claude_code_backend = _mock_backend()
+        claude_code_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         claude_code_backend.name = "claude-code"
 
         with (

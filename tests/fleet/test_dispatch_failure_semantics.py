@@ -464,3 +464,75 @@ class TestSidecarBasedResultSynthesis:
         )
         envelope = json.loads(result.outcome.to_envelope())
         assert envelope["dispatch_status"] == "success"
+
+
+class TestTrackerBridgeIntegration:
+    @pytest.mark.anyio
+    async def test_single_issue_killed_with_tracker_progress_is_resumable(
+        self, tool_ctx, monkeypatch
+    ):
+        """process_killed + no sidecar + populated tracker file → RESUMABLE via checkpoint bridge."""
+        import dataclasses
+        import json
+
+        from autoskillit.core import DispatchIdentity, InfraOutcome
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        fixed_dispatch_id = "aaaabbbb-aaaa-bbbb-cccc-111111111111"
+        _fixed_identity = DispatchIdentity.from_dispatch_id(fixed_dispatch_id)
+
+        class _FixedDispatchIdentity:
+            @classmethod
+            def fresh(cls) -> DispatchIdentity:
+                return _fixed_identity
+
+        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=False,
+                session_id="sess-tracker-001",
+                lifespan_started=True,
+                retry_reason="resume",
+                infra=InfraOutcome(exit_category="process_killed"),
+            )
+        )
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        tracker_dir = tool_ctx.project_dir / ".autoskillit" / "temp" / "pipeline_tracker"
+        tracker_dir.mkdir(parents=True, exist_ok=True)
+        tracker_file = tracker_dir / f"{fixed_dispatch_id}.json"
+        tracker_file.write_text(
+            json.dumps(
+                {
+                    "pipeline_id": fixed_dispatch_id,
+                    "kitchen_id": "k-test",
+                    "initialized_at": "2026-06-01T00:00:00Z",
+                    "steps": {
+                        "plan": {
+                            "status": "complete",
+                            "completed_at": "2026-06-01T00:01:00Z",
+                        },
+                        "implement": {
+                            "status": "complete",
+                            "completed_at": "2026-06-01T00:02:00Z",
+                        },
+                        "review-pr": {"status": "pending"},
+                    },
+                    "dependencies": {},
+                }
+            )
+        )
+
+        await _run(tool_ctx)
+
+        record = _read_dispatch_record(tool_ctx)
+        assert record["status"] == "resumable"
+        assert record["reason"] == "fleet_l3_no_result_block"

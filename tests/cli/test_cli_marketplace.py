@@ -87,10 +87,7 @@ class TestInstallPluginInstallCapableGuard:
 
         assert result is False
         captured = capsys.readouterr()
-        assert (
-            "plugin_install_capable" in captured.out
-            or "plugin-install-capable" in captured.out.lower()
-        )
+        assert "plugin_install_capable" in captured.out
 
     def test_passes_guard_when_plugin_install_capable(self, monkeypatch, capsys):
         """install() does not reject at capability guard when True."""

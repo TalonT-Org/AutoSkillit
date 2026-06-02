@@ -532,7 +532,7 @@ annotate_pr_diff:
   with:
     callable: autoskillit.smoke_utils.annotate_pr_diff
     work_dir: ${{ context.work_dir }}          # ← tool-level, anchors output_dir
-    output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr/iter_0'
+    output_dir: review-pr/iter_0
     cwd: ${{ context.work_dir }}
     pr_number: ${{ context.pr_number }}
 ```

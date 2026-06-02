@@ -420,11 +420,17 @@ class TestImportAndCallTypeCoercion:
 
     @pytest.mark.anyio
     async def test_sentinel_stripping_preserves_callable_accepted_keys(self):
-        """Sentinel keys that the callable legitimately accepts must NOT be stripped."""
+        """Sentinel keys that the callable legitimately accepts must NOT be stripped.
+
+        work_dir is set at the top level (correct path-anchoring usage). When
+        top-level work_dir is non-empty, the auto-promotion is a no-op and the
+        args dict is preserved as-is, so the callable receives work_dir from args.
+        """
         result = json.loads(
             await run_python(
                 callable="tests.server._type_coercion_fixtures._work_dir_param",
                 args={"work_dir": "/some/path", "base_branch": "main"},
+                work_dir="/some/path",
                 timeout=10,
             )
         )

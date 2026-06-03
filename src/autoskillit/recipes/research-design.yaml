@@ -11,7 +11,7 @@ description: >
   artifacts. Dispatched as a food truck by campaign recipes that separate
   design from execution.
 dispatch_only: true
-summary: scope > plan > [review?] > dial > apply > synthesize > design_complete
+summary: scope > plan > [review?] > dial > select_review_dimensions > apply > synthesize > vis_dial > vis_apply > vis_synthesize > design_complete
 
 ingredients:
   task:
@@ -94,76 +94,122 @@ steps:
     optional_context_refs: [revision_guidance, selected_directions]
     capture:
       experiment_plan: "${{ result.experiment_plan }}"
-    on_success: review_design
+    on_success: dial
     on_failure: escalate_stop
-
-  review_design:
-    tool: run_skill
-    model: ""
-    with:
-      skill_command: "/autoskillit:review-design ${{ context.experiment_plan }} ${{ context.scope_report }}"
-      cwd: "${{ inputs.source_dir }}"
-      step_name: review_design
-      output_dir: "{{AUTOSKILLIT_TEMP}}/review-design"
-    capture:
-      verdict: "${{ result.verdict }}"
-      experiment_type: "${{ result.experiment_type }}"
-      evaluation_dashboard: "${{ result.evaluation_dashboard }}"
-      revision_guidance: "${{ result.revision_guidance }}"
-    pass_through: [experiment_type]
-    skip_when_false: inputs.review_design
-    retries: 2
-    on_exhausted: dial
-    on_context_limit: dial
-    on_failure: dial
-    on_result:
-    - when: "${{ result.verdict }} == GO"
-      route: dial
-    - when: "${{ result.verdict }} == REVISE"
-      route: revise_design
-    - when: "${{ result.verdict }} == STOP"
-      route: resolve_design_review
-    - route: dial
 
   dial:
     tool: run_skill
     model: ""
-    phoropter_family: vis-lens
+    phoropter_family: review-design
     with:
-      skill_command: "/autoskillit:select-vis-lenses ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
+      skill_command: "/autoskillit:classify-experiment-type ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: dial
-      output_dir: "{{AUTOSKILLIT_TEMP}}/dial"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/classify-experiment-type"
+    capture:
+      experiment_type: "${{ result.experiment_type }}"
+      is_silent_type: "${{ result.is_silent_type }}"
+      classification_timestamp: "${{ result.classification_timestamp }}"
+    pass_through: [experiment_type, is_silent_type, classification_timestamp]
+    skip_when_false: inputs.review_design
+    on_context_limit: synthesize
+    on_success: select_review_dimensions
+    on_failure: escalate_stop
+
+  select_review_dimensions:
+    tool: run_python
+    phoropter_family: review-design
+    with:
+      callable: "autoskillit.smoke_utils.select_review_dimensions"
+      experiment_type: "${{ context.experiment_type }}"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/select-review-dimensions"
+      work_dir: "${{ inputs.source_dir }}"
     capture:
       selected_lenses: "${{ result.selected_lenses }}"
-      lens_context_paths: "${{ result.lens_context_paths }}"
+      dimensions_manifest_path: "${{ result.dimensions_manifest_path }}"
     on_success: apply
     on_failure: escalate_stop
 
   apply:
     tool: run_skill
     model: ""
-    phoropter_family: vis-lens
+    phoropter_family: review-design
+    with:
+      skill_command: "/autoskillit:apply-review-dimensions ${{ context.experiment_plan }} ${{ context.scope_report }} ${{ context.dimensions_manifest_path }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: apply
+      output_dir: "{{AUTOSKILLIT_TEMP}}/apply-review-dimensions"
+    capture:
+      findings_manifest_path: "${{ result.findings_manifest_path }}"
+      evaluation_dashboard: "${{ result.evaluation_dashboard_path }}"
+    optional_context_refs: [is_silent_type, classification_timestamp]
+    skip_when_true: context.is_silent_type
+    retries: 2
+    on_exhausted: synthesize
+    on_context_limit: synthesize
+    on_failure: synthesize
+    on_success: synthesize
+
+  synthesize:
+    tool: run_python
+    phoropter_family: review-design
+    with:
+      callable: "autoskillit.smoke_utils.aggregate_review_verdict"
+      findings_manifest_path: "${{ context.findings_manifest_path }}"
+      dimensions_manifest_path: "${{ context.dimensions_manifest_path }}"
+      experiment_type: "${{ context.experiment_type }}"
+      output_dir: "{{AUTOSKILLIT_TEMP}}/aggregate-review-verdict"
+      work_dir: "${{ inputs.source_dir }}"
+    capture:
+      verdict: "${{ result.verdict }}"
+      revision_guidance: "${{ result.revision_guidance_path }}"
+    optional_context_refs: [findings_manifest_path, dimensions_manifest_path]
+    on_failure: vis_dial
+    on_result:
+    - when: "${{ result.verdict }} == GO"
+      route: vis_dial
+    - when: "${{ result.verdict }} == REVISE"
+      route: revise_design
+    - when: "${{ result.verdict }} == STOP"
+      route: resolve_design_review
+    - route: vis_dial
+
+  vis_dial:
+    tool: run_skill
+    model: ""
+    with:
+      skill_command: "/autoskillit:select-vis-lenses ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
+      cwd: "${{ inputs.source_dir }}"
+      step_name: vis_dial
+      output_dir: "{{AUTOSKILLIT_TEMP}}/dial"
+    capture:
+      selected_lenses: "${{ result.selected_lenses }}"
+      lens_context_paths: "${{ result.lens_context_paths }}"
+    on_success: vis_apply
+    on_failure: escalate_stop
+
+  vis_apply:
+    tool: run_skill
+    model: ""
     with:
       skill_command: "/autoskillit:vis-lens-{slug} {context_path} ${{ context.experiment_plan }}"
       cwd: "${{ inputs.source_dir }}"
-      step_name: apply
+      step_name: vis_apply
       output_dir: "{{AUTOSKILLIT_TEMP}}/apply"
     capture_list:
       all_figure_spec_paths: "${{ result.figure_spec_path }}"
     optional_context_refs: [selected_lenses, lens_context_paths]
     retries: 0
-    on_success: synthesize
-    on_failure: synthesize
+    on_success: vis_synthesize
+    on_failure: vis_synthesize
 
-  synthesize:
+  vis_synthesize:
     tool: run_skill
     model: ""
-    phoropter_family: vis-lens
     with:
       skill_command: "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/apply"
       cwd: "${{ inputs.source_dir }}"
-      step_name: synthesize
+      step_name: vis_synthesize
       output_dir: "{{AUTOSKILLIT_TEMP}}/synthesize"
     capture:
       visualization_plan_path: "${{ result.visualization_plan_path }}"
@@ -187,16 +233,16 @@ steps:
       design_review_count: "${{ result.next_iteration }}"
     on_result:
     - when: "${{ result.max_exceeded }} == true"
-      route: dial
-    - route: plan_experiment
-    on_failure: dial
+      route: vis_dial
+    - route: apply
+    on_failure: vis_dial
     optional_context_refs:
     - design_review_count
     note: >
-      Iteration guard for the review_design → revise_design → plan_experiment cycle.
-      Caps design revision loops at 3 iterations. Both REVISE and
-      STOP→resolve→revised paths flow through revise_design and hit this guard.
-      On exhaustion, proceeds to dial with the best available design.
+      Iteration guard for the apply → synthesize REVISE → revise_design → check_design_review_loop → apply cycle.
+      Re-entry skips re-dialing since experiment_type is stable across revision cycles.
+      Caps design revision loops at 3 iterations. On exhaustion, proceeds to
+      vis_dial with the best available design.
 
   resolve_design_review:
     tool: run_skill
@@ -206,7 +252,7 @@ steps:
       cwd: "${{ inputs.source_dir }}"
       step_name: resolve_design_review
       output_dir: "{{AUTOSKILLIT_TEMP}}/resolve-design-review"
-    optional_context_refs: [evaluation_dashboard, experiment_plan, revision_guidance]
+    optional_context_refs: [evaluation_dashboard, experiment_plan, revision_guidance, findings_manifest_path]
     capture:
       revision_guidance: "${{ result.revision_guidance }}"
     retries: 1
@@ -229,7 +275,7 @@ steps:
       Research pipeline halted: experiment design rejected (verdict=STOP, resolution=failed).
       All stop-trigger findings are structural — revision cannot address the identified flaws.
       Check {{AUTOSKILLIT_TEMP}}/resolve-design-review/ for the triage report and
-      {{AUTOSKILLIT_TEMP}}/review-design/ for the evaluation dashboard.
+      {{AUTOSKILLIT_TEMP}}/apply-review-dimensions/ for the evaluation dashboard.
       Emit the L3 result sentinel JSON block now with success=false.
       Example sentinel: {"success": false, "reason": "experiment design rejected"}
 

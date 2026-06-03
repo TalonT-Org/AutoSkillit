@@ -312,7 +312,7 @@ class TestResearchRecipeStructure:
     def test_check_design_review_loop_routes_to_apply(self, recipe) -> None:
         step = recipe.steps["check_design_review_loop"]
         fallback = next(
-            (c for c in step.on_result.conditions if not c.when or "max_exceeded" not in c.when),
+            (c for c in step.on_result.conditions if c.when is None),
             None,
         )
         assert fallback is not None

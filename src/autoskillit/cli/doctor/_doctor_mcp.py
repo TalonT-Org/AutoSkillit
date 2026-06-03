@@ -281,9 +281,8 @@ def _check_codex_mcp_timeouts(*, backend: CodingAgentBackend | None = None) -> D
             "codex_mcp_timeouts",
             f"Skipped (backend={backend.name if backend else 'none'})",
         )
-    from autoskillit.config.settings import compute_codex_mcp_tool_timeout
-    from autoskillit.execution import _read_codex_config
-    from autoskillit.execution.backends._codex_config import CODEX_MCP_TOOL_TIMEOUT_FLOOR
+    from autoskillit.config import compute_codex_mcp_tool_timeout
+    from autoskillit.execution import CODEX_MCP_TOOL_TIMEOUT_FLOOR, _read_codex_config
 
     config_path = Path.home() / ".codex" / "config.toml"
     read_result = _read_codex_config(config_path)

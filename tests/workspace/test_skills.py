@@ -615,6 +615,8 @@ RESEARCH_SKILL_NAMES = {
     "troubleshoot-experiment",
     "audit-claims",
     "resolve-claims-review",
+    "classify-experiment-type",
+    "apply-review-dimensions",
 }
 
 

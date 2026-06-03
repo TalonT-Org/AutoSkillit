@@ -270,3 +270,32 @@ class TestEvaluateContentState:
             _PREP_PATTERNS,
         )
         assert state == ContentState.CONTRACT_VIOLATION
+
+
+class TestNormalizeModelOutputCodeFence:
+    """Tests for Stage 0 (code-fence stripping) and Stage 2.5 (backtick value strip)."""
+
+    def test_code_fence_stripped_token_visible(self) -> None:
+        raw = "```\nworktree_path = /tmp/wt\n```"
+        result = _normalize_model_output(raw)
+        assert "worktree_path = /tmp/wt" in result
+
+    def test_code_fence_with_language_tag_stripped(self) -> None:
+        raw = "```markdown\nworktree_path = /tmp/wt\n```"
+        result = _normalize_model_output(raw)
+        assert "worktree_path = /tmp/wt" in result
+
+    def test_code_fence_preserves_non_token_content(self) -> None:
+        raw = "```\nsome content\nworktree_path = /tmp/wt\nmore content\n```"
+        result = _normalize_model_output(raw)
+        assert "some content" in result
+        assert "worktree_path = /tmp/wt" in result
+        assert "more content" in result
+
+    def test_backtick_wrapped_value_stripped(self) -> None:
+        result = _normalize_model_output("worktree_path = `/tmp/wt-val`")
+        assert "worktree_path = /tmp/wt-val" in result
+
+    def test_backtick_value_not_applied_to_key(self) -> None:
+        result = _normalize_model_output("`worktree_path` = /tmp/wt")
+        assert "worktree_path = /tmp/wt" in result

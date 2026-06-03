@@ -17,8 +17,10 @@ from autoskillit.core.types import (
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
+    NormalizedMessages,
     _build_skill_result,
     _extract_worktree_path,
+    _normalize_messages,
 )
 from tests.conftest import _make_result, _make_timeout_result
 from tests.execution.conftest import _mock_backend, _sr, _success_session_json
@@ -1403,59 +1405,67 @@ class TestExtractWorktreePath:
     def test_extracts_path_from_single_message(self):
         """Finds worktree_path= token in a single assistant message."""
         msg = "Worktree created.\nworktree_path=/path/to/wt\nbranch_name=impl"
-        assert _extract_worktree_path([msg]) == "/path/to/wt"
+        assert _extract_worktree_path(NormalizedMessages([msg])) == "/path/to/wt"
 
     def test_returns_last_occurrence_across_messages(self):
         """When multiple messages contain the token, last match wins."""
-        msgs = [
-            "worktree_path=/first/path",
-            "worktree_path=/second/path",
-        ]
+        msgs = NormalizedMessages(
+            [
+                "worktree_path=/first/path",
+                "worktree_path=/second/path",
+            ]
+        )
         assert _extract_worktree_path(msgs) == "/second/path"
 
     def test_returns_none_when_no_token(self):
         """Returns None when no worktree_path= token is present."""
-        assert _extract_worktree_path(["No token here."]) is None
+        assert _extract_worktree_path(NormalizedMessages(["No token here."])) is None
 
     def test_returns_none_for_empty_messages(self):
         """Returns None for empty message list."""
-        assert _extract_worktree_path([]) is None
+        assert _extract_worktree_path(NormalizedMessages([])) is None
 
     def test_strips_trailing_whitespace(self):
         """Extracted value has trailing whitespace stripped."""
         msg = "worktree_path=/some/path   \n"
-        assert _extract_worktree_path([msg]) == "/some/path"
+        assert _extract_worktree_path(NormalizedMessages([msg])) == "/some/path"
 
     def test_extract_worktree_path_with_spaces_around_equals(self):
         """Regex handles 'worktree_path = /path' format (spaces around =)."""
         msg = "Worktree created.\nworktree_path = /path/to/wt\nbranch_name = impl"
-        result = _extract_worktree_path([msg])
+        result = _extract_worktree_path(NormalizedMessages([msg]))
         assert result == "/path/to/wt"
 
     def test_extract_worktree_path_mixed_spacing(self):
         """Regex handles mixed spacing: 'worktree_path= /path' and 'worktree_path =/path'."""
         for token in ["worktree_path= /path/to/wt", "worktree_path =/path/to/wt"]:
             msg = f"Done.\n{token}\nbranch_name=impl"
-            result = _extract_worktree_path([msg])
+            result = _extract_worktree_path(NormalizedMessages([msg]))
             assert result == "/path/to/wt"
 
     def test_relative_path_with_dotdot_is_discarded(self) -> None:
         """Relative worktree_path tokens (../...) are silently discarded; returns None."""
-        result = _extract_worktree_path(["worktree_path = ../worktrees/impl-fix-20260307"])
+        result = _extract_worktree_path(
+            NormalizedMessages(["worktree_path = ../worktrees/impl-fix-20260307"])
+        )
         assert result is None
 
     def test_relative_path_without_slash_prefix_is_discarded(self) -> None:
         """Any non-absolute form is silently discarded."""
-        result = _extract_worktree_path(["worktree_path = worktrees/impl-fix-20260307"])
+        result = _extract_worktree_path(
+            NormalizedMessages(["worktree_path = worktrees/impl-fix-20260307"])
+        )
         assert result is None
 
     def test_absolute_wins_over_subsequent_relative(self) -> None:
         """If an absolute token appears before a relative one, the absolute path is returned."""
         result = _extract_worktree_path(
-            [
-                "worktree_path = /abs/worktrees/impl-first",
-                "worktree_path = ../worktrees/impl-second",
-            ]
+            NormalizedMessages(
+                [
+                    "worktree_path = /abs/worktrees/impl-first",
+                    "worktree_path = ../worktrees/impl-second",
+                ]
+            )
         )
         assert result == "/abs/worktrees/impl-first"
 
@@ -1468,7 +1478,7 @@ class TestExtractWorktreePath:
         ids=["markdown-bold", "backtick-wrapped"],
     )
     def test_extract_worktree_path_normalized_variants(self, token: str, expected: str):
-        assert _extract_worktree_path([token]) == expected
+        assert _extract_worktree_path(_normalize_messages([token])) == expected
 
     @pytest.mark.parametrize(
         "token",
@@ -1479,7 +1489,7 @@ class TestExtractWorktreePath:
         ids=["colon-separator", "uppercase"],
     )
     def test_extract_worktree_path_format_variants_return_none(self, token: str):
-        assert _extract_worktree_path([token]) is None
+        assert _extract_worktree_path(NormalizedMessages([token])) is None
 
 
 class TestBuildSkillResultWorktreePath:
@@ -1617,6 +1627,102 @@ class TestWorktreePathOnContextExhaustion:
         assert sr.success is False
         assert data["needs_retry"] is True
         assert data["worktree_path"] == path
+
+
+class TestBuildSkillResultBranchName:
+    """_build_skill_result extracts branch_name and to_json() serializes it."""
+
+    def test_extracts_branch_name_on_context_exhaustion(self, tmp_path):
+        wt = tmp_path / "impl-fix-20260307"
+        wt.mkdir()
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": (f"worktree_path={wt}\nbranch_name=impl-fix-20260307\n"),
+                },
+            }
+        )
+        result = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "prompt is too long",
+                "session_id": "s1",
+                "errors": ["prompt is too long"],
+            }
+        )
+        sub = SubprocessResult(
+            returncode=-1,
+            stdout=f"{assistant}\n{result}\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub, "", "/test", None, backend=ClaudeCodeBackend())
+        assert sr.branch_name == "impl-fix-20260307"
+
+    def test_branch_name_none_when_absent(self):
+        sub = SubprocessResult(
+            returncode=-1,
+            stdout=_context_exhausted_session_json(),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub, "", "/test", None, backend=ClaudeCodeBackend())
+        assert sr.branch_name is None
+
+    def test_branch_name_serialized_in_to_json(self, tmp_path):
+        wt = tmp_path / "impl-fix-branch"
+        wt.mkdir()
+        assistant = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "content": f"worktree_path={wt}\nbranch_name=my-branch\n",
+                },
+            }
+        )
+        result_rec = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "prompt is too long",
+                "session_id": "s1",
+                "errors": ["prompt is too long"],
+            }
+        )
+        sub = SubprocessResult(
+            returncode=-1,
+            stdout=f"{assistant}\n{result_rec}\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub, "", "/test", None, backend=ClaudeCodeBackend())
+        data = json.loads(sr.to_json())
+        assert data.get("branch_name") == "my-branch"
+
+    def test_branch_name_absent_from_to_json_when_none(self):
+        sub = SubprocessResult(
+            returncode=-1,
+            stdout=_context_exhausted_session_json(),
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1234,
+            channel_confirmation=ChannelConfirmation.UNMONITORED,
+        )
+        sr = _build_skill_result(sub, "", "/test", None, backend=ClaudeCodeBackend())
+        data = json.loads(sr.to_json())
+        assert "branch_name" not in data
 
 
 def test_relative_worktree_path_causes_adjudicated_failure() -> None:

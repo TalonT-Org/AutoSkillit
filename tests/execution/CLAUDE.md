@@ -49,6 +49,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_headless_env_scrub.py` | Launch-site env-scrub contract test for run_headless_core |
 | `test_headless_ordering.py` | AST-based structural test for post-session operation ordering in headless.py |
 | `test_headless_path_validation.py` | Tests for headless.py: _build_skill_result, path validation, synthesis, and contract gates |
+| `test_headless_recovery.py` | Tests for _headless_recovery.py skip-check normalization — verifies decorated tokens prevent duplicate synthesis and redundant nudge hints |
 | `test_headless_provider_fallback.py` | Tests for the provider fallback loop in _execute_claude_headless — STALE and BUDGET_EXHAUSTED trigger provider switch |
 | `test_headless_provider_forwarding.py` | Tests verifying provider_extras and profile_name forwarding through the headless call chain |
 | `test_false_success_integration.py` | Integration tests for completion_required guard against false success via marker_absent_contract_met bypass |

@@ -17,6 +17,7 @@ from autoskillit.execution.session import (
     ClaudeSessionResult,
     _check_expected_patterns,
 )
+from autoskillit.execution.session._session_content import _normalize_model_output
 
 if TYPE_CHECKING:
     from autoskillit.core import (
@@ -143,7 +144,7 @@ def _synthesize_from_write_artifacts(
         if not token_name:
             continue
         # Skip if the pattern is already satisfied in the current result.
-        if re.search(pattern, session.result):
+        if re.search(pattern, _normalize_model_output(session.result)):
             continue
         # Collect ALL absolute Write/Edit paths; use the LAST one (final deliverable).
         # Multi-artifact skills write intermediate files first, final deliverable last.
@@ -188,7 +189,7 @@ def _extract_missing_token_hints(
         if not token_name:
             continue
         # Skip if already satisfied
-        if re.search(pattern, session.output):
+        if re.search(pattern, _normalize_model_output(session.output)):
             continue
         # Collect absolute Write/Edit paths; use the LAST one (final deliverable).
         # tool_uses and token_usage live in .raw (not promoted to typed attrs) because

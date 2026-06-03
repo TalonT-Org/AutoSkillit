@@ -312,6 +312,7 @@ class SkillResult:
     stderr: str
     token_usage: dict[str, Any] | None = None
     worktree_path: str | None = None
+    branch_name: str | None = None
     cli_subtype: str = field(default="")
     write_path_warnings: list[str] = field(default_factory=list)
     evidence: WriteEvidence = field(default_factory=WriteEvidence.none_observed)
@@ -371,6 +372,8 @@ class SkillResult:
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
+        if self.branch_name is not None:
+            data["branch_name"] = self.branch_name
         data["order_id"] = self.order_id
         return json.dumps(data, default=lambda o: o.value if isinstance(o, Enum) else str(o))
 

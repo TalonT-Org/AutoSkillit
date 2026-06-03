@@ -307,3 +307,130 @@ async def test_backend_override_emits_structured_log_provider_profile(
     log = override_logs[0]
     assert log["reason"] == "provider_profile"
     assert log["original_backend"] == "codex"
+
+
+@pytest.mark.anyio
+async def test_backend_override_threads_effective_backend_to_init_session(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    """When backend_override is set, init_session receives the overridden backend
+    (ClaudeCodeBackend), not the orchestrator backend (Codex)."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+    tool_ctx_kitchen_open.backend = fake_backend
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    skill_md = session_dir / ".claude" / "skills" / "test-skill" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("name: test-skill\n")
+
+    fake_validated = ValidatedAddDir(path=str(session_dir))
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+    mock_skill_info = MagicMock()
+    mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = mock_skill_info
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("default", {}),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
+    )
+
+    await run_skill("/autoskillit:test-skill", str(tmp_path))
+
+    mock_ssm.init_session.assert_called_once()
+    init_backend = mock_ssm.init_session.call_args.kwargs.get("backend")
+    assert init_backend is not fake_backend, (
+        "init_session must NOT receive the orchestrator backend"
+    )
+    assert init_backend.name == "claude-code"
+
+
+@pytest.mark.anyio
+async def test_backend_override_skill_md_uses_effective_conventions(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    """SKILL.md path uses the effective backend's conventions.skills_subdir,
+    not a hardcoded '.claude/skills'."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+    tool_ctx_kitchen_open.backend = fake_backend
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    skill_md = session_dir / ".claude" / "skills" / "test-skill" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("name: test-skill\n")
+
+    fake_validated = ValidatedAddDir(path=str(session_dir))
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+    mock_skill_info = MagicMock()
+    mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = mock_skill_info
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("default", {}),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
+    )
+
+    result_json = await run_skill("/autoskillit:test-skill", str(tmp_path))
+    assert "SKILL.md not found" not in str(result_json), (
+        "SKILL.md at .claude/skills/ should be found when effective backend is claude-code"
+    )
+
+    session_dir_codex = tmp_path / "session_codex"
+    session_dir_codex.mkdir()
+    codex_skill_md = session_dir_codex / "skills" / "test-skill" / "SKILL.md"
+    codex_skill_md.parent.mkdir(parents=True)
+    codex_skill_md.write_text("name: test-skill\n")
+
+    fake_validated_codex = ValidatedAddDir(path=str(session_dir_codex))
+    mock_ssm.reset_mock()
+    mock_ssm.init_session.return_value = fake_validated_codex
+
+    result_json2 = await run_skill("/autoskillit:test-skill", str(tmp_path))
+    assert "SKILL.md not found" in str(result_json2), (
+        "SKILL.md at codex 'skills/' should NOT be found when effective backend is claude-code"
+    )

@@ -321,6 +321,59 @@ async def test_run_skill_passes_backend_to_init_session(
     assert mock_ssm.init_session.call_args.kwargs.get("backend") is fake_backend
 
 
+@pytest.mark.anyio
+async def test_run_skill_passes_effective_backend_to_init_session_when_override(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    """When backend_override is triggered, init_session receives the overridden
+    backend object, not tool_ctx.backend."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    skill_md = session_dir / ".claude" / "skills" / "test-skill" / "SKILL.md"
+    skill_md.parent.mkdir(parents=True)
+    skill_md.write_text("name: test-skill\n")
+
+    fake_validated = ValidatedAddDir(path=str(session_dir))
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = fake_validated
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+    tool_ctx_kitchen_open.backend = fake_backend
+
+    mock_skill_info = MagicMock()
+    mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = mock_skill_info
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("default", {}),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
+    )
+
+    await run_skill("/autoskillit:test-skill", str(tmp_path))
+
+    mock_ssm.init_session.assert_called_once()
+    init_backend = mock_ssm.init_session.call_args.kwargs.get("backend")
+    assert init_backend is not fake_backend
+    assert init_backend.name == "claude-code"
+
+
 class TestOutputDirParameter:
     """output_dir parameter plumbing from run_skill to executor."""
 

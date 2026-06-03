@@ -131,14 +131,3 @@ def test_derivation_backend_requirements_match_capabilities():
         f"{len(violations)} skill(s) still have backend_requirements in SKILL.md frontmatter "
         f"(should be derived at runtime):\n" + "\n".join(f"  {v}" for v in violations)
     )
-
-
-def test_no_skill_has_backend_requirements():
-    violations = []
-    for name, skill_md in _iter_skill_dirs():
-        fm = _read_skill_frontmatter(skill_md)
-        if fm.get("backend_requirements"):
-            violations.append(f"{name}: {fm.get('backend_requirements')}")
-    assert not violations, "No skill should have backend_requirements:\n" + "\n".join(
-        f"  {v}" for v in violations
-    )

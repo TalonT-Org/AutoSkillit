@@ -363,5 +363,12 @@ async def test_provider_override_threads_effective_backend_to_init_session(
 
 @pytest.mark.anyio
 async def test_no_skill_requires_claude_logic() -> None:
-    source = Path("src/autoskillit/server/tools/tools_execution.py").read_text()
+    source = (
+        Path(__file__).parents[2]
+        / "src"
+        / "autoskillit"
+        / "server"
+        / "tools"
+        / "tools_execution.py"
+    ).read_text()
     assert "_skill_requires_claude" not in source

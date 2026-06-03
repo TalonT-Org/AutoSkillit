@@ -34,8 +34,8 @@ def _has_genuine_claude_code_dependency(body: str, skill_name: str) -> bool:
         if "autoskillit:" in stripped:
             if f"autoskillit:{skill_name}" in stripped:
                 continue
-            cap = SKILL_CAPABILITY_REGISTRY.get("cross_skill_ref")
-            if cap and cap.required_backends:
+            cap = SKILL_CAPABILITY_REGISTRY["cross_skill_ref"]
+            if cap.required_backends:
                 return True
     return False
 

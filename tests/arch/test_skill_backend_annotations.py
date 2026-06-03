@@ -46,6 +46,17 @@ def _detect_capabilities(body: str, skill_name: str) -> set[str]:
     return detected
 
 
+_INLINE_DETECTED_CAPS = {"cross_skill_ref"}
+
+_pattern_keys = set(_CAPABILITY_PATTERNS) | _INLINE_DETECTED_CAPS
+_registry_keys = set(SKILL_CAPABILITY_REGISTRY)
+assert _pattern_keys == _registry_keys, (
+    f"_CAPABILITY_PATTERNS + inline caps must match registry. "
+    f"Missing: {_registry_keys - _pattern_keys}, "
+    f"Extra: {_pattern_keys - _registry_keys}"
+)
+
+
 def test_forward_check_capabilities_declared():
     """Skills using a capability must declare it in uses_capabilities."""
     violations: list[str] = []

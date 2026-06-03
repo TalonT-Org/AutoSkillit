@@ -79,7 +79,8 @@ def test_analyze_pipeline_health_never_prohibits_tmp():
 
     skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
     content = skill_path.read_text()
-    assert "/tmp" in content and "/var/tmp" in content, (
+    never_block = content.split("**NEVER:**", 1)[1] if "**NEVER:**" in content else ""
+    assert "/tmp" in never_block and "/var/tmp" in never_block, (
         "analyze-pipeline-health/SKILL.md NEVER block must explicitly prohibit "
         "/tmp and /var/tmp writes"
     )

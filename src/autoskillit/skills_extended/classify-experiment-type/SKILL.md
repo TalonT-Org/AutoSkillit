@@ -63,11 +63,14 @@ python -c "from autoskillit.core import pkg_root; print(pkg_root() / 'recipes' /
 
 (b) Glob `*.yaml` in that directory. Parse each file extracting: `name`,
 `classification_triggers`, `dimension_weights`, `applicable_lenses`, `red_team_focus`,
-`l1_severity`, `dimension_weight_rationale`.
+`l1_severity`, `dimension_weight_rationale`. If a file is malformed or unreadable, log a
+warning and skip it — do not abort registry loading.
 
 (c) Check `.autoskillit/experiment-types/` in the current working directory for user
 overrides. A user-defined type with the same `name` replaces the bundled entry entirely
-(no field merging).
+(no field merging). Validate that each user-defined entry contains all required fields
+(`name`, `classification_triggers`, `dimension_weights`); if any required field is missing,
+log a warning and skip the entry rather than silently accepting a partial spec.
 
 (d) Build registry mapping `type_name → spec`. The set of valid `experiment_type` values
 is the set of keys in the registry.
@@ -124,7 +127,7 @@ returned by the triage subagent. This matches how the Python `is_silent_type(spe
 function in `experiment_type_registry.py` operates — it reads
 `spec.dimension_weights.values()` from the registry entry directly.
 
-Apply the `is_silent_type` rule: **>=6 of 8 `dimension_weights` == S** →
+Apply the `is_silent_type` rule: **>=6 of 9 `dimension_weights` == S** →
 `is_silent_type=true`.
 
 Reference: `docs/research/silent-type-convention.md`.

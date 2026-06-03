@@ -31,6 +31,7 @@ Coordinator skill that reads session logs from a pipeline run, groups them by st
 - Fabricate, embellish, or invent findings not supported by evidence in session data
 - Modify any source code files
 - Create issues or PRs (findings are reported to the calling session only)
+- Write to `/tmp`, `/var/tmp`, or any system scratch directory — all intermediate and scratch files belong in `{{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/`
 - Run subagents in the background (run_in_background: true is prohibited)
 - Issue subagent Task calls sequentially — ALL must be in a single parallel message
 
@@ -43,6 +44,16 @@ Coordinator skill that reads session logs from a pipeline run, groups them by st
 - Issue all Task calls in a single message to maximize parallelism
 
 ## Workflow
+
+### Step 0: Resolve output directory
+
+Resolve the scratch directory for any intermediate files produced during analysis:
+
+1. Use `{{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/` as the scratch directory
+2. Create the directory if it does not exist (use Bash: `mkdir -p`)
+3. All intermediate files (partial scanner results, working notes) go here — never in `/tmp` or `/var/tmp`
+
+Note: The final JSON report (Step 5) writes to the diagnostics log directory (`health-reports/`), not to this scratch directory.
 
 ### Step 1: Read sessions.jsonl
 

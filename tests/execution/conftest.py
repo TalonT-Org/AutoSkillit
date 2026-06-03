@@ -309,7 +309,7 @@ def _subagent_assistant_ndjson(
     )
 
 
-def _flush(tmp_path: Path, **overrides) -> None:
+def _flush(tmp_path: Path, *, backend: str = "claude-code", **overrides) -> None:
     from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
     from autoskillit.core.types._type_results_execution import (
         RecipeIdentity,
@@ -391,6 +391,7 @@ def _flush(tmp_path: Path, **overrides) -> None:
         telemetry=telemetry,
         provider_outcome=provider_outcome,
         recipe_identity=recipe_identity,
+        backend=backend,
     )
 
 

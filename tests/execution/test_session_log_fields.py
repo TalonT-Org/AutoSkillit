@@ -1781,3 +1781,26 @@ def test_model_identity_readers_agree(tmp_path, model_identity, expected_model):
 
     assert disk_model == hook_model, f"readers disagree: disk={disk_model!r}, hook={hook_model!r}"
     assert disk_model == expected_model
+
+
+class TestBackendField:
+    """backend field in sessions.jsonl and summary.json."""
+
+    def test_flush_stores_backend_in_sessions_index(self, tmp_path):
+        """flush_session_log with backend='codex' writes backend to index."""
+        _flush(tmp_path, backend="codex")
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+        assert entry["backend"] == "codex"
+
+    def test_flush_stores_backend_in_summary(self, tmp_path):
+        """flush_session_log with backend='codex' writes backend to summary.json."""
+        _flush(tmp_path, backend="codex")
+        dirs = [d for d in (tmp_path / "sessions").iterdir() if d.is_dir()]
+        summary = json.loads((dirs[0] / "summary.json").read_text())
+        assert summary["backend"] == "codex"
+
+    def test_flush_backend_defaults_to_claude_code(self, tmp_path):
+        """When backend is not provided, defaults to 'claude-code'."""
+        _flush(tmp_path)
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+        assert entry["backend"] == "claude-code"

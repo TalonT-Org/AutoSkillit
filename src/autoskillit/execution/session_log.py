@@ -13,7 +13,7 @@ import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
@@ -152,6 +152,7 @@ def flush_session_log(
     max_sessions: int | None = None,
     is_resume: bool = False,
     codex_log_path: Path | None = None,
+    backend: Literal["claude-code", "codex"] = "claude-code",
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -393,6 +394,7 @@ def flush_session_log(
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
         "tracer_target_resolution_version": 2,
+        "backend": backend,
         "orphaned_tool_result": orphaned_tool_result,
         "last_stop_reason": last_stop_reason,
         "request_ids": _cb_request_ids,
@@ -513,6 +515,7 @@ def flush_session_log(
         "file_changes_count": file_changes_count,
         "tracked_comm": _effective_tracked_comm,
         "tracked_comm_drift": _tracked_comm_drift,
+        "backend": backend,
         "autoskillit_version": versions.get("autoskillit_version", "") if versions else "",
         "claude_code_version": versions.get("claude_code_version", "") if versions else "",
         "codex_version": versions.get("codex_version", "") if versions else "",

@@ -51,6 +51,16 @@ Read ~/.local/share/autoskillit/logs/sessions.jsonl and filter entries where kit
 
 Group the filtered entries by step_name. Each group represents one phase of the pipeline (e.g., plan, implement, test, merge).
 
+### Step 2b: Identify Codex sessions
+
+Some sessions may use the Codex backend instead of Claude Code. These are identifiable by:
+- `backend` field is `"codex"` in the sessions.jsonl entry
+- `codex_log` is non-null while `claude_code_log` is null
+
+When passing session entries to scanner subagents in Step 3, include the `codex_log` path and `backend` field in the JSON array. The scanner agent knows how to handle both backend types — it will use grep-based coarse analysis for Codex sessions and full JSONL analysis for Claude Code sessions.
+
+No special grouping is needed — Codex and Claude Code sessions for the same step can be in the same scanner batch.
+
 ### Step 3: Spawn scanner subagents (SINGLE MESSAGE)
 
 **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
@@ -60,7 +70,7 @@ Do not output any prose between subagent dispatches. Immediately proceed to the 
 For each step group, spawn a scanner subagent via the Agent tool with subagent_type: "autoskillit:pipeline-health-scanner".
 
 Each scanner receives in its prompt:
-- The sessions.jsonl entries for its batch (JSON array)
+- The sessions.jsonl entries for its batch (JSON array — includes `claude_code_log`, `codex_log`, and `backend` fields)
 - The session directory paths: ~/.local/share/autoskillit/logs/sessions/<dir_name>/
 - Context about what the step does (derive from step_name)
 

@@ -838,6 +838,24 @@ class TestBackendRequirements:
         info = SkillInfo(name="test", source=SkillSource.BUNDLED, path=Path("/fake/SKILL.md"))
         assert info.backend_requirements == frozenset()
 
+    def test_backend_requirements_derived_not_read_from_yaml(self, tmp_path) -> None:
+        """backend_requirements in SKILL.md YAML is ignored — derived from uses_capabilities."""
+        from autoskillit.workspace.skills import _skill_info_from_frontmatter
+
+        skill_dir = tmp_path / "test-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: test-skill\nbackend_requirements: [claude-code]\n"
+            "uses_capabilities: [claude_dir]\n---\nTest skill.\n"
+        )
+        info = _skill_info_from_frontmatter(
+            "test-skill", SkillSource.PROJECT, skill_dir / "SKILL.md"
+        )
+        assert info.backend_requirements == frozenset(), (
+            "backend_requirements should be derived from uses_capabilities "
+            "(claude_dir → frozenset()), not read from YAML"
+        )
+
 
 class TestSkillInfoSchemaExhaustiveness:
     def test_all_skillinfo_fields_parsed_by_frontmatter_function(self) -> None:

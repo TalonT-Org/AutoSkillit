@@ -341,10 +341,20 @@ async def test_run_skill_incompatible_backend_rejects_before_init_session(
     fake_backend.capabilities.anthropic_provider_capable = False
     tool_ctx_kitchen_open.backend = fake_backend
 
-    mock_skill_info = MagicMock()
-    mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    from pathlib import Path
+
+    from autoskillit.core.types import SkillSource
+    from autoskillit.workspace.skills import SkillInfo
+
+    skill_info = SkillInfo(
+        name="test-skill",
+        source=SkillSource.BUNDLED,
+        path=Path("/fake/SKILL.md"),
+        backend_requirements=frozenset({"claude-code"}),
+        uses_capabilities=frozenset({"open_kitchen"}),
+    )
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = mock_skill_info
+    mock_resolver.resolve.return_value = skill_info
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()

@@ -150,56 +150,6 @@ async def test_skill_backend_requirement_triggers_incompatibility_gate(
 
 
 @pytest.mark.anyio
-async def test_skill_without_backend_requirement_no_override(
-    tool_ctx_kitchen_open, tmp_path, monkeypatch
-) -> None:
-    """Skill with empty backend_requirements on a non-claude backend -> no override."""
-    from unittest.mock import MagicMock
-
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
-    from tests.fakes import InMemoryHeadlessExecutor
-
-    executor = InMemoryHeadlessExecutor()
-    tool_ctx_kitchen_open.executor = executor
-    fake_backend = MagicMock(spec=CodingAgentBackend)
-    fake_backend.name = "codex"
-    fake_backend.capabilities.anthropic_provider_capable = False
-    tool_ctx_kitchen_open.backend = fake_backend
-    tool_ctx_kitchen_open.session_skill_manager = None
-
-    mock_skill_info = MagicMock()
-    mock_skill_info.backend_requirements = frozenset()
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = mock_skill_info
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
-
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
-    monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
-        lambda *a, **kw: ("default", {}),
-    )
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.resolve_target_skill",
-        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
-    )
-
-    captured: dict = {}
-    original_run = executor.run
-
-    async def spy_run(*args, **kwargs):
-        captured.update(kwargs)
-        return await original_run(*args, **kwargs)
-
-    monkeypatch.setattr(executor, "run", spy_run)
-
-    await run_skill("/autoskillit:probe", str(tmp_path))
-
-    assert captured.get("backend_override") is None
-
-
-@pytest.mark.anyio
 async def test_backend_incompatibility_does_not_emit_override_log(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:

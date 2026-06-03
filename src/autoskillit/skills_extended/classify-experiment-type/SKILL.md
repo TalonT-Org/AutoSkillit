@@ -2,6 +2,7 @@
 name: classify-experiment-type
 categories: [research]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model, cross_skill_ref]
 description: Classify an experiment plan into a type, build the dimension weight matrix, and emit dialing interface tokens for the apply-review-dimensions step.
 hooks:
   PreToolUse:

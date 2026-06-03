@@ -2,6 +2,7 @@
 name: planner-validate-task-alignment
 categories: [planner]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model]
 description: Validate that plan phases and WPs align with the stated task
 hooks:
   PreToolUse:

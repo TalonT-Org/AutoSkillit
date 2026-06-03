@@ -2,6 +2,7 @@
 name: select-vis-lenses
 categories: [research, vis-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model]
 phoropter_family: vis-lens
 description: >
   Dial step of the vis-lens phoropter: parses experiment plan fields, applies

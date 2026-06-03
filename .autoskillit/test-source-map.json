@@ -1502,7 +1502,10 @@
     "tests/arch/test_mcp_env_forward_coverage.py",
     "tests/arch/test_pty_coherence.py",
     "tests/arch/test_run_python_path_resolution.py",
+    "tests/arch/test_backend_annotation_context_awareness.py",
+    "tests/arch/test_skill_backend_annotation_accuracy.py",
     "tests/arch/test_skill_backend_annotations.py",
+    "tests/arch/test_skill_capability_registry.py",
     "tests/arch/test_skill_registries.py",
     "tests/arch/test_write_restriction_coverage.py",
     "tests/cli/test_cli_hooks.py",
@@ -1980,7 +1983,10 @@
     "tests/arch/test_pty_coherence.py",
     "tests/arch/test_regex_import.py",
     "tests/arch/test_session_type_exhaustive.py",
+    "tests/arch/test_backend_annotation_context_awareness.py",
+    "tests/arch/test_skill_backend_annotation_accuracy.py",
     "tests/arch/test_skill_backend_annotations.py",
+    "tests/arch/test_skill_capability_registry.py",
     "tests/cli/test_cli_hooks.py",
     "tests/cli/test_cli_prompts.py",
     "tests/cli/test_cli_serve_logging.py",
@@ -2653,6 +2659,11 @@
   ],
   "src/autoskillit/core/types/_type_constants_features.py": [
     "tests/core/test_label_lifecycle.py"
+  ],
+  "src/autoskillit/core/types/_type_constants_registries.py": [
+    "tests/arch/test_skill_backend_annotation_accuracy.py",
+    "tests/arch/test_skill_backend_annotations.py",
+    "tests/arch/test_skill_capability_registry.py"
   ],
   "src/autoskillit/core/types/_type_dispatch_identity.py": [
     "tests/core/types/test_dispatch_identity.py",
@@ -14775,7 +14786,10 @@
   ],
   "src/autoskillit/workspace/skills.py": [
     "tests/arch/test_protocol_names.py",
+    "tests/arch/test_backend_annotation_context_awareness.py",
+    "tests/arch/test_skill_backend_annotation_accuracy.py",
     "tests/arch/test_skill_backend_annotations.py",
+    "tests/arch/test_skill_capability_registry.py",
     "tests/cli/test_cli_serve_logging.py",
     "tests/cli/test_cook_env_scrub.py",
     "tests/cli/test_cook_features.py",

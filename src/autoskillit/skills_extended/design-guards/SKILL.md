@@ -1,6 +1,7 @@
 ---
 name: design-guards
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 description: Investigate a bug pattern audit report and design architectural guards (tests, contracts, structural changes) that provide immunity to each identified pattern. Use when user says "design guards", "design defenses", or wants architectural solutions for bug patterns.
 hooks:
   PreToolUse:

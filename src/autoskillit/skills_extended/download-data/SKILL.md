@@ -2,6 +2,7 @@
 name: download-data
 categories: [research]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model]
 description: >
   Download external and gitignored datasets declared in the experiment plan's
   data_manifest. Executes acquisition commands sequentially into pre-created

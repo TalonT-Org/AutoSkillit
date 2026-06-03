@@ -2,6 +2,7 @@
 name: arch-lens-data-lineage
 categories: [arch-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-data-lineage/"]
 description: Create Data Lineage architecture diagram showing information flow, transformations, and storage destinations. Data-centric lens answering "Where is the data?"

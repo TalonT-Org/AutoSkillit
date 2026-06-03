@@ -2,6 +2,7 @@
 name: plan-experiment
 categories: [research]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model, cross_skill_ref, test_check]
 description: Convert a scope report into a structured experiment plan with hypothesis, variables, phases, and success criteria.
 hooks:
   PreToolUse:

@@ -10,6 +10,7 @@ from autoskillit.core import (
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
     KNOWN_BACKEND_NAMES,
     RETIRED_SKILL_NAMES,
+    SKILL_CAPABILITY_REGISTRY,
     SkillSource,
     YAMLError,
     get_logger,
@@ -27,6 +28,7 @@ class SkillInfo:
     path: Path
     categories: frozenset[str] = frozenset()
     backend_requirements: frozenset[str] = frozenset()
+    uses_capabilities: frozenset[str] = frozenset()
 
 
 def _read_skill_frontmatter(path: Path) -> dict[str, Any]:
@@ -146,12 +148,36 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
             valid=sorted(KNOWN_BACKEND_NAMES),
         )
         backend_requirements = backend_requirements - invalid
+
+    caps_raw = data.get("uses_capabilities", [])
+    if caps_raw and not isinstance(caps_raw, list):
+        logger.warning(
+            "uses_capabilities_not_a_list",
+            value=caps_raw,
+            skill=name,
+            hint="use bracket syntax: uses_capabilities: [agent_subagent]",
+        )
+        caps_raw = [caps_raw]
+    uses_capabilities = (
+        frozenset(str(c) for c in caps_raw) if isinstance(caps_raw, list) else frozenset()
+    )
+    unknown_caps = uses_capabilities - frozenset(SKILL_CAPABILITY_REGISTRY)
+    if unknown_caps:
+        logger.warning(
+            "unrecognized_uses_capabilities",
+            invalid=sorted(unknown_caps),
+            skill=name,
+            valid=sorted(SKILL_CAPABILITY_REGISTRY),
+        )
+        uses_capabilities = uses_capabilities - unknown_caps
+
     return SkillInfo(
         name=name,
         source=source,
         path=skill_path,
         categories=categories,
         backend_requirements=backend_requirements,
+        uses_capabilities=uses_capabilities,
     )
 
 

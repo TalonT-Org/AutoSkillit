@@ -1,7 +1,8 @@
 ---
 name: planner-elaborate-assignments
-categories: [planner]
 backend_requirements: [claude-code]
+uses_capabilities: [run_skill]
+categories: [planner]
 description: >
   Elaborate all assignments for a target phase via parallel L0 subagents.
   One invocation per phase; spawns one L0 per assignment concurrently. (Pass 2 loop body)

@@ -1,7 +1,6 @@
 ---
 name: compose-research-pr
 categories: [research]
-backend_requirements: [claude-code]
 description: >
   Reads a PR prep file and validated experiment diagrams, composes the PR body,
   and creates the GitHub PR. Part 3 of 3 in the decomposed research-PR flow.

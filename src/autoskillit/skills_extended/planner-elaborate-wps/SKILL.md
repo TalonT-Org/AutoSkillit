@@ -1,7 +1,8 @@
 ---
 name: planner-elaborate-wps
-categories: [planner]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref, run_skill]
+categories: [planner]
 description: >
   Elaborate all work packages for a target phase via parallel L0 subagents.
   One invocation per phase; spawns one L0 per WP concurrently. (Pass 3 loop body)

@@ -2,6 +2,7 @@
 name: merge-pr
 categories: [github]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 description: Merge a single PR into the integration branch. For simple PRs, uses gh pr merge --squash --auto to enforce GitHub's required status checks. For needs_check PRs, re-assesses complexity and returns needs_plan=true with a conflict report when conflicts are detected. Use inside the merge-prs loop.
 hooks:
   PreToolUse:

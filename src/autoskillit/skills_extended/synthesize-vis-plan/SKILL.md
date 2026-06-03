@@ -1,7 +1,6 @@
 ---
 name: synthesize-vis-plan
 categories: [research, vis-lens]
-backend_requirements: [claude-code]
 description: >
   Synthesize step of the vis-lens phoropter: reads captured yaml:figure-spec
   blocks from lens output files, resolves inter-lens conflicts via the

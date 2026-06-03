@@ -2,6 +2,7 @@
 name: exp-lens-measurement-validity
 categories: [exp-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Analyze measurement validity for experimental design — auditing metric-construct alignment, proxy validity, reliability, sensitivity, and consequential validity. Argumentative lens answering "Do measurements justify the interpretation?"
 hooks:

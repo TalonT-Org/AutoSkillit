@@ -2,6 +2,7 @@
 name: audit-defense-standards
 categories: [audit]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 description: Audit the codebase against defense standards derived from historical bug patterns. Standards accumulate over time as new patterns are discovered via audit-bugs and design-guards. Use when user says "audit defenses", "audit defense standards", "check defenses", or "defense audit".
 hooks:
   PreToolUse:

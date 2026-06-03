@@ -2,6 +2,7 @@
 name: audit-review-decisions
 categories: [audit]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model, cross_skill_ref]
 description: >
   Audit merged PR review threads for agreed-but-deferred suggestions (design decisions,
   future work, out-of-scope items) that were never implemented. Mines REVIEW-FLAG markers

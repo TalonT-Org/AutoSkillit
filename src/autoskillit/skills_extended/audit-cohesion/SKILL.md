@@ -2,6 +2,7 @@
 name: audit-cohesion
 categories: [audit]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 description: Audit codebase for internal cohesion - how well components fit together and maintain consistent patterns. Distinct from audit-arch (which checks rule violations); this checks integration fitness and convergence. Use when user says "audit cohesion", "check cohesion", "cohesion audit", or "alignment check".
 hooks:
   PreToolUse:

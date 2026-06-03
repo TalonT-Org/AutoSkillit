@@ -97,7 +97,10 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_subagent_filter_guard.py` | AST guard: all assistant-record NDJSON processing sites must use _is_parent_assistant_record or _is_parent_assistant predicate |
 | `test_enqueue_ready_type_enforcement.py` | AST guard: mutation methods (_enqueue_direct, _enable_auto_merge_direct) must accept EnqueueReady, not str |
 | `test_origin_isolation_contract.py` | AST + shell lint guard: no hardcoded "origin" in git remote operations outside allowlist; shell scripts must try upstream before origin |
-| `test_skill_backend_annotations.py` | Architectural invariant: skills using Claude-Code-only features must declare backend_requirements: [claude-code] |
+| `test_backend_annotation_context_awareness.py` | Context-aware pattern detection: distinguishes self-referential autoskillit: documentation from genuine cross-skill dependencies |
+| `test_skill_backend_annotation_accuracy.py` | Reverse-direction annotation validation: skills with backend_requirements: [claude-code] must have genuine Claude-Code-only dependency |
+| `test_skill_backend_annotations.py` | Bidirectional annotation enforcement: forward (pattern → uses_capabilities), reverse (annotation → justified), co-requirement, and derivation checks |
+| `test_skill_capability_registry.py` | Capability registry consistency: every SKILL_CAPABILITY_REGISTRY key consumed, backend_requirements derivable from uses_capabilities, no unknown capabilities declared |
 | `test_write_guard_resolution.py` | Arch test: extract_redirect_targets must use resolve_write_target, not inline startswith |
 | `test_codex_timeout_coherence.py` | Cross-system timeout hierarchy: Codex MCP tool_timeout_sec must exceed max session duration |
 | `test_skill_search_dir_symmetry.py` | Suppression-delivery symmetry invariants for project-local skill search dirs |

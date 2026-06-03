@@ -1,7 +1,7 @@
 ---
 name: audit-friction
 categories: [audit]
-backend_requirements: [claude-code]
+uses_capabilities: [claude_dir]
 description: Scan Claude Code project logs for friction patterns — repeated failures, approach loops, tool errors, misunderstanding cycles, and stuck workflows. Categorizes and counts friction events to surface what causes the most resistance. Use when user says "audit friction", "find friction", "friction audit", or "what keeps going wrong".
 hooks:
   PreToolUse:

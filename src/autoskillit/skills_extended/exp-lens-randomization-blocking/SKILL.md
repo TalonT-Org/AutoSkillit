@@ -2,6 +2,7 @@
 name: exp-lens-randomization-blocking
 categories: [exp-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create Randomization & Blocking experimental design diagram showing assignment mechanisms, blocking factors, and comparability sources. Design-Structural lens answering "Where does comparability come from?"
 hooks:

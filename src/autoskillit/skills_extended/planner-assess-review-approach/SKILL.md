@@ -2,6 +2,7 @@
 name: planner-assess-review-approach
 categories: [planner]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model]
 description: >
   Assess each work package for review-approach benefit before implementation.
   Writes review_approach_assessment.json; does NOT invoke review-approach.

@@ -2,6 +2,7 @@
 name: exp-lens-validity-threats
 categories: [exp-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create a validity threat matrix identifying alternative explanations and design mitigations. Adversarial lens answering "What alternative explanations survive?"
 hooks:

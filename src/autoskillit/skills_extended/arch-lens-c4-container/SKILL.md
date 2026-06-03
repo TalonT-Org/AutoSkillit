@@ -2,6 +2,7 @@
 name: arch-lens-c4-container
 categories: [arch-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-c4-container/"]
 description: Create C4 Container architecture diagram showing static structure, building blocks, and technology choices. Anatomical lens answering "How is it built?"

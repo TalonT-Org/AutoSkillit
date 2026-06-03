@@ -195,6 +195,7 @@ from .types import SESSION_TYPE_FLEET as SESSION_TYPE_FLEET
 from .types import SESSION_TYPE_ORCHESTRATOR as SESSION_TYPE_ORCHESTRATOR
 from .types import SESSION_TYPE_SKILL as SESSION_TYPE_SKILL
 from .types import SKILL_ACTIVATE_DEPS_REQUIRED as SKILL_ACTIVATE_DEPS_REQUIRED
+from .types import SKILL_CAPABILITY_REGISTRY as SKILL_CAPABILITY_REGISTRY
 from .types import SKILL_COMMAND_DISPLAY_MAX as SKILL_COMMAND_DISPLAY_MAX
 from .types import SKILL_COMMAND_PREFIX as SKILL_COMMAND_PREFIX
 from .types import SKILL_FILE_ADVISORY_MAP as SKILL_FILE_ADVISORY_MAP
@@ -305,6 +306,7 @@ from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
+from .types import SkillCapabilityDef as SkillCapabilityDef
 from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver

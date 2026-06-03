@@ -1,12 +1,14 @@
 """Tool registries, pack registries, tool-to-tag mappings, visibility tags.
 
-Zero autoskillit imports.
+Zero autoskillit imports — except sibling _type_constants_env for backend name constants.
 """
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from dataclasses import dataclass
+from typing import Literal, NamedTuple
 
+from ._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
 from ._type_enums import FleetErrorCode
 
 __all__ = [
@@ -31,6 +33,8 @@ __all__ = [
     "CORE_PACKS",
     "TOOL_SUBSET_TAGS",
     "ALL_VISIBILITY_TAGS",
+    "SkillCapabilityDef",
+    "SKILL_CAPABILITY_REGISTRY",
 ]
 
 # Native Claude Code tools that pipeline orchestrators must NEVER use directly.
@@ -290,3 +294,51 @@ if not _non_category_tool_tags <= ALL_VISIBILITY_TAGS:
         f"ALL_VISIBILITY_TAGS is missing non-category tags found in TOOL_SUBSET_TAGS: "
         f"{sorted(_missing)}. Add the missing tags to ALL_VISIBILITY_TAGS."
     )
+
+
+@dataclass(frozen=True, slots=True)
+class SkillCapabilityDef:
+    """A capability that a skill may require from its execution backend."""
+
+    description: str
+    required_backends: frozenset[str]
+    codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"]
+
+
+SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
+    "agent_subagent": SkillCapabilityDef(
+        description="Agent(subagent_type=...) tool — delegates to specialized subagent",
+        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
+        codex_status="fix-required",
+    ),
+    "agent_model": SkillCapabilityDef(
+        description="Agent(model=...) tool — spawns model-specific subagent",
+        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
+        codex_status="fix-required",
+    ),
+    "open_kitchen": SkillCapabilityDef(
+        description="open_kitchen / close_kitchen lifecycle tools",
+        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
+        codex_status="not-applicable",
+    ),
+    "run_skill": SkillCapabilityDef(
+        description="run_skill MCP tool call (headless session dispatch)",
+        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
+        codex_status="not-applicable",
+    ),
+    "test_check": SkillCapabilityDef(
+        description="test_check MCP tool (headless test runner)",
+        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
+        codex_status="not-applicable",
+    ),
+    "claude_dir": SkillCapabilityDef(
+        description="Reads/writes .claude/ directory structure",
+        required_backends=frozenset(),
+        codex_status="works-as-is",
+    ),
+    "cross_skill_ref": SkillCapabilityDef(
+        description="Cross-skill /autoskillit: invocation via Skill tool",
+        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
+        codex_status="fix-required",
+    ),
+}

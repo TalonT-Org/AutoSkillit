@@ -2,6 +2,7 @@
 name: promote-to-main
 categories: [github]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model, cross_skill_ref]
 description: >
   Promote integration to main with comprehensive changelog and PR creation. Use when
   user says "promote to main", "open promotion PR", "integration to main", or

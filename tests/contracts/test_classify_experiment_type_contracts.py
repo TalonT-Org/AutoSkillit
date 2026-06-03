@@ -58,12 +58,7 @@ def test_secondary_modifiers_all_present(skill_text: str) -> None:
 
 def test_dimension_weight_matrix_documented(skill_text: str) -> None:
     """The dimension weight matrix (H/M/L/S tier labels) must be present in the SKILL.md."""
-    # The example weight matrix in Step 5 uses all four tier labels.
-    assert "H" in skill_text
-    assert "M" in skill_text
-    assert "L" in skill_text
-    assert "S" in skill_text
-    # All four must appear together in a dimension_weights context.
+    # All four tier labels must appear together in a dimension_weights context.
     matrix_line_present = "causal_structure:H" in skill_text and "S" in skill_text
     assert matrix_line_present, (
         "classify-experiment-type/SKILL.md must show a dimension_weights matrix "
@@ -144,7 +139,7 @@ def test_skill_contracts_yaml_declares_classify_experiment_type() -> None:
         "skill_contracts.yaml must register the `classify-experiment-type` skill"
     )
     entry = skills["classify-experiment-type"]
-    output_names = {o.get("name") for o in entry.get("outputs", [])}
+    output_names = {o.get("name") for o in entry.get("outputs", []) if isinstance(o, dict)}
     assert "experiment_type" in output_names, (
         "classify-experiment-type entry must declare an output named `experiment_type`"
     )

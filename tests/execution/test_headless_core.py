@@ -1460,14 +1460,23 @@ class TestExtractWorktreePath:
         assert result == "/abs/worktrees/impl-first"
 
     @pytest.mark.parametrize(
+        "token,expected",
+        [
+            ("**worktree_path:** /path/to/wt", "/path/to/wt"),
+            ("`worktree_path` = /path/to/wt", "/path/to/wt"),
+        ],
+        ids=["markdown-bold", "backtick-wrapped"],
+    )
+    def test_extract_worktree_path_normalized_variants(self, token: str, expected: str):
+        assert _extract_worktree_path([token]) == expected
+
+    @pytest.mark.parametrize(
         "token",
         [
-            "**worktree_path:** /path/to/wt",
             "worktree_path: /path/to/wt",
             "WORKTREE_PATH = /path/to/wt",
-            "`worktree_path` = /path/to/wt",
         ],
-        ids=["markdown-bold", "colon-separator", "uppercase", "backtick-wrapped"],
+        ids=["colon-separator", "uppercase"],
     )
     def test_extract_worktree_path_format_variants_return_none(self, token: str):
         assert _extract_worktree_path([token]) is None
@@ -2774,3 +2783,67 @@ class TestInjectNarrationSuppression:
         result = _inject_narration_suppression("cmd", has_skill_prefix=True)
         assert "EFFICIENCY DIRECTIVE" in result
         assert "between tool calls" in result
+
+
+class TestInjectCompletionReminder:
+    def test_with_marker(self):
+        from autoskillit.execution.commands import _inject_completion_reminder
+
+        result = _inject_completion_reminder("prompt", "%%DONE%%")
+        assert "%%DONE%%" in result
+        assert result.endswith("%%DONE%%")
+
+    def test_empty_marker_noop(self):
+        from autoskillit.execution.commands import _inject_completion_reminder
+
+        result = _inject_completion_reminder("prompt", "")
+        assert result == "prompt"
+
+    def test_always_appends(self):
+        from autoskillit.execution.commands import _inject_completion_reminder
+
+        once = _inject_completion_reminder("prompt", "%%DONE%%")
+        twice = _inject_completion_reminder(once, "%%DONE%%")
+        assert twice.count("%%DONE%%") == 2
+
+
+def test_prompt_injector_registry():
+    import inspect
+
+    from autoskillit.execution.backends._claude_prompt import (
+        PROMPT_INJECTOR_CHAIN,
+        apply_prompt_injector_chain,
+    )
+
+    names = [entry.name for entry in PROMPT_INJECTOR_CHAIN]
+    assert "completion-directive" in names
+    assert "cwd-anchor" in names
+    assert "narration-suppression" in names
+    assert "output-format-reinforcement" in names
+    assert "completion-reminder" in names
+    assert names[0] == "completion-directive"
+    assert names[-1] == "completion-reminder"
+    source = inspect.getsource(apply_prompt_injector_chain)
+    for entry in PROMPT_INJECTOR_CHAIN:
+        func_name = f"_inject_{entry.name.replace('-', '_')}"
+        assert func_name in source, (
+            f"Chain entry '{entry.name}' missing dispatch call to {func_name}"
+        )
+
+
+def test_inject_output_format_reinforcement_non_anthropic():
+    from autoskillit.execution.backends._claude_prompt import _inject_output_format_reinforcement
+
+    result = _inject_output_format_reinforcement("base prompt", profile_name="minimax")
+    lower = result.lower()
+    assert "plain text" in lower or "no markdown" in lower
+    assert "OUTPUT FORMAT" in result, "Expected 'OUTPUT FORMAT' in injected directive"
+    directive_part = result.partition("OUTPUT FORMAT")[2]
+    assert "**" not in directive_part
+
+
+def test_inject_output_format_reinforcement_anthropic_noop():
+    from autoskillit.execution.backends._claude_prompt import _inject_output_format_reinforcement
+
+    result = _inject_output_format_reinforcement("base prompt", profile_name="")
+    assert result == "base prompt"

@@ -2103,3 +2103,23 @@ class TestWorktreePathPropagationWithEmptyMessages:
     def test_extract_output_paths_with_empty_messages_returns_empty(self):
         """_extract_output_paths([]) returns {} (documents the contract)."""
         assert _extract_output_paths([]) == {}
+
+
+class TestExtractPathTokensWithMarkdownDecorators:
+    def test_extract_worktree_path_with_markdown_bold(self):
+        msgs = ["**worktree_path** = /tmp/wt-abc"]
+        assert _extract_worktree_path(msgs) == "/tmp/wt-abc"
+
+    def test_extract_worktree_path_with_backticks(self):
+        msgs = ["`worktree_path` = /tmp/wt-abc"]
+        assert _extract_worktree_path(msgs) == "/tmp/wt-abc"
+
+    def test_extract_output_paths_with_markdown_decorators(self):
+        from autoskillit.execution.headless._headless_path_tokens import _OUTPUT_PATH_TOKENS
+
+        if not _OUTPUT_PATH_TOKENS:
+            pytest.skip("_OUTPUT_PATH_TOKENS is empty (contracts YAML not available)")
+        token = next(iter(sorted(_OUTPUT_PATH_TOKENS)))
+        msgs = [f"**{token}** = /tmp/plan.md"]
+        paths = _extract_output_paths(msgs)
+        assert paths.get(token) == "/tmp/plan.md"

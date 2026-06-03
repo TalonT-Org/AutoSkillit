@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from autoskillit.execution.backends import CodexBackend
@@ -79,3 +81,27 @@ class TestBuildSkillSessionCmdSharedBehavior:
             "/autoskillit:investigate", "/repo", completion_marker="DONE"
         )
         assert spec.env["AUTOSKILLIT_APPLICABLE_GUARDS"] == expected
+
+
+def _skill_session_impl_src(backend_cls: type) -> str:
+    """Get the source of the skill session implementation method.
+
+    ClaudeCodeBackend delegates through _build_skill_session_cmd_impl;
+    CodexBackend implements directly in build_skill_session_cmd.
+    """
+    impl = getattr(backend_cls, "_build_skill_session_cmd_impl", None)
+    if impl is None:
+        impl = backend_cls.build_skill_session_cmd
+    return inspect.getsource(impl)
+
+
+class TestPromptInjectorChainBackendConsistency:
+    @pytest.mark.parametrize("backend_cls", [ClaudeCodeBackend, CodexBackend])
+    def test_all_backends_use_prompt_injector_chain(self, backend_cls) -> None:
+        src = _skill_session_impl_src(backend_cls)
+        assert "apply_prompt_injector_chain" in src
+
+    @pytest.mark.parametrize("backend_cls", [ClaudeCodeBackend, CodexBackend])
+    def test_orchestrator_paths_use_prompt_injector_chain(self, backend_cls) -> None:
+        src = inspect.getsource(backend_cls.build_food_truck_cmd)
+        assert "apply_prompt_injector_chain" in src

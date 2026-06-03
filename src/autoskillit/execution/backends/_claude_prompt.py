@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import Any, NamedTuple
 
 from autoskillit.core import (
     ClaudeFlags,
@@ -182,6 +183,61 @@ def _inject_completion_reminder(prompt: str, marker: str) -> str:
     if not marker:
         return prompt
     return f"{prompt}\nRemember: end your final response with {marker}"
+
+
+def _inject_output_format_reinforcement(prompt: str, *, profile_name: str = "") -> str:
+    """Append plain-text output format reinforcement for non-Anthropic providers."""
+    if not profile_name:
+        return prompt
+    directive = (
+        "\n\nOUTPUT FORMAT DIRECTIVE: All structured output tokens (key = value lines, "
+        "completion markers, delimiter tokens) MUST be emitted as plain text with NO "
+        "markdown formatting. Do NOT wrap token names in bold, italic, or backticks. "
+        "Do NOT wrap output blocks in code fences. "
+        "Correct: plan_path = /path/file.md  "
+        "Incorrect: wrapping plan_path in asterisks or backticks"
+    )
+    return prompt + directive
+
+
+@dataclass(frozen=True, slots=True)
+class PromptBuildContext:
+    """Context bag passed through the injection chain."""
+
+    completion_marker: str = ""
+    cwd: str = ""
+    temp_dir_relpath: str | None = None
+    has_skill_prefix: bool = False
+    profile_name: str = ""
+
+
+class InjectorDef(NamedTuple):
+    """Static definition of a registered prompt injector."""
+
+    name: str
+
+
+PROMPT_INJECTOR_CHAIN: tuple[InjectorDef, ...] = (
+    InjectorDef("completion-directive"),
+    InjectorDef("cwd-anchor"),
+    InjectorDef("narration-suppression"),
+    InjectorDef("output-format-reinforcement"),
+    InjectorDef("completion-reminder"),
+)
+
+
+def apply_prompt_injector_chain(prompt: str, ctx: PromptBuildContext) -> str:
+    """Apply all registered prompt injectors in declared order.
+
+    Dispatches to each injector's function using the function's own established
+    parameter interface. The existing _inject_* signatures are preserved unchanged.
+    """
+    prompt = _inject_completion_directive(prompt, ctx.completion_marker)
+    prompt = _inject_cwd_anchor(prompt, ctx.cwd, temp_dir_relpath=ctx.temp_dir_relpath)
+    prompt = _inject_narration_suppression(prompt, has_skill_prefix=ctx.has_skill_prefix)
+    prompt = _inject_output_format_reinforcement(prompt, profile_name=ctx.profile_name)
+    prompt = _inject_completion_reminder(prompt, ctx.completion_marker)
+    return prompt
 
 
 def _compose_resume_prompt(

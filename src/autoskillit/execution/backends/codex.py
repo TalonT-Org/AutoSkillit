@@ -55,12 +55,10 @@ from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     _SESSION_BASELINE_ENV,
+    PromptBuildContext,
     _compose_resume_prompt,
     _ensure_skill_prefix,
-    _inject_completion_directive,
-    _inject_completion_reminder,
-    _inject_cwd_anchor,
-    _inject_narration_suppression,
+    apply_prompt_injector_chain,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.backends._codex_config import (
@@ -520,16 +518,15 @@ class CodexBackend:
                 skill_command, provider_profile=profile_name or ""
             )
 
-        prompt = _inject_completion_reminder(
-            _inject_narration_suppression(
-                _inject_cwd_anchor(
-                    _inject_completion_directive(effective_prompt, completion_marker),
-                    cwd,
-                    temp_dir_relpath=temp_dir_relpath,
-                ),
+        prompt = apply_prompt_injector_chain(
+            effective_prompt,
+            PromptBuildContext(
+                completion_marker=completion_marker,
+                cwd=cwd,
+                temp_dir_relpath=temp_dir_relpath,
                 has_skill_prefix=_has_prefix,
+                profile_name=profile_name,
             ),
-            completion_marker,
         )
 
         extras: dict[str, str] = {
@@ -637,15 +634,15 @@ class CodexBackend:
         else:
             effective_prompt = orchestrator_prompt
 
-        prompt = _inject_completion_reminder(
-            _inject_narration_suppression(
-                _inject_cwd_anchor(
-                    _inject_completion_directive(effective_prompt, completion_marker),
-                    cwd,
-                    temp_dir_relpath=temp_dir_relpath,
-                )
+        prompt = apply_prompt_injector_chain(
+            effective_prompt,
+            PromptBuildContext(
+                completion_marker=completion_marker,
+                cwd=cwd,
+                temp_dir_relpath=temp_dir_relpath,
+                has_skill_prefix=False,
+                profile_name="",
             ),
-            completion_marker,
         )
 
         extras: dict[str, str] = {

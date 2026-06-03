@@ -7,6 +7,7 @@ import os
 import regex as re
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
+from autoskillit.execution.session._session_content import _normalize_model_output
 
 logger = get_logger(__name__)
 
@@ -17,7 +18,8 @@ def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
     """Return the last absolute path emitted as worktree_path=<value>."""
     last: str | None = None
     for msg in assistant_messages:
-        m = _WORKTREE_PATH_PATTERN.search(msg)
+        normalized = _normalize_model_output(msg)
+        m = _WORKTREE_PATH_PATTERN.search(normalized)
         if m:
             candidate = m.group(1).strip()
             if os.path.isabs(candidate):
@@ -140,7 +142,8 @@ def _extract_output_paths(assistant_messages: list[str]) -> dict[str, str]:
         logger.debug("_extract_output_paths called with empty assistant_messages")
     paths: dict[str, str] = {}
     for msg in assistant_messages:
-        for m in _OUTPUT_PATH_PATTERN.finditer(msg):
+        normalized = _normalize_model_output(msg)
+        for m in _OUTPUT_PATH_PATTERN.finditer(normalized):
             token, value = m.group(1), m.group(2).strip()
             if os.path.isabs(value):
                 paths[token] = value

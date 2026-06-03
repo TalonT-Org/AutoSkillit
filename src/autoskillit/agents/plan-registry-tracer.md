@@ -183,7 +183,7 @@ This check is the primary defense against the "two-family" planning failure, whe
 
 Write this table for EACH symbol before forming any conclusion:
 
-| Symbol | File Found | Reference Type (registry/type/config/artifact/re-export/pseudo-doc/test/doc/code) | Updated by Plan? |
+| Symbol | File Found | Reference Type (registry/type/config/artifact/re-export/pseudocode-doc/test/doc/code) | Updated by Plan? |
 |--------|-----------|-----------------------------------------------------------------------|-----------------|
 | ... | ... | ... | ... |
 

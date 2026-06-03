@@ -2365,10 +2365,11 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 23 public names."""
+    """smoke_utils.__all__ must list all 25 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
+        "aggregate_review_verdict",
         "annotate_pr_diff",
         "build_agent_eval_context",
         "build_eval_context",
@@ -2391,6 +2392,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "parse_eval_manifests",
         "patch_pr_token_summary",
         "pre_iteration_cleanup",
+        "select_review_dimensions",
         "try_load_json",
     }
     assert set(su.__all__) == expected
@@ -2399,6 +2401,7 @@ def test_smoke_utils_all_exports_complete() -> None:
 @pytest.mark.parametrize(
     "name",
     [
+        "aggregate_review_verdict",
         "annotate_pr_diff",
         "build_agent_eval_context",
         "build_eval_context",
@@ -2420,6 +2423,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "parse_eval_manifests",
         "patch_pr_token_summary",
         "pre_iteration_cleanup",
+        "select_review_dimensions",
         "try_load_json",
     ],
 )
@@ -2541,6 +2545,274 @@ def test_pre_iteration_cleanup_noop_when_dir_empty(tmp_path: Path) -> None:
     result = pre_iteration_cleanup(output_dir=str(out))
     assert result["cleaned"] == "true"
     assert result["removed_count"] == "0"
+
+
+# ---------------------------------------------------------------------------
+# T_SRD1–T_SRD5: select_review_dimensions callable
+# ---------------------------------------------------------------------------
+
+
+def test_select_review_dimensions_happy_path(tmp_path: Path) -> None:
+    """select_review_dimensions sorts by tier and excludes S dimensions."""
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    weights = {
+        "causal_structure": "H",
+        "variance_protocol": "M",
+        "ecological_validity": "L",
+        "data_acquisition": "S",
+    }
+    result = select_review_dimensions(
+        dimension_weights_json=json.dumps(weights),
+        output_dir=str(tmp_path),
+    )
+    lenses = result["selected_lenses"].split(",")
+    assert lenses == ["causal_structure", "variance_protocol", "ecological_validity"]
+    assert "data_acquisition" not in result["selected_lenses"]
+    ctx_parts = result["lens_context_paths"].split(",")
+    assert len(ctx_parts) == len(lenses)
+    assert all(p == "" for p in ctx_parts)
+    manifest = json.loads(Path(result["dimensions_manifest_path"]).read_text())
+    assert "data_acquisition" not in manifest
+    assert list(manifest.keys()) == [
+        "causal_structure",
+        "variance_protocol",
+        "ecological_validity",
+    ]
+
+
+def test_select_review_dimensions_all_s_returns_empty(tmp_path: Path) -> None:
+    """All-S weights returns empty outputs and writes no file."""
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    weights = {"causal_structure": "S", "variance_protocol": "S"}
+    result = select_review_dimensions(
+        dimension_weights_json=json.dumps(weights),
+        output_dir=str(tmp_path),
+    )
+    assert result["selected_lenses"] == ""
+    assert result["lens_context_paths"] == ""
+    assert result["dimensions_manifest_path"] == ""
+    assert not list(tmp_path.iterdir())
+
+
+def test_select_review_dimensions_causal_modifier_upgrades(tmp_path: Path) -> None:
+    """+causal modifier upgrades causal_structure one tier."""
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    weights = {"causal_structure": "L", "variance_protocol": "M"}
+    result = select_review_dimensions(
+        dimension_weights_json=json.dumps(weights),
+        secondary_modifiers_json=json.dumps(["+causal"]),
+        output_dir=str(tmp_path),
+    )
+    manifest = json.loads(Path(result["dimensions_manifest_path"]).read_text())
+    assert manifest["causal_structure"] == "M"
+    lenses = result["selected_lenses"].split(",")
+    assert set(lenses) == {"causal_structure", "variance_protocol"}
+
+
+def test_select_review_dimensions_empty_weights_returns_empty(tmp_path: Path) -> None:
+    """Empty dimension_weights_json returns empty outputs without filesystem writes."""
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    result = select_review_dimensions(
+        dimension_weights_json="",
+        output_dir=str(tmp_path),
+    )
+    assert result == {
+        "selected_lenses": "",
+        "lens_context_paths": "",
+        "dimensions_manifest_path": "",
+    }
+    assert not list(tmp_path.iterdir())
+
+
+def test_select_review_dimensions_creates_output_dir(tmp_path: Path) -> None:
+    """Missing output_dir is created by the function."""
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    out = tmp_path / "nested" / "output"
+    assert not out.exists()
+    weights = {"scope_alignment": "H"}
+    result = select_review_dimensions(
+        dimension_weights_json=json.dumps(weights),
+        output_dir=str(out),
+    )
+    assert out.exists()
+    assert Path(result["dimensions_manifest_path"]).exists()
+
+
+# ---------------------------------------------------------------------------
+# T_ARV1–T_ARV7: aggregate_review_verdict callable
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_review_verdict_go(tmp_path: Path) -> None:
+    """GO verdict when no criticals and warnings below threshold."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    findings = [
+        {"dimension": "scope_alignment", "severity": "info", "message": "ok"},
+        {"dimension": "variance_protocol", "severity": "warning", "message": "minor"},
+    ]
+    (tmp_path / "findings.json").write_text(json.dumps(findings))
+    dims = {"scope_alignment": "H", "variance_protocol": "M"}
+    (tmp_path / "dims.json").write_text(json.dumps(dims))
+
+    result = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "findings.json"),
+        dimensions_manifest_path=str(tmp_path / "dims.json"),
+        output_dir=str(tmp_path / "out"),
+    )
+    assert result["verdict"] == "GO"
+    assert "evaluation_dashboard_path" in result
+    assert Path(result["evaluation_dashboard_path"]).exists()
+    assert "revision_guidance_path" not in result
+
+
+def test_aggregate_review_verdict_revise(tmp_path: Path) -> None:
+    """REVISE verdict when non-stop-trigger critical is present."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    findings = [
+        {
+            "dimension": "scope_alignment",
+            "severity": "critical",
+            "message": "gap",
+            "fixability": "ADDRESSABLE",
+        },
+    ]
+    (tmp_path / "findings.json").write_text(json.dumps(findings))
+
+    result = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "findings.json"),
+        output_dir=str(tmp_path / "out"),
+    )
+    assert result["verdict"] == "REVISE"
+    assert "revision_guidance_path" in result
+    assert Path(result["revision_guidance_path"]).exists()
+    assert Path(result["evaluation_dashboard_path"]).exists()
+
+
+def test_aggregate_review_verdict_stop_structural_l1(tmp_path: Path) -> None:
+    """STOP verdict on estimand_clarity critical with fixability=None."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    findings = [
+        {
+            "dimension": "estimand_clarity",
+            "severity": "critical",
+            "message": "ambiguous",
+            "fixability": None,
+        },
+    ]
+    (tmp_path / "findings.json").write_text(json.dumps(findings))
+
+    result = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "findings.json"),
+        output_dir=str(tmp_path / "out"),
+    )
+    assert result["verdict"] == "STOP"
+    assert "revision_guidance_path" not in result
+    assert "evaluation_dashboard_path" in result
+    assert Path(result["evaluation_dashboard_path"]).exists()
+
+
+def test_aggregate_review_verdict_estimand_clarity_addressable_is_revise(tmp_path: Path) -> None:
+    """estimand_clarity critical with fixability=ADDRESSABLE → REVISE, not STOP."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    findings = [
+        {
+            "dimension": "estimand_clarity",
+            "severity": "critical",
+            "message": "ambiguous but addressable",
+            "fixability": "ADDRESSABLE",
+        },
+    ]
+    (tmp_path / "findings.json").write_text(json.dumps(findings))
+
+    result = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "findings.json"),
+        output_dir=str(tmp_path / "out"),
+    )
+    assert result["verdict"] == "REVISE"
+    assert "revision_guidance_path" in result
+    assert Path(result["revision_guidance_path"]).exists()
+    assert Path(result["evaluation_dashboard_path"]).exists()
+
+
+def test_aggregate_review_verdict_rt_cap_downgrades(tmp_path: Path) -> None:
+    """rt_max_severity='warning' downgrades red_team critical to warning."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    findings = [
+        {"dimension": "red_team", "severity": "critical", "message": "adversarial"},
+    ]
+    (tmp_path / "findings.json").write_text(json.dumps(findings))
+    dims = {"scope_alignment": "H"}
+    (tmp_path / "dims.json").write_text(json.dumps(dims))
+
+    result = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "findings.json"),
+        dimensions_manifest_path=str(tmp_path / "dims.json"),
+        rt_max_severity="warning",
+        output_dir=str(tmp_path / "out"),
+    )
+    assert result["verdict"] == "GO"
+    dashboard = Path(result["evaluation_dashboard_path"]).read_text()
+    assert "warning_count: 1" in dashboard
+    assert "critical_count: 0" in dashboard
+
+
+def test_aggregate_review_verdict_empty_path_returns_error() -> None:
+    """Empty findings_manifest_path returns error key."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    result = aggregate_review_verdict(findings_manifest_path="")
+    assert "error" in result
+
+
+def test_aggregate_review_verdict_missing_file_returns_error(tmp_path: Path) -> None:
+    """Non-existent findings_manifest_path returns error key."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    result = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "nonexistent.json"),
+        output_dir=str(tmp_path / "out"),
+    )
+    assert "error" in result
+
+
+def test_aggregate_review_verdict_warning_threshold_proportional(tmp_path: Path) -> None:
+    """warning_threshold = active_dimensions * 5: 10 warnings -> REVISE, 9 -> GO."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    dims = {"dim_a": "H", "dim_b": "M"}  # 2 active -> threshold=10
+    (tmp_path / "dims.json").write_text(json.dumps(dims))
+
+    findings_10 = [
+        {"dimension": "dim_a", "severity": "warning", "message": f"w{i}"} for i in range(10)
+    ]
+    (tmp_path / "f10.json").write_text(json.dumps(findings_10))
+    r10 = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "f10.json"),
+        dimensions_manifest_path=str(tmp_path / "dims.json"),
+        output_dir=str(tmp_path / "out10"),
+    )
+    assert r10["verdict"] == "REVISE"
+
+    findings_9 = [
+        {"dimension": "dim_a", "severity": "warning", "message": f"w{i}"} for i in range(9)
+    ]
+    (tmp_path / "f9.json").write_text(json.dumps(findings_9))
+    r9 = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "f9.json"),
+        dimensions_manifest_path=str(tmp_path / "dims.json"),
+        output_dir=str(tmp_path / "out9"),
+    )
+    assert r9["verdict"] == "GO"
 
 
 # ---------------------------------------------------------------------------

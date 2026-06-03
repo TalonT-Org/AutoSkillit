@@ -514,6 +514,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "skills/test_review_design_contracts.py",
             "integration",
             "cli",
+            "smoke_utils",
         }
     ),
     "registry": frozenset(
@@ -781,6 +782,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "skills/test_vis_lens_methodology_norms.py",
             "skills/test_audit_impl_diff_discipline.py",
             "skills/test_skill_variable_threading.py",
+            "smoke_utils",
         }
     ),
     "migration": frozenset(

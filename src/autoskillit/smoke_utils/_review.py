@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 
 from autoskillit.core import get_logger
@@ -136,6 +137,10 @@ LOCAL_ROUND_EXEMPT_VERDICTS: frozenset[str] = frozenset(
         "approved_with_comments",
     }
 )
+
+SEVERITY_RANK: dict[str, int] = {"info": 0, "warning": 1, "critical": 2}
+TIER_RANK: dict[str, int] = {"H": 0, "M": 1, "L": 2}
+_STRUCTURAL_FIXABILITY_VALUES: frozenset[str | None] = frozenset({"STRUCTURAL", None})
 
 
 def check_review_loop(
@@ -354,3 +359,239 @@ def pre_iteration_cleanup(
         removed += 1
 
     return {"cleaned": "true", "removed_count": str(removed)}
+
+
+def select_review_dimensions(
+    experiment_type: str = "",
+    dimension_weights_json: str = "",
+    secondary_modifiers_json: str = "",
+    output_dir: str = "",
+) -> dict[str, str]:
+    """Transform dimension weights and modifiers into the dialing contract format.
+
+    Called by run_python from review-design recipe steps. Parses dimension
+    weights, applies secondary modifiers, filters silent (S) dimensions,
+    sorts by tier, and writes a dimensions manifest.
+    """
+    from autoskillit.core import atomic_write  # noqa: PLC0415
+
+    _EMPTY = {"selected_lenses": "", "lens_context_paths": "", "dimensions_manifest_path": ""}
+
+    out = Path(output_dir)
+    if not out.is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
+
+    weights_str = dimension_weights_json.strip()
+    if not weights_str:
+        return _EMPTY
+
+    try:
+        weights: dict[str, str] = json.loads(weights_str)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON in dimension_weights_json: {exc}") from exc
+    if not weights:
+        return _EMPTY
+
+    modifiers_str = secondary_modifiers_json.strip()
+    try:
+        modifiers: list[str] = json.loads(modifiers_str) if modifiers_str else []
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON in secondary_modifiers_json: {exc}") from exc
+
+    tier_order = ["H", "M", "L", "S"]
+
+    def _upgrade_one_tier(current: str) -> str:
+        if current not in tier_order:
+            raise ValueError(f"unknown tier {current!r}; expected one of {tier_order}")
+        idx = tier_order.index(current)
+        return tier_order[max(0, idx - 1)]
+
+    for mod in modifiers:
+        if mod == "+causal" and "causal_structure" in weights:
+            weights["causal_structure"] = _upgrade_one_tier(weights["causal_structure"])
+        elif mod == "+high_cost" and "resource_proportionality" in weights:
+            if weights["resource_proportionality"] == "L":
+                weights["resource_proportionality"] = "M"
+        elif mod == "+deployment" and "ecological_validity" in weights:
+            if tier_order.index(weights["ecological_validity"]) > tier_order.index("M"):
+                weights["ecological_validity"] = "M"
+        elif mod == "+multi_metric" and "statistical_corrections" in weights:
+            weights["statistical_corrections"] = _upgrade_one_tier(
+                weights["statistical_corrections"]
+            )
+
+    active = {dim: w for dim, w in weights.items() if w != "S"}
+    if not active:
+        return _EMPTY
+
+    sorted_dims = sorted(active.items(), key=lambda x: TIER_RANK.get(x[1], 3))
+
+    selected_lenses = ",".join(d for d, _ in sorted_dims)
+    lens_context_paths = ",".join("" for _ in sorted_dims)
+
+    out.mkdir(parents=True, exist_ok=True)
+    manifest_path = out / "dimensions_manifest.json"
+    manifest_data = dict(sorted_dims)
+    atomic_write(manifest_path, json.dumps(manifest_data))
+
+    return {
+        "selected_lenses": selected_lenses,
+        "lens_context_paths": lens_context_paths,
+        "dimensions_manifest_path": str(manifest_path),
+    }
+
+
+def aggregate_review_verdict(
+    findings_manifest_path: str = "",
+    dimensions_manifest_path: str = "",
+    experiment_type: str = "",
+    rt_max_severity: str = "",
+    output_dir: str = "",
+) -> dict[str, str]:
+    """Compute GO/REVISE/STOP verdict from review findings and dimension weights.
+
+    Called by run_python from the review-design verdict step. Applies red-team
+    severity caps, computes proportional warning thresholds, identifies
+    structural stop triggers, and writes evaluation artifacts.
+    """
+    from datetime import datetime  # noqa: PLC0415
+
+    from autoskillit.core import atomic_write  # noqa: PLC0415
+
+    if not findings_manifest_path.strip():
+        return {"error": "findings_manifest_path is empty"}
+
+    out = Path(output_dir)
+    if not out.is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
+
+    findings_path = Path(findings_manifest_path.strip())
+    if not findings_path.exists():
+        return {"error": f"findings manifest not found: {findings_manifest_path}"}
+
+    try:
+        findings: list[dict[str, str | None]] = json.loads(findings_path.read_text())
+    except json.JSONDecodeError as exc:
+        return {"error": f"corrupt findings manifest: {exc}"}
+
+    active_dimensions = 0
+    dim_data: dict[str, str] = {}
+    if dimensions_manifest_path.strip():
+        dim_path = Path(dimensions_manifest_path.strip())
+        if dim_path.exists():
+            try:
+                dim_data = json.loads(dim_path.read_text())
+            except json.JSONDecodeError as exc:
+                return {"error": f"corrupt dimensions manifest: {exc}"}
+            active_dimensions = sum(1 for w in dim_data.values() if w != "S")
+
+    rt_cap = rt_max_severity.strip() if rt_max_severity.strip() else "critical"
+    if not rt_max_severity.strip() and experiment_type.strip():
+        from autoskillit.recipe import get_experiment_type_by_name  # noqa: PLC0415
+
+        spec = get_experiment_type_by_name(experiment_type.strip())
+        if spec is not None:
+            rt_cap = spec.red_team_focus.get("severity_cap", "critical")
+
+    for f in findings:
+        if f.get("dimension") == "red_team":
+            f_sev = f.get("severity", "info")
+            if SEVERITY_RANK.get(str(f_sev), 0) > SEVERITY_RANK.get(rt_cap, 2):
+                f["severity"] = rt_cap
+
+    warning_threshold = active_dimensions * 5
+
+    critical_findings = [f for f in findings if f.get("severity") == "critical"]
+    warning_findings = [f for f in findings if f.get("severity") == "warning"]
+    info_findings = [f for f in findings if f.get("severity") == "info"]
+
+    l1_criticals = [
+        f
+        for f in critical_findings
+        if f.get("dimension") in {"estimand_clarity", "hypothesis_falsifiability"}
+    ]
+    structural_stop_triggers = [
+        f for f in l1_criticals if f.get("fixability") in _STRUCTURAL_FIXABILITY_VALUES
+    ]
+    rt_stop = [f for f in critical_findings if f.get("dimension") == "red_team"]
+    stop_triggers = structural_stop_triggers + rt_stop
+
+    if stop_triggers:
+        verdict = "STOP"
+    elif critical_findings or (
+        active_dimensions > 0 and len(warning_findings) >= warning_threshold
+    ):
+        verdict = "REVISE"
+    else:
+        verdict = "GO"
+
+    out.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(tz=UTC).strftime("%Y-%m-%d_%H%M%S")
+
+    scorecard_rows = []
+    for dim, weight in dim_data.items():
+        c = sum(
+            1 for f in findings if f.get("dimension") == dim and f.get("severity") == "critical"
+        )
+        w = sum(
+            1 for f in findings if f.get("dimension") == dim and f.get("severity") == "warning"
+        )
+        i = sum(1 for f in findings if f.get("dimension") == dim and f.get("severity") == "info")
+        scorecard_rows.append(f"| {dim} | {weight} | {c} | {w} | {i} |")
+
+    dashboard_lines = [
+        "# Evaluation Dashboard\n",
+        f"## Verdict: {verdict}\n",
+        "## Dimension Scorecard\n",
+        "| Dimension | Weight | Critical | Warning | Info |",
+        "|-----------|--------|----------|---------|------|",
+        *scorecard_rows,
+        "",
+        "## Finding Summary\n",
+        f"- **Critical:** {len(critical_findings)}",
+        f"- **Warning:** {len(warning_findings)}",
+        f"- **Info:** {len(info_findings)}",
+        f"- **Stop triggers:** {len(stop_triggers)}",
+        "",
+        "## Summary\n",
+        "```yaml",
+        f"verdict: {verdict}",
+        f"total_findings: {len(findings)}",
+        f"critical_count: {len(critical_findings)}",
+        f"warning_count: {len(warning_findings)}",
+        f"info_count: {len(info_findings)}",
+        f"active_dimensions: {active_dimensions}",
+        f"warning_threshold: {warning_threshold}",
+        f"stop_triggers: {len(stop_triggers)}",
+        "```",
+    ]
+    dashboard_path = out / f"evaluation_dashboard_{timestamp}.md"
+    atomic_write(dashboard_path, "\n".join(dashboard_lines))
+
+    result: dict[str, str] = {
+        "verdict": verdict,
+        "evaluation_dashboard_path": str(dashboard_path),
+    }
+
+    if verdict == "REVISE":
+        required = [
+            f"- **[{f.get('dimension', '?')}]** {f.get('message', f.get('finding', ''))}"
+            for f in critical_findings
+        ]
+        recommended = [
+            f"- **[{f.get('dimension', '?')}]** {f.get('message', f.get('finding', ''))}"
+            for f in warning_findings
+        ]
+        guidance_lines = [
+            "# Revision Guidance\n",
+            "## Required Revisions (Critical)\n",
+            *(required if required else ["- (none)"]),
+            "",
+            "## Recommended Revisions (Warning)\n",
+            *(recommended if recommended else ["- (none)"]),
+        ]
+        guidance_path = out / f"revision_guidance_{timestamp}.md"
+        atomic_write(guidance_path, "\n".join(guidance_lines))
+        result["revision_guidance_path"] = str(guidance_path)
+
+    return result

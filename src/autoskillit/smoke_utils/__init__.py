@@ -22,6 +22,7 @@ from autoskillit.smoke_utils._helpers import try_load_json
 from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
 from autoskillit.smoke_utils._review import (
     LOCAL_ROUND_EXEMPT_VERDICTS,
+    aggregate_review_verdict,
     annotate_pr_diff,
     check_loop_iteration,
     check_loop_with_progress,
@@ -29,11 +30,13 @@ from autoskillit.smoke_utils._review import (
     enrich_diff_context,
     init_counter,
     pre_iteration_cleanup,
+    select_review_dimensions,
 )
 from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch_pr_token_summary
 
 __all__ = [
     "LOCAL_ROUND_EXEMPT_VERDICTS",
+    "aggregate_review_verdict",
     "annotate_pr_diff",
     "build_agent_eval_context",
     "build_eval_context",
@@ -55,5 +58,6 @@ __all__ = [
     "parse_eval_manifests",
     "patch_pr_token_summary",
     "pre_iteration_cleanup",
+    "select_review_dimensions",
     "try_load_json",
 ]

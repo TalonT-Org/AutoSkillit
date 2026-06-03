@@ -34,6 +34,8 @@ def _check_phoropter_phase_order(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if family in errored_families:
             continue
+        if step.action == "route":
+            continue
 
         expected_phase = expected_next.get(family, "dial")
         if step_name != expected_phase:
@@ -76,6 +78,8 @@ def _check_phoropter_interleaving(ctx: ValidationContext) -> list[RuleFinding]:
     for step_name, step in ctx.recipe.steps.items():
         family = step.phoropter_family
         if family is not None:
+            if step.action == "route":
+                continue
             in_progress[family] = step_name
             if step_name in _PHOROPTER_PHASES:
                 idx = _PHOROPTER_PHASES.index(step_name)

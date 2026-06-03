@@ -1,18 +1,38 @@
-<!-- autoskillit-recipe-hash: sha256:88d0f9f65b2b9fc09968435229d21f6264c19a9b986d74a771f9fe4826d88085 -->
+<!-- autoskillit-recipe-hash: sha256:1d5fac42c5bb63012f0407cb60737d61eca2eb680d3e461a56f588852875fabb -->
 <!-- autoskillit-diagram-format: v7 -->
 
 ## research
 
 scope
 |
+select_directions
+|
 plan_experiment
 |
-review_design
-|   +-- [dial] (optional)
-|   |    +-- [apply] (phoropter: vis-lens)
-|   |    |    +-- [synthesize] (phoropter: vis-lens)
-|   +-- [resolve_design_review] (on STOP verdict)
-|   x fail [-> escalate_stop]
+dial (phoropter: review-design)
+|    +-- [silent_type_gate] (route — is_silent_type)
+|    |    +-- [synthesize] (phoropter: review-design, when is_silent_type)
+|    |    |
+|    |    [apply] (phoropter: review-design, default after gate)
+|    |    |    +-- [synthesize] (phoropter: review-design)
+|    |    |    |
+|    |    |    [revise_design] (on REVISE verdict)
+|    |    |
+|    |    [synthesize] (phoropter: review-design)
+|    |    |    +-- [vis_dial] (on GO verdict)
+|    |    |    +-- [revise_design] (on REVISE verdict)
+|    |    |    +-- [resolve_design_review] (on STOP verdict)
+|    |    |    x fail [-> create_worktree]
+|    |    |
+|    |    x fail [-> create_worktree]
+|    |
+|    x fail [-> create_worktree]
+|
+vis_dial
+|
+vis_apply
+|
+vis_synthesize
 |
 stage_data
 |

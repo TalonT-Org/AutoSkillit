@@ -145,20 +145,17 @@ def test_unrouted_verdict_value_severity_is_error() -> None:
         )
 
 
-def test_unrouted_verdict_passes_for_review_design_in_research_recipe() -> None:
-    """The unrouted-verdict-value rule must not fire for review-design in research.yaml.
-
-    All three verdict values (GO, REVISE, STOP) have explicit on_result conditions.
-    This test ensures the rule exercises review-design, not just review-pr.
+def test_unrouted_verdict_passes_for_synthesize_in_research_recipe() -> None:
+    """The unrouted-verdict-value rule must not fire for the review-design synthesize step
+    in research.yaml. All three verdict values (GO, REVISE, STOP) plus a fallback have
+    explicit on_result conditions.
     """
     recipe = load_recipe(builtin_recipes_dir() / "research.yaml")
     findings = run_semantic_rules(recipe)
     unrouted = [
-        f
-        for f in findings
-        if f.rule == "unrouted-verdict-value" and f.step_name == "review_design"
+        f for f in findings if f.rule == "unrouted-verdict-value" and f.step_name == "synthesize"
     ]
-    assert not unrouted, f"unrouted-verdict-value fired for review_design step: {unrouted}"
+    assert not unrouted, f"unrouted-verdict-value fired for synthesize step: {unrouted}"
 
 
 # ---------------------------------------------------------------------------

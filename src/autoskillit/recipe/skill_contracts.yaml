@@ -599,7 +599,7 @@ skills:
     expected_output_patterns:
     - "triage_report[ \\t]*=[ \\t]*(\\S[^\\n]*|none)"
     pattern_examples:
-    - "triage_report = .autoskillit/temp/triage-issues/triage_report_20260310_120000.md\n%%ORDER_UP%%"
+    - "triage_report = /tmp/triage_report_20260310_120000.md\n%%ORDER_UP%%"
 
   review-pr:
     inputs:
@@ -2408,8 +2408,8 @@ skills:
     - "selected_lenses[ \\t]*=[ \\t]*([^\\n]*|none)"
     - "lens_context_paths[ \\t]*=[ \\t]*([^\\n]*|none)"
     pattern_examples:
-    - "experiment_type = benchmark\ndimension_weights = causal_structure:H,variance_protocol:M,statistical_corrections:M,ecological_validity:M,measurement_alignment:H,resource_proportionality:M,data_acquisition:H,agent_implementability:M,scope_alignment:M\nis_silent_type = false\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /abs/cwd/.autoskillit/temp/classify-experiment-type/dimensions_manifest_benchmark_2026-06-02_183000.json\nselected_lenses = causal_structure,variance_protocol,statistical_corrections,ecological_validity,measurement_alignment,resource_proportionality,data_acquisition,agent_implementability,scope_alignment\nlens_context_paths = /abs/cwd/.autoskillit/temp/classify-experiment-type/lens_ctx_causal_structure_benchmark_2026-06-02_183000.md,/abs/cwd/.autoskillit/temp/classify-experiment-type/lens_ctx_variance_protocol_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
-    - "experiment_type = exploratory\ndimension_weights = causal_structure:S,variance_protocol:S,statistical_corrections:S,ecological_validity:S,measurement_alignment:S,resource_proportionality:S,data_acquisition:L,agent_implementability:L,scope_alignment:S\nis_silent_type = true\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /abs/cwd/.autoskillit/temp/classify-experiment-type/dimensions_manifest_exploratory_2026-06-02_183000.json\nselected_lenses = \nlens_context_paths = \n%%ORDER_UP%%"
+    - "experiment_type = benchmark\ndimension_weights = causal_structure:H,variance_protocol:M,statistical_corrections:M,ecological_validity:M,measurement_alignment:H,resource_proportionality:M,data_acquisition:H,agent_implementability:M,scope_alignment:M\nis_silent_type = false\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_benchmark_2026-06-02_183000.json\nselected_lenses = causal_structure,variance_protocol,statistical_corrections,ecological_validity,measurement_alignment,resource_proportionality,data_acquisition,agent_implementability,scope_alignment\nlens_context_paths = /tmp/classify-experiment-type/lens_ctx_causal_structure_benchmark_2026-06-02_183000.md,/tmp/classify-experiment-type/lens_ctx_variance_protocol_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
+    - "experiment_type = exploratory\ndimension_weights = causal_structure:S,variance_protocol:S,statistical_corrections:S,ecological_validity:S,measurement_alignment:S,resource_proportionality:S,data_acquisition:L,agent_implementability:L,scope_alignment:S\nis_silent_type = true\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_exploratory_2026-06-02_183000.json\nselected_lenses = \nlens_context_paths = \n%%ORDER_UP%%"
     write_behavior: always
   apply-review-dimensions:
     inputs:
@@ -2437,7 +2437,7 @@ skills:
     - "findings_manifest_path[ \\t]*=[ \\t]*/.+"
     - "evaluation_dashboard_path[ \\t]*=[ \\t]*/.+"
     pattern_examples:
-    - "findings_manifest_path = /abs/cwd/.autoskillit/temp/apply-review-dimensions/findings_manifest_benchmark_2026-06-02_183000.json\nevaluation_dashboard_path = /abs/cwd/.autoskillit/temp/apply-review-dimensions/evaluation_dashboard_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
+    - "findings_manifest_path = /tmp/apply-review-dimensions/findings_manifest_benchmark_2026-06-02_183000.json\nevaluation_dashboard_path = /tmp/apply-review-dimensions/evaluation_dashboard_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
     write_behavior: always
 callable_contracts:
   autoskillit.smoke_utils.check_loop_iteration:

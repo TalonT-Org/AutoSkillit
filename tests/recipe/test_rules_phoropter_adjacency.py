@@ -245,3 +245,42 @@ def test_minimal_recipe_no_phoropter_findings():
     phoropter_rules = {"phoropter-phase-order", "phoropter-step-interleaving"}
     findings = [f for f in run_semantic_rules(recipe) if f.rule in phoropter_rules]
     assert not findings
+
+
+# --- route-action transparency tests ---
+
+
+def test_route_action_between_phases_is_transparent():
+    """A route-action step between dial and apply within the same phoropter family
+    must NOT produce a phase-order finding — it is transparent to phase tracking."""
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "gate": RecipeStep(action="route", phoropter_family="test-fam"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "done": RecipeStep(action="stop"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
+    assert len(findings) == 0
+
+
+def test_route_action_does_not_trigger_interleaving():
+    """The phoropter-step-interleaving rule must NOT produce a false positive
+    when a route-action step is inserted between dial and apply within the same family."""
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "gate": RecipeStep(action="route", phoropter_family="test-fam"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "done": RecipeStep(action="stop"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-step-interleaving"]
+    assert len(findings) == 0

@@ -332,8 +332,14 @@ def _generate_agent_tomls(session_dir: Path) -> int:
         if "'''" in body:
             logger.warning("agent_toml_skip_triple_quote", path=str(md_path))
             continue
-        name = meta["name"]
-        desc = meta["description"]
+        name = meta.get("name")
+        if not name:
+            logger.warning("agent_toml_skip_missing_name", path=str(md_path))
+            continue
+        desc = meta.get("description")
+        if not desc:
+            logger.warning("agent_toml_skip_missing_description", path=str(md_path))
+            continue
         lines = [
             f"name = {_format_toml_value(name)}",
             f"description = {_format_toml_value(desc)}",

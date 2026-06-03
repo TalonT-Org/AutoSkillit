@@ -458,21 +458,20 @@ def aggregate_review_verdict(
 
     from autoskillit.core import atomic_write  # noqa: PLC0415
 
-    if not findings_manifest_path.strip():
-        return {"error": "findings_manifest_path is empty"}
-
     out = Path(output_dir)
     if not out.is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
 
-    findings_path = Path(findings_manifest_path.strip())
-    if not findings_path.exists():
-        return {"error": f"findings manifest not found: {findings_manifest_path}"}
-
-    try:
-        findings: list[dict[str, str | None]] = json.loads(findings_path.read_text())
-    except json.JSONDecodeError as exc:
-        return {"error": f"corrupt findings manifest: {exc}"}
+    if findings_manifest_path.strip():
+        findings_path = Path(findings_manifest_path.strip())
+        if not findings_path.exists():
+            return {"error": f"findings manifest not found: {findings_manifest_path}"}
+        try:
+            findings: list[dict[str, str | None]] = json.loads(findings_path.read_text())
+        except json.JSONDecodeError as exc:
+            return {"error": f"corrupt findings manifest: {exc}"}
+    else:
+        findings = []
 
     active_dimensions = 0
     dim_data: dict[str, str] = {}

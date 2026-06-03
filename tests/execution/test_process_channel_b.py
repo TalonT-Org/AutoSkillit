@@ -35,7 +35,9 @@ CHANNEL_B_THEN_A_CONFIRM_SCRIPT = textwrap.dedent("""\
         f.flush()
     # Delay must exceed session_id_timeout + Phase 1 poll so Phase 2 initializes
     # scan_pos from discovery boundary before the marker arrives.
-    time.sleep(1.0)
+    # 3s margin handles xdist -n 4 event-loop saturation on WSL2 where coroutine
+    # scheduling jitter can delay Phase 1 discovery by >1s.
+    time.sleep(3.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -156,12 +158,18 @@ class TestChannelBDrainWait:
 
         Sequence (fast poll params):
           t=0.00s  subprocess starts
-          t=0.10s  script writes %%ORDER_UP%% to session JSONL (Channel B target)
-          t~0.15s  Phase 1 poll fires → session file found
-          t~0.20s  Phase 2 poll fires → marker detected → Channel B fires → drain starts
-          t=0.25s  script writes type=result to stdout (0.15s after JSONL write)
-          t~0.30s  heartbeat fires → Channel A confirms → drain completes
-          t~0.30s  process killed with confirmed stdout
+          t=0.10s  script creates session JSONL with initial content
+          t~0.11s  Phase 1 poll discovers file, Phase 2 initializes scan_pos
+          t=3.10s  script writes %%ORDER_UP%% to session JSONL (Channel B target)
+          t~3.15s  Phase 2 detects marker → Channel B fires → drain starts
+          t=3.25s  script writes type=result to stdout (0.15s after JSONL write)
+          t~3.30s  heartbeat fires → Channel A confirms → drain completes
+          t~3.30s  process killed with confirmed stdout
+
+        The 3.0s gap between file creation and marker write ensures Phase 1 discovers
+        the JSONL file and Phase 2 initializes scan_pos BEFORE the marker arrives —
+        preventing a race where Phase 2 sets scan_pos past the marker under xdist -n 4
+        event-loop saturation on WSL2.
 
         timeout=300s: guards against the outer wall-clock expiring under xdist -n 4 load.
         _phase1_timeout=400: must exceed outer timeout (300s) so that Phase 1 never fires
@@ -181,10 +189,10 @@ class TestChannelBDrainWait:
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=5.0,
             _phase1_timeout=400,
-            _phase1_poll=0.05,
+            _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
-            _session_id_timeout=2.0,
+            _session_id_timeout=0.01,
         )
 
         assert result.termination == TerminationReason.COMPLETED

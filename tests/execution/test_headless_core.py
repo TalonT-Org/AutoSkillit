@@ -2774,3 +2774,62 @@ class TestInjectNarrationSuppression:
         result = _inject_narration_suppression("cmd", has_skill_prefix=True)
         assert "EFFICIENCY DIRECTIVE" in result
         assert "between tool calls" in result
+
+
+class TestInjectCompletionReminder:
+    def test_with_marker(self):
+        from autoskillit.execution.commands import _inject_completion_reminder
+
+        result = _inject_completion_reminder("prompt", "%%DONE%%")
+        assert "%%DONE%%" in result
+        assert result.endswith("%%DONE%%")
+
+    def test_empty_marker_noop(self):
+        from autoskillit.execution.commands import _inject_completion_reminder
+
+        result = _inject_completion_reminder("prompt", "")
+        assert result == "prompt"
+
+    def test_idempotent(self):
+        from autoskillit.execution.commands import _inject_completion_reminder
+
+        once = _inject_completion_reminder("prompt", "%%DONE%%")
+        twice = _inject_completion_reminder(once, "%%DONE%%")
+        assert twice.count("%%DONE%%") == 2
+
+
+def test_prompt_injector_registry_completeness():
+    from autoskillit.execution.backends._claude_prompt import PROMPT_INJECTOR_CHAIN
+
+    names = [entry.name for entry in PROMPT_INJECTOR_CHAIN]
+    assert "completion-directive" in names
+    assert "cwd-anchor" in names
+    assert "narration-suppression" in names
+    assert "output-format-reinforcement" in names
+    assert "completion-reminder" in names
+    assert names[-1] == "completion-reminder"
+
+
+def test_prompt_injector_registry_ordering():
+    from autoskillit.execution.backends._claude_prompt import PROMPT_INJECTOR_CHAIN
+
+    names = [entry.name for entry in PROMPT_INJECTOR_CHAIN]
+    assert names[0] == "completion-directive"
+    assert names[-1] == "completion-reminder"
+
+
+def test_inject_output_format_reinforcement_non_anthropic():
+    from autoskillit.execution.backends._claude_prompt import _inject_output_format_reinforcement
+
+    result = _inject_output_format_reinforcement("base prompt", profile_name="minimax")
+    lower = result.lower()
+    assert "plain text" in lower or "no markdown" in lower
+    directive_part = result.split("OUTPUT FORMAT")[1]
+    assert "**" not in directive_part
+
+
+def test_inject_output_format_reinforcement_anthropic_noop():
+    from autoskillit.execution.backends._claude_prompt import _inject_output_format_reinforcement
+
+    result = _inject_output_format_reinforcement("base prompt", profile_name="")
+    assert result == "base prompt"

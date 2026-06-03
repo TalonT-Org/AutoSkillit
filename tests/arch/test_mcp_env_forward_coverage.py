@@ -12,6 +12,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND__BACKEND", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_MCP_CLIENT_BACKEND", raising=False)
 
 

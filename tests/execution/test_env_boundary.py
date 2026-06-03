@@ -189,13 +189,18 @@ def test_unknown_claude_code_var_is_caught() -> None:
 def test_orchestrator_session_required_env_hygiene_coverage() -> None:
     """Every ORCHESTRATOR_SESSION_REQUIRED_ENV var is accounted for in the env hygiene chain."""
     from autoskillit.core import (
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
         AGENT_BACKEND_ENV_VAR,
         AUTOSKILLIT_PRIVATE_ENV_VARS,
         ORCHESTRATOR_SESSION_REQUIRED_ENV,
     )
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
-    always_injected = {AGENT_BACKEND_ENV_VAR, "MCP_CONNECTION_NONBLOCKING"}
+    always_injected = {
+        AGENT_BACKEND_ENV_VAR,
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
+        "MCP_CONNECTION_NONBLOCKING",
+    }
     allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected
     uncovered = ORCHESTRATOR_SESSION_REQUIRED_ENV - allowed
     assert not uncovered, (
@@ -207,6 +212,7 @@ def test_orchestrator_session_required_env_hygiene_coverage() -> None:
 def test_skill_session_required_env_hygiene_coverage() -> None:
     """Every SKILL_SESSION_REQUIRED_ENV var is accounted for in the env hygiene chain."""
     from autoskillit.core import (
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
         AGENT_BACKEND_ENV_VAR,
         AUTOSKILLIT_PRIVATE_ENV_VARS,
         SKILL_SESSION_REQUIRED_ENV,
@@ -215,6 +221,7 @@ def test_skill_session_required_env_hygiene_coverage() -> None:
 
     always_injected = {
         AGENT_BACKEND_ENV_VAR,
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
         "MCP_CONNECTION_NONBLOCKING",
     }
     allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected

@@ -262,17 +262,17 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.stdout.strip()  # Channel A confirmed: stdout is non-empty
 
-    @pytest.mark.timeout(150)
+    @pytest.mark.timeout(360)
     @pytest.mark.anyio
     async def test_data_confirmed_false_set_on_drain_timeout(self, tmp_path):
         """Channel B wins the race; drain timeout expires without Channel A confirming.
 
         Verifies that SubprocessResult.data_confirmed is False when the bounded
         drain wait times out — i.e. Channel A never confirmed stdout data.
-        timeout=120s / _phase1_timeout=250: _phase1_timeout must exceed the outer timeout so
-        Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
-        completion_drain_timeout=0.5: 0.1s was too tight under xdist -n 4 load; the
-        event loop may not process the drain callback before pytest-timeout fires.
+        timeout=300s: guards against the outer wall-clock expiring under xdist -n 4 load.
+        _phase1_timeout=400: must exceed outer timeout (300s) so that Phase 1 never fires
+        STALE before the outer wall-clock guard cancels — prevents spurious TIMED_OUT when
+        subprocess startup is slow under WSL2 + xdist load.
         natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
         so shorten grace window to reduce total test time and avoid asyncio-waitpid
         thread contention under CI load (default 3.0s grace + 3.0s kill = 6s total).
@@ -287,15 +287,15 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=120,
+            timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
-            natural_exit_grace_seconds=0.5,
+            natural_exit_grace_seconds=0.1,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,
-            _phase1_timeout=250,
+            _phase1_timeout=400,
         )
 
         assert result.termination == TerminationReason.COMPLETED

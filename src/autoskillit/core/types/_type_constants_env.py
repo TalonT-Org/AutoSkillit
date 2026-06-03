@@ -28,6 +28,7 @@ __all__ = [
     "KITCHEN_SESSION_ID_ENV_VAR",
     "LAUNCH_ID_ENV_VAR",
     "FOOD_TRUCK_TOOL_TAGS_ENV_VAR",
+    "AGENT_BACKEND_DYNACONF_ENV_VAR",
     "AGENT_BACKEND_ENV_VAR",
     "AGENT_BACKEND_CLAUDE_CODE",
     "AGENT_BACKEND_CODEX",
@@ -59,6 +60,7 @@ KITCHEN_SESSION_ID_ENV_VAR: str = "AUTOSKILLIT_KITCHEN_SESSION_ID"
 LAUNCH_ID_ENV_VAR: str = "AUTOSKILLIT_LAUNCH_ID"
 FOOD_TRUCK_TOOL_TAGS_ENV_VAR: str = "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS"
 AGENT_BACKEND_ENV_VAR: str = "AUTOSKILLIT_AGENT_BACKEND"
+AGENT_BACKEND_DYNACONF_ENV_VAR: str = "AUTOSKILLIT_AGENT_BACKEND__BACKEND"
 AGENT_BACKEND_CLAUDE_CODE: str = "claude-code"
 AGENT_BACKEND_CODEX: str = "codex"
 AUTOSKILLIT_APPLICABLE_GUARDS: str = "AUTOSKILLIT_APPLICABLE_GUARDS"
@@ -71,6 +73,12 @@ MCP_CLIENT_BACKEND_ENV_VAR: str = "AUTOSKILLIT_MCP_CLIENT_BACKEND"
 # build_skill_session_cmd (the _HEADLESS_EXCLUSIVE_VARS filter and
 # CodexEnvPolicy.build_env).  Backends inject the canonical value via
 # extras regardless.
+#
+# AGENT_BACKEND_DYNACONF_ENV_VAR (the nested Dynaconf form) is also
+# absent: _config_loader.py pops only the flat form before Dynaconf
+# construction — the nested form survives and is resolved by Dynaconf
+# as agent_backend.backend.  Both forms must be injected by cmd
+# builders so child MCP servers inherit the parent's backend.
 AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
     {
         HEADLESS_ENV_VAR,
@@ -117,6 +125,7 @@ SKILL_SESSION_REQUIRED_ENV: frozenset[str] = frozenset(
         "MAX_MCP_OUTPUT_TOKENS",
         "MCP_CONNECTION_NONBLOCKING",
         AGENT_BACKEND_ENV_VAR,
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
         AUTOSKILLIT_APPLICABLE_GUARDS,
     }
 )
@@ -128,6 +137,7 @@ ORCHESTRATOR_SESSION_REQUIRED_ENV: frozenset[str] = frozenset(
         "MAX_MCP_OUTPUT_TOKENS",
         "MCP_CONNECTION_NONBLOCKING",
         AGENT_BACKEND_ENV_VAR,
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
     }
 )
 

@@ -11,6 +11,7 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     CodingAgentBackend,
+    DirectInstall,
     EnvPolicy,
     OutputFormat,
     ResultParser,
@@ -142,6 +143,34 @@ class TestClaudeCodeBackendAgentBackendEnv:
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
         spec = ClaudeCodeBackend().build_skill_session_cmd(**self.BASE)
         assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "claude-code"
+
+
+class TestClaudeCodeDynaconfBackendEnv:
+    """AUTOSKILLIT_AGENT_BACKEND__BACKEND (Dynaconf nested form) in Claude cmd builders."""
+
+    SKILL_BASE: dict[str, object] = {
+        "skill_command": "/test-skill",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "model": None,
+        "plugin_source": None,
+        "output_format": OutputFormat.JSON,
+    }
+
+    FOOD_TRUCK_BASE: dict[str, object] = {
+        "orchestrator_prompt": "dispatch the work",
+        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+    }
+
+    def test_skill_session_has_dynaconf_backend(self) -> None:
+        spec = ClaudeCodeBackend().build_skill_session_cmd(**self.SKILL_BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"] == "claude-code"
+
+    def test_food_truck_has_dynaconf_backend(self) -> None:
+        spec = ClaudeCodeBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"] == "claude-code"
 
 
 def test_headless_env_hardening_constant_exists() -> None:

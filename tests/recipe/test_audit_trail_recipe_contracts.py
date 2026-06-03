@@ -21,7 +21,7 @@ def test_dial_captures_disambiguation_fields():
 
 
 def test_dial_captures_classification_timestamp():
-    """dial step captures classification_timestamp."""
+    """review-design dial step captures classification_timestamp (not vis_dial)."""
     recipe = load_yaml(RECIPE_PATH)
     rd_step = recipe["steps"]["dial"]
     captures = rd_step.get("capture", {})

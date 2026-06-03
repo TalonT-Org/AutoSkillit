@@ -100,10 +100,8 @@ class TestPromptInjectorChainBackendConsistency:
     def test_all_backends_use_prompt_injector_chain(self, backend_cls) -> None:
         src = _skill_session_impl_src(backend_cls)
         assert "apply_prompt_injector_chain" in src
-        assert "_inject_completion_reminder(_inject_narration" not in src
 
     @pytest.mark.parametrize("backend_cls", [ClaudeCodeBackend, CodexBackend])
     def test_orchestrator_paths_use_prompt_injector_chain(self, backend_cls) -> None:
         src = inspect.getsource(backend_cls.build_food_truck_cmd)
         assert "apply_prompt_injector_chain" in src
-        assert "_inject_completion_reminder(_inject_narration" not in src

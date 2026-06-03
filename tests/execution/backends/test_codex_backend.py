@@ -11,6 +11,7 @@ import structlog.testing
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     CAMPAIGN_ID_ENV_VAR,
+    CODEX_MODEL_ALIASES,
     KITCHEN_SESSION_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     SESSION_TYPE_ORCHESTRATOR,
@@ -28,6 +29,7 @@ from autoskillit.core import (
     SkillSessionConfig,
     StreamParser,
     ValidatedAddDir,
+    pkg_root,
 )
 from autoskillit.execution.backends.codex import (
     CODEX_ENV_PREFIX_DENYLIST,
@@ -1415,3 +1417,57 @@ class TestCodexBackendSetupSessionDir:
         CodexBackend().setup_session_dir(self.session_dir)
         # Verify sessions is still a directory (symlink failed silently)
         assert not (self.session_dir / "sessions").is_symlink()
+
+    def test_setup_session_dir_creates_agents_directory(self) -> None:
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        assert (self.session_dir / "agents").is_dir()
+
+    def test_agent_toml_count_matches_md_sources(self) -> None:
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        toml_files = list((self.session_dir / "agents").glob("*.toml"))
+        md_count = len([p for p in (pkg_root() / "agents").glob("*.md") if p.name != "CLAUDE.md"])
+        assert len(toml_files) == md_count
+
+    def test_agent_toml_required_fields_present_and_nonempty(self) -> None:
+        import tomllib
+
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        for toml_path in sorted((self.session_dir / "agents").glob("*.toml")):
+            data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+            assert data["name"], f"{toml_path.name}: name empty"
+            assert data["description"], f"{toml_path.name}: description empty"
+            assert data["developer_instructions"], (
+                f"{toml_path.name}: developer_instructions empty"
+            )
+            assert data["sandbox_mode"] == "workspace-write", (
+                f"{toml_path.name}: wrong sandbox_mode"
+            )
+
+    def test_agent_toml_model_alias_mapped(self) -> None:
+        import tomllib
+
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        wp_toml = self.session_dir / "agents" / "wp-elaborator.toml"
+        data = tomllib.loads(wp_toml.read_text(encoding="utf-8"))
+        assert data["model"] == CODEX_MODEL_ALIASES["sonnet"]
+
+    def test_no_claude_md_toml_generated(self) -> None:
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        assert not (self.session_dir / "agents" / "CLAUDE.toml").exists()
+
+    def test_developer_instructions_preserves_markdown_structure(self) -> None:
+        import tomllib
+
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        wp_toml = self.session_dir / "agents" / "wp-elaborator.toml"
+        data = tomllib.loads(wp_toml.read_text(encoding="utf-8"))
+        body = data["developer_instructions"]
+        assert "# wp-elaborator" in body
+        assert "## Tool Constraints" in body
+        assert "```json" in body

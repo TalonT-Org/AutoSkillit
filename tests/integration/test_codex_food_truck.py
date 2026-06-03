@@ -45,6 +45,11 @@ class TestCodexFoodTruckCommand:
         idx = spec.cmd.index("-c")
         assert spec.cmd[idx + 1] == "web_search=disabled"
 
+    def test_image_generation_disabled_flag(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        overrides = [spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == "-c"]
+        assert "features.image_generation=false" in overrides
+
     def test_no_tools_flag(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "--tools" not in spec.cmd

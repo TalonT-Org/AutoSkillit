@@ -359,6 +359,8 @@ class TestCodexHeadlessCmd:
             "--json",
             "--sandbox",
             "workspace-write",
+            "-c",
+            "features.image_generation=false",
             "do stuff",
         )
 
@@ -418,6 +420,8 @@ class TestCodexResumeCmd:
             "--json",
             "--sandbox",
             "read-only",
+            "-c",
+            "features.image_generation=false",
             "resume",
             "abc123",
             "continue",
@@ -744,9 +748,11 @@ class TestCodexBuildInteractiveCmd:
 
     def test_system_prompt_with_no_resume_appends_config_override(self) -> None:
         spec = CodexBackend().build_interactive_cmd(system_prompt="foo")
-        assert CodexFlags.CONFIG_OVERRIDE in spec.cmd
-        idx = spec.cmd.index(CodexFlags.CONFIG_OVERRIDE)
-        assert spec.cmd[idx + 1] == "developer_instructions=foo"
+        overrides = [
+            spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
+        ]
+        assert "developer_instructions=foo" in overrides
+        assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_named_resume_does_not_append_config_override(self) -> None:
         from autoskillit.core import NamedResume
@@ -754,7 +760,11 @@ class TestCodexBuildInteractiveCmd:
         spec = CodexBackend().build_interactive_cmd(
             resume_spec=NamedResume(session_id="s1"), system_prompt="foo"
         )
-        assert CodexFlags.CONFIG_OVERRIDE not in spec.cmd
+        overrides = [
+            spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
+        ]
+        assert not any(v.startswith("developer_instructions=") for v in overrides)
+        assert "features.image_generation=false" in overrides
 
     def test_add_dirs_appends_add_dir_for_each_entry(self) -> None:
         spec = CodexBackend().build_interactive_cmd(add_dirs=["/a", "/b"])

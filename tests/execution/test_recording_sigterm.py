@@ -15,7 +15,6 @@ import sys
 
 import pytest
 
-from autoskillit.core.runtime.readiness import readiness_sentinel_path
 from tests._subprocess_ready import wait_for_subprocess_ready
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -32,27 +31,37 @@ def test_sigterm_writes_scenario_json(tmp_path):
     """
     output_dir = tmp_path / "scenario"
     output_dir.mkdir()
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
 
     env = {
         **os.environ,
         "RECORD_SCENARIO": "1",
         "RECORD_SCENARIO_DIR": str(output_dir),
         "RECORD_SCENARIO_RECIPE": "test-recipe",
+        "AUTOSKILLIT_STATE_DIR": str(state_dir),
     }
     # Use sys.executable -m to ensure we run the worktree-installed version,
     # not a system-wide `autoskillit` binary that may lack the lifespan fix.
+    # cwd=tmp_path and AUTOSKILLIT_STATE_DIR isolate the subprocess's
+    # filesystem state from the project tree (e.g. any real execution
+    # markers under CWD) so the sentinel location is deterministic.
     proc = subprocess.Popen(
         [sys.executable, "-m", "autoskillit"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
+        cwd=tmp_path,
     )
 
     # Wait for the filesystem sentinel — written inside the lifespan's try:
     # block AFTER the anyio signal receiver is armed. Observing the sentinel
     # guarantees SIGTERM will be caught by the event-loop-routed handler.
-    sentinel_path = readiness_sentinel_path(proc.pid)
+    # Compute the path manually from the overridden state dir rather than
+    # calling readiness_sentinel_path(), because the test process's own
+    # AUTOSKILLIT_STATE_DIR may differ from the subprocess's.
+    sentinel_path = state_dir / "kitchen_state" / f"server_ready_{proc.pid}.sentinel"
     wait_for_subprocess_ready(proc, sentinel_path, deadline_s=10.0)
 
     # SIGTERM is the exact signal Claude Code sends on /exit. Close stdin so

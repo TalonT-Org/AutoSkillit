@@ -66,27 +66,40 @@ class TestCodexInteractiveCmdSystemPrompt:
             system_prompt="do stuff",
             resume_spec=NoResume(),
         )
-        assert CodexFlags.CONFIG_OVERRIDE in spec.cmd
-        idx = list(spec.cmd).index(CodexFlags.CONFIG_OVERRIDE)
-        assert spec.cmd[idx + 1] == "developer_instructions=do stuff"
+        overrides = [
+            spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
+        ]
+        assert "developer_instructions=do stuff" in overrides
+        assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_named_resume_suppressed(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
             system_prompt="do stuff",
             resume_spec=NamedResume(session_id="s1"),
         )
-        assert CodexFlags.CONFIG_OVERRIDE not in spec.cmd
+        overrides = [
+            spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
+        ]
+        assert not any(v.startswith("developer_instructions=") for v in overrides)
+        assert "features.image_generation=false" in overrides
 
     def test_system_prompt_with_bare_resume_suppressed(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
             system_prompt="do stuff",
             resume_spec=BareResume(),
         )
-        assert CodexFlags.CONFIG_OVERRIDE not in spec.cmd
+        overrides = [
+            spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
+        ]
+        assert not any(v.startswith("developer_instructions=") for v in overrides)
+        assert "features.image_generation=false" in overrides
 
     def test_no_system_prompt_with_no_resume_excludes_config_override(self) -> None:
         spec = CodexBackend().build_interactive_cmd(resume_spec=NoResume())
-        assert CodexFlags.CONFIG_OVERRIDE not in spec.cmd
+        overrides = [
+            spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == CodexFlags.CONFIG_OVERRIDE
+        ]
+        assert overrides == ["features.image_generation=false"]
 
 
 class TestCodexInteractiveCmdAddDirs:

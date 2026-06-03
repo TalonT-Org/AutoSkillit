@@ -318,6 +318,15 @@ Event mapping:
 - `needs_human` → `COMMENT`
 - `changes_requested` → `REQUEST_CHANGES`
 
+If the batch POST returns HTTP 200, treat the review as successfully posted regardless
+of response body content. Do NOT inspect the response body for a `comments` array —
+GitHub's review API does not echo back the submitted comments, so any length check
+would always read 0 and falsely trigger Tier 1 fallback.
+
+If the batch POST returns HTTP 422 and the error message mentions "review" or "author",
+the PR is self-authored. Retry the same request with event `COMMENT` instead of
+`REQUEST_CHANGES` or `APPROVE`.
+
 **Fallback Tier 1 — Individual Comments (if batch POST fails):**
 
 Attempt to post each finding individually via:

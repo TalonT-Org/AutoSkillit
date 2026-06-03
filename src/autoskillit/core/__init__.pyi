@@ -154,6 +154,7 @@ from .types import FLEET_TOOLS as FLEET_TOOLS
 from .types import FOOD_TRUCK_TOOL_TAGS_ENV_VAR as FOOD_TRUCK_TOOL_TAGS_ENV_VAR
 from .types import FREE_RANGE_TOOLS as FREE_RANGE_TOOLS
 from .types import GATED_TOOLS as GATED_TOOLS
+from .types import GITHUB_API_SKILL_FAMILIES as GITHUB_API_SKILL_FAMILIES
 from .types import HEADLESS_AUTO_GATE_ENV_VAR as HEADLESS_AUTO_GATE_ENV_VAR
 from .types import HEADLESS_ENV_VAR as HEADLESS_ENV_VAR
 from .types import HEADLESS_TOOLS as HEADLESS_TOOLS
@@ -303,6 +304,7 @@ from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
+from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult

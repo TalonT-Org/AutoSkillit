@@ -777,15 +777,15 @@ def test_resolve_instance_cache_caches_none(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 class TestBackendRequirements:
-    def test_parse_backend_requirements_from_frontmatter(self, tmp_path) -> None:
+    def test_backend_requirements_derived_from_capabilities(self, tmp_path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text("---\nname: test\nbackend_requirements: [claude-code]\n---\n# content")
+        skill_md.write_text("---\nname: test\nuses_capabilities: [open_kitchen]\n---\n# content")
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.backend_requirements == frozenset({"claude-code"})
 
-    def test_empty_backend_requirements(self, tmp_path) -> None:
+    def test_empty_capabilities_yields_empty_backend_requirements(self, tmp_path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
@@ -793,44 +793,44 @@ class TestBackendRequirements:
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.backend_requirements == frozenset()
 
-    def test_non_list_backend_requirements_coerced_to_list(self, tmp_path) -> None:
+    def test_non_mcp_capabilities_yield_empty_backend_requirements(self, tmp_path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text("---\nname: test\nbackend_requirements: claude-code\n---\n# content")
+        skill_md.write_text(
+            "---\nname: test\nuses_capabilities: [agent_subagent, claude_dir]\n---\n# content"
+        )
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset({"claude-code"})
+        assert info.backend_requirements == frozenset()
 
-    def test_invalid_backend_name_pruned_with_warning(self, tmp_path) -> None:
+    def test_unknown_capability_pruned_with_warning(self, tmp_path) -> None:
         import structlog.testing
 
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
-        skill_md.write_text("---\nname: test\nbackend_requirements: [claude_code]\n---\n# content")
+        skill_md.write_text(
+            "---\nname: test\nuses_capabilities: [nonexistent_cap]\n---\n# content"
+        )
         with structlog.testing.capture_logs() as logs:
             info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
         assert info.backend_requirements == frozenset()
-        assert any(log["event"] == "unrecognized_backend_requirements" for log in logs)
+        assert any(log["event"] == "unrecognized_uses_capabilities" for log in logs)
 
-    def test_valid_backend_names_no_warning(self, tmp_path, caplog) -> None:
-        import logging
-
+    def test_mixed_capabilities_derive_backend_requirements(self, tmp_path) -> None:
         from autoskillit.workspace.skills import _skill_info_from_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text(
-            "---\nname: test\nbackend_requirements: [claude-code, codex]\n---\n# content"
+            "---\nname: test\nuses_capabilities: [agent_subagent, run_skill]\n---\n# content"
         )
-        with caplog.at_level(logging.WARNING, logger="autoskillit.workspace.skills"):
-            info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset({"claude-code", "codex"})
-        assert "unrecognized_backend_requirements" not in caplog.text
+        info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
+        assert info.backend_requirements == frozenset({"claude-code"})
 
-    def test_investigate_skill_has_claude_code_requirement(self) -> None:
+    def test_investigate_skill_has_no_backend_requirement(self) -> None:
         info = DefaultSkillResolver().resolve("investigate")
         assert info is not None
-        assert "claude-code" in info.backend_requirements
+        assert info.backend_requirements == frozenset()
 
     def test_skill_info_default_backend_requirements(self) -> None:
         from autoskillit.workspace.skills import SkillInfo
@@ -850,7 +850,8 @@ class TestSkillInfoSchemaExhaustiveness:
 
         dc_fields = {f.name for f in dataclasses.fields(SkillInfo)}
         constructor_only = {"name", "source", "path"}
-        parseable_fields = dc_fields - constructor_only
+        derived_fields = {"backend_requirements"}
+        parseable_fields = dc_fields - constructor_only - derived_fields
 
         source = inspect.getsource(_skill_info_from_frontmatter)
         tree = ast.parse(source)

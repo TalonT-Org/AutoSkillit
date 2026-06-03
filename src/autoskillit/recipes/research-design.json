@@ -202,6 +202,7 @@
     "vis_dial": {
       "tool": "run_skill",
       "model": "",
+      "phoropter_family": "vis-lens",
       "with": {
         "skill_command": "/autoskillit:select-vis-lenses ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
@@ -218,6 +219,7 @@
     "vis_apply": {
       "tool": "run_skill",
       "model": "",
+      "phoropter_family": "vis-lens",
       "with": {
         "skill_command": "/autoskillit:vis-lens-{slug} {context_path} ${{ context.experiment_plan }}",
         "cwd": "${{ inputs.source_dir }}",
@@ -238,6 +240,7 @@
     "vis_synthesize": {
       "tool": "run_skill",
       "model": "",
+      "phoropter_family": "vis-lens",
       "with": {
         "skill_command": "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/apply",
         "cwd": "${{ inputs.source_dir }}",

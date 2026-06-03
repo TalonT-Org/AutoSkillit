@@ -2807,6 +2807,21 @@ class TestInjectCompletionReminder:
         assert twice.count("%%DONE%%") == 2
 
 
+def test_inject_completion_reminder_with_marker():
+    from autoskillit.execution.commands import _inject_completion_reminder
+
+    result = _inject_completion_reminder("prompt", "%%DONE%%")
+    assert "%%DONE%%" in result
+    assert result.endswith("%%DONE%%")
+
+
+def test_inject_completion_reminder_empty_marker():
+    from autoskillit.execution.commands import _inject_completion_reminder
+
+    result = _inject_completion_reminder("prompt", "")
+    assert result == "prompt"
+
+
 def test_prompt_injector_registry_completeness():
     from autoskillit.execution.backends._claude_prompt import PROMPT_INJECTOR_CHAIN
 

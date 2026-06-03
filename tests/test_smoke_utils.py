@@ -2746,9 +2746,13 @@ def test_aggregate_review_verdict_estimand_clarity_addressable_is_revise(tmp_pat
 
 def test_structural_fixability_values_matches_skill_md_pseudocode() -> None:
     """_STRUCTURAL_FIXABILITY_VALUES must be referenced by name in SKILL.md pseudocode."""
-    skill_md = Path("src/autoskillit/skills_extended/review-design/SKILL.md").read_text()
-    step7_start = skill_md.index("### Step 7")
-    step7_end = skill_md.index("### Step 8")
+    from autoskillit.core import pkg_root
+
+    skill_md = (pkg_root() / "skills_extended" / "review-design" / "SKILL.md").read_text()
+    step7_start = skill_md.find("### Step 7")
+    assert step7_start != -1, "SKILL.md must contain '### Step 7' heading"
+    step7_end = skill_md.find("### Step 8")
+    assert step7_end != -1, "SKILL.md must contain '### Step 8' heading"
     step7_text = skill_md[step7_start:step7_end]
 
     match = re.search(

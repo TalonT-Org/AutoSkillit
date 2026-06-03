@@ -43,6 +43,7 @@ from autoskillit.core import (
     SessionCheckpoint,
     SkillSessionConfig,
     ValidatedAddDir,
+    atomic_write,
     default_log_dir,
     extract_skill_name,
     get_logger,
@@ -338,7 +339,7 @@ def _generate_agent_tomls(session_dir: Path) -> int:
         if model_key and model_key in CODEX_MODEL_ALIASES:
             lines.append(f"model = {_format_toml_value(CODEX_MODEL_ALIASES[model_key])}")
         lines.append(f"developer_instructions = '''\n{body}\n'''")
-        (out_dir / f"{name}.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        atomic_write(out_dir / f"{name}.toml", "\n".join(lines) + "\n")
         count += 1
     logger.debug("codex_agents_generated", count=count, dest=str(out_dir))
     return count

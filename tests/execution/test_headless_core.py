@@ -2837,7 +2837,8 @@ def test_inject_output_format_reinforcement_non_anthropic():
     result = _inject_output_format_reinforcement("base prompt", profile_name="minimax")
     lower = result.lower()
     assert "plain text" in lower or "no markdown" in lower
-    directive_part = result.split("OUTPUT FORMAT")[1]
+    assert "OUTPUT FORMAT" in result, "Expected 'OUTPUT FORMAT' in injected directive"
+    directive_part = result.partition("OUTPUT FORMAT")[2]
     assert "**" not in directive_part
 
 

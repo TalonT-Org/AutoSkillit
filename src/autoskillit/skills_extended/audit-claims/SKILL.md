@@ -1,7 +1,6 @@
 ---
 name: audit-claims
 categories: [research]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model]
 description: >
   Parallel subagent-driven claim extraction and citation integrity audit for

@@ -16,10 +16,6 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _GENUINE_CLAUDE_CODE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"Agent\(\s*subagent_type\s*="),
     re.compile(r"Agent\(\s*model\s*="),
-    re.compile(r"\bopen_kitchen\b"),
-    re.compile(r"\bclose_kitchen\b"),
-    re.compile(r"\brun_skill\b"),
-    re.compile(r"\btest_check\b"),
 )
 
 

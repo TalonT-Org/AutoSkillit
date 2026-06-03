@@ -1,7 +1,6 @@
 ---
 name: exp-lens-error-budget
 categories: [exp-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Analyze statistical error budget showing Type I/II errors, power, minimum detectable effect, multiplicity corrections, and sequential monitoring. Statistical lens answering "Are error risks sized and controlled?"

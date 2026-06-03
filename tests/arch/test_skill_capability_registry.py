@@ -63,3 +63,37 @@ def test_no_unknown_capability_declared():
     assert not violations, "Unknown capabilities declared in SKILL.md files:\n" + "\n".join(
         f"  {v}" for v in violations
     )
+
+
+def test_codex_status_consistent_with_required_backends():
+    from autoskillit.core.types._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
+
+    violations = []
+    for key, cap in SKILL_CAPABILITY_REGISTRY.items():
+        if cap.codex_status != "not-applicable" and cap.required_backends == frozenset(
+            {AGENT_BACKEND_CLAUDE_CODE}
+        ):
+            violations.append(
+                f"{key}: codex_status={cap.codex_status!r} contradicts required_backends"
+            )
+    assert not violations, "\n".join(f"  {v}" for v in violations)
+
+
+_MCP_TOOL_CAPABILITIES = {"run_skill", "test_check", "open_kitchen"}
+
+
+def test_mcp_tools_are_backend_agnostic():
+    violations = []
+    for cap_name in _MCP_TOOL_CAPABILITIES:
+        cap = SKILL_CAPABILITY_REGISTRY.get(cap_name)
+        if cap and cap.required_backends:
+            violations.append(f"{cap_name}: required_backends={cap.required_backends!r}")
+    assert not violations, "MCP tools must have empty required_backends:\n" + "\n".join(
+        f"  {v}" for v in violations
+    )
+
+
+def test_required_backends_is_derived_property():
+    from autoskillit.core.types._type_constants_registries import SkillCapabilityDef
+
+    assert "required_backends" not in SkillCapabilityDef.__dataclass_fields__

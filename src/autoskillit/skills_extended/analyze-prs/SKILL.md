@@ -1,7 +1,6 @@
 ---
 name: analyze-prs
 categories: [github]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model, cross_skill_ref]
 description: Analyze all open PRs targeting a base branch — determine merge order, identify file overlaps, and tag each PR as simple or needs_check for complexity. Use at the start of a PR consolidation workflow.
 hooks:

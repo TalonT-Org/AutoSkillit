@@ -1,7 +1,6 @@
 ---
 name: apply-review-dimensions
 categories: [research]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model, cross_skill_ref]
 description: Evaluate experiment design across weighted dimensions using multi-level subagent analysis with adversarial red-team, producing a findings manifest and evaluation dashboard.
 hooks:

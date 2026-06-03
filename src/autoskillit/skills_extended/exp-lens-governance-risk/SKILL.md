@@ -1,7 +1,6 @@
 ---
 name: exp-lens-governance-risk
 categories: [exp-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create a risk register and stakeholder impact assessment for experiments with deployment implications. Governance lens answering "What risks arise from acting on this result?"

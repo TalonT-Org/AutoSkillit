@@ -1,7 +1,6 @@
 ---
 name: exp-lens-pipeline-integrity
 categories: [exp-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create Pipeline Integrity experimental design diagram showing data splits, leakage points, preprocessing order, and label contamination. Integrity lens answering "Could data handling create optimistic bias?"

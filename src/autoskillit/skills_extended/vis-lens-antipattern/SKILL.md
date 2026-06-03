@@ -1,7 +1,6 @@
 ---
 name: vis-lens-antipattern
 categories: [vis-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: "Create Anti-Pattern Detection visualization audit showing severity-tiered catalog of visualization anti-patterns present in or planned for the experiment. Diagnostic lens answering \"Which visualization anti-patterns are present?\""

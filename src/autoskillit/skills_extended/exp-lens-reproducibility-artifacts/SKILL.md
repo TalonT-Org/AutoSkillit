@@ -1,7 +1,6 @@
 ---
 name: exp-lens-reproducibility-artifacts
 categories: [exp-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create Reproducibility Artifacts experimental design diagram showing run instructions, environment capture, data availability, determinism controls, and audit trail. Transparency lens answering "Could an independent party reproduce this?"

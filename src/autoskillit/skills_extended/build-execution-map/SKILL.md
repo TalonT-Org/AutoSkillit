@@ -1,7 +1,6 @@
 ---
 name: build-execution-map
 categories: [github]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model]
 description: Analyze issue dependencies and produce a dispatch execution map for parallel orchestration
 hooks:

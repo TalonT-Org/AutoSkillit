@@ -7,6 +7,8 @@ containing ANTHROPIC_BASE_URL.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.server.tools.tools_execution import run_skill
@@ -434,3 +436,9 @@ async def test_backend_override_skill_md_uses_effective_conventions(
     assert "SKILL.md not found" in str(result_json2), (
         "SKILL.md at codex 'skills/' should NOT be found when effective backend is claude-code"
     )
+
+
+@pytest.mark.anyio
+async def test_no_skill_requires_claude_logic() -> None:
+    source = Path("src/autoskillit/server/tools/tools_execution.py").read_text()
+    assert "_skill_requires_claude" not in source

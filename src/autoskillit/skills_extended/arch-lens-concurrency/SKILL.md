@@ -1,7 +1,6 @@
 ---
 name: arch-lens-concurrency
 categories: [arch-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-concurrency/"]

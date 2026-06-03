@@ -1,7 +1,6 @@
 ---
 name: vis-lens-story-arc
 categories: [vis-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: "Create Narrative Story Arc visualization planning spec showing visual consistency across the report (same color = same model everywhere), logical figure progression, redundant figure detection, and narrative dependency between figures. Narrative lens answering \"Do the figures tell a coherent story across the report?\""

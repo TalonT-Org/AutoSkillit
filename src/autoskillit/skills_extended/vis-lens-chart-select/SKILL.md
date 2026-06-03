@@ -1,7 +1,6 @@
 ---
 name: vis-lens-chart-select
 categories: [vis-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: "Create Chart Type Selection visualization planning spec showing encoding channel assignments, Cleveland-McGill perceptual hierarchy, and data-type→chart-type matrix. Typological lens answering \"Which chart type is perceptually optimal for this data?\""

@@ -1,7 +1,6 @@
 ---
 name: resolve-claims-review
 categories: [research]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model]
 description: >
   Fetch claim findings from audit-claims, run citation-aware intent validation

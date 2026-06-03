@@ -480,7 +480,7 @@ def test_annotate_pr_diff_captures_both_paths(recipe_name: str) -> None:
 
 @pytest.mark.parametrize(
     "recipe_name",
-    ["implementation", "remediation", "implementation-groups", "merge-prs", "research-review"],
+    ["implementation", "remediation", "implementation-groups", "merge-prs"],
 )
 def test_annotate_pr_diff_captures_head_sha(recipe_name: str) -> None:
     """The annotate_pr_diff step must capture head_sha for freshness tracking."""

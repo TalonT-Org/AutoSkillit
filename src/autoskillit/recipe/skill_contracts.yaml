@@ -1684,6 +1684,75 @@ skills:
     - "verdict = GO\nexperiment_type = exploratory\nevaluation_dashboard = /tmp/eval.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  classify-experiment-type:
+    inputs:
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: scope_report_path
+      type: file_path
+      required: false
+    outputs:
+    - name: experiment_type
+      type: string
+      allowed_values: [benchmark, configuration_study, causal_inference, robustness_audit, exploratory]
+    - name: dimension_weights
+      type: string
+    - name: is_silent_type
+      type: string
+      allowed_values: ['true', 'false']
+    - name: classification_timestamp
+      type: string
+    - name: dimensions_manifest_path
+      type: file_path
+    - name: selected_lenses
+      type: string
+    - name: lens_context_paths
+      type: string
+    expected_output_patterns:
+    - "experiment_type[ \\t]*=[ \\t]*\\S+"
+    - "dimension_weights[ \\t]*=[ \\t]*[a-z_]+:[HMLS](,[a-z_]+:[HMLS])*"
+    - "is_silent_type[ \\t]*=[ \\t]*(true|false)"
+    - "dimensions_manifest_path[ \\t]*=[ \\t]*/.+"
+    - "selected_lenses[ \\t]*=[ \\t]*([^\\n]*|none)"
+    - "lens_context_paths[ \\t]*=[ \\t]*([^\\n]*|none)"
+    pattern_examples:
+    - "experiment_type = benchmark\ndimension_weights = causal_structure:H,variance_protocol:M,statistical_corrections:M,ecological_validity:M,measurement_alignment:H,resource_proportionality:M,data_acquisition:H,agent_implementability:M,scope_alignment:M\nis_silent_type = false\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_benchmark_2026-06-02_183000.json\nselected_lenses = causal_structure,variance_protocol,statistical_corrections,ecological_validity,measurement_alignment,resource_proportionality,data_acquisition,agent_implementability,scope_alignment\nlens_context_paths = /tmp/classify-experiment-type/lens_ctx_causal_structure_benchmark_2026-06-02_183000.md,/tmp/classify-experiment-type/lens_ctx_variance_protocol_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
+    - "experiment_type = exploratory\ndimension_weights = causal_structure:S,variance_protocol:S,statistical_corrections:S,ecological_validity:S,measurement_alignment:S,resource_proportionality:S,data_acquisition:L,agent_implementability:L,scope_alignment:S\nis_silent_type = true\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_exploratory_2026-06-02_183000.json\nselected_lenses = \nlens_context_paths = \n%%ORDER_UP%%"
+    - "experiment_type = configuration_study\ndimension_weights = causal_structure:M,variance_protocol:H,statistical_corrections:M,ecological_validity:M,measurement_alignment:M,resource_proportionality:H,data_acquisition:M,agent_implementability:H,scope_alignment:M\nis_silent_type = false\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_configuration_study_2026-06-02_183000.json\nselected_lenses = causal_structure,variance_protocol,statistical_corrections,ecological_validity,measurement_alignment,resource_proportionality,data_acquisition,agent_implementability,scope_alignment\nlens_context_paths = /tmp/classify-experiment-type/lens_ctx_variance_protocol_configuration_study_2026-06-02_183000.md\n%%ORDER_UP%%"
+    - "experiment_type = causal_inference\ndimension_weights = causal_structure:H,variance_protocol:H,statistical_corrections:H,ecological_validity:M,measurement_alignment:H,resource_proportionality:M,data_acquisition:H,agent_implementability:M,scope_alignment:M\nis_silent_type = false\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_causal_inference_2026-06-02_183000.json\nselected_lenses = causal_structure,variance_protocol,statistical_corrections,ecological_validity,measurement_alignment,resource_proportionality,data_acquisition,agent_implementability,scope_alignment\nlens_context_paths = /tmp/classify-experiment-type/lens_ctx_causal_structure_causal_inference_2026-06-02_183000.md\n%%ORDER_UP%%"
+    - "experiment_type = robustness_audit\ndimension_weights = causal_structure:M,variance_protocol:H,statistical_corrections:H,ecological_validity:H,measurement_alignment:M,resource_proportionality:M,data_acquisition:M,agent_implementability:M,scope_alignment:H\nis_silent_type = false\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_robustness_audit_2026-06-02_183000.json\nselected_lenses = causal_structure,variance_protocol,statistical_corrections,ecological_validity,measurement_alignment,resource_proportionality,data_acquisition,agent_implementability,scope_alignment\nlens_context_paths = /tmp/classify-experiment-type/lens_ctx_variance_protocol_robustness_audit_2026-06-02_183000.md\n%%ORDER_UP%%"
+    write_behavior: always
+  apply-review-dimensions:
+    inputs:
+    - name: dimensions_manifest_path
+      type: file_path
+      required: true
+    - name: scope_report_path
+      type: file_path
+      required: false
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: experiment_type
+      type: string
+      required: true
+    - name: classification_timestamp
+      type: string
+      required: true
+    outputs:
+    - name: findings_manifest_path
+      type: file_path
+    - name: evaluation_dashboard_path
+      type: file_path
+    expected_output_patterns:
+    - "findings_manifest_path[ \\t]*=[ \\t]*/.+"
+    pattern_examples:
+    - "findings_manifest_path = /tmp/apply-review-dimensions/findings_manifest_benchmark_2026-06-02_183000.json\nevaluation_dashboard_path = /tmp/apply-review-dimensions/evaluation_dashboard_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
+    - "findings_manifest_path = /tmp/apply-review-dimensions/findings_manifest_causal_inference_2026-06-02_183000.json\n%%ORDER_UP%%"
+    - "findings_manifest_path = /tmp/apply-review-dimensions/findings_manifest_exploratory_2026-06-02_183000.json\n%%ORDER_UP%%"
+    write_behavior: always
+
   review-research-pr:
     inputs:
     - name: worktree_path
@@ -2376,69 +2445,6 @@ skills:
     - "## Findings\n### confirmed_bug\n...\n---pipeline-health-result---\n%%ORDER_UP%%"
     - "Analysis complete.\n\n---\npipeline-health-result---\n%%ORDER_UP%%"
     read_only: true
-  classify-experiment-type:
-    inputs:
-    - name: experiment_plan_path
-      type: file_path
-      required: true
-    - name: scope_report_path
-      type: file_path
-      required: false
-    outputs:
-    - name: experiment_type
-      type: string
-    - name: dimension_weights
-      type: string
-    - name: is_silent_type
-      type: string
-      allowed_values: ['true', 'false']
-    - name: classification_timestamp
-      type: string
-    - name: dimensions_manifest_path
-      type: file_path
-    - name: selected_lenses
-      type: string
-    - name: lens_context_paths
-      type: string
-    expected_output_patterns:
-    - "experiment_type[ \\t]*=[ \\t]*\\S+"
-    - "dimension_weights[ \\t]*=[ \\t]*[a-z_]+:[HMLS](,[a-z_]+:[HMLS])*"
-    - "is_silent_type[ \\t]*=[ \\t]*(true|false)"
-    - "dimensions_manifest_path[ \\t]*=[ \\t]*/.+"
-    - "selected_lenses[ \\t]*=[ \\t]*([^\\n]*|none)"
-    - "lens_context_paths[ \\t]*=[ \\t]*([^\\n]*|none)"
-    pattern_examples:
-    - "experiment_type = benchmark\ndimension_weights = causal_structure:H,variance_protocol:M,statistical_corrections:M,ecological_validity:M,measurement_alignment:H,resource_proportionality:M,data_acquisition:H,agent_implementability:M,scope_alignment:M\nis_silent_type = false\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_benchmark_2026-06-02_183000.json\nselected_lenses = causal_structure,variance_protocol,statistical_corrections,ecological_validity,measurement_alignment,resource_proportionality,data_acquisition,agent_implementability,scope_alignment\nlens_context_paths = /tmp/classify-experiment-type/lens_ctx_causal_structure_benchmark_2026-06-02_183000.md,/tmp/classify-experiment-type/lens_ctx_variance_protocol_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
-    - "experiment_type = exploratory\ndimension_weights = causal_structure:S,variance_protocol:S,statistical_corrections:S,ecological_validity:S,measurement_alignment:S,resource_proportionality:S,data_acquisition:L,agent_implementability:L,scope_alignment:S\nis_silent_type = true\nclassification_timestamp = 2026-06-02T18:30:00Z\ndimensions_manifest_path = /tmp/classify-experiment-type/dimensions_manifest_exploratory_2026-06-02_183000.json\nselected_lenses = \nlens_context_paths = \n%%ORDER_UP%%"
-    write_behavior: always
-  apply-review-dimensions:
-    inputs:
-    - name: dimensions_manifest_path
-      type: file_path
-      required: true
-    - name: scope_report_path
-      type: file_path
-      required: false
-    - name: experiment_plan_path
-      type: file_path
-      required: true
-    - name: experiment_type
-      type: string
-      required: true
-    - name: classification_timestamp
-      type: string
-      required: true
-    outputs:
-    - name: findings_manifest_path
-      type: file_path
-    - name: evaluation_dashboard_path
-      type: file_path
-    expected_output_patterns:
-    - "findings_manifest_path[ \\t]*=[ \\t]*/.+"
-    - "evaluation_dashboard_path[ \\t]*=[ \\t]*/.+"
-    pattern_examples:
-    - "findings_manifest_path = /tmp/apply-review-dimensions/findings_manifest_benchmark_2026-06-02_183000.json\nevaluation_dashboard_path = /tmp/apply-review-dimensions/evaluation_dashboard_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
-    write_behavior: always
 callable_contracts:
   autoskillit.smoke_utils.check_loop_iteration:
     inputs:

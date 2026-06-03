@@ -131,22 +131,71 @@ def test_skill_contracts_pattern_examples_use_valid_experiment_types() -> None:
         )
 
 
-def test_review_design_experiment_type_output_has_allowed_values() -> None:
-    """review-design contract must declare allowed_values for experiment_type output.
-
-    Without this constraint, invalid values (e.g. 'controlled') can propagate
-    silently through capture and downstream recipe steps.
-    """
+@pytest.mark.parametrize(
+    "skill_name",
+    ["review-design", "classify-experiment-type"],
+)
+def test_experiment_type_output_has_allowed_values(skill_name: str) -> None:
+    """Skills that emit experiment_type must declare allowed_values matching
+    VALID_EXPERIMENT_TYPES — the canonical set shared across the phoropter pipeline."""
     contracts = load_yaml(_CONTRACTS_YAML)
-    review_design = contracts["skills"]["review-design"]
-    outputs = {o["name"]: o for o in review_design["outputs"]}
+    skill = contracts["skills"][skill_name]
+    outputs = {o["name"]: o for o in skill["outputs"]}
     et_output = outputs.get("experiment_type")
-    assert et_output is not None, "review-design must declare experiment_type output"
+    assert et_output is not None, f"{skill_name} must declare experiment_type output"
     assert "allowed_values" in et_output, (
-        "experiment_type output must have allowed_values constraint. "
+        f"{skill_name}: experiment_type output must have allowed_values constraint. "
         "Without it, invalid values propagate silently."
     )
     assert set(et_output["allowed_values"]) == VALID_EXPERIMENT_TYPES
+
+
+def test_classify_and_apply_in_tier3_between_review_and_resolve() -> None:
+    """classify-experiment-type and apply-review-dimensions must be positioned
+    between review-design and resolve-design-review in defaults.yaml tier3."""
+    defaults = load_yaml(_CONTRACTS_YAML.parent.parent / "config" / "defaults.yaml")
+    tier3 = defaults["skills"]["tier3"]
+    rd_idx = tier3.index("review-design")
+    rdr_idx = tier3.index("resolve-design-review")
+    cet_idx = tier3.index("classify-experiment-type")
+    ard_idx = tier3.index("apply-review-dimensions")
+    assert rd_idx < cet_idx < rdr_idx, (
+        f"classify-experiment-type (idx={cet_idx}) must be between "
+        f"review-design (idx={rd_idx}) and resolve-design-review (idx={rdr_idx})"
+    )
+    assert rd_idx < ard_idx < rdr_idx, (
+        f"apply-review-dimensions (idx={ard_idx}) must be between "
+        f"review-design (idx={rd_idx}) and resolve-design-review (idx={rdr_idx})"
+    )
+    assert cet_idx < ard_idx, (
+        f"classify-experiment-type (idx={cet_idx}) must precede "
+        f"apply-review-dimensions (idx={ard_idx}) — classify emits experiment_type "
+        "which apply-review-dimensions consumes"
+    )
+
+
+def test_classify_experiment_type_pattern_examples_cover_all_types(
+    skills: dict[str, Any],
+) -> None:
+    """classify-experiment-type pattern_examples must cover all 5 experiment types."""
+    examples = skills["classify-experiment-type"].get("pattern_examples", [])
+    example_text = "\n".join(examples)
+    for et in sorted(VALID_EXPERIMENT_TYPES):
+        assert f"experiment_type = {et}" in example_text, (
+            f"Missing pattern_example for experiment_type={et}"
+        )
+
+
+def test_apply_review_dimensions_pattern_examples_minimum_count(
+    skills: dict[str, Any],
+) -> None:
+    """apply-review-dimensions must have >=3 pattern_examples covering normal,
+    edge case (no evaluation_dashboard), and silent-type short-circuit."""
+    examples = skills["apply-review-dimensions"].get("pattern_examples", [])
+    assert len(examples) >= 3, (
+        f"apply-review-dimensions has {len(examples)} pattern_examples, need >=3: "
+        "normal run, edge case (findings only), silent-type short-circuit"
+    )
 
 
 def test_review_design_has_scope_report_input(skills: dict[str, Any]) -> None:

@@ -1,9 +1,10 @@
 """Semantic validation rules enforcing phoropter step adjacency (dial→apply→synthesize).
 
-Naming constraint: phoropter-family steps must use the exact phase literals
-("dial", "apply", "synthesize") as their step keys.  The phase-order rule
-compares step_name directly against _PHOROPTER_PHASES, so a step keyed
-"vis-lens-dial" with phoropter_family set will always fail validation.
+Phase-order constraint: canonical phoropter phases ("dial", "apply", "synthesize")
+must appear in the declared order within each family.  Steps with phoropter_family
+set but a non-canonical step key (e.g., "select_review_dimensions") are transparent
+to phase ordering — they are allowed between canonical phases without advancing the
+phase counter.  Route-action steps are also transparent.
 """
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ def _check_phoropter_phase_order(ctx: ValidationContext) -> list[RuleFinding]:
         if family in errored_families:
             continue
         if step.action == "route":
+            continue
+        if step_name not in _PHOROPTER_PHASES:
             continue
 
         expected_phase = expected_next.get(family, "dial")

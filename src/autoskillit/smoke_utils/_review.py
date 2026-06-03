@@ -472,9 +472,7 @@ def aggregate_review_verdict(
 
     rt_cap = rt_max_severity.strip() if rt_max_severity.strip() else "critical"
     if not rt_max_severity.strip() and experiment_type.strip():
-        from autoskillit.recipe.experiment_type_registry import (  # noqa: PLC0415
-            get_experiment_type_by_name,
-        )
+        from autoskillit.recipe import get_experiment_type_by_name  # noqa: PLC0415
 
         spec = get_experiment_type_by_name(experiment_type.strip())
         if spec is not None:

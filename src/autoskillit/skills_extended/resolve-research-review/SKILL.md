@@ -336,20 +336,30 @@ When configured, enforce max 3 iteration retry loop before exiting non-zero.
 
 ### Step 6: Resolve Addressed Review Threads
 
-For each `thread_id` in `addressed_thread_ids`:
+Batch all thread resolutions into a single GraphQL request using aliased mutations.
+This reduces N requests (5 pts each = 5N pts) to 1 request (5 pts total).
+If `addressed_thread_ids` has more than 50 threads, chunk into batches of 50.
 
 ```bash
-gh api graphql \
-  -f query='mutation($threadId:ID!){resolveReviewThread(input:{threadId:$threadId}){thread{isResolved}}}' \
-  -f threadId="$thread_id"
+# Build aliased mutation query for all addressed threads
+MUTATION_QUERY="mutation {"
+for i in $(seq 0 $((${#ADDRESSED_THREAD_IDS[@]} - 1))); do
+    tid="${ADDRESSED_THREAD_IDS[$i]}"
+    MUTATION_QUERY="${MUTATION_QUERY} resolve${i}: resolveReviewThread(input: {threadId: \"${tid}\"}) { thread { isResolved } }"
+done
+MUTATION_QUERY="${MUTATION_QUERY} }"
+
+gh api graphql -f query="${MUTATION_QUERY}"
 ```
 
-- Success (`isResolved: true`): increment `resolved_count`
-- Failure: log warning `"Warning: could not resolve thread {thread_id}: {error}"`,
-  continue. Do not modify exit code.
+Parse the response: for each `resolve${i}` alias key, check `thread.isResolved`.
+- **Success** (`isResolved: true`): increment `resolved_count`.
+- **Failure** (non-zero exit code, parse error, or `isResolved: false` for any alias): log a warning
+  `"Warning: could not resolve thread ${tid}: {error}"`. Continue to the next thread.
+  Do not modify exit code.
 
-Track `resolved_count` and `resolve_failed_count`. Thread resolution failure must never
-cause exit non-zero.
+Track `resolved_count` and `resolve_failed_count`. This step is best-effort — failure
+to resolve any thread never affects the exit code.
 
 ### Step 6.5: Post Inline Replies
 
@@ -370,6 +380,7 @@ API endpoint:
 ```bash
 gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
   --method POST --field body="..."
+sleep 1  # Rate-limit discipline: 1s between mutating calls
 ```
 
 Track `reply_posted_count` and `reply_failed_count`. Best-effort — failure to post

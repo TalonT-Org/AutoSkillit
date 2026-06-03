@@ -217,7 +217,11 @@ Save findings to `{{AUTOSKILLIT_TEMP}}/audit-claims/findings_{pr_number}.json`. 
 
 1. Collect all Phase 2 subagent JSON responses
 2. Deduplicate by `(file, line)` pairs — keep highest severity for each pair
-3. Bucket by actionability:
+3. Partition by postability: validate each finding's `line` against the PR diff hunks.
+   Findings whose line number falls outside a diff hunk are `UNPOSTABLE_FINDINGS` —
+   they cannot be posted as inline comments via the batch Reviews API.
+   Findings with valid diff-hunk lines are `FILTERED_FINDINGS`.
+4. Bucket `FILTERED_FINDINGS` by actionability:
    - `actionable_findings` — requires_decision=false AND severity in ("critical", "warning")
    - `decision_findings` — requires_decision=true (any severity)
    - `info_findings` — severity == "info" AND requires_decision=false
@@ -278,6 +282,15 @@ Event mapping:
 - `needs_human` → `COMMENT`
 - `changes_requested` → `REQUEST_CHANGES`
 
+If the batch POST returns HTTP 200, treat the review as successfully posted regardless
+of response body content. Do NOT inspect the response body for a `comments` array —
+GitHub's review API does not echo back the submitted comments, so any length check
+would always read 0 and falsely trigger Tier 1 fallback.
+
+If the batch POST returns HTTP 422 and the error message mentions "review" or "author",
+the PR is self-authored. Retry the same request with event `COMMENT` instead of
+`REQUEST_CHANGES` or `APPROVE`.
+
 **Fallback Tier 1 — Individual Comments (if batch POST fails):**
 
 Track success and failure counts across all individual post attempts:
@@ -296,6 +309,7 @@ if gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
   --field commit_id="$COMMIT_ID" \
   --field body="[{finding.severity}] {finding.dimension}: {finding.message}"; then
   tier1_success=$((tier1_success + 1))
+  sleep 1  # Rate-limit discipline: 1s between mutating calls
 else
   # On HTTP 422 (invalid line number), retry as file-level comment
   if gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
@@ -326,6 +340,32 @@ Before posting, state:
 ```bash
 gh pr review {pr_number} --comment --body "{summary_markdown}"
 ```
+
+**File-Level Comments for Critical Unpostable Findings:**
+
+After the batch review POST succeeds (or after Tier 1 individual posting completes),
+post file-level comments for each **critical-severity** finding in `UNPOSTABLE_FINDINGS`.
+These use the individual comments endpoint with `subject_type: "file"` — this parameter
+is NOT valid on the batch Reviews API `comments[]` array.
+
+```bash
+COMMIT_ID=$(gh pr view {pr_number} --json headRefOid -q .headRefOid)
+
+# For each CRITICAL finding in UNPOSTABLE_FINDINGS:
+gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments \
+  --method POST \
+  --field path="{finding.file}" \
+  --field subject_type="file" \
+  --field commit_id="$COMMIT_ID" \
+  --field body="[{finding.severity}] {finding.dimension} (L{finding.line} — outside diff hunk): {finding.message}"
+sleep 1  # Rate-limit discipline: 1s between mutating calls
+```
+
+Only critical-severity findings are posted as file-level comments to control API call volume.
+Warning and info unpostable findings appear in the Step 7 review body only.
+
+If a file-level POST fails, log the failure and continue — file-level comments are
+best-effort supplementary visibility. Do not fall through to Tier 1/Tier 2 for these.
 
 ### Step 6.5: Post-Completion Confirmation
 

@@ -151,6 +151,7 @@
     },
     "silent_type_gate": {
       "action": "route",
+      "phoropter_family": "review-design",
       "on_result": [
         {
           "when": "${{ context.is_silent_type }} == true",

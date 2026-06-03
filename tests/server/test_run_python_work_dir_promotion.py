@@ -78,35 +78,44 @@ async def test_run_python_auto_promotes_work_dir_from_args(tool_ctx_kitchen_open
     assert expected.exists()
 
 
-# T2b: work_dir is removed from args after promotion (does not leak to callable)
+# T2b: work_dir is stripped by sentinel introspection for callables that don't accept it
 @pytest.mark.anyio
 async def test_run_python_strips_work_dir_from_args_after_promotion(
-    tool_ctx_kitchen_open, tmp_path, monkeypatch
+    tool_ctx_kitchen_open, tmp_path
 ):
-    captured_args: dict = {}
-
-    async def fake_import_and_call(dotted_path, args=None, timeout=30):
-        captured_args.update(args or {})
-        return {"success": True, "result": "ok"}
-
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._import_and_call",
-        fake_import_and_call,
-    )
     result_json = await run_python(
-        callable="some.module.func",
+        callable="tests.server._type_coercion_fixtures._typed_callable",
         args={
-            "output_dir": str(tmp_path / "output"),  # absolute — no relative-path conflict
+            "name": "test",
+            "count": "1",
             "work_dir": str(tmp_path),
         },
         work_dir="",
     )
     result = json.loads(result_json)
     assert result["success"] is True
-    assert "work_dir" not in captured_args, (
-        "work_dir must be removed from args after promotion to prevent leaking "
-        "to the callable via _import_and_call"
+    assert result["result"] == {"name": "test", "count": 1, "ratio": 1.0}
+
+
+# T2b2: work_dir is preserved for callables that accept it
+@pytest.mark.anyio
+async def test_run_python_preserves_work_dir_for_callable_that_accepts_it(
+    tool_ctx_kitchen_open, tmp_path
+):
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    result_json = await run_python(
+        callable="tests.server._type_coercion_fixtures._work_dir_param",
+        args={
+            "base_branch": "main",
+            "work_dir": str(work_dir),
+        },
+        work_dir="",
     )
+    result = json.loads(result_json)
+    assert result["success"] is True
+    assert result["result"]["work_dir"] == str(work_dir)
+    assert result["result"]["base_branch"] == "main"
 
 
 # T2c: run_python surfaces diagnostic when work_dir is misplaced AND path-like arg is relative

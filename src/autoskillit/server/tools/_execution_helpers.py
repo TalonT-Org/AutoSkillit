@@ -59,17 +59,6 @@ def maybe_promote_work_dir(args: dict[str, object] | None, work_dir: str) -> str
     return work_dir
 
 
-def strip_work_dir_from_args(args: dict[str, object] | None) -> dict[str, object] | None:
-    """Return a new args dict without the work_dir key, if present.
-
-    Returns the input unchanged when args is None. Preserves input args when
-    work_dir is not a key (no copy needed).
-    """
-    if args is None or "work_dir" not in args:
-        return args
-    return {k: v for k, v in args.items() if k != "work_dir"}
-
-
 def _coerce_scalar(val: object, annotation: object) -> object:
     """Coerce val to match the annotated type.
 

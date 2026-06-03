@@ -240,7 +240,7 @@ DATA_MANIFEST_SOURCE_TYPES: frozenset[str] = frozenset(
     }
 )
 
-RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout"})
+RUN_PYTHON_SENTINEL_KEYS: frozenset[str] = frozenset({"callable", "timeout", "work_dir"})
 
 SCOPE_DIRECTION_SOURCE_TYPES: frozenset[str] = frozenset(
     {

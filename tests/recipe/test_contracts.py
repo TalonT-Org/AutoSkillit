@@ -750,6 +750,8 @@ def test_write_behavior_defaults_to_none() -> None:
 ALWAYS_WRITE_SKILLS = {
     "audit-tests",
     "build-execution-map",
+    "classify-experiment-type",
+    "apply-review-dimensions",
     "compose-research-pr",
     "design-guards",
     "diagnose-ci",

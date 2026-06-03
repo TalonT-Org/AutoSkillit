@@ -14,6 +14,8 @@ _KNOWN_UNGAPPED_WRITE_ALWAYS = frozenset(
     {
         "audit-tests",
         "build-execution-map",
+        "classify-experiment-type",
+        "apply-review-dimensions",
         "compose-research-pr",
         "design-guards",
         "diagnose-ci",

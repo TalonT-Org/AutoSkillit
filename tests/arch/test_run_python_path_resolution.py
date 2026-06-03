@@ -42,6 +42,16 @@ _EXPLICITLY_EXCLUDED: dict[str, str] = {
         "patch_pr_token_summary receives log_dir as an absolute path from the "
         "caller context; never passed as a relative string to run_python steps"
     ),
+    "findings_manifest_path": (
+        "input file path produced by an upstream run_python callable; "
+        "always absolute (returned by select_review_dimensions or written by "
+        "apply-review-dimensions skill); never a relative path at the call site"
+    ),
+    "dimensions_manifest_path": (
+        "input file path produced by select_review_dimensions; "
+        "always absolute (dimensions_manifest_path return value); "
+        "never a relative path at the run_python call site"
+    ),
 }
 
 

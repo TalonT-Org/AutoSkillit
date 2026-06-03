@@ -18,7 +18,7 @@ import shlex
 _SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 
 _HEREDOC_BODY_RE = re.compile(
-    r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)\b",
+    r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
     re.DOTALL,
 )
 

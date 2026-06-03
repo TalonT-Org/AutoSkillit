@@ -13,6 +13,7 @@ from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, Severity, build_agent_
 from ._doctor_types import DoctorResult
 
 if TYPE_CHECKING:
+    from autoskillit.config._config_dataclasses import FleetConfig, RunSkillConfig
     from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
@@ -273,7 +274,12 @@ def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult
     )
 
 
-def _check_codex_mcp_timeouts(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
+def _check_codex_mcp_timeouts(
+    *,
+    backend: CodingAgentBackend | None = None,
+    run_skill: RunSkillConfig | None = None,
+    fleet: FleetConfig | None = None,
+) -> DoctorResult:
     """Check that deployed Codex config.toml has a correct tool_timeout_sec value."""
     if backend is None or not backend.capabilities.mcp_config_capable:
         return DoctorResult(
@@ -282,7 +288,7 @@ def _check_codex_mcp_timeouts(*, backend: CodingAgentBackend | None = None) -> D
             f"Skipped (backend={backend.name if backend else 'none'})",
         )
     from autoskillit.config import compute_codex_mcp_tool_timeout
-    from autoskillit.execution import CODEX_MCP_TOOL_TIMEOUT_FLOOR, _read_codex_config
+    from autoskillit.execution import _read_codex_config
 
     config_path = Path.home() / ".codex" / "config.toml"
     read_result = _read_codex_config(config_path)
@@ -306,21 +312,19 @@ def _check_codex_mcp_timeouts(*, backend: CodingAgentBackend | None = None) -> D
             "codex_mcp_timeouts",
             "tool_timeout_sec missing from codex config.toml. Run 'autoskillit init' to set it.",
         )
-    expected = compute_codex_mcp_tool_timeout()
-    minimum = CODEX_MCP_TOOL_TIMEOUT_FLOOR
-    if observed < minimum:
+    expected = compute_codex_mcp_tool_timeout(run_skill=run_skill, fleet=fleet)
+    if observed < expected:
         return DoctorResult(
             Severity.WARNING,
             "codex_mcp_timeouts",
             f"tool_timeout_sec={observed}s in codex config.toml is below "
-            f"the system minimum ({minimum}s). Long-running MCP tool calls "
-            f"will be killed by Codex. Run 'autoskillit init' to update. "
-            f"(expected >= {expected}s)",
+            f"the expected value ({expected}s). Long-running MCP tool calls "
+            f"will be killed by Codex. Run 'autoskillit init' to update.",
         )
     return DoctorResult(
         Severity.OK,
         "codex_mcp_timeouts",
-        f"tool_timeout_sec={observed}s is sufficient (minimum={minimum}s)",
+        f"tool_timeout_sec={observed}s is sufficient (expected={expected}s)",
     )
 
 

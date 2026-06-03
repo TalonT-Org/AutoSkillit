@@ -209,7 +209,9 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_script_binary())
 
     # Check 32: Codex MCP tool_timeout_sec coherence
-    results.append(_check_codex_mcp_timeouts(backend=_backend))
+    results.append(
+        _check_codex_mcp_timeouts(backend=_backend, run_skill=cfg.run_skill, fleet=cfg.fleet)
+    )
 
     # Output
     if output_json:

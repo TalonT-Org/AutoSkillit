@@ -22,6 +22,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     extract_redirect_targets,
     is_gh_command,
     resolve_write_target,
+    strip_heredoc_bodies,
     tokenize_command_segments,
 )
 
@@ -163,7 +164,7 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
             all_targets.extend(result)
 
     try:
-        flat_tokens = shlex.split(command)
+        flat_tokens = shlex.split(strip_heredoc_bodies(command))
     except (ValueError, TypeError, AttributeError):
         flat_tokens = []
     redirect_paths = extract_redirect_targets(flat_tokens, cwd)

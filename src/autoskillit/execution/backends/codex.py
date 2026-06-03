@@ -321,6 +321,9 @@ def _generate_agent_tomls(session_dir: Path) -> int:
             logger.warning("agent_toml_skip_no_frontmatter", path=str(md_path))
             continue
         meta = load_yaml(parts[1])
+        if not isinstance(meta, dict):
+            logger.warning("agent_toml_skip_invalid_frontmatter", path=str(md_path))
+            continue
         body = parts[2].strip()
         if not body:
             logger.warning("agent_toml_skip_empty_body", path=str(md_path))

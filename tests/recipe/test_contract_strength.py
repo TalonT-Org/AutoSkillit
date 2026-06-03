@@ -12,6 +12,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _KNOWN_UNGAPPED_WRITE_ALWAYS = frozenset(
     {
+        "apply-review-dimensions",
         "audit-tests",
         "build-execution-map",
         "classify-experiment-type",

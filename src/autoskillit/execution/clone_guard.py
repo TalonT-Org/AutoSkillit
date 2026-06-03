@@ -183,7 +183,6 @@ def _parse_worktree_branches(stdout: str) -> dict[str, str]:
         if line.startswith("worktree "):
             if first:
                 first = False
-                current_path = None
                 continue
             current_path = line.split(" ", 1)[1].strip()
         elif line.startswith("branch ") and current_path is not None:

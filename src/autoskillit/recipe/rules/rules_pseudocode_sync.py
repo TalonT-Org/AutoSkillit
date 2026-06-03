@@ -26,7 +26,6 @@ logger = get_logger(__name__)
 
 
 def _get_package_source_dir(callable_path: str) -> Path | None:
-    """Resolve the source directory for the callable's package."""
     parts = callable_path.split(".")
     for n in range(len(parts), 1, -1):
         pkg = ".".join(parts[:n])
@@ -44,7 +43,6 @@ def _get_package_source_dir(callable_path: str) -> Path | None:
 
 
 def _find_frozenset_constants(source_dir: Path) -> dict[str, frozenset[str | None]]:
-    """Find module-level frozenset constants in all Python source files under source_dir."""
     constants: dict[str, frozenset[str | None]] = {}
     for py_file in sorted(source_dir.rglob("*.py")):
         try:
@@ -88,7 +86,6 @@ def _find_frozenset_constants(source_dir: Path) -> dict[str, frozenset[str | Non
 
 
 def _member_inlined_in_block(member: str | None, block: str) -> bool:
-    """Return True if member appears as a literal in the block without being named by constant."""
     if member is None:
         return "None" in block
     return f'"{member}"' in block or f"'{member}'" in block
@@ -104,7 +101,6 @@ def _member_inlined_in_block(member: str | None, block: str) -> bool:
     severity=Severity.WARNING,
 )
 def _check_pseudocode_callable_divergence(ctx: ValidationContext) -> list[RuleFinding]:
-    """Fire WARNING when SKILL.md pseudocode inlines frozenset constant members by value."""
     findings: list[RuleFinding] = []
 
     for step_name, step in ctx.recipe.steps.items():
@@ -152,7 +148,7 @@ def _check_pseudocode_callable_divergence(ctx: ValidationContext) -> list[RuleFi
                 if const_name in all_blocks:
                     continue
                 # Check if ALL members are inlined as literals without the constant name
-                if all(_member_inlined_in_block(m, all_blocks) for m in members):
+                if members and all(_member_inlined_in_block(m, all_blocks) for m in members):
                     findings.append(
                         RuleFinding(
                             rule="pseudocode-callable-divergence",

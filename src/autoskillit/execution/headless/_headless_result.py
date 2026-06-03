@@ -34,8 +34,10 @@ from autoskillit.execution.headless._headless_evidence import (
     _stdout_mentions_write_tools,
 )
 from autoskillit.execution.headless._headless_path_tokens import (
+    _extract_branch_name,
     _extract_output_paths,
     _extract_worktree_path,
+    _normalize_messages,
     _validate_output_paths,
 )
 from autoskillit.execution.headless._headless_recovery import (
@@ -660,7 +662,8 @@ def _build_skill_result(
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
-    extracted_worktree_path = _extract_worktree_path(session.assistant_messages)
+    normalized_msgs = _normalize_messages(session.assistant_messages)
+    extracted_worktree_path = _extract_worktree_path(normalized_msgs)
     validated_wt = (
         validate_worktree_path(extracted_worktree_path) if extracted_worktree_path else None
     )
@@ -671,13 +674,14 @@ def _build_skill_result(
             reason="path does not exist on disk",
         )
     effective_worktree_path = validated_wt.path if validated_wt else None
+    extracted_branch_name = _extract_branch_name(normalized_msgs)
 
     # Path contamination detection
     path_contamination: str | None = None
     if not cwd:
         logger.debug("path_contamination_check_skipped", reason="cwd not provided")
     else:
-        extracted_paths = _extract_output_paths(session.assistant_messages)
+        extracted_paths = _extract_output_paths(normalized_msgs)
         path_contamination = _validate_output_paths(extracted_paths, cwd)
         if path_contamination:
             logger.warning("path_contamination_detected", detail=path_contamination, cwd=cwd)
@@ -705,6 +709,7 @@ def _build_skill_result(
         stderr=_truncate(result.stderr),
         token_usage=session.token_usage,
         worktree_path=effective_worktree_path,
+        branch_name=extracted_branch_name,
         cli_subtype=session.subtype,
         write_path_warnings=write_path_warnings,
         evidence=evidence,

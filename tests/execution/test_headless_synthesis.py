@@ -11,7 +11,11 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.headless import _build_skill_result, _scan_jsonl_write_paths
+from autoskillit.execution.headless import (
+    NormalizedMessages,
+    _build_skill_result,
+    _scan_jsonl_write_paths,
+)
 from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -21,7 +25,7 @@ class TestExtractOutputPaths:
     def test_extracts_single_path(self):
         from autoskillit.execution.headless import _extract_output_paths
 
-        msgs = ["plan_path = /correct/path/.autoskillit/temp/make-plan/foo.md"]
+        msgs = NormalizedMessages(["plan_path = /correct/path/.autoskillit/temp/make-plan/foo.md"])
         result = _extract_output_paths(msgs)
         assert result == {"plan_path": "/correct/path/.autoskillit/temp/make-plan/foo.md"}
 
@@ -33,7 +37,7 @@ class TestExtractOutputPaths:
             "summary_path = /clone/.autoskillit/temp/report/summary.md\n"
             "investigation_path = /clone/.autoskillit/temp/investigate/inv.md"
         )
-        result = _extract_output_paths([msg])
+        result = _extract_output_paths(NormalizedMessages([msg]))
         assert result == {
             "plan_path": "/clone/.autoskillit/temp/make-plan/plan.md",
             "summary_path": "/clone/.autoskillit/temp/report/summary.md",
@@ -43,22 +47,26 @@ class TestExtractOutputPaths:
     def test_returns_empty_when_no_tokens(self):
         from autoskillit.execution.headless import _extract_output_paths
 
-        result = _extract_output_paths(["no tokens here", "just regular text"])
+        result = _extract_output_paths(NormalizedMessages(["no tokens here", "just regular text"]))
         assert result == {}
 
     def test_ignores_non_absolute_paths(self):
         from autoskillit.execution.headless import _extract_output_paths
 
-        result = _extract_output_paths(["plan_path = .autoskillit/temp/make-plan/foo.md"])
+        result = _extract_output_paths(
+            NormalizedMessages(["plan_path = .autoskillit/temp/make-plan/foo.md"])
+        )
         assert result == {}
 
     def test_extracts_from_multiple_messages(self):
         from autoskillit.execution.headless import _extract_output_paths
 
-        msgs = [
-            "plan_path = /first/path",
-            "investigation_path = /second/path",
-        ]
+        msgs = NormalizedMessages(
+            [
+                "plan_path = /first/path",
+                "investigation_path = /second/path",
+            ]
+        )
         result = _extract_output_paths(msgs)
         assert result == {
             "plan_path": "/first/path",
@@ -68,10 +76,12 @@ class TestExtractOutputPaths:
     def test_last_occurrence_wins(self):
         from autoskillit.execution.headless import _extract_output_paths
 
-        msgs = [
-            "plan_path = /first/path",
-            "plan_path = /second/path",
-        ]
+        msgs = NormalizedMessages(
+            [
+                "plan_path = /first/path",
+                "plan_path = /second/path",
+            ]
+        )
         result = _extract_output_paths(msgs)
         assert result == {"plan_path": "/second/path"}
 

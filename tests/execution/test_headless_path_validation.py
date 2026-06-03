@@ -17,8 +17,10 @@ from autoskillit.execution.headless import (
     _extract_missing_token_hints,
 )
 from autoskillit.execution.headless._headless_path_tokens import (
+    NormalizedMessages,
     _extract_output_paths,
     _extract_worktree_path,
+    _normalize_messages,
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
@@ -2097,22 +2099,24 @@ class TestWorktreePathPropagationWithEmptyMessages:
         Directory existence validation is handled by validate_worktree_path in
         _build_skill_result, not by _extract_worktree_path.
         """
-        result = _extract_worktree_path(["worktree_path = /nonexistent/path/xyz"])
+        result = _extract_worktree_path(
+            NormalizedMessages(["worktree_path = /nonexistent/path/xyz"])
+        )
         assert result == "/nonexistent/path/xyz"
 
     def test_extract_output_paths_with_empty_messages_returns_empty(self):
         """_extract_output_paths([]) returns {} (documents the contract)."""
-        assert _extract_output_paths([]) == {}
+        assert _extract_output_paths(NormalizedMessages([])) == {}
 
 
 class TestExtractPathTokensWithMarkdownDecorators:
     def test_extract_worktree_path_with_markdown_bold(self):
         msgs = ["**worktree_path** = /tmp/wt-abc"]
-        assert _extract_worktree_path(msgs) == "/tmp/wt-abc"
+        assert _extract_worktree_path(_normalize_messages(msgs)) == "/tmp/wt-abc"
 
     def test_extract_worktree_path_with_backticks(self):
         msgs = ["`worktree_path` = /tmp/wt-abc"]
-        assert _extract_worktree_path(msgs) == "/tmp/wt-abc"
+        assert _extract_worktree_path(_normalize_messages(msgs)) == "/tmp/wt-abc"
 
     def test_extract_output_paths_with_markdown_decorators(self):
         from autoskillit.execution.headless._headless_path_tokens import _OUTPUT_PATH_TOKENS
@@ -2121,5 +2125,85 @@ class TestExtractPathTokensWithMarkdownDecorators:
             pytest.skip("_OUTPUT_PATH_TOKENS is empty (contracts YAML not available)")
         token = next(iter(sorted(_OUTPUT_PATH_TOKENS)))
         msgs = [f"**{token}** = /tmp/plan.md"]
-        paths = _extract_output_paths(msgs)
+        paths = _extract_output_paths(_normalize_messages(msgs))
         assert paths.get(token) == "/tmp/plan.md"
+
+
+class TestNormalizeMessagesIntegration:
+    """Integration tests: _normalize_messages gateway + extraction for variants not in
+    TestExtractPathTokensWithMarkdownDecorators (italic, code-fence, backtick-value)."""
+
+    def test_worktree_path_italic_equals(self):
+        msgs = ["*worktree_path* = /tmp/wt-italic"]
+        assert _extract_worktree_path(_normalize_messages(msgs)) == "/tmp/wt-italic"
+
+    def test_worktree_path_code_fenced(self):
+        msgs = ["```\nworktree_path = /tmp/wt-fenced\n```"]
+        assert _extract_worktree_path(_normalize_messages(msgs)) == "/tmp/wt-fenced"
+
+    def test_worktree_path_backtick_value(self):
+        msgs = ["worktree_path = `/tmp/wt-btval`"]
+        assert _extract_worktree_path(_normalize_messages(msgs)) == "/tmp/wt-btval"
+
+    def test_output_path_italic_equals(self):
+        from autoskillit.execution.headless._headless_path_tokens import _OUTPUT_PATH_TOKENS
+
+        if not _OUTPUT_PATH_TOKENS:
+            pytest.skip("_OUTPUT_PATH_TOKENS is empty (contracts YAML not available)")
+        token = next(iter(sorted(_OUTPUT_PATH_TOKENS)))
+        msgs = [f"*{token}* = /tmp/plan.md"]
+        paths = _extract_output_paths(_normalize_messages(msgs))
+        assert paths.get(token) == "/tmp/plan.md"
+
+    def test_output_path_code_fenced(self):
+        from autoskillit.execution.headless._headless_path_tokens import _OUTPUT_PATH_TOKENS
+
+        if not _OUTPUT_PATH_TOKENS:
+            pytest.skip("_OUTPUT_PATH_TOKENS is empty (contracts YAML not available)")
+        token = next(iter(sorted(_OUTPUT_PATH_TOKENS)))
+        msgs = [f"```\n{token} = /tmp/plan-fenced.md\n```"]
+        paths = _extract_output_paths(_normalize_messages(msgs))
+        assert paths.get(token) == "/tmp/plan-fenced.md"
+
+
+class TestExtractBranchName:
+    """Tests for _extract_branch_name and SkillResult.branch_name integration."""
+
+    def test_extracts_plain_branch_name(self):
+        from autoskillit.execution.headless._headless_path_tokens import _extract_branch_name
+
+        msgs = NormalizedMessages(["branch_name = feature/my-branch"])
+        assert _extract_branch_name(msgs) == "feature/my-branch"
+
+    def test_last_emission_wins(self):
+        from autoskillit.execution.headless._headless_path_tokens import _extract_branch_name
+
+        msgs = NormalizedMessages(
+            [
+                "branch_name = first-branch",
+                "branch_name = second-branch",
+            ]
+        )
+        assert _extract_branch_name(msgs) == "second-branch"
+
+    def test_returns_none_when_absent(self):
+        from autoskillit.execution.headless._headless_path_tokens import _extract_branch_name
+
+        assert _extract_branch_name(NormalizedMessages(["no token here"])) is None
+
+    def test_decorated_variants_extract_after_normalization(self):
+        from autoskillit.execution.headless._headless_path_tokens import _extract_branch_name
+
+        for raw in [
+            "**branch_name** = bold-branch",
+            "`branch_name` = backtick-branch",
+            "*branch_name* = italic-branch",
+        ]:
+            result = _extract_branch_name(_normalize_messages([raw]))
+            assert result is not None, f"Expected extraction from: {raw!r}"
+
+    def test_code_fenced_branch_name_extracts(self):
+        from autoskillit.execution.headless._headless_path_tokens import _extract_branch_name
+
+        msgs = ["```\nbranch_name = fenced-branch\n```"]
+        assert _extract_branch_name(_normalize_messages(msgs)) == "fenced-branch"

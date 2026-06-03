@@ -16,6 +16,8 @@ from autoskillit.core.types import (
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.clone_guard import (
     CloneSnapshot,
+    _parse_worktree_branches,
+    _recover_branch_name,
     build_clone_guard_policy,
     check_and_revert_clone_contamination,
     derive_exclude_prefix,
@@ -1140,3 +1142,108 @@ def test_validate_worktree_path_verify_git_rejects_non_worktree_dir(tmp_path):
 
     assert validate_worktree_path(regular_dir) is not None
     assert validate_worktree_path(regular_dir, verify_git=True) is None
+
+
+# ---------------------------------------------------------------------------
+# Branch name recovery from git worktree list --porcelain
+# ---------------------------------------------------------------------------
+
+
+def test_parse_worktree_branches_extracts_short_name(tmp_path):
+    """_parse_worktree_branches strips refs/heads/ and maps path → branch name."""
+    wt_dir = tmp_path / "worktrees" / "impl-feature"
+    porcelain = (
+        f"worktree {tmp_path}\n"
+        "HEAD abc123\n"
+        "branch refs/heads/main\n"
+        "\n"
+        f"worktree {wt_dir}\n"
+        "HEAD def456\n"
+        "branch refs/heads/impl-feature\n"
+    )
+    branches = _parse_worktree_branches(porcelain)
+    assert branches == {str(wt_dir): "impl-feature"}
+
+
+def test_parse_worktree_branches_skips_main_worktree(tmp_path):
+    """The first (main) worktree entry is not included in the result."""
+    porcelain = f"worktree {tmp_path}\nHEAD abc123\nbranch refs/heads/main\n"
+    branches = _parse_worktree_branches(porcelain)
+    assert branches == {}
+
+
+def test_parse_worktree_branches_omits_detached_head(tmp_path):
+    """Detached HEAD worktrees have no branch line and are absent from result."""
+    wt_dir = tmp_path / "worktrees" / "impl-detached"
+    porcelain = (
+        f"worktree {tmp_path}\n"
+        "HEAD abc123\n"
+        "branch refs/heads/main\n"
+        "\n"
+        f"worktree {wt_dir}\n"
+        "HEAD def456\n"
+        "detached\n"
+    )
+    branches = _parse_worktree_branches(porcelain)
+    assert str(wt_dir) not in branches
+
+
+def test_recover_branch_name_returns_branch_for_valid_worktree(tmp_path):
+    """_recover_branch_name returns the branch for the first valid new worktree."""
+    wt_dir = tmp_path / "worktrees" / "impl-feature"
+    wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-feature\n")
+
+    branch_map = {str(wt_dir): "impl-feature"}
+    result = _recover_branch_name([str(wt_dir)], branch_map)
+    assert result == "impl-feature"
+
+
+def test_recover_branch_name_returns_none_when_no_branch_in_map(tmp_path):
+    """_recover_branch_name returns None when the worktree path is not in branch_map."""
+    wt_dir = tmp_path / "worktrees" / "impl-no-branch"
+    wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-no-branch\n")
+
+    result = _recover_branch_name([str(wt_dir)], {})
+    assert result is None
+
+
+@pytest.mark.anyio
+async def test_guard_recovers_branch_name_alongside_worktree_path(tmp_path):
+    """When worktree_path is None and a new worktree is detected, branch_name is also recovered."""
+    runner = MockSubprocessRunner()
+    wt_dir = tmp_path / "worktrees" / "impl-feature"
+    wt_dir.mkdir(parents=True)
+    (wt_dir / ".git").write_text("gitdir: /tmp/fake/.git/worktrees/impl-feature\n")
+
+    porcelain_post = (
+        f"worktree {tmp_path}\n"
+        "HEAD abc123\n"
+        "branch refs/heads/main\n"
+        "\n"
+        f"worktree {wt_dir}\n"
+        "HEAD def456\n"
+        "branch refs/heads/impl-feature\n"
+    )
+    snapshot = CloneSnapshot(head_sha="abc123", worktree_set=frozenset())
+    skill_result = _make_skill_result(success=False, worktree_path=None)
+    runner.push(_git_result(stdout=porcelain_post))
+
+    result, reverted = await check_and_revert_clone_contamination(
+        snapshot,
+        skill_result,
+        str(tmp_path),
+        runner,
+        None,
+        skill_command="/autoskillit:implement-worktree-no-merge plan.md",
+        policy=build_clone_guard_policy(
+            readonly_skill=False,
+            has_write_scope=False,
+            is_clone_commit=False,
+            is_worktree=True,
+        ),
+    )
+    assert not reverted
+    assert result.worktree_path == str(wt_dir)
+    assert result.branch_name == "impl-feature"

@@ -57,14 +57,18 @@ from autoskillit.execution.headless._headless_helpers import (
     resolve_model_identity,
 )
 from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
+    _BRANCH_NAME_PATTERN,
     _INTENTIONALLY_EXCLUDED_PATH_TOKENS,
     _OUTPUT_PATH_PATTERN,
     _OUTPUT_PATH_TOKENS,
     _RECOVERABLE_PATH_TOKENS,
     _WORKTREE_PATH_PATTERN,
+    NormalizedMessages,
     _build_path_token_set,
+    _extract_branch_name,
     _extract_output_paths,
     _extract_worktree_path,
+    _normalize_messages,
     _validate_output_paths,
 )
 from autoskillit.execution.headless._headless_recovery import (

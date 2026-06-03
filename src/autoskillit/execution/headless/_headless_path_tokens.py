@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import NewType
 
 import regex as re
 
@@ -11,18 +12,37 @@ from autoskillit.execution.session._session_content import _normalize_model_outp
 
 logger = get_logger(__name__)
 
+NormalizedMessages = NewType("NormalizedMessages", list[str])
+
+
+def _normalize_messages(assistant_messages: list[str]) -> NormalizedMessages:
+    return NormalizedMessages([_normalize_model_output(msg) for msg in assistant_messages])
+
+
 _WORKTREE_PATH_PATTERN: re.Pattern[str] = re.compile(r"^worktree_path\s*=\s*(.+)$", re.MULTILINE)
+_BRANCH_NAME_PATTERN: re.Pattern[str] = re.compile(r"^branch_name\s*=\s*(.+)$", re.MULTILINE)
 
 
-def _extract_worktree_path(assistant_messages: list[str]) -> str | None:
+def _extract_worktree_path(assistant_messages: NormalizedMessages) -> str | None:
     """Return the last absolute path emitted as worktree_path=<value>."""
     last: str | None = None
     for msg in assistant_messages:
-        normalized = _normalize_model_output(msg)
-        m = _WORKTREE_PATH_PATTERN.search(normalized)
+        m = _WORKTREE_PATH_PATTERN.search(msg)
         if m:
             candidate = m.group(1).strip()
             if os.path.isabs(candidate):
+                last = candidate
+    return last
+
+
+def _extract_branch_name(assistant_messages: NormalizedMessages) -> str | None:
+    """Return the last branch_name token value emitted."""
+    last: str | None = None
+    for msg in assistant_messages:
+        m = _BRANCH_NAME_PATTERN.search(msg)
+        if m:
+            candidate = m.group(1).strip()
+            if candidate:
                 last = candidate
     return last
 
@@ -136,14 +156,13 @@ _OUTPUT_PATH_PATTERN: re.Pattern[str] = (
 )
 
 
-def _extract_output_paths(assistant_messages: list[str]) -> dict[str, str]:
+def _extract_output_paths(assistant_messages: NormalizedMessages) -> dict[str, str]:
     """Extract structured output path tokens from session output."""
     if not assistant_messages:
         logger.debug("_extract_output_paths called with empty assistant_messages")
     paths: dict[str, str] = {}
     for msg in assistant_messages:
-        normalized = _normalize_model_output(msg)
-        for m in _OUTPUT_PATH_PATTERN.finditer(normalized):
+        for m in _OUTPUT_PATH_PATTERN.finditer(msg):
             token, value = m.group(1), m.group(2).strip()
             if os.path.isabs(value):
                 paths[token] = value

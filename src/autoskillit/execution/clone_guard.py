@@ -169,20 +169,46 @@ def _parse_worktree_list(stdout: str) -> list[str]:
     return paths
 
 
+def _parse_worktree_branches(stdout: str) -> dict[str, str]:
+    """Parse ``git worktree list --porcelain`` output into a path→branch-name mapping.
+
+    Strips the ``refs/heads/`` prefix so callers receive the short branch name.
+    Skips the first entry (main worktree). Entries with detached HEAD have no branch
+    line and are omitted from the result.
+    """
+    branches: dict[str, str] = {}
+    current_path: str | None = None
+    first = True
+    for line in stdout.splitlines():
+        if line.startswith("worktree "):
+            if first:
+                first = False
+                current_path = None
+                continue
+            current_path = line.split(" ", 1)[1].strip()
+        elif line.startswith("branch ") and current_path is not None:
+            ref = line.split(" ", 1)[1].strip()
+            name = ref.removeprefix("refs/heads/")
+            branches[current_path] = name
+    return branches
+
+
 async def _detect_new_worktrees(
     pre_worktree_set: frozenset[str],
     cwd: str,
     runner: SubprocessRunner,
-) -> list[str]:
+) -> tuple[list[str], dict[str, str]]:
     result = await runner(
         ["git", "worktree", "list", "--porcelain"],
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
     if result.returncode != 0:
-        return []
+        return [], {}
     current = _parse_worktree_list(result.stdout)
-    return [p for p in current if p not in pre_worktree_set]
+    branches = _parse_worktree_branches(result.stdout)
+    new_paths = [p for p in current if p not in pre_worktree_set]
+    return new_paths, {p: branches[p] for p in new_paths if p in branches}
 
 
 def _recover_worktree_path(new_worktrees: list[str]) -> str | None:
@@ -190,6 +216,15 @@ def _recover_worktree_path(new_worktrees: list[str]) -> str | None:
         validated = validate_worktree_path(path, verify_git=True)
         if validated is not None:
             return validated.path
+    return None
+
+
+def _recover_branch_name(new_worktrees: list[str], branch_map: dict[str, str]) -> str | None:
+    """Return the branch name for the first valid new worktree path."""
+    for path in new_worktrees:
+        validated = validate_worktree_path(path, verify_git=True)
+        if validated is not None and validated.path in branch_map:
+            return branch_map[validated.path]
     return None
 
 
@@ -639,7 +674,9 @@ async def check_and_revert_clone_contamination(
         and is_worktree_skill(skill_command)
         and snapshot.worktree_set is not None
     ):
-        new_worktrees = await _detect_new_worktrees(snapshot.worktree_set, cwd, runner)
+        new_worktrees, wt_branch_map = await _detect_new_worktrees(
+            snapshot.worktree_set, cwd, runner
+        )
         if new_worktrees:
             recovered = _recover_worktree_path(new_worktrees)
             if recovered:
@@ -648,7 +685,12 @@ async def check_and_revert_clone_contamination(
                     recovered_path=recovered,
                     extraction_status="failed",
                 )
-                skill_result = dataclasses.replace(skill_result, worktree_path=recovered)
+                recovered_branch = _recover_branch_name(new_worktrees, wt_branch_map)
+                skill_result = dataclasses.replace(
+                    skill_result,
+                    worktree_path=recovered,
+                    branch_name=recovered_branch or skill_result.branch_name,
+                )
 
     if not policy.should_fire(skill_result.success):
         return skill_result, False

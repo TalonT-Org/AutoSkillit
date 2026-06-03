@@ -18,6 +18,10 @@ from autoskillit.execution.session._session_model import (
 
 logger = get_logger(__name__)
 
+# Code-fence opener: ```[optional-lang]\n → strip (Stage 0)
+_CODE_FENCE_OPEN_RE: re.Pattern[str] = re.compile(r"^```[a-zA-Z]*\n", re.MULTILINE)
+# Code-fence closer: standalone ``` line → strip (Stage 0)
+_CODE_FENCE_CLOSE_RE: re.Pattern[str] = re.compile(r"^```\s*$", re.MULTILINE)
 # Bold + equals: **key** = value → key = value
 _MARKDOWN_BOLD_EQUALS_RE: re.Pattern[str] = re.compile(
     r"\*\*{1,2}(\w[\w_-]*)\*{1,2}(\s*=)", re.MULTILINE
@@ -37,6 +41,8 @@ _MARKDOWN_ITALIC_COLON_RE: re.Pattern[str] = re.compile(
 )
 # Backtick: `key` = value → key = value
 _MARKDOWN_BACKTICK_RE: re.Pattern[str] = re.compile(r"`(\w[\w_-]*)`(\s*=)", re.MULTILINE)
+# Backtick-wrapped value: key = `value` → key = value (Stage 2.5)
+_BACKTICK_VALUE_RE: re.Pattern[str] = re.compile(r"^(\w[\w_-]*\s*=\s*)`([^`]+)`", re.MULTILINE)
 # HR-split delimiter: ---\n[/]name--- → ---[/]name--- (open and close delimiter variants)
 _HR_SPLIT_DELIMITER_RE: re.Pattern[str] = re.compile(r"---\n+(/?\w[\w:.-]*---)")
 # Bold-wrapped delimiter: **---[/]name---** or *---[/]name---* → ---[/]name---
@@ -59,7 +65,8 @@ def _collapse_hr_split_delimiters(text: str) -> str:
 def _normalize_model_output(text: str) -> str:
     """Normalize model output formatting variations that interfere with pattern matching.
 
-    Applies three sequential normalization stages:
+    Stage 0 — Code-fence strip: removes triple-backtick fences (with optional language
+    tag) so token lines inside fenced blocks are visible to downstream regex searches.
 
     Stage 1 — HR-split collapse: rejoins ``---\\n[/]name---`` into ``---[/]name---``
     when the model emits a markdown horizontal rule immediately before a delimiter
@@ -69,16 +76,23 @@ def _normalize_model_output(text: str) -> str:
     from ``key = value`` structured output token names so ``**plan_path** = /path``
     is treated identically to ``plan_path = /path``.
 
+    Stage 2.5 — Backtick-wrapped value strip: removes backtick wrapping from token
+    values so ``worktree_path = `/tmp/wt``` is treated identically to
+    ``worktree_path = /tmp/wt``.
+
     Stage 3 — Delimiter decorator strip: removes bold and backtick wrapping from
     ``---X---`` delimiter tokens so ``**---pipeline-health-result---**`` is treated
     identically to ``---pipeline-health-result---``.
     """
+    text = _CODE_FENCE_OPEN_RE.sub("", text)
+    text = _CODE_FENCE_CLOSE_RE.sub("", text)
     text = _collapse_hr_split_delimiters(text)
     text = _MARKDOWN_BOLD_EQUALS_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
     text = _MARKDOWN_BOLD_COLON_RE.sub(lambda m: m.group(1).lower() + " = ", text)
     text = _MARKDOWN_ITALIC_EQUALS_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
     text = _MARKDOWN_ITALIC_COLON_RE.sub(lambda m: m.group(1).lower() + " = ", text)
     text = _MARKDOWN_BACKTICK_RE.sub(lambda m: m.group(1).lower() + m.group(2), text)
+    text = _BACKTICK_VALUE_RE.sub(lambda m: m.group(1) + m.group(2), text)
     text = _DELIMITER_BOLD_RE.sub(r"\1", text)
     text = _DELIMITER_BACKTICK_RE.sub(r"\1", text)
     return text

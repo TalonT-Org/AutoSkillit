@@ -1141,14 +1141,21 @@ def git_changed_files_local(
         if line.strip():
             files.add(line.strip())
 
-    untracked = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
+    try:
+        untracked = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        warnings.warn("git ls-files timed out after 10s", stacklevel=2)
+        return files
+    except FileNotFoundError:
+        warnings.warn("git binary not found on PATH", stacklevel=2)
+        return files
     if untracked.returncode == 0:
         for line in untracked.stdout.strip().splitlines():
             if line.strip():

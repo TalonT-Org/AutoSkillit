@@ -2780,6 +2780,7 @@ def test_aggregate_review_verdict_missing_file_returns_error(tmp_path: Path) -> 
 
     result = aggregate_review_verdict(
         findings_manifest_path=str(tmp_path / "nonexistent.json"),
+        output_dir=str(tmp_path / "out"),
     )
     assert "error" in result
 

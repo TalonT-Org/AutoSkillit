@@ -406,3 +406,42 @@ class TestExtractRedirectTargetsCwd:
         from autoskillit.hooks._command_classification import extract_redirect_targets
 
         assert extract_redirect_targets(tokens, cwd) == expected
+
+
+@pytest.mark.parametrize(
+    "command,expected_stripped",
+    [
+        (
+            "python3 - <<'EOF'\nif x > 3:\n    pass\nEOF",
+            "python3 - <<'EOF'\nEOF",
+        ),
+        (
+            "cat <<EOF\nbody > content\nEOF",
+            "cat <<EOF\nEOF",
+        ),
+        (
+            "cat <<-DELIM\n\tbody\nDELIM",
+            "cat <<-DELIM\nDELIM",
+        ),
+        (
+            "cat <<-DELIM\n\tbody\n\tDELIM",
+            "cat <<-DELIM\nDELIM",
+        ),
+        (
+            "cat <<'EOF' > /real/file.txt\nbody content\nEOF",
+            "cat <<'EOF' > /real/file.txt\nEOF",
+        ),
+        (
+            "echo hello > /dev/null",
+            "echo hello > /dev/null",
+        ),
+        (
+            "cat <<'A'\nbody1\nA\ncat <<'B'\nbody2\nB",
+            "cat <<'A'\nA\ncat <<'B'\nB",
+        ),
+    ],
+)
+def test_strip_heredoc_bodies(command: str, expected_stripped: str) -> None:
+    from autoskillit.hooks._command_classification import strip_heredoc_bodies
+
+    assert strip_heredoc_bodies(command) == expected_stripped

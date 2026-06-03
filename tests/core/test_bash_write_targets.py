@@ -110,6 +110,10 @@ _PARITY_CORPUS: list[tuple[str, str]] = [
     ("echo x > $MY_OUTPUT_DIR/out.txt", "/workspace"),
     ("tee $MY_OUTPUT_DIR/out.txt", "/workspace"),
     ("REVIEW_OUTPUT_DIR='.autoskillit/temp' && echo x > $REVIEW_OUTPUT_DIR/out.txt", "/workspace"),
+    # Heredoc with > comparison in body — must NOT produce false write targets
+    ("python3 - <<'EOF'\nif x > 3:\n    pass\nEOF", "/workspace"),
+    # Heredoc with real redirect on opening line — must produce write target
+    ("cat <<'EOF' > /workspace/out.txt\nbody content\nEOF", "/workspace"),
 ]
 
 
@@ -130,6 +134,9 @@ def test_parity_with_command_classification(
         extract_redirect_targets as hooks_extract_redirect_targets,
     )
     from _command_classification import (
+        strip_heredoc_bodies as hooks_strip_heredoc_bodies,
+    )
+    from _command_classification import (
         tokenize_command_segments as hooks_tokenize_command_segments,
     )
     from guards.write_guard import (  # type: ignore[import-not-found]
@@ -148,7 +155,7 @@ def test_parity_with_command_classification(
         if seg_result is not None:
             hooks_all.extend(seg_result)
     try:
-        flat_tokens = shlex.split(command)
+        flat_tokens = shlex.split(hooks_strip_heredoc_bodies(command))
     except (ValueError, TypeError, AttributeError):
         flat_tokens = []
     redirect_paths = hooks_extract_redirect_targets(flat_tokens, cwd)
@@ -165,3 +172,28 @@ def test_parity_with_command_classification(
     assert core_result == hooks_unique, (
         f"Parity mismatch for {command!r}: core={core_result}, hooks={hooks_unique}"
     )
+
+
+def test_strip_heredoc_bodies_parity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """IL-0 and hooks implementations of strip_heredoc_bodies must agree."""
+    from pathlib import Path
+
+    hooks_dir = str(
+        Path(__file__).resolve().parent.parent.parent / "src" / "autoskillit" / "hooks"
+    )
+    monkeypatch.syspath_prepend(hooks_dir)
+
+    from _command_classification import (  # type: ignore[import-not-found]
+        strip_heredoc_bodies as hooks_strip_heredoc_bodies,
+    )
+
+    from autoskillit.core.bash_write_targets import _strip_heredoc_bodies as core_strip
+
+    cases = [
+        "python3 - <<'EOF'\nif x > 3:\n    pass\nEOF",
+        "cat <<EOF > /real/file.txt\nbody\nEOF",
+        "echo hello > /dev/null",
+        "cat <<-DELIM\n\tbody\n\tDELIM",
+    ]
+    for cmd in cases:
+        assert core_strip(cmd) == hooks_strip_heredoc_bodies(cmd), f"Parity mismatch for: {cmd!r}"

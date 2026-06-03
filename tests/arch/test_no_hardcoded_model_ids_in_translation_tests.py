@@ -29,7 +29,12 @@ def _get_alias_values() -> frozenset[str]:
 
 
 def _collect_rhs_string_literals_in_assert_eq(tree: ast.AST) -> list[str]:
-    """Collect string literals on the RHS of == comparisons inside assert statements."""
+    """Collect string literals on the RHS of == comparisons inside assert statements.
+
+    Passthrough patterns — where the same literal appears in both the LHS call
+    argument and the RHS — are excluded. These test that a native model ID passes
+    through unchanged and are not alias-resolution assertions.
+    """
     literals: list[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assert):
@@ -37,10 +42,17 @@ def _collect_rhs_string_literals_in_assert_eq(tree: ast.AST) -> list[str]:
         test = node.test
         if not isinstance(test, ast.Compare):
             continue
+        lhs_literals = {
+            n.value
+            for n in ast.walk(test.left)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+        }
         for op, comparator in zip(test.ops, test.comparators):
             if isinstance(op, ast.Eq) and isinstance(comparator, ast.Constant):
                 if isinstance(comparator.value, str):
-                    literals.append(comparator.value)
+                    # Skip passthrough tests: same literal in both argument and expected value
+                    if comparator.value not in lhs_literals:
+                        literals.append(comparator.value)
     return literals
 
 

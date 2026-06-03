@@ -293,6 +293,8 @@ skills:
     - resolve-claims-review
     - build-execution-map
     - promote-to-main
+    - classify-experiment-type
+    - apply-review-dimensions
 
 workspace:
   worktree_root: null   # null = auto-resolve to ../worktrees/ relative to project root

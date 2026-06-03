@@ -2766,12 +2766,16 @@ def test_aggregate_review_verdict_rt_cap_downgrades(tmp_path: Path) -> None:
     assert "critical_count: 0" in dashboard
 
 
-def test_aggregate_review_verdict_empty_path_returns_error() -> None:
-    """Empty findings_manifest_path returns error key."""
+def test_aggregate_review_verdict_empty_path_returns_go(tmp_path: Path) -> None:
+    """Empty findings_manifest_path (silent type path) returns GO with no findings."""
     from autoskillit.smoke_utils import aggregate_review_verdict
 
-    result = aggregate_review_verdict(findings_manifest_path="")
-    assert "error" in result
+    result = aggregate_review_verdict(
+        findings_manifest_path="",
+        output_dir=str(tmp_path / "out"),
+    )
+    assert result.get("verdict") == "GO"
+    assert "error" not in result
 
 
 def test_aggregate_review_verdict_missing_file_returns_error(tmp_path: Path) -> None:

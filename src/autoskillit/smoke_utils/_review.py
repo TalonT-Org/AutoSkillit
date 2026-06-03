@@ -139,6 +139,8 @@ LOCAL_ROUND_EXEMPT_VERDICTS: frozenset[str] = frozenset(
 )
 
 SEVERITY_RANK: dict[str, int] = {"info": 0, "warning": 1, "critical": 2}
+TIER_RANK: dict[str, int] = {"H": 0, "M": 1, "L": 2}
+_STRUCTURAL_FIXABILITY_VALUES: frozenset[str | None] = frozenset({"STRUCTURAL", None})
 
 
 def check_review_loop(
@@ -375,20 +377,32 @@ def select_review_dimensions(
 
     _EMPTY = {"selected_lenses": "", "lens_context_paths": "", "dimensions_manifest_path": ""}
 
+    out = Path(output_dir)
+    if not out.is_absolute():
+        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
+
     weights_str = dimension_weights_json.strip()
     if not weights_str:
         return _EMPTY
 
-    weights: dict[str, str] = json.loads(weights_str)
+    try:
+        weights: dict[str, str] = json.loads(weights_str)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON in dimension_weights_json: {exc}") from exc
     if not weights:
         return _EMPTY
 
     modifiers_str = secondary_modifiers_json.strip()
-    modifiers: list[str] = json.loads(modifiers_str) if modifiers_str else []
+    try:
+        modifiers: list[str] = json.loads(modifiers_str) if modifiers_str else []
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON in secondary_modifiers_json: {exc}") from exc
 
     tier_order = ["H", "M", "L", "S"]
 
     def _upgrade_one_tier(current: str) -> str:
+        if current not in tier_order:
+            raise ValueError(f"unknown tier {current!r}; expected one of {tier_order}")
         idx = tier_order.index(current)
         return tier_order[max(0, idx - 1)]
 
@@ -410,12 +424,7 @@ def select_review_dimensions(
     if not active:
         return _EMPTY
 
-    out = Path(output_dir)
-    if not out.is_absolute():
-        raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
-
-    tier_rank = {"H": 0, "M": 1, "L": 2}
-    sorted_dims = sorted(active.items(), key=lambda x: tier_rank.get(x[1], 3))
+    sorted_dims = sorted(active.items(), key=lambda x: TIER_RANK.get(x[1], 3))
 
     selected_lenses = ",".join(d for d, _ in sorted_dims)
     lens_context_paths = ",".join("" for _ in sorted_dims)
@@ -452,22 +461,28 @@ def aggregate_review_verdict(
     if not findings_manifest_path.strip():
         return {"error": "findings_manifest_path is empty"}
 
-    findings_path = Path(findings_manifest_path.strip())
-    if not findings_path.exists():
-        return {"error": f"findings manifest not found: {findings_manifest_path}"}
-
     out = Path(output_dir)
     if not out.is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
 
-    findings: list[dict[str, str | None]] = json.loads(findings_path.read_text())
+    findings_path = Path(findings_manifest_path.strip())
+    if not findings_path.exists():
+        return {"error": f"findings manifest not found: {findings_manifest_path}"}
+
+    try:
+        findings: list[dict[str, str | None]] = json.loads(findings_path.read_text())
+    except json.JSONDecodeError as exc:
+        return {"error": f"corrupt findings manifest: {exc}"}
 
     active_dimensions = 0
     dim_data: dict[str, str] = {}
     if dimensions_manifest_path.strip():
         dim_path = Path(dimensions_manifest_path.strip())
         if dim_path.exists():
-            dim_data = json.loads(dim_path.read_text())
+            try:
+                dim_data = json.loads(dim_path.read_text())
+            except json.JSONDecodeError as exc:
+                return {"error": f"corrupt dimensions manifest: {exc}"}
             active_dimensions = sum(1 for w in dim_data.values() if w != "S")
 
     rt_cap = rt_max_severity.strip() if rt_max_severity.strip() else "critical"
@@ -496,9 +511,7 @@ def aggregate_review_verdict(
         if f.get("dimension") in {"estimand_clarity", "hypothesis_falsifiability"}
     ]
     structural_stop_triggers = [
-        f
-        for f in l1_criticals
-        if f.get("fixability") == "STRUCTURAL" or f.get("fixability") is None
+        f for f in l1_criticals if f.get("fixability") in _STRUCTURAL_FIXABILITY_VALUES
     ]
     rt_stop = [f for f in critical_findings if f.get("dimension") == "red_team"]
     stop_triggers = structural_stop_triggers + rt_stop

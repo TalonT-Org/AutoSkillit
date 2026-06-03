@@ -100,7 +100,8 @@ def test_on_context_limit_verdict_stop_fallback(skill_text: str) -> None:
     assert "Context Limit Behavior" in skill_text, (
         "review-design/SKILL.md must have a ## Context Limit Behavior section"
     )
-    assert "STOP" in skill_text, (
+    ctx_section = skill_text_between("## Context Limit Behavior", "## Workflow", skill_text)
+    assert "STOP" in ctx_section, (
         "Context Limit Behavior section must document verdict=STOP as safe fallback"
     )
 

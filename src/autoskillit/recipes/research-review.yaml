@@ -180,16 +180,53 @@ steps:
     action: route
     on_result:
     - when: "${{ context.pr_url }}"
-      route: review_research_pr
+      route: extract_pr_number
     - route: review_pr_complete
     note: Guard — skip review if pr_url is empty (graceful degradation from open_research_pr).
+
+  extract_pr_number:
+    tool: run_cmd
+    optional_context_refs: [worktree_path]
+    with:
+      cmd: "gh pr view '${{ context.pr_url }}' --json number -q .number"
+      cwd: "${{ context.worktree_path }}"
+      step_name: extract_pr_number
+    capture:
+      pr_number: ${{ result.stdout | trim }}
+    on_success: annotate_pr_diff
+    on_failure: review_research_pr
+    note: >
+      Extracts the PR number from the PR URL for use by annotate_pr_diff.
+      On failure, falls through to review_research_pr which operates without
+      pre-computed diff annotation.
+
+  annotate_pr_diff:
+    tool: run_python
+    optional_context_refs: [worktree_path]
+    with:
+      callable: autoskillit.smoke_utils.annotate_pr_diff
+      pr_number: ${{ context.pr_number }}
+      cwd: ${{ context.worktree_path }}
+      output_dir: '{{AUTOSKILLIT_TEMP}}/review-research-pr'
+      base_branch: ${{ inputs.base_branch }}
+      work_dir: ${{ context.worktree_path }}
+    capture:
+      annotated_diff_path: ${{ result.annotated_diff_path }}
+      hunk_ranges_path: ${{ result.hunk_ranges_path }}
+      valid_lines_path: ${{ result.valid_lines_path }}
+    on_success: review_research_pr
+    on_failure: review_research_pr
+    note: >
+      Pre-computes annotated diff with [LNNN] markers and hunk ranges JSON for
+      review-research-pr. On failure, falls through to review_research_pr which
+      uses empty fallback.
 
   review_research_pr:
     tool: run_skill
     model: ""
     optional_context_refs: [worktree_path]
     with:
-      skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }}"
+      skill_command: "/autoskillit:review-research-pr ${{ context.worktree_path }} ${{ inputs.base_branch }} ${{ context.pr_url }} annotated_diff_path=${{ context.annotated_diff_path }} hunk_ranges_path=${{ context.hunk_ranges_path }} valid_lines_path=${{ context.valid_lines_path }}"
       cwd: "${{ context.worktree_path }}"
       step_name: review_research_pr
       output_dir: "{{AUTOSKILLIT_TEMP}}/review-research-pr"

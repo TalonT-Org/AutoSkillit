@@ -448,7 +448,7 @@ def test_review_pr_step_passes_annotated_diff_inputs(recipe_name: str) -> None:
 
 @pytest.mark.parametrize(
     "recipe_name",
-    ["implementation", "remediation", "implementation-groups", "merge-prs"],
+    ["implementation", "remediation", "implementation-groups", "merge-prs", "research-review"],
 )
 def test_annotate_pr_diff_captures_both_paths(recipe_name: str) -> None:
     """The annotate_pr_diff step must capture annotated_diff_path and hunk_ranges_path."""

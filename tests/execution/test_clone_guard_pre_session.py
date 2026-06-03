@@ -293,3 +293,204 @@ async def test_cross_session_contamination_blocked(tmp_path):
     assert _git_status(repo) == ""
     assert not (repo / "evil.py").exists()
     assert _git(["git", "ls-files", "--error-unmatch", "evil.py"], repo).returncode != 0
+
+
+@pytest.mark.anyio
+async def test_validate_pre_session_index_preserves_tracked_modifications_in_stash(tmp_path):
+    """Tracked-file modifications from a context-exhausted session survive cleanup in stash."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    (repo / "src" / "impl.py").parent.mkdir(parents=True)
+    (repo / "src" / "impl.py").write_text("original")
+    _git(["git", "add", "src/impl.py"], repo)
+    _git(["git", "commit", "-m", "add impl"], repo)
+    (repo / "src" / "impl.py").write_text("partial implementation work")
+    _git(["git", "add", "src/impl.py"], repo)
+
+    runner = _RealAsyncRunner()
+    result = await validate_pre_session_index(str(repo), runner)
+
+    assert result is True
+    assert _git_status(repo) == ""
+
+    stash_list = _git(["git", "stash", "list"], repo).stdout.decode()
+    assert "autoskillit:" in stash_list
+
+    stash_diff = _git(["git", "stash", "show", "-p"], repo).stdout.decode()
+    assert "impl.py" in stash_diff
+
+    _git(["git", "stash", "pop"], repo)
+    assert (repo / "src" / "impl.py").read_text() == "partial implementation work"
+
+
+@pytest.mark.anyio
+async def test_validate_pre_session_index_uses_exclude_on_git_clean(tmp_path):
+    """validate_pre_session_index passes --exclude=.autoskillit/ to git clean."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    autoskillit_state = repo / ".autoskillit" / "state"
+    autoskillit_state.mkdir(parents=True)
+    (autoskillit_state / "marker.txt").write_text("preserve me")
+    (repo / "junk.tmp").write_text("discard me")
+    (repo / "tracked.py").write_text("original")
+    _git(["git", "add", "tracked.py"], repo)
+    _git(["git", "commit", "-m", "add tracked"], repo)
+    (repo / "tracked.py").write_text("dirty")
+
+    runner = _RealAsyncRunner()
+    await validate_pre_session_index(str(repo), runner, exclude_prefix=".autoskillit/")
+
+    assert (autoskillit_state / "marker.txt").exists()
+    assert not (repo / "junk.tmp").exists()
+
+
+@pytest.mark.anyio
+async def test_stash_overflow_pruning(tmp_path):
+    """Only the 5 most recent autoskillit stashes are kept after validate_pre_session_index."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    (repo / "file.py").write_text("v0")
+    _git(["git", "add", "file.py"], repo)
+    _git(["git", "commit", "-m", "base"], repo)
+
+    for i in range(6):
+        (repo / "file.py").write_text(f"v{i + 1}")
+        _git(["git", "stash", "push", "-m", f"autoskillit: stash-{i}"], repo)
+
+    stash_before = _git(["git", "stash", "list"], repo).stdout.decode().strip()
+    assert sum(1 for ln in stash_before.splitlines() if "autoskillit:" in ln) == 6
+
+    (repo / "file.py").write_text("dirty for cleanup")
+    _git(["git", "add", "file.py"], repo)
+    runner = _RealAsyncRunner()
+    await validate_pre_session_index(str(repo), runner)
+
+    stash_after = _git(["git", "stash", "list"], repo).stdout.decode().strip()
+    autoskillit_count = sum(1 for ln in stash_after.splitlines() if "autoskillit:" in ln)
+    assert autoskillit_count == 5
+
+
+@pytest.mark.anyio
+async def test_validate_pre_session_index_no_head_does_not_stash(tmp_path):
+    """No-HEAD fallback path does not attempt git stash (which would fail)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, env=_GIT_ENV)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.local"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    (repo / "staged.py").write_text("staged content")
+    _git(["git", "add", "staged.py"], repo)
+
+    runner = _RealAsyncRunner()
+    result = await validate_pre_session_index(str(repo), runner)
+
+    assert result is True
+    assert _git_status(repo) == ""
+    stash_list = _git(["git", "stash", "list"], repo).stdout.decode()
+    assert "autoskillit:" not in stash_list
+
+
+@pytest.mark.anyio
+async def test_selective_revert_stash_first_no_direct_commits(tmp_path):
+    """selective=True, direct_commits=False: modifications are stashed and recoverable."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    (repo / "module.py").write_text("original")
+    _git(["git", "add", "module.py"], repo)
+    _git(["git", "commit", "-m", "add module"], repo)
+    sha = _head_sha(repo)
+    (repo / "module.py").write_text("partial work from exhausted session")
+
+    snapshot = CloneSnapshot(head_sha=sha)
+    report = ContaminationReport(
+        pre_sha=sha,
+        post_sha=sha,
+        uncommitted_files=[" M module.py"],
+        direct_commits=False,
+        reverted=False,
+    )
+    runner = _RealAsyncRunner()
+    result = await revert_contamination(snapshot, report, str(repo), runner, selective=True)
+
+    assert result.reverted
+    assert _git_status(repo) == ""
+
+    stash_list = _git(["git", "stash", "list"], repo).stdout.decode()
+    assert "autoskillit:" in stash_list
+
+    _git(["git", "stash", "pop"], repo)
+    assert (repo / "module.py").read_text() == "partial work from exhausted session"
+
+
+@pytest.mark.anyio
+async def test_selective_revert_no_stash_with_direct_commits(tmp_path):
+    """selective=True, direct_commits=True: no stash created (hard reset discards first)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    (repo / "module.py").write_text("original")
+    _git(["git", "add", "module.py"], repo)
+    _git(["git", "commit", "-m", "add module"], repo)
+    sha = _head_sha(repo)
+    (repo / "module.py").write_text("work")
+    _git(["git", "add", "module.py"], repo)
+    _git(["git", "commit", "-m", "unwanted commit"], repo)
+
+    snapshot = CloneSnapshot(head_sha=sha)
+    report = ContaminationReport(
+        pre_sha=sha,
+        post_sha=_head_sha(repo),
+        uncommitted_files=[],
+        direct_commits=True,
+        reverted=False,
+    )
+    runner = _RealAsyncRunner()
+    result = await revert_contamination(snapshot, report, str(repo), runner, selective=True)
+
+    assert result.reverted
+    stash_list = _git(["git", "stash", "list"], repo).stdout.decode()
+    assert "autoskillit:" not in stash_list
+
+
+@pytest.mark.anyio
+async def test_non_selective_revert_no_stash(tmp_path):
+    """selective=False: no stash created (contamination must be destroyed)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    (repo / "module.py").write_text("original")
+    _git(["git", "add", "module.py"], repo)
+    _git(["git", "commit", "-m", "add module"], repo)
+    sha = _head_sha(repo)
+    (repo / "module.py").write_text("contamination")
+
+    snapshot = CloneSnapshot(head_sha=sha)
+    report = ContaminationReport(
+        pre_sha=sha,
+        post_sha=sha,
+        uncommitted_files=[" M module.py"],
+        direct_commits=False,
+        reverted=False,
+    )
+    runner = _RealAsyncRunner()
+    result = await revert_contamination(snapshot, report, str(repo), runner, selective=False)
+
+    assert result.reverted
+    stash_list = _git(["git", "stash", "list"], repo).stdout.decode()
+    assert "autoskillit:" not in stash_list

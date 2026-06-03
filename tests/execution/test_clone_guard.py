@@ -237,7 +237,7 @@ async def test_revert_uncommitted_only(tmp_path):
     cmds = [call[0] for call in runner.call_args_list]
     assert len(cmds) == 2
     assert ["git", "reset", "--hard", "abc123"] in cmds
-    assert ["git", "clean", "-fd"] in cmds
+    assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] in cmds
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +282,7 @@ async def test_revert_direct_commits(tmp_path):
     assert result.reverted
     cmds = [call[0] for call in runner.call_args_list]
     assert ["git", "reset", "--hard", "abc123"] in cmds
-    assert ["git", "clean", "-fd"] in cmds
+    assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] in cmds
 
 
 # ---------------------------------------------------------------------------
@@ -294,8 +294,7 @@ async def test_guard_full_flow_contamination_detected(tmp_path):
     # detect_contamination: rev-parse HEAD (moved), status (dirty)
     runner.push(_git_result(stdout="def456\n"))
     runner.push(_git_result(stdout=" M file.py\n"))
-    # revert_contamination (selective, direct_commits=True): reset --hard, checkout --, clean -fd
-    runner.push(_git_result())
+    # revert_contamination (selective, direct_commits=True): reset --hard, clean --exclude
     runner.push(_git_result())
     runner.push(_git_result())
 
@@ -318,7 +317,7 @@ async def test_guard_full_flow_contamination_detected(tmp_path):
         ),
     )
     assert reverted
-    assert len(runner.call_args_list) == 5  # 2 detect + 3 selective revert
+    assert len(runner.call_args_list) == 4  # 2 detect + 2 selective revert
     assert len(audit.get_report()) == 1
     record = audit.get_report()[0]
     assert record.subtype == "clone_contamination"
@@ -472,8 +471,10 @@ async def test_readonly_check_fires_on_success(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="abc123\n"))  # detect: rev-parse (same sha)
     runner.push(_git_result(stdout=" M dirty.py\n"))  # detect: status (dirty)
-    runner.push(_git_result())  # revert: checkout -- .
+    runner.push(_git_result())  # revert: reset (mixed)
+    runner.push(_git_result())  # revert: stash push
     runner.push(_git_result())  # revert: clean -fd --exclude
+    runner.push(_git_result(stdout=""))  # revert: stash list (prune)
 
     snapshot = CloneSnapshot(head_sha="abc123")
     skill_result = _make_skill_result(success=True, worktree_path=None)
@@ -518,9 +519,11 @@ async def test_readonly_selective_revert_checkout_and_clean(tmp_path):
     result = await revert_contamination(snapshot, report, str(tmp_path), runner, selective=True)
     assert result.reverted
     cmds = [call[0] for call in runner.call_args_list]
-    assert ["git", "checkout", "--", "."] in cmds
+    assert ["git", "reset", "abc123"] in cmds
+    assert ["git", "stash", "push", "-m", "autoskillit: revert-contamination abc123"] in cmds
     assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] in cmds
     assert ["git", "reset", "--hard", "abc123"] not in cmds
+    assert ["git", "checkout", "--", "."] not in cmds
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +547,7 @@ async def test_readonly_selective_revert_with_commits(tmp_path):
     assert result.reverted
     cmds = [call[0] for call in runner.call_args_list]
     assert ["git", "reset", "--hard", "abc123"] in cmds
-    assert ["git", "checkout", "--", "."] in cmds
+    assert ["git", "checkout", "--", "."] not in cmds
     assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] in cmds
 
 
@@ -569,7 +572,7 @@ async def test_worktree_skill_still_uses_nuclear_revert(tmp_path):
     assert result.reverted
     cmds = [call[0] for call in runner.call_args_list]
     assert ["git", "reset", "--hard", "abc123"] in cmds
-    assert ["git", "clean", "-fd"] in cmds
+    assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] in cmds
 
 
 # ---------------------------------------------------------------------------
@@ -583,8 +586,10 @@ async def test_contamination_check_fires_on_success_when_write_scoped(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result("abc123"))  # rev-parse HEAD (detect)
     runner.push(_git_result(" M src/daemon.rs\n"))  # status --porcelain (detect)
-    runner.push(_git_result())  # git checkout -- .
-    runner.push(_git_result())  # git clean -fd
+    runner.push(_git_result())  # revert: reset (mixed)
+    runner.push(_git_result())  # revert: stash push
+    runner.push(_git_result())  # revert: clean -fd --exclude
+    runner.push(_git_result(stdout=""))  # revert: stash list (prune)
     snapshot = CloneSnapshot(head_sha="abc123")
     skill_result = _make_skill_result(success=True, needs_retry=False, exit_code=0)
 
@@ -628,6 +633,7 @@ async def test_selective_revert_with_custom_exclude_prefix(tmp_path):
     )
     assert result.reverted
     cmds = [call[0] for call in runner.call_args_list]
+    assert ["git", "stash", "push", "-m", "autoskillit: revert-contamination abc123"] in cmds
     assert ["git", "clean", "-fd", "--exclude=temp/planner/"] in cmds
     assert ["git", "clean", "-fd", "--exclude=.autoskillit/"] not in cmds
 
@@ -656,8 +662,8 @@ async def test_result_mutated_on_contamination_revert(tmp_path):
     runner = MockSubprocessRunner()
     runner.push(_git_result(stdout="def456\n"))  # detect: rev-parse HEAD (moved)
     runner.push(_git_result(stdout=" M file.py\n"))  # detect: status (dirty)
-    runner.push(_git_result())  # revert: checkout -- .
-    runner.push(_git_result())  # revert: clean -fd
+    runner.push(_git_result())  # revert: reset --hard
+    runner.push(_git_result())  # revert: clean --exclude
 
     snapshot = CloneSnapshot(head_sha="abc123")
     skill_result = _make_skill_result(success=True, worktree_path=None)
@@ -723,7 +729,7 @@ async def test_result_needs_retry_set_on_revert(tmp_path):
     runner.push(_git_result(stdout="def456\n"))  # detect: rev-parse HEAD (moved)
     runner.push(_git_result(stdout=" M file.py\n"))  # detect: status (dirty)
     runner.push(_git_result())  # revert: reset --hard
-    runner.push(_git_result())  # revert: clean -fd
+    runner.push(_git_result())  # revert: clean --exclude
 
     snapshot = CloneSnapshot(head_sha="abc123")
     skill_result = _make_skill_result(success=False, worktree_path=None)

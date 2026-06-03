@@ -849,7 +849,7 @@ class TestBackendRequirements:
             "uses_capabilities: [claude_dir]\n---\nTest skill.\n"
         )
         info = _skill_info_from_frontmatter(
-            "test-skill", SkillSource.PROJECT, skill_dir / "SKILL.md"
+            "test-skill", SkillSource.BUNDLED, skill_dir / "SKILL.md"
         )
         assert info.backend_requirements == frozenset(), (
             "backend_requirements should be derived from uses_capabilities "

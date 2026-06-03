@@ -2799,7 +2799,7 @@ class TestInjectCompletionReminder:
         result = _inject_completion_reminder("prompt", "")
         assert result == "prompt"
 
-    def test_idempotent(self):
+    def test_always_appends(self):
         from autoskillit.execution.commands import _inject_completion_reminder
 
         once = _inject_completion_reminder("prompt", "%%DONE%%")
@@ -2807,23 +2807,13 @@ class TestInjectCompletionReminder:
         assert twice.count("%%DONE%%") == 2
 
 
-def test_inject_completion_reminder_with_marker():
-    from autoskillit.execution.commands import _inject_completion_reminder
+def test_prompt_injector_registry():
+    import inspect
 
-    result = _inject_completion_reminder("prompt", "%%DONE%%")
-    assert "%%DONE%%" in result
-    assert result.endswith("%%DONE%%")
-
-
-def test_inject_completion_reminder_empty_marker():
-    from autoskillit.execution.commands import _inject_completion_reminder
-
-    result = _inject_completion_reminder("prompt", "")
-    assert result == "prompt"
-
-
-def test_prompt_injector_registry_completeness():
-    from autoskillit.execution.backends._claude_prompt import PROMPT_INJECTOR_CHAIN
+    from autoskillit.execution.backends._claude_prompt import (
+        PROMPT_INJECTOR_CHAIN,
+        apply_prompt_injector_chain,
+    )
 
     names = [entry.name for entry in PROMPT_INJECTOR_CHAIN]
     assert "completion-directive" in names
@@ -2831,15 +2821,14 @@ def test_prompt_injector_registry_completeness():
     assert "narration-suppression" in names
     assert "output-format-reinforcement" in names
     assert "completion-reminder" in names
-    assert names[-1] == "completion-reminder"
-
-
-def test_prompt_injector_registry_ordering():
-    from autoskillit.execution.backends._claude_prompt import PROMPT_INJECTOR_CHAIN
-
-    names = [entry.name for entry in PROMPT_INJECTOR_CHAIN]
     assert names[0] == "completion-directive"
     assert names[-1] == "completion-reminder"
+    source = inspect.getsource(apply_prompt_injector_chain)
+    for entry in PROMPT_INJECTOR_CHAIN:
+        func_name = f"_inject_{entry.name.replace('-', '_')}"
+        assert func_name in source, (
+            f"Chain entry '{entry.name}' missing dispatch call to {func_name}"
+        )
 
 
 def test_inject_output_format_reinforcement_non_anthropic():

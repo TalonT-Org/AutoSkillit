@@ -167,6 +167,11 @@ def test_classify_and_apply_in_tier3_between_review_and_resolve() -> None:
         f"apply-review-dimensions (idx={ard_idx}) must be between "
         f"review-design (idx={rd_idx}) and resolve-design-review (idx={rdr_idx})"
     )
+    assert cet_idx < ard_idx, (
+        f"classify-experiment-type (idx={cet_idx}) must precede "
+        f"apply-review-dimensions (idx={ard_idx}) — classify emits experiment_type "
+        "which apply-review-dimensions consumes"
+    )
 
 
 def test_classify_experiment_type_pattern_examples_cover_all_types(

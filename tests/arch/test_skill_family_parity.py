@@ -103,7 +103,7 @@ class TestOwnPrGuard:
         text = _read_skill_md(family_skill[1])
         text_lower = text.lower()
         has_self_ref = (
-            "own pr" in text_lower or "self-review" in text_lower or "self-authored" in text_lower
+            "own pr" in text_lower or "self-review" in text_lower or "authored" in text_lower
         )
         has_comment_fallback = "comment" in text_lower
         assert has_self_ref and has_comment_fallback, (

@@ -152,6 +152,21 @@ class TestBuildTestScope:
         )
         assert result is FullRunReason.LARGE_CHANGESET
 
+    def test_aggressive_mode_ignores_large_changeset_threshold(self, tmp_path: Path) -> None:
+        """Aggressive mode does not trigger LARGE_CHANGESET even with >30 files."""
+        tests_root = tmp_path / "tests"
+        for d in ["core", "arch", "contracts"]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+        files = {f"src/autoskillit/core/f{i}.py" for i in range(35)}
+        result = build_test_scope(
+            changed_files=files,
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+        )
+        assert isinstance(result, set), (
+            f"Expected set[Path], got {type(result).__name__}: {result}"
+        )
+
     def test_scope_bucket_a_returns_full_run_reason(self, tmp_path: Path) -> None:
         result = build_test_scope(
             changed_files={"pyproject.toml"},

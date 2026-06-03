@@ -93,6 +93,13 @@ tasks:
         export AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}"
         task test-check
 
+  test-local:
+    desc: Run aggressively filtered tests for local development
+    cmds:
+      - |
+        export AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-aggressive}"
+        task test-check
+
   coverage-audit:
     desc: "Run pytest with coverage collection and compare against AST-derived function map"
     deps: [install-worktree, _tmpdir-setup]

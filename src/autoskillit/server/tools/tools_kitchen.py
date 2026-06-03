@@ -759,6 +759,10 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
         if (h := _require_orchestrator_exact("close_kitchen")) is not None:
             return h
         _close_kitchen_handler()
+
+        mcp.disable(tags={"kitchen"})
+        mcp.disable(tags={"plan-review"})
+
         await ctx.reset_visibility()
         return "Kitchen is closed."
     except Exception as exc:

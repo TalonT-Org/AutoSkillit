@@ -444,43 +444,65 @@ class TestSessionTypeVisibility:
         )
 
     @pytest.mark.anyio
-    async def test_codex_non_notification_backend_gets_kitchen_pre_reveal(self, monkeypatch):
-        """Non-notification backend (codex) gets kitchen tools pre-revealed at startup."""
+    async def test_non_notification_backend_gets_kitchen_pre_reveal(self, build_ctx, monkeypatch):
+        """Non-notification backend gets kitchen tools pre-revealed via lifespan boot."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         from autoskillit.core import (
             FLEET_DISPATCH_TOOLS,
             FLEET_TOOLS,
             GATED_TOOLS,
-            MCP_CLIENT_BACKEND_ENV_VAR,
+            HEADLESS_ENV_VAR,
         )
-        from autoskillit.server import _apply_session_type_visibility, mcp
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import mcp
+        from autoskillit.server._lifespan import _skill_auto_gate_boot
 
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
-        _apply_session_type_visibility()
+        monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.supports_tool_list_changed = False
+        ctx = build_ctx(backend=mock_backend)
+        ctx.gate = DefaultGateState(enabled=False)
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    await _skill_auto_gate_boot(ctx)
 
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
         assert kitchen_gated.issubset(tool_names), (
-            "All kitchen-tagged gated tools should be visible for codex non-notification backend"
+            "All kitchen-tagged gated tools should be visible for non-notification backend"
         )
 
     @pytest.mark.anyio
-    async def test_codex_non_notification_plan_review_pre_revealed(self, monkeypatch):
-        """Non-notification backend (codex) gets plan-review resources pre-revealed."""
-        from autoskillit.core import MCP_CLIENT_BACKEND_ENV_VAR
-        from autoskillit.server import _apply_session_type_visibility, mcp
+    async def test_non_notification_backend_plan_review_pre_revealed(self, build_ctx, monkeypatch):
+        """Non-notification backend gets plan-review resources pre-revealed via lifespan boot."""
+        from unittest.mock import AsyncMock, MagicMock, patch
 
-        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-        monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
-        _apply_session_type_visibility()
+        from autoskillit.core import HEADLESS_ENV_VAR
+        from autoskillit.pipeline.gate import DefaultGateState
+        from autoskillit.server import mcp
+        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+
+        monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.supports_tool_list_changed = False
+        ctx = build_ctx(backend=mock_backend)
+        ctx.gate = DefaultGateState(enabled=False)
+
+        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    await _food_truck_auto_gate_boot(ctx)
 
         templates = await mcp.list_resource_templates()
         uris = {t.uri_template for t in templates}
         assert "agent://plan-review/{name}" in uris, (
-            "plan-review resource template should be visible for codex non-notification backend"
+            "plan-review resource template should be visible for non-notification backend"
         )
 
 

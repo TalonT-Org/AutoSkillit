@@ -18,13 +18,16 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 # ---------------------------------------------------------------------------
 
 
-# T-VISIBILITY-1: open_kitchen tool calls ctx.enable_components
+# T-VISIBILITY-1a: open_kitchen calls enable_components for notification-capable backend
 @pytest.mark.anyio
-async def test_open_kitchen_tool_calls_enable_components(tmp_path, monkeypatch):
-    """open_kitchen tool must call ctx.enable_components(tags={'kitchen'})."""
+async def test_open_kitchen_calls_enable_components_for_notification_backend(
+    tmp_path, monkeypatch
+):
+    """open_kitchen must call ctx.enable_components when backend supports notifications."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
+    mock_ctx.backend.capabilities.supports_tool_list_changed = True
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -39,20 +42,48 @@ async def test_open_kitchen_tool_calls_enable_components(tmp_path, monkeypatch):
     mock_ctx.enable_components.assert_called_once_with(tags={"kitchen"})
 
 
-# T-VISIBILITY-2: close_kitchen tool calls ctx.reset_visibility
+# T-VISIBILITY-1b: open_kitchen skips enable_components for pre-revealed backend
+@pytest.mark.anyio
+async def test_open_kitchen_skips_enable_components_for_pre_revealed_backend(
+    tmp_path, monkeypatch
+):
+    """open_kitchen must NOT call ctx.enable_components when backend was pre-revealed."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.backend.capabilities.supports_tool_list_changed = False
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    await open_kitchen(ctx=mock_ctx)
+
+    mock_ctx.enable_components.assert_not_called()
+
+
+# T-VISIBILITY-2: close_kitchen tool calls ctx.reset_visibility and mcp.disable
 @pytest.mark.anyio
 async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
-    """close_kitchen tool must call ctx.reset_visibility()."""
+    """close_kitchen must call mcp.disable() for pre-revealed tags, then ctx.reset_visibility()."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.reset_visibility = AsyncMock()
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            from autoskillit.server.tools.tools_kitchen import close_kitchen
+            with patch("autoskillit.server.tools.tools_kitchen.mcp") as mock_mcp:
+                from autoskillit.server.tools.tools_kitchen import close_kitchen
 
-            await close_kitchen(ctx=mock_ctx)
+                await close_kitchen(ctx=mock_ctx)
 
+    mock_mcp.disable.assert_any_call(tags={"kitchen"})
+    mock_mcp.disable.assert_any_call(tags={"plan-review"})
+    assert mock_mcp.disable.call_count == 2
     mock_ctx.reset_visibility.assert_called_once()
 
 

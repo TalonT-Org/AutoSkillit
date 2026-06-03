@@ -10,7 +10,6 @@ import os
 from typing import assert_never
 
 from autoskillit.core import (
-    AGENT_BACKEND_CODEX,
     CATEGORY_TAGS,
     FEATURE_REGISTRY,
     FLEET_DISPATCH_MODE,
@@ -18,7 +17,6 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
-    MCP_CLIENT_BACKEND_ENV_VAR,
     SessionType,
     get_logger,
 )
@@ -39,14 +37,14 @@ def _apply_session_type_visibility() -> None:
     time by _fleet_auto_gate_boot (fleet sessions) and _redisable_subsets
     (open_kitchen sessions) where the full config pipeline is available.
 
-    Non-notification backends (e.g. Codex) do not process notifications/tools/list_changed
-    so kitchen tools are pre-revealed at startup when AUTOSKILLIT_MCP_CLIENT_BACKEND=codex.
+    Non-headless interactive sessions rely on _pre_reveal_kitchen() at lifespan
+    time for tag visibility when the backend does not support
+    tools/list_changed notifications.
     """
     from autoskillit.server import mcp  # circular-break
 
     _session = _resolve_session_type()
     _headless = os.environ.get(HEADLESS_ENV_VAR) == "1"
-    _mcp_client_backend = os.environ.get(MCP_CLIENT_BACKEND_ENV_VAR, "")
 
     match _session:
         case SessionType.FLEET:
@@ -78,11 +76,6 @@ def _apply_session_type_visibility() -> None:
             mcp.enable(tags={"headless"})
             if os.environ.get(HEADLESS_AUTO_GATE_ENV_VAR) == "1":
                 mcp.enable(tags={"kitchen-core"})
-        case SessionType.ORCHESTRATOR | SessionType.SKILL if (
-            _mcp_client_backend == AGENT_BACKEND_CODEX
-        ):
-            mcp.enable(tags={"kitchen"})
-            mcp.enable(tags={"plan-review"})
         case SessionType.ORCHESTRATOR | SessionType.SKILL:
             pass
         case _ as unreachable:

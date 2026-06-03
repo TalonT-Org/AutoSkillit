@@ -293,6 +293,10 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     ctx.active_recipe_ingredients = frozenset()
     if ctx.gate is not None:
         ctx.gate.enable()
+
+    _mcp.enable(tags={"kitchen"})
+    _mcp.enable(tags={"plan-review"})
+
     for subset in ctx.config.subsets.disabled:
         _mcp.disable(tags={subset})
     for tag in _collect_disabled_feature_tags(ctx.config.features, experimental_enabled=False):

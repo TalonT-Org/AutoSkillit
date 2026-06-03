@@ -180,7 +180,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.version_check_command == "claude --version"
     assert CLAUDE_CODE_CAPABILITIES.process_name == "claude"
     assert CLAUDE_CODE_CAPABILITIES.skills_subdir == ".claude/skills"
-    assert CLAUDE_CODE_CAPABILITIES.supports_tool_list_changed is True
+    assert CLAUDE_CODE_CAPABILITIES.supports_tool_list_changed is False
     assert CLAUDE_CODE_CAPABILITIES.mcp_env_forward_vars == frozenset()
     assert CLAUDE_CODE_CAPABILITIES.replay_capable is True
     assert CLAUDE_CODE_CAPABILITIES.record_capable is True

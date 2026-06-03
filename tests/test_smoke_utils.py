@@ -2715,6 +2715,8 @@ def test_aggregate_review_verdict_stop_structural_l1(tmp_path: Path) -> None:
     )
     assert result["verdict"] == "STOP"
     assert "revision_guidance_path" not in result
+    assert "evaluation_dashboard_path" in result
+    assert Path(result["evaluation_dashboard_path"]).exists()
 
 
 def test_aggregate_review_verdict_estimand_clarity_addressable_is_revise(tmp_path: Path) -> None:
@@ -2759,6 +2761,9 @@ def test_aggregate_review_verdict_rt_cap_downgrades(tmp_path: Path) -> None:
         output_dir=str(tmp_path / "out"),
     )
     assert result["verdict"] == "GO"
+    dashboard = Path(result["evaluation_dashboard_path"]).read_text()
+    assert "warning_count: 1" in dashboard
+    assert "critical_count: 0" in dashboard
 
 
 def test_aggregate_review_verdict_empty_path_returns_error() -> None:

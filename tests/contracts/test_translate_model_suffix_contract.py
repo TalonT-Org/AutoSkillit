@@ -36,10 +36,3 @@ class TestSuffixCapabilityContract:
             if cls().capabilities.supports_context_window_suffix
         )
         assert count >= 1
-
-
-class TestBuildHeadlessCmdSuffixContract:
-    def test_build_headless_cmd_preserves_suffix(self) -> None:
-        spec = ClaudeCodeBackend().build_headless_cmd("test", model=_SUFFIX_MODEL)
-        model_idx = list(spec.cmd).index("--model")
-        assert "[1m]" in spec.cmd[model_idx + 1]

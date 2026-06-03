@@ -28,7 +28,6 @@ def _is_self_referential_only(body: str, skill_name: str) -> bool:
     return True
 
 
-@pytest.mark.xfail(reason="context-aware detection not yet applied — rectify plan in progress")
 def test_self_referential_autoskillit_not_classified_as_dependency():
     from autoskillit.core import paths
     from autoskillit.workspace.skills import _read_skill_frontmatter
@@ -74,7 +73,6 @@ def test_self_referential_autoskillit_not_classified_as_dependency():
     )
 
 
-@pytest.mark.xfail(reason="context-aware detection not yet applied — rectify plan in progress")
 def test_documentation_mentions_distinguished_from_usage():
     from autoskillit.core import paths
     from autoskillit.workspace.skills import _read_skill_frontmatter

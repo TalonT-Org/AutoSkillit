@@ -28,7 +28,6 @@ def _all_skill_frontmatter() -> list[tuple[str, dict]]:
     return results
 
 
-@pytest.mark.xfail(reason="registry not yet consumed — rectify plan in progress")
 def test_all_capability_keys_are_consumed():
     all_fm = _all_skill_frontmatter()
     used_caps: set[str] = set()
@@ -41,7 +40,6 @@ def test_all_capability_keys_are_consumed():
     )
 
 
-@pytest.mark.xfail(reason="co-requirement not yet enforced — rectify plan in progress")
 def test_backend_requirements_derivable_from_capabilities():
     all_fm = _all_skill_frontmatter()
     violations: list[str] = []
@@ -68,7 +66,6 @@ def test_backend_requirements_derivable_from_capabilities():
     )
 
 
-@pytest.mark.xfail(reason="uses_capabilities not yet declared — rectify plan in progress")
 def test_no_unknown_capability_declared():
     all_fm = _all_skill_frontmatter()
     violations: list[str] = []

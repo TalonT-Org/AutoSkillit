@@ -46,7 +46,6 @@ def _has_genuine_claude_code_dependency(body: str, skill_name: str) -> bool:
     return False
 
 
-@pytest.mark.xfail(reason="over-broad annotations — rectify plan in progress")
 def test_annotated_skills_have_justified_annotation():
     pkg = paths.pkg_root()
     over_annotated: list[str] = []

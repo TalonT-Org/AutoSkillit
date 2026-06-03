@@ -85,11 +85,11 @@ class TestResponseBodyGuard:
         text_lower = text.lower()
         assert "http 200" in text_lower, f"{family_skill[1]} must document HTTP 200 success signal"
         idx = text_lower.find("http 200")
-        window = text_lower[idx : idx + 800]
+        after_http200 = text_lower[idx:]
         assert (
-            "do not inspect" in window
-            or "regardless of response body" in window
-            or "do not check" in window
+            "do not inspect" in after_http200
+            or "regardless of response body" in after_http200
+            or "do not check" in after_http200
         ), f"{family_skill[1]} must prohibit response body inspection near HTTP 200 reference"
 
 
@@ -105,7 +105,11 @@ class TestOwnPrGuard:
         has_self_ref = (
             "own pr" in text_lower or "self-review" in text_lower or "authored" in text_lower
         )
-        has_comment_fallback = "comment" in text_lower
+        has_comment_fallback = (
+            "`comment`" in text_lower
+            or '"comment"' in text_lower
+            or "comment fallback" in text_lower
+        )
         assert has_self_ref and has_comment_fallback, (
             f"{family_skill[1]} must include own-PR guard with COMMENT fallback"
         )

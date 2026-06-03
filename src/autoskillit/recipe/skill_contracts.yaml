@@ -2402,6 +2402,7 @@ skills:
       type: string
     expected_output_patterns:
     - "experiment_type[ \\t]*=[ \\t]*\\S+"
+    - "dimension_weights[ \\t]*=[ \\t]*[a-z_]+:[HMLS](,[a-z_]+:[HMLS])*"
     - "is_silent_type[ \\t]*=[ \\t]*(true|false)"
     - "dimensions_manifest_path[ \\t]*=[ \\t]*/.+"
     - "selected_lenses[ \\t]*=[ \\t]*([^\\n]*|none)"

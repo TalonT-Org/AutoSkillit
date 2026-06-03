@@ -273,6 +273,58 @@ def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult
     )
 
 
+def _check_codex_mcp_timeouts(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
+    """Check that deployed Codex config.toml has a correct tool_timeout_sec value."""
+    if backend is None or not backend.capabilities.mcp_config_capable:
+        return DoctorResult(
+            Severity.OK,
+            "codex_mcp_timeouts",
+            f"Skipped (backend={backend.name if backend else 'none'})",
+        )
+    from autoskillit.config.settings import compute_codex_mcp_tool_timeout
+    from autoskillit.execution import _read_codex_config
+    from autoskillit.execution.backends._codex_config import CODEX_MCP_TOOL_TIMEOUT_FLOOR
+
+    config_path = Path.home() / ".codex" / "config.toml"
+    read_result = _read_codex_config(config_path)
+    if read_result.is_corrupt or not read_result.data:
+        return DoctorResult(
+            Severity.OK,
+            "codex_mcp_timeouts",
+            "Codex config not readable — timeout check skipped",
+        )
+    entry = read_result.data.get("mcp_servers", {}).get("autoskillit")
+    if not isinstance(entry, dict):
+        return DoctorResult(
+            Severity.OK,
+            "codex_mcp_timeouts",
+            "No autoskillit MCP entry — timeout check skipped",
+        )
+    observed = entry.get("tool_timeout_sec")
+    if observed is None:
+        return DoctorResult(
+            Severity.WARNING,
+            "codex_mcp_timeouts",
+            "tool_timeout_sec missing from codex config.toml. Run 'autoskillit init' to set it.",
+        )
+    expected = compute_codex_mcp_tool_timeout()
+    minimum = CODEX_MCP_TOOL_TIMEOUT_FLOOR
+    if observed < minimum:
+        return DoctorResult(
+            Severity.WARNING,
+            "codex_mcp_timeouts",
+            f"tool_timeout_sec={observed}s in codex config.toml is below "
+            f"the system minimum ({minimum}s). Long-running MCP tool calls "
+            f"will be killed by Codex. Run 'autoskillit init' to update. "
+            f"(expected >= {expected}s)",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "codex_mcp_timeouts",
+        f"tool_timeout_sec={observed}s is sufficient (minimum={minimum}s)",
+    )
+
+
 def _check_cache_version_mismatch(cache_dir: Path | None = None) -> DoctorResult:
     """Check plugin cache version. ERROR if kitchen is open and versions mismatch."""
     from autoskillit.core import any_kitchen_open

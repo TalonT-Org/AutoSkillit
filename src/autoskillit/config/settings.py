@@ -123,9 +123,45 @@ def _timeout_coherence_gate(run_skill: RunSkillConfig) -> None:
         )
 
 
+def compute_codex_mcp_tool_timeout(
+    run_skill: RunSkillConfig | None = None,
+    fleet: FleetConfig | None = None,
+) -> float:
+    """Derive tool_timeout_sec from the system's timeout hierarchy.
+
+    Uses loaded config values when provided, falls back to dataclass defaults.
+    The result is always >= the floor derived from dataclass defaults.
+    """
+    rs = run_skill or RunSkillConfig()
+    fc = fleet or FleetConfig()
+    max_fleet = fc.default_timeout_sec + fc.max_extension_seconds
+    max_skill = rs.timeout
+    return max(max_fleet, max_skill) * 1.33
+
+
+def _codex_mcp_timeout_coherence_gate(run_skill: RunSkillConfig, fleet: FleetConfig) -> None:
+    """Warn when Codex MCP tool_timeout_sec is below the maximum session duration."""
+    tool_timeout = compute_codex_mcp_tool_timeout(run_skill=run_skill, fleet=fleet)
+    max_fleet = fleet.default_timeout_sec + fleet.max_extension_seconds
+    max_skill = run_skill.timeout
+    max_session = max(max_fleet, max_skill)
+    if tool_timeout < max_session:
+        logger.warning(
+            "codex_mcp_tool_timeout_coherence",
+            tool_timeout_sec=tool_timeout,
+            max_session_duration=max_session,
+            message=(
+                f"Codex MCP tool_timeout_sec ({tool_timeout}s) is below the maximum "
+                f"possible session duration ({max_session}s). This will cause Codex to kill "
+                f"long-running MCP tool calls before autoskillit's own session management."
+            ),
+        )
+
+
 __all__ = [
     "AgentBackendConfig",
     "AutomationConfig",
+    "compute_codex_mcp_tool_timeout",
     "BranchingConfig",
     "CIConfig",
     "ClassifyFixConfig",
@@ -474,6 +510,7 @@ class AutomationConfig:
         except ValueError as exc:
             raise ValueError(f"fleet config: {exc}") from exc
         _timeout_coherence_gate(result.run_skill)
+        _codex_mcp_timeout_coherence_gate(result.run_skill, result.fleet)
         return result
 
 

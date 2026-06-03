@@ -157,10 +157,10 @@ class TestChannelBDrainWait:
         Sequence (fast poll params):
           t=0.00s  subprocess starts
           t=0.10s  script writes %%ORDER_UP%% to session JSONL (Channel B target)
-          t=0.11s  Phase 1 poll fires → session file found
-          t=0.16s  Phase 2 poll fires → marker detected → Channel B fires → drain starts
+          t~0.15s  Phase 1 poll fires → session file found
+          t~0.20s  Phase 2 poll fires → marker detected → Channel B fires → drain starts
           t=0.25s  script writes type=result to stdout (0.15s after JSONL write)
-          t=0.30s  heartbeat fires → Channel A confirms → drain completes
+          t~0.30s  heartbeat fires → Channel A confirms → drain completes
           t~0.30s  process killed with confirmed stdout
 
         timeout=300s: guards against the outer wall-clock expiring under xdist -n 4 load.
@@ -181,10 +181,10 @@ class TestChannelBDrainWait:
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=5.0,
             _phase1_timeout=400,
-            _phase1_poll=0.01,
+            _phase1_poll=0.05,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
-            _session_id_timeout=0.01,
+            _session_id_timeout=2.0,
         )
 
         assert result.termination == TerminationReason.COMPLETED

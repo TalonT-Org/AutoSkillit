@@ -1,7 +1,7 @@
 ---
 name: implement-worktree-no-merge
 backend_requirements: [claude-code]
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model, cross_skill_ref, run_skill]
 activate_deps: [write-recipe]
 description: Implementation executor. ALWAYS invoke this skill when instructed to implement a plan in a worktree. Do not read the plan or edit files directly — use this skill first to load the full implementation workflow.
 hooks:

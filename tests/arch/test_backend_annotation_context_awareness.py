@@ -96,7 +96,7 @@ def test_documentation_mentions_distinguished_from_usage():
             for line in body.splitlines():
                 stripped = line.strip()
                 if "Agent(model=" in stripped or "Agent(subagent_type=" in stripped:
-                    if stripped.startswith("|") or stripped.startswith("-"):
+                    if stripped.startswith("|"):
                         mentions_agent_in_docs = True
                     else:
                         prescribes_agent_call = True

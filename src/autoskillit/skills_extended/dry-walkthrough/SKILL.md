@@ -1,7 +1,7 @@
 ---
 name: dry-walkthrough
 backend_requirements: [claude-code]
-uses_capabilities: [agent_model]
+uses_capabilities: [agent_model, test_check]
 description: Plan validation executor. ALWAYS invoke this skill when instructed to validate or dry-walkthrough a plan. Do not read the plan or trace changes directly — use this skill first to load the validation workflow.
 hooks:
   PreToolUse:

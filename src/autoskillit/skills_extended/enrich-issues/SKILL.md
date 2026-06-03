@@ -2,7 +2,7 @@
 name: enrich-issues
 categories: [github]
 backend_requirements: [claude-code]
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model, cross_skill_ref, open_kitchen]
 description: >
   Backfill structured requirements on existing GitHub issues triaged with
   recipe:implementation labels. Scans candidates, skips already-enriched issues,

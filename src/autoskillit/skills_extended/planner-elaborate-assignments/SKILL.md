@@ -1,5 +1,7 @@
 ---
 name: planner-elaborate-assignments
+backend_requirements: [claude-code]
+uses_capabilities: [run_skill]
 categories: [planner]
 description: >
   Elaborate all assignments for a target phase via parallel L0 subagents.

@@ -2,7 +2,7 @@
 name: open-integration-pr
 categories: [github]
 backend_requirements: [claude-code]
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model, cross_skill_ref, run_skill]
 activate_deps: [arch-lens]
 description: >
   Create an integration PR for the merge-prs. Reads pr_order_file JSON, generates

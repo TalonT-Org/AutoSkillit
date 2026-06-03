@@ -2,7 +2,7 @@
 name: implement-experiment
 categories: [research]
 backend_requirements: [claude-code]
-uses_capabilities: [agent_model]
+uses_capabilities: [agent_model, test_check]
 description: Deploy experiment artifacts in an isolated git worktree following an approved experiment plan, with per-phase commits.
 hooks:
   PreToolUse:

@@ -1,5 +1,7 @@
 ---
 name: select-directions
+backend_requirements: [claude-code]
+uses_capabilities: [run_skill]
 categories: [research]
 description: >
   Direction-selection gate: parse scope directions manifest, present for

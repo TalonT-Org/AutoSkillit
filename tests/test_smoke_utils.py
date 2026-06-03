@@ -2745,9 +2745,7 @@ def test_aggregate_review_verdict_estimand_clarity_addressable_is_revise(tmp_pat
 
 
 def test_structural_fixability_values_matches_skill_md_pseudocode() -> None:
-    """_STRUCTURAL_FIXABILITY_VALUES members must be referenced in SKILL.md pseudocode by name."""
-    from autoskillit.smoke_utils._review import _STRUCTURAL_FIXABILITY_VALUES
-
+    """_STRUCTURAL_FIXABILITY_VALUES must be referenced by name in SKILL.md pseudocode."""
     skill_md = Path("src/autoskillit/skills_extended/review-design/SKILL.md").read_text()
     step7_start = skill_md.index("### Step 7")
     step7_end = skill_md.index("### Step 8")
@@ -2761,14 +2759,10 @@ def test_structural_fixability_values_matches_skill_md_pseudocode() -> None:
     assert match, "Step 7 must contain structural_stop_triggers list comprehension"
     comprehension_body = match.group(1)
 
-    for member in _STRUCTURAL_FIXABILITY_VALUES:
-        member_str = repr(member) if member is not None else "None"
-        assert member_str in comprehension_body or (
-            member is None and "None" in comprehension_body
-        ), (
-            f"SKILL.md pseudocode must reference fixability member {member_str} "
-            f"from _STRUCTURAL_FIXABILITY_VALUES"
-        )
+    assert "_STRUCTURAL_FIXABILITY_VALUES" in comprehension_body, (
+        "structural_stop_triggers must reference _STRUCTURAL_FIXABILITY_VALUES by name — "
+        "do not inline the fixability values as separate OR clauses"
+    )
 
     assert "f.dimension ==" not in comprehension_body, (
         "structural_stop_triggers must not use dimension-only matching — "

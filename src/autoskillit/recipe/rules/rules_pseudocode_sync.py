@@ -13,7 +13,7 @@ import importlib.util
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import Severity
+from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe._skill_placeholder_parser import extract_python_blocks
 from autoskillit.recipe.contracts import resolve_skill_name
@@ -21,6 +21,8 @@ from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 if TYPE_CHECKING:
     from autoskillit.recipe._analysis import ValidationContext
+
+logger = get_logger(__name__)
 
 
 def _get_package_source_dir(callable_path: str) -> Path | None:
@@ -48,33 +50,39 @@ def _find_frozenset_constants(source_dir: Path) -> dict[str, frozenset[str | Non
         try:
             tree = ast.parse(py_file.read_text(encoding="utf-8"))
         except Exception:
+            logger.warning("Failed to parse %s", py_file, exc_info=True)
             continue
         for node in ast.iter_child_nodes(tree):
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if not isinstance(target, ast.Name):
-                    continue
+            targets: list[ast.Name] = []
+            val: ast.expr | None = None
+            if isinstance(node, ast.Assign):
+                targets = [t for t in node.targets if isinstance(t, ast.Name)]
                 val = node.value
-                if not (
-                    isinstance(val, ast.Call)
-                    and isinstance(val.func, ast.Name)
-                    and val.func.id == "frozenset"
-                    and val.args
-                ):
-                    continue
-                inner = val.args[0]
-                if not isinstance(inner, (ast.Set, ast.List)):
-                    continue
-                members: set[str | None] = set()
-                valid = True
-                for elt in inner.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, (str, type(None))):
-                        members.add(elt.value)
-                    else:
-                        valid = False
-                        break
-                if valid:
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                targets = [node.target]
+                val = node.value
+            if not targets or val is None:
+                continue
+            if not (
+                isinstance(val, ast.Call)
+                and isinstance(val.func, ast.Name)
+                and val.func.id == "frozenset"
+                and val.args
+            ):
+                continue
+            inner = val.args[0]
+            if not isinstance(inner, (ast.Set, ast.List)):
+                continue
+            members: set[str | None] = set()
+            valid = True
+            for elt in inner.elts:
+                if isinstance(elt, ast.Constant) and isinstance(elt.value, (str, type(None))):
+                    members.add(elt.value)
+                else:
+                    valid = False
+                    break
+            if valid:
+                for target in targets:
                     constants[target.id] = frozenset(members)
     return constants
 

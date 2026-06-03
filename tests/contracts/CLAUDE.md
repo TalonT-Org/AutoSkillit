@@ -14,10 +14,12 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_advisory_coverage.py` | Contracts: SKILL_FILE_ADVISORY_MAP advisory hook coverage |
 | `test_analyze_pipeline_health_contracts.py` | Contract tests for the analyze-pipeline-health skill — output patterns and delimiter |
 | `test_api_surface_alignment.py` | REQ-C8-01 / C2-01: API surface alignment tests |
+| `test_apply_review_dimensions_contracts.py` | Contract tests for apply-review-dimensions SKILL.md behavioral encoding — L1 gate, ADDRESSABLE/STRUCTURAL, subagent inputs, red-team, output tokens, findings manifest JSON schema |
 | `test_backend_protocol.py` | Protocol conformance for CodingAgentBackend, StreamParser, ResultParser, and ClaudeCodeBackend |
 | `test_backend_compliance.py` | Return-type and protocol conformance for all BACKEND_REGISTRY entries |
 | `test_claim_issue_contracts.py` | Contract tests for claim_issue and release_issue MCP tools |
 | `test_claude_code_interface_contracts.py` | Contract tests for Claude Code external interface conventions |
+| `test_classify_experiment_type_contracts.py` | Contract tests for classify-experiment-type SKILL.md — registry-based classification, secondary modifiers, silent-type detection, output tokens, and skill_contracts.yaml registration |
 | `test_collapse_issues_contracts.py` | Contract tests for the collapse-issues skill SKILL.md |
 | `test_callable_skill_parity.py` | Cross-check: recipe-dispatched skills must have contract tests |
 | `test_campaign_prompt_accuracy.py` | Contract: campaign prompt does not contain inaccurate semaphore language |

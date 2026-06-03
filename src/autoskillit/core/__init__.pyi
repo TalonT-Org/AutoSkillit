@@ -135,6 +135,7 @@ from .types import CATEGORY_TAGS as CATEGORY_TAGS
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
 from .types import CLAUDE_MODEL_ALIASES as CLAUDE_MODEL_ALIASES
 from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_MARKER
+from .types import CODEX_EFFORT_MAPPING as CODEX_EFFORT_MAPPING
 from .types import CODEX_INTERACTIVE_REQUIRED_ENV as CODEX_INTERACTIVE_REQUIRED_ENV
 from .types import CODEX_MCP_ENV_FORWARD_VARS as CODEX_MCP_ENV_FORWARD_VARS
 from .types import CODEX_MODEL_ALIASES as CODEX_MODEL_ALIASES
@@ -276,6 +277,7 @@ from .types import MergeState as MergeState
 from .types import MigrationService as MigrationService
 from .types import ModelIdentity as ModelIdentity
 from .types import ModelTotalEntry as ModelTotalEntry
+from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
 from .types import NoResume as NoResume
 from .types import OutputFormat as OutputFormat

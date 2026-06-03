@@ -198,3 +198,26 @@ def test_coding_agent_backend_protocol_includes_setup_session_dir():
     assert callable(getattr(CodingAgentBackend, "setup_session_dir")), (
         "setup_session_dir must be callable"
     )
+
+
+def test_coding_agent_backend_protocol_includes_model_config_overrides():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert hasattr(CodingAgentBackend, "model_config_overrides"), (
+        "CodingAgentBackend protocol must define model_config_overrides"
+    )
+    assert callable(getattr(CodingAgentBackend, "model_config_overrides")), (
+        "model_config_overrides must be callable"
+    )
+
+
+def test_all_backends_implement_model_config_overrides():
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    for name, cls in BACKEND_REGISTRY.items():
+        assert hasattr(cls, "model_config_overrides"), (
+            f"{name} backend must implement model_config_overrides"
+        )
+        assert callable(getattr(cls, "model_config_overrides")), (
+            f"{name} backend model_config_overrides must be callable"
+        )

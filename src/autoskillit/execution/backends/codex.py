@@ -21,6 +21,7 @@ from autoskillit.core import (
     AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
+    CODEX_EFFORT_MAPPING,
     CODEX_INTERACTIVE_REQUIRED_ENV,
     CODEX_MODEL_ALIASES,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
@@ -346,6 +347,9 @@ def _generate_agent_tomls(session_dir: Path) -> int:
         model_key = meta.get("model")
         if model_key and model_key in CODEX_MODEL_ALIASES:
             lines.append(f"model = {_format_toml_value(CODEX_MODEL_ALIASES[model_key])}")
+            effort = CODEX_EFFORT_MAPPING.get(model_key)
+            if effort:
+                lines.append(f"model_reasoning_effort = {_format_toml_value(effort)}")
         lines.append(f"developer_instructions = '''\n{body}\n'''")
         atomic_write(out_dir / f"{name}.toml", "\n".join(lines) + "\n")
         count += 1
@@ -430,6 +434,15 @@ class CodexBackend:
         base = strip_context_window_suffix(model)
         return CODEX_MODEL_ALIASES.get(base, base)
 
+    def model_config_overrides(self, model: str) -> tuple[str, ...]:
+        from autoskillit.core import strip_context_window_suffix
+
+        base = strip_context_window_suffix(model)
+        effort = CODEX_EFFORT_MAPPING.get(base)
+        if effort:
+            return (f"model_reasoning_effort={effort}",)
+        return ()
+
     def version_cmd(self) -> tuple[str, ...]:
         return ("codex", "--version")
 
@@ -452,6 +465,8 @@ class CodexBackend:
         ]
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
+            for override in self.model_config_overrides(model):
+                cmd += [CodexFlags.CONFIG_OVERRIDE, override]
         for d in add_dirs:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
@@ -591,6 +606,8 @@ class CodexBackend:
         ]
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
+            for override in self.model_config_overrides(model):
+                cmd += [CodexFlags.CONFIG_OVERRIDE, override]
         if resume_session_id:
             cmd.append(CodexFlags.RESUME_SUBCOMMAND)
             cmd.append(resume_session_id)
@@ -700,6 +717,8 @@ class CodexBackend:
         ]
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
+            for override in self.model_config_overrides(model):
+                cmd += [CodexFlags.CONFIG_OVERRIDE, override]
         if resume_session_id:
             cmd.append(CodexFlags.RESUME_SUBCOMMAND)
             cmd.append(resume_session_id)
@@ -738,6 +757,8 @@ class CodexBackend:
                 builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
         if model:
             builder.kv_flag(CodexFlags.MODEL, self.translate_model(model))
+            for override in self.model_config_overrides(model):
+                builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, override)
         builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
         if system_prompt is not None and isinstance(resume_spec, NoResume):
             builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, f"developer_instructions={system_prompt}")

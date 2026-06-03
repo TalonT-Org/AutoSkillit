@@ -73,12 +73,18 @@ def test_codex_status_consistent_with_required_backends():
 
     violations = []
     for key, cap in SKILL_CAPABILITY_REGISTRY.items():
-        if cap.codex_status != "not-applicable" and cap.required_backends == frozenset(
-            {AGENT_BACKEND_CLAUDE_CODE}
-        ):
-            violations.append(
-                f"{key}: codex_status={cap.codex_status!r} contradicts required_backends"
-            )
+        if cap.codex_status == "not-applicable":
+            if cap.required_backends != frozenset({AGENT_BACKEND_CLAUDE_CODE}):
+                violations.append(
+                    f"{key}: codex_status='not-applicable' but "
+                    f"required_backends={cap.required_backends!r} (expected {{claude-code}})"
+                )
+        else:
+            if cap.required_backends != frozenset():
+                violations.append(
+                    f"{key}: codex_status={cap.codex_status!r} but "
+                    f"required_backends={cap.required_backends!r} (expected empty)"
+                )
     assert not violations, "\n".join(f"  {v}" for v in violations)
 
 

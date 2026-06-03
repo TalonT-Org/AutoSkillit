@@ -217,8 +217,8 @@ Tests and configuration that maintain the path-based test filter's correctness. 
 - High-churn files in Bucket A that frequently negate filter performance gains
 
 **Test file naming for oracle traceability:**
-- Source modules under `src/autoskillit/` with zero corresponding `test_<module>.py` files — the coverage oracle (`test-source-map.json`) and aggressive mode step 7 file-level filtering rely on naming correspondence
-- Cross-reference C8's naming rules — the filter-specific concern is that misnamed test files block file-level filtering in aggressive mode step 7
+- Source modules under `src/autoskillit/` with zero corresponding `test_<module>.py` files — the coverage oracle (`test-source-map.json`) and step 7 file-level filtering rely on naming correspondence
+- Cross-reference C8's naming rules — the filter-specific concern is that misnamed test files block file-level filtering in step 7
 
 **Filter infrastructure staleness:**
 - `LAYER_CASCADE_CONSERVATIVE` or `LAYER_CASCADE_AGGRESSIVE` keys in `tests/_test_filter.py` that don't match the current set of subpackages under `src/autoskillit/`

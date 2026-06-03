@@ -54,7 +54,6 @@ def test_recipe_skills_have_contract_tests() -> None:
         "audit-feature-gates",
         "audit-docs",
         "audit-review-decisions",
-        "apply-review-dimensions",
         "make-plan",
         "review-approach",
         "audit-impl",
@@ -90,7 +89,6 @@ def test_recipe_skills_have_contract_tests() -> None:
         "compose-research-pr",
         "audit-claims",
         "bundle-local-report",
-        "classify-experiment-type",
     }
     failures: list[str] = []
     for recipe_name, skill_name in _skill_based_steps():

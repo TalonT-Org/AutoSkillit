@@ -111,14 +111,6 @@ def test_l4_step_has_agent_implementability(skill_text: str) -> None:
     )
 
 
-def test_agent_implementability_in_l4_step(skill_text: str) -> None:
-    """Step 4 must document the `agent_implementability` subagent under its name."""
-    step4 = skill_text_between("### Step 4:", "### Three-Layer Silencing Rules", skill_text)
-    assert "agent_implementability" in step4, (
-        "Step 4 must name the `agent_implementability` subagent in the L4 roster"
-    )
-
-
 def test_agent_implementability_sub_checks_documented(skill_text: str) -> None:
     """Step 4 must document all 7 sub-checks for the agent_implementability subagent."""
     step4 = skill_text_between("### Step 4:", "### Three-Layer Silencing Rules", skill_text)

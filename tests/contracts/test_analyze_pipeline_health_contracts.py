@@ -71,3 +71,30 @@ def test_analyze_pipeline_health_skill_has_codex_guidance():
     skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
     content = skill_path.read_text()
     assert "codex_log" in content, "SKILL.md must reference codex_log for Codex session handling"
+
+
+def test_analyze_pipeline_health_never_prohibits_tmp():
+    """NEVER block must prohibit /tmp and /var/tmp writes."""
+    from autoskillit.core import pkg_root
+
+    skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
+    content = skill_path.read_text()
+    assert "/tmp" in content and "/var/tmp" in content, (
+        "analyze-pipeline-health/SKILL.md NEVER block must explicitly prohibit "
+        "/tmp and /var/tmp writes"
+    )
+
+
+def test_analyze_pipeline_health_has_output_dir_resolution():
+    """SKILL.md must have a Step 0 resolving {{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/."""
+    from autoskillit.core import pkg_root
+
+    skill_path = pkg_root() / "skills_extended" / "analyze-pipeline-health" / "SKILL.md"
+    content = skill_path.read_text()
+    assert "{{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/" in content, (
+        "analyze-pipeline-health/SKILL.md must resolve "
+        "{{AUTOSKILLIT_TEMP}}/analyze-pipeline-health/ as the scratch directory"
+    )
+    assert "Step 0" in content, (
+        "analyze-pipeline-health/SKILL.md must have a Step 0 for output-dir resolution"
+    )

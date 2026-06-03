@@ -290,7 +290,7 @@ def test_write_guard_tests_cover_deny_and_allow_paths() -> None:
         for node in ast.walk(tree)
         if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
     }
-    deny_indicators = {"denied", "blocked", "deny"}
+    deny_indicators = {"denied", "blocked", "deny", "rejected"}
     allow_indicators = {"allowed", "not_blocked", "false_positive", "readonly", "approved"}
     missing = []
     for family in REQUIRED_BIDIRECTIONAL_FAMILIES:

@@ -58,17 +58,20 @@ class TestResearchDesignRecipeStructure:
         assert recipe.ingredients["issue_url"].required is False
 
     def test_step_count(self, recipe) -> None:
-        assert len(recipe.steps) == 14
+        assert len(recipe.steps) == 17
 
     def test_step_names(self, recipe) -> None:
         expected = {
             "scope",
             "select_directions",
             "plan_experiment",
-            "review_design",
             "dial",
+            "select_review_dimensions",
             "apply",
             "synthesize",
+            "vis_dial",
+            "vis_apply",
+            "vis_synthesize",
             "create_worktree",
             "revise_design",
             "check_design_review_loop",
@@ -92,7 +95,7 @@ class TestResearchDesignRecipeStructure:
 
     def test_plan_experiment_routing(self, recipe) -> None:
         step = recipe.steps["plan_experiment"]
-        assert step.on_success == "review_design"
+        assert step.on_success == "dial"
         assert step.on_failure == "escalate_stop"
 
     def test_plan_experiment_captures_experiment_plan(self, recipe) -> None:
@@ -103,30 +106,71 @@ class TestResearchDesignRecipeStructure:
         for field in ("revision_guidance", "selected_directions"):
             assert field in refs, f"plan_experiment optional_context_refs must include: {field}"
 
-    def test_review_design_skip_when_false(self, recipe) -> None:
-        assert recipe.steps["review_design"].skip_when_false == "inputs.review_design"
+    def test_dial_phoropter_family(self, recipe) -> None:
+        assert recipe.steps["dial"].phoropter_family == "review-design"
 
-    def test_review_design_retries(self, recipe) -> None:
-        assert recipe.steps["review_design"].retries == 2
+    def test_dial_skip_behavior(self, recipe) -> None:
+        assert recipe.steps["dial"].skip_when_false == "inputs.review_design"
 
-    def test_review_design_on_exhausted(self, recipe) -> None:
-        assert recipe.steps["review_design"].on_exhausted == "dial"
+    def test_dial_on_success(self, recipe) -> None:
+        assert recipe.steps["dial"].on_success == "select_review_dimensions"
 
-    def test_review_design_on_context_limit(self, recipe) -> None:
-        assert recipe.steps["review_design"].on_context_limit == "dial"
+    def test_dial_on_failure(self, recipe) -> None:
+        assert recipe.steps["dial"].on_failure == "escalate_stop"
 
-    def test_review_design_on_failure(self, recipe) -> None:
-        assert recipe.steps["review_design"].on_failure == "dial"
+    def test_dial_captures(self, recipe) -> None:
+        capture = recipe.steps["dial"].capture
+        for key in ("experiment_type", "is_silent_type", "classification_timestamp"):
+            assert key in capture, f"Missing capture key: {key}"
 
-    def test_review_design_on_result_go(self, recipe) -> None:
-        step = recipe.steps["review_design"]
+    def test_select_review_dimensions_phoropter_family(self, recipe) -> None:
+        assert recipe.steps["select_review_dimensions"].phoropter_family == "review-design"
+
+    def test_select_review_dimensions_captures(self, recipe) -> None:
+        capture = recipe.steps["select_review_dimensions"].capture
+        for key in ("selected_lenses", "dimensions_manifest_path"):
+            assert key in capture, f"Missing capture key: {key}"
+
+    def test_apply_phoropter_family(self, recipe) -> None:
+        assert recipe.steps["apply"].phoropter_family == "review-design"
+
+    def test_apply_skip_when_true(self, recipe) -> None:
+        assert recipe.steps["apply"].skip_when_true == "context.is_silent_type"
+
+    def test_apply_retries(self, recipe) -> None:
+        assert recipe.steps["apply"].retries == 2
+
+    def test_apply_on_exhausted(self, recipe) -> None:
+        assert recipe.steps["apply"].on_exhausted == "synthesize"
+
+    def test_apply_on_context_limit(self, recipe) -> None:
+        assert recipe.steps["apply"].on_context_limit == "synthesize"
+
+    def test_apply_on_failure(self, recipe) -> None:
+        assert recipe.steps["apply"].on_failure == "synthesize"
+
+    def test_apply_receives_scope_report(self, recipe) -> None:
+        step = recipe.steps["apply"]
+        cmd = step.with_args["skill_command"]
+        assert "${{ context.scope_report }}" in cmd
+
+    def test_apply_captures(self, recipe) -> None:
+        capture = recipe.steps["apply"].capture
+        for key in ("findings_manifest_path", "evaluation_dashboard"):
+            assert key in capture, f"Missing capture key: {key}"
+
+    def test_synthesize_phoropter_family(self, recipe) -> None:
+        assert recipe.steps["synthesize"].phoropter_family == "review-design"
+
+    def test_synthesize_on_result_go(self, recipe) -> None:
+        step = recipe.steps["synthesize"]
         assert step.on_result is not None
         go_cond = next((c for c in step.on_result.conditions if c.when and "GO" in c.when), None)
         assert go_cond is not None, "Missing GO route"
-        assert go_cond.route == "dial"
+        assert go_cond.route == "vis_dial"
 
-    def test_review_design_on_result_revise(self, recipe) -> None:
-        step = recipe.steps["review_design"]
+    def test_synthesize_on_result_revise(self, recipe) -> None:
+        step = recipe.steps["synthesize"]
         assert step.on_result is not None
         revise_cond = next(
             (c for c in step.on_result.conditions if c.when and "REVISE" in c.when), None
@@ -134,8 +178,8 @@ class TestResearchDesignRecipeStructure:
         assert revise_cond is not None, "Missing REVISE route"
         assert revise_cond.route == "revise_design"
 
-    def test_review_design_on_result_stop(self, recipe) -> None:
-        step = recipe.steps["review_design"]
+    def test_synthesize_on_result_stop(self, recipe) -> None:
+        step = recipe.steps["synthesize"]
         assert step.on_result is not None
         stop_cond = next(
             (c for c in step.on_result.conditions if c.when and "STOP" in c.when), None
@@ -143,70 +187,71 @@ class TestResearchDesignRecipeStructure:
         assert stop_cond is not None, "Missing STOP route"
         assert stop_cond.route == "resolve_design_review"
 
-    def test_review_design_on_result_fallback(self, recipe) -> None:
-        step = recipe.steps["review_design"]
+    def test_synthesize_on_result_fallback(self, recipe) -> None:
+        step = recipe.steps["synthesize"]
         assert step.on_result is not None
         fallback = next((c for c in step.on_result.conditions if c.when is None), None)
         assert fallback is not None, "Missing fallback route"
-        assert fallback.route == "dial"
+        assert fallback.route == "vis_dial"
 
-    def test_review_design_no_on_success(self, recipe) -> None:
-        assert recipe.steps["review_design"].on_success is None
-
-    def test_review_design_captures(self, recipe) -> None:
-        capture = recipe.steps["review_design"].capture
-        for key in ("verdict", "experiment_type", "evaluation_dashboard", "revision_guidance"):
-            assert key in capture, f"Missing capture key: {key}"
-
-    def test_review_design_receives_scope_report(self, recipe) -> None:
-        """review_design step must pass scope_report as a second argument."""
-        step = recipe.steps["review_design"]
-        cmd = step.with_args["skill_command"]
-        assert "${{ context.scope_report }}" in cmd
-
-    def test_dial_phoropter_family(self, recipe) -> None:
-        assert recipe.steps["dial"].phoropter_family == "vis-lens"
-
-    def test_dial_on_success(self, recipe) -> None:
-        assert recipe.steps["dial"].on_success == "apply"
-
-    def test_dial_on_failure(self, recipe) -> None:
-        assert recipe.steps["dial"].on_failure == "escalate_stop"
-
-    def test_dial_captures(self, recipe) -> None:
-        capture = recipe.steps["dial"].capture
-        assert "selected_lenses" in capture
-        assert "lens_context_paths" in capture
-
-    def test_apply_phoropter_family(self, recipe) -> None:
-        assert recipe.steps["apply"].phoropter_family == "vis-lens"
-
-    def test_apply_capture_list(self, recipe) -> None:
-        assert "all_figure_spec_paths" in recipe.steps["apply"].capture_list
-
-    def test_apply_retries_zero(self, recipe) -> None:
-        assert recipe.steps["apply"].retries == 0
-
-    def test_apply_on_success(self, recipe) -> None:
-        assert recipe.steps["apply"].on_success == "synthesize"
-
-    def test_apply_on_failure(self, recipe) -> None:
-        assert recipe.steps["apply"].on_failure == "synthesize"
-
-    def test_synthesize_phoropter_family(self, recipe) -> None:
-        assert recipe.steps["synthesize"].phoropter_family == "vis-lens"
-
-    def test_synthesize_on_success(self, recipe) -> None:
-        assert recipe.steps["synthesize"].on_success == "create_worktree"
-
-    def test_synthesize_on_failure(self, recipe) -> None:
-        assert recipe.steps["synthesize"].on_failure == "escalate_stop"
+    def test_synthesize_no_on_success(self, recipe) -> None:
+        assert recipe.steps["synthesize"].on_success is None
 
     def test_synthesize_captures(self, recipe) -> None:
         capture = recipe.steps["synthesize"].capture
+        for key in ("verdict", "revision_guidance"):
+            assert key in capture, f"Missing capture key: {key}"
+
+    def test_vis_dial_phoropter_family(self, recipe) -> None:
+        assert recipe.steps["vis_dial"].phoropter_family is None
+
+    def test_vis_dial_on_success(self, recipe) -> None:
+        assert recipe.steps["vis_dial"].on_success == "vis_apply"
+
+    def test_vis_dial_on_failure(self, recipe) -> None:
+        assert recipe.steps["vis_dial"].on_failure == "escalate_stop"
+
+    def test_vis_dial_captures(self, recipe) -> None:
+        capture = recipe.steps["vis_dial"].capture
+        assert "selected_lenses" in capture
+        assert "lens_context_paths" in capture
+
+    def test_vis_apply_phoropter_family(self, recipe) -> None:
+        assert recipe.steps["vis_apply"].phoropter_family is None
+
+    def test_vis_apply_capture_list(self, recipe) -> None:
+        assert "all_figure_spec_paths" in recipe.steps["vis_apply"].capture_list
+
+    def test_vis_apply_retries_zero(self, recipe) -> None:
+        assert recipe.steps["vis_apply"].retries == 0
+
+    def test_vis_apply_on_success(self, recipe) -> None:
+        assert recipe.steps["vis_apply"].on_success == "vis_synthesize"
+
+    def test_vis_apply_on_failure(self, recipe) -> None:
+        assert recipe.steps["vis_apply"].on_failure == "vis_synthesize"
+
+    def test_vis_synthesize_phoropter_family(self, recipe) -> None:
+        assert recipe.steps["vis_synthesize"].phoropter_family is None
+
+    def test_vis_synthesize_on_success(self, recipe) -> None:
+        assert recipe.steps["vis_synthesize"].on_success == "create_worktree"
+
+    def test_vis_synthesize_on_failure(self, recipe) -> None:
+        assert recipe.steps["vis_synthesize"].on_failure == "escalate_stop"
+
+    def test_vis_synthesize_captures(self, recipe) -> None:
+        capture = recipe.steps["vis_synthesize"].capture
         assert "visualization_plan_path" in capture
         assert "report_plan_path" in capture
         assert "visualization_plan_trace_path" in capture
+
+    def test_check_design_review_loop_non_exhausted_routes_to_apply(self, recipe) -> None:
+        step = recipe.steps["check_design_review_loop"]
+        assert step.on_result is not None
+        default = next((c for c in step.on_result.conditions if c.when is None), None)
+        assert default is not None
+        assert default.route == "apply"
 
     def test_no_plan_visualization_step(self, recipe) -> None:
         assert "plan_visualization" not in recipe.steps

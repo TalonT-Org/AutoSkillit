@@ -5,20 +5,14 @@ on_context_limit, and retained Critical Constraints.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
+from autoskillit.core import pkg_root
+
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
-SKILL_MD = (
-    Path(__file__).resolve().parents[2]
-    / "src"
-    / "autoskillit"
-    / "skills_extended"
-    / "review-design"
-    / "SKILL.md"
-)
+SKILL_MD = pkg_root() / "skills_extended" / "review-design" / "SKILL.md"
 
 
 @pytest.fixture(scope="module")

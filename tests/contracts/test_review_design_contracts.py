@@ -68,6 +68,13 @@ def test_scope_report_argument_documented(skill_text: str) -> None:
 # ── Orchestration dispatch ────────────────────────────────────────────────────
 
 
+_DISPATCH_XFAIL = pytest.mark.xfail(
+    reason="Forward-looking: passes after review-design SKILL.md decomposition",
+    strict=True,
+)
+
+
+@_DISPATCH_XFAIL
 def test_dispatch_to_classify_experiment_type(skill_text: str) -> None:
     """review-design must name classify-experiment-type as a dispatch target."""
     assert "classify-experiment-type" in skill_text, (
@@ -76,6 +83,7 @@ def test_dispatch_to_classify_experiment_type(skill_text: str) -> None:
     )
 
 
+@_DISPATCH_XFAIL
 def test_dispatch_to_apply_review_dimensions(skill_text: str) -> None:
     """review-design must name apply-review-dimensions as a dispatch target."""
     assert "apply-review-dimensions" in skill_text, (

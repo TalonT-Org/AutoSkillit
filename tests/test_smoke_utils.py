@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -2741,6 +2742,42 @@ def test_aggregate_review_verdict_estimand_clarity_addressable_is_revise(tmp_pat
     assert "revision_guidance_path" in result
     assert Path(result["revision_guidance_path"]).exists()
     assert Path(result["evaluation_dashboard_path"]).exists()
+
+
+def test_structural_fixability_values_matches_skill_md_pseudocode() -> None:
+    """_STRUCTURAL_FIXABILITY_VALUES members must be referenced in SKILL.md pseudocode by name."""
+    from autoskillit.smoke_utils._review import _STRUCTURAL_FIXABILITY_VALUES
+
+    skill_md = Path("src/autoskillit/skills_extended/review-design/SKILL.md").read_text()
+    step7_start = skill_md.index("### Step 7")
+    step7_end = skill_md.index("### Step 8")
+    step7_text = skill_md[step7_start:step7_end]
+
+    match = re.search(
+        r"structural_stop_triggers\s*=\s*\[(.+?)\n\s*\]",
+        step7_text,
+        re.DOTALL,
+    )
+    assert match, "Step 7 must contain structural_stop_triggers list comprehension"
+    comprehension_body = match.group(1)
+
+    for member in _STRUCTURAL_FIXABILITY_VALUES:
+        member_str = repr(member) if member is not None else "None"
+        assert member_str in comprehension_body or (
+            member is None and "None" in comprehension_body
+        ), (
+            f"SKILL.md pseudocode must reference fixability member {member_str} "
+            f"from _STRUCTURAL_FIXABILITY_VALUES"
+        )
+
+    assert "f.dimension ==" not in comprehension_body, (
+        "structural_stop_triggers must not use dimension-only matching — "
+        "this was the original bug (issue #3092)"
+    )
+    assert 'f.get("dimension")' not in comprehension_body, (
+        "structural_stop_triggers must not use f.get('dimension') matching — "
+        "use fixability-based gating only"
+    )
 
 
 def test_aggregate_review_verdict_rt_cap_downgrades(tmp_path: Path) -> None:

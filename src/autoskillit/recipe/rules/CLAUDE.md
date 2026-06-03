@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (37 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis (44 flat rule files + 4 subdirectories).
 
 ## Subdirectories
 
@@ -41,6 +41,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_optional_capture.py` | Optional capture guard enforcement |
 | `rules_packs.py` | Pack validation (names must exist in `PACK_REGISTRY`) |
 | `rules_phoropter_adjacency.py` | Phoropter phase-order and step-interleaving adjacency rules |
+| `rules_pseudocode_sync.py` | SKILL.md pseudocode constant-reference divergence from run_python callables |
 | `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
 | `rules_audit_impl_topology.py` | audit-impl-diff-topology-mismatch semantic rule |
 | `rules_remediation.py` | audit-impl remediation_path capture routing rules |

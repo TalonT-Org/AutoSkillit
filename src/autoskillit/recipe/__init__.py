@@ -143,6 +143,9 @@ from autoskillit.recipe.rules import rules_packs as _rules_packs  # noqa: E402 F
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_phoropter_adjacency as _rules_phoropter_adjacency,  # noqa: F401
 )
+from autoskillit.recipe.rules import (
+    rules_pseudocode_sync as _rules_pseudocode_sync,  # noqa: E402 F401
+)
 from autoskillit.recipe.rules import rules_reachability as _rules_reachability  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_recipe as _rules_recipe  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_remediation as _rules_remediation  # noqa: E402 F401

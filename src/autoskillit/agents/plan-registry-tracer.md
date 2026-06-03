@@ -132,12 +132,13 @@ For EACH file found in Steps 2–4 (tree-sitter, LSP, grep), determine if it is:
 - A **derived artifact** (generated file, compiled output, cache)
 - A **re-export** (`__init__.py`, `__all__`, `.pyi` stub)
 - A **test fixture** or factory
+- A **pseudocode documentation** file (SKILL.md with ```python blocks that reference symbols the plan modifies)
 - A **documentation file** (markdown, docstring, comment)
 - **None of the above** (regular code usage — still needs updating if renamed)
 
 ### Step 6 — Check Plan Coverage
 
-For EACH file classified as a registry, type definition, config, derived artifact, or re-export:
+For EACH file classified as a registry, type definition, config, derived artifact, re-export, or pseudocode documentation:
 - Does the plan explicitly update this file?
 - If not, is the update implied by another step in the plan?
 - If neither, this is a **finding**
@@ -182,7 +183,7 @@ This check is the primary defense against the "two-family" planning failure, whe
 
 Write this table for EACH symbol before forming any conclusion:
 
-| Symbol | File Found | Reference Type (registry/type/config/artifact/re-export/test/doc/code) | Updated by Plan? |
+| Symbol | File Found | Reference Type (registry/type/config/artifact/re-export/pseudo-doc/test/doc/code) | Updated by Plan? |
 |--------|-----------|-----------------------------------------------------------------------|-----------------|
 | ... | ... | ... | ... |
 

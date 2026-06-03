@@ -112,3 +112,35 @@ def test_review_design_input_gating(skill_text: str) -> None:
         "review-design/SKILL.md must reference the review_design ingredient "
         "as its input gating mechanism"
     )
+
+
+# ── structural_stop_triggers pseudocode sync ────────────────────────────────
+
+
+def test_verdict_pseudocode_no_dimension_only_stop_trigger(skill_text: str) -> None:
+    """structural_stop_triggers must not use dimension-only matching to bypass fixability."""
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    match = re.search(
+        r"structural_stop_triggers\s*=\s*\[(.+?)\n\s*\]",
+        step7_text,
+        re.DOTALL,
+    )
+    assert match, "Step 7 must contain structural_stop_triggers list comprehension"
+    comprehension_body = match.group(1)
+    assert "f.dimension ==" not in comprehension_body, (
+        "structural_stop_triggers must not use dimension-only matching — "
+        "use fixability-based gating via _STRUCTURAL_FIXABILITY_VALUES"
+    )
+    assert 'f.get("dimension")' not in comprehension_body, (
+        "structural_stop_triggers must not use dimension-only matching — "
+        "use fixability-based gating via _STRUCTURAL_FIXABILITY_VALUES"
+    )
+
+
+def test_verdict_pseudocode_structural_fixability_constant_reference(skill_text: str) -> None:
+    """Step 7 pseudocode must reference _STRUCTURAL_FIXABILITY_VALUES by name."""
+    step7_text = skill_text_between("### Step 7", "### Step 8", skill_text)
+    assert "_STRUCTURAL_FIXABILITY_VALUES" in step7_text, (
+        "Step 7 pseudocode must reference _STRUCTURAL_FIXABILITY_VALUES by name — "
+        "do not inline the fixability values as separate OR clauses"
+    )

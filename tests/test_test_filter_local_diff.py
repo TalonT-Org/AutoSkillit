@@ -29,6 +29,7 @@ class TestGitChangedFilesLocal:
         assert mock_run.call_count == 2
         first_call = mock_run.call_args_list[0][0][0]
         assert first_call == ["git", "diff", "HEAD", "--name-only"]
+        assert mock_run.call_args_list[0].kwargs["cwd"] == "/fake"
 
     def test_local_diff_clean_worktree(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Clean working tree returns empty set (not None — diff succeeded)."""

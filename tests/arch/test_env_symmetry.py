@@ -21,6 +21,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND__BACKEND", raising=False)
 
 
 def test_skill_and_food_truck_share_required_env_vars() -> None:
@@ -95,3 +96,64 @@ def test_agent_backend_env_var_in_food_truck(monkeypatch: pytest.MonkeyPatch) ->
         assert "AUTOSKILLIT_AGENT_BACKEND" in food_truck_spec.env, (
             f"{name}: AUTOSKILLIT_AGENT_BACKEND missing from build_food_truck_cmd env"
         )
+
+
+def test_dynaconf_backend_env_var_in_skill_session() -> None:
+    """Nested AUTOSKILLIT_AGENT_BACKEND__BACKEND in build_skill_session_cmd env for every backend."""  # noqa: E501
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
+    for name, cls in BACKEND_REGISTRY.items():
+        backend = cls()
+        skill_spec = backend.build_skill_session_cmd(
+            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+        )
+        assert "AUTOSKILLIT_AGENT_BACKEND__BACKEND" in skill_spec.env, (
+            f"{name}: AUTOSKILLIT_AGENT_BACKEND__BACKEND missing from build_skill_session_cmd env"
+        )
+
+
+def test_dynaconf_backend_env_var_in_food_truck_cmd() -> None:
+    """Nested AUTOSKILLIT_AGENT_BACKEND__BACKEND in build_food_truck_cmd env for every backend."""  # noqa: E501
+    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
+    for name, cls in BACKEND_REGISTRY.items():
+        backend = cls()
+        food_truck_spec = backend.build_food_truck_cmd(
+            orchestrator_prompt="test prompt",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            cwd="/repo",
+            completion_marker="DONE",
+        )
+        assert "AUTOSKILLIT_AGENT_BACKEND__BACKEND" in food_truck_spec.env, (
+            f"{name}: AUTOSKILLIT_AGENT_BACKEND__BACKEND missing from build_food_truck_cmd env"
+        )
+
+
+def test_dynaconf_and_flat_backend_values_match() -> None:
+    """Nested and flat AGENT_BACKEND env vars must carry the same value in all cmd builders."""
+    from autoskillit.core.types._type_plugin_source import DirectInstall
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
+    for name, cls in BACKEND_REGISTRY.items():
+        backend = cls()
+        skill_spec = backend.build_skill_session_cmd(
+            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+        )
+        assert (
+            skill_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
+            == skill_spec.env["AUTOSKILLIT_AGENT_BACKEND"]
+        ), f"{name}: nested and flat AGENT_BACKEND values differ in build_skill_session_cmd"
+        food_truck_spec = backend.build_food_truck_cmd(
+            orchestrator_prompt="test prompt",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            cwd="/repo",
+            completion_marker="DONE",
+        )
+        assert (
+            food_truck_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
+            == food_truck_spec.env["AUTOSKILLIT_AGENT_BACKEND"]
+        ), f"{name}: nested and flat AGENT_BACKEND values differ in build_food_truck_cmd"

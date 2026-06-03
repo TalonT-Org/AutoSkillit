@@ -57,7 +57,6 @@ from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
     maybe_promote_work_dir,
     resolve_relative_path_args,
-    strip_work_dir_from_args,
     validate_path_arg_anchoring,
 )
 
@@ -350,7 +349,6 @@ async def run_python(
                     work_dir=promoted,
                 )
                 work_dir = promoted
-                args = strip_work_dir_from_args(args)
             if work_dir and not Path(work_dir).is_absolute():
                 return json.dumps(
                     {

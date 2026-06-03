@@ -93,7 +93,7 @@ def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFindi
         if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
             continue
         valid_params = set(sig.parameters.keys())
-        tool_level_params = RUN_PYTHON_SENTINEL_KEYS | {"args", "work_dir"}
+        tool_level_params = RUN_PYTHON_SENTINEL_KEYS | {"args"}
         provided_args = _get_provided_args(step.with_args) - tool_level_params
         invalid = provided_args - valid_params
         for arg_name in sorted(invalid):

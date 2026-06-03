@@ -139,8 +139,11 @@ def test_sentinel_keys_do_not_collide_with_callable_params() -> None:
                 if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
             }
             overlap = RUN_PYTHON_SENTINEL_KEYS & explicit_params
+            nested_args = with_args.get("args", {})
             for key in sorted(overlap):
                 if sig.parameters[key].default is inspect.Parameter.empty:
+                    if isinstance(nested_args, dict) and key in nested_args:
+                        continue
                     unsafe_collisions.append(
                         f"{yaml_file.name}:{step_name} → {callable_path} declares "
                         f"'{key}' as required (no default) — recipe must pass it via args:"
@@ -163,8 +166,32 @@ def test_sentinel_keys_subset_of_tool_params() -> None:
         f"Sentinel keys {RUN_PYTHON_SENTINEL_KEYS - tool_params} are not in _TOOL_PARAMS"
     )
     non_sentinel_tool_params = tool_params - RUN_PYTHON_SENTINEL_KEYS - {"args"}
-    assert non_sentinel_tool_params == {"work_dir"}, (
+    assert non_sentinel_tool_params == set(), (
         f"Unexpected non-sentinel tool params: {non_sentinel_tool_params}"
+    )
+
+
+def test_sentinel_covers_work_dir_for_rpc_merge_callables() -> None:
+    """work_dir in sentinel set ensures introspection guard preserves it for _cmd_rpc_merge."""
+    import importlib
+    import inspect
+
+    from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS
+
+    mod = importlib.import_module("autoskillit.recipe._cmd_rpc_merge")
+    callables_with_work_dir = []
+    for name in dir(mod):
+        obj = getattr(mod, name)
+        if not callable(obj) or name.startswith("_"):
+            continue
+        sig = inspect.signature(obj)
+        if "work_dir" in sig.parameters:
+            callables_with_work_dir.append(name)
+
+    assert callables_with_work_dir, "_cmd_rpc_merge should have callables that accept work_dir"
+    assert "work_dir" in RUN_PYTHON_SENTINEL_KEYS, (
+        "work_dir must be in RUN_PYTHON_SENTINEL_KEYS so the introspection guard "
+        "preserves it for callables that declare it"
     )
 
 

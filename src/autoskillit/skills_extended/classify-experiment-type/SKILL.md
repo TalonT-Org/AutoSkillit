@@ -110,7 +110,7 @@ One subagent receives full plan plus parsed fields. Returns:
 (bundled sorted alphabetically, then user-defined sorted alphabetically). First type whose
 `classification_triggers` match the plan is selected. No match → default to `exploratory`.
 
-**Secondary modifiers** (additive, increase dimension weights):
+**Secondary modifiers** (additive, increase — never decrease — dimension weights):
 - `+causal`: mechanism claim in non-causal type → `causal_structure` weight +1 tier
 - `+high_cost`: resources > 4 GPU-hours → `resource_proportionality` L→M
 - `+deployment`: motivation references production/users → `ecological_validity` floor = M

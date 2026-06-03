@@ -144,6 +144,7 @@ from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
+from .types import GITHUB_API_SKILL_FAMILIES as GITHUB_API_SKILL_FAMILIES
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
 from .types import FLEET_ERROR_CODES as FLEET_ERROR_CODES
@@ -303,6 +304,7 @@ from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionTelemetry as SessionTelemetry
 from .types import SessionType as SessionType
 from .types import Severity as Severity
+from .types import SkillFamilyDef as SkillFamilyDef
 from .types import SkillLister as SkillLister
 from .types import SkillResolver as SkillResolver
 from .types import SkillResult as SkillResult

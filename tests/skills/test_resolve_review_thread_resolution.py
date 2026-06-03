@@ -2,21 +2,34 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core.types import GITHUB_API_SKILL_FAMILIES
+
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
+
+_THREAD_RESOLVER_FAMILY = next(
+    f for f in GITHUB_API_SKILL_FAMILIES if f.name == "thread-resolvers"
+)
+_SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
 
 @pytest.fixture
 def resolve_review_skill_md() -> str:
-    skill_path = (
-        Path(__file__).parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "skills_extended"
-        / "resolve-review"
-        / "SKILL.md"
-    )
+    skill_path = _SRC_ROOT / "skills_extended" / "resolve-review" / "SKILL.md"
     assert skill_path.exists(), f"SKILL.md not found at expected path: {skill_path}"
     return skill_path.read_text()
+
+
+def _read_member_skill_md(name: str) -> str:
+    path = _SRC_ROOT / "skills_extended" / name / "SKILL.md"
+    if not path.exists():
+        path = _SRC_ROOT / "skills" / name / "SKILL.md"
+    assert path.exists(), f"SKILL.md not found for {name}"
+    return path.read_text()
+
+
+@pytest.fixture(params=sorted(_THREAD_RESOLVER_FAMILY.members))
+def thread_resolver_skill_md(request: pytest.FixtureRequest) -> str:
+    return _read_member_skill_md(request.param)
 
 
 def test_skill_fetches_review_threads_via_graphql(resolve_review_skill_md: str) -> None:
@@ -86,21 +99,21 @@ def test_skill_reports_thread_resolution_count(resolve_review_skill_md: str) -> 
     )
 
 
-def test_resolve_review_uses_graphql_aliases(resolve_review_skill_md: str) -> None:
+def test_thread_resolver_uses_graphql_aliases(thread_resolver_skill_md: str) -> None:
     """Thread resolution must use aliased GraphQL mutations, not individual calls."""
-    assert "resolveReviewThread" in resolve_review_skill_md, (
+    assert "resolveReviewThread" in thread_resolver_skill_md, (
         "SKILL.md must include resolveReviewThread mutation for thread resolution"
     )
     assert (
-        "alias" in resolve_review_skill_md.lower()
-        or "resolve1:" in resolve_review_skill_md
-        or "resolve${" in resolve_review_skill_md
+        "alias" in thread_resolver_skill_md.lower()
+        or "resolve1:" in thread_resolver_skill_md
+        or "resolve${" in thread_resolver_skill_md
     ), (
         "SKILL.md must use GraphQL aliases (alias pattern or resolve${i}:) "
         "to batch thread resolutions, not individual mutations per call"
     )
 
 
-def test_resolve_review_reply_loop_has_delay(resolve_review_skill_md: str) -> None:
+def test_thread_resolver_reply_loop_has_delay(thread_resolver_skill_md: str) -> None:
     """Reply POST loop must include sleep 1 between calls."""
-    assert "sleep 1" in resolve_review_skill_md or "sleep(1)" in resolve_review_skill_md
+    assert "sleep 1" in thread_resolver_skill_md or "sleep(1)" in thread_resolver_skill_md

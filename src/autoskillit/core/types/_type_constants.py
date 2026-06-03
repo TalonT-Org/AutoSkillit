@@ -5,6 +5,8 @@ Zero autoskillit imports.
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 __all__ = [
     "RETIRED_SKILL_NAMES",
     "RETIRED_AGENT_NAMES",
@@ -30,6 +32,8 @@ __all__ = [
     "RUN_PYTHON_SENTINEL_KEYS",
     "SCOPE_DIRECTION_SOURCE_TYPES",
     "WORKTREE_SKILLS",
+    "SkillFamilyDef",
+    "GITHUB_API_SKILL_FAMILIES",
 ]
 
 RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
@@ -75,6 +79,52 @@ WORKTREE_SKILLS: frozenset[str] = frozenset(
         "implement-experiment",
         "retry-worktree",
     }
+)
+
+
+class SkillFamilyDef(NamedTuple):
+    """Skill family definition — groups sibling skills that must share API patterns."""
+
+    name: str
+    members: frozenset[str]
+    required_patterns: frozenset[str]
+
+
+GITHUB_API_SKILL_FAMILIES: tuple[SkillFamilyDef, ...] = (
+    SkillFamilyDef(
+        name="thread-resolvers",
+        members=frozenset(
+            {
+                "resolve-review",
+                "resolve-research-review",
+                "resolve-claims-review",
+            }
+        ),
+        required_patterns=frozenset(
+            {
+                "graphql-batch-aliases",
+                "mutating-call-delay",
+            }
+        ),
+    ),
+    SkillFamilyDef(
+        name="review-posters",
+        members=frozenset(
+            {
+                "review-pr",
+                "review-research-pr",
+                "audit-claims",
+            }
+        ),
+        required_patterns=frozenset(
+            {
+                "mutating-call-delay",
+                "unpostable-prefilter",
+                "response-body-guard",
+                "own-pr-guard",
+            }
+        ),
+    ),
 )
 
 

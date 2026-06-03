@@ -36,8 +36,8 @@ class TestClaudeTranslateModel:
     def test_identity(self) -> None:
         assert ClaudeCodeBackend().translate_model("sonnet") == "sonnet"
 
-    def test_strips_context_suffix(self) -> None:
-        assert ClaudeCodeBackend().translate_model("opus[1m]") == "opus"
+    def test_preserves_context_suffix(self) -> None:
+        assert ClaudeCodeBackend().translate_model("opus[1m]") == "opus[1m]"
 
     def test_unknown_passthrough(self) -> None:
         assert ClaudeCodeBackend().translate_model("custom-model-xyz") == "custom-model-xyz"
@@ -46,7 +46,7 @@ class TestClaudeTranslateModel:
         assert ClaudeCodeBackend().translate_model("haiku") == "haiku"
 
     def test_suffix_case_insensitive(self) -> None:
-        assert ClaudeCodeBackend().translate_model("opus[1M]") == "opus"
+        assert ClaudeCodeBackend().translate_model("opus[1M]") == "opus[1M]"
 
 
 class TestCodexBuildCmdTranslatesModel:
@@ -81,23 +81,23 @@ class TestCodexBuildCmdTranslatesModel:
 
 
 class TestClaudeBuildCmdTranslatesModel:
-    def test_build_headless_cmd_strips_suffix(self) -> None:
+    def test_build_headless_cmd_preserves_suffix(self) -> None:
         spec = ClaudeCodeBackend().build_headless_cmd("test prompt", model="opus[1m]")
         model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == "opus"
+        assert spec.cmd[model_idx + 1] == "opus[1m]"
 
-    def test_build_interactive_cmd_strips_suffix(self) -> None:
+    def test_build_interactive_cmd_preserves_suffix(self) -> None:
         spec = ClaudeCodeBackend().build_interactive_cmd(model="sonnet[1m]")
         model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == "sonnet"
+        assert spec.cmd[model_idx + 1] == "sonnet[1m]"
 
-    def test_build_skill_session_cmd_strips_suffix(self) -> None:
+    def test_build_skill_session_cmd_preserves_suffix(self) -> None:
         config = SkillSessionConfig(model="sonnet[1m]", completion_marker="%%DONE%%")
         spec = ClaudeCodeBackend().build_skill_session_cmd("/test", "/repo", config)
         model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == "sonnet"
+        assert spec.cmd[model_idx + 1] == "sonnet[1m]"
 
-    def test_build_food_truck_cmd_strips_suffix(self) -> None:
+    def test_build_food_truck_cmd_preserves_suffix(self) -> None:
         from autoskillit.core import DirectInstall
 
         spec = ClaudeCodeBackend().build_food_truck_cmd(
@@ -108,4 +108,4 @@ class TestClaudeBuildCmdTranslatesModel:
             model="opus[1m]",
         )
         model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == "opus"
+        assert spec.cmd[model_idx + 1] == "opus[1m]"

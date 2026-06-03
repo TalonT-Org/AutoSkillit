@@ -312,7 +312,11 @@ class ClaudeCodeBackend:
         )
 
         base = strip_context_window_suffix(model)
-        return CLAUDE_MODEL_ALIASES.get(base, base)
+        resolved = CLAUDE_MODEL_ALIASES.get(base, base)
+        if self.capabilities.supports_context_window_suffix:
+            suffix = model[len(base) :]
+            return resolved + suffix
+        return resolved
 
     def version_cmd(self) -> tuple[str, ...]:
         return ("claude", "--version")

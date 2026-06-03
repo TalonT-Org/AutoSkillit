@@ -147,11 +147,14 @@ PROJECT RULES CHECKLIST:
 [ ] Uses existing utilities (not reinventing) unless refactoring is part of plan or provides major improvement
 [ ] Test command uses the project's configured `test_check.commands` (list of commands, if set) or `test_check.command` (from `.autoskillit/config.yaml`, default: `task test-check`) — no unconfigured direct test runner invocations (pytest, python -m pytest, etc.)
 [ ] Worktree setup uses `worktree_setup.command` or `task install-worktree` — no hardcoded `uv venv`, `pip install`, or direct package manager invocations
+[ ] Code samples comply with the Architectural Constraint Catalog in resolve-review/SKILL.md — read the catalog table (44 constraints enforced by pytest, not pre-commit) and verify no plan code sample violates a listed constraint (e.g., .write_text() instead of _atomic_write(), bare `import re` instead of `import regex as re`)
 ```
 
 **Test command enforcement:** Scan the entire plan for any test invocation. Read the project's configured test commands from `.autoskillit/config.yaml`: check `test_check.commands` first (list of ordered commands, if set); fall back to `test_check.command` (single command, default: `task test-check`). If the plan contains `pytest`, `python -m pytest`, `make test`, or any other unconfigured test runner invocation, replace it with the config-driven command(s).
 
 **Worktree setup enforcement:** Scan the plan for any worktree environment setup. The plan should reference the project's configured `worktree_setup.command` or `task install-worktree`. If the plan contains hardcoded `uv venv`, `uv pip install`, `pip install -e`, `npm install` (as worktree setup, not as a configured command), flag it and replace with the config-driven approach.
+
+**Architectural constraint enforcement:** Read the Architectural Constraint Catalog table in `resolve-review/SKILL.md` (under the heading "Architectural Constraint Catalog — consult before classifying ACCEPT"). For each code sample or code block in the plan, verify it does not violate any cataloged constraint. If a violation is found, flag it with the constraint name and enforcing test file, and note the required alternative (e.g., "Plan line 260 uses `.write_text()` — REQ-AST-002 requires `_atomic_write()`").
 
 ### Step 4.5: Historical Regression Check
 

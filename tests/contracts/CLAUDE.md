@@ -88,6 +88,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_review_pr_severity_calibration.py` | Contract test: review-pr SKILL.md must contain severity calibration examples and grouping rule |
 | `test_no_interpreter_writes_in_skills.py` | Contract: no SKILL.md may prescribe interpreter-mediated file writes (python3 -c / heredoc with write APIs) |
 | `test_dry_walkthrough_transformation_extent.py` | Contract test: dry-walkthrough SKILL.md Step 2 must check transformation extent/scope |
+| `test_dry_walkthrough_arch_catalog_reference.py` | Contract test: dry-walkthrough SKILL.md Step 4 must reference the Architectural Constraint Catalog |
 | `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 | `test_source_attribution_contracts.py` | Cross-skill contract: source-attribution prohibition in dual-source skills |
 | `test_project_local_skill_delivery_contract.py` | Symmetric delivery contract tests for project-local skill overrides |

@@ -1427,8 +1427,20 @@ class TestCodexBackendSetupSessionDir:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)
         toml_files = list((self.session_dir / "agents").glob("*.toml"))
-        md_count = len([p for p in (pkg_root() / "agents").glob("*.md") if p.name != "CLAUDE.md"])
-        assert len(toml_files) == md_count
+        expected = 0
+        for md_path in (pkg_root() / "agents").glob("*.md"):
+            if md_path.name == "CLAUDE.md":
+                continue
+            text = md_path.read_text(encoding="utf-8")
+            if not text.startswith("---"):
+                continue
+            parts = text.split("---", 2)
+            if len(parts) < 3 or not parts[2].strip() or "'''" in parts[2]:
+                continue
+            expected += 1
+        assert len(toml_files) == expected, (
+            f"TOML count {len(toml_files)} != valid source count {expected}"
+        )
 
     def test_agent_toml_required_fields_present_and_nonempty(self) -> None:
         import tomllib

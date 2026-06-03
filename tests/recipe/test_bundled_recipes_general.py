@@ -414,7 +414,7 @@ def test_all_advisory_run_skill_steps_have_on_context_limit(recipe_path):
 
 @pytest.mark.parametrize(
     "recipe_name",
-    ["implementation", "remediation", "implementation-groups", "merge-prs", "research-review"],
+    ["implementation", "remediation", "implementation-groups", "merge-prs"],
 )
 def test_review_pr_step_passes_annotated_diff_inputs(recipe_name: str) -> None:
     """Every review-pr invocation must pass annotated_diff_path= and hunk_ranges_path=

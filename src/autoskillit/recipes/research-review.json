@@ -200,6 +200,9 @@
     },
     "extract_pr_number": {
       "tool": "run_cmd",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "cmd": "gh pr view '${{ context.pr_url }}' --json number -q .number",
         "cwd": "${{ context.worktree_path }}",
@@ -214,6 +217,9 @@
     },
     "annotate_pr_diff": {
       "tool": "run_python",
+      "optional_context_refs": [
+        "worktree_path"
+      ],
       "with": {
         "callable": "autoskillit.smoke_utils.annotate_pr_diff",
         "pr_number": "${{ context.pr_number }}",
@@ -225,8 +231,7 @@
       "capture": {
         "annotated_diff_path": "${{ result.annotated_diff_path }}",
         "hunk_ranges_path": "${{ result.hunk_ranges_path }}",
-        "valid_lines_path": "${{ result.valid_lines_path }}",
-        "pr_head_sha": "${{ result.head_sha }}"
+        "valid_lines_path": "${{ result.valid_lines_path }}"
       },
       "on_success": "review_research_pr",
       "on_failure": "review_research_pr",

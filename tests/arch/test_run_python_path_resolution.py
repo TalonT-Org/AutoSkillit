@@ -168,7 +168,7 @@ def test_sentinel_covers_work_dir_for_rpc_merge_callables() -> None:
 
     from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS
 
-    mod = importlib.import_module("autoskillit.execution.merge_queue._cmd_rpc_merge")
+    mod = importlib.import_module("autoskillit.recipe._cmd_rpc_merge")
     callables_with_work_dir = []
     for name in dir(mod):
         obj = getattr(mod, name)

@@ -1,7 +1,6 @@
 ---
 name: resolve-design-review
 categories: [research]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model, run_skill]
 description: >
   Triage STOP verdict findings from review-design, classifying each as

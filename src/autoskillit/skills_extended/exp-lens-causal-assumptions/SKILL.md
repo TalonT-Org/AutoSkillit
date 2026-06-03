@@ -1,7 +1,6 @@
 ---
 name: exp-lens-causal-assumptions
 categories: [exp-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create Causal Assumptions experimental design diagram showing confounders, mediators, colliders, and identification strategy. Causal-structural lens answering "What causal assumptions support this design?"

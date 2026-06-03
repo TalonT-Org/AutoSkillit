@@ -1,7 +1,6 @@
 ---
 name: exp-lens-comparator-construction
 categories: [exp-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create Comparator Construction experimental design analysis assessing whether baselines and controls are fair and relevant. Counterfactual lens answering "Is the comparator fair and relevant?"

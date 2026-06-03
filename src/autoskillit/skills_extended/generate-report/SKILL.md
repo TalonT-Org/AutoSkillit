@@ -1,7 +1,6 @@
 ---
 name: generate-report
 categories: [research]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model, cross_skill_ref]
 description: Synthesize experiment results into a structured research report in the research/ folder. Supports --inconclusive flag.
 hooks:

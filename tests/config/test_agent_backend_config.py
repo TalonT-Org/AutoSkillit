@@ -105,6 +105,7 @@ class TestAgentBackendConfigLoading:
         from autoskillit.config import load_config
 
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND__BACKEND", raising=False)
         config_dir = tmp_path / ".autoskillit"
         config_dir.mkdir()
         (config_dir / "config.yaml").write_text(yaml.dump({"agent_backend": {"backend": "aider"}}))

@@ -659,16 +659,8 @@ async def run_skill(
                 and tool_ctx.backend is not None
                 and not tool_ctx.backend.capabilities.anthropic_provider_capable
             )
-            _skill_requires_claude = (
-                _skill_info is not None
-                and "claude-code" in _skill_info.backend_requirements
-                and tool_ctx.backend is not None
-                and tool_ctx.backend.name != AGENT_BACKEND_CLAUDE_CODE
-            )
             backend_override: str | None = (
-                AGENT_BACKEND_CLAUDE_CODE
-                if (_provider_override or _skill_requires_claude)
-                else None
+                AGENT_BACKEND_CLAUDE_CODE if _provider_override else None
             )
 
             _effective_backend_obj: CodingAgentBackend | None = (
@@ -680,7 +672,7 @@ async def run_skill(
             if backend_override:
                 logger.info(
                     "backend_override_activated",
-                    reason="skill_requirement" if _skill_requires_claude else "provider_profile",
+                    reason="provider_profile",
                     skill=skill_command,
                     original_backend=tool_ctx.backend.name if tool_ctx.backend else "none",
                     target_backend=backend_override,

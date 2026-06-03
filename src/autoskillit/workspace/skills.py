@@ -8,7 +8,6 @@ from typing import Any, NamedTuple
 
 from autoskillit.core import (
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
-    KNOWN_BACKEND_NAMES,
     RETIRED_SKILL_NAMES,
     SKILL_CAPABILITY_REGISTRY,
     SkillSource,
@@ -125,30 +124,6 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
         if isinstance(categories_raw, list)
         else frozenset()
     )
-    backend_reqs_raw = data.get("backend_requirements", [])
-    if backend_reqs_raw and not isinstance(backend_reqs_raw, list):
-        logger.warning(
-            "backend_requirements_not_a_list",
-            value=backend_reqs_raw,
-            skill=name,
-            hint="use bracket syntax: backend_requirements: [claude-code]",
-        )
-        backend_reqs_raw = [backend_reqs_raw]
-    backend_requirements = (
-        frozenset(str(r) for r in backend_reqs_raw)
-        if isinstance(backend_reqs_raw, list)
-        else frozenset()
-    )
-    invalid = backend_requirements - KNOWN_BACKEND_NAMES
-    if invalid:
-        logger.warning(
-            "unrecognized_backend_requirements",
-            invalid=sorted(invalid),
-            skill=name,
-            valid=sorted(KNOWN_BACKEND_NAMES),
-        )
-        backend_requirements = backend_requirements - invalid
-
     caps_raw = data.get("uses_capabilities", [])
     if caps_raw and not isinstance(caps_raw, list):
         logger.warning(
@@ -170,6 +145,14 @@ def _skill_info_from_frontmatter(name: str, source: SkillSource, skill_path: Pat
             valid=sorted(SKILL_CAPABILITY_REGISTRY),
         )
         uses_capabilities = uses_capabilities - unknown_caps
+
+    backend_requirements: frozenset[str] = (
+        frozenset().union(
+            *(SKILL_CAPABILITY_REGISTRY[c].required_backends for c in uses_capabilities)
+        )
+        if uses_capabilities
+        else frozenset()
+    )
 
     return SkillInfo(
         name=name,

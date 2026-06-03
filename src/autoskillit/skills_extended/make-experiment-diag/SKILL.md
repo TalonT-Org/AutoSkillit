@@ -1,7 +1,6 @@
 ---
 name: make-experiment-diag
 categories: [exp-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [exp-lens]
 description: Interactive selection of experimental design lens for visualizing experiment methodology. Routes to the appropriate exp-lens-* skill.

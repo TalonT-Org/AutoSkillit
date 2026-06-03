@@ -1,6 +1,5 @@
 ---
 name: planner-elaborate-assignments
-backend_requirements: [claude-code]
 uses_capabilities: [run_skill]
 categories: [planner]
 description: >

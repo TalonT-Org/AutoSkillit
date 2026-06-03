@@ -1,6 +1,5 @@
 ---
 name: sous-chef
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref, open_kitchen, run_skill, test_check]
 description: Internal bootstrap document injected by open_kitchen into every orchestrator session.
 ---

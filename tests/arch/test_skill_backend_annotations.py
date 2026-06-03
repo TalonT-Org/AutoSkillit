@@ -120,22 +120,14 @@ def test_co_requirement_backend_requires_capabilities():
 
 
 def test_derivation_backend_requirements_match_capabilities():
-    """backend_requirements must equal the union of required_backends from uses_capabilities."""
+    """backend_requirements must NOT be declared in SKILL.md — derivation is runtime-only."""
     violations: list[str] = []
     for name, skill_md in _iter_skill_dirs():
         fm = _read_skill_frontmatter(skill_md)
-        uses_caps = list(fm.get("uses_capabilities", []))
-        if not uses_caps:
-            continue
-        derived: set[str] = set()
-        for cap_name in uses_caps:
-            cap_def = SKILL_CAPABILITY_REGISTRY.get(cap_name)
-            if cap_def:
-                derived |= cap_def.required_backends
-        declared = set(fm.get("backend_requirements", []))
-        if derived != declared:
-            violations.append(f"{name}: derived={sorted(derived)}, declared={sorted(declared)}")
+        declared = fm.get("backend_requirements", [])
+        if declared:
+            violations.append(f"{name}: has backend_requirements={declared} in frontmatter")
     assert not violations, (
-        f"{len(violations)} skill(s) have mismatched backend_requirements vs capabilities:\n"
-        + "\n".join(f"  {v}" for v in violations)
+        f"{len(violations)} skill(s) still have backend_requirements in SKILL.md frontmatter "
+        f"(should be derived at runtime):\n" + "\n".join(f"  {v}" for v in violations)
     )

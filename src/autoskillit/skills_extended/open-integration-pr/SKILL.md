@@ -1,7 +1,6 @@
 ---
 name: open-integration-pr
 categories: [github]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model, cross_skill_ref, run_skill]
 activate_deps: [arch-lens]
 description: >

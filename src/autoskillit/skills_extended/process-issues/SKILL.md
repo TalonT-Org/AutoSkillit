@@ -1,6 +1,5 @@
 ---
 name: process-issues
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model, cross_skill_ref, run_skill]
 description: Execute recipe sessions batch-by-batch for triaged GitHub issues. Reads the triage-issues output manifest, processes each batch sequentially, and launches the appropriate recipe for each issue. Use when user says "process issues", "run issues", or "execute pipeline for issues".
 hooks:

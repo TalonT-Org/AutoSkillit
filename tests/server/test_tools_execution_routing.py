@@ -322,26 +322,18 @@ async def test_run_skill_passes_backend_to_init_session(
 
 
 @pytest.mark.anyio
-async def test_run_skill_passes_effective_backend_to_init_session_when_override(
+async def test_run_skill_incompatible_backend_rejects_before_init_session(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    """When backend_override is triggered, init_session receives the overridden
-    backend object, not tool_ctx.backend."""
+    """When skill requires claude-code and effective backend is codex (no provider override),
+    the incompatibility gate rejects before init_session is called."""
+    import json
     from unittest.mock import MagicMock
 
-    from autoskillit.core import ValidatedAddDir
     from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
     from tests.fakes import InMemoryHeadlessExecutor
 
-    session_dir = tmp_path / "session"
-    session_dir.mkdir()
-    skill_md = session_dir / ".claude" / "skills" / "test-skill" / "SKILL.md"
-    skill_md.parent.mkdir(parents=True)
-    skill_md.write_text("name: test-skill\n")
-
-    fake_validated = ValidatedAddDir(path=str(session_dir))
     mock_ssm = MagicMock()
-    mock_ssm.init_session.return_value = fake_validated
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     fake_backend = MagicMock(spec=CodingAgentBackend)
@@ -349,10 +341,20 @@ async def test_run_skill_passes_effective_backend_to_init_session_when_override(
     fake_backend.capabilities.anthropic_provider_capable = False
     tool_ctx_kitchen_open.backend = fake_backend
 
-    mock_skill_info = MagicMock()
-    mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    from pathlib import Path
+
+    from autoskillit.core.types import SkillSource
+    from autoskillit.workspace.skills import SkillInfo
+
+    skill_info = SkillInfo(
+        name="test-skill",
+        source=SkillSource.BUNDLED,
+        path=Path("/fake/SKILL.md"),
+        backend_requirements=frozenset({"claude-code"}),
+        uses_capabilities=frozenset({"open_kitchen"}),
+    )
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = mock_skill_info
+    mock_resolver.resolve.return_value = skill_info
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
@@ -366,12 +368,11 @@ async def test_run_skill_passes_effective_backend_to_init_session_when_override(
         lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
     )
 
-    await run_skill("/autoskillit:test-skill", str(tmp_path))
-
-    mock_ssm.init_session.assert_called_once()
-    init_backend = mock_ssm.init_session.call_args.kwargs.get("backend")
-    assert init_backend is not fake_backend
-    assert init_backend.name == "claude-code"
+    result = await run_skill("/autoskillit:test-skill", str(tmp_path))
+    data = json.loads(result)
+    assert data.get("subtype") == "crashed"
+    assert "requires backend" in data.get("result", "")
+    mock_ssm.init_session.assert_not_called()
 
 
 class TestOutputDirParameter:

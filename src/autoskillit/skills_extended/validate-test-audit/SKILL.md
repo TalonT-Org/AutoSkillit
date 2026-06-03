@@ -1,7 +1,6 @@
 ---
 name: validate-test-audit
 categories: [audit]
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model, cross_skill_ref]
 description: >-
   Validate test audit findings with test-domain semantic rules and intent

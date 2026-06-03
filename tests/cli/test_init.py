@@ -323,7 +323,9 @@ class TestCodexInitFlow:
         )
 
     @pytest.fixture(autouse=True)
-    def _codex_backend_config(self, tmp_path: Path) -> None:
+    def _codex_backend_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND__BACKEND", raising=False)
         cfg_dir = tmp_path / ".autoskillit"
         cfg_dir.mkdir(parents=True, exist_ok=True)
         (cfg_dir / "config.yaml").write_text(

@@ -1,6 +1,5 @@
 ---
 name: make-plan
-backend_requirements: [claude-code]
 uses_capabilities: [agent_model, agent_subagent, cross_skill_ref]
 activate_deps: [arch-lens, write-recipe]
 description: Planning executor. ALWAYS invoke this skill when instructed to create, devise, or write an implementation plan. Do not explore the codebase or draft a plan directly — use this skill first to load the planning workflow.

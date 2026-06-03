@@ -1,7 +1,6 @@
 ---
 name: vis-lens-color-access
 categories: [vis-lens]
-backend_requirements: [claude-code]
 uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: "Create Chromatic Accessibility visualization planning spec showing colorblind safety (Okabe-Ito, Paul Tol palettes), perceptual uniformity checks (viridis/cividis pass; jet/rainbow fail), non-color redundant encoding (shape + line-style), and text size minimums. Chromatic lens answering \"Is the color encoding accessible and perceptually uniform?\""

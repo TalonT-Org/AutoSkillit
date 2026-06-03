@@ -301,44 +301,51 @@ class SkillCapabilityDef:
     """A capability that a skill may require from its execution backend."""
 
     description: str
-    required_backends: frozenset[str]
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"]
+
+    @property
+    def required_backends(self) -> frozenset[str]:
+        if self.codex_status == "not-applicable":
+            return frozenset({AGENT_BACKEND_CLAUDE_CODE})
+        return frozenset()
 
 
 SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
     "agent_subagent": SkillCapabilityDef(
         description="Agent(subagent_type=...) tool — delegates to specialized subagent",
-        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
         codex_status="fix-required",
     ),
     "agent_model": SkillCapabilityDef(
         description="Agent(model=...) tool — spawns model-specific subagent",
-        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
         codex_status="fix-required",
     ),
     "open_kitchen": SkillCapabilityDef(
         description="open_kitchen / close_kitchen lifecycle tools",
-        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
         codex_status="not-applicable",
     ),
     "run_skill": SkillCapabilityDef(
         description="run_skill MCP tool call (headless session dispatch)",
-        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
         codex_status="not-applicable",
     ),
     "test_check": SkillCapabilityDef(
         description="test_check MCP tool (headless test runner)",
-        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
         codex_status="not-applicable",
     ),
     "claude_dir": SkillCapabilityDef(
         description="Reads/writes .claude/ directory structure",
-        required_backends=frozenset(),
         codex_status="works-as-is",
     ),
     "cross_skill_ref": SkillCapabilityDef(
         description="Cross-skill /autoskillit: invocation via Skill tool",
-        required_backends=frozenset({AGENT_BACKEND_CLAUDE_CODE}),
         codex_status="fix-required",
     ),
 }
+
+_VALID_CODEX_STATUSES = {"works-as-is", "degraded", "fix-required", "not-applicable"}
+for _cap_name, _cap_def in SKILL_CAPABILITY_REGISTRY.items():
+    if _cap_def.codex_status not in _VALID_CODEX_STATUSES:
+        raise RuntimeError(
+            f"SKILL_CAPABILITY_REGISTRY[{_cap_name!r}].codex_status="
+            f"{_cap_def.codex_status!r} is not valid. "
+            f"Must be one of {sorted(_VALID_CODEX_STATUSES)}."
+        )

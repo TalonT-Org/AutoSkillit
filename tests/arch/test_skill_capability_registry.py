@@ -28,24 +28,27 @@ def test_all_capability_keys_are_consumed():
 
 
 def test_backend_requirements_derivable_from_capabilities():
-    all_fm = _all_skill_frontmatter()
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
     violations: list[str] = []
-    for name, fm in all_fm:
-        backend_reqs = frozenset(fm.get("backend_requirements", []))
-        uses_caps = list(fm.get("uses_capabilities", []))
-        if backend_reqs and not uses_caps:
-            violations.append(f"{name}: has backend_requirements but no uses_capabilities")
-            continue
+    for skill_info in resolver.list_all():
+        uses_caps = list(skill_info.uses_capabilities)
         if not uses_caps:
+            if skill_info.backend_requirements:
+                violations.append(
+                    f"{skill_info.name}: has backend_requirements but no uses_capabilities"
+                )
             continue
         derived: set[str] = set()
         for cap_name in uses_caps:
             cap_def = SKILL_CAPABILITY_REGISTRY.get(cap_name)
             if cap_def:
                 derived |= cap_def.required_backends
-        if frozenset(derived) != backend_reqs:
+        if frozenset(derived) != skill_info.backend_requirements:
             violations.append(
-                f"{name}: derived={sorted(derived)}, declared={sorted(backend_reqs)}"
+                f"{skill_info.name}: derived={sorted(derived)}, "
+                f"actual={sorted(skill_info.backend_requirements)}"
             )
     assert not violations, (
         f"{len(violations)} skill(s) have inconsistent backend_requirements vs "
@@ -63,3 +66,49 @@ def test_no_unknown_capability_declared():
     assert not violations, "Unknown capabilities declared in SKILL.md files:\n" + "\n".join(
         f"  {v}" for v in violations
     )
+
+
+def test_codex_status_consistent_with_required_backends():
+    from autoskillit.core.types._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
+
+    violations = []
+    for key, cap in SKILL_CAPABILITY_REGISTRY.items():
+        if cap.codex_status == "not-applicable":
+            if cap.required_backends != frozenset({AGENT_BACKEND_CLAUDE_CODE}):
+                violations.append(
+                    f"{key}: codex_status='not-applicable' but "
+                    f"required_backends={cap.required_backends!r} (expected {{claude-code}})"
+                )
+        else:
+            if cap.required_backends != frozenset():
+                violations.append(
+                    f"{key}: codex_status={cap.codex_status!r} but "
+                    f"required_backends={cap.required_backends!r} (expected empty)"
+                )
+    assert not violations, "\n".join(f"  {v}" for v in violations)
+
+
+_MCP_TOOL_CAPABILITIES = {"run_skill", "test_check", "open_kitchen"}
+
+
+def test_mcp_tools_require_claude_code():
+    from autoskillit.core.types._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
+
+    violations = []
+    for cap_name in _MCP_TOOL_CAPABILITIES:
+        cap = SKILL_CAPABILITY_REGISTRY.get(cap_name)
+        if cap and cap.required_backends != frozenset({AGENT_BACKEND_CLAUDE_CODE}):
+            violations.append(
+                f"{cap_name}: expected required_backends=frozenset({{'claude-code'}}), "
+                f"got {cap.required_backends!r}"
+            )
+    assert not violations, (
+        "MCP tools must derive required_backends from codex_status='not-applicable':\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_required_backends_is_derived_property():
+    from autoskillit.core.types._type_constants_registries import SkillCapabilityDef
+
+    assert "required_backends" not in SkillCapabilityDef.__dataclass_fields__

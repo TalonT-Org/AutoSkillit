@@ -568,14 +568,15 @@ One synthesis pass (no subagent — orchestrator synthesizes directly):
    for f in l1_criticals:
        if f.fixability == "ADDRESSABLE":
            f.priority = "REQUIRED"
-   # Scope guard: estimand_clarity always STRUCTURAL; None fixability defaults to STRUCTURAL
+   # Scope guard: only STRUCTURAL/None fixability triggers STOP (see _STRUCTURAL_FIXABILITY_VALUES)
    structural_stop_triggers = [
        f for f in l1_criticals
-       if f.fixability == "STRUCTURAL" or f.fixability is None or f.dimension == "estimand_clarity"
+       if f.fixability in _STRUCTURAL_FIXABILITY_VALUES  # {"STRUCTURAL", None}
    ]
 
-   # Red-team STOP path: adversarial critical findings after full analysis (L2-L4)
-   # These fire only when the L1 gate passed AND the severity cap still allows critical.
+   # Red-team STOP path: red_team has no fixability concept — dimension-only match is
+   # intentional here (unlike L1 criticals which gate on fixability via
+   # _STRUCTURAL_FIXABILITY_VALUES). The severity cap is applied upstream.
    stop_triggers = structural_stop_triggers + [f for f in critical_findings if f.dimension == "red_team"]
 
    if stop_triggers:

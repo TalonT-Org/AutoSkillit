@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -2741,6 +2742,40 @@ def test_aggregate_review_verdict_estimand_clarity_addressable_is_revise(tmp_pat
     assert "revision_guidance_path" in result
     assert Path(result["revision_guidance_path"]).exists()
     assert Path(result["evaluation_dashboard_path"]).exists()
+
+
+def test_structural_fixability_values_matches_skill_md_pseudocode() -> None:
+    """_STRUCTURAL_FIXABILITY_VALUES must be referenced by name in SKILL.md pseudocode."""
+    from autoskillit.core import pkg_root
+
+    skill_md = (pkg_root() / "skills_extended" / "review-design" / "SKILL.md").read_text()
+    step7_start = skill_md.find("### Step 7")
+    assert step7_start != -1, "SKILL.md must contain '### Step 7' heading"
+    step7_end = skill_md.find("### Step 8")
+    assert step7_end != -1, "SKILL.md must contain '### Step 8' heading"
+    step7_text = skill_md[step7_start:step7_end]
+
+    match = re.search(
+        r"structural_stop_triggers\s*=\s*\[(.+?)\n\s*\]",
+        step7_text,
+        re.DOTALL,
+    )
+    assert match, "Step 7 must contain structural_stop_triggers list comprehension"
+    comprehension_body = match.group(1)
+
+    assert "_STRUCTURAL_FIXABILITY_VALUES" in comprehension_body, (
+        "structural_stop_triggers must reference _STRUCTURAL_FIXABILITY_VALUES by name — "
+        "do not inline the fixability values as separate OR clauses"
+    )
+
+    assert "f.dimension ==" not in comprehension_body, (
+        "structural_stop_triggers must not use dimension-only matching — "
+        "this was the original bug (issue #3092)"
+    )
+    assert 'f.get("dimension")' not in comprehension_body, (
+        "structural_stop_triggers must not use f.get('dimension') matching — "
+        "use fixability-based gating only"
+    )
 
 
 def test_aggregate_review_verdict_rt_cap_downgrades(tmp_path: Path) -> None:

@@ -21,6 +21,7 @@ from autoskillit.core import (
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     CAMPAIGN_ID_ENV_VAR,
     CODEX_INTERACTIVE_REQUIRED_ENV,
+    CODEX_MODEL_ALIASES,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
@@ -45,6 +46,8 @@ from autoskillit.core import (
     default_log_dir,
     extract_skill_name,
     get_logger,
+    load_yaml,
+    pkg_root,
 )
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
@@ -58,7 +61,10 @@ from autoskillit.execution.backends._claude_prompt import (
     _inject_narration_suppression,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
-from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
+from autoskillit.execution.backends._codex_config import (
+    _format_toml_value,
+    ensure_codex_mcp_registered,
+)
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 
 __all__ = [
@@ -297,6 +303,47 @@ def _validate_codex_config() -> list[str]:
     return []
 
 
+def _generate_agent_tomls(session_dir: Path) -> int:
+    agents_src = pkg_root() / "agents"
+    out_dir = session_dir / "agents"
+    out_dir.mkdir(exist_ok=True)
+    count = 0
+    for md_path in sorted(agents_src.glob("*.md")):
+        if md_path.name == "CLAUDE.md":
+            continue
+        content = md_path.read_text(encoding="utf-8")
+        if not content.startswith("---"):
+            logger.warning("agent_toml_skip_no_frontmatter", path=str(md_path))
+            continue
+        parts = content.split("---", 2)
+        if len(parts) < 3:
+            logger.warning("agent_toml_skip_no_frontmatter", path=str(md_path))
+            continue
+        meta = load_yaml(parts[1])
+        body = parts[2].strip()
+        if not body:
+            logger.warning("agent_toml_skip_empty_body", path=str(md_path))
+            continue
+        if "'''" in body:
+            logger.warning("agent_toml_skip_triple_quote", path=str(md_path))
+            continue
+        name = meta["name"]
+        desc = meta["description"]
+        lines = [
+            f"name = {_format_toml_value(name)}",
+            f"description = {_format_toml_value(desc)}",
+            'sandbox_mode = "workspace-write"',
+        ]
+        model_key = meta.get("model")
+        if model_key and model_key in CODEX_MODEL_ALIASES:
+            lines.append(f"model = {_format_toml_value(CODEX_MODEL_ALIASES[model_key])}")
+        lines.append(f"developer_instructions = '''\n{body}\n'''")
+        (out_dir / f"{name}.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        count += 1
+    logger.debug("codex_agents_generated", count=count, dest=str(out_dir))
+    return count
+
+
 @dataclass(frozen=True, slots=True)
 class CodexBackend:
     @property
@@ -368,7 +415,6 @@ class CodexBackend:
 
     def translate_model(self, model: str) -> str:
         from autoskillit.core import (
-            CODEX_MODEL_ALIASES,
             strip_context_window_suffix,
         )
 
@@ -809,6 +855,11 @@ class CodexBackend:
             logger.warning(
                 "codex_sessions_symlink_failed", target=str(sessions_target), exc_info=True
             )
+
+        try:
+            _generate_agent_tomls(session_dir)
+        except Exception:
+            logger.warning("codex_agent_toml_generation_failed", exc_info=True)
 
     def validate_skill_content(self, content: str) -> list[str]:
         return []

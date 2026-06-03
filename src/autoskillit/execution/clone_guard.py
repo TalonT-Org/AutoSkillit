@@ -290,12 +290,18 @@ async def validate_pre_session_index(
                 strategy="sha",
             )
             return False
-        await _stash_and_clean(
+        clean_ok = await _stash_and_clean(
             cwd,
             runner,
             stash_label=f"pre-session {reset_sha[:8]}",
             exclude_prefix=exclude_prefix,
         )
+        if not clean_ok:
+            logger.warning(
+                "pre_session_stash_and_clean_failed",
+                reset_strategy="sha",
+            )
+            return False
         logger.info(
             "index_reset_pre_session",
             file_count=file_count,
@@ -367,6 +373,7 @@ async def _stash_and_clean(
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
+    tracked_clean = True
     if stash_result.returncode != 0:
         logger.warning(
             "stash_push_failed_falling_back_to_checkout",
@@ -384,6 +391,7 @@ async def _stash_and_clean(
                 returncode=co_result.returncode,
                 stderr=co_result.stderr.strip(),
             )
+            tracked_clean = False
 
     clean_cmd = ["git", "clean", "-fd"]
     if exclude_prefix:
@@ -402,7 +410,7 @@ async def _stash_and_clean(
 
     await _prune_stash_overflow(cwd, runner)
 
-    return clean_result.returncode == 0
+    return tracked_clean and clean_result.returncode == 0
 
 
 async def _prune_stash_overflow(

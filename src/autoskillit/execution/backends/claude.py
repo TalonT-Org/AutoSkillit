@@ -316,6 +316,9 @@ class ClaudeCodeBackend:
             return resolved + suffix
         return resolved
 
+    def model_config_overrides(self, model: str) -> tuple[str, ...]:
+        return ()
+
     def version_cmd(self) -> tuple[str, ...]:
         return ("claude", "--version")
 

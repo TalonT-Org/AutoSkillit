@@ -19,9 +19,11 @@ __all__ = [
     "BackendConventions",
     "CLAUDE_CODE_CAPABILITIES",
     "CLAUDE_MODEL_ALIASES",
+    "CODEX_EFFORT_MAPPING",
     "CODEX_MODEL_ALIASES",
     "CmdOrigin",
     "CmdSpec",
+    "ModelTranslation",
     "SkillSessionConfig",
     "ClaudeEventData",
     "CodexEventData",
@@ -140,10 +142,29 @@ CLAUDE_MODEL_ALIASES: dict[str, str] = {
 }
 
 CODEX_MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "o4-mini",
-    "opus": "o3",
-    "haiku": "gpt-4o-mini",
+    "sonnet": "gpt-5.5",
+    "opus": "gpt-5.5",
+    "haiku": "gpt-5.5",
 }
+
+CODEX_EFFORT_MAPPING: dict[str, str] = {
+    "sonnet": "high",
+    "opus": "xhigh",
+    "haiku": "medium",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ModelTranslation:
+    """Bundled result of model alias translation for future protocol unification.
+
+    Forward-declared to enable a future migration from translate_model() -> str
+    plus model_config_overrides() -> tuple to a single translate_model() ->
+    ModelTranslation protocol method.
+    """
+
+    model_id: str
+    config_overrides: tuple[str, ...] = ()
 
 
 def strip_context_window_suffix(model: str) -> str:

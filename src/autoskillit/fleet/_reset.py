@@ -112,6 +112,7 @@ async def _handle_sidecar_label_swap(
         return
     if sidecar_result is None:
         report.labels_reset = False
+        report.errors.append("sidecar read failed — label swap skipped")
         return
 
     match sidecar_result.source:

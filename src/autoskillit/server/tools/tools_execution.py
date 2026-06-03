@@ -20,6 +20,8 @@ from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
+    ClaudeDirectoryConventions,
+    CodingAgentBackend,
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -49,6 +51,9 @@ from autoskillit.server._misc import (
     _hook_config_overlay_path,
     _pipeline_tracker_path,
     resolve_closure_write_dirs,
+)
+from autoskillit.server._misc import (
+    get_backend as _get_backend,
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._subprocess import _run_subprocess
@@ -666,6 +671,12 @@ async def run_skill(
                 else None
             )
 
+            _effective_backend_obj: CodingAgentBackend | None = (
+                _get_backend(backend_override)
+                if backend_override is not None and tool_ctx.backend is not None
+                else tool_ctx.backend
+            )
+
             if backend_override:
                 logger.info(
                     "backend_override_activated",
@@ -690,7 +701,9 @@ async def run_skill(
 
             # Backend compatibility gate — fires before both replay and live session paths.
             if _skill_info and tool_ctx.backend is not None:
-                _effective_backend = backend_override or tool_ctx.backend.name
+                _effective_backend = (
+                    _effective_backend_obj.name if _effective_backend_obj is not None else ""
+                )
                 if _is_backend_incompatible(_skill_info, _effective_backend):
                     return SkillResult.crashed(
                         exception=RuntimeError(
@@ -805,7 +818,7 @@ async def run_skill(
                     recipe_packs=tool_ctx.active_recipe_packs,
                     recipe_features=tool_ctx.active_recipe_features,
                     allow_only=allow_only,
-                    backend=tool_ctx.backend,
+                    backend=_effective_backend_obj,
                 )
                 skill_add_dirs.append(session_root)
 
@@ -816,12 +829,13 @@ async def run_skill(
                         and tool_ctx.skill_resolver.resolve(target_name) is not None
                     )
                     if _is_known_skill:
+                        _skills_subdir = (
+                            _effective_backend_obj.conventions.skills_subdir
+                            if _effective_backend_obj is not None
+                            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+                        )
                         _skill_md = (
-                            Path(session_root.path)
-                            / ".claude"
-                            / "skills"
-                            / target_name
-                            / "SKILL.md"
+                            Path(session_root.path) / _skills_subdir / target_name / "SKILL.md"
                         )
                         if not _skill_md.exists():
                             logger.error(

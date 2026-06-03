@@ -241,6 +241,30 @@ def test_skip_when_false_field_is_parsed_from_yaml() -> None:
     assert step.skip_when_false == "inputs.open_pr"
 
 
+def test_phoropter_family_and_skip_when_true_fields_default_to_none() -> None:
+    """RecipeStep must have phoropter_family and skip_when_true fields defaulting to None."""
+    from autoskillit.recipe.schema import RecipeStep
+
+    step = RecipeStep(tool="run_skill")
+    assert step.phoropter_family is None
+    assert step.skip_when_true is None
+
+
+def test_phoropter_family_and_skip_when_true_parsed_from_yaml() -> None:
+    """phoropter_family and skip_when_true must be deserialized from YAML recipe data."""
+    from autoskillit.recipe.io import _parse_step
+
+    raw = {
+        "tool": "run_skill",
+        "phoropter_family": "review-design",
+        "skip_when_true": "context.is_silent_type",
+        "on_success": "next_step",
+    }
+    step = _parse_step(raw)
+    assert step.phoropter_family == "review-design"
+    assert step.skip_when_true == "context.is_silent_type"
+
+
 # ---------------------------------------------------------------------------
 # RECIPE-8: constant step type
 # ---------------------------------------------------------------------------

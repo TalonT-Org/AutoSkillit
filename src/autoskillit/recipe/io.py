@@ -385,6 +385,7 @@ _PARSE_STEP_HANDLED_FIELDS: frozenset[str] = frozenset(
         "block",  # Named block anchor; maps to step's block: key in YAML
         "pass_through",  # Captured outputs used for informational propagation only
         "phoropter_family",
+        "skip_when_true",
     }
 )
 if _PARSE_STEP_HANDLED_FIELDS != frozenset(RecipeStep.__dataclass_fields__):
@@ -671,6 +672,7 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         block=data.get("block"),
         pass_through=_ensure_list(data.get("pass_through", [])),
         phoropter_family=data.get("phoropter_family"),
+        skip_when_true=data.get("skip_when_true"),
     )
 
 

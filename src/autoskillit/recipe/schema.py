@@ -143,6 +143,7 @@ class RecipeStep:
         default_factory=list
     )  # Captured output names used for informational propagation, not flow control
     phoropter_family: str | None = None
+    skip_when_true: str | None = None
 
     def __post_init__(self) -> None:
         self.capture = _coerce_capture_dict(self.capture)

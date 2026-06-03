@@ -284,3 +284,22 @@ def test_route_action_does_not_trigger_interleaving():
     )
     findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-step-interleaving"]
     assert len(findings) == 0
+
+
+def test_non_canonical_phase_between_canonical_phases_is_transparent():
+    """A run_python step with phoropter_family set but a non-canonical step key between
+    dial and apply must NOT produce a phase-order or interleaving finding."""
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "select_review_dimensions": RecipeStep(tool="run_python", phoropter_family="test-fam"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "done": RecipeStep(action="stop"),
+        }
+    )
+    phoropter_rules = {"phoropter-phase-order", "phoropter-step-interleaving"}
+    findings = [f for f in run_semantic_rules(recipe) if f.rule in phoropter_rules]
+    assert len(findings) == 0

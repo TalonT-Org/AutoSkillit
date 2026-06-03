@@ -1,9 +1,10 @@
-"""Tests for idle_output_timeout config coherence validation."""
+"""Tests for idle_output_timeout and Codex MCP config coherence validation."""
 
 import pytest
 import structlog.testing
 
 from autoskillit.config import load_config
+from autoskillit.config.settings import _codex_mcp_timeout_coherence_gate
 
 pytestmark = [pytest.mark.layer("config"), pytest.mark.small]
 
@@ -56,4 +57,29 @@ class TestTimeoutCoherenceGate:
         assert cfg.run_skill.idle_output_timeout == 1000
         assert not any(
             "idle_output_timeout_coherence" in entry.get("event", "") for entry in cap_logs
+        )
+
+
+class TestCodexMcpTimeoutCoherenceGate:
+    """Tests for _codex_mcp_timeout_coherence_gate warning behavior."""
+
+    def test_no_warning_with_default_configs(self):
+        from autoskillit.config._config_dataclasses import FleetConfig, RunSkillConfig
+
+        with structlog.testing.capture_logs() as cap_logs:
+            _codex_mcp_timeout_coherence_gate(RunSkillConfig(), FleetConfig())
+        assert not any(
+            "codex_mcp_tool_timeout_coherence" in entry.get("event", "") for entry in cap_logs
+        )
+
+    def test_warns_when_tool_timeout_below_max_session(self):
+        from autoskillit.config._config_dataclasses import FleetConfig, RunSkillConfig
+
+        rs = RunSkillConfig()
+        fc = FleetConfig()
+        max_session = max(fc.default_timeout_sec + fc.max_extension_seconds, rs.timeout)
+        with structlog.testing.capture_logs() as cap_logs:
+            _codex_mcp_timeout_coherence_gate(rs, fc, tool_timeout=max_session - 1)
+        assert any(
+            "codex_mcp_tool_timeout_coherence" in entry.get("event", "") for entry in cap_logs
         )

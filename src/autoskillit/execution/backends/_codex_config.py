@@ -16,6 +16,13 @@ from autoskillit.core import (
     safe_upsert_section,
 )
 
+# Floor value: 14364.0 = max(3600 + 7200, 7200) * 1.33
+# Computed from FleetConfig and RunSkillConfig dataclass defaults.
+# This is a literal to avoid importing config/ (IL-004 constraint).
+CODEX_MCP_TOOL_TIMEOUT_FLOOR: float = 14364.0
+
+CODEX_MCP_STARTUP_TIMEOUT_SEC: float = 30.0
+
 logger = get_logger()
 
 
@@ -189,7 +196,12 @@ def _serialize_mcp_autoskillit_section(entry: dict[str, Any]) -> str:
     return _serialize_toml({"mcp_servers": {"autoskillit": entry}})
 
 
-def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bool) -> bool:
+def _is_autoskillit_registered(
+    config: dict[str, Any],
+    *,
+    headless_auto_gate: bool,
+    expected_tool_timeout: float = CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+) -> bool:
     entry = config.get("mcp_servers", {}).get("autoskillit")
     if not isinstance(entry, dict):
         return False
@@ -201,17 +213,30 @@ def _is_autoskillit_registered(config: dict[str, Any], *, headless_auto_gate: bo
     required = CODEX_MCP_ENV_FORWARD_VARS
     if not headless_auto_gate:
         required = required - {HEADLESS_AUTO_GATE_ENV_VAR}
-    return required.issubset(env_vars)
+    if not required.issubset(env_vars):
+        return False
+    if entry.get("tool_timeout_sec") != expected_tool_timeout:
+        return False
+    if entry.get("startup_timeout_sec") != CODEX_MCP_STARTUP_TIMEOUT_SEC:
+        return False
+    return True
 
 
 def ensure_codex_mcp_registered(
     *,
     config_path: Path | None = None,
     headless_auto_gate: bool = True,
+    tool_timeout_sec: float | None = None,
 ) -> bool:
-    """Return True if the entry was written, False if already registered."""
+    """Return True if the entry was written, False if already registered.
+
+    For corrupt files, always returns True (safe_upsert_section is unconditional).
+    """
     if config_path is None:
         config_path = Path.home() / ".codex" / "config.toml"
+    effective_timeout = (
+        tool_timeout_sec if tool_timeout_sec is not None else CODEX_MCP_TOOL_TIMEOUT_FLOOR
+    )
     result = _read_codex_config(config_path)
     base = CODEX_MCP_ENV_FORWARD_VARS
     if not headless_auto_gate:
@@ -220,19 +245,21 @@ def ensure_codex_mcp_registered(
     entry: dict[str, Any] = {
         "command": "autoskillit",
         "env_vars": env_vars,
-        "startup_timeout_sec": 30.0,
-        "tool_timeout_sec": 120.0,
+        "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+        "tool_timeout_sec": effective_timeout,
     }
 
     if result.is_corrupt:
-        # Corrupt file: always upsert via text-level operation.
-        # safe_upsert_section is idempotent (replaces if found, appends if not).
         section_text = _serialize_mcp_autoskillit_section(entry)
         safe_upsert_section(config_path, "[mcp_servers.autoskillit]", section_text)
         return True
     else:
         config = result.data
-        if _is_autoskillit_registered(config, headless_auto_gate=headless_auto_gate):
+        if _is_autoskillit_registered(
+            config,
+            headless_auto_gate=headless_auto_gate,
+            expected_tool_timeout=effective_timeout,
+        ):
             return False
         config.setdefault("mcp_servers", {})["autoskillit"] = entry
         _write_codex_config(config_path, config, source=result)

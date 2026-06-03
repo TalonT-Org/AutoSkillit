@@ -13,6 +13,7 @@ from autoskillit.core import DIRECT_INSTALL_CACHE_SUBDIR, Severity, build_agent_
 from ._doctor_types import DoctorResult
 
 if TYPE_CHECKING:
+    from autoskillit.config._config_dataclasses import FleetConfig, RunSkillConfig
     from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
@@ -270,6 +271,60 @@ def _check_plugin_cache_integrity(cache_dir: Path | None = None) -> DoctorResult
         Severity.OK,
         "plugin_cache_integrity",
         "Plugin cache hook paths are valid",
+    )
+
+
+def _check_codex_mcp_timeouts(
+    *,
+    backend: CodingAgentBackend | None = None,
+    run_skill: RunSkillConfig | None = None,
+    fleet: FleetConfig | None = None,
+) -> DoctorResult:
+    """Check that deployed Codex config.toml has a correct tool_timeout_sec value."""
+    if backend is None or not backend.capabilities.mcp_config_capable:
+        return DoctorResult(
+            Severity.OK,
+            "codex_mcp_timeouts",
+            f"Skipped (backend={backend.name if backend else 'none'})",
+        )
+    from autoskillit.config import compute_codex_mcp_tool_timeout
+    from autoskillit.execution import _read_codex_config
+
+    config_path = Path.home() / ".codex" / "config.toml"
+    read_result = _read_codex_config(config_path)
+    if read_result.is_corrupt or not read_result.data:
+        return DoctorResult(
+            Severity.OK,
+            "codex_mcp_timeouts",
+            "Codex config not readable — timeout check skipped",
+        )
+    entry = read_result.data.get("mcp_servers", {}).get("autoskillit")
+    if not isinstance(entry, dict):
+        return DoctorResult(
+            Severity.OK,
+            "codex_mcp_timeouts",
+            "No autoskillit MCP entry — timeout check skipped",
+        )
+    observed = entry.get("tool_timeout_sec")
+    if observed is None:
+        return DoctorResult(
+            Severity.WARNING,
+            "codex_mcp_timeouts",
+            "tool_timeout_sec missing from codex config.toml. Run 'autoskillit init' to set it.",
+        )
+    expected = compute_codex_mcp_tool_timeout(run_skill=run_skill, fleet=fleet)
+    if observed < expected:
+        return DoctorResult(
+            Severity.WARNING,
+            "codex_mcp_timeouts",
+            f"tool_timeout_sec={observed}s in codex config.toml is below "
+            f"the expected value ({expected}s). Long-running MCP tool calls "
+            f"will be killed by Codex. Run 'autoskillit init' to update.",
+        )
+    return DoctorResult(
+        Severity.OK,
+        "codex_mcp_timeouts",
+        f"tool_timeout_sec={observed}s is sufficient (expected={expected}s)",
     )
 
 

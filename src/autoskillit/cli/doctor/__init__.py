@@ -51,6 +51,7 @@ from ._doctor_install import (
 )
 from ._doctor_mcp import (
     _check_cache_version_mismatch,
+    _check_codex_mcp_timeouts,
     _check_dual_mcp_registration,
     _check_installed_plugins_entry,
     _check_mcp_server_registered,
@@ -206,6 +207,11 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 31: script(1) PTY binary availability
     results.append(_check_script_binary())
+
+    # Check 32: Codex MCP tool_timeout_sec coherence
+    results.append(
+        _check_codex_mcp_timeouts(backend=_backend, run_skill=cfg.run_skill, fleet=cfg.fleet)
+    )
 
     # Output
     if output_json:

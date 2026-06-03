@@ -189,6 +189,10 @@ class TestCheckMcpServerRegisteredCodexBackend:
             HEADLESS_AUTO_GATE_ENV_VAR,
             Severity,
         )
+        from autoskillit.execution import (
+            CODEX_MCP_STARTUP_TIMEOUT_SEC,
+            CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+        )
         from autoskillit.execution.backends.codex import CodexBackend
 
         codex_dir = tmp_path / ".codex"
@@ -197,7 +201,10 @@ class TestCheckMcpServerRegisteredCodexBackend:
             f'"{v}"' for v in sorted(CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR})
         )
         (codex_dir / "config.toml").write_text(
-            f'[mcp_servers.autoskillit]\ncommand = "autoskillit"\nenv_vars = [{env_vars_str}]\n'
+            f'[mcp_servers.autoskillit]\ncommand = "autoskillit"\n'
+            f"env_vars = [{env_vars_str}]\n"
+            f"startup_timeout_sec = {CODEX_MCP_STARTUP_TIMEOUT_SEC}\n"
+            f"tool_timeout_sec = {CODEX_MCP_TOOL_TIMEOUT_FLOOR}\n"
         )
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         result = _check_mcp_server_registered(backend=CodexBackend())

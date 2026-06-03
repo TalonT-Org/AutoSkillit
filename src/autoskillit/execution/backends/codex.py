@@ -100,6 +100,8 @@ CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
 
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 
+_IMAGE_GENERATION_DISABLED = "features.image_generation=false"
+
 
 @dataclass(frozen=True, slots=True)
 class CodexEnvPolicy:
@@ -391,7 +393,7 @@ class CodexBackend:
             CodexFlags.SANDBOX,
             "workspace-write",
             CodexFlags.CONFIG_OVERRIDE,
-            "features.image_generation=false",
+            _IMAGE_GENERATION_DISABLED,
         ]
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
@@ -530,7 +532,7 @@ class CodexBackend:
             CodexFlags.ASK_FOR_APPROVAL_SHORT,
             "never",
             CodexFlags.CONFIG_OVERRIDE,
-            "features.image_generation=false",
+            _IMAGE_GENERATION_DISABLED,
         ]
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
@@ -638,7 +640,7 @@ class CodexBackend:
             CodexFlags.CONFIG_OVERRIDE,
             "web_search=disabled",
             CodexFlags.CONFIG_OVERRIDE,
-            "features.image_generation=false",
+            _IMAGE_GENERATION_DISABLED,
         ]
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
@@ -680,7 +682,7 @@ class CodexBackend:
                 builder.mode_flag(CodexFlags.DANGEROUSLY_BYPASS)
         if model:
             builder.kv_flag(CodexFlags.MODEL, self.translate_model(model))
-        builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, "features.image_generation=false")
+        builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED)
         if system_prompt is not None and isinstance(resume_spec, NoResume):
             builder.kv_flag(CodexFlags.CONFIG_OVERRIDE, f"developer_instructions={system_prompt}")
         if initial_prompt is not None:
@@ -722,7 +724,7 @@ class CodexBackend:
         if output_format == OutputFormat.JSON:
             cmd.append(CodexFlags.JSON)
         cmd.extend([CodexFlags.SANDBOX, "read-only"])
-        cmd.extend([CodexFlags.CONFIG_OVERRIDE, "features.image_generation=false"])
+        cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
         cmd.append(CodexFlags.RESUME_SUBCOMMAND)
         cmd.append(resume_session_id)
         cmd.append(prompt)

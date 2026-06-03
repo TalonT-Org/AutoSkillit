@@ -1512,7 +1512,7 @@ def build_test_scope(
     4. Classify: src Python -> cascade, test Python -> direct, non-Python -> manifest
     5. Compute always-run set for mode (includes arch/contracts for both modes)
     6. Union all sets
-    7. For aggressive mode -> coverage oracle file-level refinement
+    7. Coverage oracle file-level refinement (same-package narrowing, both modes)
     8. Resolve to concrete paths
     """
     if mode == FilterMode.NONE:
@@ -1779,25 +1779,21 @@ def build_test_scope(
         # REQ-TIER-004: fail-open for empty changeset; aggressive mode uses its own set
         test_dirs.update(always_run)
 
-    # Step 7: Aggressive mode file-level refinement via coverage oracle.
-    # Only runs when mode is AGGRESSIVE and a coverage map path is provided.
-    # Falls back to directory-level entirely if oracle is stale or missing (cov_map is None).
-    if mode == FilterMode.AGGRESSIVE and coverage_map_path is not None:
+    # Step 7: File-level refinement via coverage oracle.
+    # Uses LAYER_CASCADE_AGGRESSIVE for grouping regardless of mode, ensuring
+    # only same-package test directories are narrowed — cross-package cascade
+    # directories from conservative mode remain untouched.
+    if coverage_map_path is not None:
         cov_map = load_coverage_map(coverage_map_path)
         if cov_map is not None:
-            # Group changed source files by the cascade directories they contribute.
-            # dir_to_src_files[d] = set of src files whose cascade includes dir d.
+            oracle_cascade = LAYER_CASCADE_AGGRESSIVE
             dir_to_src_files: dict[str, set[str]] = {}
             for f in changed_src_py:
                 pkg = _file_to_package(f)
-                if pkg and pkg in cascade_map:
-                    for d in cascade_map[pkg]:
+                if pkg and pkg in oracle_cascade:
+                    for d in oracle_cascade[pkg]:
                         dir_to_src_files.setdefault(d, set()).add(f)
 
-            # For each cascade dir: if ALL contributing source files are present in the
-            # coverage map (with non-empty test file sets), replace the directory with
-            # the union of their specific test files. If any file lacks coverage data or
-            # has an empty set, keep the directory entry (fail-open).
             for d, src_files in dir_to_src_files.items():
                 if d in test_dirs and all(f in cov_map and cov_map[f] for f in src_files):
                     test_dirs.discard(d)

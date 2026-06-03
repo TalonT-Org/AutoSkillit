@@ -1,0 +1,62 @@
+name: Refresh Coverage Oracle
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"  # Weekly Monday 4:00 AM UTC
+  workflow_dispatch:
+
+concurrency:
+  group: coverage-oracle-refresh
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-oracle:
+    name: Regenerate test-source-map.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TMPDIR: /dev/shm/pytest-coverage
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: develop
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.9.21"
+
+      - name: Install go-task
+        uses: arduino/setup-task@24c5e13bce349197642746563945fcdf9355e8f4 # v2
+        with:
+          version: "3.43.3"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Configure git auth for private deps
+        run: git config --global url."https://${{ secrets.GH_USER }}:${{ secrets.GH_PAT }}@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
+
+      - name: Set up environment
+        run: |
+          mkdir -p "$TMPDIR"
+          uv sync --locked --extra dev
+
+      - name: Generate coverage oracle
+        run: |
+          rm -f .coverage .coverage.*
+          task coverage-audit
+
+      - name: Commit updated oracle
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .autoskillit/test-source-map.json
+          git diff --cached --quiet || git commit -m "chore: refresh test-source-map.json oracle"
+          git push

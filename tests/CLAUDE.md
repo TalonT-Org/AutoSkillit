@@ -174,10 +174,10 @@ after significant architectural changes (new subpackages, major refactors).
 
 **Coverage oracle staleness guard:**
 `load_coverage_map()` (`tests/_test_filter.py:530`) returns `None` if `test-source-map.json`
-is older than 30 days. When this happens, Step 7 of the aggressive filter silently falls back
+is older than 30 days. When this happens, Step 7 silently falls back
 to directory-level cascade — no error is raised. Refresh cadence:
 - Run `task coverage-audit` after any architectural change that adds or moves source files.
-- Run at least once per calendar month if using `AUTOSKILLIT_TEST_FILTER=aggressive` in CI.
+- Run at least once per calendar month if using the coverage oracle in CI (conservative or aggressive mode).
 
 ```
 tests/

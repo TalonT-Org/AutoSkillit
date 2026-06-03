@@ -1,4 +1,4 @@
-"""Tests for build_test_scope step 7 — aggressive mode file-level filtering (S11–S17)."""
+"""Tests for build_test_scope step 7 — coverage oracle file-level filtering (S11–S17)."""
 
 from __future__ import annotations
 
@@ -111,8 +111,107 @@ class TestBuildTestScopeStep7:
         dir_names = {p.name for p in result if p.is_dir()}
         assert "core" in dir_names
 
-    def test_step7_conservative_mode_unaffected(self, tmp_path: Path) -> None:
-        """Conservative mode is completely unaffected by step 7 and coverage_map_path."""
+    def test_step7_conservative_mode_narrows_same_package_only(self, tmp_path: Path) -> None:
+        """Conservative mode narrows same-package dir via oracle, keeps cross-package dirs."""
+        tests_root = tmp_path / "tests"
+        for d in [
+            "core",
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "fleet",
+            "server",
+            "cli",
+            "hooks",
+            "skills",
+            "arch",
+            "contracts",
+            "infra",
+            "docs",
+        ]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        specific_test = tests_root / "core" / "test_io.py"
+        specific_test.write_text("")
+
+        map_file = tmp_path / "test-source-map.json"
+        map_file.write_text(
+            '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}',
+            encoding="utf-8",
+        )
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+            coverage_map_path=map_file,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result if p.is_dir()}
+        assert "core" not in dir_names
+        paths = {str(p) for p in result}
+        assert any("test_io.py" in p for p in paths)
+        for expected in [
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "fleet",
+            "server",
+            "cli",
+        ]:
+            assert expected in dir_names, f"conservative cascade lost {expected}"
+
+    def test_step7_conservative_no_oracle_keeps_all_dirs(self, tmp_path: Path) -> None:
+        """Without oracle, conservative mode keeps all cascade dirs including same-package."""
+        tests_root = tmp_path / "tests"
+        for d in [
+            "core",
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "cli",
+            "hooks",
+            "skills",
+            "arch",
+            "contracts",
+            "infra",
+            "docs",
+        ]:
+            (tests_root / d).mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+            coverage_map_path=None,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result if p.is_dir()}
+        for expected in [
+            "core",
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "cli",
+        ]:
+            assert expected in dir_names, f"conservative cascade lost {expected}"
+
+    def test_step7_conservative_stale_oracle_keeps_all_dirs(self, tmp_path: Path) -> None:
+        """Stale oracle in conservative mode falls back to full directory-level cascade."""
         tests_root = tmp_path / "tests"
         for d in [
             "core",
@@ -138,6 +237,8 @@ class TestBuildTestScopeStep7:
             '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}',
             encoding="utf-8",
         )
+        old_mtime = time.time() - (31 * 24 * 3600)
+        os.utime(map_file, (old_mtime, old_mtime))
 
         result = build_test_scope(
             changed_files={"src/autoskillit/core/io.py"},
@@ -146,7 +247,7 @@ class TestBuildTestScopeStep7:
             coverage_map_path=map_file,
         )
         assert result is not None
-        dir_names = {p.name for p in result}
+        dir_names = {p.name for p in result if p.is_dir()}
         for expected in [
             "core",
             "config",
@@ -158,7 +259,7 @@ class TestBuildTestScopeStep7:
             "server",
             "cli",
         ]:
-            assert expected in dir_names, f"conservative cascade lost {expected}"
+            assert expected in dir_names, f"stale-oracle fallback lost {expected}"
 
     def test_step7_mixed_coverage_keeps_directory(self, tmp_path: Path) -> None:
         """If two src files map to same cascade dir and one lacks coverage data, dir is kept."""

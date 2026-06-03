@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.backends._codex_config import ensure_codex_mcp_registered
+from autoskillit.execution.backends._codex_config import (
+    CODEX_MCP_STARTUP_TIMEOUT_SEC,
+    CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+    ensure_codex_mcp_registered,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -54,13 +58,13 @@ class TestEnsureCodexMcpRegisteredCreate:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
         section = data["mcp_servers"]["autoskillit"]
-        assert section["startup_timeout_sec"] == 30.0
+        assert section["startup_timeout_sec"] == CODEX_MCP_STARTUP_TIMEOUT_SEC
 
     def test_tool_timeout(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()
         data = tomllib.loads((fake_home / ".codex" / "config.toml").read_text())
         section = data["mcp_servers"]["autoskillit"]
-        assert section["tool_timeout_sec"] == 120.0
+        assert section["tool_timeout_sec"] == CODEX_MCP_TOOL_TIMEOUT_FLOOR
 
     def test_no_type_key(self, fake_home: Path) -> None:
         ensure_codex_mcp_registered()

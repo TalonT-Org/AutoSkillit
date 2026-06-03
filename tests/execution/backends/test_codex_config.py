@@ -8,6 +8,8 @@ import pytest
 from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR
 from autoskillit.execution.backends import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_config import (
+    CODEX_MCP_STARTUP_TIMEOUT_SEC,
+    CODEX_MCP_TOOL_TIMEOUT_FLOOR,
     _is_autoskillit_registered,
     _read_codex_config,
     _serialize_toml,
@@ -70,8 +72,8 @@ class TestSerializeToml:
             "mcp_servers": {
                 "autoskillit": {
                     "command": "autoskillit",
-                    "startup_timeout_sec": 30.0,
-                    "tool_timeout_sec": 120.0,
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                     "env": {"AUTOSKILLIT_HEADLESS": "1"},
                 }
             }
@@ -221,6 +223,8 @@ class TestIsAutoskillitRegistered:
                 "autoskillit": {
                     "command": "autoskillit",
                     "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR}),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             }
         }
@@ -232,6 +236,8 @@ class TestIsAutoskillitRegistered:
                 "autoskillit": {
                     "command": "autoskillit",
                     "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             }
         }
@@ -243,11 +249,39 @@ class TestIsAutoskillitRegistered:
                 "autoskillit": {
                     "command": "autoskillit",
                     "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR}),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                     "extra_field": 42,
                 }
             }
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
+
+    def test_rejects_stale_tool_timeout(self):
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": 120.0,
+                }
+            }
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
+
+    def test_rejects_stale_startup_timeout(self):
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": 10.0,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                }
+            }
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
 
     def test_missing_one_canonical_var_returns_false(self):
         """Removing any single var from the canonical set must cause registration failure."""
@@ -275,8 +309,8 @@ class TestEnsureCodexMcpRegistered:
         entry = config["mcp_servers"]["autoskillit"]
         assert entry["command"] == "autoskillit"
         assert "AUTOSKILLIT_HEADLESS" in entry["env_vars"]
-        assert entry["startup_timeout_sec"] == 30.0
-        assert entry["tool_timeout_sec"] == 120.0
+        assert entry["startup_timeout_sec"] == CODEX_MCP_STARTUP_TIMEOUT_SEC
+        assert entry["tool_timeout_sec"] == CODEX_MCP_TOOL_TIMEOUT_FLOOR
 
     def test_headless_auto_gate_true_includes_auto_gate_env(self, tmp_path):
         p = tmp_path / "config.toml"
@@ -352,6 +386,20 @@ class TestEnsureCodexMcpRegistered:
         ensure_codex_mcp_registered(config_path=p)
         data = _read_codex_config(p).data
         assert data["notice"]["model_migrations"]["gpt-5.3-codex"] == "gpt-5.4"
+
+    def test_updates_stale_tool_timeout(self, tmp_path):
+        p = tmp_path / "config.toml"
+        ensure_codex_mcp_registered(config_path=p)
+        data = tomllib.loads(p.read_text())
+        data["mcp_servers"]["autoskillit"]["tool_timeout_sec"] = 120.0
+        p.write_text(_serialize_toml(data))
+        result = ensure_codex_mcp_registered(config_path=p)
+        assert result is True
+        updated = tomllib.loads(p.read_text())
+        assert (
+            updated["mcp_servers"]["autoskillit"]["tool_timeout_sec"]
+            == CODEX_MCP_TOOL_TIMEOUT_FLOOR
+        )
 
 
 class TestReadResultDiscrimination:
@@ -454,6 +502,8 @@ class TestConfigEnvBoundary:
                 "autoskillit": {
                     "command": "autoskillit",
                     "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             }
         }
@@ -478,8 +528,8 @@ class TestConfigEnvBoundary:
                 "autoskillit": {
                     "command": "autoskillit",
                     "env_vars": ["AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_HEADLESS_AUTO_GATE"],
-                    "startup_timeout_sec": 30.0,
-                    "tool_timeout_sec": 120.0,
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
             }
         }
@@ -598,7 +648,16 @@ class TestIsRegisteredRequiresAllForwardVars:
     """_is_autoskillit_registered must require every CODEX_MCP_ENV_FORWARD_VARS member."""
 
     def _full_config(self, env_vars: list[str]) -> dict:
-        return {"mcp_servers": {"autoskillit": {"command": "autoskillit", "env_vars": env_vars}}}
+        return {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": env_vars,
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                }
+            }
+        }
 
     def test_all_forward_vars_present_is_registered(self) -> None:
         from autoskillit.core.types._type_constants_env import CODEX_MCP_ENV_FORWARD_VARS

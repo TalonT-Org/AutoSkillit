@@ -163,7 +163,9 @@ class TestBuildTestScope:
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
         )
-        assert result is not FullRunReason.LARGE_CHANGESET
+        assert isinstance(result, set), (
+            f"Expected set[Path], got {type(result).__name__}: {result}"
+        )
 
     def test_scope_bucket_a_returns_full_run_reason(self, tmp_path: Path) -> None:
         result = build_test_scope(

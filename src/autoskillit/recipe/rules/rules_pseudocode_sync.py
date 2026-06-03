@@ -36,8 +36,6 @@ def _get_package_source_dir(callable_path: str) -> Path | None:
         if spec is None or not spec.origin:
             continue
         origin = Path(spec.origin)
-        if origin.name == "__init__.py":
-            return origin.parent
         return origin.parent
     return None
 
@@ -137,6 +135,7 @@ def _check_pseudocode_callable_divergence(ctx: ValidationContext) -> list[RuleFi
             try:
                 skill_content = skill_md_path.read_text(encoding="utf-8")
             except OSError:
+                logger.warning("Failed to read %s", skill_md_path, exc_info=True)
                 continue
             python_blocks = extract_python_blocks(skill_content)
             if not python_blocks:

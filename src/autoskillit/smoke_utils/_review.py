@@ -498,9 +498,7 @@ def aggregate_review_verdict(
     structural_stop_triggers = [
         f
         for f in l1_criticals
-        if f.get("fixability") == "STRUCTURAL"
-        or f.get("fixability") is None
-        or f.get("dimension") == "estimand_clarity"
+        if f.get("fixability") == "STRUCTURAL" or f.get("fixability") is None
     ]
     rt_stop = [f for f in critical_findings if f.get("dimension") == "red_team"]
     stop_triggers = structural_stop_triggers + rt_stop

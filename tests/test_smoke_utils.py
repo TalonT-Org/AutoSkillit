@@ -2696,7 +2696,7 @@ def test_aggregate_review_verdict_revise(tmp_path: Path) -> None:
 
 
 def test_aggregate_review_verdict_stop_structural_l1(tmp_path: Path) -> None:
-    """STOP verdict on estimand_clarity critical (always structural)."""
+    """STOP verdict on estimand_clarity critical with fixability=None."""
     from autoskillit.smoke_utils import aggregate_review_verdict
 
     findings = [
@@ -2715,6 +2715,30 @@ def test_aggregate_review_verdict_stop_structural_l1(tmp_path: Path) -> None:
     )
     assert result["verdict"] == "STOP"
     assert "revision_guidance_path" not in result
+
+
+def test_aggregate_review_verdict_estimand_clarity_addressable_is_revise(tmp_path: Path) -> None:
+    """estimand_clarity critical with fixability=ADDRESSABLE → REVISE, not STOP."""
+    from autoskillit.smoke_utils import aggregate_review_verdict
+
+    findings = [
+        {
+            "dimension": "estimand_clarity",
+            "severity": "critical",
+            "message": "ambiguous but addressable",
+            "fixability": "ADDRESSABLE",
+        },
+    ]
+    (tmp_path / "findings.json").write_text(json.dumps(findings))
+
+    result = aggregate_review_verdict(
+        findings_manifest_path=str(tmp_path / "findings.json"),
+        output_dir=str(tmp_path / "out"),
+    )
+    assert result["verdict"] == "REVISE"
+    assert "revision_guidance_path" in result
+    assert Path(result["revision_guidance_path"]).exists()
+    assert Path(result["evaluation_dashboard_path"]).exists()
 
 
 def test_aggregate_review_verdict_rt_cap_downgrades(tmp_path: Path) -> None:

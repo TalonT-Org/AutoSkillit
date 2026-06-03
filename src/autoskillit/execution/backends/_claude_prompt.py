@@ -192,9 +192,10 @@ def _inject_output_format_reinforcement(prompt: str, *, profile_name: str = "") 
     directive = (
         "\n\nOUTPUT FORMAT DIRECTIVE: All structured output tokens (key = value lines, "
         "completion markers, delimiter tokens) MUST be emitted as plain text with NO "
-        "markdown formatting. Do NOT wrap token names in **bold**, *italic*, or `backticks`. "
-        "Do NOT wrap output blocks in code fences. Correct: plan_path = /path/file.md  "
-        "Incorrect: **plan_path** = /path/file.md"
+        "markdown formatting. Do NOT wrap token names in bold, italic, or backticks. "
+        "Do NOT wrap output blocks in code fences. "
+        "Correct: plan_path = /path/file.md  "
+        "Incorrect: wrapping plan_path in asterisks or backticks"
     )
     return prompt + directive
 

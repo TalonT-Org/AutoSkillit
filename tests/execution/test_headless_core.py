@@ -1460,14 +1460,23 @@ class TestExtractWorktreePath:
         assert result == "/abs/worktrees/impl-first"
 
     @pytest.mark.parametrize(
+        "token,expected",
+        [
+            ("**worktree_path:** /path/to/wt", "/path/to/wt"),
+            ("`worktree_path` = /path/to/wt", "/path/to/wt"),
+        ],
+        ids=["markdown-bold", "backtick-wrapped"],
+    )
+    def test_extract_worktree_path_normalized_variants(self, token: str, expected: str):
+        assert _extract_worktree_path([token]) == expected
+
+    @pytest.mark.parametrize(
         "token",
         [
-            "**worktree_path:** /path/to/wt",
             "worktree_path: /path/to/wt",
             "WORKTREE_PATH = /path/to/wt",
-            "`worktree_path` = /path/to/wt",
         ],
-        ids=["markdown-bold", "colon-separator", "uppercase", "backtick-wrapped"],
+        ids=["colon-separator", "uppercase"],
     )
     def test_extract_worktree_path_format_variants_return_none(self, token: str):
         assert _extract_worktree_path([token]) is None

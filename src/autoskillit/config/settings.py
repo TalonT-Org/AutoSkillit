@@ -139,9 +139,12 @@ def compute_codex_mcp_tool_timeout(
     return max(max_fleet, max_skill) * 1.33
 
 
-def _codex_mcp_timeout_coherence_gate(run_skill: RunSkillConfig, fleet: FleetConfig) -> None:
+def _codex_mcp_timeout_coherence_gate(
+    run_skill: RunSkillConfig, fleet: FleetConfig, *, tool_timeout: float | None = None
+) -> None:
     """Warn when Codex MCP tool_timeout_sec is below the maximum session duration."""
-    tool_timeout = compute_codex_mcp_tool_timeout(run_skill=run_skill, fleet=fleet)
+    if tool_timeout is None:
+        tool_timeout = compute_codex_mcp_tool_timeout(run_skill=run_skill, fleet=fleet)
     max_fleet = fleet.default_timeout_sec + fleet.max_extension_seconds
     max_skill = run_skill.timeout
     max_session = max(max_fleet, max_skill)

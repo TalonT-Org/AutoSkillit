@@ -2,6 +2,7 @@
 name: plan-visualization
 categories: [research, vis-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model, cross_skill_ref]
 description: >
   Orchestrates 2–4 vis-lens skills in parallel to produce a figure inventory
   (visualization-plan.md) and a report-placement outline (report-plan.md).

@@ -2,6 +2,7 @@
 name: arch-lens-repository-access
 categories: [arch-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-repository-access/"]
 description: Create Repository/Data Access architecture diagram showing the repository pattern, entity relationships, and data access patterns. Data-centric lens answering "How is data accessed?"

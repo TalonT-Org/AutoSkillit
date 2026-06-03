@@ -1,7 +1,6 @@
 ---
 name: audit-tests
 categories: [audit]
-backend_requirements: [claude-code]
 description: Audit the test suite for useless tests, consolidation opportunities, over-mocking, weak assertions, placement/organization issues, xdist safety violations, test path filter integrity, and other test quality issues. Use when user says "audit tests", "audit test suite", "review tests", or "test quality check". Generates an improvement plan in {{AUTOSKILLIT_TEMP}}/ with explanations for each proposed change.
 hooks:
   PreToolUse:

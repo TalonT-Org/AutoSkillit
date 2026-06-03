@@ -2,6 +2,7 @@
 name: arch-lens-deployment
 categories: [arch-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-deployment/"]
 description: Create Deployment/Physical architecture diagram showing infrastructure topology, process boundaries, and network communication. Physical lens answering "Where does it run?"

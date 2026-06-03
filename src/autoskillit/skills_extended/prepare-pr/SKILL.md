@@ -2,6 +2,7 @@
 name: prepare-pr
 categories: [github]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model]
 description: Preparation executor for pull-request metadata. ALWAYS invoke this skill when instructed to prepare PR metadata. Do not read plans or classify files directly — use this skill first to load the preparation workflow.
 hooks:
   PreToolUse:

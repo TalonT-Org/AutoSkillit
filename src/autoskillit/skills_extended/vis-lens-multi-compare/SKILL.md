@@ -2,6 +2,7 @@
 name: vis-lens-multi-compare
 categories: [vis-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: "Create Compositional Layout visualization planning spec showing small-multiples vs overlay decisions, faceting strategy (row/col), shared-axis alignment, grouped vs stacked bars, factorial interaction plots, and panel reading order. Compositional lens answering \"Which layout best reveals the comparison structure?\""
 hooks:

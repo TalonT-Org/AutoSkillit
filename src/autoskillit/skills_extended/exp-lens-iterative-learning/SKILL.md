@@ -2,6 +2,7 @@
 name: exp-lens-iterative-learning
 categories: [exp-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create Iterative Learning experimental design diagram showing factor space exploration, adaptive allocation, and next-experiment recommendations. Decision-Theoretic lens answering "How does this maximize learning per cost?"
 hooks:

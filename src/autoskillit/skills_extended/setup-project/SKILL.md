@@ -1,6 +1,7 @@
 ---
 name: setup-project
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model, claude_dir, cross_skill_ref]
 activate_deps: [write-recipe]
 description: Explore a target project and generate tailored recipes and config through an interactive workflow. Use when user wants to onboard a new project to AutoSkillit, says "setup project", or wants a starting point config.
 hooks:

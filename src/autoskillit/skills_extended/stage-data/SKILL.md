@@ -2,6 +2,7 @@
 name: stage-data
 categories: [research]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model]
 description: >
   Pre-flight resource gate for the research recipe. Reads the experiment plan's
   data_manifest, checks disk space and network connectivity for external/gitignored

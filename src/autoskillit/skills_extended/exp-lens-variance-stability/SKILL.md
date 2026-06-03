@@ -2,6 +2,7 @@
 name: exp-lens-variance-stability
 categories: [exp-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create a variance analysis profile assessing whether signals exceed noise and whether results are stable across random seeds. Stability lens answering "Is the signal larger than the noise?"
 hooks:

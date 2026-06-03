@@ -2,6 +2,7 @@
 name: vis-lens-uncertainty
 categories: [vis-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: "Create Uncertainty Representation visualization planning spec showing error bar definitions, distribution-aware alternatives, and multi-seed variance protocols. Statistical lens answering \"How is uncertainty honestly represented?\""
 hooks:

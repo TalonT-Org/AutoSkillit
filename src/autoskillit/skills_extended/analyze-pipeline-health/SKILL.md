@@ -1,7 +1,6 @@
 ---
 name: analyze-pipeline-health
 categories: [diagnostics]
-backend_requirements: [claude-code]
 description: Analyze pipeline session logs for anomalies and regressions. Spawns parallel Haiku scanner subagents per step group, each investigating its batch of sessions and reporting findings with evidence.
 hooks:
   PreToolUse:

@@ -2,6 +2,7 @@
 name: setup-environment
 categories: [research]
 backend_requirements: [claude-code]
+uses_capabilities: [agent_model]
 description: >
   Pre-flight environment gate for the research recipe. Reads the experiment
   plan, detects the required environment type, builds a Docker image or creates

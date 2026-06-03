@@ -2,6 +2,7 @@
 name: arch-lens-development
 categories: [arch-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-development/"]
 description: Create Development architecture diagram showing project structure, build tools, and quality gates. Development lens answering "How is it built and tested?"

@@ -2,6 +2,7 @@
 name: exp-lens-fair-comparison
 categories: [exp-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 description: Create a comparison fairness matrix assessing whether alternatives are evaluated under symmetric constraints. Fairness lens answering "Are alternatives compared under symmetric constraints?"
 hooks:

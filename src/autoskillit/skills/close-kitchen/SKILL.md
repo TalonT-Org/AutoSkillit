@@ -1,6 +1,7 @@
 ---
 name: close-kitchen
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref, open_kitchen]
 description: Close the AutoSkillit kitchen — hides kitchen MCP tools for this session.
 disable-model-invocation: true
 ---

@@ -2,6 +2,7 @@
 name: arch-lens-operational
 categories: [arch-lens]
 backend_requirements: [claude-code]
+uses_capabilities: [cross_skill_ref]
 activate_deps: [mermaid]
 write_paths: ["{{AUTOSKILLIT_TEMP}}/arch-lens-operational/"]
 description: Create Operational architecture diagram showing CLI workflows, configuration, and observability. Administration lens answering "How is it run and monitored?"

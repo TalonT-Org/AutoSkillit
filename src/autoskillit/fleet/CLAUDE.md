@@ -43,6 +43,10 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `tests/fleet/test_startup_label_recovery.py` | Tests for `sweep_stale_dispatch_labels` — dead dispatch cleanup, alive dispatch skip, missing sidecar, multi-campaign |
 | `tests/fleet/test_find_dispatch_for_issue.py` | Tests for `find_dispatch_for_issue` — running dispatch lookup, non-running skip, missing sidecar, empty state |
 | `tests/fleet/test_reset.py` | Tests for `find_dispatch_in_campaigns`, `compute_reset_labels` |
+| `tests/fleet/test_sidecar_terminal_step.py` | Tests for `terminal_step` field on `IssueSidecarEntry` — roundtrip, default, serialization |
+| `tests/fleet/test_sidecar_synthesis_terminal_guard.py` | Tests for synthesis terminal-step guard — failure terminal blocks, success terminal allows |
+| `tests/fleet/test_sidecar_rpc_terminal_step.py` | Tests for `write_sidecar_entry` `terminal_step` parameter — write, omit, compatibility |
+| `tests/fleet/test_verdict_dispatch_chain.py` | Integration tests for verdict → sidecar synthesis → dispatch status chain |
 
 ## Architecture Notes
 

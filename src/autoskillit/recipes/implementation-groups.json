@@ -582,7 +582,8 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "on_context_limit": "test",
+      "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "optional_context_refs": [
         "merge_gate_ci_conclusion",
         "merge_gate_diagnosis_path"
@@ -653,7 +654,8 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "on_context_limit": "merge_gate_test",
+      "on_context_limit": "release_issue_failure",
+      "on_rate_limit": "release_issue_failure",
       "optional_context_refs": [
         "merge_gate_ci_conclusion",
         "merge_gate_diagnosis_path"
@@ -1025,7 +1027,7 @@
       },
       "retries": 2,
       "on_exhausted": "release_issue_failure",
-      "on_context_limit": "pre_review_rebase",
+      "on_context_limit": "release_issue_failure",
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
@@ -1439,7 +1441,7 @@
       },
       "retries": 2,
       "on_exhausted": "release_issue_failure",
-      "on_context_limit": "re_push",
+      "on_context_limit": "release_issue_failure",
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",

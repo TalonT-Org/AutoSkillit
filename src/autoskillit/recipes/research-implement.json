@@ -443,7 +443,7 @@
       ],
       "on_failure": "troubleshoot_run_failure",
       "on_exhausted": "ensure_results",
-      "on_context_limit": "ensure_results"
+      "on_context_limit": "escalate_stop"
     },
     "troubleshoot_run_failure": {
       "tool": "run_skill",
@@ -506,7 +506,7 @@
         }
       ],
       "on_failure": "ensure_results",
-      "on_context_limit": "ensure_results"
+      "on_context_limit": "escalate_stop"
     },
     "check_run_fix_loop": {
       "tool": "run_python",
@@ -654,7 +654,7 @@
         }
       ],
       "on_failure": "escalate_stop",
-      "on_context_limit": "retest"
+      "on_context_limit": "escalate_stop"
     },
     "retest": {
       "tool": "test_check",

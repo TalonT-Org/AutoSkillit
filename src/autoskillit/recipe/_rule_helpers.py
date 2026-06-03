@@ -111,6 +111,40 @@ def _is_failure_sentinel_value(val: Any) -> bool:
     return val is False or (isinstance(val, str) and val.lower() == "false")
 
 
+def is_failure_stop(step: RecipeStep) -> bool:
+    """Return True if *step* is a stop terminal with a success=false sentinel."""
+    if step.action != "stop":
+        return False
+    if not step.message:
+        return False
+    for block in extract_sentinel_json_blocks(step.message):
+        try:
+            parsed = json.loads(block)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(parsed, dict) and "success" in parsed:
+            if _is_failure_sentinel_value(parsed["success"]):
+                return True
+    return False
+
+
+def is_success_stop(step: RecipeStep) -> bool:
+    """Return True if *step* is a stop terminal with a success=true sentinel."""
+    if step.action != "stop":
+        return False
+    if not step.message:
+        return False
+    for block in extract_sentinel_json_blocks(step.message):
+        try:
+            parsed = json.loads(block)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(parsed, dict) and "success" in parsed:
+            if not _is_failure_sentinel_value(parsed["success"]):
+                return True
+    return False
+
+
 def _extract_sentinel_fields(recipe: Recipe) -> frozenset[str]:
     """Extract declared field names from all sentinel stop step JSON examples."""
     fields: set[str] = set()

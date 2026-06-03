@@ -340,7 +340,7 @@ steps:
     - when: "${{ result.verdict }} == INCONCLUSIVE"
       route: re_push_research
     on_failure: re_push_research
-    on_context_limit: re_push_research
+    on_context_limit: escalate_stop
     note: >
       Targeted re-run of affected benchmarks after review resolution applied
       code fixes. Uses --adjust to read previous results and re-run only what

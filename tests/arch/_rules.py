@@ -135,6 +135,8 @@ _STRENUM_COMPARE_EXEMPT_FILES: frozenset[str] = frozenset(
     {
         "test_result_parser.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
         "test_sidecar.py",  # IssueSidecarEntry.status: Literal["completed", "failed"], not StrEnum
+        "test_sidecar_synthesis_terminal_guard.py",  # L3ParseResult.outcome: Literal[...]
+        "test_verdict_dispatch_chain.py",  # L3ParseResult.outcome: Literal[...]
         "test_helpers_exports.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
     }
 )

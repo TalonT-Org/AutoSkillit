@@ -25,6 +25,7 @@ class IssueSidecarEntry:
     ts: str
     pr_url: str | None = None
     reason: str | None = None
+    terminal_step: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> IssueSidecarEntry:
@@ -37,12 +38,14 @@ class IssueSidecarEntry:
         ts_raw = data.get("ts")
         pr_url_raw = data.get("pr_url")
         reason_raw = data.get("reason")
+        terminal_step_raw = data.get("terminal_step")
         return cls(
             issue_url=issue_url,
             status=status,  # type: ignore[arg-type]
             ts=str(ts_raw) if ts_raw is not None else "",
             pr_url=str(pr_url_raw) if pr_url_raw is not None else None,
             reason=str(reason_raw) if reason_raw is not None else None,
+            terminal_step=str(terminal_step_raw) if terminal_step_raw is not None else None,
         )
 
 

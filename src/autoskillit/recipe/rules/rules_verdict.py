@@ -14,27 +14,12 @@ import regex as re
 
 from autoskillit.core import Severity, get_logger, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.contracts import load_bundled_manifest
+from autoskillit.recipe._skill_helpers import (
+    get_allowed_values_for_skill as _get_allowed_values_for_skill,
+)
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
-
-
-def _get_allowed_values_for_skill(skill_name: str) -> dict[str, list[str]]:
-    """Return {output_name: [allowed_value, ...]} for a skill's outputs with allowed_values."""
-    try:
-        manifest = load_bundled_manifest()
-    except Exception:
-        logger.warning(
-            "unrouted-verdict-value: failed to load bundled manifest; skipping", exc_info=True
-        )
-        return {}
-    skill_contract = manifest.get("skills", {}).get(skill_name, {})
-    result: dict[str, list[str]] = {}
-    for output in skill_contract.get("outputs", []):
-        if "allowed_values" in output:
-            result[output["name"]] = output["allowed_values"]
-    return result
 
 
 def _is_explicit_condition(when: str | None, value: str) -> bool:

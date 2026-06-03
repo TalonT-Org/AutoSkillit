@@ -697,7 +697,7 @@ steps:
     - when: "${{ result.verdict }} == BLOCKED"
       route: escalate_stop
     on_failure: ensure_results
-    on_context_limit: ensure_results
+    on_context_limit: escalate_stop
 
   check_run_fix_loop:
     tool: run_python
@@ -820,7 +820,7 @@ steps:
     - when: "${{ result.verdict }} == 'no_test_infrastructure'"
       route: escalate_stop
     on_failure: escalate_stop
-    on_context_limit: retest
+    on_context_limit: escalate_stop
 
   retest:
     tool: test_check
@@ -1075,7 +1075,7 @@ steps:
     - when: "${{ result.verdict }} == INCONCLUSIVE"
       route: re_push_research
     on_failure: re_push_research
-    on_context_limit: re_push_research
+    on_context_limit: escalate_stop
     note: >
       Targeted re-run of affected benchmarks after review resolution applied
       code fixes. Uses --adjust to read previous results and re-run only what

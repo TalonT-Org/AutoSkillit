@@ -73,14 +73,10 @@ def test_no_verdict_token() -> None:
 
 
 def test_silent_type_rule_documented() -> None:
-    """Silent-type detection rule references '>=6 of 8' and the shared convention doc.
-
-    Also confirms the rule explicitly operates on the BASE registry entry's
-    dimension_weights — not on modifier-adjusted weights from triage.
-    """
+    """Silent-type detection rule references '>=6 of 9' and the shared convention doc."""
     content = _SKILL_MD.read_text(encoding="utf-8")
-    threshold_present = ">=6 of 8" in content or "≥6 of 8" in content or ">= 6" in content
-    assert threshold_present, "Silent-type rule '>=6 of 8' not documented in SKILL.md"
+    threshold_present = ">=6 of 9" in content or "≥6 of 9" in content
+    assert threshold_present, "Silent-type rule '>=6 of 9' not documented in SKILL.md"
     assert "is_silent_type" in content, "Token 'is_silent_type' not referenced in SKILL.md"
     assert "docs/research/silent-type-convention.md" in content, (
         "Reference to docs/research/silent-type-convention.md missing from SKILL.md"

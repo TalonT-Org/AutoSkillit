@@ -49,7 +49,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_loop_artifact_scope.py` | Loop artifact isolation: run_skill steps in cycles must use iteration-scoped output_dir |
 | `rules_loop_counter.py` | Loop counter scope isolation: cross-path sharing and guard-before-verify detection |
 | `rules_loop_progress.py` | Loop progress tracking: run_skill steps in cycles must capture declared outputs |
-| `rules_skill_content.py` | SKILL.md content validation: undefined bash placeholders, source-attribution directives, output formatting, issue comment prohibition |
+| `rules_skill_content.py` | SKILL.md content validation: undefined bash placeholders, source-attribution directives, output formatting, issue comment prohibition, inline-content-in-subagent-prompt detection |
 | `rules_skill_write_path_alignment.py` | Cross-layer validation: SKILL.md declared write scope must align with recipe step output_dir; fires ERROR when iteration-scoped output_dir is narrower than SKILL.md NEVER block path and the skill doesn't use a dynamic write variable |
 | `rules_skills.py` | `skill_command` resolvability rules |
 | `rules_stamp_ownership.py` | Exclusive stamp ownership enforcement across skills |

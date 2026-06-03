@@ -7,11 +7,14 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import load_yaml
+from autoskillit.recipe._skill_placeholder_parser import extract_blockquote_sections
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _CONTRACTS_YAML = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
 _SKILL_MD = Path(__file__).parents[2] / "src/autoskillit/skills_extended/review-pr/SKILL.md"
+_SKILLS_EXTENDED = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "skills_extended"
 
 
 def test_review_pr_contract_has_annotated_diff_path() -> None:
@@ -168,3 +171,81 @@ def test_review_pr_never_specify_subagent_type() -> None:
     assert "subagent_type" in never_block, (
         "NEVER block must contain explicit prohibition against specifying subagent_type"
     )
+
+
+def test_review_pr_never_embed_inline_in_never_block() -> None:
+    """review-pr NEVER block must prohibit inline diff embedding."""
+    content = _SKILLS_EXTENDED.joinpath("review-pr", "SKILL.md").read_text()
+    assert "Embed diff content inline" in content
+
+
+def test_review_research_pr_never_embed_inline_in_never_block() -> None:
+    """review-research-pr NEVER block must prohibit inline diff embedding."""
+    content = _SKILLS_EXTENDED.joinpath("review-research-pr", "SKILL.md").read_text()
+    assert "Embed diff content inline" in content
+
+
+def test_audit_claims_never_embed_inline_in_never_block() -> None:
+    """audit-claims NEVER block must prohibit inline diff embedding."""
+    content = _SKILLS_EXTENDED.joinpath("audit-claims", "SKILL.md").read_text()
+    assert "Embed diff content inline" in content
+
+
+def test_review_pr_blockquote_uses_path_not_content_var() -> None:
+    """review-pr blockquotes must use path var, not content var."""
+    content = _SKILLS_EXTENDED.joinpath("review-pr", "SKILL.md").read_text()
+    blocks = extract_blockquote_sections(content)
+    all_block_text = " ".join(text for _, text in blocks)
+    assert "{annotated_diff_path}" in all_block_text
+    assert "{annotated_diff_content}" not in all_block_text
+
+
+def test_review_research_pr_blockquote_uses_path_not_content_var() -> None:
+    """review-research-pr blockquotes must use path var, not content var."""
+    content = _SKILLS_EXTENDED.joinpath("review-research-pr", "SKILL.md").read_text()
+    blocks = extract_blockquote_sections(content)
+    all_block_text = " ".join(text for _, text in blocks)
+    assert "{annotated_diff_path}" in all_block_text
+    assert "{annotated_diff_content}" not in all_block_text
+
+
+def test_audit_claims_blockquote_uses_path_not_content_var() -> None:
+    """audit-claims blockquotes must use path var, not content var."""
+    content = _SKILLS_EXTENDED.joinpath("audit-claims", "SKILL.md").read_text()
+    blocks = extract_blockquote_sections(content)
+    all_block_text = " ".join(text for _, text in blocks)
+    assert "{section_diff_path}" in all_block_text
+    assert "{section_diff_content}" not in all_block_text
+
+
+_SKILL_TOOLS = frozenset({"run_skill", "run_skill_on_context_limit"})
+
+
+@pytest.mark.parametrize(
+    "skill_name,recipe_name",
+    [
+        ("review-pr", "implementation"),
+        ("review-research-pr", "research-review"),
+    ],
+)
+def test_review_skill_command_passes_diff_annotation_paths(
+    skill_name: str, recipe_name: str
+) -> None:
+    """Skill command must forward hunk_ranges_path= and valid_lines_path= inline."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    review_steps = [
+        (name, step)
+        for name, step in recipe.steps.items()
+        if step.tool in _SKILL_TOOLS and skill_name in step.with_args.get("skill_command", "")
+    ]
+    assert review_steps, f"No {skill_name} step in {recipe_name}.yaml"
+    for step_name, step in review_steps:
+        cmd = step.with_args.get("skill_command", "")
+        assert "hunk_ranges_path=" in cmd, (
+            f"{recipe_name}.yaml step '{step_name}' calls {skill_name} "
+            f"without hunk_ranges_path= in skill_command"
+        )
+        assert "valid_lines_path=" in cmd, (
+            f"{recipe_name}.yaml step '{step_name}' calls {skill_name} "
+            f"without valid_lines_path= in skill_command"
+        )

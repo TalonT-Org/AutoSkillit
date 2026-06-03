@@ -212,6 +212,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_audit_impl_defaults.py` | Contract test: implementation.yaml and remediation.yaml must default inputs.audit_impl to 'true' |
 | `test_analysis_detectors_rename.py` | Tests for plan-visualization → synthesize-vis-plan rename in _OBSERVABILITY_CAPTURES |
 | `test_false_positive_escape_valve.py` | Tests for false-positive escape valve routing in recipes that invoke make-plan |
+| `test_inline_content_semantic_rule.py` | Tests for inline-content-in-subagent-prompt semantic rule |
 ## Architecture Notes
 
 `conftest.py` provides shared fixtures for recipe tests. The `fixtures/` subdirectory contains YAML test data files including sample recipes and expected diagram output. The `test_rules_*.py` files each test a single semantic validation rule from `recipe/rules/` and its subdirectories (`campaign/`, `ci/`, `dataflow/`, `graph/`).

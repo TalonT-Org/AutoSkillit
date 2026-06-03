@@ -79,8 +79,8 @@ class TestResearchReviewRecipe:
 
     # --- Steps ---
     def test_step_count(self, recipe) -> None:
-        # 22 active steps + 3 terminal stops = 25
-        assert len(recipe.steps) == 25
+        # 24 active steps + 3 terminal stops = 27
+        assert len(recipe.steps) == 27
 
     def test_active_step_names(self, recipe) -> None:
         expected = {
@@ -90,6 +90,8 @@ class TestResearchReviewRecipe:
             "route_pr_or_local",
             "compose_research_pr",
             "guard_pr_url",
+            "extract_pr_number",
+            "annotate_pr_diff",
             "review_research_pr",
             "audit_claims",
             "route_review_resolve",

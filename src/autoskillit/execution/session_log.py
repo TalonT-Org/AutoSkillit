@@ -13,7 +13,7 @@ import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
@@ -152,7 +152,7 @@ def flush_session_log(
     max_sessions: int | None = None,
     is_resume: bool = False,
     codex_log_path: Path | None = None,
-    backend: str = "claude-code",
+    backend: Literal["claude-code", "codex"] = "claude-code",
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.

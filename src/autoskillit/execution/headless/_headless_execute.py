@@ -9,7 +9,7 @@ import traceback
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import anyio
 
@@ -303,7 +303,7 @@ async def _execute_claude_headless(
                     ),
                     max_sessions=ctx.config.linux_tracing.max_sessions,
                     model_identity=model_identity,
-                    backend=_step_backend.name,
+                    backend=cast(Literal["claude-code", "codex"], _step_backend.name),
                     telemetry=_build_error_path_telemetry(
                         ctx.github_api_log,
                         session_id="",
@@ -365,7 +365,7 @@ async def _execute_claude_headless(
                         ),
                         max_sessions=ctx.config.linux_tracing.max_sessions,
                         model_identity=model_identity,
-                        backend=_step_backend.name,
+                        backend=cast(Literal["claude-code", "codex"], _step_backend.name),
                         telemetry=_build_error_path_telemetry(
                             ctx.github_api_log,
                             session_id="",
@@ -565,7 +565,7 @@ async def _execute_claude_headless(
                 model_identity=model_identity,
                 is_resume=spec.is_resume,
                 codex_log_path=_codex_log,
-                backend=_step_backend.name,
+                backend=cast(Literal["claude-code", "codex"], _step_backend.name),
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

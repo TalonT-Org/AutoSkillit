@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -13,9 +14,22 @@ from autoskillit.fleet import (
     compute_reset_labels,
     find_dispatch_in_campaigns,
 )
+from autoskillit.fleet._reset import ResetReport, reset_dispatch_artifacts, update_campaign_state
 from autoskillit.fleet.state import write_initial_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+
+
+def _make_subprocess_result(returncode: int = 0, stdout: str = "", stderr: str = ""):
+    from autoskillit.core import SubprocessResult, TerminationReason
+
+    return SubprocessResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=12345,
+    )
 
 
 def _make_state(tmp_path: Path, dispatch_name: str, **kwargs: object) -> Path:
@@ -74,3 +88,108 @@ class TestComputeResetLabels:
         remove, add = compute_reset_labels(IssueLabelState.FAIL)
         assert remove == ["in-progress", "queued"]
         assert add == ["fail"]
+
+
+class TestResetReport:
+    def test_labels_reset_default_is_none(self) -> None:
+        report = ResetReport()
+        assert report.labels_reset is None
+
+
+class TestResetDispatchArtifacts:
+    @pytest.mark.anyio
+    async def test_missing_sidecar_reports_labels_not_reset(self, tmp_path: Path) -> None:
+        sidecar = tmp_path / "gone.jsonl"
+        dispatch = DispatchRecord(
+            name="d-miss", sidecar_path=str(sidecar), status=DispatchStatus.FAILURE
+        )
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+        runner = AsyncMock(return_value=_make_subprocess_result())
+        report = await reset_dispatch_artifacts(
+            dispatch,
+            project_dir=tmp_path,
+            worktrees_dir=tmp_path / "wt",
+            runner=runner,
+            github_client=github_client,
+            target_state=IssueLabelState.FAIL,
+        )
+        assert report.labels_reset is False
+        assert any("MISSING" in e or "missing" in e for e in report.errors)
+        github_client.swap_labels.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_error_sidecar_reports_labels_not_reset(self, tmp_path: Path) -> None:
+        sidecar = tmp_path / "bad.jsonl"
+        sidecar.mkdir()  # directory triggers IsADirectoryError (OSError subclass) → ERROR
+        dispatch = DispatchRecord(
+            name="d-err", sidecar_path=str(sidecar), status=DispatchStatus.FAILURE
+        )
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+        runner = AsyncMock(return_value=_make_subprocess_result())
+        report = await reset_dispatch_artifacts(
+            dispatch,
+            project_dir=tmp_path,
+            worktrees_dir=tmp_path / "wt",
+            runner=runner,
+            github_client=github_client,
+            target_state=IssueLabelState.FAIL,
+        )
+        assert report.labels_reset is False
+        assert len(report.errors) > 0
+        github_client.swap_labels.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_sidecar_read_exception_reports_labels_not_reset(self, tmp_path: Path) -> None:
+        sidecar = tmp_path / "explode.jsonl"
+        dispatch = DispatchRecord(
+            name="d-exc", sidecar_path=str(sidecar), status=DispatchStatus.FAILURE
+        )
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+        runner = AsyncMock(return_value=_make_subprocess_result())
+        with patch(
+            "autoskillit.fleet._reset.read_sidecar_from_path",
+            side_effect=OSError("disk on fire"),
+        ):
+            report = await reset_dispatch_artifacts(
+                dispatch,
+                project_dir=tmp_path,
+                worktrees_dir=tmp_path / "wt",
+                runner=runner,
+                github_client=github_client,
+                target_state=IssueLabelState.FAIL,
+            )
+        assert report.labels_reset is False
+        assert any("disk on fire" in e for e in report.errors)
+
+
+class TestUpdateCampaignState:
+    @pytest.mark.anyio
+    async def test_fail_respects_labels_reset_false(self, tmp_path: Path) -> None:
+        sp = _make_state(tmp_path, "d-test", status=DispatchStatus.FAILURE)
+        result = await update_campaign_state(
+            "d-test", sp, reset_to_queued=False, labels_reset=False
+        )
+        assert result is True
+        from autoskillit.fleet.state import read_state
+
+        state = read_state(sp)
+        assert state is not None
+        d = next(d for d in state.dispatches if d.name == "d-test")
+        assert d.labels_cleaned is False
+
+    @pytest.mark.anyio
+    async def test_fail_sets_labels_cleaned_when_true(self, tmp_path: Path) -> None:
+        sp = _make_state(tmp_path, "d-test2", status=DispatchStatus.FAILURE)
+        result = await update_campaign_state(
+            "d-test2", sp, reset_to_queued=False, labels_reset=True
+        )
+        assert result is True
+        from autoskillit.fleet.state import read_state
+
+        state = read_state(sp)
+        assert state is not None
+        d = next(d for d in state.dispatches if d.name == "d-test2")
+        assert d.labels_cleaned is True

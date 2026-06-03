@@ -278,8 +278,8 @@ NOTE: NO `verdict` field in this YAML block — verdict is computed by
 ### Step 8: Emit Structured Output Tokens
 
 ```
-findings_manifest_path = /absolute/path/to/.autoskillit/temp/apply-review-dimensions/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json
-evaluation_dashboard_path = /absolute/path/to/.autoskillit/temp/apply-review-dimensions/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
+findings_manifest_path = {{AUTOSKILLIT_TEMP}}/apply-review-dimensions/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json
+evaluation_dashboard_path = {{AUTOSKILLIT_TEMP}}/apply-review-dimensions/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md
 ```
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no
@@ -291,6 +291,11 @@ evaluation_dashboard_path = /absolute/path/to/.autoskillit/temp/apply-review-dim
 No `verdict` token. No `revision_guidance` token.
 
 ## Output
+
+Output tokens (relative to the current working directory):
+
+- `findings_manifest_path` — `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/findings_manifest_{slug}_{YYYY-MM-DD_HHMMSS}.json`
+- `evaluation_dashboard_path` — `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/evaluation_dashboard_{slug}_{YYYY-MM-DD_HHMMSS}.md`
 
 ```
 {{AUTOSKILLIT_TEMP}}/apply-review-dimensions/

@@ -592,6 +592,9 @@ class TestOutputPathTokensDerivedFromContracts:
             "download_report",
             # classify-experiment-type output (phoropter dial step)
             "dimensions_manifest_path",
+            # apply-review-dimensions output (phoropter apply step)
+            "findings_manifest_path",
+            "evaluation_dashboard_path",
         }
     )
 

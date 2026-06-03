@@ -138,26 +138,26 @@ def test_skill_result_routing_gap_does_not_fire_for_terminal_catchall() -> None:
 def test_pass_through_capture_skips_routing_gap() -> None:
     """A pass_through-annotated capture should not trigger routing gap."""
     steps = {
-        "review": RecipeStep(
+        "classify": RecipeStep(
             tool="run_skill",
-            with_args={"skill_command": "/autoskillit:review-design plan.md scope.md"},
+            with_args={"skill_command": "/autoskillit:classify-experiment-type plan.md scope.md"},
             capture={
                 "experiment_type": "${{ result.experiment_type }}",
-                "verdict": "${{ result.verdict }}",
+                "is_silent_type": "${{ result.is_silent_type }}",
             },
             pass_through=["experiment_type"],
             on_result=StepResultRoute(
                 conditions=[
-                    StepResultCondition(route="next", when="${{ result.verdict }} == GO"),
-                    StepResultCondition(route="revise", when="${{ result.verdict }} == REVISE"),
-                    StepResultCondition(route="stopped", when="${{ result.verdict }} == STOP"),
+                    StepResultCondition(route="next", when="${{ result.is_silent_type }} == true"),
+                    StepResultCondition(
+                        route="revise", when="${{ result.is_silent_type }} == false"
+                    ),
                     StepResultCondition(route="next"),
                 ]
             ),
         ),
         "next": RecipeStep(tool="run_cmd", with_args={"cmd": "echo next"}),
         "revise": RecipeStep(tool="run_cmd", with_args={"cmd": "echo revise"}),
-        "stopped": RecipeStep(action="stop", message="stopped"),
     }
     recipe = _make_recipe(steps)
     findings = run_semantic_rules(recipe)
@@ -168,25 +168,25 @@ def test_pass_through_capture_skips_routing_gap() -> None:
 def test_routing_gap_still_fires_without_pass_through() -> None:
     """Without pass_through, unrouted allowed_values should still fire."""
     steps = {
-        "review": RecipeStep(
+        "classify": RecipeStep(
             tool="run_skill",
-            with_args={"skill_command": "/autoskillit:review-design plan.md scope.md"},
+            with_args={"skill_command": "/autoskillit:classify-experiment-type plan.md scope.md"},
             capture={
                 "experiment_type": "${{ result.experiment_type }}",
-                "verdict": "${{ result.verdict }}",
+                "is_silent_type": "${{ result.is_silent_type }}",
             },
             on_result=StepResultRoute(
                 conditions=[
-                    StepResultCondition(route="next", when="${{ result.verdict }} == GO"),
-                    StepResultCondition(route="revise", when="${{ result.verdict }} == REVISE"),
-                    StepResultCondition(route="stopped", when="${{ result.verdict }} == STOP"),
+                    StepResultCondition(route="next", when="${{ result.is_silent_type }} == true"),
+                    StepResultCondition(
+                        route="revise", when="${{ result.is_silent_type }} == false"
+                    ),
                     StepResultCondition(route="next"),
                 ]
             ),
         ),
         "next": RecipeStep(tool="run_cmd", with_args={"cmd": "echo next"}),
         "revise": RecipeStep(tool="run_cmd", with_args={"cmd": "echo revise"}),
-        "stopped": RecipeStep(action="stop", message="stopped"),
     }
     recipe = _make_recipe(steps)
     findings = run_semantic_rules(recipe)
@@ -198,14 +198,14 @@ def test_routing_gap_still_fires_without_pass_through() -> None:
 def test_pass_through_validity_fires_on_uncaptured_output() -> None:
     """pass_through referencing an output that is not captured should warn."""
     steps = {
-        "review": RecipeStep(
+        "classify": RecipeStep(
             tool="run_skill",
-            with_args={"skill_command": "/autoskillit:review-design plan.md scope.md"},
-            capture={"verdict": "${{ result.verdict }}"},
+            with_args={"skill_command": "/autoskillit:classify-experiment-type plan.md scope.md"},
+            capture={"is_silent_type": "${{ result.is_silent_type }}"},
             pass_through=["experiment_type"],
             on_result=StepResultRoute(
                 conditions=[
-                    StepResultCondition(route="next", when="${{ result.verdict }} == GO"),
+                    StepResultCondition(route="next", when="${{ result.is_silent_type }} == true"),
                     StepResultCondition(route="next"),
                 ]
             ),
@@ -222,17 +222,17 @@ def test_pass_through_validity_fires_on_uncaptured_output() -> None:
 def test_pass_through_validity_fires_on_routing_output() -> None:
     """pass_through referencing an output used in when clause should warn."""
     steps = {
-        "review": RecipeStep(
+        "classify": RecipeStep(
             tool="run_skill",
-            with_args={"skill_command": "/autoskillit:review-design plan.md scope.md"},
+            with_args={"skill_command": "/autoskillit:classify-experiment-type plan.md scope.md"},
             capture={
                 "experiment_type": "${{ result.experiment_type }}",
-                "verdict": "${{ result.verdict }}",
+                "is_silent_type": "${{ result.is_silent_type }}",
             },
-            pass_through=["experiment_type", "verdict"],
+            pass_through=["experiment_type", "is_silent_type"],
             on_result=StepResultRoute(
                 conditions=[
-                    StepResultCondition(route="next", when="${{ result.verdict }} == GO"),
+                    StepResultCondition(route="next", when="${{ result.is_silent_type }} == true"),
                     StepResultCondition(route="next"),
                 ]
             ),
@@ -245,7 +245,7 @@ def test_pass_through_validity_fires_on_routing_output() -> None:
     assert len(validity_findings) >= 1, (
         "pass-through-validity must warn when output controls routing"
     )
-    assert any("verdict" in f.message for f in validity_findings)
+    assert any("is_silent_type" in f.message for f in validity_findings)
     assert not any("experiment_type" in f.message for f in validity_findings), (
         "experiment_type is not used in when clause and should not be flagged"
     )

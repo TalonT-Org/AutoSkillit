@@ -266,10 +266,45 @@ def test_command_classification_exports_tokenization() -> None:
         "command_verb",
         "is_gh_command",
         "extract_redirect_targets",
+        "strip_heredoc_bodies",
     ):
         assert f"def {name}" in source, (
             f"_command_classification.py must define {name}() for structural command parsing"
         )
+
+
+REQUIRED_BIDIRECTIONAL_FAMILIES = {
+    "heredoc",
+    "redirect",
+    "fd_redirect",
+    "subshell",
+}
+
+
+def test_write_guard_tests_cover_deny_and_allow_paths() -> None:
+    """Critical command families must have both deny-path and allow-path test coverage."""
+    test_path = pathlib.Path(__file__).parent.parent / "hooks" / "test_write_guard.py"
+    tree = ast.parse(test_path.read_text())
+    test_names = {
+        node.name.lower()
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")
+    }
+    deny_indicators = {"denied", "blocked", "deny", "rejected"}
+    allow_indicators = {"allowed", "not_blocked", "false_positive", "readonly", "approved"}
+    missing = []
+    for family in REQUIRED_BIDIRECTIONAL_FAMILIES:
+        family_tests = {n for n in test_names if family in n}
+        has_deny = any(any(d in n for d in deny_indicators) for n in family_tests)
+        has_allow = any(any(a in n for a in allow_indicators) for n in family_tests)
+        if not has_deny:
+            missing.append(f"{family}: missing deny-path test")
+        if not has_allow:
+            missing.append(f"{family}: missing allow-path test")
+    assert not missing, (
+        f"test_write_guard.py missing bidirectional coverage: {missing}. "
+        f"Critical families need both deny and allow tests."
+    )
 
 
 def test_redirect_extraction_uses_tokenization() -> None:

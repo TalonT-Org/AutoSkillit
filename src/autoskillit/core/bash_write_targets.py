@@ -17,6 +17,11 @@ import shlex
 
 _SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 
+_HEREDOC_BODY_RE = re.compile(
+    r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
+    re.DOTALL,
+)
+
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
@@ -64,9 +69,13 @@ def _resolve_write_target(path: str, cwd: str = "") -> str | None:
     return None
 
 
+def _strip_heredoc_bodies(command: str) -> str:
+    return _HEREDOC_BODY_RE.sub(r"\1\n\3", command)
+
+
 def _tokenize_command_segments(command: str) -> list[list[str]]:
     try:
-        tokens = shlex.split(command)
+        tokens = shlex.split(_strip_heredoc_bodies(command))
     except (ValueError, TypeError):
         return []
     segments: list[list[str]] = []
@@ -262,7 +271,7 @@ def extract_bash_write_targets(command: str, cwd: str = "") -> list[str]:
             all_targets.extend(result)
 
     try:
-        flat_tokens = shlex.split(command)
+        flat_tokens = shlex.split(_strip_heredoc_bodies(command))
     except (ValueError, TypeError, AttributeError):
         flat_tokens = []
     redirect_paths = _extract_redirect_targets(flat_tokens, cwd)

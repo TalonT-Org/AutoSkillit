@@ -550,6 +550,28 @@ class TestWriteGuardInterpreterBypass:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
+    def test_python3_heredoc_readonly_comparison_allowed(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        cmd = (
+            "python3 - <<'EOF'\n"
+            "if severity_rank[f['severity']] > severity_rank[deduped[key]['severity']]:\n"
+            "    deduped[key] = f\n"
+            "EOF"
+        )
+        event = _build_bash_event(cmd)
+        result = _run_hook(event)
+        assert result == ""  # empty = approve
+
+    def test_heredoc_with_real_redirect_on_opening_line_denied(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        cmd = "cat <<'EOF' > /outside/prefix/output.txt\nsome content\nEOF"
+        event = _build_bash_event(cmd)
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
     def test_python3_append_mode_denied(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
         event = _build_bash_event("python3 -c \"open('/clone/src/f.py','a').write('x')\"")

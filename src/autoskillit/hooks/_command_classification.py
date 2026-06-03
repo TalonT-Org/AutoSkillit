@@ -51,6 +51,20 @@ _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
 _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 _SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
 
+_HEREDOC_BODY_RE = re.compile(
+    r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
+    re.DOTALL,
+)
+
+
+def strip_heredoc_bodies(command: str) -> str:
+    """Strip heredoc body content, preserving the opening line and terminator.
+
+    The opening line (containing << and any real redirects) is kept intact.
+    Only the body lines between the opening and terminator are removed.
+    """
+    return _HEREDOC_BODY_RE.sub(r"\1\n\3", command)
+
 
 def resolve_write_target(path: str, cwd: str = "") -> str | None:
     if not path:
@@ -75,7 +89,7 @@ def tokenize_command_segments(command: str) -> list[list[str]]:
     Returns [] on shlex parse error (unclosed quotes).
     """
     try:
-        tokens = shlex.split(command)
+        tokens = shlex.split(strip_heredoc_bodies(command))
     except (ValueError, TypeError):
         return []
     segments: list[list[str]] = []

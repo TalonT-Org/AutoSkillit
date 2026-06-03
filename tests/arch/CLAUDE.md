@@ -24,6 +24,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_backend_command_path.py` | AST tests enforcing ctx.backend usage for command construction in headless path |
 | `test_backend_protocol_completeness.py` | Protocol completeness tests for CodingAgentBackend command builders |
 | `test_backend_translate_model.py` | Architectural test: translate_model called at all terminal --model sites |
+| `test_no_hardcoded_model_ids_in_translation_tests.py` | AST guard: translation tests must not hardcode alias-resolved model IDs in assert comparisons |
 | `test_audit_feature_gates_skill.py` | Structural integrity tests for the audit-feature-gates skill |
 | `test_eval_agent_skill.py` | Structural integrity tests for the eval-agent skill |
 | `test_env_symmetry.py` | Architectural invariant: skill and food-truck builders must set the same required base env vars |

@@ -285,3 +285,14 @@ def test_build_interactive_cmd_signature_shape():
         if name == "self":
             continue
         assert param.kind == inspect.Parameter.KEYWORD_ONLY, f"{name} must be KEYWORD_ONLY"
+
+
+def test_model_config_overrides_on_protocol():
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+
+    assert hasattr(CodingAgentBackend, "model_config_overrides"), (
+        "CodingAgentBackend protocol must define model_config_overrides"
+    )
+    assert callable(getattr(CodingAgentBackend, "model_config_overrides")), (
+        "model_config_overrides must be callable"
+    )

@@ -1495,6 +1495,20 @@ class TestCodexBackendSetupSessionDir:
         data = tomllib.loads(wp_toml.read_text(encoding="utf-8"))
         assert data["model"] == CODEX_MODEL_ALIASES["sonnet"]
 
+    def test_agent_toml_contains_effort(self) -> None:
+        import tomllib
+
+        from autoskillit.core import CODEX_EFFORT_MAPPING
+
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        wp_toml = self.session_dir / "agents" / "wp-elaborator.toml"
+        data = tomllib.loads(wp_toml.read_text(encoding="utf-8"))
+        assert "model_reasoning_effort" in data, (
+            "agent TOML must include model_reasoning_effort field"
+        )
+        assert data["model_reasoning_effort"] == CODEX_EFFORT_MAPPING["sonnet"]
+
     def test_no_claude_md_toml_generated(self) -> None:
         self._write_all_source_files()
         CodexBackend().setup_session_dir(self.session_dir)

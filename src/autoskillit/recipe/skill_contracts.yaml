@@ -1747,7 +1747,6 @@ skills:
       type: file_path
     expected_output_patterns:
     - "findings_manifest_path[ \\t]*=[ \\t]*/.+"
-    - "(?:evaluation_dashboard_path[ \\t]*=[ \\t]*/.+|findings_manifest_path[ \\t]*=[ \\t]*/.+)"
     pattern_examples:
     - "findings_manifest_path = /tmp/apply-review-dimensions/findings_manifest_benchmark_2026-06-02_183000.json\nevaluation_dashboard_path = /tmp/apply-review-dimensions/evaluation_dashboard_benchmark_2026-06-02_183000.md\n%%ORDER_UP%%"
     - "findings_manifest_path = /tmp/apply-review-dimensions/findings_manifest_causal_inference_2026-06-02_183000.json\n%%ORDER_UP%%"

@@ -122,6 +122,7 @@ class TestBuildTestScopeStep7:
             "workspace",
             "recipe",
             "migration",
+            "fleet",
             "server",
             "cli",
             "hooks",
@@ -160,68 +161,11 @@ class TestBuildTestScopeStep7:
             "workspace",
             "recipe",
             "migration",
+            "fleet",
             "server",
             "cli",
         ]:
             assert expected in dir_names, f"conservative cascade lost {expected}"
-
-    def test_step7_conservative_cross_package_dirs_preserved(self, tmp_path: Path) -> None:
-        """Oracle never discards cross-package cascade dirs in conservative mode."""
-        tests_root = tmp_path / "tests"
-        all_conservative_core_dirs = [
-            "core",
-            "config",
-            "execution",
-            "pipeline",
-            "report",
-            "workspace",
-            "recipe",
-            "migration",
-            "fleet",
-            "server",
-            "cli",
-            "hooks",
-            "skills",
-            "arch",
-            "contracts",
-            "infra",
-            "docs",
-            "planner",
-            "smoke_utils",
-        ]
-        for d in all_conservative_core_dirs:
-            (tests_root / d).mkdir(parents=True, exist_ok=True)
-
-        specific_test = tests_root / "core" / "test_io.py"
-        specific_test.write_text("")
-
-        map_file = tmp_path / "test-source-map.json"
-        map_file.write_text(
-            '{"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}',
-            encoding="utf-8",
-        )
-
-        result = build_test_scope(
-            changed_files={"src/autoskillit/core/io.py"},
-            mode=FilterMode.CONSERVATIVE,
-            tests_root=tests_root,
-            coverage_map_path=map_file,
-        )
-        assert result is not None
-        dir_names = {p.name for p in result if p.is_dir()}
-        assert "core" not in dir_names
-        for cross_pkg in [
-            "config",
-            "execution",
-            "pipeline",
-            "workspace",
-            "recipe",
-            "migration",
-            "fleet",
-            "server",
-            "cli",
-        ]:
-            assert cross_pkg in dir_names, f"cross-package dir {cross_pkg} was removed"
 
     def test_step7_conservative_no_oracle_keeps_all_dirs(self, tmp_path: Path) -> None:
         """Without oracle, conservative mode keeps all cascade dirs including same-package."""
@@ -252,7 +196,7 @@ class TestBuildTestScopeStep7:
             coverage_map_path=None,
         )
         assert result is not None
-        dir_names = {p.name for p in result}
+        dir_names = {p.name for p in result if p.is_dir()}
         for expected in [
             "core",
             "config",
@@ -304,7 +248,18 @@ class TestBuildTestScopeStep7:
         )
         assert result is not None
         dir_names = {p.name for p in result if p.is_dir()}
-        assert "core" in dir_names
+        for expected in [
+            "core",
+            "config",
+            "execution",
+            "pipeline",
+            "workspace",
+            "recipe",
+            "migration",
+            "server",
+            "cli",
+        ]:
+            assert expected in dir_names, f"stale-oracle fallback lost {expected}"
 
     def test_step7_mixed_coverage_keeps_directory(self, tmp_path: Path) -> None:
         """If two src files map to same cascade dir and one lacks coverage data, dir is kept."""

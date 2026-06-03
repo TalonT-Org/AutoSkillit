@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import re as _stdlib_re
+from collections.abc import Iterator
 from pathlib import Path
 
 from tests.arch._rules import (
@@ -448,3 +450,29 @@ def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
 
     _walk(tree.body)
     return result
+
+
+# ── Section C: Skill frontmatter and iteration helpers ───────────────────────
+
+_FM_SPLIT = _stdlib_re.compile(r"^---\n(.*?)\n?---\n?(.*)", _stdlib_re.DOTALL)
+
+
+def _strip_frontmatter(content: str) -> str:
+    m = _FM_SPLIT.match(content)
+    return m.group(2) if m else content
+
+
+def _iter_skill_dirs() -> Iterator[tuple[str, Path]]:
+    from autoskillit.core import paths
+
+    pkg = paths.pkg_root()
+    for skill_dir in (pkg / "skills", pkg / "skills_extended"):
+        if not skill_dir.is_dir():
+            continue
+        for entry in sorted(skill_dir.iterdir()):
+            if not entry.is_dir():
+                continue
+            skill_md = entry / "SKILL.md"
+            if not skill_md.is_file():
+                continue
+            yield entry.name, skill_md

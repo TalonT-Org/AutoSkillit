@@ -9,6 +9,7 @@ import pytest
 from autoskillit.core import paths
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
 from autoskillit.workspace.skills import _read_skill_frontmatter
+from tests.arch._helpers import _strip_frontmatter
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -20,13 +21,6 @@ _GENUINE_CLAUDE_CODE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\brun_skill\b"),
     re.compile(r"\btest_check\b"),
 )
-
-_FM_SPLIT = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
-
-
-def _strip_frontmatter(content: str) -> str:
-    m = _FM_SPLIT.match(content)
-    return m.group(2) if m else content
 
 
 def _has_genuine_claude_code_dependency(body: str, skill_name: str) -> bool:

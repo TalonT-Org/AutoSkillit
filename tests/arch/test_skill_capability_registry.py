@@ -4,28 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import paths
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
 from autoskillit.workspace.skills import _read_skill_frontmatter
+from tests.arch._helpers import _iter_skill_dirs
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 def _all_skill_frontmatter() -> list[tuple[str, dict]]:
-    pkg = paths.pkg_root()
-    results: list[tuple[str, dict]] = []
-    for skill_dir in (pkg / "skills", pkg / "skills_extended"):
-        if not skill_dir.is_dir():
-            continue
-        for entry in sorted(skill_dir.iterdir()):
-            if not entry.is_dir():
-                continue
-            skill_md = entry / "SKILL.md"
-            if not skill_md.is_file():
-                continue
-            fm = _read_skill_frontmatter(skill_md)
-            results.append((entry.name, fm))
-    return results
+    return [(name, _read_skill_frontmatter(skill_md)) for name, skill_md in _iter_skill_dirs()]
 
 
 def test_all_capability_keys_are_consumed():

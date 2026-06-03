@@ -12,13 +12,11 @@ import re
 
 import pytest
 
-from autoskillit.core import paths
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
 from autoskillit.workspace.skills import _read_skill_frontmatter
+from tests.arch._helpers import _iter_skill_dirs, _strip_frontmatter
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
-
-_FM_SPLIT = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
 
 _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     "agent_subagent": [re.compile(r"Agent\(\s*subagent_type\s*=")],
@@ -28,11 +26,6 @@ _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     "test_check": [re.compile(r"\btest_check\b")],
     "claude_dir": [re.compile(r"\.claude/")],
 }
-
-
-def _strip_frontmatter(content: str) -> str:
-    m = _FM_SPLIT.match(content)
-    return m.group(2) if m else content
 
 
 def _detect_capabilities(body: str, skill_name: str) -> set[str]:
@@ -53,24 +46,10 @@ def _detect_capabilities(body: str, skill_name: str) -> set[str]:
     return detected
 
 
-def _iter_skills():
-    pkg = paths.pkg_root()
-    for skill_dir in (pkg / "skills", pkg / "skills_extended"):
-        if not skill_dir.is_dir():
-            continue
-        for entry in sorted(skill_dir.iterdir()):
-            if not entry.is_dir():
-                continue
-            skill_md = entry / "SKILL.md"
-            if not skill_md.is_file():
-                continue
-            yield entry.name, skill_md
-
-
 def test_forward_check_capabilities_declared():
     """Skills using a capability must declare it in uses_capabilities."""
     violations: list[str] = []
-    for name, skill_md in _iter_skills():
+    for name, skill_md in _iter_skill_dirs():
         content = skill_md.read_text(encoding="utf-8")
         body = _strip_frontmatter(content)
         detected = _detect_capabilities(body, name)
@@ -90,7 +69,7 @@ def test_forward_check_capabilities_declared():
 def test_reverse_check_annotation_justified():
     """Skills with backend_requirements must have at least one capability justifying it."""
     violations: list[str] = []
-    for name, skill_md in _iter_skills():
+    for name, skill_md in _iter_skill_dirs():
         fm = _read_skill_frontmatter(skill_md)
         backend_reqs = set(fm.get("backend_requirements", []))
         if not backend_reqs:
@@ -119,7 +98,7 @@ def test_reverse_check_annotation_justified():
 def test_co_requirement_backend_requires_capabilities():
     """Non-empty backend_requirements → uses_capabilities must also be declared."""
     violations: list[str] = []
-    for name, skill_md in _iter_skills():
+    for name, skill_md in _iter_skill_dirs():
         fm = _read_skill_frontmatter(skill_md)
         if fm.get("backend_requirements") and not fm.get("uses_capabilities"):
             violations.append(name)
@@ -132,7 +111,7 @@ def test_co_requirement_backend_requires_capabilities():
 def test_derivation_backend_requirements_match_capabilities():
     """backend_requirements must equal the union of required_backends from uses_capabilities."""
     violations: list[str] = []
-    for name, skill_md in _iter_skills():
+    for name, skill_md in _iter_skill_dirs():
         fm = _read_skill_frontmatter(skill_md)
         uses_caps = list(fm.get("uses_capabilities", []))
         if not uses_caps:

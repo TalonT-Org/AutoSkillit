@@ -2,18 +2,11 @@
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
+from tests.arch._helpers import _strip_frontmatter
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
-
-_FM_SPLIT = re.compile(r"^---\n(.*?)\n?---\n?(.*)", re.DOTALL)
-
-
-def _strip_frontmatter(content: str) -> str:
-    m = _FM_SPLIT.match(content)
-    return m.group(2) if m else content
 
 
 def _is_self_referential_only(body: str, skill_name: str) -> bool:

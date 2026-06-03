@@ -953,6 +953,8 @@ class TestFoodTruckAutoGateBoot:
     async def test_food_truck_auto_gate_boot_skips_non_headless_orchestrator(
         self, tool_ctx, monkeypatch
     ) -> None:
+        from unittest.mock import MagicMock
+
         from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server._lifespan import _food_truck_auto_gate_boot
@@ -960,6 +962,10 @@ class TestFoodTruckAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
         monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.supports_tool_list_changed = True
+        tool_ctx.backend = mock_backend
 
         await _food_truck_auto_gate_boot(tool_ctx)
 
@@ -1214,7 +1220,9 @@ class TestSkillAutoGateBoot:
 
     @pytest.mark.anyio
     async def test_skill_auto_gate_boot_noop_when_headless_not_1(self, tool_ctx, monkeypatch):
-        """SKILL without HEADLESS=1: gate remains closed."""
+        """SKILL without HEADLESS=1: gate remains closed (notification-capable backend)."""
+        from unittest.mock import MagicMock
+
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server._lifespan import _skill_auto_gate_boot
@@ -1222,6 +1230,10 @@ class TestSkillAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
         monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.supports_tool_list_changed = True
+        tool_ctx.backend = mock_backend
 
         await _skill_auto_gate_boot(tool_ctx)
 
@@ -1473,8 +1485,8 @@ class TestSkillAutoGateBoot:
 
     @pytest.mark.anyio
     async def test_skill_auto_gate_boot_skips_when_both_absent(self, tool_ctx, monkeypatch):
-        """Neither HEADLESS nor AUTO_GATE set: gate remains closed."""
-        from unittest.mock import patch
+        """Neither HEADLESS nor AUTO_GATE: closed (notification-capable backend)."""
+        from unittest.mock import MagicMock, patch
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
@@ -1483,6 +1495,10 @@ class TestSkillAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
         monkeypatch.delenv(HEADLESS_AUTO_GATE_ENV_VAR, raising=False)
+
+        mock_backend = MagicMock()
+        mock_backend.capabilities.supports_tool_list_changed = True
+        tool_ctx.backend = mock_backend
 
         with patch(
             "autoskillit.server.tools.tools_kitchen._write_hook_config"

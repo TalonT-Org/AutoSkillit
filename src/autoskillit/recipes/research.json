@@ -118,37 +118,99 @@
       "capture": {
         "experiment_plan": "${{ result.experiment_plan }}"
       },
-      "on_success": "review_design",
+      "on_success": "dial",
       "on_failure": "escalate_stop"
     },
-    "review_design": {
+    "dial": {
       "tool": "run_skill",
       "model": "",
+      "phoropter_family": "review-design",
       "with": {
-        "skill_command": "/autoskillit:review-design ${{ context.experiment_plan }} ${{ context.scope_report }}",
+        "skill_command": "/autoskillit:classify-experiment-type ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "review_design",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-design"
+        "step_name": "dial",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/classify-experiment-type"
       },
       "capture": {
-        "verdict": "${{ result.verdict }}",
         "experiment_type": "${{ result.experiment_type }}",
-        "evaluation_dashboard": "${{ result.evaluation_dashboard }}",
-        "revision_guidance": "${{ result.revision_guidance }}",
-        "classification_timestamp": "${{ result.classification_timestamp }}"
+        "dimensions_manifest": "${{ result.dimensions_manifest_path }}",
+        "classification_timestamp": "${{ result.classification_timestamp }}",
+        "is_silent_type": "${{ result.is_silent_type }}"
       },
       "pass_through": [
-        "experiment_type"
+        "experiment_type",
+        "classification_timestamp",
+        "is_silent_type"
       ],
       "skip_when_false": "inputs.review_design",
       "retries": 2,
       "on_exhausted": "create_worktree",
       "on_context_limit": "create_worktree",
       "on_failure": "create_worktree",
+      "on_success": "silent_type_gate"
+    },
+    "silent_type_gate": {
+      "action": "route",
+      "phoropter_family": "review-design",
+      "on_result": [
+        {
+          "when": "${{ context.is_silent_type }} == true",
+          "route": "synthesize"
+        },
+        {
+          "when": "${{ context.is_silent_type }} == false",
+          "route": "apply"
+        }
+      ]
+    },
+    "apply": {
+      "tool": "run_skill",
+      "model": "",
+      "phoropter_family": "review-design",
+      "with": {
+        "skill_command": "/autoskillit:apply-review-dimensions ${{ context.dimensions_manifest }} ${{ context.scope_report }} ${{ context.experiment_plan }} ${{ context.experiment_type }} ${{ context.classification_timestamp }}",
+        "cwd": "${{ inputs.source_dir }}",
+        "step_name": "apply",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/apply-review-dimensions"
+      },
+      "capture": {
+        "findings_manifest_path": "${{ result.findings_manifest_path }}",
+        "evaluation_dashboard": "${{ result.evaluation_dashboard_path }}"
+      },
+      "on_failure": "create_worktree",
+      "on_exhausted": "create_worktree",
+      "on_context_limit": "create_worktree",
+      "on_result": [
+        {
+          "when": "${{ result.verdict }} == REVISE",
+          "route": "revise_design"
+        },
+        {
+          "route": "synthesize"
+        }
+      ]
+    },
+    "synthesize": {
+      "tool": "run_python",
+      "phoropter_family": "review-design",
+      "with": {
+        "callable": "autoskillit.smoke_utils.aggregate_review_verdict",
+        "findings_manifest_path": "${{ context.findings_manifest_path }}",
+        "dimensions_manifest_path": "${{ context.dimensions_manifest }}",
+        "experiment_type": "${{ context.experiment_type }}",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/aggregate-review-verdict",
+        "work_dir": "${{ inputs.source_dir }}"
+      },
+      "capture": {
+        "verdict": "${{ result.verdict }}",
+        "revision_guidance": "${{ result.revision_guidance_path }}",
+        "evaluation_dashboard": "${{ result.evaluation_dashboard_path }}"
+      },
+      "on_failure": "create_worktree",
       "on_result": [
         {
           "when": "${{ result.verdict }} == GO",
-          "route": "dial"
+          "route": "vis_dial"
         },
         {
           "when": "${{ result.verdict }} == REVISE",
@@ -163,14 +225,13 @@
         }
       ]
     },
-    "dial": {
+    "vis_dial": {
       "tool": "run_skill",
       "model": "",
-      "phoropter_family": "vis-lens",
       "with": {
         "skill_command": "/autoskillit:select-vis-lenses ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "dial",
+        "step_name": "vis_dial",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/select-vis-lenses"
       },
       "capture": {
@@ -180,35 +241,33 @@
         "tier_c_lens": "${{ result.tier_c_lens }}",
         "methodology_tradition": "${{ result.methodology_tradition }}"
       },
-      "on_success": "apply",
+      "on_success": "vis_apply",
       "on_failure": "escalate_stop"
     },
-    "apply": {
+    "vis_apply": {
       "tool": "run_skill",
       "model": "",
-      "phoropter_family": "vis-lens",
       "with": {
         "skill_command": "/autoskillit:vis-lens-{slug} {context_path}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "apply",
+        "step_name": "vis_apply",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/run-vis-lenses"
       },
       "capture_list": {
         "vis_lens_output_paths": "${{ result.diagram_path }}"
       },
       "retries": 0,
-      "on_success": "synthesize",
+      "on_success": "vis_synthesize",
       "on_failure": "escalate_stop",
       "note": "LENS ITERATION: context.selected_lenses contains comma-separated vis-lens slugs (e.g. \"always-on,chart-select\"). context.lens_context_paths contains the corresponding comma-separated context file paths (same order as slugs). For each lens slug, run:\n  /autoskillit:vis-lens-{slug} {matching_context_path}\nRun all selected lenses in parallel (all run_skill calls in a single message). Accumulate each diagram_path value into context.vis_lens_output_paths via capture_list. If a lens fails, continue with remaining lenses.\n"
     },
-    "synthesize": {
+    "vis_synthesize": {
       "tool": "run_skill",
       "model": "",
-      "phoropter_family": "vis-lens",
       "with": {
         "skill_command": "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/run-vis-lenses --tier-c-lens=${{ context.tier_c_lens }} --methodology-tradition=${{ context.methodology_tradition }} --disambiguation-rule-applied=${{ context.disambiguation_rule_applied }}",
         "cwd": "${{ inputs.source_dir }}",
-        "step_name": "synthesize",
+        "step_name": "vis_synthesize",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan"
       },
       "capture": {
@@ -243,14 +302,14 @@
           "route": "create_worktree"
         },
         {
-          "route": "plan_experiment"
+          "route": "apply"
         }
       ],
       "on_failure": "create_worktree",
       "optional_context_refs": [
         "design_review_count"
       ],
-      "note": "Iteration guard for the review_design → revise_design → plan_experiment cycle. Caps design revision loops at 3 iterations. On exhaustion, proceeds to create_worktree with the best available design.\n"
+      "note": "Iteration guard for the dial → apply → synthesize REVISE → revise_design → check_design_review_loop → apply cycle. Re-entry skips re-dialing since experiment_type is stable across revision cycles. Caps design revision loops at 3 iterations. On exhaustion, proceeds to create_worktree with the best available design.\n"
     },
     "resolve_design_review": {
       "tool": "run_skill",

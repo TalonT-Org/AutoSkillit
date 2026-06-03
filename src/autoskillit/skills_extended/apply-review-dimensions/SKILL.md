@@ -311,3 +311,12 @@ Output tokens (relative to the current working directory):
   verdict (verdict computation lives in the synthesis step, not in this skill)
 - `/autoskillit:plan-experiment` — produces `experiment_plan_path`
 - `/autoskillit:scope` — produces `scope_report_path`
+
+## Context Limit Behavior
+
+When context is exhausted mid-execution, the `findings_manifest_path` and
+`evaluation_dashboard_path` in `{{AUTOSKILLIT_TEMP}}/apply-review-dimensions/`
+may be partially written but missing the deeper L3/L4 review findings. The
+recipe's `on_context_limit` route triggers `create_worktree`, preserving
+whatever findings were captured so the downstream synthesis step can still
+compute a verdict from the available evidence.

@@ -66,35 +66,39 @@ class TestResearchRecipeStructure:
         assert "review_design" in recipe.ingredients
         assert recipe.ingredients["review_design"].default == "true"
 
-    def test_research_has_review_design_step(self, recipe) -> None:
-        assert "review_design" in recipe.steps
+    def test_research_has_dial_step(self, recipe) -> None:
+        assert "dial" in recipe.steps
+        assert recipe.steps["dial"].phoropter_family == "review-design"
 
-    def test_review_design_step_skip_when_false(self, recipe) -> None:
-        step = recipe.steps["review_design"]
+    def test_dial_step_skip_when_false(self, recipe) -> None:
+        step = recipe.steps["dial"]
         assert step.skip_when_false == "inputs.review_design"
 
-    def test_review_design_step_retries_and_exhausted(self, recipe) -> None:
-        step = recipe.steps["review_design"]
+    def test_dial_step_retries_and_exhausted(self, recipe) -> None:
+        step = recipe.steps["dial"]
         assert step.retries == 2
         assert step.on_exhausted == "create_worktree"
 
-    def test_review_design_receives_scope_report(self, recipe) -> None:
-        """review_design step must pass scope_report as a second argument."""
-        step = recipe.steps["review_design"]
+    def test_dial_receives_scope_report(self, recipe) -> None:
+        """dial step must pass scope_report as a second argument."""
+        step = recipe.steps["dial"]
         cmd = step.with_args["skill_command"]
         assert "${{ context.scope_report }}" in cmd
 
-    def test_plan_experiment_routes_to_review_design(self, recipe) -> None:
+    def test_plan_experiment_routes_to_dial(self, recipe) -> None:
         step = recipe.steps["plan_experiment"]
-        assert step.on_success == "review_design"
+        assert step.on_success == "dial"
 
-    def test_review_design_on_result_routing(self, recipe) -> None:
-        """review_design STOP verdict routes to resolve_design_review (not design_rejected)."""
-        step = recipe.steps["review_design"]
+    def test_synthesize_on_result_routing(self, recipe) -> None:
+        """synthesize routes GO/REVISE/STOP verdicts in research.yaml.
+
+        The review-design synthesize step is the source of the final verdict.
+        """
+        step = recipe.steps["synthesize"]
         assert step.on_result is not None
         go_cond = next((c for c in step.on_result.conditions if c.when and "GO" in c.when), None)
         assert go_cond is not None, "Missing GO route"
-        assert go_cond.route == "dial"
+        assert go_cond.route == "vis_dial"
         revise_cond = next(
             (c for c in step.on_result.conditions if c.when and "REVISE" in c.when), None
         )
@@ -304,6 +308,15 @@ class TestResearchRecipeStructure:
     def test_research_recipe_validates_cleanly_with_new_steps(self, recipe) -> None:
         errors = validate_recipe_structure(recipe)
         assert errors == [], f"Validation errors: {errors}"
+
+    def test_check_design_review_loop_routes_to_apply(self, recipe) -> None:
+        step = recipe.steps["check_design_review_loop"]
+        fallback = next(
+            (c for c in step.on_result.conditions if not c.when or "max_exceeded" not in c.when),
+            None,
+        )
+        assert fallback is not None
+        assert fallback.route == "apply"
 
     # --- Archival phase tests ---
 

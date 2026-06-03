@@ -205,3 +205,12 @@ Do NOT emit `verdict`. When `is_silent_type=true`, prepend advisory:
 - `/autoskillit:apply-review-dimensions` — consumes this skill's output
   (`dimensions_manifest_path`, `selected_lenses`, `lens_context_paths`)
 - `/autoskillit:plan-experiment` — produces the plan this skill classifies
+
+## Context Limit Behavior
+
+When context is exhausted mid-execution, the `dimensions_manifest_path` and
+lens context files in `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/` may
+be partially written but the experiment_type classification may be incomplete.
+The recipe's `on_context_limit` route triggers `create_worktree`, preserving
+whatever was written so the next pipeline stage can attempt recovery or
+fall through to the unblocked execution path.

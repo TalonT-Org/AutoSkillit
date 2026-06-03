@@ -1018,7 +1018,8 @@ def test_research_recipe_card_contains_research_skills() -> None:
     expected_subset = {
         "scope",
         "plan-experiment",
-        "review-design",
+        "classify-experiment-type",
+        "apply-review-dimensions",
         "run-experiment",
         "generate-report",
         "resolve-failures",

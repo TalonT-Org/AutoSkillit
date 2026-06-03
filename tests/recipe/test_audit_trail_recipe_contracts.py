@@ -12,18 +12,18 @@ RECIPE_PATH = Path("src/autoskillit/recipes/research.yaml")
 
 
 def test_dial_captures_disambiguation_fields():
-    """dial step captures disambiguation_rule_applied and tier_c_lens."""
+    """vis_dial step captures disambiguation_rule_applied and tier_c_lens."""
     recipe = load_yaml(RECIPE_PATH)
-    dial_step = recipe["steps"]["dial"]
+    dial_step = recipe["steps"]["vis_dial"]
     captures = dial_step.get("capture", {})
     assert "disambiguation_rule_applied" in captures
     assert "tier_c_lens" in captures
 
 
-def test_review_design_captures_classification_timestamp():
-    """review_design step captures classification_timestamp."""
+def test_dial_captures_classification_timestamp():
+    """dial step captures classification_timestamp."""
     recipe = load_yaml(RECIPE_PATH)
-    rd_step = recipe["steps"]["review_design"]
+    rd_step = recipe["steps"]["dial"]
     captures = rd_step.get("capture", {})
     assert "classification_timestamp" in captures
 

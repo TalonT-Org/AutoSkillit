@@ -145,8 +145,8 @@ async def test_skill_backend_requirement_triggers_incompatibility_gate(
 
     result = await run_skill("/autoskillit:probe", str(tmp_path))
     data = json.loads(result)
-    assert data.get("status") == "crashed"
-    assert "requires backend" in data.get("error", "")
+    assert data.get("subtype") == "crashed"
+    assert "requires backend" in data.get("result", "")
 
 
 @pytest.mark.anyio
@@ -342,7 +342,8 @@ async def test_backend_incompatibility_gate_rejects_before_init_session(
 
     result = await run_skill("/autoskillit:test-skill", str(tmp_path))
     data = json.loads(result)
-    assert data.get("status") == "crashed"
+    assert data.get("subtype") == "crashed"
+    assert "requires backend" in data.get("result", "")
     mock_ssm.init_session.assert_not_called()
 
 

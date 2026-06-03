@@ -360,8 +360,8 @@ async def test_run_skill_incompatible_backend_rejects_before_init_session(
 
     result = await run_skill("/autoskillit:test-skill", str(tmp_path))
     data = json.loads(result)
-    assert data.get("status") == "crashed"
-    assert "requires backend" in data.get("error", "")
+    assert data.get("subtype") == "crashed"
+    assert "requires backend" in data.get("result", "")
     mock_ssm.init_session.assert_not_called()
 
 

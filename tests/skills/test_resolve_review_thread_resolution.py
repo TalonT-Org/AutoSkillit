@@ -1,7 +1,6 @@
-from pathlib import Path
-
 import pytest
 
+from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import GITHUB_API_SKILL_FAMILIES
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
@@ -9,20 +8,19 @@ pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 _THREAD_RESOLVER_FAMILY = next(
     f for f in GITHUB_API_SKILL_FAMILIES if f.name == "thread-resolvers"
 )
-_SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
 
 @pytest.fixture
 def resolve_review_skill_md() -> str:
-    skill_path = _SRC_ROOT / "skills_extended" / "resolve-review" / "SKILL.md"
+    skill_path = pkg_root() / "skills_extended" / "resolve-review" / "SKILL.md"
     assert skill_path.exists(), f"SKILL.md not found at expected path: {skill_path}"
     return skill_path.read_text()
 
 
 def _read_member_skill_md(name: str) -> str:
-    path = _SRC_ROOT / "skills_extended" / name / "SKILL.md"
+    path = pkg_root() / "skills_extended" / name / "SKILL.md"
     if not path.exists():
-        path = _SRC_ROOT / "skills" / name / "SKILL.md"
+        path = pkg_root() / "skills" / name / "SKILL.md"
     assert path.exists(), f"SKILL.md not found for {name}"
     return path.read_text()
 

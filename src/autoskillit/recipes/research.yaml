@@ -164,7 +164,7 @@ steps:
       output_dir: "{{AUTOSKILLIT_TEMP}}/classify-experiment-type"
     capture:
       experiment_type: "${{ result.experiment_type }}"
-      dimensions_manifest: "${{ result.dimensions_manifest_path }}"
+      dimensions_manifest_path: "${{ result.dimensions_manifest_path }}"
       classification_timestamp: "${{ result.classification_timestamp }}"
       is_silent_type: "${{ result.is_silent_type }}"
     pass_through: [experiment_type, classification_timestamp, is_silent_type]
@@ -189,7 +189,7 @@ steps:
     model: ""
     phoropter_family: review-design
     with:
-      skill_command: "/autoskillit:apply-review-dimensions ${{ context.dimensions_manifest }} ${{ context.scope_report }} ${{ context.experiment_plan }} ${{ context.experiment_type }} ${{ context.classification_timestamp }}"
+      skill_command: "/autoskillit:apply-review-dimensions ${{ context.dimensions_manifest_path }} ${{ context.scope_report }} ${{ context.experiment_plan }} ${{ context.experiment_type }} ${{ context.classification_timestamp }}"
       cwd: "${{ inputs.source_dir }}"
       step_name: apply
       output_dir: "{{AUTOSKILLIT_TEMP}}/apply-review-dimensions"
@@ -210,7 +210,7 @@ steps:
     with:
       callable: "autoskillit.smoke_utils.aggregate_review_verdict"
       findings_manifest_path: "${{ context.findings_manifest_path }}"
-      dimensions_manifest_path: "${{ context.dimensions_manifest }}"
+      dimensions_manifest_path: "${{ context.dimensions_manifest_path }}"
       experiment_type: "${{ context.experiment_type }}"
       output_dir: "{{AUTOSKILLIT_TEMP}}/aggregate-review-verdict"
       work_dir: "${{ inputs.source_dir }}"

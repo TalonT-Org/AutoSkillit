@@ -751,7 +751,6 @@ ALWAYS_WRITE_SKILLS = {
     "audit-tests",
     "build-execution-map",
     "classify-experiment-type",
-    "apply-review-dimensions",
     "compose-research-pr",
     "design-guards",
     "diagnose-ci",

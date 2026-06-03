@@ -247,7 +247,7 @@ analyze-pipeline-health, analyze-prs, arch-lens-c4-container, arch-lens-concurre
 arch-lens-development, arch-lens-error-resilience, arch-lens-module-dependency, arch-lens-operational,
 arch-lens-process-flow, arch-lens-repository-access, arch-lens-scenarios, arch-lens-security, arch-lens-state-lifecycle,
 audit-arch, audit-bugs, audit-claims, audit-cohesion, audit-defense-standards, audit-docs, audit-friction, audit-impl, audit-review-decisions, audit-tests,
-build-execution-map, bundle-local-report, close-kitchen, collapse-issues, compose-pr, compose-research-pr, design-guards, diagnose-ci, download-data, dry-walkthrough, elaborate-phase,
+build-execution-map, bundle-local-report, classify-experiment-type, close-kitchen, collapse-issues, compose-pr, compose-research-pr, design-guards, diagnose-ci, download-data, dry-walkthrough, elaborate-phase,
 enrich-issues, exp-lens-benchmark-representativeness, exp-lens-causal-assumptions, exp-lens-comparator-construction,
 exp-lens-error-budget, exp-lens-estimand-clarity, exp-lens-exploratory-confirmatory, exp-lens-fair-comparison,
 exp-lens-governance-risk, exp-lens-iterative-learning, exp-lens-measurement-validity, exp-lens-pipeline-integrity,

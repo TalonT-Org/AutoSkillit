@@ -279,6 +279,8 @@ def test_output_path_tokens_synchronized() -> None:
             "group_manifest",
             "download_report",
             "selected_directions",
+            # classify-experiment-type output (phoropter dial step)
+            "dimensions_manifest_path",
         }
     )
 

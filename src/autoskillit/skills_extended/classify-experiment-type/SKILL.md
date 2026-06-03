@@ -49,6 +49,7 @@ and before `apply-review-dimensions`. NOT invoked standalone — the recipe step
 - Emit `is_silent_type=true|false`
 - Emit `dimensions_manifest_path` as an absolute path
 - Write output to `{{AUTOSKILLIT_TEMP}}/classify-experiment-type/`
+- Issue all subagent calls in a single message to maximize parallel execution
 
 ## Workflow
 
@@ -79,8 +80,9 @@ Two-level backward-compatible fallback:
   tokens). Record `source: frontmatter` for each extracted field. If YAML is malformed,
   treat all fields as missing → fall through to Level 2.
 - **Level 2 (LLM extraction)**: For each missing field, launch a targeted extraction
-  subagent against the corresponding prose section. All extractions are independent and
-  run in parallel. Record `source: extracted`.
+  subagent against the corresponding prose section. All extractions are independent —
+  launch all extraction subagents in a single message so they run in parallel. Record
+  `source: extracted`.
 
 Fields and prose-target mapping:
 

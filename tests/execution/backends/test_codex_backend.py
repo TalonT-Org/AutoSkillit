@@ -830,6 +830,34 @@ class TestCodexBuildSkillSessionCmdAgentBackend:
         assert spec.env["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
 
 
+class TestCodexDynaconfBackendEnv:
+    """AUTOSKILLIT_AGENT_BACKEND__BACKEND (Dynaconf nested form) in Codex cmd builders."""
+
+    SKILL_BASE: dict[str, object] = {
+        "skill_command": "/test-skill",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+        "model": None,
+        "plugin_source": None,
+        "output_format": OutputFormat.JSON,
+    }
+
+    FOOD_TRUCK_BASE: dict[str, object] = {
+        "orchestrator_prompt": "dispatch the work",
+        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+    }
+
+    def test_skill_session_has_dynaconf_backend(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"] == "codex"
+
+    def test_food_truck_has_dynaconf_backend(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        assert spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"] == "codex"
+
+
 class TestCodexBuildFoodTruckCmd:
     BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",

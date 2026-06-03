@@ -1,11 +1,4 @@
-"""Tests for the apply-review-dimensions skill SKILL.md specification.
-
-These are stateless read-only tests that verify structural validity of the
-SKILL.md file: directory exists, frontmatter parses, required sections are
-present, no verdict token is emitted in the output section, the findings
-manifest JSON schema is documented, and the three-layer silencing rules are
-documented (including the variance_protocol foothold-validation exception).
-"""
+"""Tests for the apply-review-dimensions skill SKILL.md specification."""
 
 from __future__ import annotations
 
@@ -42,6 +35,7 @@ def test_skill_sections() -> None:
     """All required H2 sections are present in the SKILL.md body."""
     content = _SKILL_MD.read_text(encoding="utf-8")
     required = [
+        "## When to Use",
         "## Arguments",
         "## Critical Constraints",
         "## Workflow",

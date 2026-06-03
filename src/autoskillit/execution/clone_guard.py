@@ -282,19 +282,38 @@ async def validate_pre_session_index(
             cwd=Path(cwd),
             timeout=_GIT_TIMEOUT,
         )
-    else:
-        reset_result = await runner(
-            ["git", "rm", "--cached", "-r", "."],
-            cwd=Path(cwd),
-            timeout=_GIT_TIMEOUT,
+        if reset_result.returncode != 0:
+            logger.warning(
+                "pre_session_reset_failed",
+                returncode=reset_result.returncode,
+                stderr=reset_result.stderr.strip(),
+                strategy="sha",
+            )
+            return False
+        await _stash_and_clean(
+            cwd,
+            runner,
+            stash_label=f"pre-session {reset_sha[:8]}",
+            exclude_prefix=exclude_prefix,
         )
+        logger.info(
+            "index_reset_pre_session",
+            file_count=file_count,
+            reset_strategy="sha",
+        )
+        return True
 
+    reset_result = await runner(
+        ["git", "rm", "--cached", "-r", "."],
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
     if reset_result.returncode != 0:
         logger.warning(
             "pre_session_reset_failed",
             returncode=reset_result.returncode,
             stderr=reset_result.stderr.strip(),
-            strategy="sha" if reset_sha else "rm_cached",
+            strategy="rm_cached",
         )
         return False
 
@@ -309,8 +328,11 @@ async def validate_pre_session_index(
             returncode=co_result.returncode,
             stderr=co_result.stderr.strip(),
         )
+    clean_cmd = ["git", "clean", "-fd"]
+    if exclude_prefix:
+        clean_cmd.append(f"--exclude={exclude_prefix}")
     clean_result = await runner(
-        ["git", "clean", "-fd"],
+        clean_cmd,
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )
@@ -320,13 +342,104 @@ async def validate_pre_session_index(
             returncode=clean_result.returncode,
             stderr=clean_result.stderr.strip(),
         )
-
     logger.info(
         "index_reset_pre_session",
         file_count=file_count,
-        reset_strategy="sha" if reset_sha else "rm_cached",
+        reset_strategy="rm_cached",
     )
     return True
+
+
+async def _stash_and_clean(
+    cwd: str,
+    runner: SubprocessRunner,
+    *,
+    stash_label: str,
+    exclude_prefix: str = ".autoskillit/",
+) -> bool:
+    """Stash tracked-file modifications then clean untracked files.
+
+    Returns True when the working tree is clean afterwards.
+    Falls back to ``git checkout -- .`` when stash fails.
+    """
+    stash_result = await runner(
+        ["git", "stash", "push", "-m", f"autoskillit: {stash_label}"],
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
+    if stash_result.returncode != 0:
+        logger.warning(
+            "stash_push_failed_falling_back_to_checkout",
+            returncode=stash_result.returncode,
+            stderr=stash_result.stderr.strip(),
+        )
+        co_result = await runner(
+            ["git", "checkout", "--", "."],
+            cwd=Path(cwd),
+            timeout=_GIT_TIMEOUT,
+        )
+        if co_result.returncode != 0:
+            logger.warning(
+                "stash_fallback_checkout_failed",
+                returncode=co_result.returncode,
+                stderr=co_result.stderr.strip(),
+            )
+
+    clean_cmd = ["git", "clean", "-fd"]
+    if exclude_prefix:
+        clean_cmd.append(f"--exclude={exclude_prefix}")
+    clean_result = await runner(
+        clean_cmd,
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
+    if clean_result.returncode != 0:
+        logger.warning(
+            "stash_and_clean_clean_failed",
+            returncode=clean_result.returncode,
+            stderr=clean_result.stderr.strip(),
+        )
+
+    await _prune_stash_overflow(cwd, runner)
+
+    return clean_result.returncode == 0
+
+
+async def _prune_stash_overflow(
+    cwd: str,
+    runner: SubprocessRunner,
+    *,
+    max_stashes: int = 5,
+    prefix: str = "autoskillit:",
+) -> None:
+    """Drop oldest autoskillit stashes beyond *max_stashes*."""
+    list_result = await runner(
+        ["git", "stash", "list"],
+        cwd=Path(cwd),
+        timeout=_GIT_TIMEOUT,
+    )
+    if list_result.returncode != 0 or not list_result.stdout.strip():
+        return
+
+    matching: list[int] = []
+    for line in list_result.stdout.splitlines():
+        if prefix in line:
+            idx_str = line.split(":", 1)[0]
+            try:
+                matching.append(int(idx_str.split("{")[1].split("}")[0]))
+            except (IndexError, ValueError):
+                continue
+
+    if len(matching) <= max_stashes:
+        return
+
+    to_drop = sorted(matching[max_stashes:], reverse=True)
+    for idx in to_drop:
+        await runner(
+            ["git", "stash", "drop", f"stash@{{{idx}}}"],
+            cwd=Path(cwd),
+            timeout=_GIT_TIMEOUT,
+        )
 
 
 def _status_path_under_prefix(status_line: str, prefix: str) -> bool:
@@ -407,10 +520,14 @@ async def revert_contamination(
 ) -> ContaminationReport:
     """Revert the clone to its pre-session state.
 
-    When *selective* is True (read-only or write-scoped skills), uses
-    ``git checkout -- .`` and ``git clean -fd --exclude=<exclude_prefix>``
-    to preserve legitimate output under *exclude_prefix*.
-    Falls back to ``git reset --hard`` only when direct commits are present.
+    When *selective* is True and there are no direct commits, uses
+    ``_stash_and_clean`` to preserve tracked-file modifications in a
+    recoverable stash before cleaning.  When direct commits are present,
+    uses ``git reset --hard`` (modifications are unrecoverable in this
+    path — the hard reset discards them along with the unwanted commits).
+
+    When *selective* is False, uses ``git reset --hard`` + ``git clean``
+    to aggressively discard all contamination (no stash).
     """
     logger.info(
         "reverting_clone_contamination",
@@ -428,27 +545,32 @@ async def revert_contamination(
             )
             if reset_result.returncode != 0:
                 return dataclasses.replace(report, reverted=False)
-        else:
-            reset_result = await runner(
-                ["git", "reset", snapshot.head_sha],
+            # After hard reset, working-tree modifications are already gone;
+            # stash would be a no-op. Only clean untracked files.
+            clean_cmd = ["git", "clean", "-fd"]
+            if exclude_prefix:
+                clean_cmd.append(f"--exclude={exclude_prefix}")
+            clean_result = await runner(
+                clean_cmd,
                 cwd=Path(cwd),
                 timeout=_GIT_TIMEOUT,
             )
-            if reset_result.returncode != 0:
-                return dataclasses.replace(report, reverted=False)
-        checkout_result = await runner(
-            ["git", "checkout", "--", "."],
+            return dataclasses.replace(report, reverted=clean_result.returncode == 0)
+
+        reset_result = await runner(
+            ["git", "reset", snapshot.head_sha],
             cwd=Path(cwd),
             timeout=_GIT_TIMEOUT,
         )
-        if checkout_result.returncode != 0:
+        if reset_result.returncode != 0:
             return dataclasses.replace(report, reverted=False)
-        clean_result = await runner(
-            ["git", "clean", "-fd", f"--exclude={exclude_prefix}"],
-            cwd=Path(cwd),
-            timeout=_GIT_TIMEOUT,
+        reverted = await _stash_and_clean(
+            cwd,
+            runner,
+            stash_label=f"revert-contamination {snapshot.head_sha[:8]}",
+            exclude_prefix=exclude_prefix,
         )
-        return dataclasses.replace(report, reverted=clean_result.returncode == 0)
+        return dataclasses.replace(report, reverted=reverted)
 
     reset_result = await runner(
         ["git", "reset", "--hard", snapshot.head_sha],
@@ -461,8 +583,11 @@ async def revert_contamination(
             reset_rc=reset_result.returncode,
         )
         return dataclasses.replace(report, reverted=False)
+    clean_cmd = ["git", "clean", "-fd"]
+    if exclude_prefix:
+        clean_cmd.append(f"--exclude={exclude_prefix}")
     clean_result = await runner(
-        ["git", "clean", "-fd"],
+        clean_cmd,
         cwd=Path(cwd),
         timeout=_GIT_TIMEOUT,
     )

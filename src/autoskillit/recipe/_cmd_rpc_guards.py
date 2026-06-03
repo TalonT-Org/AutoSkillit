@@ -61,7 +61,14 @@ def check_dropped_healthy_loop(
 
 
 def main_repo_guard(clone_path: str) -> dict[str, str]:
-    """Stash dirty state from the main repo before merge."""
+    """Stash dirty state from the main repo before merge.
+
+    Primary path uses ``git stash --include-untracked``.  When stash
+    fails (e.g. index corruption), falls back to destructive cleanup
+    (``git checkout -- .`` + ``git clean -fd``).  In the fallback path,
+    working-tree modifications are irrecoverable — the stash attempt
+    already failed, so there is no preservation mechanism available.
+    """
     result = run_git(["status", "--porcelain"], cwd=clone_path)
     if result.returncode != 0:
         raise subprocess.CalledProcessError(

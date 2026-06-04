@@ -833,7 +833,7 @@ class TestWorktreePathPersistenceContract:
     @pytest.mark.parametrize("skill_name", WORKTREE_SKILLS)
     def test_worktree_skills_instruct_path_capture_from_output(self, skill_name):
         text = self._skill_text(skill_name)
-        assert re.search(r"(?i)bash tool.{0,30}output", text), (
+        assert re.search(r"(?i)bash tool.{0,30}output.{0,100}WORKTREE_PATH", text, re.DOTALL), (
             f"{skill_name}/SKILL.md must instruct the agent to read WORKTREE_PATH "
             "from the Bash tool output (shell variables do not persist across tool calls)"
         )

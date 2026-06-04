@@ -462,6 +462,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | No print | `test_ast_rules.py` (ARCH-001) | `print()` in production `src/` code |
 | No StrEnum-to-string compare | `test_ast_rules.py` (ARCH-010) | Comparing StrEnum fields to raw string literals |
 | Dataclass slots | `test_dataclass_slots.py` | `dataclass(frozen=True)` decorator without `slots=True` |
+| *Def/*Spec naming | `test_def_spec_naming.py` | `*Def` class that is not a `NamedTuple` or `@dataclass(frozen=True)`; `*Spec` class that is not a `@dataclass` or `TypedDict` |
 | Import layer ordering | `test_layer_enforcement.py` | Importing from a higher IL layer (e.g., IL-2 recipe/ imported by IL-0 core/) |
 | Anyio migration | `test_anyio_migration.py` | `asyncio.sleep`, `asyncio.Event`, `asyncio.to_thread` in `execution/process.py` |
 | Protocol types on ToolContext | `test_subpackage_isolation.py` | Concrete class types instead of Protocol types for ToolContext service fields |

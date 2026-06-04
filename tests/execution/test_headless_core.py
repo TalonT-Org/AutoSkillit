@@ -936,9 +936,10 @@ class TestEnsureSkillPrefix:
         assert result.startswith("FIRST ACTION:")
         assert 'skill="implement-worktree-no-merge"' in result
 
-    def test_first_action_includes_fallback(self):
+    def test_first_action_includes_error_stop(self):
         result = _ensure_skill_prefix("/autoskillit:investigate error", provider_profile="minimax")
-        assert "SKILL.md" in result
+        assert "report the error and stop" in result
+        assert "SKILL.md" not in result
 
     def test_first_action_uses_extract_skill_name(self):
         result = _ensure_skill_prefix("/autoskillit:make-plan task", provider_profile="minimax")

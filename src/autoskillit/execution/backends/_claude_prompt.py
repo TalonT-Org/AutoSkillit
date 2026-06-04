@@ -136,8 +136,8 @@ def _ensure_skill_prefix(skill_command: str, *, provider_profile: str = "") -> s
             formatted = (
                 f"FIRST ACTION: Your first action should be to load the skill instructions "
                 f'by calling the Skill tool with skill="{skill_name}". '
-                f"If the Skill tool is unavailable or returns an error, read the skill "
-                f"instructions from the skill's SKILL.md file instead.\n\n"
+                f"If the Skill tool is unavailable or returns an error, report the error "
+                f"and stop — do not attempt to read skill files from the filesystem.\n\n"
                 f"{formatted}"
             )
         return formatted

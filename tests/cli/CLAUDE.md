@@ -61,6 +61,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_order_config.py` | Tests for parse-failure write guards in _enable_packs_permanently and _enable_subsets_permanently |
 | `test_order_resume.py` | Tests for order CLI infra-exit detection and auto-resume via NamedResume |
 | `test_orchestrator_prompt_contract.py` | Tests for orchestrator prompt contract: failure predicates and dispatch consistency |
+| `test_sous_chef_content.py` | Tests for sous-chef SKILL.md content invariants |
 | `test_plugin_cache.py` | Tests for _plugin_cache: retiring cache, install locking, kitchen registry |
 | `test_preview.py` | Tests for the shared pre-launch preview module (_preview.py) |
 | `test_reap.py` | Tests for _reap_stale_dispatches in cli/_fleet.py (Group J) |

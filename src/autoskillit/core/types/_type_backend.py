@@ -123,6 +123,7 @@ class BackendCapabilities:
     # True when backend CLI natively understands context-window suffixes like [1m]
     # and translate_model must preserve them in the --model flag value
     supports_context_window_suffix: bool = field(default=False)
+    has_unguarded_filesystem_access: bool = field(default=False)
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (

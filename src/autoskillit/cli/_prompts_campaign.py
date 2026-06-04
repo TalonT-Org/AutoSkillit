@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.cli._prompts import _ingredient_table_display_instruction, _read_full_sous_chef
+from autoskillit.cli._prompts import (
+    _backend_supplement,
+    _ingredient_table_display_instruction,
+    _read_full_sous_chef,
+)
 from autoskillit.core import ROUTING_AUTHORITY_CLAUSE, RetryReason
 
 if TYPE_CHECKING:
@@ -120,6 +124,7 @@ def _build_fleet_campaign_prompt(
     prior_dispatch_id: str = "",
     resume_checkpoint: dict[str, Any] | None = None,
     max_issues_per_food_truck: int = 3,
+    has_unguarded_filesystem_access: bool = False,
 ) -> str:
     """Build the system prompt for an L3 campaign dispatcher headless session.
 
@@ -485,4 +490,4 @@ Emit at each dispatch state transition:
 - <n>: total dispatch count ({dispatch_count})
 - <dispatch_id>: per-dispatch UUID assigned before calling dispatch_food_truck
 - <state>: one of queued, running, success, failure, skipped
-"""
+""" + _backend_supplement(has_unguarded_filesystem_access)

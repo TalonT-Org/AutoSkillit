@@ -355,7 +355,10 @@ class TestOrderMcpPrefixSelection:
         captured: list[dict] = []
 
         def _capturing_build(
-            recipe_name: str, mcp_prefix: str, ingredients_table: object = None
+            recipe_name: str,
+            mcp_prefix: str,
+            ingredients_table: object = None,
+            has_unguarded_filesystem_access: bool = False,
         ) -> str:
             captured.append({"ingredients_table": ingredients_table})
             return "ROUTING RULES\nFIRST ACTION\nopenKitchen\nDuring pipeline execution"

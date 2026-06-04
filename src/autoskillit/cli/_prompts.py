@@ -46,6 +46,21 @@ def _ingredient_table_display_instruction(source: str) -> str:
     )
 
 
+def _backend_supplement(has_unguarded_filesystem_access: bool) -> str:
+    if has_unguarded_filesystem_access:
+        return (
+            "\n\nBACKEND-SPECIFIC CONSTRAINTS (unguarded filesystem access):\n"
+            "- NEVER use run_cmd to read recipe YAML files, SKILL.md files, or agent "
+            "definition files from the package directory. These raw files contain "
+            "unresolved metadata that does not reflect the resolved state.\n"
+            "- To recall step definitions or routing, call load_recipe.\n"
+            "- To load skill instructions, call the Skill tool.\n"
+            "- run_cmd is for executing project-level commands only — never for reading "
+            "AutoSkillit package internals."
+        )
+    return ""
+
+
 # ── Re-exports from domain submodules ───────────────────────────────────
 
 from autoskillit.cli._prompts_campaign import (  # noqa: E402
@@ -69,6 +84,7 @@ __all__ = [
     "_MCP_RETRY_INSTRUCTION",
     "_read_full_sous_chef",
     "_ingredient_table_display_instruction",
+    "_backend_supplement",
     "_build_fleet_campaign_prompt",
     "_has_dynamic_dispatch",
     "_build_dynamic_dispatch_section",

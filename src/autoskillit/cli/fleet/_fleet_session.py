@@ -60,6 +60,10 @@ def _launch_fleet_session(
 
     cfg = load_config(project_dir)
 
+    from autoskillit.execution import get_backend  # noqa: PLC0415
+
+    _backend_caps = get_backend(cfg.agent_backend.backend).capabilities
+
     if campaign_recipe is None:
         # Ad-hoc mode: no campaign, no state, bare kitchen open
         from autoskillit.cli._prompts import _build_fleet_dispatch_prompt
@@ -70,6 +74,7 @@ def _launch_fleet_session(
             max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
             max_total_issues=cfg.fleet.max_total_issues,
             max_concurrent_dispatches=cfg.fleet.max_concurrent_dispatches,
+            has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
         )
         env_spec = FleetSessionEnv(
             session_type="fleet",
@@ -165,6 +170,7 @@ def _launch_fleet_session(
             prior_dispatch_id=resume_dispatch_id,
             resume_checkpoint=resume_checkpoint,
             max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
+            has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
         )
         env_spec = FleetSessionEnv(
             session_type="fleet",
@@ -251,4 +257,5 @@ def _launch_fleet_session(
                 prior_dispatch_id=resume_dispatch_id,
                 resume_checkpoint=resume_checkpoint,
                 max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
+                has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
             )

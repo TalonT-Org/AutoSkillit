@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from autoskillit.cli._prompts import (
     _MCP_RETRY_INSTRUCTION,
+    _backend_supplement,
     _ingredient_table_display_instruction,
     _read_full_sous_chef,
 )
@@ -79,6 +80,7 @@ def _build_orchestrator_prompt(
     recipe_name: str,
     mcp_prefix: str,
     ingredients_table: str | None = None,
+    has_unguarded_filesystem_access: bool = False,
 ) -> str:
     """Build the --append-system-prompt content for a cook session.
 
@@ -355,4 +357,4 @@ NULL/NONE CONTEXT VARIABLES — MANDATORY:
 - The string "None" is NOT the same as null. If the captured value is the Python
   None object, do not pass the literal string "None".
 {sous_chef_content}
-"""
+""" + _backend_supplement(has_unguarded_filesystem_access)

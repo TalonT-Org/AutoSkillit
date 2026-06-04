@@ -1,13 +1,12 @@
-from pathlib import Path
-
 import pytest
 import yaml
 
+from autoskillit.core import pkg_root
 from autoskillit.core.io import load_yaml
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
-MIGRATIONS_DIR = Path(__file__).parents[2] / "src" / "autoskillit" / "migrations"
+MIGRATIONS_DIR = pkg_root() / "migrations"
 
 
 def test_fleet_rename_migration_note_exists():

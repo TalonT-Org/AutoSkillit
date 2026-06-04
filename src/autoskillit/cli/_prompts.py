@@ -30,9 +30,14 @@ def _read_full_sous_chef() -> str:
     """Read the full sous-chef SKILL.md for injection into L1/L2 orchestration sessions."""
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     try:
-        return path.read_text()
+        content = path.read_text()
     except OSError:
         return ""
+    if content.startswith("---"):
+        end = content.find("---", 3)
+        if end != -1:
+            content = content[end + 3 :].lstrip("\n")
+    return content
 
 
 def _ingredient_table_display_instruction(source: str) -> str:

@@ -34,9 +34,9 @@ def _read_full_sous_chef() -> str:
     except OSError:
         return ""
     if content.startswith("---"):
-        end = content.find("\n---", 3)
+        end = content.find("\n---\n", 3)
         if end != -1:
-            content = content[end + 4 :].lstrip("\n")
+            content = content[end + 5 :].lstrip("\n")
     return content
 
 

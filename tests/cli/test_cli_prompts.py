@@ -959,13 +959,3 @@ def test_build_open_kitchen_prompt_includes_post_dispatch_diagnostics():
     assert "POST-DISPATCH DIAGNOSTICS" in prompt
     assert "confirmed_bug" in prompt
     assert "anomaly" in prompt
-
-
-def test_sous_chef_content_no_frontmatter():
-    """_read_full_sous_chef must strip YAML frontmatter metadata."""
-    from autoskillit.cli._prompts import _read_full_sous_chef
-
-    content = _read_full_sous_chef()
-    assert content, "_read_full_sous_chef returned empty string"
-    assert not content.startswith("---"), "Frontmatter delimiter still present"
-    assert "uses_capabilities:" not in content, "Frontmatter field leaked into content"

@@ -95,19 +95,7 @@ class TestCodexEnvPolicy:
         with pytest.raises((FrozenInstanceError, TypeError, AttributeError)):
             policy.some_attr = "value"  # type: ignore[misc]
 
-    def test_agent_backend_not_stripped(self) -> None:
-        # AUTOSKILLIT_AGENT_BACKEND must pass through CodexEnvPolicy so that
-        # hook subprocesses and test runners can read the session identity.
-        policy = CodexEnvPolicy()
-        base = {"AUTOSKILLIT_AGENT_BACKEND": "codex", "PATH": "/usr/bin"}
-        result = policy.build_env(base)
-        assert result["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
-
-    @pytest.mark.xfail(
-        reason="Requires P4-A1-WP1 to land: adds AUTOSKILLIT_AGENT_BACKEND to CODEX_ENV_DENYLIST",
-        strict=True,
-    )
-    def test_agent_backend_not_in_base_env(self) -> None:
+    def test_agent_backend_stripped_from_base(self) -> None:
         policy = CodexEnvPolicy()
         base = {"AUTOSKILLIT_AGENT_BACKEND": "codex", "PATH": "/usr/bin"}
         result = policy.build_env(base)
@@ -119,5 +107,5 @@ class TestCodexEnvPolicy:
         result = policy.build_env(base, extras={"AUTOSKILLIT_AGENT_BACKEND": "codex"})
         assert result["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
 
-    def test_agent_backend_not_in_private_env_vars(self) -> None:
-        assert AGENT_BACKEND_ENV_VAR not in AUTOSKILLIT_PRIVATE_ENV_VARS
+    def test_agent_backend_in_private_env_vars(self) -> None:
+        assert AGENT_BACKEND_ENV_VAR in AUTOSKILLIT_PRIVATE_ENV_VARS

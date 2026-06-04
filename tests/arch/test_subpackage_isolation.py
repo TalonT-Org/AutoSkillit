@@ -798,7 +798,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _type_exceptions.py adds RecipeLoadError hierarchy (ProcessStaleError,
             RecipeNotFoundError) for exception-based error propagation from
             load_and_validate, bringing the count to 23.
-            Exempt at 35 files (core/types: 23).
+            _type_phoropter.py adds frozen phoropter family/phase types
+            (PhoropterPrescription, ReadingToken, PhoropterPhaseSkip,
+            CrossDomainPrescription, CrossDomainAssessment) for the phoropter
+            registry system, bringing the core/types count to 29.
+            Exempt at 35 files (core/types: 29).
           cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -859,7 +863,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 21,
-        "core/types": 28,
+        "core/types": 29,
         "cli": 21,
         "hooks": 13,
         "pipeline": 12,

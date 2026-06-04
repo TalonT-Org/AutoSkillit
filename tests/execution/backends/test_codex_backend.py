@@ -55,15 +55,10 @@ class TestCodexFlags:
         expected = {
             "JSON",
             "SANDBOX",
-            "ASK_FOR_APPROVAL",
-            "ASK_FOR_APPROVAL_SHORT",
             "MODEL",
             "MODEL_SHORT",
             "ADD_DIR",
-            "IGNORE_USER_CONFIG",
-            "EPHEMERAL",
             "RESUME_SUBCOMMAND",
-            "LAST",
             "CONFIG_OVERRIDE",
             "DANGEROUSLY_BYPASS",
         }
@@ -583,7 +578,7 @@ class TestCodexBuildSkillSessionCmd:
         assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
         assert "sess-abc123" in spec.cmd
         assert "--sandbox" in spec.cmd
-        assert "-a" in spec.cmd
+        assert "-a" not in spec.cmd
 
     def test_completion_marker_with_profile(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
@@ -901,9 +896,8 @@ class TestCodexBuildFoodTruckCmd:
 
     def test_approval_never(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "-a" in spec.cmd
-        idx = spec.cmd.index("-a")
-        assert spec.cmd[idx + 1] == "never"
+        assert "-a" not in spec.cmd
+        assert "never" not in spec.cmd
 
     def test_no_add_dir_flag(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)

@@ -219,6 +219,31 @@ def test_cwd_in_headless_exclusive_vars() -> None:
     assert "AUTOSKILLIT_CWD" in _HEADLESS_EXCLUSIVE_VARS
 
 
+@pytest.mark.parametrize(
+    "builder_call",
+    [
+        lambda: CodexBackend().build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        ),
+        lambda: CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="L3 orchestrator",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+        ),
+        lambda: CodexBackend().build_headless_cmd("do stuff"),
+        lambda: CodexBackend().build_resume_cmd(resume_session_id="sess-test", prompt="continue"),
+    ],
+    ids=["skill_session", "food_truck", "headless", "resume"],
+)
+def test_codex_exec_builders_start_with_codex_exec(builder_call) -> None:
+    spec = builder_call()
+    assert spec.cmd[0] == "codex"
+    assert spec.cmd[1] == "exec"
+
+
 def test_session_deadline_not_in_l1_subprocess_env(monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_DEADLINE", "9999999999.0")
     spec = ClaudeCodeBackend().build_skill_session_cmd(

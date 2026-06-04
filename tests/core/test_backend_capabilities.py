@@ -80,6 +80,7 @@ def test_backend_capabilities_field_count():
     tuple_fields = {f.name for f in fields if hints[f.name] == tuple[str, ...]}
     assert bool_fields == {
         "channel_b_capable",
+        "has_unguarded_filesystem_access",
         "pty_required",
         "session_resume_capable",
         "skill_injection_capable",
@@ -118,6 +119,7 @@ def test_backend_capabilities_field_names_locked():
 
     expected = {
         "channel_b_capable",
+        "has_unguarded_filesystem_access",
         "pty_required",
         "session_resume_capable",
         "skill_injection_capable",

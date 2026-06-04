@@ -30,16 +30,16 @@ def test_vis_synthesize_step_exists(recipe) -> None:
 
 
 def test_vis_dial_phoropter_family(recipe) -> None:
-    """vis-lens steps no longer carry phoropter_family after rename."""
-    assert recipe.steps["vis_dial"].phoropter_family is None
+    """vis-lens steps carry phoropter_family: vis-lens."""
+    assert recipe.steps["vis_dial"].phoropter_family == "vis-lens"
 
 
 def test_vis_apply_phoropter_family(recipe) -> None:
-    assert recipe.steps["vis_apply"].phoropter_family is None
+    assert recipe.steps["vis_apply"].phoropter_family == "vis-lens"
 
 
 def test_vis_synthesize_phoropter_family(recipe) -> None:
-    assert recipe.steps["vis_synthesize"].phoropter_family is None
+    assert recipe.steps["vis_synthesize"].phoropter_family == "vis-lens"
 
 
 def test_vis_dial_captures_disambiguation_fields(recipe) -> None:

@@ -100,7 +100,7 @@ def test_subprocess_termination_contract_variable_still_defined() -> None:
 
 
 def test_phoropter_symbols_importable_from_types_hub() -> None:
-    """All _type_phoropter symbols must be importable from autoskillit.core.types."""
+    """All phoropter-related symbols must be importable from autoskillit.core.types."""
     import dataclasses
 
     from autoskillit.core.types import (
@@ -110,9 +110,11 @@ def test_phoropter_symbols_importable_from_types_hub() -> None:
         PhoropterPhaseSkip,
         PhoropterPrescription,
         ReadingToken,
+        SynthesisStrategy,
     )
 
     assert isinstance(READING_TOKEN_PATTERN, str)
+    assert issubclass(SynthesisStrategy, str)
     assert dataclasses.is_dataclass(PhoropterPrescription)
     assert dataclasses.is_dataclass(ReadingToken)
     assert dataclasses.is_dataclass(PhoropterPhaseSkip)

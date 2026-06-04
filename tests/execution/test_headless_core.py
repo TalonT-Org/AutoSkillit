@@ -1,4 +1,4 @@
-"""Tests for headless_runner.py extracted helpers."""
+"""Tests for execution/headless/ extracted helper functions."""
 
 import json
 from pathlib import Path

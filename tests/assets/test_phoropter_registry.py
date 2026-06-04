@@ -51,7 +51,7 @@ def test_schema_version_is_one(registry_data: dict) -> None:
     )
 
 
-def test_families_has_exactly_four_entries(registry_data: dict) -> None:
+def test_families_keys_match_expected_set(registry_data: dict) -> None:
     """families must contain exactly the four expected phoropter lens families."""
     families = registry_data.get("families", {})
     assert set(families.keys()) == EXPECTED_FAMILIES, (

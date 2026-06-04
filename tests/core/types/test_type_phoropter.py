@@ -106,4 +106,4 @@ def test_all_dataclasses_have_slots() -> None:
         CrossDomainPrescription,
         CrossDomainAssessment,
     ):
-        assert "__slots__" in dir(cls), f"{cls.__name__} missing __slots__"
+        assert "__slots__" in vars(cls), f"{cls.__name__} missing __slots__"

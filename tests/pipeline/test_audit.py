@@ -631,9 +631,8 @@ def _write_audit_session_order_id(
     timestamp: str = "2026-05-01T00:00:00+00:00",
 ) -> None:
     """Write audit session with order_id in the index entry."""
-    from pathlib import Path as _Path
 
-    session_dir = _Path(log_root) / "sessions" / dir_name
+    session_dir = Path(log_root) / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "audit_log.json").write_text(json.dumps(records))
     index_entry = {
@@ -642,7 +641,7 @@ def _write_audit_session_order_id(
         "session_id": dir_name,
         "order_id": order_id,
     }
-    with (_Path(log_root) / "sessions.jsonl").open("a") as f:
+    with (Path(log_root) / "sessions.jsonl").open("a") as f:
         f.write(json.dumps(index_entry) + "\n")
 
 
@@ -678,9 +677,8 @@ def _write_audit_session_dispatch_id(
     timestamp: str = "2026-05-01T00:00:00+00:00",
 ) -> None:
     """Write audit session with dispatch_id in the index entry."""
-    from pathlib import Path as _Path
 
-    session_dir = _Path(log_root) / "sessions" / dir_name
+    session_dir = Path(log_root) / "sessions" / dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     (session_dir / "audit_log.json").write_text(json.dumps(records))
     index_entry = {
@@ -689,7 +687,7 @@ def _write_audit_session_dispatch_id(
         "session_id": dir_name,
         "dispatch_id": dispatch_id,
     }
-    with (_Path(log_root) / "sessions.jsonl").open("a") as f:
+    with (Path(log_root) / "sessions.jsonl").open("a") as f:
         f.write(json.dumps(index_entry) + "\n")
 
 
@@ -741,7 +739,6 @@ def test_iter_session_log_entries_dispatch_id_filter_empty_passes_all(tmp_path):
 
 def test_iter_entries_dispatch_id_filter_combined_with_campaign_id(tmp_path):
     """dispatch_id_filter AND campaign_id_filter apply as AND logic."""
-    from pathlib import Path as _Path
 
     from autoskillit.pipeline.audit import _iter_session_log_entries
 
@@ -750,7 +747,7 @@ def test_iter_entries_dispatch_id_filter_combined_with_campaign_id(tmp_path):
         ("wrong-did", "d2", "c1"),
         ("wrong-cid", "d1", "c2"),
     ]:
-        session_dir = _Path(tmp_path) / "sessions" / dir_name
+        session_dir = Path(tmp_path) / "sessions" / dir_name
         session_dir.mkdir(parents=True, exist_ok=True)
         (session_dir / "audit_log.json").write_text(json.dumps([_valid_failure_record_dict()]))
         index_entry = {
@@ -760,7 +757,7 @@ def test_iter_entries_dispatch_id_filter_combined_with_campaign_id(tmp_path):
             "dispatch_id": dispatch_id,
             "campaign_id": campaign_id,
         }
-        with (_Path(tmp_path) / "sessions.jsonl").open("a") as f:
+        with (Path(tmp_path) / "sessions.jsonl").open("a") as f:
             f.write(json.dumps(index_entry) + "\n")
 
     results = list(
@@ -778,7 +775,6 @@ def test_iter_entries_dispatch_id_filter_combined_with_campaign_id(tmp_path):
 
 def test_iter_session_log_entries_dispatch_id_combined_with_order_id(tmp_path):
     """dispatch_id_filter AND order_id_filter apply as AND logic."""
-    from pathlib import Path as _Path
 
     from autoskillit.pipeline.audit import _iter_session_log_entries
 
@@ -787,7 +783,7 @@ def test_iter_session_log_entries_dispatch_id_combined_with_order_id(tmp_path):
         ("dispatch-only", "d1", "o2"),
         ("order-only", "d2", "o1"),
     ]:
-        session_dir = _Path(tmp_path) / "sessions" / dir_name
+        session_dir = Path(tmp_path) / "sessions" / dir_name
         session_dir.mkdir(parents=True, exist_ok=True)
         (session_dir / "audit_log.json").write_text(json.dumps([_valid_failure_record_dict()]))
         index_entry = {
@@ -797,7 +793,7 @@ def test_iter_session_log_entries_dispatch_id_combined_with_order_id(tmp_path):
             "dispatch_id": dispatch_id,
             "order_id": order_id,
         }
-        with (_Path(tmp_path) / "sessions.jsonl").open("a") as f:
+        with (Path(tmp_path) / "sessions.jsonl").open("a") as f:
             f.write(json.dumps(index_entry) + "\n")
 
     results = list(

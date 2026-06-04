@@ -105,8 +105,8 @@ def test_fleet_status_json_includes_totals(
         "cid01",
         "test",
         token_usage={
-            "input_tokens": 100,
-            "output_tokens": 50,
+            "input": 100,
+            "output": 50,
             "cache_creation": 10,
             "cache_read": 20,
         },
@@ -115,8 +115,8 @@ def test_fleet_status_json_includes_totals(
     with pytest.raises(SystemExit):
         _fleet_status("cid01", json_output=True)
     data = json.loads(capsys.readouterr().out)
-    assert data["totals"]["input_tokens"] == 100
-    assert data["totals"]["output_tokens"] == 50
+    assert data["totals"]["input"] == 100
+    assert data["totals"]["output"] == 50
     assert data["totals"]["cache_read"] == 20
     assert data["totals"]["cache_creation"] == 10
 
@@ -260,7 +260,7 @@ def test_status_table_shows_totals_row(
         tmp_path,
         "cid01",
         "test",
-        token_usage={"input_tokens": 100, "output_tokens": 50},
+        token_usage={"input": 100, "output": 50},
     )
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
@@ -289,3 +289,27 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
         _fleet_status(None)
     assert exc_info.value.code == 1
     assert "fleet" in checked_features
+
+
+def test_aggregate_totals_uses_canonical_keys() -> None:
+    """_aggregate_totals reads canonical keys (input/output) from DispatchRecord.
+
+    Regression guard: previously this function read input_tokens/output_tokens
+    but normalize_dispatch_token_usage writes input/output, so totals were
+    always 0 unless callers populated the long-named keys manually.
+    """
+    from autoskillit.cli.fleet._fleet_display import _aggregate_totals
+
+    state = _make_state_with_tokens(input_total=5000)
+    totals = _aggregate_totals(state)
+    assert totals["input"] == 5000
+
+
+def test_build_status_rows_shows_nonzero_tokens() -> None:
+    """_build_status_rows renders non-zero input/output from canonical keys."""
+    from autoskillit.cli.fleet._fleet_display import _build_status_rows
+
+    state = _make_state_with_tokens(input_total=10000)
+    rows = _build_status_rows(state)
+    dispatch_row = rows[0]
+    assert dispatch_row[3] != "0"

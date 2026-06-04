@@ -77,6 +77,9 @@ class TestCodexFlagRegistryAudit:
                 **{**SKILL_BASE, "resume_session_id": "sess-test"},
             ),
             lambda: CodexBackend().build_food_truck_cmd(**FOOD_TRUCK_BASE),
+            lambda: CodexBackend().build_food_truck_cmd(
+                **{**FOOD_TRUCK_BASE, "resume_session_id": "sess-test"},
+            ),
             lambda: CodexBackend().build_headless_cmd("do stuff"),
             lambda: CodexBackend().build_resume_cmd(
                 resume_session_id="sess-test", prompt="continue"
@@ -86,6 +89,7 @@ class TestCodexFlagRegistryAudit:
             "skill_session",
             "skill_session_resume",
             "food_truck",
+            "food_truck_resume",
             "headless",
             "resume",
         ],
@@ -145,6 +149,9 @@ class TestNoApprovalFlagInExecBuilders:
                 **{**SKILL_BASE, "resume_session_id": "sess-test"},
             ),
             lambda: CodexBackend().build_food_truck_cmd(**FOOD_TRUCK_BASE),
+            lambda: CodexBackend().build_food_truck_cmd(
+                **{**FOOD_TRUCK_BASE, "resume_session_id": "sess-test"},
+            ),
             lambda: CodexBackend().build_headless_cmd("do stuff"),
             lambda: CodexBackend().build_resume_cmd(
                 resume_session_id="sess-test", prompt="continue"
@@ -154,6 +161,7 @@ class TestNoApprovalFlagInExecBuilders:
             "skill_session",
             "skill_session_resume",
             "food_truck",
+            "food_truck_resume",
             "headless",
             "resume",
         ],

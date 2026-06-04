@@ -30,6 +30,13 @@ class TestSessionTypeVisibility:
         tools = list(await mcp.list_tools())
         visible = {t.name for t in tools}
 
+        assert FLEET_TOOLS, "FLEET_TOOLS must be non-empty for this assertion to be meaningful"
+        assert FLEET_DISPATCH_TOOLS, (
+            "FLEET_DISPATCH_TOOLS must be non-empty for this assertion to be meaningful"
+        )
+        assert FREE_RANGE_TOOLS, (
+            "FREE_RANGE_TOOLS must be non-empty for this assertion to be meaningful"
+        )
         expected = FLEET_TOOLS | FLEET_DISPATCH_TOOLS | FREE_RANGE_TOOLS
         assert visible == expected
 

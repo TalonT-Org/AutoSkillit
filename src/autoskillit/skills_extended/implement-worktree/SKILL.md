@@ -172,8 +172,8 @@ cd "${WORKTREE_PATH}" && \
   AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
   AUTOSKILLIT_TEST_BASE_REF=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch") \
   {test_command}
-```
 # Note: {{AUTOSKILLIT_TEMP}}/worktrees/ is sidecar metadata inside the main repo — not the worktree path.
+```
 
 If tests fail, fix the issue and re-run.
 

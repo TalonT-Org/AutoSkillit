@@ -1,0 +1,9 @@
+{"type":"thread.started","thread_id":"thread_v0136_abc"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"command_execution","id":"ce_001","command":"ls -la"}}
+{"type":"item.completed","item":{"type":"command_execution","id":"ce_001","command":"ls -la","output":"file1.py\nfile2.py"}}
+{"type":"item.started","item":{"type":"file_change","id":"fch_001","changes":[{"path":"/src/main.py","kind":"modify"}]}}
+{"type":"item.completed","item":{"type":"file_change","id":"fch_001","changes":[{"path":"/src/main.py","kind":"modify"}]}}
+{"type":"item.started","item":{"type":"agent_message","id":"msg_001"}}
+{"type":"item.completed","item":{"type":"agent_message","id":"msg_001","text":"Task completed successfully.\n\n%%ORDER_UP%%"}}
+{"type":"turn.completed","usage":{"input_tokens":200,"output_tokens":90,"cached_input_tokens":40,"reasoning_output_tokens":0}}

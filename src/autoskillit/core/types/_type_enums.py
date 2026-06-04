@@ -35,6 +35,8 @@ __all__ = [
     "ClaudeContentBlockType",
     "InfraExitCategory",
     "BackendEventKind",
+    "CodexEventType",
+    "CodexItemType",
     "SynthesisStrategy",
 ]
 
@@ -523,6 +525,56 @@ class BackendEventKind(StrEnum):
     TOOL_OUTPUT = "tool_output"
     ERROR = "error"
     IGNORED = "ignored"
+
+
+class CodexEventType(StrEnum):
+    """Sealed enum for Codex CLI NDJSON top-level event types.
+
+    The from_ndjson() constructor maps unknown event types to UNKNOWN
+    instead of raising ValueError.
+    """
+
+    THREAD_STARTED = "thread.started"
+    ITEM_COMPLETED = "item.completed"
+    TURN_COMPLETED = "turn.completed"
+    TURN_FAILED = "turn.failed"
+    ERROR = "error"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_ndjson(cls, raw: str) -> CodexEventType:
+        try:
+            return cls(raw)
+        except ValueError:
+            return cls.UNKNOWN
+
+
+class CodexItemType(StrEnum):
+    """Sealed enum for Codex CLI item.completed item types.
+
+    The from_ndjson() constructor maps unknown item types to UNKNOWN
+    instead of raising ValueError. Legacy members (MESSAGE, FUNCTION_CALL)
+    are retained for backward compatibility with Codex CLI <= v0.133.0.
+    """
+
+    AGENT_MESSAGE = "agent_message"
+    COMMAND_EXECUTION = "command_execution"
+    FILE_CHANGE = "file_change"
+    MCP_TOOL_CALL = "mcp_tool_call"
+    COLLAB_TOOL_CALL = "collab_tool_call"
+    WEB_SEARCH = "web_search"
+    MESSAGE = "message"
+    FUNCTION_CALL = "function_call"
+    REASONING = "reasoning"
+    TODO_LIST = "todo_list"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def from_ndjson(cls, raw: str) -> CodexItemType:
+        try:
+            return cls(raw)
+        except ValueError:
+            return cls.UNKNOWN
 
 
 class SynthesisStrategy(StrEnum):

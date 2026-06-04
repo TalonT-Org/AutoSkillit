@@ -157,6 +157,33 @@ def _codex_exec_base(
     return cmd
 
 
+def _codex_exec_extras(
+    *,
+    session_type: str,
+    include_session_baseline: bool = False,
+    include_agent_backend_flat: bool = False,
+    applicable_guards: frozenset[str] | None = None,
+) -> dict[str, str]:
+    extras: dict[str, str] = {}
+    if include_session_baseline:
+        extras.update(_SESSION_BASELINE_ENV)
+    extras.update(
+        {
+            "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
+            "AUTOSKILLIT_SESSION_TYPE": session_type,
+            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
+            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
+        }
+    )
+    if include_agent_backend_flat:
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+    if applicable_guards is not None:
+        extras[AUTOSKILLIT_APPLICABLE_GUARDS] = ",".join(sorted(applicable_guards))
+    return extras
+
+
 @dataclass(frozen=True, slots=True)
 class CodexEnvPolicy:
     denylist_prefixes: tuple[str, ...] = CODEX_ENV_PREFIX_DENYLIST
@@ -510,14 +537,7 @@ class CodexBackend:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        headless_extras: dict[str, str] = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-            "AUTOSKILLIT_SESSION_TYPE": "",
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-        }
+        headless_extras = _codex_exec_extras(session_type="")
         if env_extras:
             headless_extras.update(env_extras)
         env = self.env_policy().build_env(filtered_base, extras=headless_extras)
@@ -589,18 +609,13 @@ class CodexBackend:
             ),
         )
 
-        extras: dict[str, str] = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-            "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
-            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
-            "MCP_CONNECTION_NONBLOCKING": "0",
-        }
+        extras = _codex_exec_extras(
+            session_type=SESSION_TYPE_SKILL,
+            include_agent_backend_flat=True,
+            applicable_guards=self.capabilities.applicable_guards,
+        )
+        extras["MAX_MCP_OUTPUT_TOKENS"] = _MAX_MCP_OUTPUT_TOKENS_VALUE
+        extras["MCP_CONNECTION_NONBLOCKING"] = "0"
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name
         campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
@@ -697,18 +712,13 @@ class CodexBackend:
             ),
         )
 
-        extras: dict[str, str] = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
-            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
-            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-            "MCP_CONNECTION_NONBLOCKING": "0",
-        }
+        extras = _codex_exec_extras(
+            session_type=SESSION_TYPE_ORCHESTRATOR,
+            include_agent_backend_flat=True,
+            applicable_guards=self.capabilities.applicable_guards,
+        )
+        extras["MAX_MCP_OUTPUT_TOKENS"] = _MAX_MCP_OUTPUT_TOKENS_VALUE
+        extras["MCP_CONNECTION_NONBLOCKING"] = "0"
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name
         campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
@@ -834,17 +844,7 @@ class CodexBackend:
         cmd.append(resume_session_id)
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        resume_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
-        resume_extras.update(
-            {
-                "AUTOSKILLIT_HEADLESS": "1",
-                "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-                "AUTOSKILLIT_SESSION_TYPE": "",
-                AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-                MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-                FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            }
-        )
+        resume_extras = _codex_exec_extras(session_type="", include_session_baseline=True)
         if env_extras:
             resume_extras.update(env_extras)
         env = self.env_policy().build_env(

@@ -2606,7 +2606,7 @@ def test_select_review_dimensions_happy_path(tmp_path: Path) -> None:
         output_dir=str(tmp_path),
     )
     lenses = result["selected_lenses"].split(",")
-    assert len(lenses) == 8
+    assert len(lenses) == len(expected_dims)
     assert set(lenses) == expected_dims
     manifest = json.loads(Path(result["dimensions_manifest_path"]).read_text())
     tiers = list(manifest.values())
@@ -2644,7 +2644,7 @@ def test_select_review_dimensions_qualitative_type_returns_active_dims(
         output_dir=str(tmp_path),
     )
     lenses = result["selected_lenses"].split(",")
-    assert len(lenses) == 2
+    assert len(lenses) == len(expected_dims)
     assert set(lenses) == expected_dims
     assert "data_acquisition" in lenses
     assert "agent_implementability" in lenses

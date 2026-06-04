@@ -6,7 +6,7 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 
 def test_fleet_display_importable():
-    from autoskillit.cli.fleet._fleet_display import _build_status_rows, _humanize  # noqa: F401
+    from autoskillit.cli.fleet._fleet_display import _build_status_rows  # noqa: F401
 
 
 def test_fleet_lifecycle_importable():

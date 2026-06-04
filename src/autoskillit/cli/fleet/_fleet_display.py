@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import TerminalColumn, get_logger
+from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
 
 logger = get_logger(__name__)
 
@@ -79,19 +80,6 @@ def _fmt_elapsed(dispatch: DispatchRecord) -> str:
     return f"{hours}h {mins}m"
 
 
-def _humanize(n: int | float | None) -> str:
-    """Humanize token counts: 1234 -> '1.2k', 1234567 -> '1.2M'."""
-    if n is None or n == 0:
-        return "0"
-    if not isinstance(n, (int, float)):
-        return "0"
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    if n >= 1_000:
-        return f"{n / 1_000:.1f}k"
-    return str(int(n))
-
-
 def _aggregate_totals(state: CampaignState) -> dict[str, int]:
     """Sum token_usage across all dispatches."""
     totals: dict[str, int] = {
@@ -119,10 +107,10 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
                 d.name,
                 str(d.status),
                 _fmt_elapsed(d),
-                _humanize(tu.get("input", 0)),
-                _humanize(tu.get("output", 0)),
-                _humanize(tu.get("cache_read", 0)),
-                _humanize(tu.get("cache_creation", 0)),
+                TelemetryFormatter._humanize(tu.get("input", 0)),
+                TelemetryFormatter._humanize(tu.get("output", 0)),
+                TelemetryFormatter._humanize(tu.get("cache_read", 0)),
+                TelemetryFormatter._humanize(tu.get("cache_creation", 0)),
                 d.dispatched_session_log_dir or "-",
             )
         )
@@ -133,10 +121,10 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
             "TOTAL",
             "",
             "",
-            _humanize(totals["input"]),
-            _humanize(totals["output"]),
-            _humanize(totals["cache_read"]),
-            _humanize(totals["cache_creation"]),
+            TelemetryFormatter._humanize(totals["input"]),
+            TelemetryFormatter._humanize(totals["output"]),
+            TelemetryFormatter._humanize(totals["cache_read"]),
+            TelemetryFormatter._humanize(totals["cache_creation"]),
             "",
         )
     )

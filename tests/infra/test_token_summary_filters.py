@@ -45,6 +45,20 @@ def test_tsa_humanize_preserves_decimal() -> None:
     )
 
 
+def test_fmt_duration_output_equivalent_to_canonical() -> None:
+    """Hook _fmt_duration must produce identical output to TelemetryFormatter._fmt_duration."""
+    from autoskillit.hooks.token_summary_hook import _fmt_duration as hook_fmt_duration
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    cases = [4.0, 45.7, 492.0, 3720.0, 0.0, 59.9, 60.0, 3599.9, 3600.0]
+    for seconds in cases:
+        hook_out = hook_fmt_duration(seconds)
+        canonical_out = TelemetryFormatter._fmt_duration(seconds)
+        assert hook_out == canonical_out, (
+            f"_fmt_duration({seconds}) diverged: hook={hook_out!r}, canonical={canonical_out!r}"
+        )
+
+
 def test_non_anthropic_step_marked_in_format_table() -> None:
     """Hook _format_table marks non-Anthropic step names with * and adds footnote."""
     from autoskillit.hooks.token_summary_hook import _format_table

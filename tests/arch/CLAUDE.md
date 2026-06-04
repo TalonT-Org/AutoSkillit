@@ -84,6 +84,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_tools_execution_decomposition.py` | Structural decomposition guard for tools_execution.py split |
 | `test_transforms_hygiene.py` | Structural guards for FastMCP visibility tag hygiene |
 | `test_variadic_ordering.py` | Architectural invariant: positional initial_prompt must precede all variadic CLI flags in build_interactive_cmd |
+| `test_codex_flag_metadata_coverage.py` | Closed categorization guard: every CodexFlags member must appear in VARIADIC_CODEX_FLAGS or NON_VARIADIC_CODEX_FLAGS; model alias/effort key parity |
 | `test_flag_metadata_coverage.py` | Closed categorization guard: every ClaudeFlags member must appear in VARIADIC_CLAUDE_FLAGS or NON_VARIADIC_CLAUDE_FLAGS |
 | `test_interactive_ordering_gate.py` | AST guard: _session_launch.py and _cook.py must import and call assert_interactive_ordering before subprocess invocation |
 | `test_watcher_signal_consistency.py` | Structural guard: all process watchers must call `_has_active_execution_marker` |

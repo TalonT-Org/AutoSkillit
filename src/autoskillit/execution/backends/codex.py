@@ -76,6 +76,8 @@ __all__ = [
     "CodexEnvPolicy",
     "CodexFlags",
     "CodexSessionLocator",
+    "NON_VARIADIC_CODEX_FLAGS",
+    "VARIADIC_CODEX_FLAGS",
     "ensure_codex_mcp_registered",
 ]
 
@@ -108,6 +110,19 @@ CODEX_TOP_LEVEL_ONLY_FLAGS: frozenset[str] = frozenset(
     {
         CodexFlags.DANGEROUSLY_BYPASS,
         CodexFlags.MODEL_SHORT,
+    }
+)
+
+VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset({CodexFlags.ADD_DIR, CodexFlags.CONFIG_OVERRIDE})
+
+NON_VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset(
+    {
+        CodexFlags.JSON,
+        CodexFlags.SANDBOX,
+        CodexFlags.MODEL,
+        CodexFlags.MODEL_SHORT,
+        CodexFlags.RESUME_SUBCOMMAND,
+        CodexFlags.DANGEROUSLY_BYPASS,
     }
 )
 

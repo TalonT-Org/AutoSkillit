@@ -240,11 +240,6 @@ class TestPRGatesVocabularyContract:
         assert isinstance(pr_gates.KNOWN_REVIEW_STATES, frozenset)
         assert "CHANGES_REQUESTED" in pr_gates.KNOWN_REVIEW_STATES
 
-    def test_changes_requested_in_known_review_states(self):
-        from autoskillit.pipeline.pr_gates import KNOWN_REVIEW_STATES
-
-        assert "CHANGES_REQUESTED" in KNOWN_REVIEW_STATES
-
     def test_ci_passing_conclusions_constant_exists(self):
         from autoskillit.pipeline import pr_gates
 

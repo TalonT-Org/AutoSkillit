@@ -11,6 +11,8 @@ from autoskillit.execution.process import _marker_is_standalone
 from tests.fixtures.codex import (
     CODEX_SCHEMA_VERSION,
     HAPPY_PATH_SINGLE_TURN,
+    HAPPY_PATH_V0136,
+    MARKER_DETECTION_V0136,
     MULTI_TURN_WITH_COMPACTION,
     SESSION_WITH_MCP_TOOL_CALL,
     SESSION_WITH_REASONING,
@@ -25,6 +27,8 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 ALL_FIXTURE_NAMES = [
     HAPPY_PATH_SINGLE_TURN,
+    HAPPY_PATH_V0136,
+    MARKER_DETECTION_V0136,
     MULTI_TURN_WITH_COMPACTION,
     TURN_FAILED_ERROR,
     SESSION_WITH_REASONING,
@@ -39,8 +43,8 @@ def _load_events(name: str) -> list[dict]:
 
 
 class TestCodexFixturePackage:
-    def test_schema_version_is_one(self) -> None:
-        assert CODEX_SCHEMA_VERSION == 1
+    def test_schema_version_is_two(self) -> None:
+        assert CODEX_SCHEMA_VERSION == 2
 
     def test_all_filename_constants_end_in_ndjson(self) -> None:
         for name in ALL_FIXTURE_NAMES:
@@ -51,7 +55,7 @@ class TestCodexFixturePackage:
             assert fixture_path(name).is_file()
 
     def test_all_exports_count(self) -> None:
-        assert len(CODEX_ALL) == 7
+        assert len(CODEX_ALL) == 9
 
 
 class TestCodexFixtureValidity:
@@ -231,6 +235,10 @@ class TestCodexFixturesParseWithBackend:
         acc = _scan_codex_ndjson(text)
         assert acc.success is True
         assert acc.session_id
+        assert len(acc.agent_messages) > 0, "canary: agent_messages empty after happy-path parse"
+        assert len(acc.command_executions) > 0, (
+            "canary: command_executions empty after happy-path parse"
+        )
 
     def test_failed_parses_as_failure(self) -> None:
         text = fixture_path(TURN_FAILED_ERROR).read_text()
@@ -238,3 +246,21 @@ class TestCodexFixturesParseWithBackend:
         assert acc.success is False
         assert acc.error_message
         assert acc.error_code == "rate_limit_exceeded"
+
+    def test_v0136_happy_path_parses_successfully(self) -> None:
+        text = fixture_path(HAPPY_PATH_V0136).read_text()
+        acc = _scan_codex_ndjson(text)
+        assert acc.success is True
+        assert acc.session_id == "thread_v0136_abc"
+        assert len(acc.agent_messages) > 0, "canary: agent_messages empty after v0.136.0 parse"
+        assert len(acc.command_executions) > 0, (
+            "canary: command_executions empty after v0.136.0 parse"
+        )
+        assert len(acc.file_changes) > 0, "canary: file_changes empty after v0.136.0 parse"
+
+    def test_v0136_marker_detection_parses_successfully(self) -> None:
+        text = fixture_path(MARKER_DETECTION_V0136).read_text()
+        acc = _scan_codex_ndjson(text)
+        assert acc.success is True
+        assert acc.session_id == "thread_v0136_marker"
+        assert len(acc.agent_messages) > 0

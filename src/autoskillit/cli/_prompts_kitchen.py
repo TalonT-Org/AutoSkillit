@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoskillit.cli._prompts import _MCP_RETRY_INSTRUCTION, _read_full_sous_chef
+from autoskillit.cli._prompts import (
+    _MCP_RETRY_INSTRUCTION,
+    _backend_supplement,
+    _read_full_sous_chef,
+)
 from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, ROUTING_AUTHORITY_CLAUSE
 
 __all__ = [
@@ -13,7 +17,9 @@ __all__ = [
 ]
 
 
-def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
+def _build_open_kitchen_prompt(
+    mcp_prefix: str, has_unguarded_filesystem_access: bool = False
+) -> str:
     """Build the --append-system-prompt content for an open-kitchen cook session (no recipe)."""
     raw = _read_full_sous_chef()
     sous_chef_content = "\n\n" + raw if raw else ""
@@ -83,7 +89,7 @@ def _build_open_kitchen_prompt(mcp_prefix: str) -> str:
             "to migrate automatically, or ask me to do it for you."
         )
 
-    return text
+    return text + _backend_supplement(has_unguarded_filesystem_access)
 
 
 def _build_fleet_dispatch_prompt(
@@ -92,6 +98,7 @@ def _build_fleet_dispatch_prompt(
     max_issues_per_food_truck: int = 3,
     max_total_issues: int = 12,
     max_concurrent_dispatches: int = 3,
+    has_unguarded_filesystem_access: bool = False,
 ) -> str:
     """Build the --append-system-prompt content for an ad-hoc fleet dispatcher session."""
     from autoskillit.fleet import _build_admiral_dispatch_block  # noqa: PLC0415
@@ -300,4 +307,4 @@ NEVER use run_skill or any non-fleet tool.
 
 After all dispatches complete, call {mcp_prefix}batch_cleanup_clones() to clean up \
 clone artifacts before ending the session.
-"""
+""" + _backend_supplement(has_unguarded_filesystem_access)

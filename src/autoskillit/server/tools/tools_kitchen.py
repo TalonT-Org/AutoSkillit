@@ -362,14 +362,33 @@ def _close_kitchen_handler() -> None:
 
 @mcp.resource("recipe://{name}")
 def get_recipe(name: str) -> str:
-    """Return recipe YAML for the orchestrating agent to follow."""
+    """Return composed recipe YAML for the orchestrating agent to follow."""
     from autoskillit.server._state import _get_ctx_or_none  # circular-break
 
     ctx = _get_ctx_or_none()
-    match = ctx.recipes.find(name, ctx.project_dir) if ctx and ctx.recipes else None
+    if ctx is None or ctx.recipes is None:
+        return json.dumps({"error": "Kitchen not open."})
+    match = ctx.recipes.find(name, ctx.project_dir)
     if match is None:
         return json.dumps({"error": f"No recipe named '{name}'."})
-    return match.path.read_text()
+
+    _defaults = resolve_ingredient_defaults(ctx.project_dir)
+    _config_layer = build_config_authoritative_layer(_defaults)
+    try:
+        result = ctx.recipes.load_and_validate(
+            name,
+            ctx.project_dir,
+            resolved_defaults=_defaults,
+            ingredient_overrides=_config_layer,
+            backend_name=ctx.backend.name if ctx.backend else None,
+        )
+    except ProcessStaleError:
+        logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
+        return json.dumps({"error": f"Recipe '{name}' composition failed — process stale."})
+    except Exception:
+        logger.warning("get_recipe_failure", recipe=name, stage="load_and_validate", exc_info=True)
+        return json.dumps({"error": f"Recipe '{name}' composition failed."})
+    return result.get("content", json.dumps({"error": "Recipe composition failed."}))
 
 
 def _build_tool_category_listing(

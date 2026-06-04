@@ -131,11 +131,17 @@ def _write_dispatch_to_campaign_state(
         logger.warning("_write_dispatch_to_campaign_state: failed", exc_info=True)
 
 
-def _get_food_truck_prompt_builder() -> Callable[..., str]:
+def _get_food_truck_prompt_builder(
+    has_unguarded_filesystem_access: bool = False,
+) -> Callable[..., str]:
     """Return the food truck prompt builder with mcp_prefix pre-bound."""
 
     mcp_prefix = detect_autoskillit_mcp_prefix()
-    return functools.partial(_build_food_truck_prompt, mcp_prefix=mcp_prefix)
+    return functools.partial(
+        _build_food_truck_prompt,
+        mcp_prefix=mcp_prefix,
+        has_unguarded_filesystem_access=has_unguarded_filesystem_access,
+    )
 
 
 @mcp.tool(
@@ -313,7 +319,13 @@ async def dispatch_food_truck(
             ingredients=ingredients,
             dispatch_name=dispatch_name,
             timeout_sec=timeout_sec,
-            prompt_builder=_get_food_truck_prompt_builder(),
+            prompt_builder=_get_food_truck_prompt_builder(
+                has_unguarded_filesystem_access=(
+                    tool_ctx.backend.capabilities.has_unguarded_filesystem_access
+                    if tool_ctx.backend
+                    else False
+                ),
+            ),
             quota_checker=lambda cfg: check_and_sleep_if_needed(
                 cfg,
                 provider=resolve_provider(tool_ctx.config.providers.default_provider),

@@ -30,9 +30,14 @@ def _read_full_sous_chef() -> str:
     """Read the full sous-chef SKILL.md for injection into L1/L2 orchestration sessions."""
     path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
     try:
-        return path.read_text()
+        content = path.read_text()
     except OSError:
         return ""
+    if content.startswith("---"):
+        end = content.find("\n---\n", 3)
+        if end != -1:
+            content = content[end + 5 :].lstrip("\n")
+    return content
 
 
 def _ingredient_table_display_instruction(source: str) -> str:
@@ -44,6 +49,21 @@ def _ingredient_table_display_instruction(source: str) -> str:
         "a task and an issue_url ingredient, mention that a GitHub issue URL can be\n"
         "provided as the task. Keep it to one or two short sentences."
     )
+
+
+def _backend_supplement(has_unguarded_filesystem_access: bool) -> str:
+    if has_unguarded_filesystem_access:
+        return (
+            "\n\nBACKEND-SPECIFIC CONSTRAINTS (unguarded filesystem access):\n"
+            "- NEVER use run_cmd to read recipe YAML files, SKILL.md files, or agent "
+            "definition files from the package directory. These raw files contain "
+            "unresolved metadata that does not reflect the resolved state.\n"
+            "- To recall step definitions or routing, call load_recipe.\n"
+            "- To load skill instructions, call the Skill tool.\n"
+            "- run_cmd is for executing project-level commands only — never for reading "
+            "AutoSkillit package internals."
+        )
+    return ""
 
 
 # ── Re-exports from domain submodules ───────────────────────────────────
@@ -69,6 +89,7 @@ __all__ = [
     "_MCP_RETRY_INSTRUCTION",
     "_read_full_sous_chef",
     "_ingredient_table_display_instruction",
+    "_backend_supplement",
     "_build_fleet_campaign_prompt",
     "_has_dynamic_dispatch",
     "_build_dynamic_dispatch_section",

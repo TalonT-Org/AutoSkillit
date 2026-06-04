@@ -312,4 +312,4 @@ def test_build_status_rows_shows_nonzero_tokens() -> None:
     state = _make_state_with_tokens(input_total=10000)
     rows = _build_status_rows(state)
     dispatch_row = rows[0]
-    assert dispatch_row[3] != "0"
+    assert dispatch_row[3] == "10.0k"

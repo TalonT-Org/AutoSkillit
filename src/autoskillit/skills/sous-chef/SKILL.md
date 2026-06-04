@@ -873,6 +873,18 @@ configuration that should be invisible.
 
 ---
 
+## Recipe Content Authority
+
+NEVER read recipe YAML files from the filesystem. Raw files contain unresolved metadata
+(optional, skip_when_false, hidden ingredient references) that does not reflect the
+resolved state. The `load_recipe` tool is the ONLY authoritative source of recipe content —
+it runs the full composition pipeline (sub-recipe merging, skip-guard resolution, hidden
+ingredient interpolation) before serving content to you.
+
+Similarly, NEVER read SKILL.md files directly from the filesystem. Use the Skill tool
+to load skill instructions — it applies runtime transformations (namespace rewriting,
+temp directory substitution, disable-model-invocation injection) that raw files lack.
+
 ## NARRATION SUPPRESSION — MANDATORY
 
 Do NOT output prose status text, phase announcements, or progress summaries between

@@ -209,6 +209,69 @@ class TestFirstActionDirectOpenKitchen:
         assert "sleep" not in first_action.lower()
 
 
+def test_orchestrator_prompt_prohibits_raw_file_reading():
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt(
+        "implementation",
+        mcp_prefix="mcp__autoskillit_",
+        has_unguarded_filesystem_access=True,
+    )
+    assert "NEVER read recipe YAML files from the filesystem" in prompt
+    assert "load_recipe" in prompt
+
+
+def test_orchestrator_prompt_has_universal_raw_file_prohibition():
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt("implementation", mcp_prefix="mcp__autoskillit_")
+    assert "NEVER read recipe YAML files from the filesystem" in prompt
+
+
+def test_unguarded_filesystem_backend_supplement_injected():
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt(
+        "implementation",
+        mcp_prefix="mcp__autoskillit_",
+        has_unguarded_filesystem_access=True,
+    )
+    assert "run_cmd" in prompt
+    assert "BACKEND-SPECIFIC CONSTRAINTS" in prompt
+
+
+def test_guarded_backend_no_filesystem_supplement():
+    from autoskillit.cli._prompts import _build_orchestrator_prompt
+
+    prompt = _build_orchestrator_prompt(
+        "implementation",
+        mcp_prefix="mcp__autoskillit_",
+        has_unguarded_filesystem_access=False,
+    )
+    assert "NEVER read recipe YAML files from the filesystem" in prompt
+    assert "BACKEND-SPECIFIC CONSTRAINTS" not in prompt
+
+
+@pytest.mark.parametrize(
+    "func_name,module",
+    [
+        ("_build_orchestrator_prompt", "autoskillit.cli._prompts_orchestrator"),
+        ("_build_open_kitchen_prompt", "autoskillit.cli._prompts_kitchen"),
+        ("_build_fleet_dispatch_prompt", "autoskillit.cli._prompts_kitchen"),
+        ("_build_food_truck_prompt", "autoskillit.fleet._prompts"),
+        ("_build_fleet_campaign_prompt", "autoskillit.cli._prompts_campaign"),
+    ],
+)
+def test_prompt_builders_accept_filesystem_access_param(func_name: str, module: str):
+    import importlib
+    import inspect
+
+    mod = importlib.import_module(module)
+    func = getattr(mod, func_name)
+    sig = inspect.signature(func)
+    assert "has_unguarded_filesystem_access" in sig.parameters
+
+
 def test_cook_prompt_skip_guard_parity_with_fleet():
     """The cook prompt must handle skip_when_false resolution at least as correctly as the
     fleet prompt — which passes overrides to open_kitchen."""

@@ -23,7 +23,12 @@ def get_plan_review_agent(name: str) -> str:
     agent_path = pkg_root() / "agents" / f"{name}.md"
     if not agent_path.is_file():
         raise ResourceError(f"Unknown agent: {name}")
-    return agent_path.read_text()
+    content = agent_path.read_text()
+    if content.startswith("---"):
+        end = content.find("\n---", 3)
+        if end != -1:
+            content = content[end + 4 :].lstrip("\n")
+    return content
 
 
 @mcp.resource("agent://plan-review/_index", tags={"plan-review"}, mime_type="application/json")

@@ -27,6 +27,21 @@ from autoskillit.core import (
 logger = get_logger(__name__)
 
 
+def _backend_supplement(has_unguarded_filesystem_access: bool) -> str:
+    if has_unguarded_filesystem_access:
+        return (
+            "\n\nBACKEND-SPECIFIC CONSTRAINTS (unguarded filesystem access):\n"
+            "- NEVER use run_cmd to read recipe YAML files, SKILL.md files, or agent "
+            "definition files from the package directory. These raw files contain "
+            "unresolved metadata that does not reflect the resolved state.\n"
+            "- To recall step definitions or routing, call load_recipe.\n"
+            "- To load skill instructions, call the Skill tool.\n"
+            "- run_cmd is for executing project-level commands only — never for reading "
+            "AutoSkillit package internals."
+        )
+    return ""
+
+
 def _build_admiral_dispatch_block() -> str:
     """Extract the dispatch-relevant subset of sous-chef SKILL.md.
 
@@ -65,6 +80,7 @@ def _build_food_truck_prompt(
     l3_timeout_sec: int,
     capture: dict[str, CaptureEntrySpec] | None = None,
     caller_instructions: str | None = None,
+    has_unguarded_filesystem_access: bool = False,
 ) -> str:
     """Build the system prompt for an L2 food truck headless session.
 
@@ -330,4 +346,4 @@ Fields:
 The sentinel markers ---l3-result::{dispatch_id}--- and ---end-l3-result::{dispatch_id}---
 are parsed by the fleet dispatcher. The %%L3_DONE::{dispatch_id_short}%% marker
 signals session completion to the process monitor.
-"""
+""" + _backend_supplement(has_unguarded_filesystem_access)

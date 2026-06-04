@@ -186,9 +186,16 @@ def order(
         )
         if resolved is SLOT_ZERO_SELECTED:
             from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
+            from autoskillit.config import load_config as _load_config_early
+            from autoskillit.execution import get_backend as _get_backend_early
 
+            _cfg_early = _load_config_early(Path.cwd())
+            _caps_early = _get_backend_early(_cfg_early.agent_backend.backend).capabilities
             _launch_cook_session(
-                _build_open_kitchen_prompt(mcp_prefix=mcp_prefix),
+                _build_open_kitchen_prompt(
+                    mcp_prefix=mcp_prefix,
+                    has_unguarded_filesystem_access=_caps_early.has_unguarded_filesystem_access,
+                ),
                 initial_message=random.choice(_OPEN_KITCHEN_GREETINGS),
                 resume_spec=resume_spec,
                 project_dir=Path.cwd(),
@@ -308,8 +315,16 @@ def order(
         return
     greeting = random.choice(_COOK_GREETINGS).format(recipe_name=recipe)
     _extra_env |= _write_order_entry(Path.cwd(), recipe)
+    from autoskillit.execution import get_backend
+
+    _backend_caps = get_backend(_cfg.agent_backend.backend).capabilities
     _launch_cook_session(
-        _build_orchestrator_prompt(recipe, mcp_prefix=mcp_prefix, ingredients_table=_itable),
+        _build_orchestrator_prompt(
+            recipe,
+            mcp_prefix=mcp_prefix,
+            ingredients_table=_itable,
+            has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,
+        ),
         initial_message=greeting,
         extra_env=_extra_env,
         resume_spec=resume_spec,

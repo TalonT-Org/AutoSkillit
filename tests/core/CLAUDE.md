@@ -51,6 +51,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_types.py` | Tests for shared type contracts — enum exhaustiveness |
 | `test_types_structure.py` | Tests for core/types.py split into focused sub-modules (P8-F2) |
 | `test_type_results_execution.py` | Tests for _type_results_execution.py — execution-scoped types |
+| `test_types_phoropter.py` | Authoritative phoropter type tests — frozen invariants, `__all__` guard, gateway accessibility for all `_type_phoropter` and `SynthesisStrategy` types |
 | `test_validated_worktree_path.py` | Tests for ValidatedWorktreePath construction contracts |
 | `test_version_snapshot.py` | Tests for core/_version_snapshot.py |
 | `test_version_snapshot_codex_routing.py` | Codex version snapshot routing tests — verifies collect_version_snapshot() routes codex_version correctly by AUTOSKILLIT_AGENT_BACKEND |

@@ -2624,7 +2624,7 @@ def test_select_review_dimensions_all_s_returns_empty(
         l1_severity={},
     )
     monkeypatch.setattr(
-        "autoskillit.smoke_utils._review.get_experiment_type_by_name",
+        "autoskillit.recipe.get_experiment_type_by_name",
         lambda _name, **_kw: all_s_spec,
     )
     result = select_review_dimensions(
@@ -2653,7 +2653,7 @@ def test_select_review_dimensions_empty_weights_returns_empty(
         l1_severity={},
     )
     monkeypatch.setattr(
-        "autoskillit.smoke_utils._review.get_experiment_type_by_name",
+        "autoskillit.recipe.get_experiment_type_by_name",
         lambda _name, **_kw: empty_spec,
     )
     result = select_review_dimensions(

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Literal
 
 import pytest
 
@@ -479,6 +483,86 @@ def _make_input_contract_resolver():
     from autoskillit.recipe._contracts_manifest import resolve_input_specs
 
     return resolve_input_specs
+
+
+def _collect_all_path_input_specs() -> list[tuple[str, str, str]]:
+    from autoskillit.core.io import load_yaml
+
+    yaml_path = Path(__file__).parents[2] / "src/autoskillit/recipe/skill_contracts.yaml"
+    raw = load_yaml(yaml_path)
+    result = []
+    for skill_name, contract in sorted(raw.get("skills", {}).items()):
+        for inp in contract.get("inputs", []):
+            if inp.get("type") in ("file_path", "directory_path"):
+                result.append((skill_name, inp["name"], inp["type"]))
+    return result
+
+
+_ALL_PATH_INPUT_SPECS = _collect_all_path_input_specs()
+
+
+class TestInputContractRealContracts:
+    """Gate integration tests using real contract declarations."""
+
+    @pytest.mark.parametrize(
+        "skill_name,input_name,declared_type",
+        _ALL_PATH_INPUT_SPECS,
+        ids=[f"{s}-{i}" for s, i, _ in _ALL_PATH_INPUT_SPECS],
+    )
+    def test_gate_accepts_correct_path_type(
+        self, tmp_path, skill_name: str, input_name: str, declared_type: str
+    ):
+        """Gate must accept the correct filesystem entity for every declared path input."""
+        from autoskillit.core import InputSpec
+        from autoskillit.server._guards import _check_input_contracts
+
+        narrowed: Literal["file_path", "directory_path"] = (
+            "file_path" if declared_type == "file_path" else "directory_path"
+        )
+        if narrowed == "file_path":
+            target = tmp_path / "test_input.md"
+            target.write_text("test")
+        else:
+            target = tmp_path / "test_input_dir"
+            target.mkdir()
+        spec = InputSpec(name=input_name, type=narrowed, required=True, position=0)
+        result = _check_input_contracts(
+            f"/autoskillit:{skill_name} {target}",
+            str(tmp_path),
+            resolver=lambda skill_command, _s=spec: (_s,),
+        )
+        assert result is None
+
+    @pytest.mark.parametrize(
+        "skill_name,input_name,declared_type",
+        _ALL_PATH_INPUT_SPECS,
+        ids=[f"{s}-{i}" for s, i, _ in _ALL_PATH_INPUT_SPECS],
+    )
+    def test_gate_rejects_wrong_path_type(
+        self, tmp_path, skill_name: str, input_name: str, declared_type: str
+    ):
+        """Gate must reject the WRONG filesystem entity for every declared path input."""
+        from autoskillit.core import InputSpec
+        from autoskillit.server._guards import _check_input_contracts
+
+        narrowed: Literal["file_path", "directory_path"] = (
+            "file_path" if declared_type == "file_path" else "directory_path"
+        )
+        if narrowed == "file_path":
+            wrong_target = tmp_path / "wrong_dir"
+            wrong_target.mkdir()
+        else:
+            wrong_target = tmp_path / "wrong_file.md"
+            wrong_target.write_text("test")
+        spec = InputSpec(name=input_name, type=narrowed, required=True, position=0)
+        result = _check_input_contracts(
+            f"/autoskillit:{skill_name} {wrong_target}",
+            str(tmp_path),
+            resolver=lambda skill_command, _s=spec: (_s,),
+        )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["success"] is False
 
 
 class TestInputContractIntegration:

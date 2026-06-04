@@ -221,6 +221,41 @@ def test_all_exp_lens_skills_have_contracts(skills):
     assert not missing, f"exp-lens skills missing contracts: {sorted(missing)}"
 
 
+_CONTRACTLESS_SKILLS: frozenset[str] = frozenset(
+    {
+        "audit-arch",
+        "audit-bugs",
+        "audit-cohesion",
+        "audit-defense-standards",
+        "audit-docs",
+        "audit-review-decisions",
+        "close-kitchen",
+        "elaborate-phase",
+        "make-arch-diag",
+        "make-experiment-diag",
+        "make-req",
+        "open-kitchen",
+        "reload-session",
+        "setup-project",
+        "smoke-task",
+        "validate-review-decisions",
+        "verify-diag",
+    }
+)
+
+
+def test_all_bundled_skills_have_contracts(skills):
+    """Every bundled skill must have a contract entry in skill_contracts.yaml."""
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+    all_skills = [s.name for s in resolver.list_all()]
+    missing = [
+        name for name in all_skills if name not in skills and name not in _CONTRACTLESS_SKILLS
+    ]
+    assert not missing, f"Bundled skills missing contracts: {sorted(missing)}"
+
+
 _EXP_LENS_SKILLS: Final[list[str]] = sorted(
     name for name in load_yaml(_CONTRACTS_YAML).get("skills", {}) if name.startswith("exp-lens-")
 )

@@ -2385,7 +2385,7 @@ skills:
   file-audit-issues:
     inputs:
       - name: run_dir
-        type: file_path
+        type: directory_path
         required: false
     outputs:
       - name: issue_urls

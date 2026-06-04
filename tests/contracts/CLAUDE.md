@@ -39,6 +39,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_github_ops.py` | Contract tests: GitHub operation semantics in SKILL.md files |
 | `test_hook_bridge_coverage.py` | REQ-BRIDGE-001: quota guard hook config bridge must produce exactly the keys that resolve_quota_settings() reads |
 | `test_implement_experiment_contracts.py` | Contract tests for implement-experiment SKILL.md — test infrastructure requirements |
+| `test_input_type_semantic_correctness.py` | Cross-validate skill_contracts.yaml path input types against SKILL.md content |
 | `test_instruction_surface.py` | Contract tests: every instruction surface must carry the pipeline tool restriction |
 | `test_issue_body_discipline.py` | Cross-skill contract: no SKILL.md may append validation summaries to issue bodies |
 | `test_issue_content_fidelity.py` | Cross-skill contract: content fidelity for issue body assembly |

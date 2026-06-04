@@ -231,7 +231,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe.steps["vis_apply"].phoropter_family is None
 
     def test_vis_apply_capture_list(self, recipe) -> None:
-        assert "all_figure_spec_paths" in recipe.steps["vis_apply"].capture_list
+        assert "vis_lens_output_paths" in recipe.steps["vis_apply"].capture_list
 
     def test_vis_apply_retries_zero(self, recipe) -> None:
         assert recipe.steps["vis_apply"].retries == 0

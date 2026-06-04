@@ -178,6 +178,7 @@ from .types import QUOTA_BUDGET_EXCEEDED_TRIGGER as QUOTA_BUDGET_EXCEEDED_TRIGGE
 from .types import QUOTA_GUARD_DENY_TRIGGER as QUOTA_GUARD_DENY_TRIGGER
 from .types import QUOTA_POST_BUDGET_EXCEEDED_TRIGGER as QUOTA_POST_BUDGET_EXCEEDED_TRIGGER
 from .types import QUOTA_POST_WARNING_TRIGGER as QUOTA_POST_WARNING_TRIGGER
+from .types import READING_TOKEN_PATTERN as READING_TOKEN_PATTERN
 from .types import RECIPE_PACK_REGISTRY as RECIPE_PACK_REGISTRY
 from .types import RECIPE_PACK_TAGS as RECIPE_PACK_TAGS
 from .types import REQUIRED_CONSUMER_FIELDS as REQUIRED_CONSUMER_FIELDS
@@ -241,6 +242,8 @@ from .types import CodexEventData as CodexEventData
 from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ContaminationOutcome as ContaminationOutcome
+from .types import CrossDomainAssessment as CrossDomainAssessment
+from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
@@ -283,12 +286,15 @@ from .types import NoResume as NoResume
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
+from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
+from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PluginSource as PluginSource
 from .types import ProcessStaleError as ProcessStaleError
 from .types import PromptContractError as PromptContractError
 from .types import ProviderOutcome as ProviderOutcome
 from .types import PRState as PRState
 from .types import QuotaRefreshTask as QuotaRefreshTask
+from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError
@@ -320,6 +326,7 @@ from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner
 from .types import SupportsDebug as SupportsDebug
 from .types import SupportsLogger as SupportsLogger
+from .types import SynthesisStrategy as SynthesisStrategy
 from .types import TerminationAction as TerminationAction
 from .types import TerminationReason as TerminationReason
 from .types import TestResult as TestResult

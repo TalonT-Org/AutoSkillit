@@ -219,13 +219,16 @@ def test_find_caller_session_id_returns_fresh_marker(tmp_path, monkeypatch):
 
 
 def test_find_caller_session_id_picks_freshest_by_mtime(tmp_path, monkeypatch):
-    import time
+    import os
 
     from autoskillit.core.runtime.kitchen_state import find_caller_session_id, write_marker
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     write_marker("sess-old", "recipe-1")
-    time.sleep(0.05)
+    # Backdate sess-old by 10s so mtime ordering is filesystem-resolution-independent
+    old_json = tmp_path / "kitchen_state" / "sess-old.json"
+    past = old_json.stat().st_mtime - 10.0
+    os.utime(old_json, (past, past))
     write_marker("sess-new", "recipe-2")
     result = find_caller_session_id()
     assert result == "sess-new"

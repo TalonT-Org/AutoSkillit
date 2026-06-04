@@ -32,6 +32,8 @@ from ._type_helpers import *  # noqa: F401, F403
 from ._type_helpers import __all__ as _helpers_all
 from ._type_inspector import *  # noqa: F401, F403
 from ._type_inspector import __all__ as _inspector_all
+from ._type_phoropter import *  # noqa: F401, F403
+from ._type_phoropter import __all__ as _phoropter_all
 from ._type_plugin_source import *  # noqa: F401, F403
 from ._type_plugin_source import __all__ as _plugin_source_all
 from ._type_protocols_backend import *  # noqa: F401, F403
@@ -75,6 +77,7 @@ __all__ = (
     + _figure_spec_all
     + _helpers_all
     + _inspector_all
+    + _phoropter_all
     + _plugin_source_all
     + _protocols_logging_all
     + _protocols_execution_all

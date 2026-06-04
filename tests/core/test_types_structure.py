@@ -97,3 +97,54 @@ def test_subprocess_termination_contract_variable_still_defined() -> None:
     import autoskillit.core.types._type_subprocess as m
 
     assert hasattr(m, "_TERMINATION_CONTRACT")
+
+
+def test_phoropter_symbols_importable_from_types_hub() -> None:
+    """All _type_phoropter symbols must be importable from autoskillit.core.types."""
+    import dataclasses
+
+    from autoskillit.core.types import (
+        READING_TOKEN_PATTERN,
+        CrossDomainAssessment,
+        CrossDomainPrescription,
+        PhoropterPhaseSkip,
+        PhoropterPrescription,
+        ReadingToken,
+    )
+
+    assert isinstance(READING_TOKEN_PATTERN, str)
+    assert dataclasses.is_dataclass(PhoropterPrescription)
+    assert dataclasses.is_dataclass(ReadingToken)
+    assert dataclasses.is_dataclass(PhoropterPhaseSkip)
+    assert dataclasses.is_dataclass(CrossDomainPrescription)
+    assert dataclasses.is_dataclass(CrossDomainAssessment)
+
+
+def test_phoropter_symbols_importable_from_core_gateway() -> None:
+    """All seven phoropter-related symbols must resolve via autoskillit.core (lazy stub)."""
+    from autoskillit.core import (
+        READING_TOKEN_PATTERN,
+        CrossDomainAssessment,
+        CrossDomainPrescription,
+        PhoropterPhaseSkip,
+        PhoropterPrescription,
+        ReadingToken,
+        SynthesisStrategy,
+    )
+
+    assert isinstance(READING_TOKEN_PATTERN, str)
+    assert issubclass(SynthesisStrategy, str)
+    assert callable(PhoropterPrescription)
+    assert callable(ReadingToken)
+    assert callable(PhoropterPhaseSkip)
+    assert callable(CrossDomainPrescription)
+    assert callable(CrossDomainAssessment)
+
+
+def test_phoropter_all_in_types_all() -> None:
+    """Every _type_phoropter.__all__ member must appear in core.types.__all__."""
+    from autoskillit.core.types import __all__ as types_all
+    from autoskillit.core.types._type_phoropter import __all__ as phoropter_all
+
+    missing = set(phoropter_all) - set(types_all)
+    assert not missing, f"Missing from core.types.__all__: {missing}"

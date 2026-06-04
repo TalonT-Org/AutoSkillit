@@ -49,7 +49,7 @@ families:
       skip_field: context.is_silent_type
       skip_semantics: skip_when_true
       applies_to: apply
-    lens_metadata: {}
+    lens_metadata: {}  # vis-lens-specific extension point; other families omit this field intentionally
     status: implemented
 
   refactor-lens:

@@ -56,6 +56,20 @@ _HEADLESS_ENV_HARDENING: dict[str, str] = {
 # additions to that set do not silently change interactive env filtering.
 _INTERACTIVE_ENV_EXCLUSIONS: frozenset[str] = frozenset(_HEADLESS_ENV_HARDENING)
 
+_PROVIDER_EXTRAS_BASE_DENYLIST: frozenset[str] = frozenset(
+    {
+        "AUTOSKILLIT_SESSION_TYPE",
+        "AUTOSKILLIT_HEADLESS",
+    }
+)
+
+_SKILL_SESSION_EXTRAS_DENYLIST: frozenset[str] = _PROVIDER_EXTRAS_BASE_DENYLIST | frozenset(
+    {
+        "MAX_MCP_OUTPUT_TOKENS",
+        "AUTOSKILLIT_SKILL_NAME",
+    }
+)
+
 # Variables that _build_skill_session_cmd_impl controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name, allowed_write_prefix, etc.).

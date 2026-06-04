@@ -56,7 +56,9 @@ from autoskillit.core import (
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
+    _PROVIDER_EXTRAS_BASE_DENYLIST,
     _SESSION_BASELINE_ENV,
+    _SKILL_SESSION_EXTRAS_DENYLIST,
     PromptBuildContext,
     _compose_resume_prompt,
     _ensure_skill_prefix,
@@ -633,12 +635,7 @@ class CodexBackend:
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
-                if k not in (
-                    "AUTOSKILLIT_SESSION_TYPE",
-                    "AUTOSKILLIT_HEADLESS",
-                    "MAX_MCP_OUTPUT_TOKENS",
-                    "AUTOSKILLIT_SKILL_NAME",
-                ):
+                if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
                     extras[k] = v
         if profile_name:
             extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name
@@ -737,7 +734,7 @@ class CodexBackend:
             extras["AUTOSKILLIT_CWD"] = cwd
         if env_extras:
             for k, v in env_extras.items():
-                if k not in ("AUTOSKILLIT_SESSION_TYPE", "AUTOSKILLIT_HEADLESS"):
+                if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:
                     extras[k] = v
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}

@@ -59,6 +59,20 @@ def test_fmt_duration_output_equivalent_to_canonical() -> None:
         )
 
 
+def test_humanize_output_equivalent_to_canonical() -> None:
+    """Hook _humanize must produce identical output to TelemetryFormatter._humanize."""
+    from autoskillit.hooks.token_summary_hook import _humanize as hook_humanize
+    from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+
+    cases = [0, 0.0, None, 1, 999, 1000, 1500, 999999, 1_000_000, 1_200_000, 45.7, -1]
+    for val in cases:
+        hook_out = hook_humanize(val)
+        canonical_out = TelemetryFormatter._humanize(val)
+        assert hook_out == canonical_out, (
+            f"_humanize({val!r}) diverged: hook={hook_out!r}, canonical={canonical_out!r}"
+        )
+
+
 def test_non_anthropic_step_marked_in_format_table() -> None:
     """Hook _format_table marks non-Anthropic step names with * and adds footnote."""
     from autoskillit.hooks.token_summary_hook import _format_table

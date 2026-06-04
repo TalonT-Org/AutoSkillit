@@ -377,3 +377,236 @@ def test_load_family_prefixes_cache_hit(monkeypatch):
     _load_family_prefixes()
     assert call_count == 1
     _PREFIXES_CACHE.clear()
+
+
+# --- _canonical_phase_for_step unit tests ---
+
+
+def test_canonical_step_name_any_family():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import _canonical_phase_for_step
+
+    prefixes = {"vis-lens": "vis"}
+    assert _canonical_phase_for_step("dial", "vis-lens", prefixes) == "dial"
+    assert _canonical_phase_for_step("apply", "vis-lens", prefixes) == "apply"
+    assert _canonical_phase_for_step("synthesize", "vis-lens", prefixes) == "synthesize"
+
+
+def test_canonical_step_name_family_none():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import _canonical_phase_for_step
+
+    assert _canonical_phase_for_step("dial", None, {}) == "dial"
+    assert _canonical_phase_for_step("apply", None, {}) == "apply"
+    assert _canonical_phase_for_step("synthesize", None, {}) == "synthesize"
+
+
+def test_prefixed_match_correct_family():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import _canonical_phase_for_step
+
+    prefixes = {"vis-lens": "vis"}
+    assert _canonical_phase_for_step("vis_dial", "vis-lens", prefixes) == "dial"
+    assert _canonical_phase_for_step("vis_apply", "vis-lens", prefixes) == "apply"
+    assert _canonical_phase_for_step("vis_synthesize", "vis-lens", prefixes) == "synthesize"
+
+
+def test_prefixed_name_none_prefix_entry():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import _canonical_phase_for_step
+
+    prefixes = {"vis-lens": None}
+    assert _canonical_phase_for_step("vis_dial", "vis-lens", prefixes) is None
+
+
+def test_prefixed_name_family_none():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import _canonical_phase_for_step
+
+    prefixes = {"vis-lens": "vis"}
+    assert _canonical_phase_for_step("vis_dial", None, prefixes) is None
+
+
+def test_unrecognized_step_name_returns_none():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import _canonical_phase_for_step
+
+    prefixes = {"vis-lens": "vis"}
+    assert _canonical_phase_for_step("select_review_dimensions", "vis-lens", prefixes) is None
+
+
+# --- iterative-discovery pattern ---
+
+
+def test_iterative_discovery_pattern():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import _canonical_phase_for_step
+
+    prefixes = {"vis-lens": "vis", "arch-lens": None}
+    step_name = "vis_dial"
+    found_family = None
+    found_phase = None
+    for candidate_family in prefixes:
+        phase = _canonical_phase_for_step(step_name, candidate_family, prefixes)
+        if phase is not None:
+            found_family = candidate_family
+            found_phase = phase
+            break
+    assert found_family == "vis-lens"
+    assert found_phase == "dial"
+
+
+# --- prefixed step phase-order tests ---
+
+
+def test_prefixed_steps_correct_order_no_findings(monkeypatch):
+    import autoskillit.recipe  # noqa: F401
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"vis-lens": "vis"},
+    )
+    recipe = _make_recipe(
+        {
+            "vis_dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "vis_apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "vis_synthesize": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
+    assert not findings
+
+
+def test_prefixed_steps_wrong_order_error_with_canonical(monkeypatch):
+    import autoskillit.recipe  # noqa: F401
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"vis-lens": "vis"},
+    )
+    recipe = _make_recipe(
+        {
+            "vis_apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "vis_dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "vis_synthesize": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert findings[0].step_name == "vis_apply"
+    assert "vis_apply" in findings[0].message
+    assert "apply" in findings[0].message
+
+
+def test_prefixed_steps_family_none_transparency():
+    """Prefixed steps with family=None are transparent via the outer family guard,
+    not via _canonical_phase_for_step."""
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "vis_dial": RecipeStep(tool="run_skill"),
+            "vis_apply": RecipeStep(tool="run_skill"),
+            "vis_synthesize": RecipeStep(tool="run_skill"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
+    assert not findings
+
+
+def test_canonical_steps_regression_guard():
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
+    assert not findings
+
+
+def test_mixed_two_family_correct_order_no_findings(monkeypatch):
+    import autoskillit.recipe  # noqa: F401
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"vis-lens": "vis"},
+    )
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "vis_dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "vis_apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "vis_synthesize": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
+    assert not findings
+
+
+# --- canonical-entry interleaving tests ---
+
+
+def test_non_canonical_family_step_no_interleaving():
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "select_review_dimensions": RecipeStep(tool="run_python", phoropter_family="test-fam"),
+            "plain-step": RecipeStep(tool="run_cmd"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-step-interleaving"]
+    assert not findings
+
+
+def test_sequential_family_exemption(monkeypatch):
+    import autoskillit.recipe  # noqa: F401
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"refactor-lens": "refactor"},
+    )
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="fam-a"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="fam-a"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="fam-a"),
+            "routing-step": RecipeStep(tool="run_cmd"),
+            "refactor_dial": RecipeStep(tool="run_skill", phoropter_family="refactor-lens"),
+            "refactor_apply": RecipeStep(tool="run_skill", phoropter_family="refactor-lens"),
+            "refactor_synthesize": RecipeStep(tool="run_skill", phoropter_family="refactor-lens"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-step-interleaving"]
+    assert not findings
+
+
+def test_in_progress_interleaving_still_fires():
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "plain-step": RecipeStep(tool="run_cmd"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-step-interleaving"]
+    assert len(findings) == 1
+    assert findings[0].step_name == "plain-step"
+    assert "test-fam" in findings[0].message
+
+
+def test_standalone_synthesize_does_not_complete_family():
+    import autoskillit.recipe  # noqa: F401
+
+    recipe = _make_recipe(
+        {
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="test-fam"),
+            "plain-step": RecipeStep(tool="run_cmd"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-step-interleaving"]
+    assert len(findings) == 1
+    assert findings[0].step_name == "plain-step"
+    assert "test-fam" in findings[0].message

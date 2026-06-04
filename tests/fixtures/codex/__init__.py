@@ -6,13 +6,13 @@ from pathlib import Path
 
 CODEX_SCHEMA_VERSION: int = 2
 
-HAPPY_PATH_SINGLE_TURN: str = "happy_path_single_turn.ndjson"
+HAPPY_PATH_SINGLE_TURN: str = "happy_path_single_turn_v0133.ndjson"
 HAPPY_PATH_V0136: str = "happy_path_v0136.ndjson"
 MARKER_DETECTION_V0136: str = "marker_detection_v0136.ndjson"
-MULTI_TURN_WITH_COMPACTION: str = "multi_turn_with_compaction.ndjson"
-TURN_FAILED_ERROR: str = "turn_failed_error.ndjson"
-SESSION_WITH_REASONING: str = "session_with_reasoning.ndjson"
-SESSION_WITH_MCP_TOOL_CALL: str = "session_with_mcp_tool_call.ndjson"
+MULTI_TURN_WITH_COMPACTION: str = "multi_turn_with_compaction_v0133.ndjson"
+TURN_FAILED_ERROR: str = "turn_failed_error_v0133.ndjson"
+SESSION_WITH_REASONING: str = "session_with_reasoning_v0133.ndjson"
+SESSION_WITH_MCP_TOOL_CALL: str = "session_with_mcp_tool_call_v0133.ndjson"
 
 
 def fixture_path(name: str) -> Path:

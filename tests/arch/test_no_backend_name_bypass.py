@@ -17,7 +17,6 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "execution/headless/_headless_result.py",  # Claude-specific result parsing
         "core/_version_snapshot.py",  # Version snapshot — routes codex_version by backend name
         "execution/headless/_headless_helpers.py",  # assert_headless_cmd claude -p flag check
-        "server/_session_type.py",  # Codex pre-reveal — env var dispatch, no capabilities
         "cli/session/_session_launch.py",  # Feature-gate backend-alignment fallback
         "recipe/rules/rules_backend_compat.py",  # Backend compatibility semantic rule
     }

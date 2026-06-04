@@ -274,22 +274,34 @@ def test_no_retired_agent_name_has_a_live_file():
 
 
 @pytest.mark.anyio
-async def test_plan_review_pre_revealed_for_non_notification_backend(monkeypatch):
-    """For codex (non-notification) backend, plan-review resources are visible at startup
-    without calling unlock_agent_pack."""
-    from autoskillit.core import MCP_CLIENT_BACKEND_ENV_VAR
-    from autoskillit.server import _apply_session_type_visibility, mcp
+async def test_plan_review_pre_revealed_for_non_notification_backend(tmp_path, monkeypatch):
+    """Non-notification backend gets plan-review resources pre-revealed via _pre_reveal_kitchen."""
+    from unittest.mock import AsyncMock, MagicMock, patch
 
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
-    monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
-    _apply_session_type_visibility()
+    from autoskillit.core import HEADLESS_ENV_VAR
+    from autoskillit.pipeline.gate import DefaultGateState
+    from autoskillit.server import mcp
+    from autoskillit.server._lifespan import _skill_auto_gate_boot
+    from tests.server.conftest import _make_mock_ctx
+
+    monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
+
+    mock_backend = MagicMock()
+    mock_backend.capabilities.supports_tool_list_changed = False
+    ctx = _make_mock_ctx()
+    ctx.backend = mock_backend
+    ctx.gate = DefaultGateState(enabled=False)
+    ctx.project_dir = tmp_path
+
+    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+        with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+            with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                await _skill_auto_gate_boot(ctx)
 
     templates = await mcp.list_resource_templates()
     uris = {t.uri_template for t in templates}
     assert "agent://plan-review/{name}" in uris, (
-        "plan-review resources should be pre-revealed at startup"
-        " for codex non-notification backend"
+        "plan-review resources should be pre-revealed at startup for non-notification backend"
     )
 
 

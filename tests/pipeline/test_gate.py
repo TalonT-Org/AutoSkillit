@@ -151,6 +151,12 @@ def test_gate_error_result_accepts_custom_message():
     assert parsed["needs_retry"] is False
 
 
+def test_default_gate_message_no_hidden_at_startup():
+    from autoskillit.pipeline.gate import _DEFAULT_GATE_MESSAGE
+
+    assert "hidden at startup" not in _DEFAULT_GATE_MESSAGE
+
+
 def test_gate_imports_only_from_core():
     """gate.py (IL-1 pipeline) may only import from autoskillit.core (IL-0)."""
     import ast

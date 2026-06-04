@@ -33,8 +33,7 @@ class DefaultGateState:
 
 _DEFAULT_GATE_MESSAGE = (
     "AutoSkillit tools are not enabled. "
-    "Call the open_kitchen tool to activate (visible in your tool list). "
-    "Kitchen tools are hidden at startup and revealed per-session when open_kitchen is called."
+    "Call the open_kitchen tool to activate (visible in your tool list)."
 )
 
 

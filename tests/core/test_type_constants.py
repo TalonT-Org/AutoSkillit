@@ -348,7 +348,7 @@ def test_session_type_cook_order_not_in_core_types() -> None:
 def test_codex_schema_version_value() -> None:
     from autoskillit.core.types._type_constants_env import CODEX_SCHEMA_VERSION
 
-    assert CODEX_SCHEMA_VERSION == 1
+    assert CODEX_SCHEMA_VERSION == 2
     assert isinstance(CODEX_SCHEMA_VERSION, int)
 
 
@@ -371,7 +371,7 @@ def test_codex_schema_version_in_all() -> None:
 def test_codex_schema_version_importable_from_types() -> None:
     from autoskillit.core.types import CODEX_SCHEMA_VERSION
 
-    assert CODEX_SCHEMA_VERSION == 1
+    assert CODEX_SCHEMA_VERSION == 2
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +382,7 @@ def test_codex_schema_version_importable_from_types() -> None:
 def test_codex_schema_version_importable_from_core() -> None:
     from autoskillit.core import CODEX_SCHEMA_VERSION
 
-    assert CODEX_SCHEMA_VERSION == 1
+    assert CODEX_SCHEMA_VERSION == 2
 
 
 # ---------------------------------------------------------------------------

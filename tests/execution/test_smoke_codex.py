@@ -89,6 +89,7 @@ class TestCodexSmokeExecution:
         )
         assert token_usage.get("input_tokens", -1) >= 0
         assert token_usage.get("output_tokens", -1) >= 0
+        assert agent_result.output, "Codex session produced no output — possible schema drift"
 
 
 @_skip_unless_codex_smoke

@@ -239,6 +239,8 @@ from .types import CloneSuccessResult as CloneSuccessResult
 from .types import CmdOrigin as CmdOrigin
 from .types import CmdSpec as CmdSpec
 from .types import CodexEventData as CodexEventData
+from .types import CodexEventType as CodexEventType
+from .types import CodexItemType as CodexItemType
 from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ContaminationOutcome as ContaminationOutcome

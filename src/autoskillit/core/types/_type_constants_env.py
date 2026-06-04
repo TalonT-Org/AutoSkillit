@@ -43,7 +43,7 @@ __all__ = [
 ]
 
 AUTOSKILLIT_INSTALLED_VERSION: str = version("autoskillit")
-CODEX_SCHEMA_VERSION: int = 1
+CODEX_SCHEMA_VERSION: int = 2
 
 # Session type environment variable and valid values.
 SESSION_TYPE_ENV_VAR: str = "AUTOSKILLIT_SESSION_TYPE"

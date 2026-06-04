@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"thread_v0136_marker"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"agent_message","id":"msg_001"}}
+{"type":"item.completed","item":{"type":"agent_message","id":"msg_001","text":"I have completed the task.\n\n%%ORDER_UP%%"}}
+{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":50,"cached_input_tokens":20,"reasoning_output_tokens":0}}

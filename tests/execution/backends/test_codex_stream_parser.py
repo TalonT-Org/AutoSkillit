@@ -3,16 +3,23 @@ from __future__ import annotations
 import json
 
 import pytest
+import structlog.testing
 
 from autoskillit.core import (
     BackendEventKind,
     CanonicalTokenUsage,
     CodexEventData,
+    CodexItemType,
     StreamParser,
 )
-from autoskillit.execution.backends._codex_parse import CodexStreamParser
+from autoskillit.execution.backends._codex_parse import (
+    CodexStreamParser,
+    _scan_codex_ndjson,
+)
 from tests.fixtures.codex import (
     HAPPY_PATH_SINGLE_TURN,
+    HAPPY_PATH_V0136,
+    MARKER_DETECTION_V0136,
     MULTI_TURN_WITH_COMPACTION,
     TURN_FAILED_ERROR,
     fixture_path,
@@ -379,3 +386,178 @@ class TestCodexStreamParserFixtures:
 class TestCodexStreamParserConformance:
     def test_isinstance_stream_parser_protocol(self) -> None:
         assert isinstance(CodexStreamParser(), StreamParser)
+
+
+class TestCodexStreamParserV0136Schema:
+    def test_agent_message_yields_tool_output(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "agent_message", "text": "hello from v0.136"},
+            }
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.kind == BackendEventKind.TOOL_OUTPUT
+        assert isinstance(event.backend_data, CodexEventData)
+        assert event.backend_data.item_type == "agent_message"
+
+    def test_command_execution_yields_tool_output(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "command_execution", "command": "ls -la"},
+            }
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.kind == BackendEventKind.TOOL_OUTPUT
+        assert isinstance(event.backend_data, CodexEventData)
+        assert event.backend_data.item_type == "command_execution"
+
+    def test_agent_message_marker_detected(self) -> None:
+        marker = "%%ORDER_UP%%"
+        parser = CodexStreamParser(completion_marker=marker)
+        msg_line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "agent_message", "text": f"Done.\n\n{marker}"},
+            }
+        )
+        parser.parse_line(msg_line)
+        turn_line = json.dumps({"type": "turn.completed", "usage": {}})
+        event = parser.parse_line(turn_line)
+        assert event is not None
+        assert event.has_marker is True
+
+    def test_agent_message_empty_marker_no_false_positive(self) -> None:
+        parser = CodexStreamParser(completion_marker="")
+        msg_line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "agent_message", "text": "some text\n\n"},
+            }
+        )
+        parser.parse_line(msg_line)
+        turn_line = json.dumps({"type": "turn.completed", "usage": {}})
+        event = parser.parse_line(turn_line)
+        assert event is not None
+        assert event.has_marker is False
+
+    def test_mcp_tool_call_yields_tool_output(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "mcp_tool_call", "tool_name": "test_tool"},
+            }
+        )
+        event = parser.parse_line(line)
+        assert event is not None
+        assert event.kind == BackendEventKind.TOOL_OUTPUT
+        assert isinstance(event.backend_data, CodexEventData)
+        assert event.backend_data.item_type == "mcp_tool_call"
+
+
+class TestCodexStreamParserV0136Fixtures:
+    def test_v0136_happy_path_marker_detected(self) -> None:
+        text = fixture_path(HAPPY_PATH_V0136).read_text()
+        parser = CodexStreamParser(completion_marker="%%ORDER_UP%%")
+        events = [
+            ev
+            for line in text.strip().splitlines()
+            if line.strip()
+            for ev in [parser.parse_line(line)]
+            if ev is not None
+        ]
+        assert events[0].kind == BackendEventKind.SESSION_META
+        terminal_events = [e for e in events if e.is_terminal]
+        assert len(terminal_events) == 1
+        assert terminal_events[0].has_marker is True
+
+    def test_v0136_marker_detection_fixture(self) -> None:
+        text = fixture_path(MARKER_DETECTION_V0136).read_text()
+        parser = CodexStreamParser(completion_marker="%%ORDER_UP%%")
+        events = [
+            ev
+            for line in text.strip().splitlines()
+            if line.strip()
+            for ev in [parser.parse_line(line)]
+            if ev is not None
+        ]
+        terminal_events = [e for e in events if e.is_terminal]
+        assert len(terminal_events) == 1
+        assert terminal_events[0].has_marker is True
+
+
+class TestCodexParserParity:
+    _INFORMATIONAL = {CodexItemType.REASONING, CodexItemType.TODO_LIST}
+    _SKIP = {CodexItemType.UNKNOWN} | _INFORMATIONAL
+
+    def test_both_parsers_handle_same_item_types(self) -> None:
+        for member in CodexItemType:
+            if member in self._SKIP:
+                continue
+            item: dict = {"type": member.value}
+            if member == CodexItemType.AGENT_MESSAGE:
+                item["text"] = "test"
+            elif member == CodexItemType.MESSAGE:
+                item["content"] = [{"type": "text", "text": "test"}]
+            elif member == CodexItemType.FILE_CHANGE:
+                item["path"] = "/test.py"
+            ndjson_line = json.dumps({"type": "item.completed", "item": item})
+            acc = _scan_codex_ndjson(ndjson_line)
+            batch_has_data = (
+                acc.agent_messages
+                or acc.command_executions
+                or acc.mcp_tool_calls
+                or acc.file_changes
+            )
+            assert batch_has_data, f"batch parser silently dropped {member.value}"
+            parser = CodexStreamParser()
+            event = parser.parse_line(ndjson_line)
+            assert event is not None, f"stream parser returned None for {member.value}"
+            assert event.kind != BackendEventKind.IGNORED, (
+                f"stream parser returned IGNORED for {member.value}"
+            )
+
+    def test_informational_items_ignored_by_both(self) -> None:
+        for member in self._INFORMATIONAL:
+            item: dict = {"type": member.value, "text": "info"}
+            ndjson_line = json.dumps({"type": "item.completed", "item": item})
+            acc = _scan_codex_ndjson(ndjson_line)
+            assert not acc.agent_messages
+            assert not acc.command_executions
+            parser = CodexStreamParser()
+            event = parser.parse_line(ndjson_line)
+            assert event is not None
+            assert event.kind == BackendEventKind.IGNORED
+
+
+class TestCodexParserUnrecognizedTypeWarning:
+    def test_unknown_event_type_logs_warning(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps({"type": "brand_new_event_type", "data": 1})
+        with structlog.testing.capture_logs() as cap:
+            parser.parse_line(line)
+        assert any(
+            log["event"] == "codex_ndjson_unknown_event_type" and log["log_level"] == "warning"
+            for log in cap
+        )
+
+    def test_unknown_item_type_logs_warning(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"type": "brand_new_item_type", "data": 1},
+            }
+        )
+        with structlog.testing.capture_logs() as cap:
+            parser.parse_line(line)
+        assert any(
+            log["event"] == "codex_ndjson_unknown_item_type" and log["log_level"] == "warning"
+            for log in cap
+        )

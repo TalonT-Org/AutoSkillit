@@ -685,3 +685,89 @@ def test_error_code_empty_when_no_failure() -> None:
     )
     result = CodexResultParser().parse_stdout(line)
     assert result.raw["error_code"] == ""
+
+
+# ---------------------------------------------------------------------------
+# v0.136.0 schema helpers
+# ---------------------------------------------------------------------------
+
+
+def _item_completed_agent_message_line(text: str) -> str:
+    return json.dumps(
+        {
+            "type": "item.completed",
+            "item": {"type": "agent_message", "text": text},
+        }
+    )
+
+
+def _item_completed_command_execution_line(command: str) -> str:
+    return json.dumps(
+        {
+            "type": "item.completed",
+            "item": {"type": "command_execution", "command": command},
+        }
+    )
+
+
+def _item_completed_file_change_nested_line(paths: list[str]) -> str:
+    return json.dumps(
+        {
+            "type": "item.completed",
+            "item": {
+                "type": "file_change",
+                "changes": [{"path": p, "kind": "add"} for p in paths],
+            },
+        }
+    )
+
+
+class TestCodexResultParserV0136Schema:
+    def test_agent_message_populates_agent_messages(self) -> None:
+        ndjson = "\n".join(
+            [
+                _item_completed_agent_message_line("hello from v0.136"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["agent_messages"] == ["hello from v0.136"]
+        assert result.output == "hello from v0.136"
+
+    def test_command_execution_populates_command_executions(self) -> None:
+        ndjson = "\n".join(
+            [
+                _item_completed_command_execution_line("ls -la"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert len(result.raw["command_executions"]) == 1
+        assert result.raw["command_executions"][0]["command"] == "ls -la"
+
+    def test_file_change_nested_populates_file_changes(self) -> None:
+        ndjson = "\n".join(
+            [
+                _item_completed_file_change_nested_line(["/src/a.py", "/src/b.py"]),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["file_changes"] == ["/src/a.py", "/src/b.py"]
+
+    def test_v0136_composite_session_output_nonempty(self) -> None:
+        ndjson = "\n".join(
+            [
+                _thread_started_line("v0136-session"),
+                _item_completed_agent_message_line("Task done."),
+                _item_completed_command_execution_line("git status"),
+                _item_completed_file_change_nested_line(["/src/main.py"]),
+                _turn_completed_line({"input_tokens": 200, "output_tokens": 80}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.success is True
+        assert result.output
+        assert len(result.raw["agent_messages"]) > 0
+        assert len(result.raw["command_executions"]) > 0
+        assert len(result.raw["file_changes"]) > 0

@@ -141,6 +141,22 @@ CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 _IMAGE_GENERATION_DISABLED = "features.image_generation=false"
 
 
+def _codex_exec_base(
+    *,
+    sandbox: str,
+    json: bool = True,
+    extra_overrides: Sequence[str] = (),
+) -> list[str]:
+    cmd: list[str] = ["codex", "exec"]
+    if json:
+        cmd.append(CodexFlags.JSON)
+    cmd.extend([CodexFlags.SANDBOX, sandbox])
+    for override in extra_overrides:
+        cmd.extend([CodexFlags.CONFIG_OVERRIDE, override])
+    cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
+    return cmd
+
+
 @dataclass(frozen=True, slots=True)
 class CodexEnvPolicy:
     denylist_prefixes: tuple[str, ...] = CODEX_ENV_PREFIX_DENYLIST
@@ -485,15 +501,7 @@ class CodexBackend:
         add_dirs: Sequence[str] = (),
         env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec:
-        cmd: list[str] = [
-            "codex",
-            "exec",
-            CodexFlags.JSON,
-            CodexFlags.SANDBOX,
-            "workspace-write",
-            CodexFlags.CONFIG_OVERRIDE,
-            _IMAGE_GENERATION_DISABLED,
-        ]
+        cmd = _codex_exec_base(sandbox="workspace-write")
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -630,15 +638,7 @@ class CodexBackend:
             required=SKILL_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
-        cmd: list[str] = [
-            "codex",
-            "exec",
-            CodexFlags.JSON,
-            CodexFlags.SANDBOX,
-            "workspace-write",
-            CodexFlags.CONFIG_OVERRIDE,
-            _IMAGE_GENERATION_DISABLED,
-        ]
+        cmd = _codex_exec_base(sandbox="workspace-write")
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -737,17 +737,7 @@ class CodexBackend:
             required=ORCHESTRATOR_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
-        cmd: list[str] = [
-            "codex",
-            "exec",
-            CodexFlags.JSON,
-            CodexFlags.SANDBOX,
-            "read-only",
-            CodexFlags.CONFIG_OVERRIDE,
-            "web_search=disabled",
-            CodexFlags.CONFIG_OVERRIDE,
-            _IMAGE_GENERATION_DISABLED,
-        ]
+        cmd = _codex_exec_base(sandbox="read-only", extra_overrides=["web_search=disabled"])
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -839,11 +829,7 @@ class CodexBackend:
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)
-        cmd: list[str] = ["codex", "exec"]
-        if output_format == OutputFormat.JSON:
-            cmd.append(CodexFlags.JSON)
-        cmd.extend([CodexFlags.SANDBOX, "read-only"])
-        cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
+        cmd = _codex_exec_base(sandbox="read-only", json=(output_format == OutputFormat.JSON))
         cmd.append(CodexFlags.RESUME_SUBCOMMAND)
         cmd.append(resume_session_id)
         cmd.append(prompt)

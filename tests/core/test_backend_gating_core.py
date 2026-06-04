@@ -11,13 +11,6 @@ from autoskillit.core._version_snapshot import collect_version_snapshot
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-@pytest.fixture(autouse=True)
-def _clear_snapshot_cache():
-    collect_version_snapshot.cache_clear()
-    yield
-    collect_version_snapshot.cache_clear()
-
-
 def _make_backend(name: str, version: str = "", plugins: list | None = None) -> Mock:
     """Create a mock CodingAgentBackend with the given identity and return values."""
     mock = Mock()

@@ -214,7 +214,7 @@ class TestResearchDesignRecipeStructure:
     # ----- vis-lens renamed step tests (T29-T37) -----
 
     def test_vis_dial_phoropter_family(self, recipe) -> None:
-        assert recipe.steps["vis_dial"].phoropter_family is None
+        assert recipe.steps["vis_dial"].phoropter_family == "vis-lens"
 
     def test_vis_dial_on_success(self, recipe) -> None:
         assert recipe.steps["vis_dial"].on_success == "vis_apply"
@@ -234,7 +234,7 @@ class TestResearchDesignRecipeStructure:
             assert key in capture, f"vis_dial missing capture key: {key}"
 
     def test_vis_apply_phoropter_family(self, recipe) -> None:
-        assert recipe.steps["vis_apply"].phoropter_family is None
+        assert recipe.steps["vis_apply"].phoropter_family == "vis-lens"
 
     def test_vis_apply_capture_list(self, recipe) -> None:
         assert "vis_lens_output_paths" in recipe.steps["vis_apply"].capture_list
@@ -249,7 +249,7 @@ class TestResearchDesignRecipeStructure:
         assert recipe.steps["vis_apply"].on_failure == "vis_synthesize"
 
     def test_vis_synthesize_phoropter_family(self, recipe) -> None:
-        assert recipe.steps["vis_synthesize"].phoropter_family is None
+        assert recipe.steps["vis_synthesize"].phoropter_family == "vis-lens"
 
     def test_vis_synthesize_on_success(self, recipe) -> None:
         assert recipe.steps["vis_synthesize"].on_success == "create_worktree"

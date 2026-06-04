@@ -1257,3 +1257,25 @@ def test_existing_rules_do_not_catch_cycle_clobber_pattern() -> None:
         f"loop-body-uncaptured-output should NOT catch cycle-clobber pattern "
         f"(implement step HAS a capture block), got: {uncaptured_findings}"
     )
+
+
+def test_model_on_non_skill_triggers() -> None:
+    wf = _make_workflow(
+        {
+            "check": {"tool": "test_check", "model": "sonnet", "on_success": "done"},
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert any(f.rule == "model-on-non-skill-step" for f in findings)
+
+
+def test_model_on_non_skill_clean() -> None:
+    wf = _make_workflow(
+        {
+            "do": {"tool": "run_skill", "model": "sonnet", "on_success": "done"},
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert not any(f.rule == "model-on-non-skill-step" for f in findings)

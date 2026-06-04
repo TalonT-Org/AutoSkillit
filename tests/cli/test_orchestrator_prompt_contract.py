@@ -237,7 +237,7 @@ def test_unguarded_filesystem_backend_supplement_injected():
         has_unguarded_filesystem_access=True,
     )
     assert "run_cmd" in prompt
-    assert "raw" in prompt.lower()
+    assert "BACKEND-SPECIFIC CONSTRAINTS" in prompt
 
 
 def test_guarded_backend_no_filesystem_supplement():

@@ -82,6 +82,9 @@ class TestCrossdomainStubs:
 
 
 def test_all_guard() -> None:
+    # SynthesisStrategy is intentionally absent: defined in _type_enums, not _type_phoropter.
+    # It reaches autoskillit.core via a separate re-export path
+    # (verified by test_importable_from_gateway).
     from autoskillit.core.types._type_phoropter import __all__ as phoropter_all
 
     assert set(phoropter_all) == {

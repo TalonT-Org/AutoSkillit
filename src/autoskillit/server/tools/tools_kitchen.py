@@ -383,8 +383,10 @@ def get_recipe(name: str) -> str:
             backend_name=ctx.backend.name if ctx.backend else None,
         )
     except ProcessStaleError:
+        logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
         return json.dumps({"error": f"Recipe '{name}' composition failed — process stale."})
     except Exception:
+        logger.warning("get_recipe_failure", recipe=name, stage="load_and_validate", exc_info=True)
         return json.dumps({"error": f"Recipe '{name}' composition failed."})
     return result.get("content", json.dumps({"error": "Recipe composition failed."}))
 

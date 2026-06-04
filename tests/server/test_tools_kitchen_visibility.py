@@ -87,6 +87,32 @@ async def test_close_kitchen_tool_calls_reset_visibility(tmp_path, monkeypatch):
     mock_ctx.reset_visibility.assert_called_once()
 
 
+# T-VISIBILITY-2b: close_kitchen roundtrip — pre-revealed kitchen tools hidden after close
+@pytest.mark.anyio
+async def test_close_kitchen_hides_pre_revealed_tools(tmp_path, monkeypatch):
+    """close_kitchen must remove pre-revealed kitchen tools from list_tools() roundtrip."""
+    monkeypatch.chdir(tmp_path)
+    from autoskillit.core import FLEET_DISPATCH_TOOLS, FLEET_TOOLS, GATED_TOOLS
+    from autoskillit.server import mcp
+    from autoskillit.server.tools.tools_kitchen import close_kitchen
+
+    mcp.enable(tags={"kitchen"})
+    tools_before = {t.name for t in await mcp.list_tools()}
+    kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
+    assert kitchen_gated.issubset(tools_before), "kitchen tools should be visible after enable"
+
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.reset_visibility = AsyncMock()
+
+    with patch("autoskillit.server.tools.tools_kitchen._close_kitchen_handler"):
+        await close_kitchen(ctx=mock_ctx)
+
+    tools_after = {t.name for t in await mcp.list_tools()}
+    assert not kitchen_gated.intersection(tools_after), (
+        "kitchen tools should be hidden after close_kitchen"
+    )
+
+
 @pytest.mark.anyio
 async def test_open_kitchen_does_not_write_gate_file(tmp_path, monkeypatch):
     """_open_kitchen_handler must never write a gate file."""

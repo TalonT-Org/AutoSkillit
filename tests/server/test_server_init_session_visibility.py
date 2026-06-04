@@ -470,6 +470,10 @@ class TestSessionTypeVisibility:
                 with patch("autoskillit.server._lifespan.register_active_kitchen"):
                     await _skill_auto_gate_boot(ctx)
 
+        assert ctx.gate.enabled is True, (
+            "gate must be enabled after _skill_auto_gate_boot pre-reveal"
+        )
+
         tools = list(await mcp.list_tools())
         tool_names = {t.name for t in tools}
         kitchen_gated = GATED_TOOLS - FLEET_TOOLS - FLEET_DISPATCH_TOOLS
@@ -498,6 +502,10 @@ class TestSessionTypeVisibility:
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch("autoskillit.server._lifespan.register_active_kitchen"):
                     await _food_truck_auto_gate_boot(ctx)
+
+        assert ctx.gate.enabled is True, (
+            "gate must be enabled after _food_truck_auto_gate_boot pre-reveal"
+        )
 
         templates = await mcp.list_resource_templates()
         uris = {t.uri_template for t in templates}

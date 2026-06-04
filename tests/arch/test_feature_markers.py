@@ -45,6 +45,10 @@ _ALL_FLEET_FILES = [*_FLEET_DIR_FILES, *_FLEET_CROSS_DIR_FILES]
 
 # Classes within mixed files that MUST carry @pytest.mark.feature("fleet")
 _FLEET_CLASS_MARKERS: dict[str, set[str]] = {
+    "server/test_lifespan_fleet_boot.py": {
+        "TestFleetAutoGateBoot",
+        "TestFleetAutoGateBootProjectDir",
+    },
     "server/test_session_type_visibility.py": {
         "TestSessionTypeVisibility",
         "TestFeatureGateVisibility",

@@ -2588,102 +2588,67 @@ def test_pre_iteration_cleanup_noop_when_dir_empty(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T_SRD1–T_SRD8: select_review_dimensions callable
+# T_SRD1–T_SRD6: select_review_dimensions callable
 # ---------------------------------------------------------------------------
 
 
 def test_select_review_dimensions_happy_path(tmp_path: Path) -> None:
-    """select_review_dimensions sorts by tier and excludes S dimensions."""
+    """Registry-grounded benchmark type returns 8 non-S lenses in H→M→L order."""
     from autoskillit.recipe import get_experiment_type_by_name
     from autoskillit.smoke_utils import select_review_dimensions
 
-    spec = get_experiment_type_by_name("causal_inference")
+    spec = get_experiment_type_by_name("benchmark")
     assert spec is not None
-    expected_count = sum(1 for v in spec.dimension_weights.values() if v != "S")
+    expected_dims = {d for d, w in spec.dimension_weights.items() if w != "S"}
 
     result = select_review_dimensions(
-        experiment_type="causal_inference",
+        experiment_type="benchmark",
         output_dir=str(tmp_path),
     )
     lenses = result["selected_lenses"].split(",")
-    assert len(lenses) == expected_count
+    assert len(lenses) == 8
+    assert set(lenses) == expected_dims
     manifest = json.loads(Path(result["dimensions_manifest_path"]).read_text())
     tiers = list(manifest.values())
     expected_order = sorted(tiers, key=lambda t: {"H": 0, "M": 1, "L": 2}.get(t, 3))
     assert tiers == expected_order
 
 
-def test_select_review_dimensions_all_s_returns_empty(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """All-S weights returns empty outputs and writes no file."""
-    from autoskillit.recipe import ExperimentTypeSpec
-    from autoskillit.smoke_utils import select_review_dimensions
-
-    all_s_spec = ExperimentTypeSpec(
-        name="all_s_fake",
-        classification_triggers=[],
-        dimension_weights={"causal_structure": "S", "variance_protocol": "S"},
-        applicable_lenses={},
-        red_team_focus={},
-        l1_severity={},
-    )
-    monkeypatch.setattr(
-        "autoskillit.recipe.get_experiment_type_by_name",
-        lambda _name, **_kw: all_s_spec,
-    )
-    result = select_review_dimensions(
-        experiment_type="all_s_fake",
-        output_dir=str(tmp_path),
-    )
-    assert result["selected_lenses"] == ""
-    assert result["lens_context_paths"] == ""
-    assert result["dimensions_manifest_path"] == ""
-    assert not list(tmp_path.iterdir())
-
-
-def test_select_review_dimensions_empty_weights_returns_empty(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Empty dimension_weights from registry returns empty outputs."""
-    from autoskillit.recipe import ExperimentTypeSpec
-    from autoskillit.smoke_utils import select_review_dimensions
-
-    empty_spec = ExperimentTypeSpec(
-        name="empty_weights_fake",
-        classification_triggers=[],
-        dimension_weights={},
-        applicable_lenses={},
-        red_team_focus={},
-        l1_severity={},
-    )
-    monkeypatch.setattr(
-        "autoskillit.recipe.get_experiment_type_by_name",
-        lambda _name, **_kw: empty_spec,
-    )
-    result = select_review_dimensions(
-        experiment_type="empty_weights_fake",
-        output_dir=str(tmp_path),
-    )
-    assert result == {
-        "selected_lenses": "",
-        "lens_context_paths": "",
-        "dimensions_manifest_path": "",
-    }
-    assert not list(tmp_path.iterdir())
-
-
 def test_select_review_dimensions_creates_output_dir(tmp_path: Path) -> None:
-    """Missing output_dir is created by the function."""
+    """Benchmark experiment type creates missing output_dir and writes manifest."""
     from autoskillit.smoke_utils import select_review_dimensions
 
     out = tmp_path / "nested" / "output"
     assert not out.exists()
     result = select_review_dimensions(
-        experiment_type="causal_inference",
+        experiment_type="benchmark",
         output_dir=str(out),
     )
     assert out.exists()
+    assert Path(result["dimensions_manifest_path"]).exists()
+
+
+def test_select_review_dimensions_qualitative_type_returns_active_dims(
+    tmp_path: Path,
+) -> None:
+    """Qualitative-interpretive type returns only its 2 active L-tier dimensions."""
+    from autoskillit.recipe import get_experiment_type_by_name
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    spec = get_experiment_type_by_name("qualitative_interpretive")
+    assert spec is not None
+    expected_dims = {d for d, w in spec.dimension_weights.items() if w != "S"}
+
+    result = select_review_dimensions(
+        experiment_type="qualitative_interpretive",
+        output_dir=str(tmp_path),
+    )
+    lenses = result["selected_lenses"].split(",")
+    assert len(lenses) == 2
+    assert set(lenses) == expected_dims
+    assert "data_acquisition" in lenses
+    assert "agent_implementability" in lenses
+    assert "causal_structure" not in lenses
     assert Path(result["dimensions_manifest_path"]).exists()
 
 

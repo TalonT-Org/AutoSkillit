@@ -626,6 +626,7 @@ class TestCodexBuildSkillSessionCmd:
             "AUTOSKILLIT_SESSION_TYPE",
             "MAX_MCP_OUTPUT_TOKENS",
             "AUTOSKILLIT_SKILL_NAME",
+            "AUTOSKILLIT_CWD",
         }
         leaking = (
             _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_MCP_ENV_FORWARD_VARS
@@ -1024,7 +1025,12 @@ class TestCodexBuildFoodTruckCmd:
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        reinjected = {"AUTOSKILLIT_SESSION_TYPE", "MAX_MCP_OUTPUT_TOKENS"}
+        reinjected = {
+            "AUTOSKILLIT_SESSION_TYPE",
+            "MAX_MCP_OUTPUT_TOKENS",
+            "AUTOSKILLIT_CWD",
+            "AUTOSKILLIT_COMPLETION_MARKER",
+        }
         leaking = (
             _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_MCP_ENV_FORWARD_VARS
         ) & spec.env.keys()

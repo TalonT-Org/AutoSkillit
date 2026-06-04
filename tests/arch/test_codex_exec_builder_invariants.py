@@ -76,15 +76,33 @@ def test_all_exec_builders_have_image_generation_disabled(builder) -> None:
     assert _IMAGE_GENERATION_DISABLED in spec.cmd
 
 
-@pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
-def test_all_exec_builders_filter_headless_exclusive_vars(builder, monkeypatch) -> None:
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
-    spec = builder()
-    reinjected = {
+_REINJECTED_BY_BUILDER: dict[str, set[str]] = {
+    "headless": set(),
+    "skill_session": {
         "AUTOSKILLIT_SESSION_TYPE",
         "MAX_MCP_OUTPUT_TOKENS",
         "AUTOSKILLIT_SKILL_NAME",
-    }
+        "AUTOSKILLIT_CWD",
+    },
+    "food_truck": {
+        "AUTOSKILLIT_SESSION_TYPE",
+        "MAX_MCP_OUTPUT_TOKENS",
+        "AUTOSKILLIT_CWD",
+        "AUTOSKILLIT_COMPLETION_MARKER",
+    },
+    "resume": set(),
+}
+
+
+@pytest.mark.parametrize(
+    ("builder", "builder_id"), list(zip(ALL_BUILDERS, BUILDER_IDS)), ids=BUILDER_IDS
+)
+def test_all_exec_builders_filter_headless_exclusive_vars(
+    builder, builder_id, monkeypatch
+) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
+    spec = builder()
+    reinjected = _REINJECTED_BY_BUILDER[builder_id]
     leaking = (
         _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_MCP_ENV_FORWARD_VARS
     ) & spec.env.keys()

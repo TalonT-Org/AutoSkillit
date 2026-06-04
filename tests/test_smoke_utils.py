@@ -2594,14 +2594,19 @@ def test_pre_iteration_cleanup_noop_when_dir_empty(tmp_path: Path) -> None:
 
 def test_select_review_dimensions_happy_path(tmp_path: Path) -> None:
     """select_review_dimensions sorts by tier and excludes S dimensions."""
+    from autoskillit.recipe import get_experiment_type_by_name
     from autoskillit.smoke_utils import select_review_dimensions
+
+    spec = get_experiment_type_by_name("causal_inference")
+    assert spec is not None
+    expected_count = sum(1 for v in spec.dimension_weights.values() if v != "S")
 
     result = select_review_dimensions(
         experiment_type="causal_inference",
         output_dir=str(tmp_path),
     )
     lenses = result["selected_lenses"].split(",")
-    assert len(lenses) == 9
+    assert len(lenses) == expected_count
     manifest = json.loads(Path(result["dimensions_manifest_path"]).read_text())
     tiers = list(manifest.values())
     expected_order = sorted(tiers, key=lambda t: {"H": 0, "M": 1, "L": 2}.get(t, 3))

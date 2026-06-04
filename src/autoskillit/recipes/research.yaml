@@ -231,6 +231,7 @@ steps:
   vis_dial:
     tool: run_skill
     model: ""
+    phoropter_family: vis-lens
     with:
       skill_command: "/autoskillit:select-vis-lenses ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}"
       cwd: "${{ inputs.source_dir }}"
@@ -248,6 +249,7 @@ steps:
   vis_apply:
     tool: run_skill
     model: ""
+    phoropter_family: vis-lens
     with:
       skill_command: "/autoskillit:vis-lens-{slug} {context_path}"
       cwd: "${{ inputs.source_dir }}"
@@ -271,6 +273,7 @@ steps:
   vis_synthesize:
     tool: run_skill
     model: ""
+    phoropter_family: vis-lens
     with:
       skill_command: "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/run-vis-lenses --tier-c-lens=${{ context.tier_c_lens }} --methodology-tradition=${{ context.methodology_tradition }} --disambiguation-rule-applied=${{ context.disambiguation_rule_applied }}"
       cwd: "${{ inputs.source_dir }}"

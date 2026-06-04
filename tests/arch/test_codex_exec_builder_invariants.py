@@ -90,7 +90,7 @@ _REINJECTED_BY_BUILDER: dict[str, set[str]] = {
         "AUTOSKILLIT_CWD",
         "AUTOSKILLIT_COMPLETION_MARKER",
     },
-    "resume": set(),
+    "resume": {"MAX_MCP_OUTPUT_TOKENS"},
 }
 
 

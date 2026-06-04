@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import Severity
@@ -303,3 +305,72 @@ def test_non_canonical_phase_between_canonical_phases_is_transparent():
     phoropter_rules = {"phoropter-phase-order", "phoropter-step-interleaving"}
     findings = [f for f in run_semantic_rules(recipe) if f.rule in phoropter_rules]
     assert len(findings) == 0
+
+
+# --- family prefix loader tests ---
+
+
+def test_load_family_prefixes_vis_lens_has_prefix():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import (
+        _PREFIXES_CACHE,
+        _load_family_prefixes,
+    )
+
+    _PREFIXES_CACHE.clear()
+    result = _load_family_prefixes()
+    assert result["vis-lens"] == "vis"
+    _PREFIXES_CACHE.clear()
+
+
+def test_load_family_prefixes_review_design_key_absent():
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import (
+        _PREFIXES_CACHE,
+        _load_family_prefixes,
+    )
+
+    _PREFIXES_CACHE.clear()
+    result = _load_family_prefixes()
+    assert result.get("review-design") is None
+    _PREFIXES_CACHE.clear()
+
+
+def test_load_family_prefixes_file_not_found_returns_empty(monkeypatch):
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import (
+        _PREFIXES_CACHE,
+        _load_family_prefixes,
+    )
+
+    _PREFIXES_CACHE.clear()
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency.load_yaml",
+        lambda _: (_ for _ in ()).throw(FileNotFoundError("mock")),
+    )
+    result = _load_family_prefixes()
+    assert result == {}
+    _PREFIXES_CACHE.clear()
+
+
+def test_load_family_prefixes_cache_hit(monkeypatch):
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import (
+        _PREFIXES_CACHE,
+        _load_family_prefixes,
+        _load_registry_yaml,
+    )
+
+    _PREFIXES_CACHE.clear()
+    call_count = 0
+    original = _load_registry_yaml
+
+    def counting_loader(path: Path) -> dict[str, str | None]:
+        nonlocal call_count
+        call_count += 1
+        return original(path)
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_registry_yaml",
+        counting_loader,
+    )
+    _load_family_prefixes()
+    _load_family_prefixes()
+    assert call_count == 1
+    _PREFIXES_CACHE.clear()

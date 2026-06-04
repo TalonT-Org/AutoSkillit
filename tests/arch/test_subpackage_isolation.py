@@ -97,6 +97,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_contracts_manifest",  # recipe/_contracts_manifest.py: _MANIFEST_CACHE = YamlFileCache()
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
+        "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(

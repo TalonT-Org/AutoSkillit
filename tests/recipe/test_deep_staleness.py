@@ -335,6 +335,33 @@ def test_block_budgets_missing_file_returns_empty_dict(tmp_path, monkeypatch):
     assert result == {}
 
 
+def test_phoropter_prefix_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
+    """_load_family_prefixes re-reads when phoropter-registry.yaml changes on disk."""
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import (
+        _PREFIXES_CACHE,
+        _load_family_prefixes,
+    )
+
+    assets_dir = tmp_path / "assets"
+    assets_dir.mkdir()
+    registry_path = assets_dir / "phoropter-registry.yaml"
+    registry_path.write_text("families:\n  vis-lens:\n    step_naming:\n      prefix: vis\n")
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency.pkg_root",
+        lambda: tmp_path,
+    )
+    _PREFIXES_CACHE.clear()
+
+    r1 = _load_family_prefixes()
+    assert r1["vis-lens"] == "vis"
+
+    registry_path.write_text("families:\n  vis-lens:\n    step_naming:\n      prefix: viz\n")
+
+    r2 = _load_family_prefixes()
+    assert r2["vis-lens"] == "viz"
+
+
 def test_ml_sub_area_folding_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
     """load_ml_sub_area_folding re-reads when YAML changes on disk."""
     from autoskillit.recipe.methodology_venue_appendix import (

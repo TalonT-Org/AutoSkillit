@@ -40,7 +40,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_merge_queue.py` | Merge queue push routing: `queued_branch` error route enforcement |
 | `rules_optional_capture.py` | Optional capture guard enforcement |
 | `rules_packs.py` | Pack validation (names must exist in `PACK_REGISTRY`) |
-| `rules_phoropter_adjacency.py` | Phoropter phase-order and step-interleaving adjacency rules |
+| `rules_phoropter_adjacency.py` | Phoropter phase-order and step-interleaving adjacency rules; family-prefix loader backed by phoropter-registry.yaml |
 | `rules_pseudocode_sync.py` | SKILL.md pseudocode constant-reference divergence from run_python callables |
 | `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
 | `rules_audit_impl_topology.py` | audit-impl-diff-topology-mismatch semantic rule |

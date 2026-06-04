@@ -184,6 +184,7 @@ class TestPendingCIGuard:
                 request=httpx.Request("POST", url),
             )
 
+        watcher._client = AsyncMock()  # type: ignore[method-assign]
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         state = await watcher._fetch_pr_and_queue_state(1, "owner", "repo", "main")
 

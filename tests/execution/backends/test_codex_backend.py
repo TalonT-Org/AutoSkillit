@@ -154,11 +154,9 @@ class TestCodexBackend:
         assert CodexBackend().capabilities.skills_subdir == "skills"
 
     def test_capabilities_mcp_env_forward_vars(self) -> None:
-        from autoskillit.core import MCP_CLIENT_BACKEND_ENV_VAR
+        from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
 
-        assert CodexBackend().capabilities.mcp_env_forward_vars == frozenset(
-            {MCP_CLIENT_BACKEND_ENV_VAR}
-        )
+        assert CodexBackend().capabilities.mcp_env_forward_vars == CODEX_MCP_ENV_FORWARD_VARS
 
     def test_capabilities_replay_capable_false(self) -> None:
         assert CodexBackend().capabilities.replay_capable is False

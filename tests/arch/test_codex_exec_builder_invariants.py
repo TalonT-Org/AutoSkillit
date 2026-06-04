@@ -53,8 +53,8 @@ BUILDER_IDS = ["headless", "skill_session", "food_truck", "resume"]
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
+    for var in _HEADLESS_EXCLUSIVE_VARS:
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)

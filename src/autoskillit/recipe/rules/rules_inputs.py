@@ -244,7 +244,8 @@ def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
         if step.on_exhausted:
             referenced.add(step.on_exhausted)
     for sentinel in _TERMINAL_TARGETS:
-        referenced.discard(sentinel)
+        if sentinel not in wf.steps:
+            referenced.discard(sentinel)
 
     first_step = next(iter(wf.steps))
     findings: list[RuleFinding] = []

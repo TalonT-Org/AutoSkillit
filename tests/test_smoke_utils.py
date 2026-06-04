@@ -6,7 +6,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -883,6 +883,45 @@ def test_section_re_covers_all_pr_telemetry_sections() -> None:
     matched = m.group(0)
     for section in PR_TELEMETRY_SECTIONS:
         assert section in matched, f"{section} not consumed by section_re"
+
+
+# T_PTS15
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_uses_injected_token_log(
+    mock_run: MagicMock, _mock_sleep: MagicMock, tmp_path: Path
+) -> None:
+    """patch_pr_token_summary uses injected token_log instead of constructing a new one.
+
+    Regression guard for the DI gap: callers with a pre-loaded DefaultTokenLog
+    should be able to inject it to avoid redundant disk I/O, and the function
+    must not replace the injected instance with a fresh DefaultTokenLog.
+    """
+    from autoskillit.pipeline import DefaultTokenLog
+    from autoskillit.smoke_utils._telemetry import patch_pr_token_summary
+
+    cwd = "/clone/test"
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": cwd,
+                "step_name": "plan",
+                "input_tokens": 1000,
+                "output_tokens": 500,
+            },
+        ],
+    )
+
+    token_log = DefaultTokenLog()
+    token_log.load_from_log_dir(tmp_path, cwd_filter=cwd)
+    sentinel_id = id(token_log)
+
+    mock_run.side_effect = _make_gh_mock(get_body="## Summary\nTest PR")
+    result = patch_pr_token_summary(PR_URL, cwd, log_dir=str(tmp_path), token_log=token_log)
+    assert result["success"] == "true"
+    assert id(token_log) == sentinel_id, "injected token_log must not be replaced"
 
 
 # ---------------------------------------------------------------------------

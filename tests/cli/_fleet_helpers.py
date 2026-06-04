@@ -170,7 +170,7 @@ def _make_state_with_tokens(*, input_total: int) -> CampaignState:
         DispatchRecord(
             name="dispatch-1",
             status=DispatchStatus.SUCCESS,
-            token_usage={"input_tokens": input_total},
+            token_usage={"input": input_total},
         )
     ]
     return CampaignState(

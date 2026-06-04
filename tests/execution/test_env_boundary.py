@@ -36,6 +36,7 @@ def test_codex_mcp_env_forward_vars_subset_of_private() -> None:
 def test_codex_forward_vars_cover_server_consumed() -> None:
     """CODEX_MCP_ENV_FORWARD_VARS must cover every server-consumed env var."""
     from autoskillit.core import (
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
         CODEX_MCP_ENV_FORWARD_VARS,
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
         HEADLESS_AUTO_GATE_ENV_VAR,
@@ -51,6 +52,7 @@ def test_codex_forward_vars_cover_server_consumed() -> None:
             MCP_CLIENT_BACKEND_ENV_VAR,
             SESSION_TYPE_ENV_VAR,
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+            AGENT_BACKEND_DYNACONF_ENV_VAR,
         }
     )
     missing = server_consumed_forward_vars - CODEX_MCP_ENV_FORWARD_VARS
@@ -189,16 +191,13 @@ def test_unknown_claude_code_var_is_caught() -> None:
 def test_orchestrator_session_required_env_hygiene_coverage() -> None:
     """Every ORCHESTRATOR_SESSION_REQUIRED_ENV var is accounted for in the env hygiene chain."""
     from autoskillit.core import (
-        AGENT_BACKEND_DYNACONF_ENV_VAR,
-        AGENT_BACKEND_ENV_VAR,
         AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_MCP_ENV_FORWARD_VARS,
         ORCHESTRATOR_SESSION_REQUIRED_ENV,
     )
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
     always_injected = {
-        AGENT_BACKEND_ENV_VAR,
-        AGENT_BACKEND_DYNACONF_ENV_VAR,
         "MCP_CONNECTION_NONBLOCKING",
     }
     allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected
@@ -208,20 +207,24 @@ def test_orchestrator_session_required_env_hygiene_coverage() -> None:
         "Add to AUTOSKILLIT_PRIVATE_ENV_VARS, _HEADLESS_EXCLUSIVE_VARS, or inject via extras."
     )
 
+    mcp_forward_required = always_injected - {"MCP_CONNECTION_NONBLOCKING"}
+    missing_forward = mcp_forward_required - CODEX_MCP_ENV_FORWARD_VARS
+    assert not missing_forward, (
+        f"always_injected vars not in CODEX_MCP_ENV_FORWARD_VARS: {missing_forward}. "
+        f"The Codex MCP server won't receive these vars through config.toml."
+    )
+
 
 def test_skill_session_required_env_hygiene_coverage() -> None:
     """Every SKILL_SESSION_REQUIRED_ENV var is accounted for in the env hygiene chain."""
     from autoskillit.core import (
-        AGENT_BACKEND_DYNACONF_ENV_VAR,
-        AGENT_BACKEND_ENV_VAR,
         AUTOSKILLIT_PRIVATE_ENV_VARS,
+        CODEX_MCP_ENV_FORWARD_VARS,
         SKILL_SESSION_REQUIRED_ENV,
     )
     from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
     always_injected = {
-        AGENT_BACKEND_ENV_VAR,
-        AGENT_BACKEND_DYNACONF_ENV_VAR,
         "MCP_CONNECTION_NONBLOCKING",
     }
     allowed = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS | always_injected
@@ -229,4 +232,11 @@ def test_skill_session_required_env_hygiene_coverage() -> None:
     assert not uncovered, (
         f"Skill required vars not in env hygiene chain: {uncovered}. "
         "Add to AUTOSKILLIT_PRIVATE_ENV_VARS, _HEADLESS_EXCLUSIVE_VARS, or inject via extras."
+    )
+
+    mcp_forward_required = always_injected - {"MCP_CONNECTION_NONBLOCKING"}
+    missing_forward = mcp_forward_required - CODEX_MCP_ENV_FORWARD_VARS
+    assert not missing_forward, (
+        f"always_injected vars not in CODEX_MCP_ENV_FORWARD_VARS: {missing_forward}. "
+        f"The Codex MCP server won't receive these vars through config.toml."
     )

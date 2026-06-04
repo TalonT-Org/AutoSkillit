@@ -67,18 +67,11 @@ AUTOSKILLIT_APPLICABLE_GUARDS: str = "AUTOSKILLIT_APPLICABLE_GUARDS"
 KNOWN_BACKEND_NAMES: frozenset[str] = frozenset({AGENT_BACKEND_CLAUDE_CODE, AGENT_BACKEND_CODEX})
 MCP_CLIENT_BACKEND_ENV_VAR: str = "AUTOSKILLIT_MCP_CLIENT_BACKEND"
 
-# AGENT_BACKEND_ENV_VAR is intentionally absent: it is not in
-# _HEADLESS_EXCLUSIVE_VARS (_claude_prompt.py) and removing it here
-# allows natural propagation through both scrub stages in codex.py's
-# build_skill_session_cmd (the _HEADLESS_EXCLUSIVE_VARS filter and
-# CodexEnvPolicy.build_env).  Backends inject the canonical value via
-# extras regardless.
-#
-# AGENT_BACKEND_DYNACONF_ENV_VAR (the nested Dynaconf form) is also
-# absent: _config_loader.py pops only the flat form before Dynaconf
-# construction — the nested form survives and is resolved by Dynaconf
-# as agent_backend.backend.  Both forms must be injected by cmd
-# builders so child MCP servers inherit the parent's backend.
+# Both AGENT_BACKEND_ENV_VAR (flat) and AGENT_BACKEND_DYNACONF_ENV_VAR
+# (nested Dynaconf form) are scrubbed from ambient env by build_env(),
+# then re-injected via extras in all cmd builders.  The nested form is
+# additionally forwarded to the MCP server via CODEX_MCP_ENV_FORWARD_VARS
+# in config.toml so Dynaconf resolves agent_backend.backend in the child.
 AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
     {
         HEADLESS_ENV_VAR,
@@ -106,6 +99,8 @@ AUTOSKILLIT_PRIVATE_ENV_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_CWD",
         "MAX_MCP_OUTPUT_TOKENS",
         "AUTOSKILLIT_SESSION_DEADLINE",
+        AGENT_BACKEND_ENV_VAR,
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
     }
 )
 
@@ -154,6 +149,7 @@ CODEX_MCP_ENV_FORWARD_VARS: frozenset[str] = frozenset(
         MCP_CLIENT_BACKEND_ENV_VAR,
         SESSION_TYPE_ENV_VAR,
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
     }
 )
 

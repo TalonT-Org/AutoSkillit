@@ -103,6 +103,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_skill_backend_annotations.py` | Bidirectional annotation enforcement: forward (pattern → uses_capabilities), reverse (annotation → justified), co-requirement, and derivation checks |
 | `test_skill_capability_registry.py` | Capability registry consistency: every SKILL_CAPABILITY_REGISTRY key consumed, backend_requirements derivable from uses_capabilities, no unknown capabilities declared |
 | `test_write_guard_resolution.py` | Arch test: extract_redirect_targets must use resolve_write_target, not inline startswith |
+| `test_codex_env_forward_bridge.py` | Cross-layer bridge: CODEX_MCP_ENV_FORWARD_VARS ↔ cmd builders ↔ capabilities parity |
 | `test_codex_timeout_coherence.py` | Cross-system timeout hierarchy: Codex MCP tool_timeout_sec must exceed max session duration |
 | `test_skill_search_dir_symmetry.py` | Suppression-delivery symmetry invariants for project-local skill search dirs |
 

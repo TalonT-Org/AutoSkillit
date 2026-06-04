@@ -23,6 +23,7 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     CODEX_EFFORT_MAPPING,
     CODEX_INTERACTIVE_REQUIRED_ENV,
+    CODEX_MCP_ENV_FORWARD_VARS,
     CODEX_MODEL_ALIASES,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
@@ -390,7 +391,7 @@ class CodexBackend:
             version_check_command="codex --version",
             process_name="codex",
             skills_subdir="skills",
-            mcp_env_forward_vars=frozenset({MCP_CLIENT_BACKEND_ENV_VAR}),
+            mcp_env_forward_vars=CODEX_MCP_ENV_FORWARD_VARS,
             replay_capable=False,
             record_capable=False,
             anthropic_provider_capable=False,
@@ -471,10 +472,16 @@ class CodexBackend:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        headless_extras: dict[str, str] = {}
+        headless_extras: dict[str, str] = {
+            "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
+            "AUTOSKILLIT_SESSION_TYPE": "",
+            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
+            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
+        }
         if env_extras:
             headless_extras.update(env_extras)
-        headless_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         env = self.env_policy().build_env(filtered_base, extras=headless_extras)
         return CmdSpec(cmd=tuple(cmd), env=env)
 
@@ -768,9 +775,18 @@ class CodexBackend:
             builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
         base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         merged_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        merged_extras.update(
+            {
+                "AUTOSKILLIT_HEADLESS": "",
+                "AUTOSKILLIT_HEADLESS_AUTO_GATE": "",
+                "AUTOSKILLIT_SESSION_TYPE": "",
+                AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
+                MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+                FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
+            }
+        )
         if env_extras:
             merged_extras.update(env_extras)
-        merged_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         if add_dirs:
             merged_extras.setdefault("CODEX_HOME", str(add_dirs[0]))
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
@@ -807,9 +823,18 @@ class CodexBackend:
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        resume_extras.update(
+            {
+                "AUTOSKILLIT_HEADLESS": "1",
+                "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
+                "AUTOSKILLIT_SESSION_TYPE": "",
+                AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
+                MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+                FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
+            }
+        )
         if env_extras:
             resume_extras.update(env_extras)
-        resume_extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
         env = self.env_policy().build_env(
             filtered_base,
             extras=resume_extras,

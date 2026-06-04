@@ -217,12 +217,14 @@ def test_alias_identity() -> None:
     assert build_agent_env is build_claude_env
 
 
-def test_agent_backend_not_scrubbed() -> None:
-    # AUTOSKILLIT_AGENT_BACKEND must not be stripped by build_agent_env so that
-    # hook subprocesses and test runners can read the session identity.
+def test_agent_backend_scrubbed_and_reinjected_via_extras() -> None:
     result = build_agent_env(base={"AUTOSKILLIT_AGENT_BACKEND": "codex", "HOME": "/tmp"})
-    assert "AUTOSKILLIT_AGENT_BACKEND" in result
-    assert result["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
+    assert "AUTOSKILLIT_AGENT_BACKEND" not in result
+    result_with_extras = build_agent_env(
+        base={"HOME": "/tmp"},
+        extras={"AUTOSKILLIT_AGENT_BACKEND": "codex"},
+    )
+    assert result_with_extras["AUTOSKILLIT_AGENT_BACKEND"] == "codex"
 
 
 def test_build_agent_env_rejects_invalid_session_type() -> None:

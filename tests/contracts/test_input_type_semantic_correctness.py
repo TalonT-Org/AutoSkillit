@@ -20,6 +20,8 @@ def _infer_path_kind_from_skillmd(
 ) -> Literal["file", "directory", "ambiguous"]:
     if input_name.endswith(("_dir", "_directory")) or input_name == "run_dir":
         return "directory"
+    if "worktree" in input_name or input_name == "workspace":
+        return "directory"
     if input_name.endswith("_path") and not any(
         kw in input_name for kw in ("dir", "folder", "workspace")
     ):

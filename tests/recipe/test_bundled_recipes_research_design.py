@@ -224,14 +224,20 @@ class TestResearchDesignRecipeStructure:
 
     def test_vis_dial_captures(self, recipe) -> None:
         capture = recipe.steps["vis_dial"].capture
-        for key in ("selected_lenses", "lens_context_paths"):
+        for key in (
+            "selected_lenses",
+            "lens_context_paths",
+            "disambiguation_rule_applied",
+            "tier_c_lens",
+            "methodology_tradition",
+        ):
             assert key in capture, f"vis_dial missing capture key: {key}"
 
     def test_vis_apply_phoropter_family(self, recipe) -> None:
         assert recipe.steps["vis_apply"].phoropter_family is None
 
     def test_vis_apply_capture_list(self, recipe) -> None:
-        assert "all_figure_spec_paths" in recipe.steps["vis_apply"].capture_list
+        assert "vis_lens_output_paths" in recipe.steps["vis_apply"].capture_list
 
     def test_vis_apply_retries_zero(self, recipe) -> None:
         assert recipe.steps["vis_apply"].retries == 0

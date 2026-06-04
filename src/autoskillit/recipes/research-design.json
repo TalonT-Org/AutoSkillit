@@ -206,11 +206,14 @@
         "skill_command": "/autoskillit:select-vis-lenses ${{ inputs.source_dir }} ${{ context.experiment_plan }} ${{ context.scope_report }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "vis_dial",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/dial"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/select-vis-lenses"
       },
       "capture": {
         "selected_lenses": "${{ result.selected_lenses }}",
-        "lens_context_paths": "${{ result.lens_context_paths }}"
+        "lens_context_paths": "${{ result.lens_context_paths }}",
+        "disambiguation_rule_applied": "${{ result.disambiguation_rule_applied }}",
+        "tier_c_lens": "${{ result.tier_c_lens }}",
+        "methodology_tradition": "${{ result.methodology_tradition }}"
       },
       "on_success": "vis_apply",
       "on_failure": "escalate_stop"
@@ -222,10 +225,10 @@
         "skill_command": "/autoskillit:vis-lens-{slug} {context_path} ${{ context.experiment_plan }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "vis_apply",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/apply"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/run-vis-lenses"
       },
       "capture_list": {
-        "all_figure_spec_paths": "${{ result.figure_spec_path }}"
+        "vis_lens_output_paths": "${{ result.diagram_path }}"
       },
       "optional_context_refs": [
         "selected_lenses",
@@ -239,10 +242,10 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/apply",
+        "skill_command": "/autoskillit:synthesize-vis-plan ${{ inputs.source_dir }} ${{ context.experiment_plan }} {{AUTOSKILLIT_TEMP}}/run-vis-lenses --tier-c-lens=${{ context.tier_c_lens }} --methodology-tradition=${{ context.methodology_tradition }} --disambiguation-rule-applied=${{ context.disambiguation_rule_applied }}",
         "cwd": "${{ inputs.source_dir }}",
         "step_name": "vis_synthesize",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}/synthesize"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/synthesize-vis-plan"
       },
       "capture": {
         "visualization_plan_path": "${{ result.visualization_plan_path }}",

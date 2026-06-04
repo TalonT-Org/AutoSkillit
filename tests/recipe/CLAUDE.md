@@ -187,7 +187,6 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_rate_limit_parity.py` | Tests for on_rate_limit parity with on_context_limit across bundled recipes |
 | `test_rules_stop_sentinel_direction.py` | Tests for stop-sentinel-success-mismatch semantic validation rule |
 | `test_rules_tools.py` | Tests for tools semantic validation rule |
-| `test_rules_unreachable_model.py` | Tests for unreachable_model semantic validation rule |
 | `test_rules_unsatisfied_input.py` | Tests for unsatisfied_input semantic validation rule |
 | `test_rules_verdict.py` | Tests for verdict semantic validation rule |
 | `test_rules_weak_constraint.py` | Tests for weak_constraint semantic validation rule |

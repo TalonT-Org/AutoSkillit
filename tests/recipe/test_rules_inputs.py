@@ -16,6 +16,7 @@ from autoskillit.recipe.schema import (
     StepResultCondition,
     StepResultRoute,
 )
+from tests.recipe.conftest import _make_workflow
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -427,3 +428,27 @@ class TestIngredientConditionValueDomain:
         findings = run_semantic_rules(recipe)
         rule_findings = [f for f in findings if f.rule == "ingredient-condition-value-domain"]
         assert rule_findings == []
+
+
+def test_unreachable_steps_detects_orphan() -> None:
+    wf = _make_workflow(
+        {
+            "start": {"tool": "run_cmd", "on_success": "done"},
+            "orphan": {"tool": "run_cmd", "on_success": "done"},
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    assert any(f.rule == "unreachable-step" and "orphan" in f.message for f in findings)
+
+
+def test_unreachable_steps_first_step_clean() -> None:
+    wf = _make_workflow(
+        {
+            "start": {"tool": "run_cmd", "on_success": "done"},
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+    findings = run_semantic_rules(wf)
+    unreachable = [f for f in findings if f.rule == "unreachable-step"]
+    assert unreachable == []

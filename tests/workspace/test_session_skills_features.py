@@ -75,7 +75,7 @@ def test_other_skills_unaffected_by_fleet_feature(tmp_path: Path) -> None:
     skill_names_on = {p.parent.name for p in session_on.glob(".claude/skills/*/SKILL.md")}
     assert "make-plan" in skill_names_off
     assert "implement-worktree" in skill_names_off
-    # Count invariant: fleet=False removes exactly the fleet-category skills
+    # off ⊆ on: disabling fleet only removes skills, never introduces new suppressions
     assert skill_names_off.issubset(skill_names_on), (
         "fleet=False must only remove skills, not introduce new suppressions"
     )

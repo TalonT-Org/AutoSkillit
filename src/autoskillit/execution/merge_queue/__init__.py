@@ -68,33 +68,38 @@ class DefaultMergeQueueWatcher:
     Never raises; all errors are returned as structured dicts.
     """
 
+    _UNRESOLVED = object()
+
     def __init__(
         self,
-        token: str | None | Callable[[], str | None],
         *,
+        token: str | None | Callable[[], str | None] = None,
         tracker: GitHubApiLog | None = None,
     ) -> None:
         self._token_factory: Callable[[], str | None] | None
         self._tracker = tracker
         if callable(token):
             self._token_factory = token
-            self._client: httpx.AsyncClient | None = None
+            self._token: str | None = self._UNRESOLVED  # type: ignore[assignment]
         else:
             self._token_factory = None
-            self._client = make_tracked_httpx_client(
-                self._tracker,
-                timeout=httpx.Timeout(30.0),
-                headers=github_headers(token),
-                limits=httpx.Limits(keepalive_expiry=60),
-            )
+            self._token = token
+        self._client: httpx.AsyncClient | None = None
+
+    def _resolve_token(self) -> str | None:
+        if self._token is self._UNRESOLVED:
+            self._token = self._token_factory() if self._token_factory is not None else None
+        return self._token
+
+    def _headers(self) -> dict[str, str]:
+        return github_headers(self._resolve_token())
 
     def _ensure_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            resolved = self._token_factory() if self._token_factory is not None else None
             self._client = make_tracked_httpx_client(
                 self._tracker,
                 timeout=httpx.Timeout(30.0),
-                headers=github_headers(resolved),
+                headers=self._headers(),
                 limits=httpx.Limits(keepalive_expiry=60),
             )
         return self._client

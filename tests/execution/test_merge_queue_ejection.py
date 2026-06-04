@@ -525,6 +525,7 @@ class TestEnqueueMethod:
                 request=httpx.Request("POST", "http://x"),
             )
 
+        watcher._client = AsyncMock()  # type: ignore[method-assign]
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         result = await watcher.enqueue(
             pr_number=42,
@@ -555,6 +556,7 @@ class TestEnqueueMethod:
                 request=httpx.Request("POST", "http://x"),
             )
 
+        watcher._client = AsyncMock()  # type: ignore[method-assign]
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         result = await watcher.enqueue(
             pr_number=42,
@@ -591,6 +593,7 @@ class TestEnqueueMethod:
                 request=httpx.Request("POST", "http://x"),
             )
 
+        watcher._client = AsyncMock()  # type: ignore[method-assign]
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         result = await watcher.enqueue(
             pr_number=42,
@@ -621,6 +624,7 @@ class TestEnqueueMethod:
                 request=httpx.Request("POST", "http://x"),
             )
 
+        watcher._client = AsyncMock()  # type: ignore[method-assign]
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         result = await watcher.enqueue(
             pr_number=42,
@@ -649,6 +653,7 @@ class TestEnqueueMethod:
                 request=httpx.Request("POST", "http://x"),
             )
 
+        watcher._client = AsyncMock()  # type: ignore[method-assign]
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         result = await watcher.enqueue(
             pr_number=42,

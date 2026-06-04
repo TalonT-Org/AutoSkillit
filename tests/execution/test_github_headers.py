@@ -59,7 +59,8 @@ async def test_merge_queue_watcher_includes_user_agent_in_client_headers():
     """
     watcher = DefaultMergeQueueWatcher(token=None)
     try:
-        client_headers = dict(watcher._client.headers)
+        client = watcher._ensure_client()
+        client_headers = dict(client.headers)
         assert client_headers.get("user-agent") == "autoskillit"
     finally:
         await watcher.aclose()
@@ -70,7 +71,16 @@ async def test_merge_queue_watcher_includes_user_agent_with_token():
     """User-Agent must be present even when a token is provided."""
     watcher = DefaultMergeQueueWatcher(token="tok")
     try:
-        client_headers = dict(watcher._client.headers)
+        client = watcher._ensure_client()
+        client_headers = dict(client.headers)
         assert client_headers.get("user-agent") == "autoskillit"
     finally:
         await watcher.aclose()
+
+
+def test_merge_queue_watcher_has_resolve_token_interface():
+    """DefaultMergeQueueWatcher matches sibling token resolution pattern."""
+    watcher = DefaultMergeQueueWatcher(token=None)
+    assert hasattr(watcher, "_resolve_token")
+    assert hasattr(watcher, "_UNRESOLVED")
+    assert watcher._resolve_token() is None  # type: ignore[attr-defined]

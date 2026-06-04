@@ -301,7 +301,6 @@ def run_update_checks(home: Path | None = None) -> None:
     - ``CI=1`` — generic CI environment
     - ``AUTOSKILLIT_SKIP_STALE_CHECK=1`` — explicit bypass
     - ``AUTOSKILLIT_SKIP_UPDATE_CHECK=1`` — explicit bypass (preferred name)
-    - ``AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK=1`` — deprecated alias for the above
     - Non-TTY stdin or stdout
 
     Install types ``LOCAL_EDITABLE``, ``LOCAL_PATH``, and ``UNKNOWN`` are
@@ -312,7 +311,6 @@ def run_update_checks(home: Path | None = None) -> None:
         or os.environ.get("CI")
         or os.environ.get("AUTOSKILLIT_SKIP_STALE_CHECK")
         or os.environ.get("AUTOSKILLIT_SKIP_UPDATE_CHECK")
-        or os.environ.get("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK")
         or not sys.stdin.isatty()
         or not sys.stdout.isatty()
     ):
@@ -322,7 +320,6 @@ def run_update_checks(home: Path | None = None) -> None:
         **os.environ,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
-        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
     }
 
     info = detect_install()

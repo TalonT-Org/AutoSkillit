@@ -51,7 +51,6 @@ def _setup_run_checks(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
 
     fake_stdin = MagicMock()
@@ -281,7 +280,6 @@ def test_yes_passes_skip_env_to_subprocess(
     for env in env_passed:
         assert env.get("AUTOSKILLIT_SKIP_STALE_CHECK") == "1"
         assert env.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
-        assert env.get("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK") == "1"
 
 
 def test_yes_single_invocation_exits_without_any_other_prompt(

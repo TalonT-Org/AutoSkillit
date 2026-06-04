@@ -49,9 +49,8 @@ Set any of these env vars to silence all update checks for a single invocation:
 
     AUTOSKILLIT_SKIP_UPDATE_CHECK=1 autoskillit <command>
     AUTOSKILLIT_SKIP_STALE_CHECK=1 autoskillit <command>
-    AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK=1 autoskillit <command>
 
-Both are automatically injected by the update logic itself so that subprocesses
+These are automatically injected by the update logic itself so that subprocesses
 launched during an update do not re-enter the check.
 
 ## Install detection

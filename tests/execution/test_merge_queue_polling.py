@@ -222,6 +222,7 @@ class TestDefaultMergeQueueWatcher:
             )
             return resp
 
+        watcher._client = AsyncMock()  # type: ignore[method-assign]
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         with pytest.raises(RuntimeError, match="GraphQL error"):
             await watcher._fetch_pr_and_queue_state(42, "owner", "repo", "main")
@@ -452,6 +453,7 @@ class TestMergeQueueReliability:
                 data = {"data": {}}
             return httpx.Response(200, json=data, request=httpx.Request("POST", url))
 
+        watcher._client = AsyncMock()  # type: ignore[method-assign]
         watcher._client.post = _mock_post  # type: ignore[method-assign]
         with patch("autoskillit.execution.merge_queue.asyncio.sleep", new_callable=AsyncMock):
             await watcher.wait(

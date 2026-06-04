@@ -29,7 +29,6 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
         ("CI", "1"),
         ("AUTOSKILLIT_SKIP_STALE_CHECK", "1"),
         ("AUTOSKILLIT_SKIP_UPDATE_CHECK", "1"),
-        ("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", "1"),
     ],
 )
 def test_run_update_checks_skips_on_guard_env_var(
@@ -45,7 +44,6 @@ def test_run_update_checks_skips_on_guard_env_var(
         "CI",
         "AUTOSKILLIT_SKIP_STALE_CHECK",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK",
-        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK",
     ]:
         if other != env_var:
             monkeypatch.delenv(other, raising=False)
@@ -68,7 +66,6 @@ def test_run_update_checks_skips_non_tty_stdin(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
     fake_stdin = io.StringIO()
     fake_stdout = io.StringIO()
     monkeypatch.setattr(sys, "stdin", fake_stdin)
@@ -89,7 +86,6 @@ def test_run_update_checks_skips_non_tty_stdout(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
 
     fake_stdin = MagicMock()
     fake_stdin.isatty.return_value = True
@@ -116,7 +112,6 @@ def test_run_update_checks_skips_local_and_unknown_install_types(
     monkeypatch.delenv("CI", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_STALE_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_SKIP_UPDATE_CHECK", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK", raising=False)
     monkeypatch.delenv("AUTOSKILLIT_FORCE_UPDATE_CHECK", raising=False)
 
     fake_stdin = MagicMock()

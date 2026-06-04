@@ -36,7 +36,6 @@ def run_update_command(home: Path | None = None) -> None:
         **os.environ,
         "AUTOSKILLIT_SKIP_STALE_CHECK": "1",
         "AUTOSKILLIT_SKIP_UPDATE_CHECK": "1",
-        "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK": "1",
     }
 
     info = detect_install()

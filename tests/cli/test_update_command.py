@@ -157,7 +157,6 @@ def test_update_passes_skip_env_to_subprocess(
     for env in env_passed:
         assert env.get("AUTOSKILLIT_SKIP_STALE_CHECK") == "1"
         assert env.get("AUTOSKILLIT_SKIP_UPDATE_CHECK") == "1"
-        assert env.get("AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK") == "1"
 
 
 def test_update_verifies_version_advance_and_warns_on_failure(

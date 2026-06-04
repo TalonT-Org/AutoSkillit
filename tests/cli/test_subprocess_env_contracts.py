@@ -105,9 +105,6 @@ def test_autoskillit_subprocess_calls_inject_skip_stale_check_guard() -> None:
     )
 
 
-DRIFT_GUARD = "AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK"
-
-
 def test_update_checks_all_subprocess_calls_have_env_kwarg() -> None:
     """Every subprocess.run call in cli/_update_checks.py must carry env=.
 
@@ -142,37 +139,8 @@ def test_update_checks_all_subprocess_calls_have_env_kwarg() -> None:
         + "\n".join(violations)
     )
 
-    # File-level: must define both guard env vars
+    # File-level: must define the guard env var
     assert REQUIRED_GUARD in content
-    assert DRIFT_GUARD in content
-
-
-def test_all_call_sites_set_autoskillit_skip_source_drift_check() -> None:
-    """Every CLI file that defines AUTOSKILLIT_SKIP_STALE_CHECK must also define
-    AUTOSKILLIT_SKIP_SOURCE_DRIFT_CHECK — both guards travel together.
-
-    Rationale: a subprocess launched by the update-check path could re-enter the
-    drift gate unless both skip vars are set.  This test enforces co-location.
-    """
-    if not CLI_ROOT.is_dir():
-        pytest.skip("Source tree unavailable")
-
-    violations: list[str] = []
-    for py_file in sorted(CLI_ROOT.rglob("*.py")):
-        content = py_file.read_text(encoding="utf-8")
-        non_comment = "\n".join(
-            line for line in content.splitlines() if not line.lstrip().startswith("#")
-        )
-        if REQUIRED_GUARD not in non_comment:
-            continue
-        if DRIFT_GUARD not in non_comment:
-            rel = py_file.relative_to(CLI_ROOT.parents[2])
-            violations.append(f"{rel}: defines '{REQUIRED_GUARD}' but not '{DRIFT_GUARD}'")
-
-    assert not violations, (
-        f"Found {len(violations)} file(s) with {REQUIRED_GUARD!r} but missing "
-        f"{DRIFT_GUARD!r}:\n\n" + "\n".join(violations)
-    )
 
 
 def test_update_command_all_subprocess_calls_have_env_kwarg() -> None:
@@ -205,7 +173,6 @@ def test_update_command_all_subprocess_calls_have_env_kwarg() -> None:
     )
 
     assert REQUIRED_GUARD in content
-    assert DRIFT_GUARD in content
 
 
 # ─────────────────────────────────────────────────────────────────────────────

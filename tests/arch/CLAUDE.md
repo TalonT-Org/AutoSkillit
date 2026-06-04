@@ -84,6 +84,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_tools_execution_decomposition.py` | Structural decomposition guard for tools_execution.py split |
 | `test_transforms_hygiene.py` | Structural guards for FastMCP visibility tag hygiene |
 | `test_variadic_ordering.py` | Architectural invariant: positional initial_prompt must precede all variadic CLI flags in build_interactive_cmd |
+| `test_codex_exec_builder_invariants.py` | Cross-builder invariant matrix: parametrized tests asserting shared structural properties across all four Codex exec builders |
 | `test_codex_flag_metadata_coverage.py` | Closed categorization guard: every CodexFlags member must appear in VARIADIC_CODEX_FLAGS or NON_VARIADIC_CODEX_FLAGS; model alias/effort key parity |
 | `test_provider_extras_denylist.py` | Structural and AST enforcement: provider-extras filter sites must use named *_DENYLIST constants |
 | `test_flag_metadata_coverage.py` | Closed categorization guard: every ClaudeFlags member must appear in VARIADIC_CLAUDE_FLAGS or NON_VARIADIC_CLAUDE_FLAGS |

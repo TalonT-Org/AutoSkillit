@@ -65,7 +65,7 @@ wheels = [
 
 [[package]]
 name = "autoskillit"
-version = "0.10.646"
+version = "0.10.647"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

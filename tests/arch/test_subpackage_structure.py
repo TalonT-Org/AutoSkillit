@@ -28,6 +28,7 @@ class TestCoreSubpackages:
             "_type_capture",
             "_type_helpers",
             "_type_inspector",
+            "_type_phoropter",
             "_type_plugin_source",
             "_type_protocols_backend",
             "_type_protocols_execution",

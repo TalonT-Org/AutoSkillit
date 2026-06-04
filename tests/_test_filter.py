@@ -249,6 +249,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "config", "core", "pipeline", "recipe", "server", "workspace"}
     ),
     "_type_exceptions": frozenset({"core", "fleet", "recipe", "server"}),
+    "_type_phoropter": frozenset({"core"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
     "bash_write_targets": frozenset({"core", "execution"}),

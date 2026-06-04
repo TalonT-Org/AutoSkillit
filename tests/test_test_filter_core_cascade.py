@@ -103,6 +103,7 @@ class TestModuleCascadeCore:
             "_type_session_env",
             "_type_capture",
             "_type_inspector",
+            "_type_phoropter",
             "_type_token",
             "_type_constants_env",
             "_type_constants_features",
@@ -178,6 +179,9 @@ class TestModuleCascadeCore:
 
     def test_type_token_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_token"] == frozenset({"core", "execution"})
+
+    def test_type_phoropter_cascade(self) -> None:
+        assert MODULE_CASCADE_CORE["_type_phoropter"] == frozenset({"core"})
 
     def test_type_protocols_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_protocols_backend"] == frozenset(
@@ -555,6 +559,31 @@ class TestBuildTestScopeCoreCascade:
         for pkg in ["core", "execution"]:
             assert pkg in dir_names, f"narrow cascade should include {pkg}"
         for excluded in ["config", "pipeline", "fleet", "migration", "workspace"]:
+            assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
+
+    def test_type_phoropter_narrow_cascade(self, tmp_path: Path) -> None:
+        """_type_phoropter → narrow cascade of {"core"} (no consumers yet — brand new module)."""
+        tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/types/_type_phoropter.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+        )
+        assert result is not None
+        dir_names = {p.name for p in result}
+        assert "core" in dir_names, "narrow cascade should include 'core'"
+        for excluded in [
+            "config",
+            "execution",
+            "pipeline",
+            "fleet",
+            "migration",
+            "workspace",
+            "recipe",
+            "report",
+            "cli",
+            "server",
+        ]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_protocols_backend_narrow_cascade(self, tmp_path: Path) -> None:

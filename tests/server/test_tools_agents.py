@@ -574,5 +574,5 @@ def test_agent_resource_strips_frontmatter():
 
     result = get_plan_review_agent("plan-foundation-auditor")
     assert not result.startswith("---"), "Frontmatter delimiter still present"
-    assert "model:" not in result.split("\n")[0], "Frontmatter field leaked into first line"
+    assert "model:" not in result, "Frontmatter field leaked into result"
     assert result.strip(), "Frontmatter-stripped body should not be empty"

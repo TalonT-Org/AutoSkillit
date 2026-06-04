@@ -450,4 +450,5 @@ def test_unreachable_steps_first_step_clean() -> None:
         }
     )
     findings = run_semantic_rules(wf)
-    assert not any(f.rule == "unreachable-step" and "start" in f.step_name for f in findings)
+    unreachable = [f for f in findings if f.rule == "unreachable-step"]
+    assert unreachable == []

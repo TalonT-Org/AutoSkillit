@@ -38,8 +38,6 @@ _CODEX_VALUE_BEARING_FLAGS: frozenset[str] = frozenset(
         CodexFlags.MODEL,
         CodexFlags.MODEL_SHORT,
         CodexFlags.ADD_DIR,
-        CodexFlags.ASK_FOR_APPROVAL,
-        CodexFlags.ASK_FOR_APPROVAL_SHORT,
         CodexFlags.SANDBOX,
         CodexFlags.CONFIG_OVERRIDE,
     }

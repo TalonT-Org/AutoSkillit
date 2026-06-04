@@ -20,6 +20,8 @@ from .claude import (
     ClaudeStreamParser,
 )
 from .codex import (
+    CODEX_EXEC_FLAGS,
+    CODEX_TOP_LEVEL_ONLY_FLAGS,
     CodexBackend,
     CodexEnvPolicy,
     CodexFlags,
@@ -48,6 +50,8 @@ def get_backend(name: str) -> CodingAgentBackend:
 
 __all__ = [
     "BACKEND_REGISTRY",
+    "CODEX_EXEC_FLAGS",
+    "CODEX_TOP_LEVEL_ONLY_FLAGS",
     "ClaudeCodeBackend",
     "ClaudeEnvPolicy",
     "ClaudeResultParser",

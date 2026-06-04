@@ -31,6 +31,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_backend_dispatch.py` | End-to-end tests verifying run_headless_core routes command construction through ctx.backend |
 | `test_diff_annotator.py` | Behavioral tests for execution/diff_annotator.py |
 | `test_exit_classification.py` | Unit tests for classify_infra_exit and InfraExitCategory enum |
+| `test_codex_flag_contracts.py` | Contract tests for Codex CLI flags: registry audit, metadata coverage, value-bearing subset |
 | `test_flag_contracts.py` | Contract tests for Claude CLI flags |
 | `test_flush_completeness_guard.py` | Structural guard: every required-container field must appear in flush output |
 | `test_flush_provider_integration.py` | Integration seam tests: provider fields forwarded from _execute_claude_headless to flush_session_log |

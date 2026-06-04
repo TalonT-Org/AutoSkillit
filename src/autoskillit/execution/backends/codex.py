@@ -70,6 +70,8 @@ from autoskillit.execution.backends._codex_config import (
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 
 __all__ = [
+    "CODEX_EXEC_FLAGS",
+    "CODEX_TOP_LEVEL_ONLY_FLAGS",
     "CodexBackend",
     "CodexEnvPolicy",
     "CodexFlags",
@@ -84,17 +86,30 @@ logger = get_logger(__name__)
 class CodexFlags(StrEnum):
     JSON = "--json"
     SANDBOX = "--sandbox"
-    ASK_FOR_APPROVAL = "--ask-for-approval"
-    ASK_FOR_APPROVAL_SHORT = "-a"
     MODEL = "--model"
     MODEL_SHORT = "-m"
     ADD_DIR = "--add-dir"
-    IGNORE_USER_CONFIG = "--ignore-user-config"
-    EPHEMERAL = "--ephemeral"
     RESUME_SUBCOMMAND = "resume"
-    LAST = "--last"
     CONFIG_OVERRIDE = "-c"
     DANGEROUSLY_BYPASS = "--dangerously-bypass-approvals-and-sandbox"
+
+
+CODEX_EXEC_FLAGS: frozenset[str] = frozenset(
+    {
+        CodexFlags.JSON,
+        CodexFlags.SANDBOX,
+        CodexFlags.MODEL,
+        CodexFlags.CONFIG_OVERRIDE,
+        CodexFlags.ADD_DIR,
+    }
+)
+
+CODEX_TOP_LEVEL_ONLY_FLAGS: frozenset[str] = frozenset(
+    {
+        CodexFlags.DANGEROUSLY_BYPASS,
+        CodexFlags.MODEL_SHORT,
+    }
+)
 
 
 CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
@@ -606,8 +621,6 @@ class CodexBackend:
             CodexFlags.JSON,
             CodexFlags.SANDBOX,
             "workspace-write",
-            CodexFlags.ASK_FOR_APPROVAL_SHORT,
-            "never",
             CodexFlags.CONFIG_OVERRIDE,
             _IMAGE_GENERATION_DISABLED,
         ]
@@ -715,8 +728,6 @@ class CodexBackend:
             CodexFlags.JSON,
             CodexFlags.SANDBOX,
             "read-only",
-            CodexFlags.ASK_FOR_APPROVAL_SHORT,
-            "never",
             CodexFlags.CONFIG_OVERRIDE,
             "web_search=disabled",
             CodexFlags.CONFIG_OVERRIDE,

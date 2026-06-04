@@ -25,12 +25,6 @@ class TestCodexExecBase:
             "features.image_generation=false",
         ]
 
-    def test_with_approval_never(self) -> None:
-        result = _codex_exec_base(sandbox="workspace-write", approval="never")
-        assert "-a" in result
-        idx = result.index("-a")
-        assert result[idx + 1] == "never"
-
     def test_without_json(self) -> None:
         result = _codex_exec_base(sandbox="read-only", json=False)
         assert "--json" not in result

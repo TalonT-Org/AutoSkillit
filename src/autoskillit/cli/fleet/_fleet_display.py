@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from autoskillit.core import TerminalColumn, get_logger
-from autoskillit.pipeline.telemetry_fmt import TelemetryFormatter
+from autoskillit.pipeline import TelemetryFormatter
 
 logger = get_logger(__name__)
 

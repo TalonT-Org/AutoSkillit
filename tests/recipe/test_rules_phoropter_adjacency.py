@@ -610,3 +610,46 @@ def test_standalone_synthesize_does_not_complete_family():
     assert len(findings) == 1
     assert findings[0].step_name == "plain-step"
     assert "test-fam" in findings[0].message
+
+
+def test_route_action_between_complete_sequential_family_blocks_is_transparent(monkeypatch):
+    import autoskillit.recipe  # noqa: F401
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"vis-lens": "vis"},
+    )
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "routing-step": RecipeStep(action="route"),
+            "vis_dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "vis_apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "vis_synthesize": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-step-interleaving"]
+    assert len(findings) == 0
+
+
+def test_two_family_phase_order_no_findings(monkeypatch):
+    import autoskillit.recipe  # noqa: F401
+
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"vis-lens": "vis"},
+    )
+    recipe = _make_recipe(
+        {
+            "dial": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "apply": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "synthesize": RecipeStep(tool="run_skill", phoropter_family="review-design"),
+            "vis_dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "vis_apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+            "vis_synthesize": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
+        }
+    )
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == "phoropter-phase-order"]
+    assert len(findings) == 0

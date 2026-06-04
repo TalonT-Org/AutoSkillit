@@ -59,6 +59,8 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
             continue
         if event_type == CodexEventType.THREAD_STARTED:
             acc.session_id = obj.get("thread_id", "")
+        elif event_type in (CodexEventType.TURN_STARTED, CodexEventType.ITEM_STARTED):
+            continue
         elif event_type == CodexEventType.ITEM_COMPLETED:
             item = obj.get("item", {})
             if not isinstance(item, dict):
@@ -216,6 +218,13 @@ class CodexStreamParser:
                 is_terminal=False,
                 has_marker=False,
                 session_id=obj.get("thread_id", "") or None,
+            )
+
+        if event_type in (CodexEventType.TURN_STARTED, CodexEventType.ITEM_STARTED):
+            return SessionEvent(
+                kind=BackendEventKind.IGNORED,
+                is_terminal=False,
+                has_marker=False,
             )
 
         if event_type == CodexEventType.ITEM_COMPLETED:

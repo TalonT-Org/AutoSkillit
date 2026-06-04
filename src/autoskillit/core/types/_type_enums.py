@@ -535,6 +535,8 @@ class CodexEventType(StrEnum):
     """
 
     THREAD_STARTED = "thread.started"
+    TURN_STARTED = "turn.started"
+    ITEM_STARTED = "item.started"
     ITEM_COMPLETED = "item.completed"
     TURN_COMPLETED = "turn.completed"
     TURN_FAILED = "turn.failed"
@@ -553,8 +555,7 @@ class CodexItemType(StrEnum):
     """Sealed enum for Codex CLI item.completed item types.
 
     The from_ndjson() constructor maps unknown item types to UNKNOWN
-    instead of raising ValueError. Legacy members (MESSAGE, FUNCTION_CALL)
-    are retained for backward compatibility with Codex CLI <= v0.133.0.
+    instead of raising ValueError.
     """
 
     AGENT_MESSAGE = "agent_message"

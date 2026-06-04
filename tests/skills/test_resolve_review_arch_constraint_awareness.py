@@ -51,6 +51,7 @@ _CATALOG_EXCLUSIONS: frozenset[str] = frozenset(
         "test_tools_dispatch_split.py",
         "test_tools_git_split.py",
         "test_api_split_integrity.py",
+        "test_server_init_session_visibility_split.py",
         # CI/infra guards (not violable by code review suggestions):
         "test_ci_dev_config.py",
         "test_session_type_exemption_enforcement.py",

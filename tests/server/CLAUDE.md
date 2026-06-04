@@ -24,7 +24,9 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_helpers_tier_guards.py` | Tests for tier-aware guard helpers in server._guards |
 | `test_kitchen_lifecycle.py` | Kitchen lifecycle tests |
 | `test_lifespan.py` | Tests that the FastMCP lifespan calls recorder.finalize() on server shutdown |
+| `test_lifespan_fleet_boot.py` | Tests for fleet and food-truck lifespan auto-gate boot functions |
 | `test_lifespan_readiness_structural.py` | AST structural guard for _autoskillit_lifespan readiness invariants |
+| `test_lifespan_skill_boot.py` | Tests for skill lifespan auto-gate boot and registry wiring |
 | `test_mcp_overrides.py` | Tests for MCP tool ingredient_overrides parameter propagation |
 | `test_misc_module.py` | Contract tests: server._misc module |
 | `test_no_raw_signal_handler.py` | AST guard: no raw signal.signal(SIGTERM, ...) in cli/app.py |
@@ -40,11 +42,12 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_run_skill_backend_compat.py` | Tests for dispatch-time backend compatibility gate in run_skill |
 | `test_run_skill_resume.py` | Tests for resume_session_id threading from run_skill through executor |
 | `test_server_init_gate.py` | Tests for server init: gate access, visibility, subset management, wire format compliance |
-| `test_server_init_session_visibility.py` | Tests for server init: session type visibility, fleet gate boot, feature gate visibility |
+| `test_server_init_session_visibility_split.py` | Session visibility split structural guard |
 | `test_server_tool_registration.py` | Tests for MCP tool registration, config-driven behavior, and schema contracts |
 | `test_server_version_telemetry.py` | Tests for server version info, plugin metadata, lazy init, and telemetry |
 | `test_service_wrappers.py` | Behavior tests for DefaultRecipeRepository and DefaultMigrationService (REQ-ARCH-006, 007) |
 | `test_session_type_tags.py` | Tests for _collect_fleet_tool_tags in server._session_type (Finding 1) |
+| `test_session_type_visibility.py` | Tests for session-type tag visibility dispatch (_apply_session_type_visibility) |
 | `test_set_commit_status.py` | Tests for the set_commit_status MCP tool handler |
 | `test_smoke_pipeline.py` | Smoke-test pipeline: structural validation and end-to-end execution tests |
 | `test_smoke_recipe_scope_guard.py` | Structural guard: smoke_recipe fixture must not use scope='module' |

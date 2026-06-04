@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import regex as _regex
 
 from autoskillit.core import DISPATCH_ID_ENV_VAR, PR_TELEMETRY_SECTIONS
+
+if TYPE_CHECKING:
+    from autoskillit.core import TokenLog
 
 assert len(PR_TELEMETRY_SECTIONS) == 3, (  # noqa: S101
     f"_PR_SECTION_RE assumes exactly 3 sections; got {len(PR_TELEMETRY_SECTIONS)}"
@@ -28,6 +32,7 @@ def patch_pr_token_summary(
     order_id: str = "",
     log_dir: str = "",
     timeout: int = 60,
+    token_log: TokenLog | None = None,
 ) -> dict[str, str]:
     import os  # noqa: PLC0415
     import subprocess  # noqa: PLC0415
@@ -45,19 +50,19 @@ def patch_pr_token_summary(
     effective_order_id = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     log_root = resolve_log_dir(log_dir)
-    token_log = DefaultTokenLog()
+    effective_token_log = token_log if token_log is not None else DefaultTokenLog()
     if effective_order_id:
-        count = token_log.load_from_log_dir(log_root, order_id_filter=effective_order_id)
+        count = effective_token_log.load_from_log_dir(log_root, order_id_filter=effective_order_id)
     else:
-        count = token_log.load_from_log_dir(log_root, cwd_filter=cwd)
+        count = effective_token_log.load_from_log_dir(log_root, cwd_filter=cwd)
 
     if count == 0:
         return {"success": "false", "error": "No sessions found", "sessions_loaded": "0"}
 
     scope_kwargs: dict[str, str] = {"order_id": effective_order_id} if effective_order_id else {}
-    steps = token_log.get_report(**scope_kwargs)
-    total = token_log.compute_total(**scope_kwargs)
-    model_totals = token_log.compute_model_totals(**scope_kwargs)
+    steps = effective_token_log.get_report(**scope_kwargs)
+    total = effective_token_log.compute_total(**scope_kwargs)
+    model_totals = effective_token_log.compute_model_totals(**scope_kwargs)
     combined = TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
 
     try:

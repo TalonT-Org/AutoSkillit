@@ -50,44 +50,6 @@ class TestFleetAutoGateBoot:
         )
 
     @pytest.mark.anyio
-    @pytest.mark.parametrize(
-        "boot_fn_name",
-        ["_fleet_auto_gate_boot", "_food_truck_auto_gate_boot", "_skill_auto_gate_boot"],
-    )
-    async def test_boot_paths_inherit_campaign_id(self, boot_fn_name, tool_ctx, monkeypatch):
-        """All boot paths must resolve kitchen_id via resolve_kitchen_id()."""
-        import importlib
-        from unittest.mock import AsyncMock, MagicMock, patch
-
-        from autoskillit.core import CAMPAIGN_ID_ENV_VAR
-        from autoskillit.pipeline.gate import DefaultGateState
-
-        expected_id = f"test-campaign-{boot_fn_name}"
-        monkeypatch.setenv(CAMPAIGN_ID_ENV_VAR, expected_id)
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-        # FOOD_TRUCK_TOOL_TAGS: only read by _food_truck_auto_gate_boot;
-        # harmless for fleet/skill paths.
-        monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen-core")
-        monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "1")
-        tool_ctx.gate = DefaultGateState(enabled=False)
-        tool_ctx.quota_refresh_task = None
-
-        boot_fn = getattr(
-            importlib.import_module("autoskillit.server._lifespan"),
-            boot_fn_name,
-        )
-        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-            with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch(
-                    "autoskillit.server._lifespan.create_background_task",
-                    return_value=MagicMock(),
-                ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
-                        await boot_fn(tool_ctx)
-
-        assert tool_ctx.kitchen_id == expected_id
-
-    @pytest.mark.anyio
     async def test_fleet_auto_gate_boot_passes_campaign_id_to_reaper(
         self, tool_ctx, monkeypatch, tmp_path
     ) -> None:
@@ -691,3 +653,42 @@ class TestFoodTruckAutoGateBoot:
             reaper_dispatch_id="",
             heartbeat_grace_seconds=90.0,
         )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "boot_fn_name",
+    ["_fleet_auto_gate_boot", "_food_truck_auto_gate_boot", "_skill_auto_gate_boot"],
+)
+async def test_boot_paths_inherit_campaign_id(boot_fn_name, tool_ctx, monkeypatch):
+    """All boot paths must resolve kitchen_id via resolve_kitchen_id()."""
+    import importlib
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from autoskillit.core import CAMPAIGN_ID_ENV_VAR
+    from autoskillit.pipeline.gate import DefaultGateState
+
+    expected_id = f"test-campaign-{boot_fn_name}"
+    monkeypatch.setenv(CAMPAIGN_ID_ENV_VAR, expected_id)
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    # FOOD_TRUCK_TOOL_TAGS: only read by _food_truck_auto_gate_boot;
+    # harmless for fleet/skill paths.
+    monkeypatch.setenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "kitchen-core")
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "1")
+    tool_ctx.gate = DefaultGateState(enabled=False)
+    tool_ctx.quota_refresh_task = None
+
+    boot_fn = getattr(
+        importlib.import_module("autoskillit.server._lifespan"),
+        boot_fn_name,
+    )
+    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+        with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
+            with patch(
+                "autoskillit.server._lifespan.create_background_task",
+                return_value=MagicMock(),
+            ):
+                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    await boot_fn(tool_ctx)
+
+    assert tool_ctx.kitchen_id == expected_id

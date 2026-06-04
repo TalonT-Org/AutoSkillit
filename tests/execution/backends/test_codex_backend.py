@@ -616,6 +616,23 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "--json" in spec.cmd
 
+    def test_skill_session_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
+        from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
+        from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        reinjected = {
+            "AUTOSKILLIT_SESSION_TYPE",
+            "MAX_MCP_OUTPUT_TOKENS",
+            "AUTOSKILLIT_SKILL_NAME",
+            "AUTOSKILLIT_CWD",
+        }
+        leaking = (
+            _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_MCP_ENV_FORWARD_VARS
+        ) & spec.env.keys()
+        assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into skill session env: {leaking}"
+
 
 class TestCodexBuildSkillSessionCmdConfigAdapter:
     def test_config_adapter_matches_flat_params(self) -> None:
@@ -1001,6 +1018,23 @@ class TestCodexBuildFoodTruckCmd:
     def test_non_resume_json_present(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "--json" in spec.cmd
+
+    def test_food_truck_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
+        from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
+        from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        reinjected = {
+            "AUTOSKILLIT_SESSION_TYPE",
+            "MAX_MCP_OUTPUT_TOKENS",
+            "AUTOSKILLIT_CWD",
+            "AUTOSKILLIT_COMPLETION_MARKER",
+        }
+        leaking = (
+            _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_MCP_ENV_FORWARD_VARS
+        ) & spec.env.keys()
+        assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into food truck env: {leaking}"
 
 
 class TestCodexEnsurePreLaunchConfigValidation:

@@ -22,6 +22,8 @@ from .claude import (
 from .codex import (
     CODEX_EXEC_FLAGS,
     CODEX_TOP_LEVEL_ONLY_FLAGS,
+    NON_VARIADIC_CODEX_FLAGS,
+    VARIADIC_CODEX_FLAGS,
     CodexBackend,
     CodexEnvPolicy,
     CodexFlags,
@@ -66,6 +68,8 @@ __all__ = [
     "CodexStreamParser",
     "CODEX_MCP_STARTUP_TIMEOUT_SEC",
     "CODEX_MCP_TOOL_TIMEOUT_FLOOR",
+    "NON_VARIADIC_CODEX_FLAGS",
+    "VARIADIC_CODEX_FLAGS",
     "_is_autoskillit_registered",
     "_read_codex_config",
     "_serialize_toml",

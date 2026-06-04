@@ -56,7 +56,9 @@ from autoskillit.core import (
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
+    _PROVIDER_EXTRAS_BASE_DENYLIST,
     _SESSION_BASELINE_ENV,
+    _SKILL_SESSION_EXTRAS_DENYLIST,
     PromptBuildContext,
     _compose_resume_prompt,
     _ensure_skill_prefix,
@@ -76,6 +78,8 @@ __all__ = [
     "CodexEnvPolicy",
     "CodexFlags",
     "CodexSessionLocator",
+    "NON_VARIADIC_CODEX_FLAGS",
+    "VARIADIC_CODEX_FLAGS",
     "ensure_codex_mcp_registered",
 ]
 
@@ -111,6 +115,19 @@ CODEX_TOP_LEVEL_ONLY_FLAGS: frozenset[str] = frozenset(
     }
 )
 
+VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset({CodexFlags.ADD_DIR, CodexFlags.CONFIG_OVERRIDE})
+
+NON_VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset(
+    {
+        CodexFlags.JSON,
+        CodexFlags.SANDBOX,
+        CodexFlags.MODEL,
+        CodexFlags.MODEL_SHORT,
+        CodexFlags.RESUME_SUBCOMMAND,
+        CodexFlags.DANGEROUSLY_BYPASS,
+    }
+)
+
 
 CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
     {
@@ -124,6 +141,49 @@ CODEX_ENV_DENYLIST: frozenset[str] = frozenset(
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 
 _IMAGE_GENERATION_DISABLED = "features.image_generation=false"
+
+
+def _codex_exec_base(
+    *,
+    sandbox: str,
+    json: bool = True,
+    extra_overrides: Sequence[str] = (),
+) -> list[str]:
+    cmd: list[str] = ["codex", "exec"]
+    if json:
+        cmd.append(CodexFlags.JSON)
+    cmd.extend([CodexFlags.SANDBOX, sandbox])
+    for override in extra_overrides:
+        cmd.extend([CodexFlags.CONFIG_OVERRIDE, override])
+    cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
+    return cmd
+
+
+def _codex_exec_extras(
+    *,
+    session_type: str,
+    include_session_baseline: bool = False,
+    include_agent_backend_flat: bool = False,
+    applicable_guards: frozenset[str] | None = None,
+) -> dict[str, str]:
+    extras: dict[str, str] = {}
+    if include_session_baseline:
+        extras.update(_SESSION_BASELINE_ENV)
+    extras.update(
+        {
+            "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
+            "AUTOSKILLIT_SESSION_TYPE": session_type,
+            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
+            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
+            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
+        }
+    )
+    if include_agent_backend_flat:
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+    if applicable_guards is not None:
+        extras[AUTOSKILLIT_APPLICABLE_GUARDS] = ",".join(sorted(applicable_guards))
+    return extras
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,15 +530,7 @@ class CodexBackend:
         add_dirs: Sequence[str] = (),
         env_extras: Mapping[str, str] | None = None,
     ) -> CmdSpec:
-        cmd: list[str] = [
-            "codex",
-            "exec",
-            CodexFlags.JSON,
-            CodexFlags.SANDBOX,
-            "workspace-write",
-            CodexFlags.CONFIG_OVERRIDE,
-            _IMAGE_GENERATION_DISABLED,
-        ]
+        cmd = _codex_exec_base(sandbox="workspace-write")
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -487,14 +539,7 @@ class CodexBackend:
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        headless_extras: dict[str, str] = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-            "AUTOSKILLIT_SESSION_TYPE": "",
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-        }
+        headless_extras = _codex_exec_extras(session_type="")
         if env_extras:
             headless_extras.update(env_extras)
         env = self.env_policy().build_env(filtered_base, extras=headless_extras)
@@ -566,18 +611,13 @@ class CodexBackend:
             ),
         )
 
-        extras: dict[str, str] = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-            "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
-            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
-            "MCP_CONNECTION_NONBLOCKING": "0",
-        }
+        extras = _codex_exec_extras(
+            session_type=SESSION_TYPE_SKILL,
+            include_agent_backend_flat=True,
+            applicable_guards=self.capabilities.applicable_guards,
+        )
+        extras["MAX_MCP_OUTPUT_TOKENS"] = _MAX_MCP_OUTPUT_TOKENS_VALUE
+        extras["MCP_CONNECTION_NONBLOCKING"] = "0"
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name
         campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
@@ -595,12 +635,7 @@ class CodexBackend:
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
-                if k not in (
-                    "AUTOSKILLIT_SESSION_TYPE",
-                    "AUTOSKILLIT_HEADLESS",
-                    "MAX_MCP_OUTPUT_TOKENS",
-                    "AUTOSKILLIT_SKILL_NAME",
-                ):
+                if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
                     extras[k] = v
         if profile_name:
             extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name
@@ -615,15 +650,7 @@ class CodexBackend:
             required=SKILL_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
-        cmd: list[str] = [
-            "codex",
-            "exec",
-            CodexFlags.JSON,
-            CodexFlags.SANDBOX,
-            "workspace-write",
-            CodexFlags.CONFIG_OVERRIDE,
-            _IMAGE_GENERATION_DISABLED,
-        ]
+        cmd = _codex_exec_base(sandbox="workspace-write")
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -682,18 +709,13 @@ class CodexBackend:
             ),
         )
 
-        extras: dict[str, str] = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
-            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-            MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-            FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
-            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-            "MCP_CONNECTION_NONBLOCKING": "0",
-        }
+        extras = _codex_exec_extras(
+            session_type=SESSION_TYPE_ORCHESTRATOR,
+            include_agent_backend_flat=True,
+            applicable_guards=self.capabilities.applicable_guards,
+        )
+        extras["MAX_MCP_OUTPUT_TOKENS"] = _MAX_MCP_OUTPUT_TOKENS_VALUE
+        extras["MCP_CONNECTION_NONBLOCKING"] = "0"
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name
         campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
@@ -712,7 +734,7 @@ class CodexBackend:
             extras["AUTOSKILLIT_CWD"] = cwd
         if env_extras:
             for k, v in env_extras.items():
-                if k not in ("AUTOSKILLIT_SESSION_TYPE", "AUTOSKILLIT_HEADLESS"):
+                if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:
                     extras[k] = v
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
@@ -722,17 +744,7 @@ class CodexBackend:
             required=ORCHESTRATOR_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
-        cmd: list[str] = [
-            "codex",
-            "exec",
-            CodexFlags.JSON,
-            CodexFlags.SANDBOX,
-            "read-only",
-            CodexFlags.CONFIG_OVERRIDE,
-            "web_search=disabled",
-            CodexFlags.CONFIG_OVERRIDE,
-            _IMAGE_GENERATION_DISABLED,
-        ]
+        cmd = _codex_exec_base(sandbox="read-only", extra_overrides=["web_search=disabled"])
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -824,26 +836,12 @@ class CodexBackend:
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)
-        cmd: list[str] = ["codex", "exec"]
-        if output_format == OutputFormat.JSON:
-            cmd.append(CodexFlags.JSON)
-        cmd.extend([CodexFlags.SANDBOX, "read-only"])
-        cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
+        cmd = _codex_exec_base(sandbox="read-only", json=(output_format == OutputFormat.JSON))
         cmd.append(CodexFlags.RESUME_SUBCOMMAND)
         cmd.append(resume_session_id)
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        resume_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
-        resume_extras.update(
-            {
-                "AUTOSKILLIT_HEADLESS": "1",
-                "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
-                "AUTOSKILLIT_SESSION_TYPE": "",
-                AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
-                MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
-                FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
-            }
-        )
+        resume_extras = _codex_exec_extras(session_type="", include_session_baseline=True)
         if env_extras:
             resume_extras.update(env_extras)
         env = self.env_policy().build_env(

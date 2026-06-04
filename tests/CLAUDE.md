@@ -173,7 +173,7 @@ after significant architectural changes (new subpackages, major refactors).
 - Exit code is always 0 (audit tool, not a gate)
 
 **Coverage oracle staleness guard:**
-`load_coverage_map()` (`tests/_test_filter.py:530`) returns `None` if `test-source-map.json`
+`load_coverage_map()` (`tests/_test_filter.py:1328`) returns `None` if `test-source-map.json`
 is older than 30 days. When this happens, Step 7 silently falls back
 to directory-level cascade — no error is raised. Refresh cadence:
 - Run `task coverage-audit` after any architectural change that adds or moves source files.
@@ -203,8 +203,10 @@ tests/
 ├── test_test_filter_core_cascade.py
 ├── test_test_filter_coverage_map.py
 ├── test_test_filter_execution_cascade.py
+├── test_test_filter_local_diff.py
 ├── test_test_filter_plugin.py
 ├── test_test_filter_scope_extras.py
+├── test_test_filter_script_manifest.py
 ├── test_test_filter_step7.py
 ├── test_test_filter_tiered_always_run.py
 ├── test_version.py                      # Version health tests
@@ -224,6 +226,7 @@ tests/
 ├── pipeline/                            # Audit log, gate, fidelity, and PR-gate tests (see pipeline/CLAUDE.md)
 ├── planner/                             # Planner manifest, validation, and compilation tests (see planner/CLAUDE.md)
 ├── recipe/                              # Recipe I/O, validation, schema tests (see recipe/CLAUDE.md)
+│   └── fixtures/                        # YAML test data: sample recipes, expected diagram output
 ├── server/                              # Server unit tests — tool handlers (see server/CLAUDE.md)
 ├── skills/                              # Skill contract and compliance tests (see skills/CLAUDE.md)
 ├── skills_extended/                     # Extended skill tests (see skills_extended/CLAUDE.md)

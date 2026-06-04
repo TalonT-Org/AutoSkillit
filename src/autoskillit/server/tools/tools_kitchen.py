@@ -374,13 +374,18 @@ def get_recipe(name: str) -> str:
 
     _defaults = resolve_ingredient_defaults(ctx.project_dir)
     _config_layer = build_config_authoritative_layer(_defaults)
-    result = ctx.recipes.load_and_validate(
-        name,
-        ctx.project_dir,
-        resolved_defaults=_defaults,
-        ingredient_overrides=_config_layer,
-        backend_name=ctx.backend.name if ctx.backend else None,
-    )
+    try:
+        result = ctx.recipes.load_and_validate(
+            name,
+            ctx.project_dir,
+            resolved_defaults=_defaults,
+            ingredient_overrides=_config_layer,
+            backend_name=ctx.backend.name if ctx.backend else None,
+        )
+    except ProcessStaleError:
+        return json.dumps({"error": f"Recipe '{name}' composition failed — process stale."})
+    except Exception:
+        return json.dumps({"error": f"Recipe '{name}' composition failed."})
     return result.get("content", json.dumps({"error": "Recipe composition failed."}))
 
 

@@ -340,10 +340,13 @@ def test_load_family_prefixes_file_not_found_returns_empty(monkeypatch):
         _load_family_prefixes,
     )
 
+    def _raise_file_not_found(_):
+        raise FileNotFoundError("mock")
+
     _PREFIXES_CACHE.clear()
     monkeypatch.setattr(
         "autoskillit.recipe.rules.rules_phoropter_adjacency.load_yaml",
-        lambda _: (_ for _ in ()).throw(FileNotFoundError("mock")),
+        _raise_file_not_found,
     )
     result = _load_family_prefixes()
     assert result == {}

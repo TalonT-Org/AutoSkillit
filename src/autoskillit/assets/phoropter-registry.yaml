@@ -1,0 +1,68 @@
+schema_version: 1
+
+families:
+  arch-lens:
+    description: Architectural diagram generation across 13 structural lenses
+    output_type: diagram
+    mode_label: Architecture Impact
+    lens_count: 13
+    default_enabled: true
+    failure_mode: continue
+    arg_interface: 1-arg
+    dial_skill: prepare-pr
+    synthesis:
+      strategy: null
+    step_naming:
+      prefix: null
+    status: implemented
+
+  exp-lens:
+    description: Experiment design assessment across 18 methodological lenses
+    output_type: assessment
+    mode_label: Experiment Design
+    lens_count: 18
+    default_enabled: true
+    failure_mode: continue
+    arg_interface: 2-arg
+    dial_skill: prepare-research-pr
+    synthesis:
+      strategy: priority_hierarchy
+    step_naming:
+      prefix: null
+    status: implemented
+
+  vis-lens:
+    description: Figure specification output across 12 visualization lenses
+    output_type: figure_spec
+    mode_label: Visualization Plan
+    lens_count: 12
+    default_enabled: true
+    failure_mode: continue
+    arg_interface: 2-arg
+    dial_skill: select-vis-lenses
+    synthesis:
+      strategy: priority_hierarchy
+      skill: synthesize-vis-plan
+    step_naming:
+      prefix: vis
+    phase_skip:
+      skip_field: context.is_silent_type
+      skip_semantics: skip_when_true
+      applies_to: apply
+    lens_metadata: {}  # vis-lens-specific extension point; other families omit this field intentionally
+    status: implemented
+
+  refactor-lens:
+    description: Future refactoring assessment for codebase evolution analysis
+    output_type: assessment
+    mode_label: Refactoring Assessment
+    lens_count: 0
+    default_enabled: false
+    failure_mode: continue
+    arg_interface: 2-arg
+    dial_skill: null
+    synthesis:
+      strategy: electre_iii
+    step_naming:
+      prefix: refactor
+    status: designed

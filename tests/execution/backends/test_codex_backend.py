@@ -458,6 +458,7 @@ class TestCodexResumeCmd:
         assert "read-only" in spec.cmd
 
     def test_resume_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
+        from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
         from autoskillit.execution.commands import (
             _HEADLESS_EXCLUSIVE_VARS,
             _SESSION_BASELINE_ENV,
@@ -465,18 +466,19 @@ class TestCodexResumeCmd:
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        reinjected = frozenset(_SESSION_BASELINE_ENV.keys())
+        reinjected = frozenset(_SESSION_BASELINE_ENV.keys()) | CODEX_MCP_ENV_FORWARD_VARS
         leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume env: {leaking}"
 
 
 class TestCodexHeadlessCmdEnv:
     def test_headless_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
+        from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
         from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_headless_cmd("do stuff")
-        leaking = _HEADLESS_EXCLUSIVE_VARS & spec.env.keys()
+        leaking = (_HEADLESS_EXCLUSIVE_VARS - CODEX_MCP_ENV_FORWARD_VARS) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into headless env: {leaking}"
 
 

@@ -1059,15 +1059,21 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
         load_ml_sub_area_folding,
     )
     from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE, _block_budgets
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import (
+        _PREFIXES_CACHE,
+        _load_family_prefixes,
+    )
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
     _block_budgets()
     load_bundled_manifest()
     load_ml_sub_area_folding()
+    _load_family_prefixes()
     assert _BUDGETS_CACHE._value is not _MISSING
     assert _MANIFEST_CACHE._value is not _MISSING
     assert _ML_SUB_AREA_CACHE._value is not _MISSING
+    assert _PREFIXES_CACHE._value is not _MISSING
 
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
@@ -1086,6 +1092,7 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     assert _BUDGETS_CACHE._value is _MISSING
     assert _MANIFEST_CACHE._value is _MISSING
     assert _ML_SUB_AREA_CACHE._value is _MISSING
+    assert _PREFIXES_CACHE._value is _MISSING
 
 
 def test_mid_process_yaml_only_update(tmp_path, monkeypatch):

@@ -9,11 +9,32 @@ phase counter.  Route-action steps are also transparent.
 
 from __future__ import annotations
 
-from autoskillit.core import Severity
+from pathlib import Path
+
+from autoskillit.core import Severity, load_yaml, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._api_cache import YamlFileCache
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _PHOROPTER_PHASES: tuple[str, ...] = ("dial", "apply", "synthesize")
+
+_PREFIXES_CACHE = YamlFileCache()
+
+
+def _load_registry_yaml(path: Path) -> dict[str, str | None]:
+    try:
+        data = load_yaml(path)
+    except FileNotFoundError:
+        return {}
+    result: dict[str, str | None] = {}
+    for family_name, entry in data.get("families", {}).items():
+        result[family_name] = entry.get("step_naming", {}).get("prefix")
+    return result
+
+
+def _load_family_prefixes() -> dict[str, str | None]:
+    path = pkg_root() / "assets" / "phoropter-registry.yaml"
+    return _PREFIXES_CACHE.get_or_load(path, _load_registry_yaml)
 
 
 @semantic_rule(

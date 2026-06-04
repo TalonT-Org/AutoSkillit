@@ -1097,6 +1097,13 @@ class TestHeadlessExecutorCompletionMarker:
 class TestHeadlessExecutorIdleOutputTimeout:
     """Protocol conformance and resolution logic for idle_output_timeout."""
 
+    @pytest.fixture(autouse=True)
+    def _no_clone_guard(self, monkeypatch):
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            lambda _: False,
+        )
+
     def test_headless_executor_accepts_idle_output_timeout(self) -> None:
         import inspect
 
@@ -1247,6 +1254,13 @@ class TestContractNudge:
     with file_path triggers CONTRACT_RECOVERY while _extract_missing_token_hints
     can still find the file_path for hints.
     """
+
+    @pytest.fixture(autouse=True)
+    def _no_clone_guard(self, monkeypatch):
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            lambda _: False,
+        )
 
     def _main_session_ndjson(
         self, marker: str, *, include_token: bool = False, session_id: str = "sess-main"
@@ -1670,6 +1684,13 @@ def test_build_skill_result_surfaces_last_stop_reason():
 class TestEarlyStopRecovery:
     """EARLY_STOP must trigger nudge recovery, not fall through to on_failure."""
 
+    @pytest.fixture(autouse=True)
+    def _no_clone_guard(self, monkeypatch):
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            lambda _: False,
+        )
+
     def _early_stop_subprocess_result(
         self, result_text: str, session_id: str = "sess-123"
     ) -> SubprocessResult:
@@ -1736,6 +1757,13 @@ class TestEarlyStopRecovery:
 
 class TestNudgeBackendGuard:
     """Backend capability guard for _attempt_contract_nudge nudge recovery."""
+
+    @pytest.fixture(autouse=True)
+    def _no_clone_guard(self, monkeypatch):
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            lambda _: False,
+        )
 
     def _main_subprocess_result(
         self, marker: str, session_id: str = "sess-main"

@@ -226,8 +226,12 @@ def _clear_stale_caches() -> None:
         _ML_SUB_AREA_CACHE,
     )
     from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE  # noqa: PLC0415
+    from autoskillit.recipe.rules.rules_phoropter_adjacency import (  # noqa: PLC0415
+        _PREFIXES_CACHE,
+    )
 
     _BUDGETS_CACHE.clear()
+    _PREFIXES_CACHE.clear()
     _MANIFEST_CACHE.clear()
     _ML_SUB_AREA_CACHE.clear()
     _SKILL_NAMES_CACHE.clear()

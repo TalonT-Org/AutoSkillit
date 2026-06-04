@@ -36,7 +36,12 @@ from autoskillit.execution.headless._headless_evidence import (
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._session_outcome import _compute_outcome
 from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
-from tests.fixtures.codex import HAPPY_PATH_SINGLE_TURN, TURN_FAILED_ERROR, fixture_path
+from tests.fixtures.codex import (
+    HAPPY_PATH_SINGLE_TURN,
+    HAPPY_PATH_V0136,
+    TURN_FAILED_ERROR,
+    fixture_path,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -1043,19 +1048,30 @@ class TestCodexPipelineHappyPath:
     """Codex NDJSON happy-path through _parse_stdout and _build_skill_result."""
 
     def test_parse_stdout_with_codex_backend(self):
-        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        content = fixture_path(HAPPY_PATH_V0136).read_text()
         session = _parse_stdout(content, backend=CodexBackend())
-        assert session.session_id == "thread_hp_abc123"
+        assert session.session_id == "thread_v0136_abc"
         assert session.is_error is False
         assert session.token_usage is not None
         assert "input_tokens" in session.token_usage
         assert "output_tokens" in session.token_usage
-        assert session.token_usage["input_tokens"] == 150
-        assert session.token_usage["output_tokens"] == 75
-        assert session.token_usage["cache_read_tokens"] == 30
+        assert session.token_usage["input_tokens"] == 200
+        assert session.token_usage["output_tokens"] == 90
+        assert session.token_usage["cache_read_tokens"] == 40
+
+    def test_parse_stdout_populates_assistant_messages(self):
+        content = fixture_path(HAPPY_PATH_V0136).read_text()
+        session = _parse_stdout(content, backend=CodexBackend())
+        assert len(session.assistant_messages) > 0
+        assert "Task completed successfully." in session.assistant_messages[0]
+
+    def test_parse_stdout_populates_tool_uses(self):
+        content = fixture_path(HAPPY_PATH_V0136).read_text()
+        session = _parse_stdout(content, backend=CodexBackend())
+        assert len(session.tool_uses) > 0
 
     def test_happy_path_pipeline(self):
-        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        content = fixture_path(HAPPY_PATH_V0136).read_text()
         result = _codex_subprocess_result(content)
         sr = _build_skill_result(
             result,
@@ -1063,12 +1079,12 @@ class TestCodexPipelineHappyPath:
             supports_claude_format_stdout=False,
         )
         assert sr.success is True
-        assert sr.session_id == "thread_hp_abc123"
+        assert sr.session_id == "thread_v0136_abc"
         assert sr.is_error is False
         assert sr.token_usage is not None
 
     def test_subtype_via_compute_outcome(self):
-        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        content = fixture_path(HAPPY_PATH_V0136).read_text()
         backend = CodexBackend()
         session = _parse_stdout(content, backend=backend)
         result = _codex_subprocess_result(content)
@@ -1081,9 +1097,19 @@ class TestCodexPipelineHappyPath:
         expected_subtype = session.normalize_subtype(outcome, "")
         assert sr.subtype == expected_subtype
 
+    def test_v0133_legacy_parse_still_works(self):
+        content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
+        session = _parse_stdout(content, backend=CodexBackend())
+        assert session.session_id == "thread_hp_abc123"
+        assert session.is_error is False
+        assert session.token_usage is not None
+        assert session.token_usage["input_tokens"] == 150
+        assert session.token_usage["output_tokens"] == 75
+        assert len(session.assistant_messages) > 0
+
 
 class TestCodexPipelineTurnFailed:
-    """Codex NDJSON turn_failed_error through _build_skill_result."""
+    """Codex NDJSON turn-failed scenario through _build_skill_result."""
 
     @pytest.fixture(autouse=True)
     def _patch_parse_stdout(self, monkeypatch):

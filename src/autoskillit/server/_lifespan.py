@@ -562,7 +562,10 @@ async def _autoskillit_lifespan(server: Any) -> Any:
             if not task.done():
                 task.cancel()
         if bg_tasks:
-            await _asyncio.gather(*bg_tasks, return_exceptions=True)
+            try:
+                await _asyncio.gather(*bg_tasks, return_exceptions=True)
+            except _asyncio.CancelledError:
+                pass  # don't let task cancellation bypass finalize_recorder
         try:
             cleanup_readiness_sentinel()
         except Exception:

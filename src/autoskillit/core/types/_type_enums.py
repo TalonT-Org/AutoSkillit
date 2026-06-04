@@ -35,6 +35,7 @@ __all__ = [
     "ClaudeContentBlockType",
     "InfraExitCategory",
     "BackendEventKind",
+    "SynthesisStrategy",
 ]
 
 
@@ -522,3 +523,13 @@ class BackendEventKind(StrEnum):
     TOOL_OUTPUT = "tool_output"
     ERROR = "error"
     IGNORED = "ignored"
+
+
+class SynthesisStrategy(StrEnum):
+    """Recognized synthesis strategies for phoropter output aggregation."""
+
+    NULL = "null"
+    PRIORITY_HIERARCHY = "priority_hierarchy"
+    ELECTRE_III = "electre_iii"
+    DEX = "dex"
+    CUSTOM = "custom"

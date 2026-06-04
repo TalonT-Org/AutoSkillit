@@ -814,3 +814,33 @@ def test_orchestrator_tool_name_matches_open_kitchen_hook_matcher(mcp_prefix: st
         assert re.search(matcher, qualified_name), (
             f"Prompt tool name '{qualified_name}' does not match hook matcher '{matcher}'"
         )
+
+
+class TestWorktreePathPersistenceContract:
+    """Worktree-creating skills must instruct the agent to capture WORKTREE_PATH
+    from Bash tool output, since shell variables do not persist across tool calls."""
+
+    WORKTREE_SKILLS = [
+        "implement-worktree",
+        "implement-worktree-no-merge",
+        "implement-experiment",
+    ]
+
+    def _skill_text(self, skill_name: str) -> str:
+        skills_dir = _project_root() / "src" / "autoskillit" / "skills_extended"
+        return (skills_dir / skill_name / "SKILL.md").read_text()
+
+    @pytest.mark.parametrize("skill_name", WORKTREE_SKILLS)
+    def test_worktree_skills_instruct_path_capture_from_output(self, skill_name):
+        text = self._skill_text(skill_name)
+        assert re.search(r"(?i)bash tool.{0,30}output.{0,100}WORKTREE_PATH", text, re.DOTALL), (
+            f"{skill_name}/SKILL.md must instruct the agent to read WORKTREE_PATH "
+            "from the Bash tool output (shell variables do not persist across tool calls)"
+        )
+
+    def test_sidecar_paths_have_metadata_disambiguation(self):
+        text = self._skill_text("implement-worktree")
+        assert "metadata" in text.lower() or "sidecar" in text.lower(), (
+            "implement-worktree/SKILL.md must clarify that "
+            "{{AUTOSKILLIT_TEMP}}/worktrees/ is metadata, not the worktree path"
+        )

@@ -97,6 +97,8 @@ WORKTREE_NAME="impl-{plan_name}-$(date +%Y%m%d-%H%M%S)"
 eval "$(bash "{{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh" "${WORKTREE_NAME}" "{{AUTOSKILLIT_TEMP}}")"
 ```
 
+The Bash tool output will display three `KEY='VALUE'` lines. **Read `WORKTREE_PATH` from that output** — it is an absolute path to the worktree (a sibling directory outside this repo, e.g. `../../worktrees/<name>`). Use this literal path in every subsequent `cd` and file reference. Shell variables do not persist across Bash tool calls.
+
 ### Step 2: Deep System Understanding (Subagents) (SINGLE MESSAGE)
 
 **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
@@ -170,6 +172,7 @@ cd "${WORKTREE_PATH}" && \
   AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-conservative}" \
   AUTOSKILLIT_TEST_BASE_REF=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch") \
   {test_command}
+# Note: {{AUTOSKILLIT_TEMP}}/worktrees/ is sidecar metadata inside the main repo — not the worktree path.
 ```
 
 If tests fail, fix the issue and re-run.
@@ -177,6 +180,7 @@ If tests fail, fix the issue and re-run.
 ### Step 6: Rebase for Squash-and-Merge
 
 ```bash
+# Sidecar metadata (inside main repo) — not the worktree path
 CURRENT_BRANCH=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch")
 REMOTE=$(git remote get-url upstream >/dev/null 2>&1 && echo upstream || echo origin)
 git fetch "$REMOTE"
@@ -195,6 +199,7 @@ Do not merge until user confirms first!
 Then emit these structured output tokens on their own lines so recipe capture blocks can extract them:
 
 ```bash
+# Sidecar metadata (inside main repo) — not the worktree path
 CURRENT_BRANCH=$(cat "{{AUTOSKILLIT_TEMP}}/worktrees/${WORKTREE_NAME}/base-branch")
 ```
 

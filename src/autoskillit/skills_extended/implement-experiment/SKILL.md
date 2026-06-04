@@ -105,6 +105,8 @@ WORKTREE_NAME="research-$(date +%Y%m%d-%H%M%S)"
 eval "$(bash "{{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh" "${WORKTREE_NAME}" "{{AUTOSKILLIT_TEMP}}")"
 ```
 
+The Bash tool output will display three `KEY='VALUE'` lines. **Read `WORKTREE_PATH` from that output** — it is an absolute path to the worktree (a sibling directory outside this repo). Use this literal path in every subsequent `cd` and file reference. Shell variables do not persist across Bash tool calls.
+
 ### Step 1 (cont.) — Emit Structured Tokens Early
 
 Immediately after the worktree is created, output these tokens so the

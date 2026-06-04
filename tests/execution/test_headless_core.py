@@ -741,7 +741,7 @@ class TestRunHeadlessCore:
     """Integration test for run_headless_core via the injected mock runner."""
 
     @pytest.mark.anyio
-    async def test_run_headless_core_returns_success_result(self, tool_ctx):
+    async def test_run_headless_core_returns_success_result(self, tool_ctx, tmp_path):
         from autoskillit.execution.headless import run_headless_core
 
         marker = tool_ctx.config.run_skill.completion_marker
@@ -757,7 +757,7 @@ class TestRunHeadlessCore:
         tool_ctx.runner.push(
             SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
         )
-        result = await run_headless_core("/investigate foo", cwd="/tmp", ctx=tool_ctx)
+        result = await run_headless_core("/investigate foo", cwd=str(tmp_path), ctx=tool_ctx)
         assert result.success is True
         assert result.needs_retry is False
         assert result.result == "Task completed."
@@ -773,7 +773,7 @@ class TestRunHeadlessCore:
         assert cmd[fmt_idx + 1] == "stream-json"
 
     @pytest.mark.anyio
-    async def test_assembled_cmd_contains_format_required_flags(self, tool_ctx):
+    async def test_assembled_cmd_contains_format_required_flags(self, tool_ctx, tmp_path):
         """Assembled command must include all flags required by the output format."""
         from autoskillit.execution.headless import run_headless_core
 
@@ -790,7 +790,7 @@ class TestRunHeadlessCore:
         tool_ctx.runner.push(
             SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
         )
-        await run_headless_core("/investigate bar", cwd="/tmp", ctx=tool_ctx)
+        await run_headless_core("/investigate bar", cwd=str(tmp_path), ctx=tool_ctx)
         cmd, _cwd, _timeout, _kwargs = tool_ctx.runner.call_args_list[0]
         fmt = tool_ctx.config.run_skill.output_format
         for flag in fmt.required_cli_flags:
@@ -862,7 +862,7 @@ class TestHeadlessTelemetryContainment:
 
     @pytest.mark.anyio
     async def test_run_headless_core_token_log_error_does_not_suppress_skill_result(
-        self, tool_ctx, monkeypatch
+        self, tool_ctx, monkeypatch, tmp_path
     ):
         """token_log.record() raising must not suppress the skill_result."""
         import structlog.testing
@@ -884,7 +884,7 @@ class TestHeadlessTelemetryContainment:
 
         with structlog.testing.capture_logs() as cap:
             result = await run_headless_core(
-                "/investigate foo", cwd="/tmp", ctx=tool_ctx, step_name="test-step"
+                "/investigate foo", cwd=str(tmp_path), ctx=tool_ctx, step_name="test-step"
             )
 
         assert isinstance(result, _SkillResult)

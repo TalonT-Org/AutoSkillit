@@ -363,14 +363,12 @@ def pre_iteration_cleanup(
 
 def select_review_dimensions(
     experiment_type: str = "",
-    dimension_weights_json: str = "",
-    secondary_modifiers_json: str = "",
     output_dir: str = "",
 ) -> dict[str, str]:
-    """Transform dimension weights and modifiers into the dialing contract format.
+    """Derive dimension weights from the experiment type registry and write a manifest.
 
-    Called by run_python from review-design recipe steps. Parses dimension
-    weights, applies secondary modifiers, filters silent (S) dimensions,
+    Called by run_python from review-design recipe steps. Looks up the
+    experiment type in the registry, filters silent (S) dimensions,
     sorts by tier, and writes a dimensions manifest.
     """
     from autoskillit.core import atomic_write  # noqa: PLC0415
@@ -381,44 +379,18 @@ def select_review_dimensions(
     if not out.is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
 
-    weights_str = dimension_weights_json.strip()
-    if not weights_str:
+    if not experiment_type.strip():
         return _EMPTY
 
-    try:
-        weights: dict[str, str] = json.loads(weights_str)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid JSON in dimension_weights_json: {exc}") from exc
+    from autoskillit.recipe import get_experiment_type_by_name  # noqa: PLC0415
+
+    spec = get_experiment_type_by_name(experiment_type.strip())
+    if spec is None:
+        return _EMPTY
+
+    weights: dict[str, str] = spec.dimension_weights
     if not weights:
         return _EMPTY
-
-    modifiers_str = secondary_modifiers_json.strip()
-    try:
-        modifiers: list[str] = json.loads(modifiers_str) if modifiers_str else []
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid JSON in secondary_modifiers_json: {exc}") from exc
-
-    tier_order = ["H", "M", "L", "S"]
-
-    def _upgrade_one_tier(current: str) -> str:
-        if current not in tier_order:
-            raise ValueError(f"unknown tier {current!r}; expected one of {tier_order}")
-        idx = tier_order.index(current)
-        return tier_order[max(0, idx - 1)]
-
-    for mod in modifiers:
-        if mod == "+causal" and "causal_structure" in weights:
-            weights["causal_structure"] = _upgrade_one_tier(weights["causal_structure"])
-        elif mod == "+high_cost" and "resource_proportionality" in weights:
-            if weights["resource_proportionality"] == "L":
-                weights["resource_proportionality"] = "M"
-        elif mod == "+deployment" and "ecological_validity" in weights:
-            if tier_order.index(weights["ecological_validity"]) > tier_order.index("M"):
-                weights["ecological_validity"] = "M"
-        elif mod == "+multi_metric" and "statistical_corrections" in weights:
-            weights["statistical_corrections"] = _upgrade_one_tier(
-                weights["statistical_corrections"]
-            )
 
     active = {dim: w for dim, w in weights.items() if w != "S"}
     if not active:

@@ -2588,46 +2588,52 @@ def test_pre_iteration_cleanup_noop_when_dir_empty(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T_SRD1–T_SRD5: select_review_dimensions callable
+# T_SRD1–T_SRD8: select_review_dimensions callable
 # ---------------------------------------------------------------------------
 
 
 def test_select_review_dimensions_happy_path(tmp_path: Path) -> None:
     """select_review_dimensions sorts by tier and excludes S dimensions."""
+    from autoskillit.recipe import get_experiment_type_by_name
     from autoskillit.smoke_utils import select_review_dimensions
 
-    weights = {
-        "causal_structure": "H",
-        "variance_protocol": "M",
-        "ecological_validity": "L",
-        "data_acquisition": "S",
-    }
+    spec = get_experiment_type_by_name("causal_inference")
+    assert spec is not None
+    expected_count = sum(1 for v in spec.dimension_weights.values() if v != "S")
+
     result = select_review_dimensions(
-        dimension_weights_json=json.dumps(weights),
+        experiment_type="causal_inference",
         output_dir=str(tmp_path),
     )
     lenses = result["selected_lenses"].split(",")
-    assert lenses == ["causal_structure", "variance_protocol", "ecological_validity"]
-    assert "data_acquisition" not in result["selected_lenses"]
-    ctx_parts = result["lens_context_paths"].split(",")
-    assert len(ctx_parts) == len(lenses)
-    assert all(p == "" for p in ctx_parts)
+    assert len(lenses) == expected_count
     manifest = json.loads(Path(result["dimensions_manifest_path"]).read_text())
-    assert "data_acquisition" not in manifest
-    assert list(manifest.keys()) == [
-        "causal_structure",
-        "variance_protocol",
-        "ecological_validity",
-    ]
+    tiers = list(manifest.values())
+    expected_order = sorted(tiers, key=lambda t: {"H": 0, "M": 1, "L": 2}.get(t, 3))
+    assert tiers == expected_order
 
 
-def test_select_review_dimensions_all_s_returns_empty(tmp_path: Path) -> None:
+def test_select_review_dimensions_all_s_returns_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """All-S weights returns empty outputs and writes no file."""
+    from autoskillit.recipe import ExperimentTypeSpec
     from autoskillit.smoke_utils import select_review_dimensions
 
-    weights = {"causal_structure": "S", "variance_protocol": "S"}
+    all_s_spec = ExperimentTypeSpec(
+        name="all_s_fake",
+        classification_triggers=[],
+        dimension_weights={"causal_structure": "S", "variance_protocol": "S"},
+        applicable_lenses={},
+        red_team_focus={},
+        l1_severity={},
+    )
+    monkeypatch.setattr(
+        "autoskillit.recipe.get_experiment_type_by_name",
+        lambda _name, **_kw: all_s_spec,
+    )
     result = select_review_dimensions(
-        dimension_weights_json=json.dumps(weights),
+        experiment_type="all_s_fake",
         output_dir=str(tmp_path),
     )
     assert result["selected_lenses"] == ""
@@ -2636,28 +2642,27 @@ def test_select_review_dimensions_all_s_returns_empty(tmp_path: Path) -> None:
     assert not list(tmp_path.iterdir())
 
 
-def test_select_review_dimensions_causal_modifier_upgrades(tmp_path: Path) -> None:
-    """+causal modifier upgrades causal_structure one tier."""
+def test_select_review_dimensions_empty_weights_returns_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Empty dimension_weights from registry returns empty outputs."""
+    from autoskillit.recipe import ExperimentTypeSpec
     from autoskillit.smoke_utils import select_review_dimensions
 
-    weights = {"causal_structure": "L", "variance_protocol": "M"}
-    result = select_review_dimensions(
-        dimension_weights_json=json.dumps(weights),
-        secondary_modifiers_json=json.dumps(["+causal"]),
-        output_dir=str(tmp_path),
+    empty_spec = ExperimentTypeSpec(
+        name="empty_weights_fake",
+        classification_triggers=[],
+        dimension_weights={},
+        applicable_lenses={},
+        red_team_focus={},
+        l1_severity={},
     )
-    manifest = json.loads(Path(result["dimensions_manifest_path"]).read_text())
-    assert manifest["causal_structure"] == "M"
-    lenses = result["selected_lenses"].split(",")
-    assert set(lenses) == {"causal_structure", "variance_protocol"}
-
-
-def test_select_review_dimensions_empty_weights_returns_empty(tmp_path: Path) -> None:
-    """Empty dimension_weights_json returns empty outputs without filesystem writes."""
-    from autoskillit.smoke_utils import select_review_dimensions
-
+    monkeypatch.setattr(
+        "autoskillit.recipe.get_experiment_type_by_name",
+        lambda _name, **_kw: empty_spec,
+    )
     result = select_review_dimensions(
-        dimension_weights_json="",
+        experiment_type="empty_weights_fake",
         output_dir=str(tmp_path),
     )
     assert result == {
@@ -2674,13 +2679,59 @@ def test_select_review_dimensions_creates_output_dir(tmp_path: Path) -> None:
 
     out = tmp_path / "nested" / "output"
     assert not out.exists()
-    weights = {"scope_alignment": "H"}
     result = select_review_dimensions(
-        dimension_weights_json=json.dumps(weights),
+        experiment_type="causal_inference",
         output_dir=str(out),
     )
     assert out.exists()
     assert Path(result["dimensions_manifest_path"]).exists()
+
+
+def test_select_review_dimensions_registry_happy_path(tmp_path: Path) -> None:
+    """Registry lookup returns non-empty lenses for a known experiment type."""
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    result = select_review_dimensions(
+        experiment_type="causal_inference",
+        output_dir=str(tmp_path),
+    )
+    assert result["selected_lenses"] != ""
+    assert result["dimensions_manifest_path"] != ""
+    manifest_path = Path(result["dimensions_manifest_path"])
+    assert manifest_path.is_absolute()
+    assert manifest_path.exists()
+
+
+def test_select_review_dimensions_unknown_type_returns_empty(tmp_path: Path) -> None:
+    """Unknown experiment type returns _EMPTY and writes no files."""
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    result = select_review_dimensions(
+        experiment_type="nonexistent_type",
+        output_dir=str(tmp_path),
+    )
+    assert result == {
+        "selected_lenses": "",
+        "lens_context_paths": "",
+        "dimensions_manifest_path": "",
+    }
+    assert not list(tmp_path.iterdir())
+
+
+def test_select_review_dimensions_empty_type_returns_empty(tmp_path: Path) -> None:
+    """Empty experiment_type returns _EMPTY and writes no files."""
+    from autoskillit.smoke_utils import select_review_dimensions
+
+    result = select_review_dimensions(
+        experiment_type="",
+        output_dir=str(tmp_path),
+    )
+    assert result == {
+        "selected_lenses": "",
+        "lens_context_paths": "",
+        "dimensions_manifest_path": "",
+    }
+    assert not list(tmp_path.iterdir())
 
 
 # ---------------------------------------------------------------------------

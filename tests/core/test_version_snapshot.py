@@ -13,13 +13,6 @@ from autoskillit.core._version_snapshot import collect_version_snapshot
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-@pytest.fixture(autouse=True)
-def _clear_snapshot_cache():
-    collect_version_snapshot.cache_clear()
-    yield
-    collect_version_snapshot.cache_clear()
-
-
 def test_collect_version_snapshot_returns_required_keys():
     result = collect_version_snapshot()
     assert set(result.keys()) == {

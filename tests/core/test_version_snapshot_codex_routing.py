@@ -9,13 +9,6 @@ from autoskillit.core._version_snapshot import collect_version_snapshot
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-@pytest.fixture(autouse=True)
-def _clear_snapshot_cache():
-    collect_version_snapshot.cache_clear()
-    yield
-    collect_version_snapshot.cache_clear()
-
-
 def test_codex_version_populated_with_codex_backend() -> None:
     backend = Mock()
     backend.name = "codex"

@@ -7,6 +7,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | File | Purpose |
 |------|---------|
 | `__init__.py` | empty |
+| `conftest.py` | Shared autouse fixture — clears `collect_version_snapshot` lru_cache before and after each test |
 | `test_add_dir_validation.py` | Tests for ValidatedAddDir and validate_add_dir |
 | `test_canonical_token_usage.py` | Tests for CanonicalTokenUsage frozen dataclass — factory methods, merge, and immutability |
 | `test_capture.py` | Tests for CaptureEntrySpec and resolve_payload_field |

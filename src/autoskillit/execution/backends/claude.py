@@ -56,6 +56,7 @@ from autoskillit.execution.backends._claude_prompt import (
     _MAX_MCP_OUTPUT_TOKENS_VALUE,
     _PROVIDER_EXTRAS_BASE_DENYLIST,
     _SESSION_BASELINE_ENV,
+    _SKILL_SESSION_EXTRAS_DENYLIST,
     PromptBuildContext,
     _apply_output_format,
     _compose_resume_prompt,
@@ -606,7 +607,7 @@ class ClaudeCodeBackend:
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
-                if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:
+                if k not in _SKILL_SESSION_EXTRAS_DENYLIST:
                     extras[k] = v
         if profile_name:
             extras["AUTOSKILLIT_PROVIDER_PROFILE"] = profile_name

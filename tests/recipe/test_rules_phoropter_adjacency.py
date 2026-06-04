@@ -452,9 +452,13 @@ def test_iterative_discovery_pattern():
 # --- prefixed step phase-order tests ---
 
 
-def test_prefixed_steps_correct_order_no_findings():
+def test_prefixed_steps_correct_order_no_findings(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"vis-lens": "vis"},
+    )
     recipe = _make_recipe(
         {
             "vis_dial": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
@@ -466,9 +470,13 @@ def test_prefixed_steps_correct_order_no_findings():
     assert not findings
 
 
-def test_prefixed_steps_wrong_order_error_with_canonical():
+def test_prefixed_steps_wrong_order_error_with_canonical(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"vis-lens": "vis"},
+    )
     recipe = _make_recipe(
         {
             "vis_apply": RecipeStep(tool="run_skill", phoropter_family="vis-lens"),
@@ -514,9 +522,13 @@ def test_canonical_steps_regression_guard():
     assert not findings
 
 
-def test_mixed_two_family_correct_order_no_findings():
+def test_mixed_two_family_correct_order_no_findings(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"vis-lens": "vis"},
+    )
     recipe = _make_recipe(
         {
             "dial": RecipeStep(tool="run_skill", phoropter_family="review-design"),
@@ -547,9 +559,13 @@ def test_non_canonical_family_step_no_interleaving():
     assert not findings
 
 
-def test_sequential_family_exemption():
+def test_sequential_family_exemption(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
+    monkeypatch.setattr(
+        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        lambda: {"refactor-lens": "refactor"},
+    )
     recipe = _make_recipe(
         {
             "dial": RecipeStep(tool="run_skill", phoropter_family="fam-a"),

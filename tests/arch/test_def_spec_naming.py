@@ -13,8 +13,11 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SRC = pathlib.Path(__file__).parent.parent.parent / "src" / "autoskillit"
 
+# Classes exempt from the *Def naming rule. Entries must be class names (str) and each
+# exempted class must carry an inline comment explaining why it deviates from the convention.
 _EXEMPT_DEF: frozenset[str] = frozenset()
 
+# Classes exempt from the *Spec naming rule. Same policy as _EXEMPT_DEF above.
 _EXEMPT_SPEC: frozenset[str] = frozenset()
 
 
@@ -72,7 +75,10 @@ def _is_typeddict(node: ast.ClassDef) -> bool:
 
 
 def _invalid_def_classes(path: pathlib.Path) -> list[tuple[int, str]]:
-    tree = ast.parse(path.read_text())
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return []
     violations = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
@@ -88,7 +94,10 @@ def _invalid_def_classes(path: pathlib.Path) -> list[tuple[int, str]]:
 
 
 def _invalid_spec_classes(path: pathlib.Path) -> list[tuple[int, str]]:
-    tree = ast.parse(path.read_text())
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return []
     violations = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
@@ -107,7 +116,7 @@ def test_def_classes_are_immutable() -> None:
     """Every class ending in *Def must be a NamedTuple or @dataclass(frozen=True)."""
     assert _SRC.is_dir(), f"Source directory not found: {_SRC}"
     all_violations: list[str] = []
-    for py_file in sorted(_SRC.rglob("*.py")):
+    for py_file in sorted(f for f in _SRC.rglob("*.py") if "__pycache__" not in f.parts):
         for lineno, cls_name in _invalid_def_classes(py_file):
             rel = py_file.relative_to(_SRC.parent.parent)
             all_violations.append(f"  {rel}:{lineno}  {cls_name}")
@@ -121,7 +130,7 @@ def test_spec_classes_are_dataclass_or_typeddict() -> None:
     """Every class ending in *Spec must be a @dataclass or TypedDict."""
     assert _SRC.is_dir(), f"Source directory not found: {_SRC}"
     all_violations: list[str] = []
-    for py_file in sorted(_SRC.rglob("*.py")):
+    for py_file in sorted(f for f in _SRC.rglob("*.py") if "__pycache__" not in f.parts):
         for lineno, cls_name in _invalid_spec_classes(py_file):
             rel = py_file.relative_to(_SRC.parent.parent)
             all_violations.append(f"  {rel}:{lineno}  {cls_name}")

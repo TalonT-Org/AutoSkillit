@@ -356,10 +356,12 @@ def test_phoropter_prefix_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
     r1 = _load_family_prefixes()
     assert r1["vis-lens"] == "vis"
 
-    registry_path.write_text("families:\n  vis-lens:\n    step_naming:\n      prefix: viz\n")
+    registry_path.write_text(
+        "families:\n  vis-lens:\n    step_naming:\n      prefix: viz-updated\n"
+    )
 
     r2 = _load_family_prefixes()
-    assert r2["vis-lens"] == "viz"
+    assert r2["vis-lens"] == "viz-updated"
 
 
 def test_ml_sub_area_folding_mtime_change_forces_fresh_read(tmp_path, monkeypatch):

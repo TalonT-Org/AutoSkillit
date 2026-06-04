@@ -566,3 +566,12 @@ def test_agent_tool_list_covers_body_references():
         "Agent frontmatter tools must cover all tool references in the body:\n"
         + "\n".join(failures)
     )
+
+
+def test_agent_resource_strips_frontmatter():
+    """agent:// resource must strip YAML frontmatter before serving."""
+    from autoskillit.server.tools.tools_agents import get_plan_review_agent
+
+    result = get_plan_review_agent("plan-foundation-auditor")
+    assert not result.startswith("---"), "Frontmatter delimiter still present"
+    assert "model:" not in result.split("\n")[0], "Frontmatter field leaked into first line"

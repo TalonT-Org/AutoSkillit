@@ -334,7 +334,13 @@ def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
     recipe_yaml = {
         "name": "test-get-recipe-project-dir",
         "description": "Test recipe for get_recipe project_dir",
-        "steps": {"s1": {"tool": "run_skill"}},
+        "kitchen_rules": ["Never use native tools"],
+        "steps": {
+            "stop": {
+                "action": "stop",
+                "message": "done",
+            },
+        },
     }
     recipes_dir = different_dir / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
@@ -347,16 +353,64 @@ def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = different_dir
     mock_ctx.recipes = real_repo
+    mock_ctx.backend = None
 
-    with patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx):
+    with (
+        patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx),
+        patch(
+            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+            return_value={},
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen.build_config_authoritative_layer",
+            return_value={},
+        ),
+    ):
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
         result = get_recipe("test-get-recipe-project-dir")
 
-    # get_recipe returns raw YAML when found, JSON error dict when not found
     assert '"error"' not in result, (
         f"get_recipe failed to find recipe in project_dir={different_dir}. Result: {result}"
     )
     assert "test-get-recipe-project-dir" in result, (
         f"get_recipe did not return the recipe from project_dir. Result: {result}"
     )
+
+
+def test_recipe_resource_returns_composed_content():
+    """recipe:// resource must use composition pipeline, not raw file read."""
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.find.return_value = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n",
+        "valid": True,
+    }
+    mock_ctx.backend = None
+
+    with (
+        patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx),
+        patch(
+            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+            return_value={},
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen.build_config_authoritative_layer",
+            return_value={},
+        ),
+    ):
+        from autoskillit.server.tools.tools_kitchen import get_recipe
+
+        result = get_recipe("test-recipe")
+
+    mock_ctx.recipes.load_and_validate.assert_called_once_with(
+        "test-recipe",
+        mock_ctx.project_dir,
+        resolved_defaults={},
+        ingredient_overrides={},
+        backend_name=None,
+    )
+    assert result == ("name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n")
+    assert "optional: true" not in result
+    assert "skip_when_false:" not in result

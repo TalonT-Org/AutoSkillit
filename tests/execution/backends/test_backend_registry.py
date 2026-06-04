@@ -40,8 +40,10 @@ class TestBackendRegistry:
 
         expected = {
             "BACKEND_REGISTRY",
+            "CODEX_EXEC_FLAGS",
             "CODEX_MCP_STARTUP_TIMEOUT_SEC",
             "CODEX_MCP_TOOL_TIMEOUT_FLOOR",
+            "CODEX_TOP_LEVEL_ONLY_FLAGS",
             "ClaudeCodeBackend",
             "ClaudeEnvPolicy",
             "ClaudeResultParser",

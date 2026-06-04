@@ -95,15 +95,15 @@ def _humanize(n: int | float | None) -> str:
 def _aggregate_totals(state: CampaignState) -> dict[str, int]:
     """Sum token_usage across all dispatches."""
     totals: dict[str, int] = {
-        "input_tokens": 0,
-        "output_tokens": 0,
+        "input": 0,
+        "output": 0,
         "cache_read": 0,
         "cache_creation": 0,
     }
     for d in state.dispatches:
         tu = d.token_usage
-        totals["input_tokens"] += tu.get("input_tokens", 0)
-        totals["output_tokens"] += tu.get("output_tokens", 0)
+        totals["input"] += tu.get("input", 0)
+        totals["output"] += tu.get("output", 0)
         totals["cache_read"] += tu.get("cache_read", 0)
         totals["cache_creation"] += tu.get("cache_creation", 0)
     return totals
@@ -119,8 +119,8 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
                 d.name,
                 str(d.status),
                 _fmt_elapsed(d),
-                _humanize(tu.get("input_tokens", 0)),
-                _humanize(tu.get("output_tokens", 0)),
+                _humanize(tu.get("input", 0)),
+                _humanize(tu.get("output", 0)),
                 _humanize(tu.get("cache_read", 0)),
                 _humanize(tu.get("cache_creation", 0)),
                 d.dispatched_session_log_dir or "-",
@@ -133,8 +133,8 @@ def _build_status_rows(state: CampaignState) -> list[tuple[str, ...]]:
             "TOTAL",
             "",
             "",
-            _humanize(totals["input_tokens"]),
-            _humanize(totals["output_tokens"]),
+            _humanize(totals["input"]),
+            _humanize(totals["output"]),
             _humanize(totals["cache_read"]),
             _humanize(totals["cache_creation"]),
             "",
@@ -168,8 +168,8 @@ def _cross_check_tokens(state: CampaignState, state_totals: dict[str, int]) -> N
         return
 
     for label, state_key, log_key in [
-        ("input_tokens", "input_tokens", "input_tokens"),
-        ("output_tokens", "output_tokens", "output_tokens"),
+        ("input", "input", "input_tokens"),
+        ("output", "output", "output_tokens"),
         ("cache_read", "cache_read", "cache_read_tokens"),
         ("cache_creation", "cache_creation", "cache_write_tokens"),
     ]:

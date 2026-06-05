@@ -419,3 +419,26 @@ class TestResetDispatchEdgeCases:
         state = json.loads(resume_state_path.read_text())
         assert "impl-issue-42" not in state["resume_attempted"]
         assert "d-abc123" not in state["resume_attempted"]
+
+
+class TestResetDispatchProtection:
+    @pytest.mark.anyio
+    async def test_reset_dispatch_surfaces_protected_artifacts(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        """Tool response includes has_protected_artifacts and protected_prs fields."""
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url="https://github.com/owner/repo/pull/1")
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123", reset_to="queued")
+        result = json.loads(raw)
+
+        assert result["success"] is True
+        assert "has_protected_artifacts" in result
+        assert "protected_prs" in result
+        assert isinstance(result["protected_prs"], list)

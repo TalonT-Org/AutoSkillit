@@ -169,7 +169,8 @@ def parse_campaign_summary(
 
     Returns CampaignSummary on success, ParseFailure with a specific kind on any failure.
     """
-    match = _SUMMARY_PATTERN.search(text)
+    _matches = list(_SUMMARY_PATTERN.finditer(text))
+    match = _matches[-1] if _matches else None
     if match is None:
         return ParseFailure(
             ParseFailureKind.SENTINEL_MISSING, "No campaign summary sentinel found"

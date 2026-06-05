@@ -385,6 +385,7 @@ class TestDispatchRecordToDict:
             "ended_at",
             "sidecar_path",
             "attempt_history",
+            "branch_name",
             "resume_checkpoint",
             "wait_seconds",
             "resets_at",

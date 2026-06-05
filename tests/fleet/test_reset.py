@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -193,3 +194,98 @@ class TestUpdateCampaignState:
         assert state is not None
         d = next(d for d in state.dispatches if d.name == "d-test2")
         assert d.labels_cleaned is True
+
+
+class TestResetProtectedArtifacts:
+    @pytest.mark.anyio
+    async def test_open_reviewed_pr_blocks_without_force(self, tmp_path: Path) -> None:
+        """reset_dispatch_artifacts discovers open PRs via branch_name and protects them."""
+        dispatch = DispatchRecord(
+            name="issue-42",
+            branch_name="issue-42-20260604",
+            sidecar_path=str(tmp_path / "gone.jsonl"),
+            status=DispatchStatus.FAILURE,
+        )
+
+        async def _runner(cmd, **_kwargs):
+            if "pr" in cmd and "list" in cmd:
+                if "--head" in cmd:
+                    head_idx = cmd.index("--head") + 1
+                    head_val = cmd[head_idx]
+                    if head_val == "issue-42":
+                        return _make_subprocess_result(stdout="[]")
+                    elif head_val == "issue-42-20260604":
+                        return _make_subprocess_result(
+                            stdout=json.dumps([{"url": "https://github.com/o/r/pull/3757"}])
+                        )
+                return _make_subprocess_result(stdout="[]")
+            if "pr" in cmd and "view" in cmd:
+                return _make_subprocess_result(
+                    stdout=json.dumps({"state": "OPEN", "reviewDecision": "APPROVED"})
+                )
+            return _make_subprocess_result()
+
+        report = await reset_dispatch_artifacts(
+            dispatch,
+            project_dir=tmp_path,
+            worktrees_dir=tmp_path / "wt",
+            runner=_runner,
+            github_client=None,
+            target_state=IssueLabelState.FAIL,
+        )
+        assert report.has_protected_artifacts is True
+        assert "https://github.com/o/r/pull/3757" in report.protected_prs
+        assert "https://github.com/o/r/pull/3757" not in report.prs_closed
+
+    @pytest.mark.anyio
+    async def test_force_bypasses_protection(self, tmp_path: Path) -> None:
+        """force=True closes reviewed PRs without protection check."""
+        dispatch = DispatchRecord(
+            name="issue-42",
+            branch_name="issue-42-20260604",
+            sidecar_path=str(tmp_path / "gone.jsonl"),
+            status=DispatchStatus.FAILURE,
+        )
+
+        async def _runner(cmd, **_kwargs):
+            if "pr" in cmd and "list" in cmd:
+                if "--head" in cmd:
+                    head_idx = cmd.index("--head") + 1
+                    head_val = cmd[head_idx]
+                    if head_val == "issue-42-20260604":
+                        return _make_subprocess_result(
+                            stdout=json.dumps([{"url": "https://github.com/o/r/pull/3757"}])
+                        )
+                return _make_subprocess_result(stdout="[]")
+            return _make_subprocess_result()
+
+        report = await reset_dispatch_artifacts(
+            dispatch,
+            project_dir=tmp_path,
+            worktrees_dir=tmp_path / "wt",
+            runner=_runner,
+            github_client=None,
+            target_state=IssueLabelState.FAIL,
+            force=True,
+        )
+        assert report.has_protected_artifacts is False
+        assert "https://github.com/o/r/pull/3757" in report.prs_closed
+
+    @pytest.mark.anyio
+    async def test_branch_name_field_populated_in_report(self, tmp_path: Path) -> None:
+        """ResetReport.branch_name uses dispatch.branch_name when available."""
+        dispatch = DispatchRecord(
+            name="issue-42",
+            branch_name="issue-42-20260604-153012",
+            status=DispatchStatus.FAILURE,
+        )
+        runner = AsyncMock(return_value=_make_subprocess_result())
+        report = await reset_dispatch_artifacts(
+            dispatch,
+            project_dir=tmp_path,
+            worktrees_dir=tmp_path / "wt",
+            runner=runner,
+            github_client=None,
+            target_state=IssueLabelState.FAIL,
+        )
+        assert report.branch_name == "issue-42-20260604-153012"

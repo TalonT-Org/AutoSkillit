@@ -562,6 +562,12 @@ async def _run_dispatch(
                     f"JSONL log for session {resume_session_id} not found",
                 )
 
+    resume_line_offset = 0
+    if resume_session_id:
+        _resume_jsonl = claude_code_log_path(str(tool_ctx.project_dir), resume_session_id)
+        if _resume_jsonl is not None and _resume_jsonl.exists():
+            resume_line_offset = sum(1 for _ in _resume_jsonl.open(encoding="utf-8"))
+
     completion_marker = identity.completion_marker
     sentinel_contract = identity.sentinel_contract
     from autoskillit.fleet.sidecar import sidecar_path as compute_sidecar_path  # noqa: PLC0415
@@ -758,12 +764,21 @@ async def _run_dispatch(
                 additional_jsonl_paths.append(path)
 
         jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+        if resume_line_offset and skill_result.session_id and resume_session_id:
+            if skill_result.session_id != resume_session_id:
+                logger.warning(
+                    "resume_line_offset_invalidated",
+                    resume_session_id=resume_session_id,
+                    actual_session_id=skill_result.session_id,
+                )
+                resume_line_offset = 0
         parsed_result = parse_l3_result_block(
             stdout=skill_result.result or "",
             expected_dispatch_id=dispatch_id,
             assistant_messages_path=jsonl_path,
             prior_dispatch_ids=prior_ids or None,
             additional_jsonl_paths=additional_jsonl_paths or None,
+            resume_line_offset=resume_line_offset,
         )
 
     _issue_urls_raw = effective_ingredients.get("issue_urls", "") if effective_ingredients else ""
@@ -785,6 +800,24 @@ async def _run_dispatch(
         checkpoint=dispatch_checkpoint,
         subtype=skill_result.subtype,
     )
+
+    _branch_name = ""
+    if sidecar_entries and tool_ctx.runner is not None:
+        for _entry in sidecar_entries:
+            if _entry.pr_url:
+                try:
+                    _pr_info = await tool_ctx.runner(
+                        ["gh", "pr", "view", _entry.pr_url, "--json", "headRefName"],
+                        cwd=tool_ctx.project_dir,
+                        timeout=15,
+                    )
+                    if _pr_info.returncode == 0 and _pr_info.stdout:
+                        import json as _json  # noqa: PLC0415
+
+                        _branch_name = _json.loads(_pr_info.stdout).get("headRefName", "")
+                except Exception:
+                    logger.debug("branch_name_extraction_failed", exc_info=True)
+                break
 
     _labels_cleaned = False
     if final_status not in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
@@ -832,6 +865,7 @@ async def _run_dispatch(
         ended_at=ended_at,
         sidecar_path=dispatch_sidecar_path,
         labels_cleaned=_labels_cleaned,
+        branch_name=_branch_name,
         resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
     )
 

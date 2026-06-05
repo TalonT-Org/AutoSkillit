@@ -573,3 +573,110 @@ def test_clean_sentinel_regression_guard() -> None:
     result = parse_l3_result_block(stdout=stdout, expected_dispatch_id=DISPATCH_ID)
     assert result.outcome == "completed_clean"
     assert result.payload == payload
+
+
+# ---------------------------------------------------------------------------
+# Resume-scoped JSONL extraction tests
+# ---------------------------------------------------------------------------
+
+
+def test_extract_text_from_jsonl_skip_lines(tmp_path: Path) -> None:
+    """_extract_text_from_jsonl with skip_lines returns only text from lines N+ onward."""
+    from autoskillit.fleet.result_parser import _extract_text_from_jsonl
+
+    messages_run1 = [f"RUN_1_MARKER message {i}" for i in range(5)]
+    messages_run2 = [f"RUN_2_MARKER message {i}" for i in range(5)]
+    jsonl_path = make_jsonl_file(tmp_path, messages_run1 + messages_run2)
+
+    text = _extract_text_from_jsonl(jsonl_path, skip_lines=5)
+    assert "RUN_2_MARKER" in text
+    assert "RUN_1_MARKER" not in text
+
+
+def test_stale_prior_id_sentinel_returns_no_sentinel_with_offset(tmp_path: Path) -> None:
+    """Shared JSONL with prior-run failure sentinel returns no_sentinel when offset skips it."""
+    prior_id = "aaaa1111-bbbb-cccc-dddd-eeee2222ffff"
+    new_id = "xxxx9999-yyyy-zzzz-wwww-vvvv8888uuuu"
+
+    prior_run_messages = [
+        "Some prior run output",
+        f"---l3-result::{prior_id}---\n"
+        f'{{"success": false, "reason": "context_exhausted"}}\n'
+        f"---end-l3-result::{prior_id}---",
+    ]
+    # Lines 0-9 are prior run (10 JSONL lines with make_jsonl_file producing 1 line per message)
+    # Actually make_jsonl_file creates exactly len(messages) lines
+    resumed_run_messages = [
+        "Resumed run output line 1",
+        "Resumed run output line 2",
+        "Resumed run output line 3",
+    ]
+    all_messages = prior_run_messages + resumed_run_messages
+    jsonl_path = make_jsonl_file(tmp_path, all_messages)
+
+    result = parse_l3_result_block(
+        stdout="",
+        expected_dispatch_id=new_id,
+        assistant_messages_path=jsonl_path,
+        prior_dispatch_ids=[prior_id],
+        resume_line_offset=len(prior_run_messages),
+    )
+    assert result.outcome == "no_sentinel"
+
+
+def test_prior_id_sentinel_scoped_by_resume_offset(tmp_path: Path) -> None:
+    """Stage 3b only searches JSONL content after the resume offset."""
+    prior_id = "aaaa1111-bbbb-cccc-dddd-eeee2222ffff"
+    new_id = "xxxx9999-yyyy-zzzz-wwww-vvvv8888uuuu"
+
+    # 5 lines with prior-ID failure sentinel
+    prior_lines = [
+        "Prior run message 1",
+        "Prior run message 2",
+        f"---l3-result::{prior_id}---\n"
+        f'{{"success": false, "reason": "context_exhausted"}}\n'
+        f"---end-l3-result::{prior_id}---",
+        "Prior run message 4",
+        "Prior run message 5",
+    ]
+    # 5 lines with resumed-run content, no sentinel
+    resumed_lines = [
+        "Resumed message 1",
+        "Resumed message 2",
+        "Resumed message 3",
+        "Resumed message 4",
+        "Resumed message 5",
+    ]
+    jsonl_path = make_jsonl_file(tmp_path, prior_lines + resumed_lines)
+
+    result = parse_l3_result_block(
+        stdout="",
+        expected_dispatch_id=new_id,
+        assistant_messages_path=jsonl_path,
+        prior_dispatch_ids=[prior_id],
+        resume_line_offset=len(prior_lines),
+    )
+    assert result.outcome == "no_sentinel"
+
+
+def test_resume_line_offset_zero_preserves_existing_behavior(tmp_path: Path) -> None:
+    """resume_line_offset=0 (default) reads the entire JSONL, preserving backward compat."""
+    prior_id = "aaaa1111-bbbb-cccc-dddd-eeee2222ffff"
+    new_id = "xxxx9999-yyyy-zzzz-wwww-vvvv8888uuuu"
+
+    messages = [
+        f"---l3-result::{prior_id}---\n"
+        f'{{"success": true, "reason": "completed"}}\n'
+        f"---end-l3-result::{prior_id}---",
+    ]
+    jsonl_path = make_jsonl_file(tmp_path, messages)
+
+    result = parse_l3_result_block(
+        stdout="",
+        expected_dispatch_id=new_id,
+        assistant_messages_path=jsonl_path,
+        prior_dispatch_ids=[prior_id],
+        resume_line_offset=0,
+    )
+    # Without offset, the prior-ID sentinel IS found (existing behavior)
+    assert result.outcome == "completed_clean"

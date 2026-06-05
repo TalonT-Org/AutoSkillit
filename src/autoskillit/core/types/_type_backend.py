@@ -97,6 +97,8 @@ class BackendCapabilities:
     session_dir_symlinks: frozenset[str] = field(default_factory=frozenset)
     # Guard script names that apply to sessions for this backend
     applicable_guards: frozenset[str] = field(default_factory=frozenset)
+    # Tool names whose calls are subject to write_guard enforcement for this backend
+    write_guard_tool_names: frozenset[str] = field(default_factory=frozenset)
     # Env var prefixes stripped before session launch
     env_denylist_prefixes: tuple[str, ...] = field(default=())
     # Forward-declared: planned for version validation in doctor
@@ -201,6 +203,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     required_session_files=frozenset(),
     session_dir_symlinks=frozenset(),
     applicable_guards=frozenset({"skill_load_guard"}),
+    write_guard_tool_names=frozenset({"Write", "Edit", "Bash", "apply_patch"}),
     env_denylist_prefixes=(),
     min_version="",
     version_check_command="claude --version",

@@ -108,6 +108,7 @@ def test_backend_capabilities_field_count():
         "session_dir_symlinks",
         "applicable_guards",
         "mcp_env_forward_vars",
+        "write_guard_tool_names",
     }
     assert str_fields == {
         "min_version",
@@ -156,6 +157,7 @@ def test_backend_capabilities_field_names_locked():
         "patch_format",
         "default_skill_sandbox_mode",
         "supports_tool_list_changed",
+        "write_guard_tool_names",
         "mcp_env_forward_vars",
         "replay_capable",
         "record_capable",
@@ -190,6 +192,9 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.required_session_files == frozenset()
     assert CLAUDE_CODE_CAPABILITIES.session_dir_symlinks == frozenset()
     assert CLAUDE_CODE_CAPABILITIES.applicable_guards == frozenset({"skill_load_guard"})
+    assert CLAUDE_CODE_CAPABILITIES.write_guard_tool_names == frozenset(
+        {"Write", "Edit", "Bash", "apply_patch"}
+    )
     assert CLAUDE_CODE_CAPABILITIES.env_denylist_prefixes == ()
     assert CLAUDE_CODE_CAPABILITIES.min_version == ""
     assert CLAUDE_CODE_CAPABILITIES.version_check_command == "claude --version"
@@ -232,6 +237,7 @@ def test_backend_capabilities_frozenset_defaults():
         "session_dir_symlinks",
         "applicable_guards",
         "mcp_env_forward_vars",
+        "write_guard_tool_names",
     }
     field_names = {f.name for f in dataclasses.fields(instance)}
     hints = typing.get_type_hints(BackendCapabilities)

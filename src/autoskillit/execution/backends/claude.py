@@ -14,6 +14,7 @@ from autoskillit.core import (
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_APPLICABLE_GUARDS,
+    AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
     CLAUDE_CODE_CAPABILITIES,
     CONTEXT_EXHAUSTION_MARKER,
@@ -585,6 +586,9 @@ class ClaudeCodeBackend:
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
+            AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES: ",".join(
+                sorted(self.capabilities.write_guard_tool_names)
+            ),
         }
         if exit_after_stop_delay_ms > 0:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
@@ -687,6 +691,9 @@ class ClaudeCodeBackend:
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
+            AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES: ",".join(
+                sorted(self.capabilities.write_guard_tool_names)
+            ),
         }
         if exit_after_stop_delay_ms > 0:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)

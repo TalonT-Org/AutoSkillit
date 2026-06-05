@@ -497,3 +497,10 @@ def test_autoskillit_cwd_in_private_env_vars() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
 
     assert "AUTOSKILLIT_CWD" in AUTOSKILLIT_PRIVATE_ENV_VARS
+
+
+def test_autoskillit_write_guard_tool_names_in_private_env_vars() -> None:
+    """AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES must be scrubbed from ambient env."""
+    from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
+
+    assert "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES" in AUTOSKILLIT_PRIVATE_ENV_VARS

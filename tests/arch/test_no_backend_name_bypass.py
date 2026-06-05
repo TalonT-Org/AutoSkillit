@@ -13,7 +13,6 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "server/_factory.py",  # Feature-gated backend swap (pre-capabilities)
         "cli/_marketplace.py",  # Marketplace — Claude Code-only install guard
         "execution/recording.py",  # Replay setup: fmt == "codex" Compare for player selection
-        "execution/headless/_headless_evidence.py",  # Claude-specific evidence extraction
         "execution/headless/_headless_result.py",  # Claude-specific result parsing
         "core/_version_snapshot.py",  # Version snapshot — routes codex_version by backend name
         "execution/headless/_headless_helpers.py",  # assert_headless_cmd claude -p flag check

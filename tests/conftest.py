@@ -88,11 +88,24 @@ _structlog_proxies: list[object] = []
 
 @pytest.fixture(autouse=True, scope="session")
 def _detect_tmp_git_contamination():
-    """Fail fast if /tmp/.git exists — prevents 35+ phantom test failures."""
-    if _Path("/tmp/.git").exists():
+    """Fail fast if /tmp/.git is a structurally valid git repo.
+
+    An empty /tmp/.git directory is harmless — _find_git_ancestor() walks past
+    it (no HEAD file).  Only a valid git repo at /tmp contaminates tests that
+    use cwd='/tmp'.
+    """
+    tmp_git = _Path("/tmp/.git")
+    if tmp_git.is_dir() and (tmp_git / "HEAD").is_file():
         pytest.fail(
-            "/tmp/.git exists — this contaminates is_git_main_checkout() for tests "
-            "using cwd='/tmp'. Remove it before running the test suite."
+            "/tmp/.git exists with a valid HEAD — this contaminates "
+            "is_git_main_checkout() for tests using cwd='/tmp'. "
+            "Remove it before running the test suite."
+        )
+    if tmp_git.is_file():
+        pytest.fail(
+            "/tmp/.git is a worktree pointer file — this contaminates "
+            "is_git_worktree() for tests using cwd='/tmp'. "
+            "Remove it before running the test suite."
         )
 
 

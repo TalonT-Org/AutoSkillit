@@ -88,14 +88,16 @@ def test_codex_status_consistent_with_required_backends():
     assert not violations, "\n".join(f"  {v}" for v in violations)
 
 
-_MCP_TOOL_CAPABILITIES = {"run_skill", "test_check", "open_kitchen"}
+# test_check removed: reclassified to works-as-is (#3781);
+# cross-layer test is the authoritative guard.
+_NOT_APPLICABLE_MCP_CAPABILITIES = {"run_skill", "open_kitchen"}
 
 
 def test_mcp_tools_require_claude_code():
     from autoskillit.core.types._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
 
     violations = []
-    for cap_name in _MCP_TOOL_CAPABILITIES:
+    for cap_name in _NOT_APPLICABLE_MCP_CAPABILITIES:
         cap = SKILL_CAPABILITY_REGISTRY.get(cap_name)
         if cap and cap.required_backends != frozenset({AGENT_BACKEND_CLAUDE_CODE}):
             violations.append(
@@ -103,8 +105,8 @@ def test_mcp_tools_require_claude_code():
                 f"got {cap.required_backends!r}"
             )
     assert not violations, (
-        "MCP tools must derive required_backends from codex_status='not-applicable':\n"
-        + "\n".join(f"  {v}" for v in violations)
+        "Not-applicable MCP capabilities must derive required_backends"
+        " from codex_status='not-applicable':\n" + "\n".join(f"  {v}" for v in violations)
     )
 
 
@@ -112,3 +114,90 @@ def test_required_backends_is_derived_property():
     from autoskillit.core.types._type_constants_registries import SkillCapabilityDef
 
     assert "required_backends" not in SkillCapabilityDef.__dataclass_fields__
+
+
+def test_headless_tools_not_marked_not_applicable():
+    from autoskillit.core.types._type_constants_registries import HEADLESS_TOOLS
+
+    violations = []
+    for tool_name in sorted(HEADLESS_TOOLS):
+        cap = SKILL_CAPABILITY_REGISTRY.get(tool_name)
+        if cap and cap.codex_status == "not-applicable":
+            violations.append(f"{tool_name}: in HEADLESS_TOOLS but codex_status='not-applicable'")
+    assert not violations, (
+        "HEADLESS_TOOLS are accessible in Codex headless sessions — "
+        "codex_status='not-applicable' is contradictory:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+    assert SKILL_CAPABILITY_REGISTRY["test_check"].codex_status == "works-as-is", (
+        "test_check must be classified as works-as-is, not just != not-applicable"
+    )
+
+
+@pytest.mark.anyio
+async def test_codex_status_matches_tool_visibility(monkeypatch):
+    from autoskillit.core.types._type_constants_registries import (
+        GATED_TOOLS,
+        HEADLESS_TOOLS,
+        UNGATED_TOOLS,
+    )
+    from autoskillit.server import mcp
+    from autoskillit.server._session_type import _apply_session_type_visibility
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "1")
+
+    _apply_session_type_visibility()
+    tools = await mcp.list_tools()
+    tool_names = {t.name for t in tools}
+
+    assert "test_check" in tool_names, (
+        "test_check must be visible in SKILL+HEADLESS — env misconfigured?"
+    )
+
+    _skill_blocking_gated_tools = {"run_skill", "open_kitchen"}
+    mcp_tool_caps = set(SKILL_CAPABILITY_REGISTRY) & (GATED_TOOLS | HEADLESS_TOOLS | UNGATED_TOOLS)
+
+    violations = []
+    for cap_name in sorted(mcp_tool_caps):
+        cap = SKILL_CAPABILITY_REGISTRY[cap_name]
+        visible = cap_name in tool_names
+        has_skill_gate = cap_name in _skill_blocking_gated_tools
+
+        if visible and not has_skill_gate and cap.codex_status == "not-applicable":
+            violations.append(
+                f"{cap_name}: visible in Codex SKILL+HEADLESS session "
+                f"but codex_status='not-applicable'"
+            )
+
+    assert not violations, (
+        "Tools visible in Codex sessions must not be classified as not-applicable:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+def test_reclassified_skills_have_empty_backend_requirements():
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+    previously_blocked = [
+        "dry-walkthrough",
+        "implement-experiment",
+        "implement-worktree",
+        "plan-experiment",
+        "setup-project",
+    ]
+    violations = []
+    for skill_name in previously_blocked:
+        info = resolver.resolve(skill_name)
+        assert info is not None, f"Skill {skill_name!r} not found by resolver"
+        if info.backend_requirements != frozenset():
+            violations.append(
+                f"{skill_name}: backend_requirements={info.backend_requirements!r}, "
+                f"expected frozenset()"
+            )
+    assert not violations, (
+        "Reclassifying test_check should unblock these skills on all backends:\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

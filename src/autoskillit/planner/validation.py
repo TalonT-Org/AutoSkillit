@@ -400,17 +400,44 @@ def _check_version_bump_steps(
     return findings
 
 
+_TERMINAL_WP_STATUSES = frozenset({"done"})
+
+
 def _check_failed_wps(wp_manifest: dict | None) -> list[ValidationFinding]:
     if wp_manifest is None:
         return []
     findings: list[ValidationFinding] = []
     for item in wp_manifest.get("items", []):
-        if item.get("status") == "failed":
+        status = item.get("status", "")
+        if status and status not in _TERMINAL_WP_STATUSES:
             findings.append(
                 {
-                    "message": f"WP {item.get('id', '<unknown>')} has status 'failed'",
+                    "message": f"WP {item.get('id', '<unknown>')} has status '{status}'",
                     "severity": "error",
                     "check": "failed_wps",
+                }
+            )
+    return findings
+
+
+def _check_stub_consistency(
+    wp_results: dict[str, dict], wp_manifest: dict | None
+) -> list[ValidationFinding]:
+    if wp_manifest is None:
+        return []
+    manifest_status: dict[str, str] = {}
+    for item in wp_manifest.get("items", []):
+        wid = item.get("id", "")
+        if wid:
+            manifest_status[wid] = item.get("status", "")
+    findings: list[ValidationFinding] = []
+    for wp_id, wp in wp_results.items():
+        if wp.get("elaboration_failed") and manifest_status.get(wp_id) == "done":
+            findings.append(
+                {
+                    "message": f"WP {wp_id} has status 'done' but elaboration_failed in content",
+                    "severity": "error",
+                    "check": "stub_consistency",
                 }
             )
     return findings
@@ -447,6 +474,7 @@ def validate_plan(output_dir: str) -> dict[str, str]:
     all_findings.extend(_check_duplicate_files_touched(wp_results))
     all_findings.extend(_check_version_bump_steps(wp_results))
     all_findings.extend(_check_failed_wps(wp_manifest))
+    all_findings.extend(_check_stub_consistency(wp_results, wp_manifest))
 
     discovery_warnings: list[ValidationFinding] = []
     for f in phase_rejected:

@@ -329,7 +329,7 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
     ),
     "test_check": SkillCapabilityDef(
         description="test_check MCP tool (headless test runner)",
-        codex_status="not-applicable",
+        codex_status="works-as-is",
     ),
     "claude_dir": SkillCapabilityDef(
         description="Reads/writes .claude/ directory structure",

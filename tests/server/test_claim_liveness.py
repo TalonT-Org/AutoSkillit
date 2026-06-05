@@ -64,7 +64,9 @@ class TestClaimIssueLiveness:
         assert result["success"] is True
         assert result["claimed"] is True
         cleanup_mock.assert_called_once_with(
-            dead_dispatch.sidecar_path, tool_ctx_kitchen_open.github_client
+            dead_dispatch.sidecar_path,
+            tool_ctx_kitchen_open.github_client,
+            issue_url=dead_dispatch.issue_url,
         )
 
     @pytest.mark.anyio
@@ -307,3 +309,36 @@ class TestClaimHelperTerminalDispatchRecovery:
         assert decision.claimed is True
         assert decision.stale_label_cleaned is True
         liveness_mock.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_claim_helper_failure_dispatch_recovers_via_issue_url(self, tmp_path):
+        """FAILURE dispatch with issue_url + missing sidecar → cleanup succeeds."""
+        from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
+
+        failure_dispatch = DispatchRecord(
+            name="task-fail-url",
+            status=DispatchStatus.FAILURE,
+            sidecar_path=None,
+            issue_url=_ISSUE_URL,
+            labels_cleaned=False,
+        )
+        cleanup_mock = AsyncMock(return_value=True)
+
+        with (
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=failure_dispatch),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+        ):
+            decision = await _try_claim_with_liveness(
+                issue_url=_ISSUE_URL,
+                issue_number=42,
+                effective_label="in-progress",
+                current_labels=["in-progress"],
+                allow_reentry=False,
+                github_client=AsyncMock(),
+                campaign_state_paths=[],
+            )
+
+        assert decision.claimed is True
+        assert decision.stale_label_cleaned is True
+        cleanup_mock.assert_called_once()
+        assert cleanup_mock.call_args.kwargs["issue_url"] == _ISSUE_URL

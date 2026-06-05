@@ -467,3 +467,54 @@ class TestCleanupOrphanedLabelsUnit:
 
         assert result is False
         github_client.swap_labels.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_cleanup_uses_issue_url_when_sidecar_none(self, tmp_path: Path) -> None:
+        """cleanup_orphaned_labels calls swap_labels via issue_url when sidecar_path is None."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+
+        result = await cleanup_orphaned_labels(
+            None, github_client, issue_url="https://github.com/org/repo/issues/42"
+        )
+
+        assert result is True
+        github_client.swap_labels.assert_called_once()
+        args = github_client.swap_labels.call_args
+        assert args[0][0] == "org"
+        assert args[0][1] == "repo"
+        assert args[0][2] == 42
+
+    @pytest.mark.anyio
+    async def test_cleanup_returns_true_when_sidecar_none_and_no_issue_url(
+        self, tmp_path: Path
+    ) -> None:
+        """cleanup_orphaned_labels returns True (no-op) with sidecar=None and empty issue_url."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        github_client = AsyncMock()
+
+        result = await cleanup_orphaned_labels(None, github_client, issue_url="")
+
+        assert result is True
+        github_client.swap_labels.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_cleanup_falls_back_to_issue_url_when_sidecar_missing_on_disk(
+        self, tmp_path: Path
+    ) -> None:
+        """cleanup_orphaned_labels falls back to issue_url when sidecar file is missing."""
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        missing = str(tmp_path / "vanished.jsonl")
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+
+        result = await cleanup_orphaned_labels(
+            missing, github_client, issue_url="https://github.com/org/repo/issues/7"
+        )
+
+        assert result is True
+        github_client.swap_labels.assert_called_once()

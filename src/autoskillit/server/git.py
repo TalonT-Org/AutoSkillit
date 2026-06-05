@@ -28,6 +28,7 @@ from autoskillit.core import (
     truncate_text,
 )
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
+from autoskillit.server._misc import condense_test_output
 from autoskillit.server._subprocess import _process_runner_result
 from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 
@@ -296,13 +297,14 @@ async def perform_merge(
             }
         test_result = await tester.run(Path(worktree_path))
         if not test_result.passed:
+            condensed_stdout, condensed_stderr = condense_test_output(test_result)
             return {
                 "error": "Tests failed in worktree — merge blocked",
                 "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_stdout": test_result.stdout,
-                "test_stderr": test_result.stderr,
+                "test_stdout": truncate_text(condensed_stdout),
+                "test_stderr": truncate_text(condensed_stderr),
             }
 
     # 5. Fetch
@@ -382,9 +384,13 @@ async def perform_merge(
                 if abort_failed
                 else MergeState.WORKTREE_INTACT_REBASE_ABORTED
             ),
-            "stderr": rebase_stderr,
+            "stderr": truncate_text(rebase_stderr),
             "worktree_path": worktree_path,
-            **({"abort_failed": True, "abort_stderr": abort_stderr} if abort_failed else {}),
+            **(
+                {"abort_failed": True, "abort_stderr": truncate_text(abort_stderr)}
+                if abort_failed
+                else {}
+            ),
         }
 
     # 6.5. Post-rebase test gate — re-tests the rebased commits before merging
@@ -392,6 +398,7 @@ async def perform_merge(
         test_result = await tester.run(Path(worktree_path))
         passed = test_result.passed
         if not passed:
+            condensed_stdout, condensed_stderr = condense_test_output(test_result)
             return {
                 "error": (
                     "Tests failed after rebase. The worktree is intact; "
@@ -400,8 +407,8 @@ async def perform_merge(
                 "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_stdout": test_result.stdout,
-                "test_stderr": test_result.stderr,
+                "test_stdout": truncate_text(condensed_stdout),
+                "test_stderr": truncate_text(condensed_stderr),
             }
 
     # 7. Discover main repo path

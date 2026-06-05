@@ -59,6 +59,7 @@ class TestDispatchRecordSchemaV2:
             dispatched_pid=1234,
             starttime_ticks=42,
             boot_id="abc-boot",
+            issue_url="https://github.com/org/repo/issues/42",
         )
         state = read_state(sp)
         assert state is not None
@@ -67,14 +68,16 @@ class TestDispatchRecordSchemaV2:
         assert d.dispatched_pid == 1234
         assert d.dispatched_starttime_ticks == 42
         assert d.dispatched_boot_id == "abc-boot"
+        assert d.issue_url == "https://github.com/org/repo/issues/42"
 
         raw = json.loads(sp.read_text())
         dispatch_raw = raw["dispatches"][0]
         assert dispatch_raw["dispatched_starttime_ticks"] == 42
         assert dispatch_raw["dispatched_boot_id"] == "abc-boot"
+        assert dispatch_raw["issue_url"] == "https://github.com/org/repo/issues/42"
 
-    def test_schema_version_is_7(self) -> None:
-        assert FLEET_STATE_SCHEMA_VERSION == 7
+    def test_schema_version_is_8(self) -> None:
+        assert FLEET_STATE_SCHEMA_VERSION == 8
 
     def test_read_state_returns_none_on_version_mismatch(self, tmp_path: Path) -> None:
         """read_state returns None when schema_version is stale (v1)."""
@@ -384,6 +387,7 @@ class TestDispatchRecordToDict:
             "started_at",
             "ended_at",
             "sidecar_path",
+            "issue_url",
             "attempt_history",
             "branch_name",
             "resume_checkpoint",
@@ -547,6 +551,26 @@ class TestAttemptHistoryFields:
         )
         roundtripped = DispatchRecord.from_dict(d.to_dict())
         assert roundtripped.attempt_history == [{"dispatch_id": "attempt-1", "status": "failure"}]
+
+
+class TestIssueUrlField:
+    def test_issue_url_default_empty(self) -> None:
+        rec = DispatchRecord(name="d1")
+        assert rec.issue_url == ""
+
+    def test_issue_url_in_to_dict(self) -> None:
+        rec = DispatchRecord(name="d1", issue_url="https://github.com/org/repo/issues/42")
+        d = rec.to_dict()
+        assert d["issue_url"] == "https://github.com/org/repo/issues/42"
+
+    def test_issue_url_from_dict_missing_defaults_empty(self) -> None:
+        rec = DispatchRecord.from_dict({"name": "d1"})
+        assert rec.issue_url == ""
+
+    def test_issue_url_round_trips_through_to_dict(self) -> None:
+        rec = DispatchRecord(name="d1", issue_url="https://github.com/org/repo/issues/42")
+        roundtripped = DispatchRecord.from_dict(rec.to_dict())
+        assert roundtripped.issue_url == "https://github.com/org/repo/issues/42"
 
 
 class TestBranchNameField:

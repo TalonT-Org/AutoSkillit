@@ -10,7 +10,7 @@ from autoskillit.fleet.state import _write_state as write_state
 from autoskillit.fleet.state_recovery import (
     resume_campaign_from_state,
 )
-from autoskillit.fleet.state_types import CampaignState, DispatchRecord
+from autoskillit.fleet.state_types import FLEET_STATE_SCHEMA_VERSION, CampaignState, DispatchRecord
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -30,7 +30,7 @@ class TestMaxResumeAttemptsGuard:
             ),
         ]
         state = CampaignState(
-            schema_version=7,
+            schema_version=FLEET_STATE_SCHEMA_VERSION,
             campaign_id="test-id",
             campaign_name="test",
             manifest_path="manifest.yaml",
@@ -61,7 +61,7 @@ class TestMaxResumeAttemptsGuard:
             ),
         ]
         state = CampaignState(
-            schema_version=7,
+            schema_version=FLEET_STATE_SCHEMA_VERSION,
             campaign_id="test-id",
             campaign_name="test",
             manifest_path="manifest.yaml",
@@ -94,7 +94,7 @@ class TestMaxResumeAttemptsGuard:
             ),
         ]
         state = CampaignState(
-            schema_version=7,
+            schema_version=FLEET_STATE_SCHEMA_VERSION,
             campaign_id="test-id",
             campaign_name="test",
             manifest_path="manifest.yaml",

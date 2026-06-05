@@ -378,3 +378,47 @@ class TestStartupLabelRecoverySweep:
         state = read_state(state_path)
         assert state is not None
         assert state.dispatches[0].labels_cleaned is False
+
+    @pytest.mark.anyio
+    async def test_startup_sweep_cleans_terminal_via_issue_url_when_sidecar_none(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Sweep cleans labels for FAILURE dispatch with sidecar_path=None + issue_url set."""
+        from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
+        from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
+        from autoskillit.fleet.state import upsert_dispatch_record_by_name
+
+        monkeypatch.setattr(
+            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            lambda record: False,
+        )
+
+        state_path = tmp_path / "campaign_issue_url.json"
+        write_initial_state(
+            state_path,
+            campaign_id="test",
+            campaign_name="test",
+            manifest_path="/m.yaml",
+            dispatches=[DispatchRecord(name="d1")],
+        )
+        upsert_dispatch_record_by_name(
+            state_path,
+            DispatchRecord(
+                name="d1",
+                status=DispatchStatus.FAILURE,
+                sidecar_path=None,
+                issue_url="https://github.com/owner/repo/issues/99",
+                labels_cleaned=False,
+            ),
+        )
+
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+
+        await sweep_stale_dispatch_labels([state_path], github_client)
+
+        swap_labels_mock.assert_called_once()
+        state = read_state(state_path)
+        assert state is not None
+        assert state.dispatches[0].labels_cleaned is True

@@ -106,7 +106,25 @@ async def _handle_sidecar_label_swap(
     report: ResetReport,
 ) -> None:
     if dispatch.sidecar_path is None:
-        report.labels_reset = True
+        if dispatch.issue_url:
+            try:
+                owner, repo, number = _parse_issue_ref(dispatch.issue_url)
+                result = (
+                    await github_client.swap_labels(
+                        owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
+                    )
+                    if github_client
+                    else None
+                )
+                report.labels_reset = bool(result and result.get("success"))
+            except Exception as exc:
+                logger.warning(
+                    "issue_url label swap failed for %s", dispatch.issue_url, exc_info=True
+                )
+                report.labels_reset = False
+                report.errors.append(f"issue_url_label_swap({dispatch.issue_url}): {exc}")
+        else:
+            report.labels_reset = True
         return
     if github_client is None:
         report.labels_reset = False

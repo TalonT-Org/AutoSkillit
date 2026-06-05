@@ -1002,3 +1002,60 @@ async def test_verify_merge_target_returns_sha():
     assert isinstance(result, GitMergeTarget)
     assert result.branch == "dev"
     assert result.sha == "abc123def456"
+
+
+@pytest.mark.anyio
+async def test_perform_merge_condenses_pre_rebase_test_output(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """Pre-rebase test gate applies condense_test_output before truncation."""
+    from autoskillit.server.git import perform_merge
+
+    noisy_stdout = "collecting ...\n...... [ 72%]\nFAILED test_foo.py::test_bar"
+    tester = InMemoryTestRunner(results=[TestResult(False, noisy_stdout, "install noise")])
+    fake_wt = str(tmp_path)
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/wt", ""))
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+
+    result = await perform_merge(
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
+    )
+
+    assert result["failed_step"] == MergeFailedStep.TEST_GATE
+    assert "[ 72%]" not in result["test_stdout"]
+    assert "FAILED test_foo.py::test_bar" in result["test_stdout"]
+
+
+@pytest.mark.anyio
+async def test_perform_merge_condenses_post_rebase_test_output(
+    default_config, conftest_mock_runner, tmp_path
+):
+    """Post-rebase test gate applies condense_test_output before truncation."""
+    from autoskillit.server.git import perform_merge
+
+    noisy_stdout = "collecting ...\n...... [ 72%]\nFAILED test_foo.py::test_bar"
+    tester = InMemoryTestRunner(
+        results=[
+            TestResult(True, "= 10 passed =", ""),
+            TestResult(False, noisy_stdout, "install noise"),
+        ]
+    )
+    fake_wt = str(tmp_path)
+    conftest_mock_runner.push(_make_result(0, f"{fake_wt}/.git/worktrees/feature", ""))
+    conftest_mock_runner.push(_make_result(0, "feature-branch\n", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+    conftest_mock_runner.push(_make_result(0, "", ""))
+
+    result = await perform_merge(
+        fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
+    )
+
+    assert result["failed_step"] == MergeFailedStep.POST_REBASE_TEST_GATE
+    assert "[ 72%]" not in result["test_stdout"]
+    assert "FAILED test_foo.py::test_bar" in result["test_stdout"]

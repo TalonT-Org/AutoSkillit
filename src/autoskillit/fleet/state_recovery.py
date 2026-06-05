@@ -350,6 +350,17 @@ def find_dispatch_for_issue(
         if state is None:
             continue
         for d in state.dispatches:
+            if d.issue_url and d.issue_url == issue_url:
+                if d.status == DispatchStatus.RUNNING:
+                    return d
+                elif (
+                    terminal_match is None
+                    and d.status in TERMINAL_UNCLEANED_STATUSES
+                    and not d.labels_cleaned
+                ):
+                    terminal_match = d
+                continue
+
             if d.sidecar_path is None:
                 continue
             if d.status == DispatchStatus.RUNNING:

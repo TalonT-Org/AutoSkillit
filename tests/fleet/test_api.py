@@ -57,6 +57,18 @@ class TestWritePidExceptionSwallow:
         )
 
 
+class TestWritePidIssueUrlForwarding:
+    def test_write_pid_forwards_issue_url(self, tmp_path: Path) -> None:
+        from autoskillit.fleet import read_state
+
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        _write_pid(sp, "d1", "id1", 123, 0, issue_url="https://github.com/o/r/issues/1")
+        state = read_state(sp)
+        assert state is not None
+        assert state.dispatches[0].issue_url == "https://github.com/o/r/issues/1"
+
+
 class TestExecuteDispatchCancelledErrorLockRelease:
     @pytest.mark.anyio
     async def test_cancelled_error_propagates_and_releases_lock(

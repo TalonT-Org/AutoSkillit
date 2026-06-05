@@ -120,6 +120,7 @@ def _write_pid(
     sidecar_path: str | None = None,
     dispatched_create_time: float = 0.0,
     identity_degraded: bool = False,
+    issue_url: str = "",
 ) -> None:
     """on_spawn callback: atomically mark dispatch as running with dispatched_pid."""
     from autoskillit.core import read_boot_id
@@ -136,6 +137,7 @@ def _write_pid(
             dispatched_create_time=dispatched_create_time,
             sidecar_path=sidecar_path,
             identity_degraded=identity_degraded,
+            issue_url=issue_url,
         )
     except Exception:
         logger.warning("_write_pid: failed to mark dispatch running", exc_info=True)
@@ -622,6 +624,8 @@ async def _run_dispatch(
         [f"%%L3_DONE::{pid[:8]}%%" for pid in prior_ids] if prior_ids else None
     )
 
+    _issue_urls_raw = effective_ingredients.get("issue_urls", "") if effective_ingredients else ""
+
     def _on_spawn(pid: int, ticks: int) -> None:
         from autoskillit.core import read_boot_id
 
@@ -643,6 +647,7 @@ async def _run_dispatch(
             dispatch_sidecar_path,
             create_time,
             identity_degraded=(ticks == 0),
+            issue_url=_issue_urls_raw,
         )
 
     marker_dir: Path | None = None
@@ -717,7 +722,9 @@ async def _run_dispatch(
             from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
 
             with anyio.CancelScope(shield=True):
-                await cleanup_orphaned_labels(dispatch_sidecar_path, tool_ctx.github_client)
+                await cleanup_orphaned_labels(
+                    dispatch_sidecar_path, tool_ctx.github_client, issue_url=_issue_urls_raw
+                )
 
     sidecar_file = Path(dispatch_sidecar_path)
     sidecar_entries: list[IssueSidecarEntry] = []
@@ -781,7 +788,6 @@ async def _run_dispatch(
             resume_line_offset=resume_line_offset,
         )
 
-    _issue_urls_raw = effective_ingredients.get("issue_urls", "") if effective_ingredients else ""
     _dispatched_issue_list = [u.strip() for u in _issue_urls_raw.split(",") if u.strip()]
     dispatched_issue_count = len(_dispatched_issue_list)
     if parsed_result is not None and parsed_result.outcome == "no_sentinel" and sidecar_entries:
@@ -824,7 +830,7 @@ async def _run_dispatch(
         from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
 
         _labels_cleaned = await cleanup_orphaned_labels(
-            dispatch_sidecar_path, tool_ctx.github_client
+            dispatch_sidecar_path, tool_ctx.github_client, issue_url=_issue_urls_raw
         )
 
     try:
@@ -865,6 +871,7 @@ async def _run_dispatch(
         ended_at=ended_at,
         sidecar_path=dispatch_sidecar_path,
         labels_cleaned=_labels_cleaned,
+        issue_url=_issue_urls_raw,
         branch_name=_branch_name,
         resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
     )

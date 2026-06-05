@@ -129,6 +129,9 @@ def test_headless_tools_not_marked_not_applicable():
         "codex_status='not-applicable' is contradictory:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_test_check_codex_status_is_works_as_is():
     assert SKILL_CAPABILITY_REGISTRY["test_check"].codex_status == "works-as-is", (
         "test_check must be classified as works-as-is, not just != not-applicable"
     )

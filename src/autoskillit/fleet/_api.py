@@ -566,7 +566,7 @@ async def _run_dispatch(
     if resume_session_id:
         _resume_jsonl = claude_code_log_path(str(tool_ctx.project_dir), resume_session_id)
         if _resume_jsonl is not None and _resume_jsonl.exists():
-            resume_line_offset = sum(1 for _ in _resume_jsonl.open(encoding="utf-8"))
+            resume_line_offset = len(_resume_jsonl.read_text(encoding="utf-8").splitlines())
 
     completion_marker = identity.completion_marker
     sentinel_contract = identity.sentinel_contract

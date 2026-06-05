@@ -14,6 +14,8 @@ families:
       strategy: null
     step_naming:
       prefix: null
+    activate_deps: [mermaid]
+    output_prefix: ""
     status: implemented
 
   exp-lens:
@@ -29,6 +31,8 @@ families:
       strategy: priority_hierarchy
     step_naming:
       prefix: null
+    activate_deps: [mermaid]
+    output_prefix: ""
     status: implemented
 
   vis-lens:
@@ -49,7 +53,12 @@ families:
       skip_field: context.is_silent_type
       skip_semantics: skip_when_true
       applies_to: apply
-    lens_metadata: {}  # vis-lens-specific extension point; other families omit this field intentionally
+    lens_metadata:
+      methodology-norms:
+        special_assertions: [tradition_slug, two_stage_matching]
+    activate_deps: [mermaid]
+    output_prefix: "vis_spec_"
+    composite_slugs: [always-on]
     status: implemented
 
   refactor-lens:

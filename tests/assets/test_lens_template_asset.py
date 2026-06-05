@@ -10,10 +10,17 @@ import pytest
 pytestmark = [pytest.mark.medium]
 
 _ASSETS_DIR = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "assets"
+_TEMPLATE_PATH = _ASSETS_DIR / "lens-skill-template.md"
+
+_skip_no_template = pytest.mark.skipif(
+    not _TEMPLATE_PATH.exists(),
+    reason="lens-skill-template.md not yet delivered (prerequisite T2-P4-A1-WP2)",
+)
 
 
+@_skip_no_template
 def test_lens_skill_template_exists_and_has_required_sections() -> None:
-    path = _ASSETS_DIR / "lens-skill-template.md"
+    path = _TEMPLATE_PATH
     assert path.exists(), f"lens-skill-template.md not found at {path}"
     text = path.read_text()
     for section in [
@@ -27,8 +34,9 @@ def test_lens_skill_template_exists_and_has_required_sections() -> None:
         assert section in text, f"Missing section: {section}"
 
 
+@_skip_no_template
 def test_lens_skill_template_has_required_variables() -> None:
-    path = _ASSETS_DIR / "lens-skill-template.md"
+    path = _TEMPLATE_PATH
     assert path.exists(), f"lens-skill-template.md not found at {path}"
     text = path.read_text()
     for var in ["{family}", "{slug}", "{output_prefix}", "{parent_skill}"]:

@@ -475,6 +475,7 @@ class CodexBackend:
             required_session_files=frozenset({"config.toml"}),
             session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
             applicable_guards=frozenset({"write_guard"}),
+            # Codex uses run_cmd instead of Write/Edit — those tools don't exist in Codex
             write_guard_tool_names=frozenset({"apply_patch", "Bash", "run_cmd"}),
             env_denylist_prefixes=CODEX_ENV_PREFIX_DENYLIST,
             min_version="0.130.0",

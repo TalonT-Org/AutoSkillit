@@ -61,6 +61,7 @@ class TestCodexFlags:
             "RESUME_SUBCOMMAND",
             "CONFIG_OVERRIDE",
             "DANGEROUSLY_BYPASS",
+            "DANGEROUSLY_BYPASS_HOOK_TRUST",
         }
         actual = {m.name for m in CodexFlags}
         assert actual == expected
@@ -409,6 +410,10 @@ class TestCodexHeadlessCmd:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert "--output-format" not in spec.cmd
 
+    def test_bypass_hook_trust_absent_from_headless_cmd(self) -> None:
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert "--dangerously-bypass-hook-trust" not in spec.cmd
+
 
 class TestCodexResumeCmd:
     def test_positional_structure(self) -> None:
@@ -468,6 +473,10 @@ class TestCodexResumeCmd:
         reinjected = frozenset(_SESSION_BASELINE_ENV.keys()) | CODEX_MCP_ENV_FORWARD_VARS
         leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume env: {leaking}"
+
+    def test_bypass_hook_trust_absent_from_resume_cmd(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
+        assert "--dangerously-bypass-hook-trust" not in spec.cmd
 
 
 class TestCodexHeadlessCmdEnv:
@@ -636,6 +645,10 @@ class TestCodexBuildSkillSessionCmd:
             _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_MCP_ENV_FORWARD_VARS
         ) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into skill session env: {leaking}"
+
+    def test_bypass_hook_trust_present_in_skill_session_cmd(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert "--dangerously-bypass-hook-trust" in spec.cmd
 
 
 class TestCodexBuildSkillSessionCmdConfigAdapter:
@@ -1040,6 +1053,10 @@ class TestCodexBuildFoodTruckCmd:
         ) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into food truck env: {leaking}"
 
+    def test_bypass_hook_trust_present_in_food_truck_cmd(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "--dangerously-bypass-hook-trust" in spec.cmd
+
 
 class TestCodexEnsurePreLaunchConfigValidation:
     @pytest.fixture(autouse=True)
@@ -1209,6 +1226,9 @@ class TestCodexEnsurePreLaunchConfigValidation:
         def failing_sync(**kw):
             raise RuntimeError("TOML write failed")
 
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
+
         monkeypatch.setattr(
             "autoskillit.execution.backends.codex.sync_hooks_to_codex_config", failing_sync
         )
@@ -1216,8 +1236,30 @@ class TestCodexEnsurePreLaunchConfigValidation:
             "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
             lambda **kw: False,
         )
+        monkeypatch.setattr(subprocess, "run", fake_run)
         errors = CodexBackend().ensure_pre_launch()
         assert any("hook" in e.lower() or "sync" in e.lower() for e in errors)
+
+    def test_ensure_pre_launch_hook_sync_failure_is_non_fatal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def failing_sync(**kw):
+            raise RuntimeError("sync failed")
+
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
+
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config", failing_sync
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        errors = CodexBackend().ensure_pre_launch()
+        assert any("sync" in e.lower() for e in errors)
+        assert not any("codex" in e.lower() and "validation" in e.lower() for e in errors)
 
     def test_ensure_pre_launch_integration_registration_succeeds_then_validates(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

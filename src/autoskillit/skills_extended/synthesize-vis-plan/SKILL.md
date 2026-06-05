@@ -28,6 +28,14 @@ lens). The priority hierarchy in Step 1 maps directly to these tiers.
 - on_success: `create_worktree`
 - on_failure: `escalate_stop`
 
+This skill is the vis-lens-specific implementation of phoropter synthesis. It
+expects `yaml:figure-spec` blocks as input, applies the fixed four-level
+priority hierarchy (accessibility > anti-pattern > methodology-norms >
+chart-select), consumes Tier-C routing args sourced from `select-vis-lenses`,
+and produces three-file output (visualization-plan.md, report-plan.md,
+visualization-plan-trace.md). For family-agnostic synthesis with a configurable
+hierarchy and token-based input, use `phoropter-priority-synthesis` instead.
+
 ## Arguments
 
 ```

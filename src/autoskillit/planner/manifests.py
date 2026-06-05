@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
-from autoskillit.core import atomic_write, get_logger, write_versioned_json
+from autoskillit.core import atomic_write, get_logger, read_versioned_json, write_versioned_json
 from autoskillit.planner._sort_utils import _natural_sort_key
-from autoskillit.planner.lifecycle import record_lifecycle_event
+from autoskillit.planner.lifecycle import load_lifecycle_registry, record_lifecycle_event
 from autoskillit.planner.schema import (
     ASSIGN_ID_RE,
     ASSIGN_RESULT_FILE_RE,
@@ -28,6 +28,12 @@ from autoskillit.planner.schema import (
 from autoskillit.planner.validation import discover_tier_files
 
 logger = get_logger(__name__)
+
+
+def _status_from_content(data: dict) -> str:
+    if data.get("elaboration_failed"):
+        return "elaboration_failed"
+    return "done"
 
 
 class _PhaseBucket(TypedDict):
@@ -266,7 +272,7 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
             {
                 "id": data["id"],
                 "name": data["name"],
-                "status": "done",
+                "status": _status_from_content(data),
                 "result_path": str(f),
                 "metadata": {},
             }
@@ -494,3 +500,70 @@ def resolve_task_input(task: str, planner_dir: str) -> TaskResolutionResult:
     atomic_write(out, task)
     label = _derive_label(task, "")
     return TaskResolutionResult(task_file_path=str(out), task_label=label)
+
+
+def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
+    planner_path = Path(planner_dir)
+    wp_dir = planner_path / "work_packages"
+    if not wp_dir.is_dir():
+        return {"archived_count": "0", "archived_ids": ""}
+
+    active_ids: set[str] = set()
+    found_but_unreadable: list[str] = []
+    for candidate in ("consolidated_wps.json", "refined_wps.json"):
+        candidate_path = planner_path / candidate
+        if candidate_path.exists():
+            doc = read_versioned_json(candidate_path, 1)
+            if doc:
+                active_ids = {wp["id"] for wp in doc.get("work_packages", [])}
+                break
+            found_but_unreadable.append(candidate)
+    else:
+        if found_but_unreadable:
+            logger.warning(
+                "reconcile_wp_files: WP files exist but are unreadable",
+                unreadable=found_but_unreadable,
+            )
+        else:
+            logger.warning("reconcile_wp_files: no consolidated or refined WPs file found")
+        return {"archived_count": "0", "archived_ids": ""}
+
+    registry = load_lifecycle_registry(planner_path)
+    excluded_ids = set(registry.get("absorbed", {}).keys()) | set(
+        registry.get("voided_wps", {}).keys()
+    )
+
+    disk_ids: dict[str, Path] = {}
+    for f in wp_dir.glob("*_result.json"):
+        if f.parent != wp_dir:
+            continue
+        stem = f.name.removesuffix("_result.json")
+        if WP_RESULT_FILE_RE.match(f.name):
+            disk_ids[stem] = f
+
+    orphan_ids = {wid for wid in disk_ids if wid not in active_ids and wid not in excluded_ids}
+    if not orphan_ids:
+        return {"archived_count": "0", "archived_ids": ""}
+
+    archived_dir = wp_dir / "archived"
+    archived_dir.mkdir(exist_ok=True)
+    moved_ids: list[str] = []
+    for orphan_id in sorted(orphan_ids):
+        src = disk_ids[orphan_id]
+        try:
+            src.rename(archived_dir / src.name)
+            moved_ids.append(orphan_id)
+        except OSError:
+            logger.warning("reconcile_wp_files: rename failed", orphan_id=orphan_id)
+
+    if moved_ids:
+        record_lifecycle_event(
+            planner_path,
+            "archived_stubs",
+            {oid: {"reason": "elaboration_failed_orphan"} for oid in moved_ids},
+        )
+    logger.info("reconcile_wp_files", archived_count=len(moved_ids))
+    return {
+        "archived_count": str(len(moved_ids)),
+        "archived_ids": ",".join(sorted(moved_ids)),
+    }

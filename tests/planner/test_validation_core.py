@@ -209,3 +209,64 @@ def test_validation_json_schema_version_2(tmp_path: Path) -> None:
     validation = json.loads((tmp_path / "validation.json").read_text())
     assert validation["schema_version"] == 2
     assert "warnings" in validation
+
+
+def test_stub_through_validation_produces_failed_wps_finding(tmp_path: Path) -> None:
+    """Test 1.3: End-to-end stub-through-validation produces failed_wps finding."""
+    from autoskillit.planner.manifests import finalize_wp_manifest
+    from tests.planner.conftest import (
+        make_assignment_result,
+        make_phase_result,
+        make_wp_result,
+    )
+
+    phases_dir = tmp_path / "phases"
+    assigns_dir = tmp_path / "assignments"
+    wp_dir = tmp_path / "work_packages"
+
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(assigns_dir / "P1-A1_result.json", make_assignment_result(1, 1))
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(
+        wp_dir / "P1-A1-WP2_result.json",
+        make_wp_result(
+            "P1-A1-WP2",
+            allow_stub=True,
+            elaboration_failed=True,
+            deliverables=[],
+            technical_steps=[],
+            acceptance_criteria=[],
+        ),
+    )
+
+    finalize_wp_manifest(str(wp_dir), str(tmp_path))
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "fail"
+
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    checks = {f["check"] for f in validation["findings"]}
+    assert "failed_wps" in checks
+    assert "sizing_bounds" in checks
+
+
+def test_validate_plan_ignores_archived_stubs(tmp_path: Path) -> None:
+    """Test 2.2: validate_plan does not see archived stubs."""
+    make_minimal_output_dir(tmp_path)
+
+    archived_dir = tmp_path / "work_packages" / "archived"
+    archived_dir.mkdir()
+    write_json(
+        archived_dir / "P1-A2-WP1_result.json",
+        {
+            "id": "P1-A2-WP1",
+            "name": "Archived stub",
+            "elaboration_failed": True,
+            "deliverables": [],
+        },
+    )
+
+    result = validate_plan(str(tmp_path))
+    assert result["verdict"] == "pass"
+    validation = json.loads((tmp_path / "validation.json").read_text())
+    all_messages = " ".join(f["message"] for f in validation["findings"])
+    assert "P1-A2-WP1" not in all_messages

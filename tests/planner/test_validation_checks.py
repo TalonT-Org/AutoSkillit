@@ -12,7 +12,9 @@ from autoskillit.planner.validation import (
     _check_dep_id_format,
     _check_duplicate_deliverables,
     _check_duplicate_files_touched,
+    _check_failed_wps,
     _check_sizing_bounds,
+    _check_stub_consistency,
     validate_plan,
 )
 from tests.planner.conftest import (
@@ -451,3 +453,44 @@ def test_validate_plan_with_voided_wps_passes(tmp_path: Path) -> None:
 
     result = validate_plan(str(tmp_path))
     assert result["verdict"] == "pass"
+
+
+def test_check_failed_wps_detects_elaboration_failed_status() -> None:
+    """Test 1.2: _check_failed_wps must detect elaboration_failed status."""
+    wp_manifest = {
+        "items": [
+            {"id": "P1-A1-WP1", "status": "done"},
+            {"id": "P1-A1-WP2", "status": "elaboration_failed"},
+        ]
+    }
+    findings = _check_failed_wps(wp_manifest)
+    assert len(findings) == 1
+    assert findings[0]["check"] == "failed_wps"
+    assert "P1-A1-WP2" in findings[0]["message"]
+    assert "'elaboration_failed'" in findings[0]["message"]
+
+
+def test_check_stub_consistency_catches_manifest_disk_mismatch() -> None:
+    """Test 3.1: _check_stub_consistency catches manifest-content mismatch."""
+    wp_results = {
+        "P1-A1-WP1": {"id": "P1-A1-WP1", "elaboration_failed": True},
+    }
+    wp_manifest = {"items": [{"id": "P1-A1-WP1", "status": "done"}]}
+    findings = _check_stub_consistency(wp_results, wp_manifest)
+    assert len(findings) == 1
+    assert findings[0]["check"] == "stub_consistency"
+    assert findings[0]["severity"] == "error"
+    assert (
+        findings[0]["message"]
+        == "WP P1-A1-WP1 has status 'done' but elaboration_failed in content"
+    )
+
+
+def test_check_stub_consistency_no_false_positive_when_status_correct() -> None:
+    """No finding when manifest correctly has elaboration_failed status."""
+    wp_results = {
+        "P1-A1-WP1": {"id": "P1-A1-WP1", "elaboration_failed": True},
+    }
+    wp_manifest = {"items": [{"id": "P1-A1-WP1", "status": "elaboration_failed"}]}
+    findings = _check_stub_consistency(wp_results, wp_manifest)
+    assert findings == []

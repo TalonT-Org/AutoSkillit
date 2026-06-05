@@ -352,6 +352,15 @@
       "capture": {
         "consolidated_wps_path": "${{ result.consolidated_wps_path }}"
       },
+      "on_success": "reconcile_wp_files",
+      "on_failure": "escalate_stop"
+    },
+    "reconcile_wp_files": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.planner.reconcile_wp_files",
+        "planner_dir": "${{ context.planner_dir }}"
+      },
       "on_success": "validate_task_alignment",
       "on_failure": "escalate_stop"
     },

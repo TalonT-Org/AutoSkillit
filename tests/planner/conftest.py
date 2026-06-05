@@ -93,6 +93,7 @@ def make_minimal_output_dir(
     depends_on_override: dict[str, list[str]] | None = None,
     extra_phases: list[int] | None = None,
     extra_assignments: list[tuple[int, int]] | None = None,
+    stub_wp_ids: set[str] | None = None,
 ) -> Path:
     phases_dir = tmp_path / "phases"
     assigns_dir = tmp_path / "assignments"
@@ -118,26 +119,42 @@ def make_minimal_output_dir(
                 ),
             )
 
+    _stub_ids = stub_wp_ids or set()
     for p in range(1, num_phases + 1):
         for a in range(1, 2):
             for w in range(1, wps_per_assignment + 1):
                 wp_id = f"P{p}-A{a}-WP{w}"
-                deliverables = (
-                    deliverables_override
-                    if deliverables_override is not None
-                    else [f"src/mod_{wp_id}.py"]
-                )
-                deps = (depends_on_override or {}).get(wp_id, [])
-                write_json(
-                    wps_dir / f"{wp_id}_result.json",
-                    make_wp_result(wp_id, deliverables=deliverables, depends_on=deps),
-                )
+                if wp_id in _stub_ids:
+                    write_json(
+                        wps_dir / f"{wp_id}_result.json",
+                        make_wp_result(
+                            wp_id,
+                            allow_stub=True,
+                            elaboration_failed=True,
+                            deliverables=[],
+                            technical_steps=[],
+                            acceptance_criteria=[],
+                        ),
+                    )
+                else:
+                    deliverables = (
+                        deliverables_override
+                        if deliverables_override is not None
+                        else [f"src/mod_{wp_id}.py"]
+                    )
+                    deps = (depends_on_override or {}).get(wp_id, [])
+                    write_json(
+                        wps_dir / f"{wp_id}_result.json",
+                        make_wp_result(wp_id, deliverables=deliverables, depends_on=deps),
+                    )
 
     manifest_items = []
     for p in range(1, num_phases + 1):
         for a in range(1, 2):
             for w in range(1, wps_per_assignment + 1):
-                manifest_items.append({"id": f"P{p}-A{a}-WP{w}", "status": "done"})
+                wp_id = f"P{p}-A{a}-WP{w}"
+                status = "elaboration_failed" if wp_id in _stub_ids else "done"
+                manifest_items.append({"id": wp_id, "status": status})
     write_json(
         wps_dir / "wp_manifest.json",
         {"pass_name": "work_packages", "items": manifest_items},

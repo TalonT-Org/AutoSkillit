@@ -272,3 +272,83 @@ def test_finalize_wp_manifest_upper_bound_violation_warns_not_fails(tmp_path: Pa
         result = finalize_wp_manifest(str(wp_dir), str(tmp_path))
 
     assert "manifest_path" in result
+
+
+def test_finalize_wp_manifest_stub_gets_elaboration_failed_status(tmp_path: Path) -> None:
+    """Test 1.1: finalize_wp_manifest must set 'elaboration_failed' status for stubs."""
+    from autoskillit.planner.manifests import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(
+        wp_dir / "P1-A1-WP2_result.json",
+        make_wp_result(
+            "P1-A1-WP2",
+            allow_stub=True,
+            elaboration_failed=True,
+            deliverables=[],
+            technical_steps=[],
+            acceptance_criteria=[],
+        ),
+    )
+
+    result = finalize_wp_manifest(str(wp_dir), str(tmp_path))
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    items_by_id = {item["id"]: item for item in manifest["items"]}
+    assert items_by_id["P1-A1-WP1"]["status"] == "done"
+    assert items_by_id["P1-A1-WP2"]["status"] == "elaboration_failed"
+
+
+def test_reconcile_wp_files_archives_orphaned_stubs(tmp_path: Path) -> None:
+    """Test 2.1: reconcile_wp_files archives orphaned stubs."""
+    from autoskillit.planner.lifecycle import load_lifecycle_registry
+    from autoskillit.planner.manifests import reconcile_wp_files
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(
+        wp_dir / "P1-A1-WP2_result.json",
+        make_wp_result(
+            "P1-A1-WP2",
+            allow_stub=True,
+            elaboration_failed=True,
+            deliverables=[],
+            technical_steps=[],
+            acceptance_criteria=[],
+        ),
+    )
+
+    consolidated = {
+        "task": "test",
+        "source_dir": "/src",
+        "work_packages": [{"id": "P1-A1-WP1", "name": "WP1"}],
+        "schema_version": 1,
+    }
+    write_json(tmp_path / "consolidated_wps.json", consolidated)
+
+    result = reconcile_wp_files(str(tmp_path))
+    assert result["archived_count"] == "1"
+    assert "P1-A1-WP2" in result["archived_ids"]
+    assert (wp_dir / "archived" / "P1-A1-WP2_result.json").exists()
+    assert (wp_dir / "P1-A1-WP1_result.json").exists()
+    assert not (wp_dir / "P1-A1-WP2_result.json").exists()
+
+    registry = load_lifecycle_registry(tmp_path)
+    assert "P1-A1-WP2" in registry.get("archived_stubs", {})
+
+
+def test_reconcile_wp_files_no_active_file_returns_early(tmp_path: Path) -> None:
+    """reconcile_wp_files returns early when no consolidated/refined WPs file exists."""
+    from autoskillit.planner.manifests import reconcile_wp_files
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+
+    result = reconcile_wp_files(str(tmp_path))
+    assert result["archived_count"] == "0"
+    assert (wp_dir / "P1-A1-WP1_result.json").exists()

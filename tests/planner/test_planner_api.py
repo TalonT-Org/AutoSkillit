@@ -60,6 +60,7 @@ def test_planner_all_exports() -> None:
         "DiscoveryResult",
         "discover_tier_files",
         "load_lifecycle_registry",
+        "reconcile_wp_files",
         "record_lifecycle_event",
     }
 

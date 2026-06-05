@@ -14,16 +14,13 @@ import os
 from autoskillit.core import extract_bash_write_targets
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
-_DEFAULT_WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
-_DEFAULT_BASH_TOOL_NAME: str = "Bash"
-
 
 def _scan_jsonl_write_paths(
     stdout: str,
     cwd: str,
     *,
-    write_tool_names: frozenset[str] = _DEFAULT_WRITE_TOOL_NAMES,
-    bash_tool_name: str = _DEFAULT_BASH_TOOL_NAME,
+    write_tool_names: frozenset[str] = frozenset({"Write", "Edit"}),
+    bash_tool_name: str = "Bash",
 ) -> list[str]:
     """Scan raw JSONL stdout for Write/Edit/Bash tool calls outside cwd.
 

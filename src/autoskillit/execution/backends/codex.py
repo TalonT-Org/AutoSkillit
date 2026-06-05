@@ -99,6 +99,7 @@ class CodexFlags(StrEnum):
     RESUME_SUBCOMMAND = "resume"
     CONFIG_OVERRIDE = "-c"
     DANGEROUSLY_BYPASS = "--dangerously-bypass-approvals-and-sandbox"
+    DANGEROUSLY_BYPASS_HOOK_TRUST = "--dangerously-bypass-hook-trust"
 
 
 CODEX_EXEC_FLAGS: frozenset[str] = frozenset(
@@ -108,6 +109,7 @@ CODEX_EXEC_FLAGS: frozenset[str] = frozenset(
         CodexFlags.MODEL,
         CodexFlags.CONFIG_OVERRIDE,
         CodexFlags.ADD_DIR,
+        CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST,
     }
 )
 
@@ -128,6 +130,7 @@ NON_VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset(
         CodexFlags.MODEL_SHORT,
         CodexFlags.RESUME_SUBCOMMAND,
         CodexFlags.DANGEROUSLY_BYPASS,
+        CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST,
     }
 )
 
@@ -151,6 +154,7 @@ def _codex_exec_base(
     sandbox: str,
     json: bool = True,
     extra_overrides: Sequence[str] = (),
+    bypass_hook_trust: bool = False,
 ) -> list[str]:
     cmd: list[str] = ["codex", "exec"]
     if json:
@@ -159,6 +163,9 @@ def _codex_exec_base(
     for override in extra_overrides:
         cmd.extend([CodexFlags.CONFIG_OVERRIDE, override])
     cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
+    if bypass_hook_trust:
+        # Safe: --sandbox workspace-write already restricts filesystem writes.
+        cmd.append(CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST)
     return cmd
 
 
@@ -658,7 +665,10 @@ class CodexBackend:
             required=SKILL_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
-        cmd = _codex_exec_base(sandbox="workspace-write")
+        cmd = _codex_exec_base(
+            sandbox="workspace-write",
+            bypass_hook_trust=self.capabilities.mcp_config_capable,
+        )
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -752,7 +762,11 @@ class CodexBackend:
             required=ORCHESTRATOR_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
-        cmd = _codex_exec_base(sandbox="read-only", extra_overrides=["web_search=disabled"])
+        cmd = _codex_exec_base(
+            sandbox="read-only",
+            extra_overrides=["web_search=disabled"],
+            bypass_hook_trust=self.capabilities.mcp_config_capable,
+        )
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -959,11 +973,12 @@ class CodexBackend:
 
     def ensure_pre_launch(self) -> list[str]:
         os.environ[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        errors: list[str] = []
         try:
             ensure_codex_mcp_registered()
         except Exception as exc:
             logger.warning("codex_mcp_registration_failed", exc_info=True)
-            return [f"Failed to ensure MCP registration: {exc}"]
+            errors.append(f"Failed to ensure MCP registration: {exc}")
 
         try:
             sync_hooks_to_codex_config(
@@ -971,9 +986,10 @@ class CodexBackend:
             )
         except Exception as exc:
             logger.warning("codex_hook_sync_failed", exc_info=True)
-            return [f"Failed to sync hooks to Codex config: {exc}"]
+            errors.append(f"Failed to sync hooks to Codex config: {exc}")
 
-        return _validate_codex_config()
+        errors.extend(_validate_codex_config())
+        return errors
 
     def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
         raise RuntimeError("build_inspector_cmd not yet implemented — lands in #3534")

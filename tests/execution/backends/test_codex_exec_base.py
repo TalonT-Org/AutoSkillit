@@ -7,14 +7,14 @@ import inspect
 
 import pytest
 
-from autoskillit.execution.backends.codex import CodexBackend, _codex_exec_base
+from autoskillit.execution.backends.codex import CodexBackend, CodexFlags, _codex_exec_base
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestCodexExecBase:
     def test_returns_expected_preamble(self) -> None:
-        result = _codex_exec_base(sandbox="workspace-write")
+        result = _codex_exec_base(sandbox="workspace-write", bypass_hook_trust=False)
         assert result == [
             "codex",
             "exec",
@@ -35,6 +35,15 @@ class TestCodexExecBase:
         assert len(config_indices) == 2
         assert result[config_indices[0] + 1] == "web_search=disabled"
         assert result[config_indices[1] + 1] == "features.image_generation=false"
+
+    def test_bypass_hook_trust_appends_flag(self) -> None:
+        result = _codex_exec_base(sandbox="workspace-write", bypass_hook_trust=True)
+        assert CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST in result
+        config_indices = [i for i, v in enumerate(result) if v == "-c"]
+        last_config_end = config_indices[-1] + 1
+        trust_idx = result.index(CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST)
+        assert trust_idx > last_config_end
+        assert trust_idx == len(result) - 1
 
 
 class TestNoRawCodexExecListLiteral:

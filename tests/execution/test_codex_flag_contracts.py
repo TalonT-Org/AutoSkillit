@@ -62,6 +62,9 @@ class TestCodexExecFlagValues:
     def test_dangerously_bypass_value(self) -> None:
         assert CodexFlags.DANGEROUSLY_BYPASS == "--dangerously-bypass-approvals-and-sandbox"
 
+    def test_dangerously_bypass_hook_trust_value(self) -> None:
+        assert CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST == "--dangerously-bypass-hook-trust"
+
 
 class TestCodexFlagRegistryAudit:
     @pytest.fixture(autouse=True)

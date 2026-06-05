@@ -69,6 +69,9 @@ from autoskillit.execution.backends._codex_config import (
     _format_toml_value,
     ensure_codex_mcp_registered,
 )
+from autoskillit.execution.backends._codex_hooks import (
+    sync_hooks_to_codex_config,
+)
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 
 __all__ = [
@@ -957,6 +960,12 @@ class CodexBackend:
         except Exception as exc:
             logger.warning("codex_mcp_registration_failed", exc_info=True)
             return [f"Failed to ensure MCP registration: {exc}"]
+
+        try:
+            sync_hooks_to_codex_config()
+        except Exception as exc:
+            logger.warning("codex_hook_sync_failed", exc_info=True)
+            return [f"Failed to sync hooks to Codex config: {exc}"]
 
         return _validate_codex_config()
 

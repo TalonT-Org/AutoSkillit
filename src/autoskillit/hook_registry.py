@@ -27,6 +27,9 @@ class HookDef:
     session_scope: Literal["any", "headless_only", "interactive_only"] = "any"
     exempt_skills: frozenset[str] = field(default_factory=frozenset)
     exempt_session_types: frozenset[str] = field(default_factory=frozenset)
+    codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"] = (
+        "works-as-is"
+    )
 
     def __post_init__(self) -> None:
         if self.event_type != "SessionStart" and not self.matcher:
@@ -81,44 +84,45 @@ class HookDef:
 # ---------------------------------------------------------------------------
 
 HOOK_REGISTRY: list[HookDef] = [
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher="mcp__.*autoskillit.*__run_skill.*",
         scripts=[
             "guards/skill_cmd_guard.py",
             "guards/quota_guard.py",
             "guards/skill_command_guard.py",
-            "guards/ingredient_lock_guard.py",  # NEW (#3357)
+            "guards/ingredient_lock_guard.py",
             "guards/pipeline_step_guard.py",
         ],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher="mcp__.*autoskillit.*__remove_clone",
         scripts=["guards/remove_clone_guard.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
         scripts=["guards/open_kitchen_guard.py"],
         timeout_seconds=5,
     ),
-    HookDef(  # codex: not-applicable
+    HookDef(
         matcher="AskUserQuestion",
         scripts=["guards/ask_user_question_guard.py"],
         timeout_seconds=5,
         session_scope="headless_only",
+        codex_status="not-applicable",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__merge_worktree",
         scripts=["guards/branch_protection_guard.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__push_to_remote",
         scripts=["guards/branch_protection_guard.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/unsafe_install_guard.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/pr_create_guard.py"],
         # Must stay in sync with _EXEMPT_SKILLS in guards/pr_create_guard.py —
@@ -136,21 +140,21 @@ HOOK_REGISTRY: list[HookDef] = [
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/compose_pr_body_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/planner_gh_discovery_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/artifact_download_guard.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/git_ops_guard.py"],
         session_scope="headless_only",
@@ -158,7 +162,7 @@ HOOK_REGISTRY: list[HookDef] = [
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/test_runner_guard.py"],
         session_scope="headless_only",
@@ -166,46 +170,49 @@ HOOK_REGISTRY: list[HookDef] = [
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_skills=frozenset({"implement-experiment"}),
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/generated_file_write_guard.py"],
     ),
-    HookDef(  # codex: fix-required
+    HookDef(
         matcher=r"Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/write_guard.py"],
         session_scope="headless_only",
+        codex_status="fix-required",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/planner_result_naming_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/recipe_write_advisor.py"],
         session_scope="interactive_only",
     ),
-    HookDef(  # codex: not-applicable
+    HookDef(
         matcher=r"Grep",
         scripts=["guards/grep_pattern_lint_guard.py"],
+        codex_status="not-applicable",
     ),
-    HookDef(  # codex: degraded
+    HookDef(
         matcher=r"Bash|Write|Edit|Read|Glob|Grep",
         scripts=["guards/mcp_health_advisor.py"],
         timeout_seconds=5,
         session_scope="interactive_only",
+        codex_status="degraded",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
         scripts=["guards/skill_orchestration_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"Bash|Agent",
         scripts=["guards/background_exec_guard.py"],
         session_scope="headless_only",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
         scripts=[
             "guards/fleet_dispatch_guard.py",
@@ -214,51 +221,54 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/fleet_claim_guard.py",
         ],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         event_type="PostToolUse",
         matcher="mcp__.*autoskillit.*",
         scripts=["formatters/pretty_output_hook.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__run_skill.*",
         scripts=["token_summary_hook.py", "quota_post_hook.py", "pipeline_step_post_hook.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_python).*",
         scripts=["review_gate_post_hook.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         event_type="PostToolUse",
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
         scripts=["resume_gate_post_hook.py"],
     ),
-    HookDef(  # codex: degraded
+    HookDef(
         event_type="PostToolUse",
         matcher=r"Write|Edit",
         scripts=["lint_after_edit_hook.py"],
         session_scope="headless_only",
+        codex_status="degraded",
     ),
-    HookDef(  # codex: not-applicable
+    HookDef(
         event_type="PostToolUse",
         matcher="Skill",
         scripts=["skill_load_post_hook.py"],
+        codex_status="not-applicable",
     ),
-    HookDef(  # codex: fix-required
+    HookDef(
         matcher=r"Read|Write|Edit|Bash|Grep|Glob",
         scripts=["guards/skill_load_guard.py"],
         session_scope="headless_only",
+        codex_status="fix-required",
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
         scripts=["guards/review_loop_gate.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?reset_dispatch",
         scripts=["guards/reset_resume_gate.py"],
     ),
-    HookDef(  # codex: works-as-is
+    HookDef(
         event_type="SessionStart",
         scripts=["session_start_hook.py"],
         session_scope="interactive_only",
@@ -362,6 +372,7 @@ def _canonical_registry_payload(
     registry_rows = sorted(
         [
             {
+                "codex_status": h.codex_status,
                 "event_type": h.event_type,
                 "exempt_session_types": sorted(h.exempt_session_types),
                 "exempt_skills": sorted(h.exempt_skills),

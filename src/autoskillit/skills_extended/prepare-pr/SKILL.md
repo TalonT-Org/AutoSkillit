@@ -132,34 +132,35 @@ git diff --diff-filter=M --name-only $BASE_BRANCH..$FEATURE_BRANCH  # modified_f
 
 Store as separate lists: `new_files` (added, ★) and `modified_files` (modified, ●).
 
-### Step 5: Select Arch-Lens Slugs (SINGLE MESSAGE)
-
-**Issue ALL Task/Explore subagent calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
-
-Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
+### Step 5: Select Arch-Lens Slugs
 
 **arch_lenses gate:** If `arch_lenses` is not `true`, skip Steps 5 and 6 — set
 `selected_lenses` to `none` and `lens_context_paths` to `none`, then proceed directly
 to Step 7.
 
-Spawn a subagent via `Agent(model="sonnet")` with the list of changed file paths and the
-following lens menu:
+| Slug | Concern | File signals |
+|------|---------|--------------|
+| c4-container | Static structure and technology choices | files under `src/*/server/`, `src/*/cli/`, `*_server.py`, `*_client.py`, `*backend*.py`, or new top-level package `__init__.py` |
+| concurrency | Parallel execution, thread pools, synchronization | `*worker*.py`, `*pool*.py`, `*semaphore*.py`, `*barrier*.py`, `*async*.py`, `*thread*.py`, `*queue*.py`, files in `execution/` or `fleet/` |
+| data-lineage | Information flow, transformations, storage | `*transform*.py`, `*pipeline*.py`, `*loader*.py`, `*parser*.py`, `*serializ*.py`, `*format*.py`, `*migrat*.py`, files in `migration/` or `recipe/` defining data schemas |
+| deployment | Infrastructure topology, process boundaries | `*deploy*.py`, `*docker*`, `*compose*.yml`, `*k8s*`, `*helm*`, `*terraform*`, `*.tf`, `*.hcl`, `Dockerfile*`, `.github/workflows/` deploy jobs |
+| development | Build configuration, test infrastructure, CI/CD pipeline definitions, quality gate configuration, developer tooling setup — assess by file purpose, not filename | files in `.github/workflows/`, files whose name contains build/test/ci/lint/format/check/hook/task/quality at path-segment level, root-level configuration files whose purpose is build toolchain or quality gating |
+| error-resilience | Failure handling, recovery mechanisms, circuit breakers | `*retry*.py`, `*fallback*.py`, `*circuit*.py`, `*recovery*.py`, `*resilience*.py`, `*exception*.py`, `*error*.py`, `*failure*.py`, files introducing new exception classes or try/except boundaries |
+| module-dependency | Package coupling, layering, import structure | `__init__.py`, `*.pyi`, `*_types.py`, `*_protocols.py`, files adding/removing public re-exports, files in `core/types/` or defining new IL contracts |
+| operational | CLI workflows, configuration, observability | files in `cli/`, `*config*.py`, `*settings*.py`, `*dynaconf*`, `*observ*.py`, `*telemetry*.py`, `*log*.py`, `*monitor*.py`, `*healthcheck*.py`, `Taskfile.yml` |
+| process-flow | Runtime behavior, state transitions, decision points | `recipe/` step transition files, `*dispatch*.py`, `*router*.py`, `*orchestrat*.py`, `*state_machine*.py`, `*workflow*.py`, `*planner*.py`, SKILL.md files defining multi-step workflows |
+| repository-access | Data access patterns, entity relationships, query patterns | `*repository*.py`, `*store*.py`, `*dao*.py`, `*query*.py`, `*fetch*.py`, `*accessor*.py`, `*persistence*.py`, files introducing new data-read/write abstractions |
+| scenarios | End-to-end user journeys, component cooperation | files in `tests/integration/`, `tests/e2e/`, `*scenario*.py`, `*journey*.py`, `*e2e*.py`, `*smoke*.py`, recipe YAML files adding new top-level workflow paths |
+| security | Trust boundaries, validation layers, path contracts | `*auth*.py`, `*token*.py`, `*secret*.py`, `*permission*.py`, `*guard*.py`, `*trust*.py`, `*sanitiz*.py`, `*validate*.py`, `*.gitleaks*`, files handling credential/key material |
+| state-lifecycle | Field contracts, validation gates, resume safety, state mutation | `*_state*.py`, `*lifecycle*.py`, `*resume*.py`, `*checkpoint*.py`, `*mutation*.py`, `*contract*.py`, files in `core/types/` defining frozen dataclasses or TypedDict types |
 
-```
-c4-container, concurrency, data-lineage, deployment, development,
-error-resilience, module-dependency, operational, process-flow,
-repository-access, scenarios, security, state-lifecycle
-```
+**Selection algorithm:**
 
-Instruct the subagent to return 1–3 lens slugs. Only include a lens if at least one
-changed file maps to that lens's concern.
-
-**Development lens criteria:** Select `development` when the changed files include
-build configuration, test infrastructure, CI/CD pipeline definitions, quality gate
-configuration, or developer tooling setup. Assess by file purpose, not
-filename. The codebase may use any build system, CI platform, or test framework.
-
-Output: comma-separated slug list → `selected_lens_slugs`.
+1. Scan `new_files` and `modified_files` from Step 4 against the File signals column.
+2. Select a slug when at least one file matches a signal for that row.
+3. Cap selection at 3 slugs; if more than 3 rows match, prefer slugs whose signals match the greatest number of changed files.
+4. If no files match any signal row, emit `selected_lens_slugs` = `none`.
+5. Set `selected_lens_slugs` to the comma-separated list of selected slugs (or `none`).
 
 ### Step 6: Write Context Files per Lens
 

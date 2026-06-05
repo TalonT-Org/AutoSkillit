@@ -660,7 +660,7 @@ def test_prior_id_sentinel_scoped_by_resume_offset(tmp_path: Path) -> None:
 
 
 def test_resume_line_offset_zero_preserves_existing_behavior(tmp_path: Path) -> None:
-    """resume_line_offset=0 (default) reads the entire JSONL, preserving backward compat."""
+    """resume_line_offset=0 reads entire JSONL; prior-ID accepted via prior_dispatch_ids."""
     prior_id = "aaaa1111-bbbb-cccc-dddd-eeee2222ffff"
     new_id = "xxxx9999-yyyy-zzzz-wwww-vvvv8888uuuu"
 

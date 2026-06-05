@@ -246,7 +246,10 @@ async def reset_dispatch_artifacts(
                         report.protected_prs.append(pr_url)
                         continue
             except Exception:
-                logger.debug("pr_protection_check_failed", pr_url=pr_url, exc_info=True)
+                logger.warning("pr_protection_check_failed", pr_url=pr_url, exc_info=True)
+                report.has_protected_artifacts = True
+                report.protected_prs.append(pr_url)
+                continue
         try:
             close_result = await runner(
                 [

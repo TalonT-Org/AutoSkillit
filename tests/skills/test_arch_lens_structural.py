@@ -96,7 +96,7 @@ def test_frontmatter_activate_deps(slug: str) -> None:
 @pytest.mark.parametrize("slug", ARCH_LENS_SLUGS)
 def test_mermaid_load_instruction(slug: str) -> None:
     text = _read(slug)
-    assert "LOAD" in text and "mermaid" in text, (
+    assert any("LOAD" in ln and "mermaid" in ln for ln in text.splitlines()), (
         f"arch-lens-{slug} must contain mandatory mermaid skill LOAD instruction"
     )
 

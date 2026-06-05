@@ -14,11 +14,17 @@ import os
 from autoskillit.core import extract_bash_write_targets
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
-_WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
-_BASH_TOOL_NAME: str = "Bash"
+_DEFAULT_WRITE_TOOL_NAMES: frozenset[str] = frozenset({"Write", "Edit"})
+_DEFAULT_BASH_TOOL_NAME: str = "Bash"
 
 
-def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
+def _scan_jsonl_write_paths(
+    stdout: str,
+    cwd: str,
+    *,
+    write_tool_names: frozenset[str] = _DEFAULT_WRITE_TOOL_NAMES,
+    bash_tool_name: str = _DEFAULT_BASH_TOOL_NAME,
+) -> list[str]:
     """Scan raw JSONL stdout for Write/Edit/Bash tool calls outside cwd.
 
     Parses assistant records from the JSONL stream and extracts file_path
@@ -58,7 +64,7 @@ def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
             if not isinstance(inputs, dict):
                 continue
 
-            if tool_name in _WRITE_TOOL_NAMES:
+            if tool_name in write_tool_names:
                 file_path = inputs.get("file_path", "")
                 if (
                     isinstance(file_path, str)
@@ -70,7 +76,7 @@ def _scan_jsonl_write_paths(stdout: str, cwd: str) -> list[str]:
                         f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
                     )
 
-            elif tool_name == _BASH_TOOL_NAME:
+            elif tool_name == bash_tool_name:
                 command = inputs.get("command", "")
                 if isinstance(command, str):
                     targets = extract_bash_write_targets(command, cwd)

@@ -173,7 +173,7 @@ def _derive_step_name_from_skill_command(skill_command: str) -> str:
     stripped = skill_command.strip()
     if not stripped:
         return ""
-    token = stripped.split()[0].lstrip("/")
+    token = stripped.split()[0].lstrip("/$")
     if ":" in token:
         token = token.rsplit(":", 1)[-1]
     return token

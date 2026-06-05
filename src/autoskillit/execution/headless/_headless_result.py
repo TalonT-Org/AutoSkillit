@@ -688,7 +688,15 @@ def _build_skill_result(
 
     write_path_warnings: list[str] = []
     if cwd and supports_claude_format_stdout:
-        write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
+        _wtn = backend.capabilities.write_guard_tool_names
+        if _wtn:
+            write_path_warnings = _scan_jsonl_write_paths(
+                result.stdout,
+                cwd,
+                write_tool_names=_wtn,
+            )
+        else:
+            write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
         if write_path_warnings:
             logger.warning(
                 "write_path_warnings_detected",

@@ -107,6 +107,14 @@ class BackendCapabilities:
     process_name: str = ""
     # Relative path from session root to the skills directory
     skills_subdir: str = ""
+    # Hook config format identifier (e.g. settings.json vs config.toml)
+    hook_config_format: str = ""
+    # Write detection strategy (e.g. tool_names, file_change)
+    write_detection_strategy: str = ""
+    # Patch format for write-guard path extraction (e.g. unified_diff)
+    patch_format: str = ""
+    # Default sandbox mode for skill sessions
+    default_skill_sandbox_mode: str = ""
     # Env vars that must appear in CmdSpec.env for all cmd-builders (MCP forwarding)
     mcp_env_forward_vars: frozenset[str] = field(default_factory=frozenset)
     # True when backend supports api_simulator-based REPLAY_SCENARIO runner wrapping
@@ -198,6 +206,10 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     version_check_command="claude --version",
     process_name="claude",
     skills_subdir=".claude/skills",
+    hook_config_format="",
+    write_detection_strategy="tool_names",
+    patch_format="unified_diff",
+    default_skill_sandbox_mode="",
     replay_capable=True,
     record_capable=True,
     anthropic_provider_capable=True,

@@ -109,7 +109,16 @@ def test_backend_capabilities_field_count():
         "applicable_guards",
         "mcp_env_forward_vars",
     }
-    assert str_fields == {"min_version", "version_check_command", "process_name", "skills_subdir"}
+    assert str_fields == {
+        "min_version",
+        "version_check_command",
+        "process_name",
+        "skills_subdir",
+        "hook_config_format",
+        "write_detection_strategy",
+        "patch_format",
+        "default_skill_sandbox_mode",
+    }
     assert tuple_fields == {"env_denylist_prefixes"}
 
 
@@ -142,6 +151,10 @@ def test_backend_capabilities_field_names_locked():
         "version_check_command",
         "process_name",
         "skills_subdir",
+        "hook_config_format",
+        "write_detection_strategy",
+        "patch_format",
+        "default_skill_sandbox_mode",
         "supports_tool_list_changed",
         "mcp_env_forward_vars",
         "replay_capable",
@@ -190,6 +203,10 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.plugin_install_capable is True
     assert CLAUDE_CODE_CAPABILITIES.inspector_capable is True
     assert CLAUDE_CODE_CAPABILITIES.supports_context_window_suffix is True
+    assert CLAUDE_CODE_CAPABILITIES.hook_config_format == ""
+    assert CLAUDE_CODE_CAPABILITIES.write_detection_strategy == "tool_names"
+    assert CLAUDE_CODE_CAPABILITIES.patch_format == "unified_diff"
+    assert CLAUDE_CODE_CAPABILITIES.default_skill_sandbox_mode == ""
 
 
 def test_backend_capabilities_frozenset_defaults():

@@ -55,7 +55,7 @@ parsing.
   empty, write an empty synthesis file
 - Emit `synthesis_result_path` as a literal plain-text token with no markdown
   formatting
-- Use `{{AUTOSKILLIT_TEMP}}/phoropter-null-synthesis/` for all output paths
+- Use `{{AUTOSKILLIT_TEMP}}/phoropter-null-synthesis/` (relative to the current working directory) for all output paths
 
 ---
 

@@ -66,7 +66,7 @@ NOT parse `yaml:figure-spec` blocks.
 - Log every conflict resolution as a row in the Conflict Resolution Log table
   with columns: Lens A, Lens A Rec, Lens B, Lens B Rec, Dimension, Winner,
   Reason
-- Use `{{AUTOSKILLIT_TEMP}}/phoropter-priority-synthesis/` for all output
+- Use `{{AUTOSKILLIT_TEMP}}/phoropter-priority-synthesis/` (relative to the current working directory) for all output
   paths
 - Write all three output files unconditionally — even when no conflicts exist,
   write files with empty tables and zero-row logs

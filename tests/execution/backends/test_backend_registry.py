@@ -58,12 +58,15 @@ class TestBackendRegistry:
             "CodexStreamParser",
             "NON_VARIADIC_CODEX_FLAGS",
             "VARIADIC_CODEX_FLAGS",
+            "_is_autoskillit_hook_entry",
             "_is_autoskillit_registered",
             "_read_codex_config",
             "_serialize_toml",
             "_write_codex_config",
             "ensure_codex_mcp_registered",
+            "generate_codex_hooks_config",
             "get_backend",
             "make_codex_scenario_player",
+            "sync_hooks_to_codex_config",
         }
         assert set(all_exports) == expected

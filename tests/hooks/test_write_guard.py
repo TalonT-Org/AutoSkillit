@@ -1269,3 +1269,101 @@ class TestShellVariableWriteGuardIntegration:
         )
         result = _extract_bash_write_targets(cmd)
         assert result is None or result == []
+
+
+try:
+    from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch as _probe_fn
+
+    _CODEX_FORMAT_SUPPORTED = bool(_probe_fn("*** Update File: /tmp/probe.py\n"))
+except ImportError:
+    _CODEX_FORMAT_SUPPORTED = False
+
+
+class TestExtractPathsFromPatch:
+    def test_empty_string_returns_empty_list(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        assert _extract_paths_from_patch("") == []
+
+    def test_single_plus_plus_plus_b_line_returns_path(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        patch = "--- a/old.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new"
+        assert _extract_paths_from_patch(patch) == ["foo.py"]
+
+    def test_multi_file_patch_returns_all_paths_in_order(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        patch = (
+            "--- a/alpha.py\n+++ b/alpha.py\n@@ -1 +1 @@\n-old\n+new\n"
+            "--- a/beta.py\n+++ b/beta.py\n@@ -1 +1 @@\n-old\n+new"
+        )
+        assert _extract_paths_from_patch(patch) == ["alpha.py", "beta.py"]
+
+    def test_non_plus_plus_plus_b_lines_are_excluded(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        patch = "--- a/foo.py\n@@ -1 +1 @@\n context line\n"
+        assert _extract_paths_from_patch(patch) == []
+
+    def test_subdirectory_path_is_extracted_correctly(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        assert _extract_paths_from_patch("+++ b/src/foo.py") == ["src/foo.py"]
+
+
+class TestWriteGuardCodexPatchFormatXfail:
+    """Xfail-guarded integration tests for Codex patch format via _run_hook."""
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        allowed = str(tmp_path / ".autoskillit" / "temp")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", allowed)
+        self._allowed = allowed
+
+    @pytest.mark.xfail(
+        not _CODEX_FORMAT_SUPPORTED,
+        reason="P2 Codex patch format support not yet merged",
+        strict=False,
+    )
+    def test_codex_patch_within_prefix_allowed(self):
+        patch = f"*** Update File: {self._allowed}/plan.md\n"
+        result = _run_hook(_build_apply_patch_event(patch))
+        assert result == ""
+
+    @pytest.mark.xfail(
+        not _CODEX_FORMAT_SUPPORTED,
+        reason="P2 Codex patch format support not yet merged",
+        strict=False,
+    )
+    def test_codex_patch_outside_prefix_denied(self):
+        patch = "*** Update File: /outside/bar.py\n"
+        result = _run_hook(_build_apply_patch_event(patch))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    @pytest.mark.xfail(
+        not _CODEX_FORMAT_SUPPORTED,
+        reason="P2 Codex patch format support not yet merged",
+        strict=False,
+    )
+    def test_codex_mixed_format_patch_no_crash(self):
+        patch = f"+++ b/{self._allowed}/a.py\n*** Update File: {self._allowed}/b.py\n"
+        result = _run_hook(_build_apply_patch_event(patch))
+        assert isinstance(result, str)
+
+    @pytest.mark.xfail(
+        not _CODEX_FORMAT_SUPPORTED,
+        reason="P2 Codex patch format support not yet merged",
+        strict=False,
+    )
+    def test_codex_empty_patch_triggers_no_paths_deny(self):
+        patch = "*** Begin Patch\n*** End Patch\n"
+        result = _run_hook(_build_apply_patch_event(patch))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert (
+            "no target paths found in patch"
+            in parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        )

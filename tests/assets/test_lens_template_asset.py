@@ -49,3 +49,5 @@ def test_tradition_manifest_schema_exists_and_is_valid_json() -> None:
     parsed = json.loads(path.read_text())
     assert "$schema" in parsed
     assert "properties" in parsed
+    assert parsed.get("type") == "object"
+    assert parsed["properties"]

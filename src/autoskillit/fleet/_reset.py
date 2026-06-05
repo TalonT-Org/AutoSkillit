@@ -118,6 +118,9 @@ async def _handle_sidecar_label_swap(
                 )
                 report.labels_reset = bool(result and result.get("success"))
             except Exception as exc:
+                logger.warning(
+                    "issue_url label swap failed for %s", dispatch.issue_url, exc_info=True
+                )
                 report.labels_reset = False
                 report.errors.append(f"issue_url_label_swap({dispatch.issue_url}): {exc}")
         else:

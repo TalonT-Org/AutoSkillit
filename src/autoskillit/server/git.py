@@ -28,7 +28,6 @@ from autoskillit.core import (
     truncate_text,
 )
 from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
-from autoskillit.server._misc import condense_test_output
 from autoskillit.server._subprocess import _process_runner_result
 from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 
@@ -302,8 +301,8 @@ async def perform_merge(
                 "failed_step": MergeFailedStep.TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_stdout": truncate_text(condense_test_output(test_result)[0]),
-                "test_stderr": truncate_text(condense_test_output(test_result)[1]),
+                "test_stdout": truncate_text(test_result.stdout),
+                "test_stderr": truncate_text(test_result.stderr),
             }
 
     # 5. Fetch
@@ -405,8 +404,8 @@ async def perform_merge(
                 "failed_step": MergeFailedStep.POST_REBASE_TEST_GATE,
                 "state": MergeState.WORKTREE_INTACT,
                 "worktree_path": worktree_path,
-                "test_stdout": truncate_text(condense_test_output(test_result)[0]),
-                "test_stderr": truncate_text(condense_test_output(test_result)[1]),
+                "test_stdout": truncate_text(test_result.stdout),
+                "test_stderr": truncate_text(test_result.stderr),
             }
 
     # 7. Discover main repo path

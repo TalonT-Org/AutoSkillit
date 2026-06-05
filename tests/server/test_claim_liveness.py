@@ -64,7 +64,9 @@ class TestClaimIssueLiveness:
         assert result["success"] is True
         assert result["claimed"] is True
         cleanup_mock.assert_called_once_with(
-            dead_dispatch.sidecar_path, tool_ctx_kitchen_open.github_client
+            dead_dispatch.sidecar_path,
+            tool_ctx_kitchen_open.github_client,
+            issue_url=dead_dispatch.issue_url,
         )
 
     @pytest.mark.anyio

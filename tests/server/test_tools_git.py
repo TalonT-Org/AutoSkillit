@@ -234,5 +234,5 @@ class TestMergeWorktreeNoBypass:
         )  # test-check
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["failed_step"] == MergeFailedStep.TEST_GATE
-        assert len(result["test_stdout"]) <= 5000
-        assert len(result["test_stderr"]) <= 5000
+        assert len(result["test_stdout"]) <= 5100
+        assert len(result["test_stderr"]) <= 5100

@@ -62,6 +62,8 @@ from ._type_subprocess import *  # noqa: F401, F403
 from ._type_subprocess import __all__ as _subprocess_all
 from ._type_token import *  # noqa: F401, F403
 from ._type_token import __all__ as _token_all
+from ._type_tradition_manifest import *  # noqa: F401, F403
+from ._type_tradition_manifest import __all__ as _tradition_manifest_all
 
 __all__ = (
     _backend_all
@@ -92,4 +94,5 @@ __all__ = (
     + _session_env_all
     + _subprocess_all
     + _token_all
+    + _tradition_manifest_all
 )

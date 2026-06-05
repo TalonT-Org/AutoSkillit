@@ -803,7 +803,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
             (PhoropterPrescription, ReadingToken, PhoropterPhaseSkip,
             CrossDomainPrescription, CrossDomainAssessment) for the phoropter
             registry system, bringing the core/types count to 29.
-            Exempt at 35 files (core/types: 29).
+            _type_tradition_manifest.py adds TraditionManifest, LensEntry,
+            DialingConfig frozen dataclasses with from_yaml_path YAML loader
+            for the tradition manifest system, bringing the core/types count to 30.
+            Exempt at 35 files (core/types: 30).
           cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -864,7 +867,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 21,
-        "core/types": 29,
+        "core/types": 30,
         "cli": 21,
         "hooks": 13,
         "pipeline": 12,

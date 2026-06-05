@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autoskillit.dev/assets/tradition-manifest-schema/tradition-manifest.schema.json",
+  "title": "Tradition Manifest",
+  "description": "Schema for hand-authored YAML tradition manifest files for any phoropter lens family.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description", "output_type", "step_count", "mode_label", "context_file_schema", "default_enabled", "failure_mode", "lenses"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lenses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LensEntry"
+      },
+      "minItems": 1
+    },
+    "synthesis_strategy": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["priority_hierarchy", "electre_iii", "dex", "custom"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "step_name_prefix": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "arg_interface": {
+      "type": "string",
+      "enum": ["one_arg", "two_arg"],
+      "default": "one_arg"
+    },
+    "output_type": {
+      "type": "string",
+      "enum": ["mermaid_diagram", "figure_spec", "structured_markdown"]
+    },
+    "output_prefix": {
+      "type": "string"
+    },
+    "failure_mode": {
+      "type": "string",
+      "enum": ["continue", "halt"],
+      "default": "continue"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "step_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "mode_label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "context_file_schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "default_enabled": {
+      "type": "boolean"
+    },
+    "dialing": {
+      "$ref": "#/$defs/DialingConfig"
+    },
+    "phase_skip": {
+      "$ref": "#/$defs/PhaseSkip"
+    }
+  },
+  "$defs": {
+    "LensEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slug", "analytical_mode", "primary_question", "tradition"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "minLength": 1
+        },
+        "analytical_mode": {
+          "type": "string"
+        },
+        "primary_question": {
+          "type": "string"
+        },
+        "tradition": {
+          "type": "string"
+        },
+        "codification_level": {
+          "type": "string",
+          "enum": ["formal", "semi-formal", "informal"]
+        },
+        "diagram_direction": {
+          "type": "string",
+          "enum": ["TB", "LR", "BT", "RL"]
+        }
+      }
+    },
+    "DialingConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selection_strategy"],
+      "properties": {
+        "selection_strategy": {
+          "type": "string",
+          "enum": ["identity", "property_set"]
+        },
+        "min_lenses": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_lenses": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "always_run": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "synthesis_strategy": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["priority_hierarchy", "electre_iii", "dex", "custom"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "PhaseSkip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skip_field", "skip_semantics"],
+      "properties": {
+        "skip_field": {
+          "type": "string",
+          "description": "context variable path e.g. context.is_silent_type"
+        },
+        "skip_semantics": {
+          "type": "string",
+          "enum": ["skip_when_true", "skip_when_false"]
+        },
+        "applies_to": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    }
+  }
+}

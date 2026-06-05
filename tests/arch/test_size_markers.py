@@ -14,6 +14,7 @@ TESTS_ROOT = Path(__file__).resolve().parent.parent
 SIZE_DIRECTORIES: dict[str, str] = {
     "arch": "arch",
     "assets": "assets",
+    "backend": "backend",
     "cli": "cli",
     "config": "config",
     "contracts": "contracts",

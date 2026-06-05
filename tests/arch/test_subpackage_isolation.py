@@ -967,6 +967,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "three primary execution paths; auto-promotion of work_dir from args and tier-gate "
         "enforcement add required branching that pushes the module over the 1000-line limit",
     ),
+    "execution/backends/codex.py": (
+        1010,
+        "REQ-CNST-010-E9: Codex backend — write_guard_tool_names env injection added 7 lines "
+        "to _codex_exec_extras, capabilities property, and call sites; module reaches 1002 "
+        "lines in WP1 of the write-guard phase",
+    ),
 }
 
 

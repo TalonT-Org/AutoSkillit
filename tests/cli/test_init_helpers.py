@@ -321,7 +321,7 @@ class TestRegisterAllCodexHookWiring:
         )
         monkeypatch.setattr(
             "autoskillit.cli._hooks_codex.sync_hooks_to_codex_config",
-            lambda **kwargs: hook_sync_calls.append("sync_hooks") or True,
+            lambda **kwargs: hook_sync_calls.append(kwargs) or True,
         )
         monkeypatch.setattr(
             "autoskillit.cli._init_helpers._is_plugin_installed",
@@ -335,6 +335,7 @@ class TestRegisterAllCodexHookWiring:
         mock_backend = MagicMock()
         mock_backend.capabilities.mcp_config_capable = backend_name == "codex"
         mock_backend.capabilities.plugin_install_capable = backend_name != "codex"
+        mock_backend.capabilities.hook_config_format = "toml_nested"
         monkeypatch.setattr("autoskillit.execution.get_backend", lambda name: mock_backend)
 
         (tmp_path / "pkg").mkdir(exist_ok=True)
@@ -349,6 +350,7 @@ class TestRegisterAllCodexHookWiring:
         codex_calls, hook_sync_calls = self._setup(monkeypatch, tmp_path, "codex")
         _register_all("user", tmp_path)
         assert len(hook_sync_calls) == 1
+        assert hook_sync_calls[0].get("hook_config_format") == "toml_nested"
 
     def test_claude_code_backend_does_not_call_sync_hooks_to_codex_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

@@ -1200,6 +1200,7 @@ class TestCodexEnsurePreLaunchConfigValidation:
         monkeypatch.setattr(subprocess, "run", fake_run)
         errors = CodexBackend().ensure_pre_launch()
         assert len(sync_calls) == 1
+        assert sync_calls[0].get("hook_config_format") == "toml_nested"
         assert errors == []
 
     def test_ensure_pre_launch_surfaces_hook_sync_errors(

@@ -487,7 +487,9 @@ def _register_all(
     if backend.capabilities.mcp_config_capable:
         from autoskillit.cli._hooks_codex import sync_hooks_to_codex_config
 
-        sync_hooks_to_codex_config()
+        sync_hooks_to_codex_config(
+            hook_config_format=backend.capabilities.hook_config_format,
+        )
         plugin_ok = None
     else:
         settings_path = _claude_settings_path(scope)

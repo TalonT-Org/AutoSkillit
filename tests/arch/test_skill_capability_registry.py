@@ -201,6 +201,6 @@ def test_reclassified_skills_have_empty_backend_requirements():
                 f"expected frozenset()"
             )
     assert not violations, (
-        "Reclassifying test_check should unblock these skills on all backends:\n"
+        "Previously blocked skills must have empty backend_requirements:\n"
         + "\n".join(f"  {v}" for v in violations)
     )

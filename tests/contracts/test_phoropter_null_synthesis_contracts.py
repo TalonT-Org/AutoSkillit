@@ -55,7 +55,9 @@ def test_frontmatter_name() -> None:
 
 def test_frontmatter_categories() -> None:
     cats = _frontmatter()["categories"]
-    assert isinstance(cats, list) and len(cats) > 0
+    assert isinstance(cats, list)
+    for required in ("research", "arch-lens", "exp-lens"):
+        assert required in cats, f"category {required!r} missing from phoropter-null-synthesis"
 
 
 def test_frontmatter_description_mentions_synthesis() -> None:
@@ -81,7 +83,9 @@ def test_output_token_emitted_as_assignment() -> None:
 
 
 def test_never_no_priority_ordering() -> None:
-    assert "priority" in _text().lower()
+    assert re.search(r"(?i)never[\s\S]{0,500}priority.order", _text()), (
+        "phoropter-null-synthesis SKILL.md must prohibit priority ordering in a NEVER context"
+    )
 
 
 def test_never_no_yaml_figure_spec_parsing() -> None:
@@ -94,7 +98,7 @@ def test_never_no_yaml_figure_spec_parsing() -> None:
 def test_skill_contracts_yaml_write_behavior_always() -> None:
     data = load_yaml(CONTRACTS_YAML)
     entry = data["skills"].get("phoropter-null-synthesis")
-    assert entry is not None
+    assert entry is not None, "phoropter-null-synthesis not found in skill_contracts.yaml"
     assert entry.get("write_behavior") == "always"
 
 

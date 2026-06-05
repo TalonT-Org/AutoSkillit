@@ -248,8 +248,8 @@ from .types import ContaminationOutcome as ContaminationOutcome
 from .types import CrossDomainAssessment as CrossDomainAssessment
 from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
-from .types import DirectInstall as DirectInstall
 from .types import DialingConfig as DialingConfig
+from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
 from .types import EnvPolicy as EnvPolicy

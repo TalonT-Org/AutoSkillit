@@ -79,6 +79,8 @@ def test_arch_lens_fields(registry_data: dict) -> None:
     assert entry["status"] == "implemented"
     assert entry["default_enabled"] is True
     assert entry["failure_mode"] == "continue"
+    assert entry["activate_deps"] == ["mermaid"]
+    assert entry["output_prefix"] == ""
     assert "phase_skip" not in entry
 
 
@@ -93,6 +95,8 @@ def test_exp_lens_fields(registry_data: dict) -> None:
     assert "skill" not in entry["synthesis"]
     assert entry["step_naming"]["prefix"] is None
     assert entry["status"] == "implemented"
+    assert entry["activate_deps"] == ["mermaid"]
+    assert entry["output_prefix"] == ""
     assert "phase_skip" not in entry
 
 
@@ -112,6 +116,13 @@ def test_vis_lens_fields(registry_data: dict) -> None:
     assert entry["phase_skip"]["applies_to"] == "apply"
     assert "lens_metadata" in entry
     assert isinstance(entry["lens_metadata"], dict)
+    assert entry["activate_deps"] == ["mermaid"]
+    assert entry["output_prefix"] == "vis_spec_"
+    assert entry["composite_slugs"] == ["always-on"]
+    assert entry["lens_metadata"]["methodology-norms"]["special_assertions"] == [
+        "tradition_slug",
+        "two_stage_matching",
+    ]
 
 
 def test_refactor_lens_fields(registry_data: dict) -> None:

@@ -1,5 +1,15 @@
-"""PreToolUse hook: blocks Write/Edit/Bash/apply_patch outside
-the allowed prefix in write-scoped sessions."""
+"""PreToolUse hook: blocks tool calls outside the allowed prefix
+in write-scoped sessions.
+
+Two gate mechanisms operate together:
+1. Named-tool gate: controlled by AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES (default:
+   Write, Edit, Bash, apply_patch). Tool calls not in this set pass through
+   immediately with no prefix check.
+2. run_cmd bypass: any tool whose name contains the substring "run_cmd" is
+   unconditionally routed into the Bash command analysis path regardless of
+   AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES. This ensures Codex's run_cmd tool is
+   always subject to command-level write checks. The env var cannot suppress
+   or extend this bypass."""
 
 from __future__ import annotations
 
@@ -248,7 +258,18 @@ def main() -> None:
         return
 
     tool_name = data.get("tool_name", "")
-    if tool_name not in ("Write", "Edit", "Bash", "apply_patch") and "run_cmd" not in tool_name:
+
+    raw_tool_names = os.environ.get("AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES", "")
+    parsed_names = [t.strip() for t in raw_tool_names.split(",") if t.strip()]
+    # Default must match CLAUDE_CODE_CAPABILITIES.write_guard_tool_names
+    # in core/types/_type_backend.py
+    effective_tool_names: frozenset[str] = (
+        frozenset(parsed_names)
+        if parsed_names
+        else frozenset({"Write", "Edit", "Bash", "apply_patch"})
+    )
+
+    if tool_name not in effective_tool_names and "run_cmd" not in tool_name:
         sys.exit(0)
 
     tool_input = data.get("tool_input", {})

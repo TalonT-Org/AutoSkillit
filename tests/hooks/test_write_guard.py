@@ -293,6 +293,54 @@ class TestWriteGuardCodexPatchFormat:
         assert "file_b.rs" in paths
 
 
+class TestWriteGuardToolNamesEnvVar:
+    """AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES env var overrides the hardcoded tool set."""
+
+    PREFIX = "/clone/.autoskillit/temp/"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+
+    def test_env_var_set_allows_non_listed_tool_passthrough(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES", "apply_patch,Bash")
+        result = _run_hook(_build_event("Write", "/outside/foo.py"))
+        assert result == ""
+
+    def test_env_var_empty_string_falls_back_to_default_set(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES", "")
+        result = _run_hook(_build_event("Write", "/outside/foo.py"))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_env_var_whitespace_only_falls_back_to_default_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES", "   ")
+        result = _run_hook(_build_event("Write", "/outside/foo.py"))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_env_var_with_apply_patch_denies_codex_patch_outside_prefix(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES", "apply_patch,Bash")
+        patch = (
+            "*** Begin Patch\n"
+            "*** Update File: /outside/credentials.rs\n"
+            "@@ -1,3 +1,4 @@\n"
+            "+new line\n"
+            "*** End Patch"
+        )
+        result = _run_hook(_build_apply_patch_event(patch))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert (
+            "read-only skill session" in parsed["hookSpecificOutput"]["permissionDecisionReason"]
+        )
+
+
 class TestWriteGuardBashBypass:
     """write_guard intercepts Bash tool calls containing file-modifying commands."""
 

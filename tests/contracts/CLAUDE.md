@@ -78,6 +78,8 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_stage_data_contracts.py` | Contract tests for stage-data SKILL.md — pre-flight resource feasibility gate |
 | `test_sub_skill_refusal_contracts.py` | Cross-skill contract: every SKILL.md that invokes sub-skills must contain explicit refusal handling language |
 | `test_synthesize_vis_plan_contracts.py` | Contract tests: synthesize-vis-plan SKILL.md structural and content invariants |
+| `test_phoropter_null_synthesis_contracts.py` | Contract tests: phoropter-null-synthesis SKILL.md structural and content invariants |
+| `test_phoropter_priority_synthesis_contracts.py` | Contract tests: phoropter-priority-synthesis SKILL.md structural and content invariants |
 | `test_ticket_body_size_ceiling.py` | Cross-skill contract: issue-filing skills must document body size guard |
 | `test_target_skill_invocability.py` | Contract: the target skill of a run_skill call must be invocable after session setup |
 | `test_token_summary_contracts.py` | Structural contracts for the token summary pipeline |

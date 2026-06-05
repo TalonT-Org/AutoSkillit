@@ -215,7 +215,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     record_capable=True,
     anthropic_provider_capable=True,
     plugin_install_capable=True,
-    inspector_capable=True,
+    inspector_capable=False,
     supports_context_window_suffix=True,
 )
 

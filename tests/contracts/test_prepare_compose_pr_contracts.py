@@ -286,3 +286,19 @@ def test_compose_pr_unconditional_diagram_gate_before_step3():
     assert "generat" in lower, "Must prohibit 'generate' between Step 2 and Step 3"
     assert "fabricat" in lower, "Must prohibit 'fabricate' between Step 2 and Step 3"
     assert "creat" in lower, "Must prohibit 'create' between Step 2 and Step 3"
+
+
+def test_prepare_pr_arch_lens_classification_covers_all_slugs():
+    skill_paths = list(SKILLS_DIR.glob("arch-lens-*/SKILL.md"))
+    assert len(skill_paths) > 0, f"No arch-lens-* SKILL.md files found under {SKILLS_DIR}"
+    text = PREPARE_PR.read_text()
+    step5_idx = text.find("### Step 5")
+    step6_idx = text.find("### Step 6")
+    assert step5_idx != -1
+    assert step6_idx != -1
+    step5_text = text[step5_idx:step6_idx]
+    for p in skill_paths:
+        slug = p.parent.name.removeprefix("arch-lens-")
+        assert slug in step5_text, (
+            f"arch-lens slug '{slug}' not found in Step 5 classification table"
+        )

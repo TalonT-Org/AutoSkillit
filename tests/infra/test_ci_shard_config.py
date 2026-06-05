@@ -14,6 +14,7 @@ WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 KNOWN_GENERAL_SHARD_DIRS = {
     "arch",
     "assets",
+    "backend",
     "cli",
     "config",
     "docs",

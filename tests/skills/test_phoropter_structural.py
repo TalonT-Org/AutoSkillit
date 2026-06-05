@@ -34,6 +34,10 @@ _DIAL_SKILL_MAP: dict[str, str | None] = {
     "exp-lens": None,
 }
 
+_DIAL_SKILL_PAIRS: list[tuple[str, str]] = [
+    (family, skill) for family, skill in _DIAL_SKILL_MAP.items() if skill is not None
+]
+
 RESEARCH_RECIPE = load_recipe(builtin_recipes_dir() / "research.yaml")
 RESEARCH_DESIGN_RECIPE = load_recipe(builtin_recipes_dir() / "research-design.yaml")
 
@@ -106,26 +110,20 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
         )
 
 
-def test_vis_lens_dial_skill_skill_md_exists() -> None:
-    assert (SKILLS_DIR / "select-vis-lenses" / "SKILL.md").exists()
+@pytest.mark.parametrize("family,dial_skill", _DIAL_SKILL_PAIRS)
+def test_dial_skill_skill_md_exists(family: str, dial_skill: str) -> None:
+    assert (SKILLS_DIR / dial_skill / "SKILL.md").exists(), (
+        f"{family} dial skill {dial_skill}/SKILL.md is missing"
+    )
 
 
-def test_vis_lens_dial_skill_emits_output_tokens() -> None:
-    text = (SKILLS_DIR / "select-vis-lenses" / "SKILL.md").read_text()
-    assert "selected_lenses" in text
-    assert "lens_context_paths" in text
-
-
-def test_review_design_dial_skill_skill_md_exists() -> None:
-    assert (SKILLS_DIR / "classify-experiment-type" / "SKILL.md").exists()
-
-
-def test_review_design_dial_skill_emits_output_tokens() -> None:
-    # For classify-experiment-type, selected_lenses and lens_context_paths
-    # refer to review dimensions, not vis-lens context paths.
-    text = (SKILLS_DIR / "classify-experiment-type" / "SKILL.md").read_text()
-    assert "selected_lenses" in text
-    assert "lens_context_paths" in text
+@pytest.mark.parametrize("family,dial_skill", _DIAL_SKILL_PAIRS)
+def test_dial_skill_emits_output_tokens(family: str, dial_skill: str) -> None:
+    text = (SKILLS_DIR / dial_skill / "SKILL.md").read_text()
+    assert "selected_lenses" in text, f"{family} dial skill {dial_skill} must emit selected_lenses"
+    assert "lens_context_paths" in text, (
+        f"{family} dial skill {dial_skill} must emit lens_context_paths"
+    )
 
 
 def test_prefixed_step_naming_convention() -> None:

@@ -214,6 +214,10 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
             # _subprocess is a same-package helper with no upward layer imports;
             # git.py delegates timeout result processing to _process_runner_result.
             "autoskillit.server._subprocess",
+            # _misc re-exports condense_test_output from execution.testing;
+            # git.py needs it to strip progress noise from test gate output,
+            # matching the pattern in tools_workspace.py:106.
+            "autoskillit.server._misc",
             # workspace is IL-1; git.py delegates worktree removal to the
             # single IL-1 implementation rather than inlining subprocess calls.
             "autoskillit.workspace",

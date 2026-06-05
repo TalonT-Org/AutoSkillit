@@ -216,6 +216,7 @@ def test_build_skill_session_cmd_config_delegates_to_impl():
         resume_session_id="sess-1",
         resume_checkpoint=SessionCheckpoint(step_name="chk"),
         resume_message="resume-msg",
+        sandbox_mode="read-only",
     )
     sentinel = CmdSpec(cmd=("sentinel",), env={})
 
@@ -247,6 +248,7 @@ def test_build_skill_session_cmd_config_delegates_to_impl():
     assert kw["resume_session_id"] == config.resume_session_id
     assert kw["resume_checkpoint"] == config.resume_checkpoint
     assert kw["resume_message"] == config.resume_message
+    assert kw["sandbox_mode"] == config.sandbox_mode
 
 
 def test_build_skill_session_cmd_impl_exists():

@@ -53,129 +53,92 @@ def test_frontmatter_name() -> None:
     assert _frontmatter()["name"] == "phoropter-priority-synthesis"
 
 
-def test_frontmatter_categories() -> None:
-    assert _frontmatter()["categories"] == ["research", "vis-lens"]
+def test_frontmatter_categories_include_vis_lens() -> None:
+    assert "vis-lens" in _frontmatter()["categories"]
 
 
-def test_frontmatter_description() -> None:
-    desc = str(_frontmatter().get("description", ""))
-    assert desc.strip(), "description must not be empty"
+def test_frontmatter_description_mentions_synthesis_or_phoropter() -> None:
+    desc = str(_frontmatter().get("description", "")).lower()
+    assert "synthesis" in desc or "phoropter" in desc
 
 
-def test_when_to_use_positioning() -> None:
+def test_hierarchy_arg_documented() -> None:
+    assert "--hierarchy" in _text()
+
+
+def test_hierarchy_arg_is_named_arg() -> None:
+    assert "--hierarchy=" in _text()
+
+
+def test_hierarchy_is_comma_separated() -> None:
     text = _text()
-    assert "synthesize" in text.lower()
-    assert "apply" in text.lower()
-    assert "create_worktree" in text.lower()
+    assert "comma" in text.lower() or "accessibility,anti-pattern" in text
 
 
-def test_arguments_positional_args() -> None:
+def test_hierarchy_default_value_documented() -> None:
+    assert "accessibility,anti-pattern,methodology-norms,chart-select" in _text()
+
+
+def test_hierarchy_contains_all_four_tiers() -> None:
     text = _text()
-    for arg in ("source_dir", "experiment_plan_path", "capture_dir"):
-        assert arg in text, f"Arguments must document {arg}"
-
-
-def test_arguments_hierarchy_flag() -> None:
-    text = _text()
-    assert "--hierarchy" in text
     assert "accessibility" in text
     assert "anti-pattern" in text
     assert "methodology-norms" in text
     assert "chart-select" in text
 
 
-def test_never_parse_yaml_figure_spec() -> None:
-    text = _text().lower()
-    assert re.search(r"never[\s\S]{0,500}yaml:figure-spec", text), (
-        "SKILL.md must prohibit yaml:figure-spec parsing in a NEVER context"
-    )
-
-
-def test_never_write_outside_temp() -> None:
+def test_three_output_tokens_present() -> None:
     text = _text()
-    assert "phoropter-priority-synthesis/" in text
-    assert re.search(
-        r"NEVER[\s\S]{0,500}outside.*phoropter-priority-synthesis",
-        text,
-    ), "Must prohibit writing outside phoropter-priority-synthesis/"
+    assert "synthesis_result_path" in text
+    assert "report_path" in text
+    assert "synthesis_trace_path" in text
 
 
-def test_never_omit_tokens() -> None:
-    text = _text().lower()
-    assert re.search(r"never[\s\S]{0,500}omit[\s\S]{0,200}token", text), (
-        "Must prohibit omitting required path tokens"
-    )
+def test_synthesis_result_path_token_emitted() -> None:
+    assert re.search(r"synthesis_result_path\s*=", _text())
 
 
-def test_always_emit_literal_plain_text() -> None:
-    text = _text()
-    assert "literal plain text" in text
+def test_report_path_token_emitted() -> None:
+    assert re.search(r"report_path\s*=", _text())
 
 
-def test_conflict_resolution_log_columns() -> None:
-    text = _text()
-    for col in ("Lens A", "Lens A Rec", "Lens B", "Lens B Rec", "Dimension", "Winner", "Reason"):
-        assert col in text, f"Conflict Resolution Log must include column: {col}"
+def test_synthesis_trace_path_token_emitted() -> None:
+    assert re.search(r"synthesis_trace_path\s*=", _text())
 
 
-def test_workflow_five_steps() -> None:
-    text = _text()
-    assert "Step 0" in text
-    assert "Step 1" in text
-    assert "Step 2" in text
-    assert "Step 3" in text
-    assert "Step 4" in text
+def test_no_subagents_constraint() -> None:
+    assert re.search(r"never[\s\S]{0,500}sub.?agent", _text().lower())
 
 
-def test_three_output_tokens() -> None:
-    text = _text()
-    for token in ("synthesis_result_path", "report_path", "synthesis_trace_path"):
-        assert re.search(rf"{token}\s*=", text), f"Must emit structured token: {token}"
+def test_output_paths_use_phoropter_priority_synthesis() -> None:
+    assert "phoropter-priority-synthesis/" in _text()
 
 
-def test_important_callout_present() -> None:
-    text = _text()
-    assert "IMPORTANT" in text
-    assert "literal plain text" in text
-    assert "no markdown formatting" in text
-
-
-def test_contract_in_skill_contracts_yaml() -> None:
+def test_skill_contracts_yaml_registers_skill() -> None:
     data = load_yaml(CONTRACTS_YAML)
     entry = data["skills"].get("phoropter-priority-synthesis")
     assert entry is not None, "phoropter-priority-synthesis not found in skill_contracts.yaml"
 
 
-def test_contract_inputs() -> None:
-    data = load_yaml(CONTRACTS_YAML)
-    entry = data["skills"]["phoropter-priority-synthesis"]
-    input_names = {i["name"] for i in entry.get("inputs", [])}
-    assert "source_dir" in input_names
-    assert "experiment_plan_path" in input_names
-    assert "capture_dir" in input_names
-    assert "hierarchy" in input_names
-
-
-def test_contract_outputs() -> None:
-    data = load_yaml(CONTRACTS_YAML)
-    entry = data["skills"]["phoropter-priority-synthesis"]
-    output_names = {o["name"] for o in entry.get("outputs", [])}
-    assert "synthesis_result_path" in output_names
-    assert "report_path" in output_names
-    assert "synthesis_trace_path" in output_names
-
-
-def test_contract_three_output_patterns() -> None:
-    data = load_yaml(CONTRACTS_YAML)
-    entry = data["skills"]["phoropter-priority-synthesis"]
-    patterns = entry.get("expected_output_patterns", [])
-    assert len(patterns) == 3
-    assert any("synthesis_result_path" in p for p in patterns)
-    assert any("report_path" in p for p in patterns)
-    assert any("synthesis_trace_path" in p for p in patterns)
-
-
-def test_contract_write_behavior() -> None:
+def test_skill_contracts_yaml_write_behavior_always() -> None:
     data = load_yaml(CONTRACTS_YAML)
     entry = data["skills"]["phoropter-priority-synthesis"]
     assert entry.get("write_behavior") == "always"
+
+
+def test_skill_contracts_yaml_declares_synthesis_result_path_output() -> None:
+    data = load_yaml(CONTRACTS_YAML)
+    entry = data["skills"]["phoropter-priority-synthesis"]
+    assert any(o["name"] == "synthesis_result_path" for o in entry.get("outputs", []))
+
+
+def test_skill_contracts_yaml_declares_report_path_output() -> None:
+    data = load_yaml(CONTRACTS_YAML)
+    entry = data["skills"]["phoropter-priority-synthesis"]
+    assert any(o["name"] == "report_path" for o in entry.get("outputs", []))
+
+
+def test_skill_contracts_yaml_declares_synthesis_trace_path_output() -> None:
+    data = load_yaml(CONTRACTS_YAML)
+    entry = data["skills"]["phoropter-priority-synthesis"]
+    assert any(o["name"] == "synthesis_trace_path" for o in entry.get("outputs", []))

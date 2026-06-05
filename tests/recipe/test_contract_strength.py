@@ -25,6 +25,8 @@ _KNOWN_UNGAPPED_WRITE_ALWAYS = frozenset(
         "generate-report",
         "make-campaign",
         "make-groups",
+        "phoropter-null-synthesis",
+        "phoropter-priority-synthesis",
         "plan-experiment",
         "plan-visualization",
         "planner-assess-review-approach",

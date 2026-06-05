@@ -1,7 +1,7 @@
 # Skill catalog
 
-The complete list of bundled skills (140 total: 3 in `src/autoskillit/skills/`,
-137 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
+The complete list of bundled skills (142 total: 3 in `src/autoskillit/skills/`,
+139 in `src/autoskillit/skills_extended/`). Filesystem walk this directory if
 you need an exhaustive listing; this catalog groups by purpose.
 
 ## Tier 1 — free range (3)
@@ -19,7 +19,7 @@ Located under `src/autoskillit/skills_extended/`. Grouped by purpose:
 ### Plan and implementation
 `investigate`, `make-plan`, `dry-walkthrough`, `review-approach`,
 `implement-worktree`, `rectify`, `make-groups`, `mermaid`, `make-arch-diag`,
-`make-experiment-diag`, `build-execution-map`, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan`
+`make-experiment-diag`, `build-execution-map`, `plan-visualization`, `select-vis-lenses`, `synthesize-vis-plan`, `phoropter-null-synthesis`, `phoropter-priority-synthesis`
 
 ### Audit suite
 `audit-arch`, `audit-cohesion`, `audit-tests`, `audit-defense-standards`,

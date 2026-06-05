@@ -597,6 +597,9 @@ class TestOutputPathTokensDerivedFromContracts:
             # apply-review-dimensions output (phoropter apply step)
             "findings_manifest_path",
             "evaluation_dashboard_path",
+            # phoropter-null-synthesis / phoropter-priority-synthesis outputs
+            "synthesis_result_path",
+            "synthesis_trace_path",
         }
     )
 

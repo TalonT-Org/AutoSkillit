@@ -764,6 +764,8 @@ ALWAYS_WRITE_SKILLS = {
     "implement-worktree-no-merge",
     "make-campaign",
     "make-groups",
+    "phoropter-null-synthesis",
+    "phoropter-priority-synthesis",
     "plan-experiment",
     "plan-visualization",
     "planner-consolidate-wps",

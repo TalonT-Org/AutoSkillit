@@ -588,6 +588,7 @@ class CodexBackend:
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
+        sandbox_mode: str = "workspace-write",
     ) -> CmdSpec:
         if config is not None:
             completion_marker = config.completion_marker
@@ -606,6 +607,7 @@ class CodexBackend:
             resume_session_id = config.resume_session_id
             resume_checkpoint = config.resume_checkpoint
             resume_message = config.resume_message
+            sandbox_mode = config.sandbox_mode
         _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
 
         if resume_session_id:
@@ -673,7 +675,7 @@ class CodexBackend:
         )
 
         cmd = _codex_exec_base(
-            sandbox="workspace-write",
+            sandbox=sandbox_mode,
             bypass_hook_trust=self.capabilities.mcp_config_capable,
         )
         if model:

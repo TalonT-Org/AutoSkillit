@@ -692,6 +692,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             resume_session_id="s1",
             resume_checkpoint=chk,
             resume_message="resume-msg",
+            sandbox_mode="read-only",
         )
         via_config = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
         via_flat = CodexBackend().build_skill_session_cmd(
@@ -712,9 +713,16 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             resume_session_id="s1",
             resume_checkpoint=chk,
             resume_message="resume-msg",
+            sandbox_mode="read-only",
         )
         assert via_config.cmd == via_flat.cmd
         assert via_config.env == via_flat.env
+
+    def test_config_sandbox_mode_propagates(self) -> None:
+        config = SkillSessionConfig(sandbox_mode="read-only")
+        spec = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
+        idx = spec.cmd.index("--sandbox")
+        assert spec.cmd[idx + 1] == "read-only"
 
     def test_config_path_returns_cmdspec(self) -> None:
         config = SkillSessionConfig(completion_marker="%%DONE%%", output_format=OutputFormat.JSON)

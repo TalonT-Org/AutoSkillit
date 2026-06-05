@@ -190,6 +190,9 @@ async def run_headless_core(
             resume_session_id=resume_session_id,
             resume_checkpoint=resume_checkpoint,
             resume_message=resume_message,
+            sandbox_mode="read-only"
+            if readonly_skill
+            else ctx.backend.capabilities.default_skill_sandbox_mode,
         )
         step_backend: CodingAgentBackend | None = None
         if backend_override is not None:

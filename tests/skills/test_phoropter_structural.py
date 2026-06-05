@@ -17,11 +17,13 @@ _LENS_PAIRS: list[tuple[str, str]] = sorted(
 
 _IMPLEMENTED_FAMILIES = frozenset({"vis-lens", "arch-lens", "exp-lens"})
 
+_EXPECTED_LENS_COUNT = sum(meta["lens_count"] for meta in _REGISTRY["families"].values())
+
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
 def test_discovery_is_non_empty_and_covers_all_families() -> None:
-    assert len(_LENS_PAIRS) >= 43
+    assert len(_LENS_PAIRS) >= _EXPECTED_LENS_COUNT
     discovered_families = {family for family, _ in _LENS_PAIRS}
     for expected in _IMPLEMENTED_FAMILIES:
         assert expected in discovered_families, f"{expected} not found in discovered lens pairs"

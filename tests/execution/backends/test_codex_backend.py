@@ -757,7 +757,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             output_format=OutputFormat.JSON,
         )
         assert isinstance(spec, CmdSpec)
-        assert any("/test-skill" in s for s in spec.cmd)
+        assert any("$test-skill" in s for s in spec.cmd)
 
 
 class TestCodexBuildInteractiveCmd:

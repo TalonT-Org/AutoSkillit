@@ -8,6 +8,8 @@ from autoskillit.core import CmdSpec, SkillSessionConfig
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 def _extract_prompt(spec: CmdSpec) -> str:
     """Extract the prompt string from a CmdSpec, dispatching by backend command shape."""

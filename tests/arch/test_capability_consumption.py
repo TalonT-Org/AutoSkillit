@@ -75,11 +75,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         rationale="patch path extraction routing — consumer in write_guard.py P2",
         added_date=date(2026, 6, 5),
     ),
-    "default_skill_sandbox_mode": ForwardDeclaredField(
-        issue=3776,
-        rationale="sandbox mode routing — consumer in CodexBackend.build_skill_session_cmd P2",
-        added_date=date(2026, 6, 5),
-    ),
 }
 
 

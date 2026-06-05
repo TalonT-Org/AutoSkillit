@@ -65,11 +65,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         ),
         added_date=date(2026, 6, 2),
     ),
-    "write_detection_strategy": ForwardDeclaredField(
-        issue=3776,
-        rationale="write evidence strategy routing — consumer in _headless_evidence.py P2",
-        added_date=date(2026, 6, 5),
-    ),
     "patch_format": ForwardDeclaredField(
         issue=3776,
         rationale="patch path extraction routing — consumer in write_guard.py P2",

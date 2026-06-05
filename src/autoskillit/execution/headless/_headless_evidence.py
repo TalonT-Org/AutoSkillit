@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
     CODEX_CONTEXT_EXHAUSTION_MARKER,
     AgentSessionResult,
     CliSubtype,
@@ -163,7 +162,7 @@ def _compute_write_evidence(
 
 
 def _extract_file_changes(stdout: str, backend: CodingAgentBackend) -> list[str]:
-    if backend.name == AGENT_BACKEND_CLAUDE_CODE:
+    if backend.capabilities.write_detection_strategy == "tool_names":
         return []
     agent_result = backend.result_parser().parse_stdout(stdout)
     return list(agent_result.raw.get("file_changes", []))

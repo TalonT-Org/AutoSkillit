@@ -1042,6 +1042,13 @@ class TestCodexEnsurePreLaunchConfigValidation:
     def _clean_backend_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(MCP_CLIENT_BACKEND_ENV_VAR, raising=False)
 
+    @pytest.fixture(autouse=True)
+    def _stub_hook_sync(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config",
+            lambda **kw: False,
+        )
+
     def test_ensure_pre_launch_returns_error_on_config_load_failure(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1106,13 +1113,17 @@ class TestCodexEnsurePreLaunchConfigValidation:
         )
         assert CodexBackend().ensure_pre_launch() == []
 
-    def test_ensure_pre_launch_codex_doctor_runs_after_mcp_registration(
+    def test_ensure_pre_launch_codex_doctor_runs_after_mcp_and_hook_sync(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         call_order: list[str] = []
 
         def fake_register(**kw):
             call_order.append("register")
+            return False
+
+        def fake_sync(**kw):
+            call_order.append("hook_sync")
             return False
 
         def fake_run(cmd, **kwargs):
@@ -1122,9 +1133,12 @@ class TestCodexEnsurePreLaunchConfigValidation:
         monkeypatch.setattr(
             "autoskillit.execution.backends.codex.ensure_codex_mcp_registered", fake_register
         )
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config", fake_sync
+        )
         monkeypatch.setattr(subprocess, "run", fake_run)
         CodexBackend().ensure_pre_launch()
-        assert call_order == ["register", "doctor"]
+        assert call_order == ["register", "hook_sync", "doctor"]
 
     def test_ensure_pre_launch_returns_empty_on_nonzero_returncode(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1164,6 +1178,41 @@ class TestCodexEnsurePreLaunchConfigValidation:
             lambda **kw: False,
         )
         assert CodexBackend().ensure_pre_launch() == []
+
+    def test_ensure_pre_launch_syncs_hooks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        sync_calls: list[dict] = []
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config",
+            lambda **kw: sync_calls.append(kw) or False,
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout='{"checks": {}}')
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        errors = CodexBackend().ensure_pre_launch()
+        assert len(sync_calls) == 1
+        assert errors == []
+
+    def test_ensure_pre_launch_surfaces_hook_sync_errors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def failing_sync(**kw):
+            raise RuntimeError("TOML write failed")
+
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.sync_hooks_to_codex_config", failing_sync
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.ensure_codex_mcp_registered",
+            lambda **kw: False,
+        )
+        errors = CodexBackend().ensure_pre_launch()
+        assert any("hook" in e.lower() or "sync" in e.lower() for e in errors)
 
     def test_ensure_pre_launch_integration_registration_succeeds_then_validates(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

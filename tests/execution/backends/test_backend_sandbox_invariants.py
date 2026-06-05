@@ -25,7 +25,9 @@ class TestCodexSandboxInvariants:
         spec: CmdSpec = CodexBackend().build_skill_session_cmd(
             "/test-skill", cwd="", config=config
         )
-        assert spec.cmd[spec.cmd.index("--sandbox") + 1] == sandbox_mode
+        positions = [i for i, v in enumerate(spec.cmd) if v == "--sandbox"]
+        assert len(positions) == 1, f"expected exactly one --sandbox, got {len(positions)}"
+        assert spec.cmd[positions[0] + 1] == sandbox_mode
 
     def test_build_food_truck_cmd_sandbox_read_only(self) -> None:
         spec: CmdSpec = CodexBackend().build_food_truck_cmd(
@@ -34,8 +36,9 @@ class TestCodexSandboxInvariants:
             cwd="",
             completion_marker="%%DONE%%",
         )
-        assert "--sandbox" in spec.cmd
-        assert spec.cmd[spec.cmd.index("--sandbox") + 1] == "read-only"
+        positions = [i for i, v in enumerate(spec.cmd) if v == "--sandbox"]
+        assert len(positions) == 1, f"expected exactly one --sandbox, got {len(positions)}"
+        assert spec.cmd[positions[0] + 1] == "read-only"
 
 
 class TestClaudeCodeSandboxAbsence:

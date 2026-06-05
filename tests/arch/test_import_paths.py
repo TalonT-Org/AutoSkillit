@@ -216,7 +216,7 @@ def test_req_imp_005_git_only_core_at_runtime() -> None:
             "autoskillit.server._subprocess",
             # _misc re-exports condense_test_output from execution.testing;
             # git.py needs it to strip progress noise from test gate output,
-            # matching the pattern in tools_workspace.py:106.
+            # matching the pattern in tools_workspace.py.
             "autoskillit.server._misc",
             # workspace is IL-1; git.py delegates worktree removal to the
             # single IL-1 implementation rather than inlining subprocess calls.

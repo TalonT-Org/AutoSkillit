@@ -509,6 +509,7 @@ def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
         return {"archived_count": "0", "archived_ids": ""}
 
     active_ids: set[str] = set()
+    found_but_unreadable: list[str] = []
     for candidate in ("consolidated_wps.json", "refined_wps.json"):
         candidate_path = planner_path / candidate
         if candidate_path.exists():
@@ -516,8 +517,15 @@ def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
             if doc:
                 active_ids = {wp["id"] for wp in doc.get("work_packages", [])}
                 break
+            found_but_unreadable.append(candidate)
     else:
-        logger.warning("reconcile_wp_files: no consolidated or refined WPs file found")
+        if found_but_unreadable:
+            logger.warning(
+                "reconcile_wp_files: WP files exist but are unreadable",
+                unreadable=found_but_unreadable,
+            )
+        else:
+            logger.warning("reconcile_wp_files: no consolidated or refined WPs file found")
         return {"archived_count": "0", "archived_ids": ""}
 
     registry = load_lifecycle_registry(planner_path)

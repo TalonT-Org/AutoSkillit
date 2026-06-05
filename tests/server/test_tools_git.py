@@ -213,3 +213,26 @@ class TestMergeWorktreeNoBypass:
         result = json.loads(await merge_worktree(str(wt), "dev"))
         assert "error" in result
         assert "test_summary" not in result
+
+    @pytest.mark.anyio
+    async def test_gate_failure_truncates_large_output(self, tool_ctx_kitchen_open, tmp_path):
+        """merge_worktree truncates test_stdout and test_stderr in failure response."""
+        wt = tmp_path / "worktree"
+        wt.mkdir()
+        (wt / ".git").write_text("gitdir: /repo/.git/worktrees/wt")
+
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(0, "/repo/.git/worktrees/wt\n", "")
+        )  # rev-parse
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "impl-branch\n", ""))  # branch
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git ls-files
+        tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git status --porcelain
+        large_stdout = "F" * 100_000 + "\n= 3 failed, 97 passed ="
+        large_stderr = "E" * 100_000
+        tool_ctx_kitchen_open.runner.push(
+            _make_result(1, large_stdout, large_stderr)
+        )  # test-check
+        result = json.loads(await merge_worktree(str(wt), "dev"))
+        assert result["failed_step"] == MergeFailedStep.TEST_GATE
+        assert len(result["test_stdout"]) <= 5000
+        assert len(result["test_stderr"]) <= 5000

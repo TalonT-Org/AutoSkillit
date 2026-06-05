@@ -108,6 +108,55 @@ def test_handles_none_sidecar_path_gracefully(tmp_path):
     assert result is None
 
 
+def test_finds_running_dispatch_via_issue_url_when_sidecar_missing(tmp_path):
+    dispatch = DispatchRecord(
+        name="task-url-1",
+        status=DispatchStatus.RUNNING,
+        sidecar_path=str(tmp_path / "nonexistent.jsonl"),
+        issue_url=_ISSUE_URL,
+    )
+    state_path = tmp_path / "state.json"
+    _write_state(state_path, [dispatch])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [state_path])
+
+    assert result is not None
+    assert result.name == "task-url-1"
+
+
+def test_finds_running_dispatch_via_issue_url_when_sidecar_none(tmp_path):
+    dispatch = DispatchRecord(
+        name="task-url-2",
+        status=DispatchStatus.RUNNING,
+        sidecar_path=None,
+        issue_url=_ISSUE_URL,
+    )
+    state_path = tmp_path / "state.json"
+    _write_state(state_path, [dispatch])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [state_path])
+
+    assert result is not None
+    assert result.name == "task-url-2"
+
+
+def test_finds_failure_dispatch_via_issue_url_when_sidecar_none(tmp_path):
+    dispatch = DispatchRecord(
+        name="task-url-3",
+        status=DispatchStatus.FAILURE,
+        sidecar_path=None,
+        issue_url=_ISSUE_URL,
+        labels_cleaned=False,
+    )
+    state_path = tmp_path / "state.json"
+    _write_state(state_path, [dispatch])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [state_path])
+
+    assert result is not None
+    assert result.name == "task-url-3"
+
+
 def test_skips_corrupt_state_file_and_continues(tmp_path):
     corrupt_path = tmp_path / "corrupt.json"
     corrupt_path.write_text("not valid json {{{{")

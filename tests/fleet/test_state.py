@@ -49,7 +49,7 @@ class TestInitialState:
 
         state = read_state(sp)
         assert state is not None
-        assert state.schema_version == 7
+        assert state.schema_version == 8
         assert state.campaign_id == "cid-1"
         assert state.campaign_name == "my-campaign"
         assert state.manifest_path == "/m.yaml"

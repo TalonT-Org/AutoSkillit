@@ -56,7 +56,8 @@ retries) before escalation.
 Read `$1`. Extract the `findings` array (contains only error-severity findings as structured
 dicts). Extract the `message` field from each finding for classification. Group by type:
 
-- **failed_wps**: Findings matching `WP .* has status 'failed'`
+- **failed_wps**: Findings matching `WP .* has status '(?!done')[^']*'` (any non-done status including `elaboration_failed`)
+- **stub_consistency**: Findings matching `WP .* has status 'done' but elaboration_failed in content` — route to the same re-elaboration action as `failed_wps` (re-run `finalize_wp_manifest` to regenerate the manifest from content, then re-elaborate the stub WP)
 - **sizing_violations**: Findings matching `WP .* has \d+ deliverables`
 - **duplicate_deliverables**: Findings matching `Deliverable '.*' claimed by multiple WPs`
 - **dep_references**: Findings matching `WP .* depends on unknown WP`
@@ -72,9 +73,9 @@ dicts). Extract the `message` field from each finding for classification. Group 
 
 ### Step 3: Fix each finding type
 
-**Failed WPs** — re-elaborate:
-- For each failed WP ID, read its entry from `wp_manifest.json` (provides `name`, `scope`,
-  `estimated_files`)
+**Failed WPs** (including `elaboration_failed` and `stub_consistency` findings) — re-elaborate:
+- For each failed WP ID, read its `{id}_result.json` from `{$2}/work_packages/` (provides
+  `name`, `scope`, `estimated_files`) and its entry from `wp_manifest.json` for status context
 - Spawn a sub-agent with `model: "sonnet"` per failed WP. Provide: WP name, scope,
   estimated_files, and the relevant portion of `wp_index.json` for context
 - Sub-agent writes a corrected `{$2}/work_packages/{id}_result.json`
@@ -167,6 +168,7 @@ issues_fixed = <N>
 ```
 
 `N` = count of findings addressed from the `findings` array (failed_wps +
-duplicate_deliverables + dep_references). Sizing-violation, missing-element, malformed-ID,
-and DAG-cycle findings are excluded from the count (they are escalated as critical, not
-fixed). Files-touched overlap findings are in the `warnings` array and are not actionable.
+stub_consistency + duplicate_deliverables + dep_references). Sizing-violation,
+missing-element, malformed-ID, and DAG-cycle findings are excluded from the count
+(they are escalated as critical, not fixed). Files-touched overlap findings are in the
+`warnings` array and are not actionable.

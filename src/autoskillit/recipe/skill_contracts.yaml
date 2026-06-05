@@ -2728,6 +2728,16 @@ callable_contracts:
       type: str
     - name: source_commit
       type: str
+  autoskillit.planner.reconcile_wp_files:
+    inputs:
+    - name: planner_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: archived_count
+      type: str
+    - name: archived_ids
+      type: str
   autoskillit.planner.finalize_wp_manifest:
     inputs:
     - name: work_packages_dir

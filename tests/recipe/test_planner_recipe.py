@@ -40,6 +40,7 @@ def test_planner_recipe_has_required_steps(planner_recipe):
         "finalize_wp_manifest",
         "merge_wps",
         "refine_wps",
+        "reconcile_wp_files",
         "validate_task_alignment",
         "reconcile_deps",
         "validate",

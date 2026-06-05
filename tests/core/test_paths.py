@@ -13,10 +13,13 @@ pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 class TestWorktreeDetection:
     def test_detects_main_checkout_as_not_worktree(self, tmp_path: Path) -> None:
         """A directory with a .git DIRECTORY is the main checkout, not a worktree."""
-        from autoskillit.core.paths import is_git_worktree
+        from autoskillit.core.paths import is_git_main_checkout, is_git_worktree
 
-        (tmp_path / ".git").mkdir()
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
         assert is_git_worktree(tmp_path) is False
+        assert is_git_main_checkout(tmp_path) is True
 
     def test_detects_linked_worktree_via_git_file(self, tmp_path: Path) -> None:
         """A directory with a .git FILE is a linked worktree."""
@@ -168,7 +171,9 @@ class TestIsGitMainCheckout:
     def test_git_directory_returns_true(self, tmp_path: Path) -> None:
         from autoskillit.core.paths import is_git_main_checkout
 
-        (tmp_path / ".git").mkdir()
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
         assert is_git_main_checkout(tmp_path) is True
 
     def test_git_file_returns_false(self, tmp_path: Path) -> None:
@@ -180,7 +185,9 @@ class TestIsGitMainCheckout:
     def test_nested_directory_returns_true(self, tmp_path: Path) -> None:
         from autoskillit.core.paths import is_git_main_checkout
 
-        (tmp_path / ".git").mkdir()
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
         subdir = tmp_path / "src" / "pkg"
         subdir.mkdir(parents=True)
         assert is_git_main_checkout(subdir) is True
@@ -190,7 +197,9 @@ class TestIsInGitRepo:
     def test_returns_true_for_git_directory(self, tmp_path: Path) -> None:
         from autoskillit.core.paths import is_in_git_repo
 
-        (tmp_path / ".git").mkdir()
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
         assert is_in_git_repo(tmp_path) is True
 
     def test_returns_true_for_git_file(self, tmp_path: Path) -> None:
@@ -207,7 +216,9 @@ class TestIsInGitRepo:
     def test_returns_true_for_nested_main_checkout(self, tmp_path: Path) -> None:
         from autoskillit.core.paths import is_in_git_repo
 
-        (tmp_path / ".git").mkdir()
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
         subdir = tmp_path / "src" / "pkg"
         subdir.mkdir(parents=True)
         assert is_in_git_repo(subdir) is True
@@ -237,7 +248,9 @@ class TestIsInGitRepo:
 
         checkout = tmp_path / "checkout"
         checkout.mkdir()
-        (checkout / ".git").mkdir()
+        checkout_git = checkout / ".git"
+        checkout_git.mkdir()
+        (checkout_git / "HEAD").write_text("ref: refs/heads/main\n")
 
         worktree = tmp_path / "worktree"
         worktree.mkdir()
@@ -245,6 +258,93 @@ class TestIsInGitRepo:
 
         for p in (bare, checkout, worktree):
             assert is_in_git_repo(p) == (is_git_worktree(p) or is_git_main_checkout(p))
+
+
+class TestEmptyGitDirectoryRejection:
+    """Empty .git directories (no HEAD) must not be treated as valid repos."""
+
+    def test_is_git_main_checkout_rejects_empty_git_dir(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_git_main_checkout
+
+        (tmp_path / ".git").mkdir()
+        assert is_git_main_checkout(tmp_path) is False
+
+    def test_is_in_git_repo_rejects_empty_git_dir(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import is_in_git_repo
+
+        (tmp_path / ".git").mkdir()
+        assert is_in_git_repo(tmp_path) is False
+
+    def test_worktree_walks_past_empty_git_to_valid_parent_worktree(self, tmp_path: Path) -> None:
+        """is_git_worktree must walk past empty .git dir to find parent worktree."""
+        from autoskillit.core.paths import is_git_worktree
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+        child = tmp_path / "subdir"
+        child.mkdir()
+        (child / ".git").mkdir()  # empty — no HEAD
+        assert is_git_worktree(child) is True
+
+
+class TestFindGitAncestor:
+    """Contract tests for the centralized primitive."""
+
+    def test_returns_none_for_plain_directory(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import _find_git_ancestor
+
+        assert _find_git_ancestor(tmp_path) is None
+
+    def test_returns_main_for_valid_git_dir(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import _find_git_ancestor, _GitAncestorKind
+
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
+        result = _find_git_ancestor(tmp_path)
+        assert result is not None
+        assert result.kind == _GitAncestorKind.MAIN
+        assert result.root == tmp_path
+
+    def test_returns_worktree_for_git_file(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import _find_git_ancestor, _GitAncestorKind
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+        result = _find_git_ancestor(tmp_path)
+        assert result is not None
+        assert result.kind == _GitAncestorKind.WORKTREE
+        assert result.root == tmp_path
+
+    def test_skips_empty_git_dir(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import _find_git_ancestor
+
+        (tmp_path / ".git").mkdir()  # empty — no HEAD
+        assert _find_git_ancestor(tmp_path) is None
+
+    def test_walks_past_empty_to_valid_main_parent(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import _find_git_ancestor, _GitAncestorKind
+
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
+        child = tmp_path / "subdir"
+        child.mkdir()
+        (child / ".git").mkdir()  # empty
+        result = _find_git_ancestor(child)
+        assert result is not None
+        assert result.kind == _GitAncestorKind.MAIN
+        assert result.root == tmp_path
+
+    def test_walks_past_empty_to_valid_worktree_parent(self, tmp_path: Path) -> None:
+        from autoskillit.core.paths import _find_git_ancestor, _GitAncestorKind
+
+        (tmp_path / ".git").write_text("gitdir: /path/to/main/.git/worktrees/foo\n")
+        child = tmp_path / "subdir"
+        child.mkdir()
+        (child / ".git").mkdir()  # empty
+        result = _find_git_ancestor(child)
+        assert result is not None
+        assert result.kind == _GitAncestorKind.WORKTREE
+        assert result.root == tmp_path
 
 
 class TestDefaultLogDir:

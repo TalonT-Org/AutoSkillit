@@ -17,7 +17,9 @@ import importlib.resources as ir
 import os
 import subprocess
 import sys
+from enum import Enum
 from pathlib import Path
+from typing import NamedTuple
 
 
 def default_log_dir() -> Path:
@@ -101,6 +103,35 @@ def find_latest_session_id(cwd: str | None = None) -> str | None:
     return jsonl_files[0].stem
 
 
+class _GitAncestorKind(Enum):
+    MAIN = "main"
+    WORKTREE = "worktree"
+
+
+class _GitAncestorResult(NamedTuple):
+    kind: _GitAncestorKind
+    root: Path
+
+
+def _find_git_ancestor(path: Path) -> _GitAncestorResult | None:
+    """Walk the ancestor chain to find the nearest structurally valid git root.
+
+    A .git *file* indicates a linked worktree.  A .git *directory* is only
+    accepted when it contains a ``HEAD`` file (matching git's own
+    ``setup.c:is_git_directory()``).  Empty/stale .git directories are
+    walked past so a valid repo higher in the tree can still be found.
+    """
+    for parent in [path, *path.parents]:
+        git_path = parent / ".git"
+        if git_path.is_file():
+            return _GitAncestorResult(_GitAncestorKind.WORKTREE, parent)
+        if git_path.is_dir():
+            if (git_path / "HEAD").is_file():
+                return _GitAncestorResult(_GitAncestorKind.MAIN, parent)
+            continue
+    return None
+
+
 def is_git_worktree(path: Path) -> bool:
     """Return True if path is inside a git linked worktree.
 
@@ -111,13 +142,8 @@ def is_git_worktree(path: Path) -> bool:
     Uses only filesystem operations — no subprocess or git required.
     This is the fast, reliable heuristic for pre-install validation.
     """
-    for parent in [path, *path.parents]:
-        git_path = parent / ".git"
-        if git_path.is_file():
-            return True  # .git file = linked worktree
-        if git_path.is_dir():
-            return False  # .git dir = main checkout
-    return False  # not in a git repo
+    result = _find_git_ancestor(path)
+    return result is not None and result.kind == _GitAncestorKind.WORKTREE
 
 
 def is_git_main_checkout(path: Path) -> bool:
@@ -129,13 +155,8 @@ def is_git_main_checkout(path: Path) -> bool:
     This is the semantic inverse of ``is_git_worktree()`` for the "main checkout"
     case — it differs in that "not in a git repo" returns False (not True).
     """
-    for parent in [path, *path.parents]:
-        git_path = parent / ".git"
-        if git_path.is_dir():
-            return True
-        if git_path.is_file():
-            return False
-    return False
+    result = _find_git_ancestor(path)
+    return result is not None and result.kind == _GitAncestorKind.MAIN
 
 
 def is_in_git_repo(path: Path) -> bool:
@@ -145,11 +166,7 @@ def is_in_git_repo(path: Path) -> bool:
     Use this when the caller needs "any git context" without caring about
     the worktree vs main checkout distinction.
     """
-    for parent in [path, *path.parents]:
-        git_path = parent / ".git"
-        if git_path.is_file() or git_path.is_dir():
-            return True
-    return False
+    return _find_git_ancestor(path) is not None
 
 
 def resolve_main_worktree(path: Path) -> Path | None:

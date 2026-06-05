@@ -86,6 +86,16 @@ class TimeoutTier:
 _structlog_proxies: list[object] = []
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _detect_tmp_git_contamination():
+    """Fail fast if /tmp/.git exists — prevents 35+ phantom test failures."""
+    if _Path("/tmp/.git").exists():
+        pytest.fail(
+            "/tmp/.git exists — this contaminates is_git_main_checkout() for tests "
+            "using cwd='/tmp'. Remove it before running the test suite."
+        )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _structlog_session_init():
     """One-time structlog proxy cache flush and proxy inventory per worker session.

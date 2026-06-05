@@ -314,6 +314,14 @@ class TestWriteGuardToolNamesEnvVar:
         parsed = json.loads(result)
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
+    def test_env_var_whitespace_only_falls_back_to_default_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES", "   ")
+        result = _run_hook(_build_event("Write", "/outside/foo.py"))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
     def test_env_var_with_apply_patch_denies_codex_patch_outside_prefix(
         self, monkeypatch: pytest.MonkeyPatch
     ):

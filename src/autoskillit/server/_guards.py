@@ -133,7 +133,11 @@ def _require_enabled() -> str | None:
 
 
 def _validate_skill_command(skill_command: str) -> str | None:
-    """Return error JSON if skill_command does not start with '/', None if OK."""
+    """Return error JSON if skill_command does not start with '/'.
+
+    Validates the MCP-layer input format, which is always slash-prefixed.
+    Backend-specific sigil translation happens downstream in _ensure_skill_prefix().
+    """
     if not skill_command.strip().startswith("/"):
         return gate_error_result(
             "run_skill requires a slash-command as skill_command.\n"

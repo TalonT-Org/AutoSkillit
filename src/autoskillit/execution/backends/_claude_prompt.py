@@ -114,11 +114,17 @@ def _apply_output_format(cmd: list[str], output_format: OutputFormat) -> None:
             cmd.append(flag)
 
 
-def _ensure_skill_prefix(skill_command: str, *, provider_profile: str = "") -> str:
+def _ensure_skill_prefix(
+    skill_command: str, *, provider_profile: str = "", skill_sigil: str = "/"
+) -> str:
     """Prompt-formatting helper: wrap slash-commands for headless session loading.
 
     Transforms `/foo args` into `Use the /foo skill args` so non-Claude models
     recognize the slash command as a Skill tool invocation rather than a task description.
+
+    When skill_sigil is not "/" (e.g. "$" for Codex), the leading "/" is replaced
+    with the target sigil and the command is returned as a raw token (no "Use the …
+    skill" prose wrapper), since non-Claude backends parse raw sigil-prefixed tokens.
 
     This is NOT a validator. Non-slash input passes through unchanged by design —
     runtime validation is enforced by the skill_command_guard PreToolUse hook.
@@ -128,6 +134,11 @@ def _ensure_skill_prefix(skill_command: str, *, provider_profile: str = "") -> s
         parts = stripped.split(None, 1)
         slash_cmd = parts[0]
         rest = parts[1] if len(parts) > 1 else ""
+
+        if skill_sigil != "/":
+            translated = skill_sigil + slash_cmd.lstrip("/")
+            return f"{translated} {rest}".rstrip() if rest else translated
+
         formatted = f"Use the {slash_cmd} skill"
         if rest:
             formatted += f" {rest}"

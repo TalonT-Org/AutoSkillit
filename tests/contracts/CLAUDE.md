@@ -97,6 +97,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_source_attribution_contracts.py` | Cross-skill contract: source-attribution prohibition in dual-source skills |
 | `test_project_local_skill_delivery_contract.py` | Symmetric delivery contract tests for project-local skill overrides |
 | `test_translate_model_suffix_contract.py` | Contract: translate_model suffix preservation tied to backend capability flag |
+| `test_backend_prompt_conventions.py` | Contract: backend prompt output must match declared skill_sigil capability |
 
 ## Architecture Notes
 

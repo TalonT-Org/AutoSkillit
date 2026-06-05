@@ -160,6 +160,9 @@ class TestCodexBackend:
     def test_capabilities_record_capable_false(self) -> None:
         assert CodexBackend().capabilities.record_capable is False
 
+    def test_capabilities_skill_sigil_dollar(self) -> None:
+        assert CodexBackend().capabilities.skill_sigil == "$"
+
     def test_binary_name(self) -> None:
         assert CodexBackend().binary_name() == "codex"
 

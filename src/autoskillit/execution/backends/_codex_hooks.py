@@ -39,7 +39,9 @@ def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int
     return cmd
 
 
-def generate_codex_hooks_config() -> dict[str, list[dict]]:
+def generate_codex_hooks_config(
+    hook_config_format: str = "",
+) -> dict[str, list[dict]]:
     """Generate Codex config.toml hooks entries from HOOK_REGISTRY.
 
     Skips interactive_only and codex fix-required/not-applicable hooks.
@@ -113,7 +115,9 @@ def _upsert_hooks_text(
     atomic_write(config_path, result_text)
 
 
-def sync_hooks_to_codex_config(config_path: Path | None = None) -> bool:
+def sync_hooks_to_codex_config(
+    config_path: Path | None = None, *, hook_config_format: str = ""
+) -> bool:
     """Sync autoskillit hooks to Codex config.toml.
 
     Returns True if the config was changed, False if already up to date.
@@ -124,7 +128,7 @@ def sync_hooks_to_codex_config(config_path: Path | None = None) -> bool:
     if result.is_corrupt:
         if result.raw_bytes is None:
             raise RuntimeError("corrupt ReadResult has no raw_bytes")
-        fresh = generate_codex_hooks_config()
+        fresh = generate_codex_hooks_config(hook_config_format=hook_config_format)
         _upsert_hooks_text(config_path, result.raw_bytes, fresh)
         return True
 
@@ -139,7 +143,7 @@ def sync_hooks_to_codex_config(config_path: Path | None = None) -> bool:
         foreign = [e for e in entries if not _is_autoskillit_hook_entry(e)]
         if foreign:
             foreign_hooks[event_type] = foreign
-    fresh = generate_codex_hooks_config()
+    fresh = generate_codex_hooks_config(hook_config_format=hook_config_format)
     merged: dict[str, list[dict]] = {}
     for event_type in set(list(foreign_hooks.keys()) + list(fresh.keys())):
         merged[event_type] = foreign_hooks.get(event_type, []) + fresh.get(event_type, [])

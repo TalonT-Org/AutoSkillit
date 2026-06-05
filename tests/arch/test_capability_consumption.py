@@ -65,11 +65,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         ),
         added_date=date(2026, 6, 2),
     ),
-    "hook_config_format": ForwardDeclaredField(
-        issue=3776,
-        rationale="hook config format routing — consumer in _hooks_codex.py lands in P2",
-        added_date=date(2026, 6, 5),
-    ),
     "write_detection_strategy": ForwardDeclaredField(
         issue=3776,
         rationale="write evidence strategy routing — consumer in _headless_evidence.py P2",

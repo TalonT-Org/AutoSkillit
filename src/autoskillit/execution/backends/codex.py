@@ -966,7 +966,9 @@ class CodexBackend:
             return [f"Failed to ensure MCP registration: {exc}"]
 
         try:
-            sync_hooks_to_codex_config()
+            sync_hooks_to_codex_config(
+                hook_config_format=self.capabilities.hook_config_format,
+            )
         except Exception as exc:
             logger.warning("codex_hook_sync_failed", exc_info=True)
             return [f"Failed to sync hooks to Codex config: {exc}"]

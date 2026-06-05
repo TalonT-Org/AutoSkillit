@@ -122,11 +122,20 @@ class TestSessionDirSymlinksAreSymlinks:
         session_dir.mkdir()
         backend.setup_session_dir(session_dir)
 
+        missing: list[str] = []
         violations: list[str] = []
         for entry in sorted(backend.capabilities.session_dir_symlinks):
             path = session_dir / entry
-            if (path.exists() or path.is_symlink()) and not path.is_symlink():
+            if not path.exists() and not path.is_symlink():
+                missing.append(entry)
+            elif not path.is_symlink():
                 violations.append(entry)
+
+        if missing:
+            pytest.fail(
+                f"Backend {backend_name!r} declares session_dir_symlinks entries "
+                f"that setup_session_dir never created: {missing}"
+            )
 
         unexpected = [e for e in violations if (backend_name, e) not in _KNOWN_COPY_NOT_SYMLINK]
         if unexpected:

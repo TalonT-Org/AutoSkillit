@@ -77,7 +77,7 @@ async def test_lifespan_calls_finalize_on_cancellation():
 
 
 @pytest.mark.asyncio
-async def test_lifespan_sets_startup_ready_event():
+async def test_lifespan_sets_startup_ready_event(monkeypatch):
     """_startup_ready must be set to a real Event and signalled after lifespan yield."""
     from autoskillit.server import _autoskillit_lifespan, _state
 
@@ -89,24 +89,17 @@ async def test_lifespan_sets_startup_ready_event():
     mock_ctx.audit.load_from_log_dir = MagicMock(return_value=0)
     mock_ctx.session_skill_manager = None
 
-    # Reset _startup_ready to None before test
-    original = _state._startup_ready
-    _state._startup_ready = None
+    monkeypatch.setattr(_state, "_startup_ready", None)
 
-    try:
-        with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
-            async with _autoskillit_lifespan(MagicMock()):
-                # _startup_ready is assigned synchronously before yield
-                assert _state._startup_ready is not None, (
-                    "_startup_ready must be assigned an asyncio.Event during lifespan"
-                )
-                # Background task may not have completed yet — await the event
-                await asyncio.wait_for(_state._startup_ready.wait(), timeout=5.0)
-                assert _state._startup_ready.is_set(), (
-                    "_startup_ready event must be signalled after deferred_initialize completes"
-                )
-    finally:
-        _state._startup_ready = original
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
+        async with _autoskillit_lifespan(MagicMock()):
+            assert _state._startup_ready is not None, (
+                "_startup_ready must be assigned an asyncio.Event during lifespan"
+            )
+            await asyncio.wait_for(_state._startup_ready.wait(), timeout=5.0)
+            assert _state._startup_ready.is_set(), (
+                "_startup_ready event must be signalled after deferred_initialize completes"
+            )
 
 
 # T-WT-4: MCP lifespan startup detects broken hooks

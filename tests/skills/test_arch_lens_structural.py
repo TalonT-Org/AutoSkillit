@@ -40,7 +40,9 @@ def _frontmatter(text: str) -> dict:
     lines = text.splitlines()
     if lines[0].strip() != "---":
         return {}
-    end = next(i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "---")
+    end = next((i for i, ln in enumerate(lines[1:], 1) if ln.strip() == "---"), None)
+    if end is None:
+        return {}
     return load_yaml("\n".join(lines[1:end]))
 
 

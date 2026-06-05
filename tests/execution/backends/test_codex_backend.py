@@ -131,7 +131,7 @@ class TestCodexBackend:
         )
 
     def test_capabilities_applicable_guards(self) -> None:
-        assert CodexBackend().capabilities.applicable_guards == frozenset()
+        assert CodexBackend().capabilities.applicable_guards == frozenset({"write_guard"})
 
     def test_capabilities_env_denylist_prefixes(self) -> None:
         assert CodexBackend().capabilities.env_denylist_prefixes == CODEX_ENV_PREFIX_DENYLIST
@@ -269,6 +269,10 @@ class TestCodexBackendFactories:
 
     def test_write_tool_names_returns_frozenset(self) -> None:
         assert isinstance(CodexBackend().write_tool_names(), frozenset)
+
+    def test_write_tool_names_includes_file_change(self) -> None:
+        names = CodexBackend().write_tool_names()
+        assert "file_change" in names
 
     def test_stream_parser_factory_passes_completion_marker(self) -> None:
         parser = CodexBackend().stream_parser(completion_marker="%%DONE%%")

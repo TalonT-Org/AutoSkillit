@@ -80,6 +80,30 @@ class TestGenerateCodexHooksConfig:
             assert key in ("PreToolUse", "PostToolUse", "SessionStart")
 
 
+class TestGeneratedHooksTrustBypass:
+    """Autoskillit-managed hooks must include trusted_hash for Codex trust gating."""
+
+    def test_generated_hooks_include_trusted_hash(self):
+        config = generate_codex_hooks_config()
+        for event_type, entries in config.items():
+            for entry in entries:
+                for hook in entry.get("hooks", []):
+                    if hook.get("type") == "command":
+                        assert "trusted_hash" in hook, (
+                            f"Hook command {hook.get('command', '?')} has no trusted_hash"
+                        )
+
+    def test_trusted_hash_is_sha256_hex(self):
+        config = generate_codex_hooks_config()
+        for entries in config.values():
+            for entry in entries:
+                for hook in entry.get("hooks", []):
+                    h = hook.get("trusted_hash", "")
+                    if h:
+                        assert len(h) == 64
+                        assert all(c in "0123456789abcdef" for c in h)
+
+
 class TestIsAutoskillitHookEntry:
     def test_is_autoskillit_hook_entry_true_autoskillit_path(self):
         entry = {"hooks": [{"command": "/autoskillit/hooks/guard.py"}]}

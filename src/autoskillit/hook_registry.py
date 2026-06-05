@@ -63,7 +63,7 @@ class HookDef:
 # git_ops_guard                          | works-as-is
 # test_runner_guard                      | works-as-is
 # generated_file_write_guard             | works-as-is
-# write_guard                            | fix-required
+# write_guard                            | works-as-is
 # planner_result_naming_guard            | works-as-is
 # recipe_write_advisor                   | works-as-is
 # grep_pattern_lint_guard               | not-applicable
@@ -178,7 +178,6 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher=r"Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/write_guard.py"],
         session_scope="headless_only",
-        codex_status="fix-required",
     ),
     HookDef(
         matcher=r"Write|Edit",

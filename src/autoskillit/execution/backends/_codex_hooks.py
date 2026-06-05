@@ -6,6 +6,7 @@ execution/backends (IL-1) without layer violations.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from autoskillit.core import atomic_write
@@ -16,12 +17,26 @@ from autoskillit.execution.backends._codex_config import (
 )
 from autoskillit.hook_registry import (
     HOOKS_DIR,
-    _build_hook_command,
     _build_hook_entry,
 )
 from autoskillit.hooks import HOOK_REGISTRY
 
 _SKIP_CODEX_STATUSES = frozenset({"fix-required", "not-applicable"})
+
+
+def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int | None) -> dict:
+    """Build a single Codex hook command dict with trusted_hash."""
+    logical_name = script.removesuffix(".py")
+    dispatch_path = hooks_dir / "_dispatch.py"
+    script_hash = hashlib.sha256(dispatch_path.read_bytes()).hexdigest()
+    cmd: dict = {
+        "type": "command",
+        "command": f"python3 {dispatch_path} {logical_name}",
+        "trusted_hash": script_hash,
+    }
+    if timeout_seconds is not None:
+        cmd["timeout"] = timeout_seconds
+    return cmd
 
 
 def generate_codex_hooks_config() -> dict[str, list[dict]]:
@@ -39,7 +54,7 @@ def generate_codex_hooks_config() -> dict[str, list[dict]]:
         event = hook_def.event_type
         key = (event, hook_def.matcher)
         hook_commands = [
-            _build_hook_command(HOOKS_DIR, script, hook_def.timeout_seconds)
+            _build_codex_hook_command(HOOKS_DIR, script, hook_def.timeout_seconds)
             for script in hook_def.scripts
         ]
         if event not in groups:

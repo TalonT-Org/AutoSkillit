@@ -215,6 +215,84 @@ class TestWriteGuardApplyPatch:
         assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+class TestWriteGuardCodexPatchFormat:
+    """Tests for Codex's *** Update/Add/Delete File: format."""
+
+    def test_extract_paths_from_codex_update_file(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        patch = (
+            "*** Begin Patch\n"
+            "*** Update File: src/main.rs\n"
+            "@@ -1,3 +1,4 @@\n"
+            "+new line\n"
+            "*** End Patch"
+        )
+        paths = _extract_paths_from_patch(patch)
+        assert paths == ["src/main.rs"]
+
+    def test_extract_paths_from_codex_add_file(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        patch = "*** Begin Patch\n*** Add File: src/new_module.rs\n+content\n*** End Patch"
+        paths = _extract_paths_from_patch(patch)
+        assert paths == ["src/new_module.rs"]
+
+    def test_extract_paths_from_codex_delete_file(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        patch = "*** Begin Patch\n*** Delete File: src/old_module.rs\n*** End Patch"
+        paths = _extract_paths_from_patch(patch)
+        assert paths == ["src/old_module.rs"]
+
+    def test_extract_paths_from_codex_multi_file_patch(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        patch = (
+            "*** Begin Patch\n"
+            "*** Update File: src/a.rs\n"
+            "@@ ...\n"
+            "+line\n"
+            "*** Update File: src/b.rs\n"
+            "@@ ...\n"
+            "+line\n"
+            "*** Add File: src/c.rs\n"
+            "+new\n"
+            "*** End Patch"
+        )
+        paths = _extract_paths_from_patch(patch)
+        assert paths == ["src/a.rs", "src/b.rs", "src/c.rs"]
+
+    def test_apply_patch_codex_format_allowed(self, monkeypatch, tmp_path):
+        allowed = str(tmp_path / ".autoskillit" / "temp")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", allowed)
+
+        patch = f"*** Begin Patch\n*** Update File: {allowed}/plan.md\n@@ ...\n+x\n*** End Patch"
+        event = _build_apply_patch_event(patch)
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_apply_patch_codex_format_denied_outside_prefix(self, monkeypatch, tmp_path):
+        allowed = str(tmp_path / ".autoskillit" / "temp")
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", allowed)
+
+        patch = "*** Begin Patch\n*** Update File: src/credentials.rs\n@@ ...\n+x\n*** End Patch"
+        event = _build_apply_patch_event(patch)
+        result = _run_hook(event)
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_extract_paths_handles_both_formats(self):
+        from autoskillit.hooks.guards.write_guard import _extract_paths_from_patch
+
+        patch = "+++ b/file_a.py\n*** Update File: file_b.rs\n"
+        paths = _extract_paths_from_patch(patch)
+        assert "file_a.py" in paths
+        assert "file_b.rs" in paths
+
+
 class TestWriteGuardBashBypass:
     """write_guard intercepts Bash tool calls containing file-modifying commands."""
 

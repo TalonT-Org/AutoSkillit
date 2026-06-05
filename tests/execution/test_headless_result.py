@@ -322,8 +322,8 @@ class TestBackendDelegatedWriteToolNames:
         sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count == 0
 
-    def test_codex_backend_produces_zero_write_count(self):
-        """CodexBackend.write_tool_names() is empty — write_call_count must be 0."""
+    def test_codex_backend_ignores_claude_write_tool_names(self):
+        """Claude-style Write/Edit are not in Codex write_tool_names — they don't count."""
 
         stdout = (
             _make_tool_use_line("Write", {"file_path": "/a/b.py", "content": "x"})

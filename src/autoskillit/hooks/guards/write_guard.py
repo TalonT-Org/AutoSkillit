@@ -186,14 +186,25 @@ def _extract_bash_write_targets(command: str) -> list[str] | None:
     return unique
 
 
+_CODEX_FILE_MARKERS = ("*** Update File: ", "*** Add File: ", "*** Delete File: ")
+
+
 def _extract_paths_from_patch(command: str) -> list[str]:
-    """Extract target file paths from a unified diff patch ('+++ b/' lines)."""
+    """Extract target file paths from a patch.
+
+    Supports unified diff ('+++ b/') and Codex apply_patch ('*** Update/Add/Delete File:').
+    """
     if not command:
         return []
     paths: list[str] = []
     for line in command.split("\n"):
         if line.startswith("+++ b/"):
             paths.append(line[6:])
+        else:
+            for marker in _CODEX_FILE_MARKERS:
+                if line.startswith(marker):
+                    paths.append(line[len(marker) :].strip())
+                    break
     return paths
 
 

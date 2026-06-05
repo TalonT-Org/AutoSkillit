@@ -259,6 +259,7 @@ class SkillSessionConfig:
     resume_session_id: str = ""
     resume_checkpoint: SessionCheckpoint | None = None
     resume_message: str | None = None
+    sandbox_mode: str = "workspace-write"
     backend_override: str | None = None
 
 

@@ -288,6 +288,7 @@ def test_skill_session_config_fields_exhaustive():
         "resume_session_id",
         "resume_checkpoint",
         "resume_message",
+        "sandbox_mode",
         "backend_override",
     }
 
@@ -312,6 +313,7 @@ def test_skill_session_config_defaults():
     assert cfg.resume_session_id == ""
     assert cfg.resume_checkpoint is None
     assert cfg.resume_message is None
+    assert cfg.sandbox_mode == "workspace-write"
     assert cfg.backend_override is None
 
 
@@ -344,4 +346,5 @@ def test_skill_session_config_field_types():
     assert hints["resume_session_id"] is str
     assert hints["resume_checkpoint"] == SessionCheckpoint | None
     assert hints["resume_message"] == str | None
+    assert hints["sandbox_mode"] is str
     assert hints["backend_override"] == str | None

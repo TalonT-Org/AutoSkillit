@@ -89,7 +89,9 @@ async def _try_claim_with_liveness(
             ),
         )
     if dispatch.status in TERMINAL_UNCLEANED_STATUSES:
-        cleaned = await cleanup_orphaned_labels(dispatch.sidecar_path, github_client)
+        cleaned = await cleanup_orphaned_labels(
+            dispatch.sidecar_path, github_client, issue_url=dispatch.issue_url
+        )
         if cleaned:
             _mark_dispatch_labels_cleaned(dispatch.name, campaign_state_paths)
         return ClaimDecision(claimed=True, stale_label_cleaned=cleaned)
@@ -101,5 +103,7 @@ async def _try_claim_with_liveness(
                 " — owning dispatch session is still alive"
             ),
         )
-    cleaned = await cleanup_orphaned_labels(dispatch.sidecar_path, github_client)
+    cleaned = await cleanup_orphaned_labels(
+        dispatch.sidecar_path, github_client, issue_url=dispatch.issue_url
+    )
     return ClaimDecision(claimed=True, stale_label_cleaned=cleaned)

@@ -13,7 +13,7 @@ from autoskillit.core import FleetErrorCode, RetryReason
 
 _resume_lock = threading.Lock()
 
-FLEET_STATE_SCHEMA_VERSION = 7
+FLEET_STATE_SCHEMA_VERSION = 8
 
 FLEET_HALTED_SENTINEL = "fleet_halted_on_failure"
 
@@ -122,6 +122,7 @@ class DispatchRecord:
     ended_at: float = 0.0
     sidecar_path: str | None = None
     labels_cleaned: bool = False
+    issue_url: str = ""
     branch_name: str = ""
     attempt_history: list[dict[str, Any]] = field(default_factory=list)
     resume_checkpoint: dict[str, Any] = field(default_factory=dict)
@@ -155,6 +156,7 @@ class DispatchRecord:
             "ended_at": self.ended_at,
             "sidecar_path": self.sidecar_path,
             "labels_cleaned": self.labels_cleaned,
+            "issue_url": self.issue_url,
             "branch_name": self.branch_name,
             "attempt_history": list(self.attempt_history),
             "resume_checkpoint": dict(self.resume_checkpoint),
@@ -214,6 +216,7 @@ class DispatchRecord:
             ended_at=d.get("ended_at", 0.0),
             sidecar_path=d.get("sidecar_path"),
             labels_cleaned=d.get("labels_cleaned", False),
+            issue_url=d.get("issue_url", ""),
             branch_name=d.get("branch_name", ""),
             attempt_history=d.get("attempt_history", []),
             resume_checkpoint=d.get("resume_checkpoint", {}),

@@ -216,7 +216,7 @@ def reset_blocking_dispatch(state_path: Path, dispatch_name: str) -> bool:
         return False
 
 
-_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6})
+_LEGACY_SCHEMA_VERSIONS: frozenset[int] = frozenset({4, 5, 6, 7})
 
 
 def _read_raw_json(state_path: Path) -> dict[str, Any] | None:
@@ -360,6 +360,7 @@ def mark_dispatch_running(
     dispatched_create_time: float = 0.0,
     sidecar_path: str | None = None,
     identity_degraded: bool = False,
+    issue_url: str = "",
 ) -> None:
     """Atomically mark a dispatch as running with its dispatch_id and dispatched_pid."""
     with CampaignStateMutator(state_path) as m:
@@ -382,6 +383,7 @@ def mark_dispatch_running(
                 d.identity_degraded = identity_degraded
                 d.started_at = time.time()
                 d.sidecar_path = sidecar_path
+                d.issue_url = issue_url
                 m.mark_dirty()
                 return
         else:

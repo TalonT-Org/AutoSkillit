@@ -36,9 +36,34 @@ _REMOVE_LABELS: list[str] = sorted(
 _ADD_LABELS: list[str] = [IssueLabelState.FAIL.value]
 
 
+async def _cleanup_single_issue(
+    github_client: GitHubFetcher,
+    issue_url: str,
+) -> bool:
+    """Swap labels for a single issue URL. Returns True on success."""
+    try:
+        owner, repo, number = _parse_issue_ref(issue_url)
+    except ValueError:
+        logger.warning("infra_label_cleanup_skip_bad_url", issue_url=issue_url)
+        return False
+    try:
+        result = await github_client.swap_labels(
+            owner, repo, number, remove_labels=_REMOVE_LABELS, add_labels=_ADD_LABELS
+        )
+        if not result.get("success"):
+            return False
+        logger.info("infra_label_cleanup", issue_url=issue_url, success=True)
+        return True
+    except Exception:
+        logger.warning("infra_label_cleanup_swap_failed", issue_url=issue_url, exc_info=True)
+        return False
+
+
 async def cleanup_orphaned_labels(
     sidecar_path: str | None,
     github_client: GitHubFetcher | None,
+    *,
+    issue_url: str = "",
 ) -> bool:
     """Remove in-progress labels for all issues in a dispatch sidecar.
 
@@ -49,11 +74,19 @@ async def cleanup_orphaned_labels(
     Returns True when all swap_labels calls succeeded (or there was nothing to
     clean). Returns False when any call failed or raised.
     """
-    if sidecar_path is None or github_client is None:
+    if github_client is None:
         logger.debug(
             "infra_label_cleanup_skipped",
-            reason="no_sidecar_or_no_client",
-            has_sidecar=sidecar_path is not None,
+            reason="no_client",
+        )
+        return True
+
+    if sidecar_path is None:
+        if issue_url:
+            return await _cleanup_single_issue(github_client, issue_url)
+        logger.debug(
+            "infra_label_cleanup_skipped",
+            reason="no_sidecar_or_no_issue_url",
         )
         return True
 
@@ -65,6 +98,8 @@ async def cleanup_orphaned_labels(
             sidecar_path=sidecar_path,
             exc_info=True,
         )
+        if issue_url:
+            return await _cleanup_single_issue(github_client, issue_url)
         return False
 
     if sidecar_result.source != SidecarReadStatus.FOUND:
@@ -73,6 +108,8 @@ async def cleanup_orphaned_labels(
             sidecar_path=sidecar_path,
             source=sidecar_result.source,
         )
+        if issue_url:
+            return await _cleanup_single_issue(github_client, issue_url)
         return False
 
     if not sidecar_result.entries:
@@ -127,8 +164,8 @@ async def sweep_stale_dispatch_labels(
     state files are logged and skipped so one corrupt file cannot block recovery.
     """
     for state_path in campaign_state_paths:
-        stale_dispatches: list[tuple[str, str | None]] = []
-        terminal_uncleaned: list[tuple[str, str | None]] = []
+        stale_dispatches: list[tuple[str, str | None, str]] = []
+        terminal_uncleaned: list[tuple[str, str | None, str]] = []
         try:
             with CampaignStateMutator(state_path) as m:
                 if m.state is None:
@@ -137,15 +174,15 @@ async def sweep_stale_dispatch_labels(
                     if d.status == DispatchStatus.RUNNING:
                         if is_dispatch_session_alive(d):
                             continue
-                        stale_dispatches.append((d.name, d.sidecar_path))
+                        stale_dispatches.append((d.name, d.sidecar_path, d.issue_url))
                         d.status = DispatchStatus.INTERRUPTED
                         m.mark_dirty()
                     elif (
                         d.status in TERMINAL_UNCLEANED_STATUSES
                         and not d.labels_cleaned
-                        and d.sidecar_path is not None
+                        and (d.sidecar_path is not None or d.issue_url)
                     ):
-                        terminal_uncleaned.append((d.name, d.sidecar_path))
+                        terminal_uncleaned.append((d.name, d.sidecar_path, d.issue_url))
         except Exception:
             logger.warning(
                 "startup_label_sweep_failed",
@@ -155,10 +192,10 @@ async def sweep_stale_dispatch_labels(
             continue
 
         cleanup_results: dict[str, bool] = {}
-        for name, sp in stale_dispatches:
-            cleanup_results[name] = await cleanup_orphaned_labels(sp, github_client)
-        for name, sp in terminal_uncleaned:
-            cleanup_results[name] = await cleanup_orphaned_labels(sp, github_client)
+        for name, sp, iu in stale_dispatches:
+            cleanup_results[name] = await cleanup_orphaned_labels(sp, github_client, issue_url=iu)
+        for name, sp, iu in terminal_uncleaned:
+            cleanup_results[name] = await cleanup_orphaned_labels(sp, github_client, issue_url=iu)
 
         if cleanup_results:
             try:

@@ -284,7 +284,8 @@ def _compose_resume_prompt(
         "Do NOT restart from scratch — pick up exactly where you stopped. "
         "Do NOT re-emit any prior failure, exhaustion, or error sentinels from "
         "your conversation history. Conditions may have changed since the prior "
-        "session — re-attempt the next pending operation."
+        "session — re-attempt the next pending operation. "
+        "The kitchen is already open — do NOT call open_kitchen again."
     )
 
     if resume_message:
@@ -296,7 +297,15 @@ def _compose_resume_prompt(
     if sentinel_contract:
         sections.append(sentinel_contract)
 
-    sections.append(f"ORIGINAL TASK CONTEXT:\n{base_prompt}")
+    import regex as re
+
+    stripped_prompt = re.sub(
+        r"FIRST ACTION:.*?(?=\n[A-Z]|\n\n|\Z)",
+        "",
+        base_prompt,
+        flags=re.DOTALL,
+    ).strip()
+    sections.append(f"ORIGINAL TASK CONTEXT:\n{stripped_prompt}")
 
     return "\n\n".join(sections)
 

@@ -1462,6 +1462,52 @@ skills:
     - "visualization_plan_path = /tmp/synthesize-vis-plan/visualization-plan.md\nreport_plan_path = /tmp/synthesize-vis-plan/report-plan.md\nvisualization_plan_trace_path = /tmp/synthesize-vis-plan/visualization-plan-trace.md\n%%ORDER_UP%%"
     write_behavior: always
 
+  phoropter-null-synthesis:
+    inputs:
+    - name: source_dir
+      type: directory_path
+      required: true
+    - name: capture_dir
+      type: directory_path
+      required: true
+    outputs:
+    - name: synthesis_result_path
+      type: file_path
+    expected_output_patterns:
+    - "synthesis_result_path[ \\t]*=[ \\t]*/.+"
+    pattern_examples:
+    - "synthesis_result_path = /tmp/phoropter-null-synthesis/synthesis-result.md\n%%ORDER_UP%%"
+    write_behavior: always
+
+  phoropter-priority-synthesis:
+    inputs:
+    - name: source_dir
+      type: directory_path
+      required: true
+    - name: experiment_plan_path
+      type: file_path
+      required: true
+    - name: capture_dir
+      type: directory_path
+      required: true
+    - name: hierarchy
+      type: string
+      required: false
+    outputs:
+    - name: synthesis_result_path
+      type: file_path
+    - name: report_path
+      type: file_path
+    - name: synthesis_trace_path
+      type: file_path
+    expected_output_patterns:
+    - "synthesis_result_path[ \\t]*=[ \\t]*/.+"
+    - "report_path[ \\t]*=[ \\t]*/.+"
+    - "synthesis_trace_path[ \\t]*=[ \\t]*/.+"
+    pattern_examples:
+    - "synthesis_result_path = /tmp/phoropter-priority-synthesis/synthesis-result.md\nreport_path = /tmp/phoropter-priority-synthesis/report.md\nsynthesis_trace_path = /tmp/phoropter-priority-synthesis/synthesis-trace.md\n%%ORDER_UP%%"
+    write_behavior: always
+
   stage-data:
     inputs:
     - name: experiment_plan

@@ -241,6 +241,8 @@ skills:
     - vis-lens-story-arc
     - select-vis-lenses
     - synthesize-vis-plan
+    - phoropter-null-synthesis
+    - phoropter-priority-synthesis
     - plan-visualization
     - stage-data
     - download-data

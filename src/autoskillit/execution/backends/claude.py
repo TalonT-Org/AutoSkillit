@@ -509,6 +509,7 @@ class ClaudeCodeBackend:
                 resume_session_id=config.resume_session_id,
                 resume_checkpoint=config.resume_checkpoint,
                 resume_message=config.resume_message,
+                sandbox_mode=config.sandbox_mode,
             )
         return self._build_skill_session_cmd_impl(
             skill_command,
@@ -552,6 +553,7 @@ class ClaudeCodeBackend:
         resume_session_id: str = "",
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
+        sandbox_mode: str = "workspace-write",
     ) -> CmdSpec:
         _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
 

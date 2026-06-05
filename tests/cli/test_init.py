@@ -347,11 +347,14 @@ class TestCodexInitFlow:
         assert config_path.exists()
         data = tomllib.loads(config_path.read_text())
 
-        hooks = data.get("hooks", [])
+        hooks = data.get("hooks", {})
         assert len(hooks) > 0
         hooks_dir_str = str(HOOKS_DIR)
         hook_commands = [
-            hook.get("command", "") for entry in hooks for hook in entry.get("hooks", [])
+            hook.get("command", "")
+            for entries in hooks.values()
+            for entry in entries
+            for hook in entry.get("hooks", [])
         ]
         assert any(hooks_dir_str in cmd for cmd in hook_commands)
         assert data["mcp_servers"]["autoskillit"]["command"] == "autoskillit"

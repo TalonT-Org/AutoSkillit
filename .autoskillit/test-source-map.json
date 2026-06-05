@@ -22,6 +22,10 @@
     "tests/cli/test_init_helpers.py",
     "tests/hooks/test_codex_hooks.py"
   ],
+  "src/autoskillit/execution/backends/_codex_hooks.py": [
+    "tests/hooks/test_codex_hooks.py",
+    "tests/cli/test_init_helpers.py"
+  ],
   "src/autoskillit/cli/_init_helpers.py": [
     "tests/cli/test_app_main.py",
     "tests/cli/test_cli_hooks.py",

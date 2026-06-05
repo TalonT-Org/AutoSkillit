@@ -11,6 +11,11 @@ from ._codex_config import (
     _write_codex_config,
     ensure_codex_mcp_registered,
 )
+from ._codex_hooks import (
+    _is_autoskillit_hook_entry,
+    generate_codex_hooks_config,
+    sync_hooks_to_codex_config,
+)
 from ._codex_parse import CodexResultParser, CodexStreamParser
 from .claude import (
     ClaudeCodeBackend,
@@ -54,6 +59,9 @@ __all__ = [
     "BACKEND_REGISTRY",
     "CODEX_EXEC_FLAGS",
     "CODEX_TOP_LEVEL_ONLY_FLAGS",
+    "_is_autoskillit_hook_entry",
+    "generate_codex_hooks_config",
+    "sync_hooks_to_codex_config",
     "ClaudeCodeBackend",
     "ClaudeEnvPolicy",
     "ClaudeResultParser",

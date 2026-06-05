@@ -69,6 +69,9 @@ from autoskillit.execution.backends._codex_config import (
     _format_toml_value,
     ensure_codex_mcp_registered,
 )
+from autoskillit.execution.backends._codex_hooks import (
+    sync_hooks_to_codex_config,
+)
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 
 __all__ = [
@@ -460,7 +463,7 @@ class CodexBackend:
             required_skill_fields=frozenset({"name", "description"}),
             required_session_files=frozenset({"config.toml"}),
             session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
-            applicable_guards=frozenset(),
+            applicable_guards=frozenset({"write_guard"}),
             env_denylist_prefixes=CODEX_ENV_PREFIX_DENYLIST,
             min_version="0.130.0",
             version_check_command="codex --version",
@@ -498,7 +501,7 @@ class CodexBackend:
         return CodexSessionLocator()
 
     def write_tool_names(self) -> frozenset[str]:
-        return frozenset()
+        return frozenset({"file_change"})
 
     def binary_name(self) -> str:
         return "codex"
@@ -957,6 +960,12 @@ class CodexBackend:
         except Exception as exc:
             logger.warning("codex_mcp_registration_failed", exc_info=True)
             return [f"Failed to ensure MCP registration: {exc}"]
+
+        try:
+            sync_hooks_to_codex_config()
+        except Exception as exc:
+            logger.warning("codex_hook_sync_failed", exc_info=True)
+            return [f"Failed to sync hooks to Codex config: {exc}"]
 
         return _validate_codex_config()
 

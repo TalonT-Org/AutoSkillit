@@ -73,7 +73,7 @@ class TestBuildSkillSessionCmdSharedBehavior:
         ("backend", "expected"),
         [
             (ClaudeCodeBackend(), "skill_load_guard"),
-            (CodexBackend(), ""),
+            (CodexBackend(), "write_guard"),
         ],
     )
     def test_applicable_guards_env_set(self, backend, expected) -> None:

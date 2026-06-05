@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -363,58 +362,30 @@ def test_find_broken_hook_scripts_dispatcher_missing(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-# HR-CODEX-1: every HookDef entry must have a # codex: comment
+# HR-CODEX-1: every HookDef entry must have a valid codex_status field
 @pytest.mark.layer("hooks")
 @pytest.mark.small
-def test_hook_registry_has_codex_comments() -> None:
-    """Every HookDef entry in HOOK_REGISTRY must have a '# codex:' trailing comment."""
-    import importlib
-    from pathlib import Path
-
-    source_path = Path(importlib.import_module("autoskillit.hook_registry").__file__)
-    source = source_path.read_text(encoding="utf-8")
-
-    # Count HookDef( occurrences and # codex: occurrences
-    hookdef_lines = [line for line in source.splitlines() if "HookDef(" in line]
-    codex_lines = [line for line in source.splitlines() if "# codex:" in line]
-
-    assert len(hookdef_lines) == len(HOOK_REGISTRY), (
-        f"Expected {len(HOOK_REGISTRY)} HookDef( lines, found {len(hookdef_lines)}"
-    )
-    assert len(codex_lines) == len(HOOK_REGISTRY), (
-        f"Expected {len(HOOK_REGISTRY)} '# codex:' comments, found {len(codex_lines)}"
-    )
-
-    # Every HookDef( line must also contain # codex:
-    missing = [line.strip() for line in hookdef_lines if "# codex:" not in line]
-    assert not missing, f"HookDef lines missing '# codex:' comment: {missing}"
+def test_hook_registry_has_codex_status() -> None:
+    """Every HookDef entry in HOOK_REGISTRY must have a valid codex_status field."""
+    valid_statuses = {"works-as-is", "degraded", "fix-required", "not-applicable"}
+    for hook_def in HOOK_REGISTRY:
+        assert hook_def.codex_status in valid_statuses, (
+            f"Hook {hook_def.scripts} has invalid codex_status: {hook_def.codex_status!r}"
+        )
 
 
 # HR-CODEX-2: degraded hook set must match expected
 @pytest.mark.layer("hooks")
 @pytest.mark.small
 def test_degraded_hooks_are_expected() -> None:
-    """The set of hooks with '# codex: degraded' must equal the expected set."""
-    import importlib
-    from pathlib import Path
-
-    source_path = Path(importlib.import_module("autoskillit.hook_registry").__file__)
-    source = source_path.read_text(encoding="utf-8")
-
+    """The set of hooks with codex_status='degraded' must equal the expected set."""
     _EXPECTED_DEGRADED = {"lint_after_edit_hook", "mcp_health_advisor"}
 
     degraded_scripts: set[str] = set()
-    lines = source.splitlines()
-    for i, line in enumerate(lines):
-        if "# codex: degraded" in line:
-            # Scan forward from HookDef( line to find the scripts= list
-            for j in range(i, min(i + 10, len(lines))):
-                if "scripts=" in lines[j]:
-                    # Extract script basenames
-                    for match in re.finditer(r'"([^"]+\.py)"', lines[j]):
-                        script = match.group(1).rsplit("/", 1)[-1].removesuffix(".py")
-                        degraded_scripts.add(script)
-                    break
+    for hook_def in HOOK_REGISTRY:
+        if hook_def.codex_status == "degraded":
+            for script in hook_def.scripts:
+                degraded_scripts.add(script.rsplit("/", 1)[-1].removesuffix(".py"))
 
     assert degraded_scripts == _EXPECTED_DEGRADED, (
         f"Expected degraded hooks {_EXPECTED_DEGRADED}, found {degraded_scripts}"

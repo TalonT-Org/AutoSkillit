@@ -134,6 +134,23 @@ def _suppress_nudge(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _suppress_pre_session_index(monkeypatch):
+    """Prevent validate_pre_session_index from consuming mock runner results.
+
+    On hosts where /tmp/.git exists as a directory (e.g. WSL2),
+    is_git_main_checkout(Path("/tmp")) returns True, causing an unexpected
+    subprocess call that shifts the mock result queue.
+    """
+
+    async def _noop(*_args, **_kwargs):
+        return False
+
+    monkeypatch.setattr(
+        "autoskillit.execution.headless._headless_execute.validate_pre_session_index", _noop
+    )
+
+
 @pytest.fixture
 def build_ctx(tmp_path):
     """Factory: build_ctx(**overrides) → minimal ToolContext with overrides applied."""

@@ -322,8 +322,8 @@ class TestBackendDelegatedWriteToolNames:
         sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.evidence.write_call_count == 0
 
-    def test_codex_backend_produces_zero_write_count(self):
-        """CodexBackend.write_tool_names() is empty — write_call_count must be 0."""
+    def test_codex_backend_ignores_claude_write_tool_names(self):
+        """Claude-style Write/Edit are not in Codex write_tool_names — they don't count."""
 
         stdout = (
             _make_tool_use_line("Write", {"file_path": "/a/b.py", "content": "x"})
@@ -337,6 +337,28 @@ class TestBackendDelegatedWriteToolNames:
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         sr = _build_skill_result(result, backend=CodexBackend())
         assert sr.evidence.write_call_count == 0
+
+    def test_codex_backend_counts_file_change_tool_uses(self):
+        """file_change entries are counted when write_tool_names includes file_change."""
+        import json as _json
+
+        lines = [
+            _json.dumps(
+                {"type": "item.completed", "item": {"type": "file_change", "path": "/a/b.py"}}
+            ),
+            _json.dumps(
+                {"type": "item.completed", "item": {"type": "file_change", "path": "/a/c.py"}}
+            ),
+            _json.dumps(
+                {"type": "turn.completed", "usage": {"input_tokens": 100, "output_tokens": 50}}
+            ),
+        ]
+        stdout = "\n".join(lines)
+        result = _codex_subprocess_result(stdout)
+        sr = _build_skill_result(
+            result, backend=CodexBackend(), supports_claude_format_stdout=False
+        )
+        assert sr.evidence.write_call_count == 2
 
     def test_claude_backend_counts_write_and_edit(self):
         """ClaudeCodeBackend.write_tool_names() includes Write and Edit."""

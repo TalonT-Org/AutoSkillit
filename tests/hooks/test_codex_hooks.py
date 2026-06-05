@@ -16,10 +16,15 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 class TestNoThirdPartyToml:
-    def test_no_third_party_toml_in_hooks_codex(self):
-        source = (
-            Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "cli" / "_hooks_codex.py"
-        )
+    @pytest.mark.parametrize(
+        "rel_path",
+        [
+            "src/autoskillit/cli/_hooks_codex.py",
+            "src/autoskillit/execution/backends/_codex_hooks.py",
+        ],
+    )
+    def test_no_third_party_toml_in_hooks_codex(self, rel_path):
+        source = Path(__file__).resolve().parents[2] / rel_path
         tree = ast.parse(source.read_text())
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -30,46 +35,73 @@ class TestNoThirdPartyToml:
                     names = [node.module or ""]
                 for name in names:
                     assert name not in ("toml", "tomli", "tomlkit"), (
-                        f"Third-party TOML import found: {name}"
+                        f"Third-party TOML import found in {rel_path}: {name}"
                     )
 
 
 class TestGenerateCodexHooksConfig:
     def test_generate_excludes_interactive_only(self):
         result = generate_codex_hooks_config()
-        for entry in result:
-            for hook in entry.get("hooks", []):
-                assert hook.get("session_scope") != "interactive_only"
+        for entries in result.values():
+            for entry in entries:
+                for hook in entry.get("hooks", []):
+                    assert hook.get("session_scope") != "interactive_only"
 
     def test_generate_consolidates_by_event_matcher(self):
         result = generate_codex_hooks_config()
         event_matcher_counts: dict[tuple, int] = {}
-        for entry in result:
-            key = (entry.get("event"), entry.get("matcher"))
-            event_matcher_counts[key] = event_matcher_counts.get(key, 0) + 1
+        for event_type, entries in result.items():
+            for entry in entries:
+                key = (event_type, entry.get("matcher"))
+                event_matcher_counts[key] = event_matcher_counts.get(key, 0) + 1
         for count in event_matcher_counts.values():
             assert count == 1, "Duplicate (event, matcher) consolidation failed"
 
     def test_generate_session_start_omits_matcher(self):
         result = generate_codex_hooks_config()
-        for entry in result:
-            if entry.get("event") == "SessionStart":
-                assert "matcher" not in entry
+        for entry in result.get("SessionStart", []):
+            assert "matcher" not in entry
 
     def test_generate_includes_timeout(self):
         result = generate_codex_hooks_config()
         has_timeout = False
-        for entry in result:
-            for hook in entry.get("hooks", []):
-                if "timeout" in hook:
-                    has_timeout = True
-                    break
+        for entries in result.values():
+            for entry in entries:
+                for hook in entry.get("hooks", []):
+                    if "timeout" in hook:
+                        has_timeout = True
+                        break
         assert has_timeout
 
-    def test_generate_every_entry_has_event_key(self):
+    def test_generate_returns_dict_keyed_by_event_type(self):
         result = generate_codex_hooks_config()
-        for entry in result:
-            assert "event" in entry
+        assert isinstance(result, dict)
+        for key in result:
+            assert key in ("PreToolUse", "PostToolUse", "SessionStart")
+
+
+class TestGeneratedHooksTrustBypass:
+    """Autoskillit-managed hooks must include trusted_hash for Codex trust gating."""
+
+    def test_generated_hooks_include_trusted_hash(self):
+        config = generate_codex_hooks_config()
+        for event_type, entries in config.items():
+            for entry in entries:
+                for hook in entry.get("hooks", []):
+                    if hook.get("type") == "command":
+                        assert "trusted_hash" in hook, (
+                            f"Hook command {hook.get('command', '?')} has no trusted_hash"
+                        )
+
+    def test_trusted_hash_is_sha256_hex(self):
+        config = generate_codex_hooks_config()
+        for entries in config.values():
+            for entry in entries:
+                for hook in entry.get("hooks", []):
+                    h = hook.get("trusted_hash", "")
+                    if h:
+                        assert len(h) == 64
+                        assert all(c in "0123456789abcdef" for c in h)
 
 
 class TestIsAutoskillitHookEntry:
@@ -106,28 +138,40 @@ class TestSyncHooksToCodexConfig:
     def test_sync_preserves_foreign_hooks(self, tmp_path):
         p = tmp_path / "config.toml"
         p.write_text(
-            '[[hooks]]\nevent = "PreToolUse"\n'
-            '[[hooks.hooks]]\ncommand = "python3 /usr/local/guard.py"\n'
+            '[[hooks.PreToolUse]]\nmatcher = "ForeignTool"\n'
+            '[[hooks.PreToolUse.hooks]]\ncommand = "python3 /usr/local/guard.py"\n'
         )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
         config = _read_codex_config(p).data
-        hooks = config.get("hooks", [])
-        foreign = [h for h in hooks if "/usr/local/" in str(h)]
+        hooks = config.get("hooks", {})
+        pre_entries = hooks.get("PreToolUse", [])
+        foreign = [
+            e
+            for e in pre_entries
+            if any("/usr/local/" in h.get("command", "") for h in e.get("hooks", []))
+        ]
         assert len(foreign) > 0
 
     def test_sync_replaces_stale(self, tmp_path):
         p = tmp_path / "config.toml"
         p.write_text(
-            '[[hooks]]\nevent = "PreToolUse"\n'
-            '[[hooks.hooks]]\ncommand = "/autoskillit/hooks/_dispatch.py old"\n'
+            '[[hooks.PreToolUse]]\nmatcher = "StaleMatch"\n'
+            '[[hooks.PreToolUse.hooks]]\ncommand = "/autoskillit/hooks/_dispatch.py old"\n'
         )
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
         config = _read_codex_config(p).data
-        hooks = config.get("hooks", [])
-        autoskillit_hooks = [h for h in hooks if "/autoskillit/" in str(h)]
-        assert len(autoskillit_hooks) > 0
+        hooks = config.get("hooks", {})
+        all_cmds = []
+        for entries in hooks.values():
+            for entry in entries:
+                for h in entry.get("hooks", []):
+                    all_cmds.append(h.get("command", ""))
+        autoskillit_cmds = [c for c in all_cmds if "/autoskillit/" in c or "_dispatch.py" in c]
+        assert len(autoskillit_cmds) > 0
+        stale = [c for c in all_cmds if "old" in c]
+        assert len(stale) == 0
 
     def test_sync_empty_config(self, tmp_path):
         p = tmp_path / "config.toml"
@@ -140,6 +184,13 @@ class TestSyncHooksToCodexConfig:
         result = sync_hooks_to_codex_config(config_path=p)
         assert result is True
         assert p.exists()
+
+    def test_sync_creates_nested_format(self, tmp_path):
+        p = tmp_path / "config.toml"
+        sync_hooks_to_codex_config(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert "[[hooks.PreToolUse]]" in content
+        assert "[[hooks]]\n" not in content
 
 
 class TestHookSyncCorruptFilePreservation:
@@ -159,4 +210,4 @@ class TestHookSyncCorruptFilePreservation:
         sync_hooks_to_codex_config(config_path=p)
         content = p.read_text(encoding="utf-8")
         assert "[projects./home/user/repo]" in content
-        assert "[[hooks]]" in content
+        assert "[[hooks.PreToolUse]]" in content

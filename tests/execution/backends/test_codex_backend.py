@@ -268,7 +268,7 @@ class TestCodexBackendFactories:
         assert isinstance(locator, CodexSessionLocator)
 
     def test_write_tool_names_returns_frozenset(self) -> None:
-        assert isinstance(CodexBackend().write_tool_names(), frozenset)
+        assert CodexBackend().write_tool_names() == frozenset({"file_change"})
 
     def test_write_tool_names_includes_file_change(self) -> None:
         names = CodexBackend().write_tool_names()

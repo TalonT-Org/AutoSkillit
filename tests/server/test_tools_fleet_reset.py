@@ -419,3 +419,34 @@ class TestResetDispatchEdgeCases:
         state = json.loads(resume_state_path.read_text())
         assert "impl-issue-42" not in state["resume_attempted"]
         assert "d-abc123" not in state["resume_attempted"]
+
+
+class TestResetDispatchProtection:
+    @pytest.mark.anyio
+    async def test_reset_dispatch_surfaces_protected_artifacts(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        """has_protected_artifacts=True and PR URL present when OPEN+APPROVED."""
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url="https://github.com/owner/repo/pull/1")
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        async def _runner(cmd, **_kwargs):
+            if "pr" in cmd and "view" in cmd:
+                return _make_subprocess_result(
+                    stdout=json.dumps({"state": "OPEN", "reviewDecision": "APPROVED"}),
+                )
+            return _make_subprocess_result()
+
+        tool_ctx.runner = _runner
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123", reset_to="queued")
+        result = json.loads(raw)
+
+        assert result["success"] is True
+        assert result["has_protected_artifacts"] is True
+        assert "https://github.com/owner/repo/pull/1" in result["protected_prs"]

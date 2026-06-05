@@ -60,6 +60,8 @@ class ResetReport:
     prs_closed: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     state_updated: bool = False
+    has_protected_artifacts: bool = False
+    protected_prs: list[str] = field(default_factory=list)
 
 
 def find_dispatch_in_campaigns(
@@ -164,8 +166,12 @@ async def reset_dispatch_artifacts(
     runner: SubprocessRunner,
     github_client: GitHubFetcher | None,
     target_state: IssueLabelState,
+    force: bool = False,
 ) -> ResetReport:
-    report = ResetReport(dispatch_name=dispatch.name, branch_name=dispatch.name)
+    report = ResetReport(
+        dispatch_name=dispatch.name,
+        branch_name=dispatch.branch_name or dispatch.name,
+    )
     remove_labels, add_labels = compute_reset_labels(target_state)
 
     sidecar_result = None
@@ -200,20 +206,50 @@ async def reset_dispatch_artifacts(
         pr_urls = [e.pr_url for e in sidecar_result.entries if e.pr_url is not None]
 
     if not pr_urls and dispatch.sidecar_path is not None:
-        try:
-            gh_result = await runner(
-                ["gh", "pr", "list", "--head", dispatch.name, "--json", "url", "--limit", "5"],
-                cwd=project_dir,
-                timeout=15,
+        for _head_name in dict.fromkeys(
+            [dispatch.name]
+            + (
+                [dispatch.branch_name]
+                if dispatch.branch_name and dispatch.branch_name != dispatch.name
+                else []
             )
-            if gh_result.returncode == 0 and gh_result.stdout:
-                parsed = json.loads(gh_result.stdout)
-                pr_urls = [item["url"] for item in parsed if "url" in item]
-        except Exception as exc:
-            logger.warning("pr_fallback_search_failed", error=str(exc))
-            report.errors.append(f"pr_fallback_search: {exc}")
+        ):
+            try:
+                gh_result = await runner(
+                    ["gh", "pr", "list", "--head", _head_name, "--json", "url", "--limit", "5"],
+                    cwd=project_dir,
+                    timeout=15,
+                )
+                if gh_result.returncode == 0 and gh_result.stdout:
+                    parsed = json.loads(gh_result.stdout)
+                    pr_urls = [item["url"] for item in parsed if "url" in item]
+                    if pr_urls:
+                        break
+            except Exception as exc:
+                logger.warning("pr_fallback_search_failed", error=str(exc))
+                report.errors.append(f"pr_fallback_search: {exc}")
 
     for pr_url in pr_urls:
+        if not force:
+            try:
+                _view_result = await runner(
+                    ["gh", "pr", "view", pr_url, "--json", "reviewDecision,state"],
+                    cwd=project_dir,
+                    timeout=15,
+                )
+                if _view_result.returncode == 0 and _view_result.stdout:
+                    _pr_data = json.loads(_view_result.stdout)
+                    _is_open = _pr_data.get("state") == "OPEN"
+                    _review = _pr_data.get("reviewDecision", "")
+                    if _is_open and _review in ("APPROVED", "CHANGES_REQUESTED"):
+                        report.has_protected_artifacts = True
+                        report.protected_prs.append(pr_url)
+                        continue
+            except Exception:
+                logger.warning("pr_protection_check_failed", pr_url=pr_url, exc_info=True)
+                report.has_protected_artifacts = True
+                report.protected_prs.append(pr_url)
+                continue
         try:
             close_result = await runner(
                 [

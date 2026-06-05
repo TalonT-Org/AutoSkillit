@@ -147,6 +147,7 @@ async def reset_dispatch(
             runner=tool_ctx.runner,
             github_client=tool_ctx.github_client,
             target_state=target_state,
+            force=force,
         )
 
         state_updated = await update_campaign_state(
@@ -174,6 +175,8 @@ async def reset_dispatch(
                 "prs_closed": report.prs_closed,
                 "state_updated": report.state_updated,
                 "errors": report.errors,
+                "has_protected_artifacts": report.has_protected_artifacts,
+                "protected_prs": report.protected_prs,
                 "reset_to": reset_to,
             }
         )

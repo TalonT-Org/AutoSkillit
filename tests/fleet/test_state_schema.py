@@ -385,6 +385,7 @@ class TestDispatchRecordToDict:
             "ended_at",
             "sidecar_path",
             "attempt_history",
+            "branch_name",
             "resume_checkpoint",
             "wait_seconds",
             "resets_at",
@@ -546,6 +547,26 @@ class TestAttemptHistoryFields:
         )
         roundtripped = DispatchRecord.from_dict(d.to_dict())
         assert roundtripped.attempt_history == [{"dispatch_id": "attempt-1", "status": "failure"}]
+
+
+class TestBranchNameField:
+    def test_branch_name_default_empty(self) -> None:
+        rec = DispatchRecord(name="d1")
+        assert rec.branch_name == ""
+
+    def test_branch_name_in_to_dict(self) -> None:
+        rec = DispatchRecord(name="d1", branch_name="feat-branch-20260604")
+        d = rec.to_dict()
+        assert d["branch_name"] == "feat-branch-20260604"
+
+    def test_branch_name_from_dict_missing_defaults_empty(self) -> None:
+        rec = DispatchRecord.from_dict({"name": "d1"})
+        assert rec.branch_name == ""
+
+    def test_branch_name_round_trips_through_to_dict(self) -> None:
+        rec = DispatchRecord(name="d1", branch_name="feat-branch-20260604")
+        roundtripped = DispatchRecord.from_dict(rec.to_dict())
+        assert roundtripped.branch_name == "feat-branch-20260604"
 
 
 class TestResumeCount:

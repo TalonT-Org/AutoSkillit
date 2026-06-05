@@ -40,11 +40,14 @@ def _is_parent_assistant_record(obj: dict) -> bool:
     return True
 
 
-def _extract_text_from_jsonl(path: Path) -> str:
+def _extract_text_from_jsonl(path: Path, skip_lines: int = 0) -> str:
     """Read a Claude Code session JSONL and extract assistant text blocks.
 
     Reads all lines, filters for type=="assistant" records, extracts text
     from message.content blocks. Returns concatenated text (oldest-first).
+
+    When *skip_lines* > 0, the first *skip_lines* lines are skipped before
+    extraction — used to scope reads to content written after a resume boundary.
     """
     try:
         raw = path.read_text(encoding="utf-8")
@@ -52,7 +55,7 @@ def _extract_text_from_jsonl(path: Path) -> str:
         return ""
 
     texts: list[str] = []
-    for line in raw.splitlines():
+    for line in raw.splitlines()[skip_lines:]:
         line = line.strip()
         if not line:
             continue
@@ -158,6 +161,7 @@ def parse_l3_result_block(
     assistant_messages_path: Path | None = None,
     prior_dispatch_ids: Sequence[str] | None = None,
     additional_jsonl_paths: Sequence[Path] | None = None,
+    resume_line_offset: int = 0,
 ) -> L3ParseResult:
     """Parse an L3 result block from food truck dispatch output.
 
@@ -184,7 +188,7 @@ def parse_l3_result_block(
     jsonl_text: str | None = None
     if assistant_messages_path is not None:
         jsonl_text = _collapse_hr_split_delimiters(
-            _extract_text_from_jsonl(assistant_messages_path)
+            _extract_text_from_jsonl(assistant_messages_path, skip_lines=resume_line_offset)
         )
         positions = _scan_for_sentinel(jsonl_text, open_sentinel, close_sentinel)
         if positions is not None:

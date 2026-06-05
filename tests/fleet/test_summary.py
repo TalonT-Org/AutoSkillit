@@ -308,3 +308,15 @@ def test_campaign_summary_accepts_prior_campaign_id() -> None:
     text = _make_sentinel_text(prior_summary, campaign_id=prior_cid)
     result = parse_campaign_summary(text, current_cid, prior_campaign_ids=[prior_cid])
     assert isinstance(result, CampaignSummary)
+
+
+def test_campaign_summary_last_match_wins() -> None:
+    """When text contains two campaign-summary blocks, parse_campaign_summary returns the last."""
+    from autoskillit.fleet import CampaignSummary, parse_campaign_summary
+
+    first_data = {**_VALID_SUMMARY_DICT, "campaign_name": "First Run"}
+    second_data = {**_VALID_SUMMARY_DICT, "campaign_name": "Second Run"}
+    text = _make_sentinel_text(first_data) + "\n\nsome text\n\n" + _make_sentinel_text(second_data)
+    result = parse_campaign_summary(text, _VALID_CAMPAIGN_ID)
+    assert isinstance(result, CampaignSummary)
+    assert result.campaign_name == "Second Run"

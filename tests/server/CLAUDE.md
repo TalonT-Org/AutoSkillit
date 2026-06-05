@@ -30,6 +30,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_mcp_overrides.py` | Tests for MCP tool ingredient_overrides parameter propagation |
 | `test_misc_module.py` | Contract tests: server._misc module |
 | `test_no_raw_signal_handler.py` | AST guard: no raw signal.signal(SIGTERM, ...) in cli/app.py |
+| `test_notify_module.py` | Contract tests: server._notify module |
 | `test_perform_merge_editable_guard.py` | Integration tests verifying perform_merge() aborts before cleanup on poisoned installs |
 | `test_profile_to_env.py` | Tests for _profile_to_env — ProviderProfileDef to env dict conversion in _guards.py |
 | `test_quota_refresh_loop.py` | Tests for _quota_refresh_loop in server/_misc.py |

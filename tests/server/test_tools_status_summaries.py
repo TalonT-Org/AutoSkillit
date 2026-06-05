@@ -18,13 +18,12 @@ from autoskillit.server.tools.tools_status import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-@pytest.fixture(autouse=True)
-def _fleet_session(monkeypatch):
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-
-
 class TestGetTokenSummary:
     """get_token_summary is a gated tool that returns accumulated token usage."""
+
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
     @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):
@@ -197,6 +196,10 @@ class TestGetTokenSummary:
 class TestGetTimingSummary:
     """get_timing_summary is a gated tool that returns accumulated wall-clock timing."""
 
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_gate_closed_returns_gate_error(self, tool_ctx):
         """get_timing_summary returns gate_error when kitchen gate is closed."""
@@ -267,6 +270,10 @@ class TestGetTimingSummary:
 class TestGetTokenSummaryFormat:
     """Tests for get_token_summary format parameter."""
 
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_format_json_default(self, tool_ctx_kitchen_open):
         """format='json' (default) returns JSON dict."""
@@ -310,6 +317,10 @@ class TestGetTokenSummaryFormat:
 class TestGetTimingSummaryFormat:
     """Tests for get_timing_summary format parameter."""
 
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_format_json_default(self, tool_ctx_kitchen_open):
         """format='json' (default) returns JSON dict."""
@@ -332,6 +343,10 @@ class TestGetTimingSummaryFormat:
 
 
 class TestTokenSummaryWallClock:
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.anyio
     async def test_wall_clock_seconds_merged_from_timing_log(self, tool_ctx_kitchen_open):
         from autoskillit.pipeline.timings import DefaultTimingLog
@@ -419,6 +434,10 @@ class TestTokenSummaryWallClock:
 
 
 class TestClearMarkerWritten:
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+
     @pytest.mark.parametrize(
         "fn,kwargs",
         [
@@ -468,6 +487,7 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(
     Entries written by a prior pipeline run must not appear in the summary,
     even if the server was restarted with those sessions present in the log dir.
     """
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     from unittest.mock import patch
 
     from autoskillit.server import _state
@@ -536,6 +556,10 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(
 
 class TestOrderIdFilterOnSummaryTools:
     """Group D: order_id filter params on get_token_summary and get_timing_summary."""
+
+    @pytest.fixture(autouse=True)
+    def _set_fleet_session(self, monkeypatch):
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
     @pytest.mark.anyio
     async def test_get_token_summary_order_id_filter_isolates_issue(

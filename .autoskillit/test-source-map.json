@@ -14234,6 +14234,7 @@
     "tests/server/test_lifespan_skill_boot.py",
     "tests/server/test_lock_ingredients.py",
     "tests/server/test_mcp_overrides.py",
+    "tests/server/test_notify_module.py",
     "tests/server/test_open_kitchen_deferred_recall.py",
     "tests/server/test_open_kitchen_staleness.py",
     "tests/server/test_pipeline_tracker.py",

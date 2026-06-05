@@ -33,14 +33,6 @@ async def test_resolve_repo_from_remote_returns_empty_for_file_url(tmp_path: Pat
     assert result == ""
 
 
-def test_notify_module_exports():
-    from autoskillit.server._notify import _get_ctx_or_none, _notify, track_response_size
-
-    assert callable(_notify)
-    assert callable(track_response_size)
-    assert callable(_get_ctx_or_none)
-
-
 def test_misc_module_exports():
     from autoskillit.server._misc import (
         _HOOK_CONFIG_FILENAME,

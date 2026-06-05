@@ -76,14 +76,16 @@ class TraditionManifest:
         if dialing_raw and isinstance(dialing_raw, dict):
             synthesis = dialing_raw.get("synthesis_strategy")
             always = dialing_raw.get("always_run")
+            try:
+                synth = SynthesisStrategy(synthesis) if synthesis else SynthesisStrategy.NULL
+            except ValueError as exc:
+                raise ValueError(f"Invalid dialing.synthesis_strategy {synthesis!r}") from exc
             dialing = DialingConfig(
                 selection_strategy=dialing_raw.get("selection_strategy", ""),
                 min_lenses=dialing_raw.get("min_lenses", 1),
                 max_lenses=dialing_raw.get("max_lenses", 1),
                 always_run=tuple(always) if always else (),
-                synthesis_strategy=SynthesisStrategy(synthesis)
-                if synthesis
-                else SynthesisStrategy.NULL,
+                synthesis_strategy=synth,
             )
         else:
             dialing = DialingConfig()
@@ -119,7 +121,10 @@ class TraditionManifest:
     def from_yaml_path(cls, path: Path) -> TraditionManifest:
         from autoskillit.core.io import load_yaml
 
-        raw = load_yaml(path)
+        try:
+            raw = load_yaml(path)
+        except Exception as exc:
+            raise ValueError(f"Failed to load tradition manifest from {path}") from exc
         if not isinstance(raw, dict):
             raise ValueError(f"Expected a YAML mapping, got {type(raw).__name__}")
         return cls.from_dict(raw)

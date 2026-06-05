@@ -26,6 +26,7 @@ CODEX_API_ERROR_SIGNAL_STRINGS: tuple[str, ...] = tuple(
 
 def _mock_backend(**kw: Any) -> Mock:
     """Build a mock backend with all-False/empty capability baseline."""
+    kw.setdefault("write_detection_strategy", "tool_names")
     caps = BackendCapabilities(**kw)
     backend = Mock()
     backend.name = "claude-code"

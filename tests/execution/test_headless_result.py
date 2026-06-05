@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 import structlog.testing
 
-from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE
+from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, BackendCapabilities
 from autoskillit.core.types import (
     AgentSessionResult,
     CliSubtype,
@@ -299,6 +299,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
         mock_backend.write_tool_names.return_value = frozenset({"CustomWrite"})
         stdout = (
             _make_tool_use_line("CustomWrite", {"file_path": "/a/b.py", "content": "x"})
@@ -393,6 +394,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         _build_skill_result(result, backend=mock_backend)
@@ -415,6 +417,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.STALE)
         _build_skill_result(result, backend=mock_backend)
@@ -437,6 +440,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.IDLE_STALL)
         _build_skill_result(result, backend=mock_backend)
@@ -459,6 +463,7 @@ class TestBackendDelegatedWriteToolNames:
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
+        mock_backend.capabilities = BackendCapabilities(write_detection_strategy="tool_names")
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.TIMED_OUT)
         _build_skill_result(result, backend=mock_backend)

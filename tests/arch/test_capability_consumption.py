@@ -67,7 +67,7 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
     ),
     "patch_format": ForwardDeclaredField(
         issue=3776,
-        rationale="patch path extraction routing — consumer in write_guard.py P2",
+        rationale="patch path extraction routing — P2-A3-WP1 (#3787) co-lands consumer",
         added_date=date(2026, 6, 5),
     ),
 }

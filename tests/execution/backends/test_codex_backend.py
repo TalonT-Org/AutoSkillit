@@ -721,6 +721,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
     def test_config_sandbox_mode_propagates(self) -> None:
         config = SkillSessionConfig(sandbox_mode="read-only")
         spec = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
+        assert "--sandbox" in spec.cmd
         idx = spec.cmd.index("--sandbox")
         assert spec.cmd[idx + 1] == "read-only"
 

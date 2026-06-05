@@ -137,9 +137,7 @@ def test_workflow_four_steps() -> None:
     assert "Step 1" in text
     assert "Step 2" in text
     assert "Step 3" in text
-    assert "Step 4" not in text or "Step 4" not in text.split("Step 3")[1], (
-        "Workflow must have exactly 4 steps (0-3)"
-    )
+    assert "Step 4" not in text, "Workflow must have exactly 4 steps (0-3)"
 
 
 def test_important_callout_present() -> None:

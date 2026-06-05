@@ -1050,7 +1050,7 @@ class TestCodexEnsurePreLaunchConfigValidation:
     def _stub_hook_sync(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "autoskillit.execution.backends.codex.sync_hooks_to_codex_config",
-            lambda **kw: False,
+            lambda *a, **kw: False,
         )
 
     def test_ensure_pre_launch_returns_error_on_config_load_failure(
@@ -1126,7 +1126,7 @@ class TestCodexEnsurePreLaunchConfigValidation:
             call_order.append("register")
             return False
 
-        def fake_sync(**kw):
+        def fake_sync(*a, **kw):
             call_order.append("hook_sync")
             return False
 

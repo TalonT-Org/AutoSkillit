@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from autoskillit.cli._hooks_codex import generate_codex_hooks_config
+from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import HookDef
 from autoskillit.hooks import HOOK_REGISTRY
 
@@ -32,7 +32,7 @@ class TestHookDefCodexStatus:
             hd.matcher for hd in HOOK_REGISTRY if hd.codex_status == "fix-required"
         }
         config = generate_codex_hooks_config()
-        for event_type, entries in config.items():
+        for _event_type, entries in config.items():
             for entry in entries:
                 assert entry.get("matcher") not in fix_required_matchers, (
                     f"fix-required hook with matcher={entry['matcher']!r} "
@@ -44,7 +44,7 @@ class TestHookDefCodexStatus:
             hd.matcher for hd in HOOK_REGISTRY if hd.codex_status == "not-applicable"
         }
         config = generate_codex_hooks_config()
-        for event_type, entries in config.items():
+        for _event_type, entries in config.items():
             for entry in entries:
                 assert entry.get("matcher") not in not_applicable_matchers, (
                     f"not-applicable hook with matcher={entry.get('matcher')!r} "

@@ -6,8 +6,8 @@ import tomllib
 
 import pytest
 
-from autoskillit.cli._hooks_codex import generate_codex_hooks_config
 from autoskillit.execution import _serialize_toml
+from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -36,9 +36,10 @@ class TestCodexTomlFormatContract:
         assert "[[hooks]]\n" not in toml_text, (
             "TOML must not use [[hooks]] — Codex expects [[hooks.PreToolUse]]"
         )
-        assert "[[hooks.PreToolUse]]" in toml_text or "[[hooks.PostToolUse]]" in toml_text, (
-            "TOML must contain [[hooks.<EventType>]] subtables"
-        )
+        for event_key in ("PreToolUse", "PostToolUse"):
+            assert f"[[hooks.{event_key}]]" in toml_text, (
+                f"TOML must contain [[hooks.{event_key}]] subtable"
+            )
         parsed = tomllib.loads(toml_text)
         hooks = parsed.get("hooks", {})
         assert isinstance(hooks, dict), "Parsed hooks must be a dict keyed by event type"

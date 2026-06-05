@@ -23,12 +23,15 @@ from autoskillit.execution.backends import (
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
     ClaudeCodeBackend,
     CodexBackend,
+    _is_autoskillit_hook_entry,
     _is_autoskillit_registered,
     _read_codex_config,
     _serialize_toml,
     _write_codex_config,
     ensure_codex_mcp_registered,
+    generate_codex_hooks_config,
     get_backend,
+    sync_hooks_to_codex_config,
 )
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import (
@@ -223,11 +226,14 @@ __all__ = [
     "CODEX_MCP_TOOL_TIMEOUT_FLOOR",
     "ClaudeCodeBackend",
     "CodexBackend",
+    "_is_autoskillit_hook_entry",
     "_is_autoskillit_registered",
     "_read_codex_config",
     "_serialize_toml",
     "_write_codex_config",
     "ensure_codex_mcp_registered",
+    "generate_codex_hooks_config",
+    "sync_hooks_to_codex_config",
     # anomaly_detection
     "detect_anomalies",
     "AnomalyKind",

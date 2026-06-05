@@ -1,6 +1,15 @@
 """PreToolUse hook: blocks tool calls outside the allowed prefix
-in write-scoped sessions. Tool set driven by AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
-(default: Write, Edit, Bash, apply_patch)."""
+in write-scoped sessions.
+
+Two gate mechanisms operate together:
+1. Named-tool gate: controlled by AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES (default:
+   Write, Edit, Bash, apply_patch). Tool calls not in this set pass through
+   immediately with no prefix check.
+2. run_cmd bypass: any tool whose name contains the substring "run_cmd" is
+   unconditionally routed into the Bash command analysis path regardless of
+   AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES. This ensures Codex's run_cmd tool is
+   always subject to command-level write checks. The env var cannot suppress
+   or extend this bypass."""
 
 from __future__ import annotations
 

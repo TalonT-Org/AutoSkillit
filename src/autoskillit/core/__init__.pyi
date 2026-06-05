@@ -249,6 +249,7 @@ from .types import CrossDomainAssessment as CrossDomainAssessment
 from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
 from .types import DirectInstall as DirectInstall
+from .types import DialingConfig as DialingConfig
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
 from .types import EnvPolicy as EnvPolicy
@@ -273,6 +274,7 @@ from .types import InspectorVerdict as InspectorVerdict
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
+from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import MarketplaceInstall as MarketplaceInstall
@@ -337,6 +339,7 @@ from .types import TestRunner as TestRunner
 from .types import TimingLog as TimingLog
 from .types import TokenFactory as TokenFactory
 from .types import TokenLog as TokenLog
+from .types import TraditionManifest as TraditionManifest
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath
 from .types import WorkspaceManager as WorkspaceManager

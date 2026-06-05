@@ -35,10 +35,11 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |
 | `_type_plugin_source.py` | `PluginSource` discriminated union: `DirectInstall | MarketplaceInstall` |
+| `_type_tradition_manifest.py` | `TraditionManifest`, `LensEntry`, `DialingConfig` frozen dataclasses with `from_yaml_path` YAML loader |
 
 ## Architecture Notes
 
-Internal dependency DAG: enums -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
+Internal dependency DAG: enums -> constants_registries -> constants_features; enums -> results -> protocols -> helpers; enums -> phoropter; enums + phoropter -> tradition_manifest. All modules have zero `autoskillit` imports outside this sub-package (IL-0 hard constraint). Production code imports from `autoskillit.core`, not from this package directly.
 
 ## Extension Bundle Pattern
 

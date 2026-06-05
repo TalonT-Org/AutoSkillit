@@ -20,6 +20,7 @@ from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
+    AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
     CODEX_EFFORT_MAPPING,
     CODEX_INTERACTIVE_REQUIRED_ENV,
@@ -175,6 +176,7 @@ def _codex_exec_extras(
     include_session_baseline: bool = False,
     include_agent_backend_flat: bool = False,
     applicable_guards: frozenset[str] | None = None,
+    write_guard_tool_names: frozenset[str] | None = None,
 ) -> dict[str, str]:
     extras: dict[str, str] = {}
     if include_session_baseline:
@@ -193,6 +195,8 @@ def _codex_exec_extras(
         extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
     if applicable_guards is not None:
         extras[AUTOSKILLIT_APPLICABLE_GUARDS] = ",".join(sorted(applicable_guards))
+    if write_guard_tool_names is not None:
+        extras[AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES] = ",".join(sorted(write_guard_tool_names))
     return extras
 
 
@@ -471,6 +475,8 @@ class CodexBackend:
             required_session_files=frozenset({"config.toml"}),
             session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
             applicable_guards=frozenset({"write_guard"}),
+            # Codex uses run_cmd instead of Write/Edit — those tools don't exist in Codex
+            write_guard_tool_names=frozenset({"apply_patch", "Bash", "run_cmd"}),
             env_denylist_prefixes=CODEX_ENV_PREFIX_DENYLIST,
             min_version="0.130.0",
             version_check_command="codex --version",
@@ -630,6 +636,7 @@ class CodexBackend:
             session_type=SESSION_TYPE_SKILL,
             include_agent_backend_flat=True,
             applicable_guards=self.capabilities.applicable_guards,
+            write_guard_tool_names=self.capabilities.write_guard_tool_names,
         )
         extras["MAX_MCP_OUTPUT_TOKENS"] = _MAX_MCP_OUTPUT_TOKENS_VALUE
         extras["MCP_CONNECTION_NONBLOCKING"] = "0"
@@ -731,6 +738,7 @@ class CodexBackend:
             session_type=SESSION_TYPE_ORCHESTRATOR,
             include_agent_backend_flat=True,
             applicable_guards=self.capabilities.applicable_guards,
+            write_guard_tool_names=self.capabilities.write_guard_tool_names,
         )
         extras["MAX_MCP_OUTPUT_TOKENS"] = _MAX_MCP_OUTPUT_TOKENS_VALUE
         extras["MCP_CONNECTION_NONBLOCKING"] = "0"

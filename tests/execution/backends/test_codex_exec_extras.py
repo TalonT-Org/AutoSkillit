@@ -57,6 +57,28 @@ class TestCodexExecExtras:
         )
         assert AGENT_BACKEND_ENV_VAR in result
 
+    def test_includes_write_guard_tool_names(self) -> None:
+        from autoskillit.core import AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
+
+        result = _codex_exec_extras(
+            session_type=SESSION_TYPE_SKILL,
+            write_guard_tool_names=frozenset({"apply_patch", "Bash"}),
+        )
+        assert result[AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES] == "Bash,apply_patch"
+
+    def test_empty_write_guard_tool_names_writes_empty_string(self) -> None:
+        from autoskillit.core import AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
+
+        result = _codex_exec_extras(
+            session_type=SESSION_TYPE_SKILL,
+            write_guard_tool_names=frozenset(),
+        )
+        assert result[AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES] == ""
+
+    def test_no_write_guard_tool_names_omits_key(self) -> None:
+        result = _codex_exec_extras(session_type="")
+        assert "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES" not in result
+
 
 _BASELINE_KEYS = {
     "AUTOSKILLIT_HEADLESS",

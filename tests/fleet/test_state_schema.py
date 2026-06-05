@@ -549,6 +549,26 @@ class TestAttemptHistoryFields:
         assert roundtripped.attempt_history == [{"dispatch_id": "attempt-1", "status": "failure"}]
 
 
+class TestBranchNameField:
+    def test_branch_name_default_empty(self) -> None:
+        rec = DispatchRecord(name="d1")
+        assert rec.branch_name == ""
+
+    def test_branch_name_in_to_dict(self) -> None:
+        rec = DispatchRecord(name="d1", branch_name="feat-branch-20260604")
+        d = rec.to_dict()
+        assert d["branch_name"] == "feat-branch-20260604"
+
+    def test_branch_name_from_dict_missing_defaults_empty(self) -> None:
+        rec = DispatchRecord.from_dict({"name": "d1"})
+        assert rec.branch_name == ""
+
+    def test_branch_name_round_trips_through_to_dict(self) -> None:
+        rec = DispatchRecord(name="d1", branch_name="feat-branch-20260604")
+        roundtripped = DispatchRecord.from_dict(rec.to_dict())
+        assert roundtripped.branch_name == "feat-branch-20260604"
+
+
 class TestResumeCount:
     def test_resume_count_default_zero(self) -> None:
         """T5.1: DispatchRecord(name='x').resume_count defaults to 0."""

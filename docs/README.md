@@ -34,3 +34,4 @@ multi-level orchestrator. The bundled recipes implement issue → plan → workt
 - [research/silent-type-convention.md](research/silent-type-convention.md) — silent type detection and advisory convention
 - [research/audit-trail-format.md](research/audit-trail-format.md) — audit/ artifact structure and lifecycle
 - [audit/surface-freeze-checklist.md](audit/surface-freeze-checklist.md) — commands.py public import surface freeze checklist
+- [phoropter/](phoropter/README.md) — phoropter lens framework: execution contracts, recipe blocks, synthesis strategies, and authoring guide

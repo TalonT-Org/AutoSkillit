@@ -20,6 +20,7 @@ EXPECTED_SUBDIRS = {
     "safety",
     "operations",
     "developer",
+    "phoropter",
 }
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)#]+)(?:#[^)]*)?\)")

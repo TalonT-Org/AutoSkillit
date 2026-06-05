@@ -5,7 +5,7 @@
   "description": "Schema for hand-authored YAML tradition manifest files for any phoropter lens family.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["name", "description", "output_type", "step_count", "mode_label", "context_file_schema", "default_enabled", "failure_mode", "step_name_prefix", "lenses"],
+  "required": ["name", "description", "output_type", "step_count", "mode_label", "context_file_schema", "default_enabled", "failure_mode", "lenses"],
   "properties": {
     "name": {
       "type": "string",
@@ -43,7 +43,8 @@
     },
     "arg_interface": {
       "type": "string",
-      "enum": ["one_arg", "two_arg"]
+      "enum": ["one_arg", "two_arg"],
+      "default": "one_arg"
     },
     "output_type": {
       "type": "string",
@@ -70,7 +71,8 @@
       "minLength": 1
     },
     "context_file_schema": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "default_enabled": {
       "type": "boolean"

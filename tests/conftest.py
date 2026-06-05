@@ -86,6 +86,29 @@ class TimeoutTier:
 _structlog_proxies: list[object] = []
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _detect_tmp_git_contamination():
+    """Fail fast if /tmp/.git is a structurally valid git repo.
+
+    An empty /tmp/.git directory is harmless — _find_git_ancestor() walks past
+    it (no HEAD file).  Only a valid git repo at /tmp contaminates tests that
+    use cwd='/tmp'.
+    """
+    tmp_git = _Path("/tmp/.git")
+    if tmp_git.is_dir() and (tmp_git / "HEAD").is_file():
+        pytest.fail(
+            "/tmp/.git exists with a valid HEAD — this contaminates "
+            "is_git_main_checkout() for tests using cwd='/tmp'. "
+            "Remove it before running the test suite."
+        )
+    if tmp_git.is_file():
+        pytest.fail(
+            "/tmp/.git is a worktree pointer file — this contaminates "
+            "is_git_worktree() for tests using cwd='/tmp'. "
+            "Remove it before running the test suite."
+        )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _structlog_session_init():
     """One-time structlog proxy cache flush and proxy inventory per worker session.

@@ -4,17 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
-
-import yaml
+from typing import Any, ClassVar
 
 from ._type_enums import SynthesisStrategy
 from ._type_phoropter import PhoropterPhaseSkip
-
-try:
-    from yaml import CSafeLoader as _Loader
-except ImportError:
-    _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
 
 __all__ = ["TraditionManifest", "LensEntry", "DialingConfig"]
 
@@ -68,11 +61,7 @@ class TraditionManifest:
     )
 
     @classmethod
-    def from_yaml_path(cls, path: Path) -> TraditionManifest:
-        with open(path, "rb") as fh:
-            raw = yaml.load(fh, Loader=_Loader)
-        if not isinstance(raw, dict):
-            raise ValueError(f"Expected a YAML mapping, got {type(raw).__name__}")
+    def from_dict(cls, raw: dict[str, Any]) -> TraditionManifest:
         missing = cls._REQUIRED_KEYS - raw.keys()
         if missing:
             raise ValueError(f"Missing required field(s): {', '.join(sorted(missing))}")
@@ -125,3 +114,12 @@ class TraditionManifest:
             lenses=lenses,
             dialing=dialing,
         )
+
+    @classmethod
+    def from_yaml_path(cls, path: Path) -> TraditionManifest:
+        from autoskillit.core.io import load_yaml
+
+        raw = load_yaml(path)
+        if not isinstance(raw, dict):
+            raise ValueError(f"Expected a YAML mapping, got {type(raw).__name__}")
+        return cls.from_dict(raw)

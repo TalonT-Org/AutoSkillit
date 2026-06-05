@@ -490,7 +490,7 @@ class CodexBackend:
             replay_capable=False,
             record_capable=False,
             anthropic_provider_capable=False,
-            inspector_capable=True,
+            inspector_capable=False,
             has_unguarded_filesystem_access=True,
         )
 

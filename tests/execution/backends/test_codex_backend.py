@@ -336,6 +336,7 @@ class TestCodexBackendProtocol:
             ("mcp_config_capable", True),
             ("food_truck_capable", True),
             ("supports_tool_list_changed", False),
+            ("inspector_capable", False),
         ],
     )
     def test_capability_flag(self, attr: str, expected: bool) -> None:

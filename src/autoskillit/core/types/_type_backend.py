@@ -6,7 +6,7 @@ import re as _re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import BackendEventKind, OutputFormat
@@ -108,7 +108,7 @@ class BackendCapabilities:
     # Relative path from session root to the skills directory
     skills_subdir: str = ""
     # Hook config format identifier (e.g. settings.json vs config.toml)
-    hook_config_format: Literal["toml_nested", ""] = ""
+    hook_config_format: str = ""
     # Write detection strategy (e.g. tool_names, file_change)
     write_detection_strategy: str = ""
     # Patch format for write-guard path extraction (e.g. unified_diff)

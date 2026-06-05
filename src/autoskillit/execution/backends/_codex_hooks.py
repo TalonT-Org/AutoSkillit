@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Literal
 
 from autoskillit.core import atomic_write
 from autoskillit.execution.backends._codex_config import (
@@ -41,7 +40,7 @@ def _build_codex_hook_command(hooks_dir: Path, script: str, timeout_seconds: int
 
 
 def generate_codex_hooks_config(
-    hook_config_format: Literal["toml_nested", ""] = "",
+    hook_config_format: str = "",
 ) -> dict[str, list[dict]]:
     """Generate Codex config.toml hooks entries from HOOK_REGISTRY.
 
@@ -117,7 +116,7 @@ def _upsert_hooks_text(
 
 
 def sync_hooks_to_codex_config(
-    config_path: Path | None = None, *, hook_config_format: Literal["toml_nested", ""] = ""
+    config_path: Path | None = None, *, hook_config_format: str = ""
 ) -> bool:
     """Sync autoskillit hooks to Codex config.toml.
 

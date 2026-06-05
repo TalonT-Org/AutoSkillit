@@ -290,13 +290,13 @@ def test_compose_pr_unconditional_diagram_gate_before_step3():
 
 def test_prepare_pr_arch_lens_classification_covers_all_slugs():
     skill_paths = list(SKILLS_DIR.glob("arch-lens-*/SKILL.md"))
-    assert len(skill_paths) > 0
+    assert len(skill_paths) > 0, f"No arch-lens-* SKILL.md files found under {SKILLS_DIR}"
     text = PREPARE_PR.read_text()
     step5_idx = text.find("### Step 5")
-    step7_idx = text.find("### Step 7")
+    step6_idx = text.find("### Step 6")
     assert step5_idx != -1
-    assert step7_idx != -1
-    step5_text = text[step5_idx:step7_idx]
+    assert step6_idx != -1
+    step5_text = text[step5_idx:step6_idx]
     for p in skill_paths:
         slug = p.parent.name.removeprefix("arch-lens-")
         assert slug in step5_text, (

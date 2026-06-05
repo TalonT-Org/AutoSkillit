@@ -34,6 +34,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_open_integration_pr_domain_analysis.py` | Open integration PR domain analysis tests |
 | `test_open_research_pr_decomposition.py` | Structural guards: decomposed research-PR skills must not invoke sub-skills via the Skill tool |
 | `test_phase2_skills.py` | Phase 2 tests: open-kitchen and close-kitchen SKILL.md files |
+| `test_phoropter_structural.py` | Registry-driven structural test: loads phoropter-registry.yaml and discovers (family, slug) pairs from skills_extended directory scan |
 | `test_plan_experiment_schema_contracts.py` | Contract tests: plan-experiment YAML frontmatter schema and revision_guidance argument |
 | `test_planner_extract_domain.py` | Planner extract domain tests |
 | `test_planner_refine_cycle_breaking.py` | Tests for planner-refine SKILL.md 2-node cycle-breaking documentation |

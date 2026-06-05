@@ -555,19 +555,27 @@ class ClaudeCodeBackend:
         resume_message: str | None = None,
         sandbox_mode: str = "workspace-write",
     ) -> CmdSpec:
-        _has_prefix = bool(profile_name) and skill_command.strip().startswith("/")
+        _has_prefix = (
+            bool(profile_name)
+            and skill_command.strip().startswith("/")
+            and self.capabilities.skill_sigil == "/"
+        )
 
         if resume_session_id:
             effective_prompt = _compose_resume_prompt(
                 base_prompt=_ensure_skill_prefix(
-                    skill_command, provider_profile=profile_name or ""
+                    skill_command,
+                    provider_profile=profile_name or "",
+                    skill_sigil=self.capabilities.skill_sigil,
                 ),
                 resume_checkpoint=resume_checkpoint,
                 resume_message=resume_message,
             )
         else:
             effective_prompt = _ensure_skill_prefix(
-                skill_command, provider_profile=profile_name or ""
+                skill_command,
+                provider_profile=profile_name or "",
+                skill_sigil=self.capabilities.skill_sigil,
             )
 
         prompt = apply_prompt_injector_chain(

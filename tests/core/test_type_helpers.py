@@ -40,3 +40,25 @@ def test_extract_positional_args_returns_non_path_only():
 
     result = extract_positional_args("/skill-name foo bar")
     assert result == ["foo", "bar"]
+
+
+class TestExtractSkillName:
+    def test_slash_prefix(self):
+        from autoskillit.core import extract_skill_name
+
+        assert extract_skill_name("/test-skill args") == "test-skill"
+
+    def test_namespaced_slash_prefix(self):
+        from autoskillit.core import extract_skill_name
+
+        assert extract_skill_name("/autoskillit:make-plan foo") == "make-plan"
+
+    def test_dollar_prefix_returns_none(self):
+        from autoskillit.core import extract_skill_name
+
+        assert extract_skill_name("$test-skill args") is None
+
+    def test_no_prefix_returns_none(self):
+        from autoskillit.core import extract_skill_name
+
+        assert extract_skill_name("test-skill args") is None

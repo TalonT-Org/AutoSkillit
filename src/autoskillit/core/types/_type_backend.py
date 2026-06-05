@@ -135,6 +135,10 @@ class BackendCapabilities:
     supports_context_window_suffix: bool = field(default=False)
     # Gates backend-specific prompt supplements that warn against reading raw package files
     has_unguarded_filesystem_access: bool = field(default=False)
+    # Native skill invocation prefix character used by this backend's model/CLI.
+    # Claude Code uses "/" (slash-commands via the Skill tool).
+    # Codex uses "$" (dollar-mention via extract_tool_mentions).
+    skill_sigil: str = "/"
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
@@ -217,6 +221,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     plugin_install_capable=True,
     inspector_capable=False,
     supports_context_window_suffix=True,
+    skill_sigil="/",
 )
 
 

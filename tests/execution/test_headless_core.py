@@ -955,6 +955,15 @@ class TestEnsureSkillPrefix:
         assert "FIRST ACTION" not in result
         assert result == "Fix the bug"
 
+    def test_dollar_sigil_transforms_slash_to_dollar(self):
+        result = _ensure_skill_prefix("/test-skill args", skill_sigil="$")
+        assert result.startswith("$test-skill")
+        assert "Use the /test-skill skill" not in result
+
+    def test_slash_sigil_preserves_current_behavior(self):
+        result = _ensure_skill_prefix("/test-skill args", skill_sigil="/")
+        assert "Use the /test-skill skill" in result
+
 
 class TestStalenessReturnsNeedsRetry:
     """Stale SubprocessResult triggers needs_retry response."""

@@ -119,6 +119,7 @@ def test_backend_capabilities_field_count():
         "write_detection_strategy",
         "patch_format",
         "default_skill_sandbox_mode",
+        "skill_sigil",
     }
     assert tuple_fields == {"env_denylist_prefixes"}
 
@@ -165,6 +166,7 @@ def test_backend_capabilities_field_names_locked():
         "plugin_install_capable",
         "inspector_capable",
         "supports_context_window_suffix",
+        "skill_sigil",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected
@@ -212,6 +214,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.write_detection_strategy == "tool_names"
     assert CLAUDE_CODE_CAPABILITIES.patch_format == "unified_diff"
     assert CLAUDE_CODE_CAPABILITIES.default_skill_sandbox_mode == ""
+    assert CLAUDE_CODE_CAPABILITIES.skill_sigil == "/"
 
 
 def test_backend_capabilities_frozenset_defaults():

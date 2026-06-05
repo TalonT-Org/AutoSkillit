@@ -547,17 +547,23 @@ def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
 
     archived_dir = wp_dir / "archived"
     archived_dir.mkdir(exist_ok=True)
+    moved_ids: list[str] = []
     for orphan_id in sorted(orphan_ids):
         src = disk_ids[orphan_id]
-        src.rename(archived_dir / src.name)
+        try:
+            src.rename(archived_dir / src.name)
+            moved_ids.append(orphan_id)
+        except OSError:
+            logger.warning("reconcile_wp_files: rename failed", orphan_id=orphan_id)
 
-    record_lifecycle_event(
-        planner_path,
-        "archived_stubs",
-        {oid: {"reason": "elaboration_failed_orphan"} for oid in orphan_ids},
-    )
-    logger.info("reconcile_wp_files", archived_count=len(orphan_ids))
+    if moved_ids:
+        record_lifecycle_event(
+            planner_path,
+            "archived_stubs",
+            {oid: {"reason": "elaboration_failed_orphan"} for oid in moved_ids},
+        )
+    logger.info("reconcile_wp_files", archived_count=len(moved_ids))
     return {
-        "archived_count": str(len(orphan_ids)),
-        "archived_ids": ",".join(sorted(orphan_ids)),
+        "archived_count": str(len(moved_ids)),
+        "archived_ids": ",".join(sorted(moved_ids)),
     }

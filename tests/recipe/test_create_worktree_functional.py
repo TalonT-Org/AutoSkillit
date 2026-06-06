@@ -364,3 +364,28 @@ class TestCreateImplWorktreeFunctional:
         assert not any("git" in ln.lower() for ln in lines), (
             f"Git output should go to stderr, not stdout: {result.stdout}"
         )
+
+    def test_impl_worktree_fails_with_readonly_git_dir(self, tmp_path: Path) -> None:
+        """Characterization: create_impl_worktree.sh fails when .git/ is read-only.
+
+        This documents the sandbox limitation — the fix is at the orchestrator level
+        (run_cmd), not in the script itself.
+        """
+        main = tmp_path / "main_repo"
+        _init_repo(main)
+        git_dir = main / ".git"
+
+        original_modes: dict[Path, int] = {}
+        try:
+            for p in git_dir.rglob("*"):
+                if p.is_dir():
+                    original_modes[p] = p.stat().st_mode
+                    p.chmod(0o555)
+            original_modes[git_dir] = git_dir.stat().st_mode
+            git_dir.chmod(0o555)
+
+            result = _run_impl_create_worktree(main, "readonly-git-test")
+            assert result.returncode != 0, "Expected non-zero exit when .git/ is read-only"
+        finally:
+            for p, mode in original_modes.items():
+                p.chmod(mode)

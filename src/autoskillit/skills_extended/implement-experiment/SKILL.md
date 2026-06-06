@@ -1,7 +1,7 @@
 ---
 name: implement-experiment
 categories: [research]
-uses_capabilities: [agent_model, test_check]
+uses_capabilities: [agent_model, test_check, git_metadata_write]
 description: Deploy experiment artifacts in an isolated git worktree following an approved experiment plan, with per-phase commits.
 hooks:
   PreToolUse:

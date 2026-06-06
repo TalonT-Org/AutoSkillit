@@ -269,8 +269,6 @@ def test_reclassified_skills_have_empty_backend_requirements():
     resolver = DefaultSkillResolver()
     previously_blocked = [
         "dry-walkthrough",
-        "implement-experiment",
-        "implement-worktree",
         "plan-experiment",
         "planner-elaborate-assignments",
         "select-directions",

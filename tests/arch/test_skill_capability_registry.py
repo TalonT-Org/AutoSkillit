@@ -213,7 +213,11 @@ async def test_codex_status_vs_visibility_matrix(ctx_label, env_vars, monkeypatc
 
     for key, val in env_vars.items():
         monkeypatch.setenv(key, val)
-    for key in ("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "AUTOSKILLIT_HEADLESS_AUTO_GATE"):
+    for key in (
+        "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS",
+        "AUTOSKILLIT_HEADLESS_AUTO_GATE",
+        "AUTOSKILLIT_HEADLESS",
+    ):
         if key not in env_vars:
             monkeypatch.delenv(key, raising=False)
 

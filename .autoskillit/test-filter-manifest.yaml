@@ -134,6 +134,9 @@ Taskfile.yml:
 docs/**/*.md:
   - docs/
 
+docs/**/*.yaml:
+  - docs/
+
 README.md:
   - docs/
 

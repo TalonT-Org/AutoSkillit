@@ -1,0 +1,16 @@
+# null-synthesis-config.yaml
+#
+# Null synthesis configuration for identity pass-through aggregation.
+# Used by arch-lens family where lens outputs do not conflict and are
+# simply concatenated in lexicographic filename order.
+
+synthesize:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:phoropter-null-synthesis
+    ${{ inputs.source_dir }}
+    ${{ context.capture_dir }}
+  capture:
+    synthesis_result_path: "${{ result.synthesis_result_path }}"
+  on_success: next_stage
+  on_failure: escalate_stop

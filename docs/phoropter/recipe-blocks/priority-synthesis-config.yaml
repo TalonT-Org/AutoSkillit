@@ -1,0 +1,20 @@
+# priority-synthesis-config.yaml
+#
+# Priority hierarchy synthesis for conflict-resolution aggregation.
+# Used by vis-lens family where inter-lens figure specification
+# conflicts are resolved by a configurable priority ordering.
+# Default hierarchy: accessibility > anti-pattern > methodology-norms > chart-select.
+
+synthesize:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:phoropter-priority-synthesis
+    ${{ inputs.source_dir }}
+    ${{ context.capture_dir }}
+    --hierarchy=accessibility,anti-pattern,methodology-norms,chart-select
+  capture:
+    synthesis_result_path: "${{ result.synthesis_result_path }}"
+    report_path: "${{ result.report_path }}"
+    synthesis_trace_path: "${{ result.synthesis_trace_path }}"
+  on_success: next_stage
+  on_failure: escalate_stop

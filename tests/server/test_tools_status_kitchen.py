@@ -182,8 +182,8 @@ class TestGetPipelineReport:
 
     @pytest.mark.anyio
     async def test_accumulates_failures_from_run_skill(self, tool_ctx):
-
         tool_ctx.gate = DefaultGateState(enabled=True)
+        tool_ctx.skill_resolver = None
         tool_ctx.runner.push(
             _make_result(
                 returncode=1,

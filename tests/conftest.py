@@ -435,10 +435,19 @@ def tool_ctx_kitchen_open(tool_ctx):
     Use when the test requires a tool that calls _require_enabled() and
     the test is not testing gate-boot behavior itself. This fixture
     mirrors the post-lifespan-boot state for interactive sessions.
+
+    Sets skill_resolver=None so run_skill skips all skill-name resolution
+    gates (existence gate, empty-closure gate, _is_known_skill check).
+    target_name stays None and the session runs unrestricted — matching
+    pre-gate behavior for tests that don't exercise skill resolution.
+
+    Tests that verify rejection behavior or specific skill resolution
+    must explicitly set tool_ctx.skill_resolver to their own mock.
     """
     from autoskillit.pipeline.gate import DefaultGateState
 
     tool_ctx.gate = DefaultGateState(enabled=True)
+    tool_ctx.skill_resolver = None
     return tool_ctx
 
 

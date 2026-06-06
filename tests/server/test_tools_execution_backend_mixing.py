@@ -217,7 +217,9 @@ async def test_backend_override_emits_structured_log_provider_profile(
     tool_ctx_kitchen_open.session_skill_manager = None
 
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = None
+    mock_resolver.resolve.return_value = MagicMock(
+        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
+    )
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
 
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)

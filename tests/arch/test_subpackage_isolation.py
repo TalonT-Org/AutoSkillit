@@ -965,10 +965,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "for ingredient key validation; splitting would cross import-layer boundaries",
     ),
     "tools_execution.py": (
-        1020,
+        1060,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
-        "three primary execution paths; auto-promotion of work_dir from args and tier-gate "
-        "enforcement add required branching that pushes the module over the 1000-line limit",
+        "three primary execution paths; fail-closed existence gate and empty-closure gate "
+        "for fabricated skill name rejection add defense-in-depth checks",
     ),
     "execution/backends/codex.py": (
         1030,

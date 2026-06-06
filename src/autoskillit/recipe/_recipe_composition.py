@@ -71,6 +71,34 @@ def _validate_no_dangling_routes(recipe: Recipe) -> list[str]:
     return errors
 
 
+def _validate_route_consistency(raw: str, recipe: Recipe) -> list[str]:
+    """Return error strings for route targets in raw YAML that are absent from the Python model.
+
+    Cross-checks the two parallel representations (Python model and raw YAML string) after
+    all pruning and content mutations. Catches any step names that were repaired in the model
+    but missed by the raw-YAML repair pass.
+    """
+    raw_targets: set[str] = set()
+    for match in re.finditer(
+        r"(?m)^[ \t]+(?:on_success|on_failure|on_context_limit|on_rate_limit|on_exhausted)"
+        r":[ \t]+(\S+)",
+        raw,
+    ):
+        raw_targets.add(match.group(1))
+    for match in re.finditer(r"(?m)^[ \t]+route:[ \t]+(\S+)", raw):
+        raw_targets.add(match.group(1))
+
+    model_targets: set[str] = set()
+    for step in recipe.steps.values():
+        model_targets.update(_collect_all_route_targets(step))
+
+    errors: list[str] = []
+    raw_only = raw_targets - model_targets - _TERMINAL_TARGETS
+    for target in sorted(raw_only):
+        errors.append(f"Raw YAML references step '{target}' which is not in the Python model")
+    return errors
+
+
 FALSY_STRINGS: frozenset[str] = frozenset({"false", "0", "no", ""})
 
 
@@ -417,7 +445,41 @@ def _resolve_skip_guards_in_content(
                 )
             continue
         if not is_truthy:
+            # Derive redirect target using the same logic as _prune_skipped_steps
+            if step.on_success is not None:
+                redirect = step.on_success
+            elif step.on_result is not None and step.on_result.conditions:
+                redirect = next(
+                    (c.route for c in step.on_result.conditions if c.when is None), None
+                )
+            else:
+                redirect = None
+
+            # Strip the pruned step's YAML block
             raw = _strip_step_block(raw, step_name)
+
+            # Repair route refs in surviving steps' raw YAML
+            if redirect is not None:
+                route_fields = (
+                    "on_success",
+                    "on_failure",
+                    "on_context_limit",
+                    "on_rate_limit",
+                    "on_exhausted",
+                )
+                for field in route_fields:
+                    raw = re.sub(
+                        rf"(?m)^([ \t]+{re.escape(field)}:[ \t]+){re.escape(step_name)}"
+                        rf"([ \t]*(?:#.*)?)$",
+                        rf"\g<1>{redirect}\g<2>",
+                        raw,
+                    )
+                # Handle on_result conditions (route: step_name)
+                raw = re.sub(
+                    rf"(?m)^([ \t]+route:[ \t]+){re.escape(step_name)}([ \t]*(?:#.*)?)$",
+                    rf"\g<1>{redirect}\g<2>",
+                    raw,
+                )
             continue
         raw = re.sub(
             rf"(?m)({_step_block_pattern(re.escape(step_name))})",

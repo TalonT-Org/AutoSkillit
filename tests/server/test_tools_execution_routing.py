@@ -516,10 +516,12 @@ async def test_run_skill_cleans_up_on_skill_md_not_found(
     mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
     mock_ssm.compute_skill_closure.return_value = frozenset({"target-skill"})
     mock_ssm.cleanup_session.side_effect = lambda sid: cleanup_calls.append(sid) or True
-    # Return None from resolver so resolve_target_skill returns (cmd, name)
-    # without accessing .source on the info object
+    # Return a valid skill_info so the pre-init existence gate passes; the test
+    # exercises the SKILL.md-not-found crash path after init_session succeeds.
     mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = None
+    mock_resolver.resolve.return_value = MagicMock(
+        source=MagicMock(value="bundled"), backend_requirements=frozenset()
+    )
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
@@ -528,6 +530,104 @@ async def test_run_skill_cleans_up_on_skill_md_not_found(
 
     assert len(cleanup_calls) == 1
     assert not result.get("success", True)
+
+
+@pytest.mark.anyio
+async def test_run_skill_rejects_fabricated_skill_name(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """run_skill crashes before session creation for a skill not in any discovery source."""
+    import json
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = None  # Skill not in any source
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/autoskillit:this-skill-does-not-exist", str(tmp_path)))
+
+    assert result.get("subtype") == "crashed"
+    assert not result.get("success", True)
+    mock_ssm.init_session.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_run_skill_empty_closure_not_expanded_to_unrestricted(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """An empty frozenset from compute_skill_closure is rejected, not expanded to allow_only=None.
+
+    Before the fix, the empty frozenset collapsed to None (unrestricted); after the fix,
+    run_skill returns a crash result and init_session is never called.
+    """
+    import json
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
+    mock_ssm.compute_skill_closure.return_value = frozenset()  # Empty — simulates unknown skill
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = MagicMock(
+        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
+    )
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/autoskillit:some-skill", str(tmp_path)))
+
+    assert result.get("subtype") == "crashed"
+    assert not result.get("success", True)
+    mock_ssm.init_session.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_run_skill_is_known_skill_else_branch_rejects_unknown_after_init(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """Defense-in-depth: resolver returning None after init crashes, not silently proceeds."""
+    import json
+    from unittest.mock import MagicMock
+
+    from autoskillit.core import ValidatedAddDir
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    mock_ssm = MagicMock()
+    mock_ssm.init_session.return_value = ValidatedAddDir(path=str(tmp_path))
+    mock_ssm.compute_skill_closure.return_value = frozenset({"some-skill"})
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+    # Call 1 (resolve_target_skill): returns valid info for namespace resolution.
+    # Call 2 (_skill_info gate 3a): returns valid info to pass existence gate.
+    # Call 3 (_is_known_skill after init): returns None — simulates resolver
+    # cache invalidation between pre-init and post-init checks.
+    _valid_info = MagicMock(source=MagicMock(value="bundled"), backend_requirements=frozenset())
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.side_effect = [
+        _valid_info,
+        _valid_info,
+        None,
+    ]
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+    tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(await run_skill("/autoskillit:some-skill", str(tmp_path)))
+
+    assert result.get("subtype") == "crashed"
+    assert not result.get("success", True)
+    mock_ssm.init_session.assert_called_once()
+    assert mock_resolver.resolve.call_count == 3
 
 
 @pytest.mark.anyio

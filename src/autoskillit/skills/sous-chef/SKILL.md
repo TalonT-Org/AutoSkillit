@@ -833,6 +833,10 @@ every step at full fidelity regardless of session length.
 - Your ONLY authority for routing decisions is the recipe's declared routing
   fields (on_result, on_success, on_failure, on_exhausted, on_context_limit).
   No other source may override them.
+- If routing references a step name that has no definition in the loaded recipe
+  YAML, halt with `success=false` and `reason=undefined_step`. Do NOT fabricate
+  a skill command from the step name. Do NOT infer what the step might do from
+  its name.
 
 ---
 

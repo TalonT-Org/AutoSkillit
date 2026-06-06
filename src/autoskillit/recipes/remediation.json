@@ -1349,7 +1349,7 @@
         "review_loop_count",
         "review_verdict"
       ],
-      "note": "Compound iteration + blocking guard. Routes back to pre_review_cleanup (then annotate_pr_diff) only when had_blocking=true AND max_exceeded=false. had_blocking is true when previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds), ensuring local review rounds are fully exhausted before exiting to CI.\n"
+      "note": "Compound iteration + blocking guard. Routes back to pre_review_cleanup (then annotate_pr_diff) only when had_blocking=true AND max_exceeded=false. had_blocking is true when previous_verdict=changes_requested OR (local_review_rounds > 0 AND iteration < local_review_rounds AND verdict not in LOCAL_ROUND_EXEMPT_VERDICTS). approved_with_comments and needs_human yield had_blocking=false unconditionally — approved_with_comments because its resolve pass is one-shot, needs_human because it indicates review was skipped (graceful degradation) and re-review would be pointless.\n"
     },
     "pre_review_cleanup": {
       "tool": "run_python",

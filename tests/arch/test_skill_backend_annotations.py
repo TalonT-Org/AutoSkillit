@@ -25,6 +25,9 @@ _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
     "run_skill": [re.compile(r"\brun_skill\b")],
     "test_check": [re.compile(r"\btest_check\b")],
     "claude_dir": [re.compile(r"\.claude/")],
+    "git_metadata_write": [
+        re.compile(r"create_impl_worktree\.sh|git worktree add\b[ \t]+\S|git checkout -b")
+    ],
 }
 
 

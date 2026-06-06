@@ -1,7 +1,7 @@
 ---
 name: implement-experiment
 categories: [research]
-uses_capabilities: [agent_model, test_check]
+uses_capabilities: [agent_model, test_check, git_metadata_write]
 description: Deploy experiment artifacts in an isolated git worktree following an approved experiment plan, with per-phase commits.
 hooks:
   PreToolUse:
@@ -98,14 +98,28 @@ worktree, discarding all partial progress. Instead, route to the next step
    - What scripts and artifacts to create
 3. Check `git status --porcelain` — if dirty, warn user.
 
-### Step 1 — Create Git Worktree
+### Step 1 — Create or Detect Git Worktree
+
+First, check if you are already inside a pre-created linked worktree (the recipe orchestrator may have created one via `run_cmd` before dispatching this skill). Run the following detection and creation logic:
 
 ```bash
-WORKTREE_NAME="research-$(date +%Y%m%d-%H%M%S)"
-eval "$(bash "{{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh" "${WORKTREE_NAME}" "{{AUTOSKILLIT_TEMP}}")"
+if [ -f ".git" ]; then
+  # Pre-created worktree detected (recipe orchestrator ran create_impl_worktree.sh via run_cmd)
+  echo "PRE_CREATED_WORKTREE=true"
+  echo "WORKTREE_PATH=$(pwd)"
+  echo "BRANCH_NAME=$(git branch --show-current)"
+else
+  # No pre-created worktree — create one via create_impl_worktree.sh
+  WORKTREE_NAME="research-$(date +%Y%m%d-%H%M%S)"
+  eval "$(bash "{{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh" "${WORKTREE_NAME}" "{{AUTOSKILLIT_TEMP}}")"
+  echo "PRE_CREATED_WORKTREE=false"
+fi
 ```
 
-The Bash tool output will display three `KEY='VALUE'` lines. **Read `WORKTREE_PATH` from that output** — it is an absolute path to the worktree (a sibling directory outside this repo). Use this literal path in every subsequent `cd` and file reference. Shell variables do not persist across Bash tool calls.
+Read the Bash tool output to capture WORKTREE_PATH — it is an absolute path to the worktree. Use this literal path in every subsequent `cd` and file reference. Shell variables do not persist across Bash tool calls.
+
+- **If `PRE_CREATED_WORKTREE=true`**: The skill is already inside a linked worktree (`.git` is a file, not a directory). `WORKTREE_PATH` is the current working directory. **Skip worktree creation** — proceed directly to Step 1 (cont.).
+- **If `PRE_CREATED_WORKTREE=false`**: The skill is running in the main repo (standalone invocation path). The worktree was just created by `create_impl_worktree.sh`.
 
 ### Step 1 (cont.) — Emit Structured Tokens Early
 

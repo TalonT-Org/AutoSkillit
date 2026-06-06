@@ -246,9 +246,23 @@
         "review_path": "${{ context.review_path }}",
         "output_dir": "{{AUTOSKILLIT_TEMP}}"
       },
-      "on_success": "implement",
+      "on_success": "create_impl_worktree",
       "on_failure": "release_issue_failure",
       "note": "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."
+    },
+    "create_impl_worktree": {
+      "tool": "run_cmd",
+      "with": {
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh 'impl-${{ context.issue_number }}-$(date +%Y%m%d-%H%M%S)' '{{AUTOSKILLIT_TEMP}}'",
+        "cwd": "${{ context.work_dir }}",
+        "step_name": "create_impl_worktree"
+      },
+      "capture": {
+        "worktree_path": "${{ result.worktree_path }}"
+      },
+      "on_success": "implement",
+      "on_failure": "release_issue_failure",
+      "note": "Creates worktree at orchestrator level (unsandboxed) so .git/ metadata writes succeed regardless of backend sandbox constraints."
     },
     "implement": {
       "tool": "run_skill",
@@ -256,7 +270,7 @@
       "stale_threshold": 2400,
       "with": {
         "skill_command": "/autoskillit:implement-worktree-no-merge ${{ context.plan_path }}",
-        "cwd": "${{ context.work_dir }}",
+        "cwd": "${{ context.worktree_path }}",
         "step_name": "implement",
         "output_dir": "."
       },

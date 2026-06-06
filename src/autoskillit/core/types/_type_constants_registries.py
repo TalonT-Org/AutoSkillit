@@ -339,6 +339,10 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
         description="Cross-skill /autoskillit: invocation via Skill tool",
         codex_status="fix-required",
     ),
+    "git_metadata_write": SkillCapabilityDef(
+        description="Requires .git/ metadata write access (git worktree add, git checkout -b)",
+        codex_status="not-applicable",
+    ),
 }
 
 _VALID_CODEX_STATUSES = {"works-as-is", "degraded", "fix-required", "not-applicable"}

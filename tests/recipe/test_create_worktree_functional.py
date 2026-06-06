@@ -271,14 +271,19 @@ class TestCreateImplWorktreeFunctional:
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         lines = [ln for ln in result.stdout.strip().splitlines() if ln]
-        assert len(lines) == 3, f"Expected exactly 3 stdout lines, got {len(lines)}: {lines}"
+        assert len(lines) == 5, f"Expected exactly 5 stdout lines, got {len(lines)}: {lines}"
 
         keys = {ln.split("=", 1)[0] for ln in lines}
-        assert keys == {"WORKTREE_PATH", "BRANCH_NAME", "BASE_BRANCH"}, (
-            f"Expected keys {{WORKTREE_PATH, BRANCH_NAME, BASE_BRANCH}}, got {keys}"
-        )
+        assert keys == {
+            "WORKTREE_PATH",
+            "BRANCH_NAME",
+            "BASE_BRANCH",
+            "worktree_path",
+            "branch_name",
+        }, f"Expected eval + run_cmd keys, got {keys}"
 
-        for ln in lines:
+        eval_lines = [ln for ln in lines if ln[0].isupper()]
+        for ln in eval_lines:
             key, val = ln.split("=", 1)
             assert val.startswith("'") and val.endswith("'"), (
                 f"Value for {key} must be single-quoted: {val}"
@@ -343,9 +348,10 @@ class TestCreateImplWorktreeFunctional:
         lines = result.stdout.splitlines()
         non_empty = [ln for ln in lines if ln.strip()]
 
-        assignment_pattern = re.compile(r"^[A-Z_]+='.*'$")
+        eval_pattern = re.compile(r"^[A-Z_]+='.*'$")
+        run_cmd_pattern = re.compile(r"^[a-z_]+=\S+$")
         for ln in non_empty:
-            assert assignment_pattern.match(ln), (
+            assert eval_pattern.match(ln) or run_cmd_pattern.match(ln), (
                 f"Non-empty stdout line does not match variable assignment pattern: {ln!r}"
             )
 
@@ -359,3 +365,28 @@ class TestCreateImplWorktreeFunctional:
         assert not any("git" in ln.lower() for ln in lines), (
             f"Git output should go to stderr, not stdout: {result.stdout}"
         )
+
+    def test_impl_worktree_fails_with_readonly_git_dir(self, tmp_path: Path) -> None:
+        """Characterization: create_impl_worktree.sh fails when .git/ is read-only.
+
+        This documents the sandbox limitation — the fix is at the orchestrator level
+        (run_cmd), not in the script itself.
+        """
+        main = tmp_path / "main_repo"
+        _init_repo(main)
+        git_dir = main / ".git"
+
+        original_modes: dict[Path, int] = {}
+        try:
+            for p in git_dir.rglob("*"):
+                if p.is_dir():
+                    original_modes[p] = p.stat().st_mode
+                    p.chmod(0o555)
+            original_modes[git_dir] = git_dir.stat().st_mode
+            git_dir.chmod(0o555)
+
+            result = _run_impl_create_worktree(main, "readonly-git-test")
+            assert result.returncode != 0, "Expected non-zero exit when .git/ is read-only"
+        finally:
+            for p, mode in original_modes.items():
+                p.chmod(mode)

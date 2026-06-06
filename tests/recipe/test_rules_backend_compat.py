@@ -207,3 +207,63 @@ class TestBackendNameThreadingAPI:
 
         cache = cache_mod._LOAD_CACHE
         assert len(cache._store) == 2
+
+
+# ---------------------------------------------------------------------------
+# Backend-parameterized bundled recipe validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestBundledRecipeBackendCompat:
+    """Validate that bundled recipes fire backend-incompatible-skill for Codex."""
+
+    @pytest.fixture(
+        scope="class",
+        params=["implementation", "implementation-groups", "remediation"],
+        ids=lambda x: x,
+    )
+    def recipe_name(self, request: pytest.FixtureRequest) -> str:
+        return request.param
+
+    def test_codex_backend_fires_for_git_metadata_skills(self, recipe_name) -> None:
+        from autoskillit.recipe._analysis import make_validation_context
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+        from autoskillit.recipe.registry import run_semantic_rules
+        from autoskillit.workspace.skills import DefaultSkillResolver
+
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        resolver = DefaultSkillResolver()
+        ctx = make_validation_context(
+            recipe,
+            backend_name="codex",
+            skill_resolver=resolver,
+            available_skills=frozenset(s.name for s in resolver.list_all()),
+        )
+        findings = run_semantic_rules(ctx)
+        compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert len(compat_findings) >= 1, (
+            f"Expected at least 1 backend-incompatible-skill finding for {recipe_name} "
+            f"on codex backend (implement step uses git_metadata_write skill)"
+        )
+        assert any("implement" in f.step_name for f in compat_findings)
+
+    def test_claude_code_backend_no_findings(self, recipe_name) -> None:
+        from autoskillit.recipe._analysis import make_validation_context
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+        from autoskillit.recipe.registry import run_semantic_rules
+        from autoskillit.workspace.skills import DefaultSkillResolver
+
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        resolver = DefaultSkillResolver()
+        ctx = make_validation_context(
+            recipe,
+            backend_name="claude-code",
+            skill_resolver=resolver,
+            available_skills=frozenset(s.name for s in resolver.list_all()),
+        )
+        findings = run_semantic_rules(ctx)
+        compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert len(compat_findings) == 0, (
+            f"No backend-incompatible-skill findings expected for {recipe_name} "
+            f"on claude-code backend, got: {compat_findings}"
+        )

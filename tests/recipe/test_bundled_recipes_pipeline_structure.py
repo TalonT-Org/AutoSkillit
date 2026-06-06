@@ -1095,3 +1095,42 @@ def test_remediation_no_go_path_has_merge_before_implement_reentry() -> None:
         f"remediation.yaml must not trigger worktree-clobber-without-merge after the fix, "
         f"got: {clobber_findings}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator-level worktree creation structural tests
+# ---------------------------------------------------------------------------
+
+
+class TestWorktreeCreationAtOrchestratorLevel:
+    """Worktree creation must happen via run_cmd (unsandboxed) before run_skill (sandboxed)."""
+
+    @pytest.fixture(
+        scope="class",
+        params=["implementation", "implementation-groups", "remediation"],
+        ids=lambda x: x,
+    )
+    def recipe(self, request: pytest.FixtureRequest):
+        return load_recipe(builtin_recipes_dir() / f"{request.param}.yaml")
+
+    def test_create_impl_worktree_step_exists_with_run_cmd(self, recipe) -> None:
+        assert "create_impl_worktree" in recipe.steps, (
+            "Recipe must have a create_impl_worktree step"
+        )
+        step = recipe.steps["create_impl_worktree"]
+        assert step.tool == "run_cmd", (
+            f"create_impl_worktree must use run_cmd (unsandboxed), got {step.tool}"
+        )
+
+    def test_create_impl_worktree_precedes_implement(self, recipe) -> None:
+        step = recipe.steps["create_impl_worktree"]
+        assert step.on_success == "implement", (
+            f"create_impl_worktree.on_success must route to implement, got {step.on_success}"
+        )
+
+    def test_implement_uses_worktree_path_as_cwd(self, recipe) -> None:
+        impl_step = recipe.steps["implement"]
+        cwd = impl_step.with_args.get("cwd", "")
+        assert "context.worktree_path" in cwd, (
+            f"implement step cwd must reference context.worktree_path, got {cwd!r}"
+        )

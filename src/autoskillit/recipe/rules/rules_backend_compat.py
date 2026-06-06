@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-from autoskillit.core import SKILL_TOOLS, Severity
+from autoskillit.core import (
+    CLAUDE_CODE_CAPABILITIES,
+    SKILL_CAPABILITY_REGISTRY,
+    SKILL_TOOLS,
+    Severity,
+)
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _has_dynamic_skill_name
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+
+_GIT_METADATA_WRITE_CAP = "git_metadata_write"
 
 
 @semantic_rule(
@@ -39,6 +46,14 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
             skill_info.backend_requirements
             and ctx.backend_name not in skill_info.backend_requirements
         ):
+            uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
+            cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
+            _required = CLAUDE_CODE_CAPABILITIES.git_metadata_writable
+            git_detail = (
+                f" (requires git_metadata_writable={_required!r})"
+                if cap_def and _GIT_METADATA_WRITE_CAP in uses_caps
+                else ""
+            )
             findings.append(
                 RuleFinding(
                     rule="backend-incompatible-skill",
@@ -47,7 +62,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                     message=(
                         f"step '{step_name}': skill '{skill_name}' requires backend "
                         f"{sorted(skill_info.backend_requirements)} but recipe targets "
-                        f"backend '{ctx.backend_name}'."
+                        f"backend '{ctx.backend_name}'.{git_detail}"
                     ),
                 )
             )

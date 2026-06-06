@@ -47,7 +47,7 @@ def _find_degradation_verdict(content: str) -> str | None:
             if _STEP_HEADING_RE.match(lines[j]):
                 end = j
                 break
-        window = "\n".join(lines[i:end])
+        window = "\n".join(lines[i + 1 : end])
         m = _VERDICT_EMIT_RE.search(window)
         if m:
             return m.group(1)

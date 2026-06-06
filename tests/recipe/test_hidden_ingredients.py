@@ -493,6 +493,121 @@ def test_prune_on_result_only_step_repairs_upstream_routes() -> None:
                 assert cond.route != "skippable"
 
 
+def test_resolve_skip_guards_repairs_route_refs_in_raw_yaml(tmp_path: Path) -> None:
+    """After pruning a step, surviving steps' route refs to it are updated in raw YAML."""
+    from autoskillit.recipe import load_and_validate
+
+    recipe_dir = tmp_path / ".autoskillit" / "recipes"
+    recipe_dir.mkdir(parents=True)
+    yaml_text = """\
+name: test-route-repair
+description: Test route repair in raw YAML
+recipe_version: "0.0.1"
+kitchen_rules:
+  - no native tools
+ingredients:
+  enable_optional:
+    description: Enable optional step
+    default: "false"
+    hidden: true
+steps:
+  start:
+    tool: run_cmd
+    with:
+      cmd: echo start
+    on_success: optional_step
+  optional_step:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.enable_optional
+    with:
+      skill_command: /autoskillit:check /tmp/x.md
+      cwd: /tmp
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: done
+"""
+    (recipe_dir / "test-route-repair.yaml").write_text(yaml_text)
+
+    result = load_and_validate(
+        "test-route-repair",
+        project_dir=tmp_path,
+        ingredient_overrides={"enable_optional": "false"},
+    )
+    content = result["content"]
+    # Pruned step block should be gone
+    assert "  optional_step:" not in content
+    # Surviving step must NOT reference the pruned step name in a route field
+    assert "on_success: optional_step" not in content
+    # Route should be redirected to the pruned step's own on_success ("done")
+    assert "on_success: done" in content
+
+
+def test_model_content_route_consistency_after_pruning(tmp_path: Path) -> None:
+    """After pruning, raw YAML route references match the Python model (no stale targets)."""
+    import re as stdlib_re
+
+    from autoskillit.recipe import load_and_validate
+
+    recipe_dir = tmp_path / ".autoskillit" / "recipes"
+    recipe_dir.mkdir(parents=True)
+    yaml_text = """\
+name: test-consistency
+description: Test model/content consistency
+recipe_version: "0.0.1"
+kitchen_rules:
+  - no native tools
+ingredients:
+  enable_optional:
+    description: Enable optional step
+    default: "false"
+    hidden: true
+steps:
+  start:
+    tool: run_cmd
+    with:
+      cmd: echo start
+    on_success: optional_step
+  optional_step:
+    tool: run_skill
+    optional: true
+    skip_when_false: inputs.enable_optional
+    with:
+      skill_command: /autoskillit:check /tmp/x.md
+      cwd: /tmp
+    on_success: done
+    on_failure: done
+  done:
+    action: stop
+    message: done
+"""
+    (recipe_dir / "test-consistency.yaml").write_text(yaml_text)
+
+    result = load_and_validate(
+        "test-consistency",
+        project_dir=tmp_path,
+        ingredient_overrides={"enable_optional": "false"},
+    )
+    # Content must not be blanked by a consistency error
+    assert result["content"]
+    content = result["content"]
+    # Extract all route targets referenced in the raw YAML
+    route_field_re = (
+        r"(?m)^[ \t]+"
+        r"(?:on_success|on_failure|on_context_limit|on_rate_limit|on_exhausted)"
+        r":[ \t]+(\S+)"
+    )
+    raw_targets: set[str] = set()
+    for m in stdlib_re.finditer(route_field_re, content):
+        raw_targets.add(m.group(1))
+    for m in stdlib_re.finditer(r"(?m)^[ \t]+route:[ \t]+(\S+)", content):
+        raw_targets.add(m.group(1))
+    # Pruned step must not appear as any route target in the raw YAML
+    assert "optional_step" not in raw_targets
+
+
 def test_prune_repairs_upstream_on_result_pointing_to_pruned_step() -> None:
     """_prune_skipped_steps repairs on_result.conditions routes on upstream steps."""
     from autoskillit.recipe._recipe_composition import _prune_skipped_steps

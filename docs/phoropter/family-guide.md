@@ -13,7 +13,7 @@ Before creating any files, decide which synthesis strategy your family will use.
 | `electre_iii` | Lens outputs have continuous-valued scores requiring threshold-based concordance/discordance analysis. | Planned; targeted at the future refactor-lens family for outranking-based multi-criteria decision analysis. |
 | `dex` | Categorical outputs ("acceptable"/"unacceptable") are needed instead of ranked lists. | Research candidate; based on [DEXi (2025)](https://kt.ijs.si/MarkoBohanec/dexi.html). Evaluate feasibility before implementing for exp-lens or refactor-lens synthesis. |
 
-The `SynthesisStrategy` enum and related types are defined in `src/autoskillit/core/types/_type_enums.py` and `src/autoskillit/core/types/_type_phoropter.py`.
+The `SynthesisStrategy` enum and `PhoropterPrescription` types are defined in `src/autoskillit/core/types/_type_enums.py` and `src/autoskillit/core/types/_type_phoropter.py`.
 
 ## §2. Create the Tradition Manifest
 

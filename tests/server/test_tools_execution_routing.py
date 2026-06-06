@@ -627,6 +627,7 @@ async def test_run_skill_is_known_skill_else_branch_rejects_unknown_after_init(
     assert result.get("subtype") == "crashed"
     assert not result.get("success", True)
     mock_ssm.init_session.assert_called_once()
+    assert mock_resolver.resolve.call_count == 3
 
 
 @pytest.mark.anyio

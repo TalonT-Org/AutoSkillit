@@ -435,10 +435,22 @@ def tool_ctx_kitchen_open(tool_ctx):
     Use when the test requires a tool that calls _require_enabled() and
     the test is not testing gate-boot behavior itself. This fixture
     mirrors the post-lifespan-boot state for interactive sessions.
+
+    Installs a permissive skill_resolver so tests using dummy skill names
+    (e.g. "/test skill") pass the existence gate. Tests that verify
+    rejection behavior must override skill_resolver with their own mock.
     """
+    from unittest.mock import MagicMock
+
     from autoskillit.pipeline.gate import DefaultGateState
 
     tool_ctx.gate = DefaultGateState(enabled=True)
+
+    permissive_resolver = MagicMock()
+    permissive_resolver.resolve.return_value = MagicMock(
+        source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
+    )
+    tool_ctx.skill_resolver = permissive_resolver
     return tool_ctx
 
 

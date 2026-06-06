@@ -23,6 +23,7 @@ PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
         245,
     ): "lazy-registry: method added by _register_rule_module() side effects",
     ("recipe/_api.py", 273): "global-mutated variable set by _finalize_registry()",
+    ("recipe/_api.py", 274): "lazy-registry: RULE_REGISTRY_HASH set by _finalize_registry()",
 }
 
 TEST_ALLOWLIST: dict[tuple[str, int], str] = {

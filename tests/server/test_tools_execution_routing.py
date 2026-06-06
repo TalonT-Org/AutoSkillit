@@ -607,11 +607,15 @@ async def test_run_skill_is_known_skill_else_branch_rejects_unknown_after_init(
     mock_ssm.compute_skill_closure.return_value = frozenset({"some-skill"})
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
-    # First call returns non-None (passes the pre-init existence gate 3a),
-    # second call returns None (simulates resolver cache invalidation after init).
+    # Call 1 (resolve_target_skill): returns valid info for namespace resolution.
+    # Call 2 (_skill_info gate 3a): returns valid info to pass existence gate.
+    # Call 3 (_is_known_skill after init): returns None — simulates resolver
+    # cache invalidation between pre-init and post-init checks.
+    _valid_info = MagicMock(source=MagicMock(value="bundled"), backend_requirements=frozenset())
     mock_resolver = MagicMock()
     mock_resolver.resolve.side_effect = [
-        MagicMock(source=MagicMock(value="bundled"), backend_requirements=frozenset()),
+        _valid_info,
+        _valid_info,
         None,
     ]
     tool_ctx_kitchen_open.skill_resolver = mock_resolver

@@ -652,6 +652,16 @@ async def run_skill(
                 if tool_ctx.skill_resolver and target_name
                 else None
             )
+            if target_name and _skill_info is None:
+                return SkillResult.crashed(
+                    exception=RuntimeError(
+                        f"Skill '{target_name}' not found in any discovery source "
+                        f"(bundled skills/, skills_extended/, or project-local). "
+                        f"Cannot launch session for undiscoverable skill name."
+                    ),
+                    skill_command=resolved_command,
+                    order_id=effective_order_id,
+                ).to_json()
 
             _provider_override = (
                 provider_extras
@@ -798,6 +808,15 @@ async def run_skill(
                 closure: frozenset[str] = frozenset()
                 if target_name:
                     closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
+                    if not closure and target_name:
+                        return SkillResult.crashed(
+                            exception=RuntimeError(
+                                f"Skill '{target_name}' resolved to an empty closure. "
+                                f"This indicates the skill exists but has no injectable content."
+                            ),
+                            skill_command=resolved_command,
+                            order_id=effective_order_id,
+                        ).to_json()
                     allow_only = closure if closure else None
 
                 session_id = f"headless-{uuid4().hex[:12]}"
@@ -846,6 +865,23 @@ async def run_skill(
                                 session_id=session_id,
                                 order_id=effective_order_id,
                             ).to_json()
+                    else:
+                        # Defense-in-depth: should be unreachable after the pre-init
+                        # existence gate (3a), but if reached, reject rather than proceed.
+                        logger.error(
+                            "unknown_skill_reached_init",
+                            target=target_name,
+                            session_id=session_id,
+                        )
+                        return SkillResult.crashed(
+                            exception=RuntimeError(
+                                f"Skill '{target_name}' unknown to resolver after session init. "
+                                f"This should have been caught by the pre-init existence gate."
+                            ),
+                            skill_command=resolved_command,
+                            session_id=session_id,
+                            order_id=effective_order_id,
+                        ).to_json()
                     # Replay-path sessions inherit write scope from their original
                     # snapshot — they don't need re-augmentation because the snapshot
                     # was built from a live session that already had the full prefix set.

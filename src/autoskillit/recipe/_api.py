@@ -49,6 +49,7 @@ from autoskillit.recipe._recipe_composition import (
     _resolve_hidden_inputs_in_content,
     _resolve_skip_guards_in_content,
     _validate_no_dangling_routes,
+    _validate_route_consistency,
 )
 from autoskillit.recipe._recipe_ingredients import (
     DeferredGuard,
@@ -413,6 +414,14 @@ def load_and_validate(
             _dangling_errors = _validate_no_dangling_routes(active_recipe)
             if _dangling_errors:
                 errors.extend(f"[post-prune] dangling route: {e}" for e in _dangling_errors)
+                raw = ""
+            # Cross-check: raw YAML route refs must match the Python model exactly.
+            # Catches any refs that the model repaired but the YAML repair pass missed.
+            _route_consistency_errors = _validate_route_consistency(raw, active_recipe)
+            if _route_consistency_errors:
+                errors.extend(
+                    f"[post-prune] route consistency: {e}" for e in _route_consistency_errors
+                )
                 raw = ""
             t0 = _t("prune_skipped_steps", t0, name)
 

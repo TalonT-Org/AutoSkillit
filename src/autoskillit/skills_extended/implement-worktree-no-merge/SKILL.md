@@ -119,7 +119,7 @@ else
 fi
 ```
 
-Read `WORKTREE_PATH` from the Bash tool output — it is an absolute path to the worktree. Use this literal path in every subsequent `cd` and file reference. Shell variables do not persist across Bash tool calls.
+Read the Bash tool output to capture WORKTREE_PATH — it is an absolute path to the worktree. Use this literal path in every subsequent `cd` and file reference. Shell variables do not persist across Bash tool calls.
 
 - **If `PRE_CREATED_WORKTREE=true`**: The skill is already inside a linked worktree (`.git` is a file, not a directory). `WORKTREE_PATH` is the current working directory. **Skip worktree creation** — proceed directly to Step 1 (cont.).
 - **If `PRE_CREATED_WORKTREE=false`**: The skill is running in the main repo (Claude Code backward-compat path). The worktree was just created by `create_impl_worktree.sh`.

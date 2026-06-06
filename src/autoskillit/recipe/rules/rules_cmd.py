@@ -37,7 +37,7 @@ def _check_run_cmd_emit_alignment(ctx: ValidationContext) -> list[RuleFinding]:
         cmd = (step.with_args or {}).get("cmd", "")
         if not isinstance(cmd, str):
             continue
-        if re.match(r"^\s*bash\s+/\S+\.sh\b", cmd):
+        if re.match(r"^\s*bash\s+(?:/|\{\{)\S+\.sh\b", cmd):
             continue
         for cap_key, cap_val in step.capture.items():
             m = RESULT_CAPTURE_RE.search(cap_val.from_)

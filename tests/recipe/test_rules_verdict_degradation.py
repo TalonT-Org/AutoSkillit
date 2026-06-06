@@ -30,10 +30,10 @@ _SKILL_MD_SHARED_VERDICT = """\
 ## Critical Constraints
 
 **NEVER:**
-- Post review comments when gh is unavailable — output verdict=approved and exit 0
+- Create files outside the output directory
 
 **ALWAYS:**
-- Output verdict= on the final line
+- Output the verdict token on the final line
 
 ## Workflow
 
@@ -44,12 +44,23 @@ If gh is unavailable or not authenticated:
 - Output verdict=approved
 - Exit 0 (graceful degradation)
 
-### Step 2: Full Review
+### Step 2: Get PR Diff
+
+Fetch the diff from GitHub.
+
+### Step 3: Analyse Findings
 
 Review the PR thoroughly.
 
-At the end:
-- verdict = "approved"
+### Step 4: Determine Verdict
+
+Classify findings into categories.
+
+### Step 5: Output
+
+At the end output the verdict token:
+
+verdict=approved
 """
 
 # SKILL.md where the degradation path emits a distinct verdict (needs_human).
@@ -57,10 +68,10 @@ _SKILL_MD_DISTINCT_VERDICT = """\
 ## Critical Constraints
 
 **NEVER:**
-- Post review comments when gh is unavailable — output verdict=needs_human and exit 0
+- Create files outside the output directory
 
 **ALWAYS:**
-- Output verdict= on the final line
+- Output the verdict token on the final line
 
 ## Workflow
 
@@ -71,12 +82,23 @@ If gh is unavailable or not authenticated:
 - Output verdict=needs_human
 - Exit 0 (graceful degradation)
 
-### Step 2: Full Review
+### Step 2: Get PR Diff
+
+Fetch the diff from GitHub.
+
+### Step 3: Analyse Findings
 
 Review the PR thoroughly.
 
-At the end:
-- verdict = "approved"
+### Step 4: Determine Verdict
+
+Classify findings into categories.
+
+### Step 5: Output
+
+At the end output the verdict token:
+
+verdict=approved
 """
 
 _MANIFEST: dict = {

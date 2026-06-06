@@ -127,14 +127,18 @@ AUDIT_CLAIMS_SKILL_PATH = (
 def _extract_degradation_block(text: str) -> str:
     """Extract the graceful-degradation block from a SKILL.md.
 
-    Returns text from the first 'unavailable' trigger line through the next
-    step heading (or 20 lines if no heading found).
+    Finds the first 'unavailable' trigger line that is inside a Step section
+    (after a ``### Step`` heading), then returns text through the next step
+    heading (or 20 lines if no heading found).
     """
     lines = text.splitlines()
+    in_step = False
     start = None
     end = len(lines)
     for i, line in enumerate(lines):
-        if re.search(r"unavailable|graceful.{0,20}degrada", line, re.IGNORECASE):
+        if re.search(r"^#{1,3}\s+Step\s+\d", line):
+            in_step = True
+        if in_step and re.search(r"unavailable|graceful.{0,20}degrada", line, re.IGNORECASE):
             start = i
             break
     if start is None:

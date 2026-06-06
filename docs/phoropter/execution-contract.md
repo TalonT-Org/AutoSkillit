@@ -62,7 +62,7 @@ Four knobs control phoropter family behavior. The first three are configured per
 | Knob | Values | Description |
 |------|--------|-------------|
 | `apply_mode` | `eager` (default), `lazy` | Controls whether the apply phase runs all selected lenses (`eager`) or stops at the first decisive result (`lazy`). Currently all families use `eager`. |
-| `synthesis_algorithm` | `null`, `priority_hierarchy`, `electre_iii`, `dex` | Selects the synthesis strategy for the synthesize phase. See §6 for the full catalog. Configured per-family in `phoropter-registry.yaml` under `synthesis.strategy`. |
+| `synthesis.strategy` | `null`, `priority_hierarchy`, `electre_iii`, `dex` | Selects the synthesis strategy for the synthesize phase. See §6 for the full catalog. Configured per-family in `phoropter-registry.yaml`. |
 | `optional_phases` | List of phase names | Phases that may be skipped via `PhoropterPhaseSkip` configuration. Currently only `apply` is skippable. Configured per-family in `phoropter-registry.yaml` under `phase_skip`. |
 | `PhoropterPhaseSkip` | `skip_when_true` / `skip_when_false` | Conditional phase skipping. The `skip_field` names a context variable; `skip_semantics` determines whether the phase is skipped when the field is truthy or falsy. |
 

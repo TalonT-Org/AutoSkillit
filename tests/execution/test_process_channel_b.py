@@ -99,7 +99,9 @@ CHANNEL_B_THEN_A_EMPTY_RESULT_SCRIPT = textwrap.dedent("""\
         f.flush()
     # Delay must exceed session_id_timeout + Phase 1 poll so Phase 2 initializes
     # scan_pos from discovery boundary before the marker arrives.
-    time.sleep(2.0)
+    # 3s margin handles xdist -n 4 event-loop saturation on WSL2 where coroutine
+    # scheduling jitter can delay Phase 1 discovery by >1s.
+    time.sleep(3.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -340,6 +342,21 @@ class TestChannelBDrainWait:
         result="". Channel A must NOT confirm on this — data_confirmed must
         remain False so the provenance bypass can fire.
 
+        Sequence (fast poll params):
+          t=0.00s  subprocess starts, writes type=system to stdout
+          t=0.10s  script creates session JSONL with initial content
+          t~0.11s  Phase 1 poll discovers file, Phase 2 initializes scan_pos
+          t=3.10s  script writes %%ORDER_UP%% to session JSONL (Channel B target)
+          t~3.15s  Phase 2 detects marker → Channel B fires → drain starts
+          t=3.25s  script writes type=result with result="" to stdout
+          t~3.30s  heartbeat sees empty result, does NOT confirm → drain continues
+          t~5.15s  drain timeout expires (2.0s), Channel B wins
+
+        The 3.0s gap between file creation and marker write ensures Phase 1 discovers
+        the JSONL file and Phase 2 initializes scan_pos BEFORE the marker arrives —
+        preventing a race where Phase 2 sets scan_pos past the marker under xdist -n 4
+        event-loop saturation on WSL2.
+
         timeout=120: guards against the outer wall-clock expiring under xdist -n 4 load.
         _phase1_timeout=250: must exceed outer timeout so Phase 1 never fires STALE first
         when subprocess startup is slow under WSL2 + xdist load.
@@ -384,14 +401,13 @@ class TestChannelBFullPipelineAdjudication:
 
         Timing notes:
         - completion_drain_timeout=0.5s: the heartbeat has already seen the empty result
-          and failed to confirm by the time Channel B fires (~1s after task group start),
+          and failed to confirm by the time Channel B fires (~3s after task group start),
           so 0.5s of additional drain time is more than sufficient semantically.
         - timeout=120s: subprocess wall-clock guard. Must be less than pytest.mark.timeout
           (180s on the class) so run_managed_async completes before pytest kills the test.
           _phase1_timeout=250 must exceed outer timeout so Phase 1 never fires STALE before
           the outer guard when subprocess startup is slow under WSL2 + xdist load.
-        - _session_id_timeout=0.5s: the script writes the JSONL marker at t~0.25s from
-          subprocess start. 0.5s is generous for session ID extraction (from stdout)
+        - _session_id_timeout=0.5s: 0.5s is generous for session ID extraction (from stdout)
           while ensuring Phase 1 starts before the marker arrives.
         """
         from autoskillit.execution.headless import _build_skill_result

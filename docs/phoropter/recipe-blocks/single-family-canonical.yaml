@@ -1,0 +1,51 @@
+# single-family-canonical.yaml
+#
+# Sole-family canonical step naming (Case A).
+# When a recipe contains exactly one phoropter family, use the bare
+# canonical step keys: dial, apply, synthesize.  Each step MUST carry
+# the phoropter_family annotation so the phoropter-phase-order and
+# phoropter-step-interleaving semantic rules can validate the sequence.
+#
+# Family used: review-design (arch-lens uses a different dial skill;
+# substitute skill_command values as appropriate for your family).
+
+dial:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:classify-experiment-type
+    ${{ context.experiment_plan }}
+    ${{ context.scope_report }}
+  phoropter_family: review-design
+  capture:
+    experiment_type: "${{ result.experiment_type }}"
+    is_silent_type: "${{ result.is_silent_type }}"
+    classification_timestamp: "${{ result.classification_timestamp }}"
+  on_success: apply
+  on_failure: escalate_stop
+
+apply:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:apply-review-dimensions
+    ${{ context.experiment_plan }}
+    ${{ context.scope_report }}
+    ${{ context.dimensions_manifest_path }}
+  phoropter_family: review-design
+  skip_when_true: context.is_silent_type
+  capture:
+    findings_manifest_path: "${{ result.findings_manifest_path }}"
+    evaluation_dashboard: "${{ result.evaluation_dashboard }}"
+  retries: 2
+  on_success: synthesize
+  on_failure: synthesize
+  on_exhausted: synthesize
+
+synthesize:
+  tool: run_python
+  callable: autoskillit.smoke_utils.aggregate_review_verdict
+  phoropter_family: review-design
+  capture:
+    verdict: "${{ result.verdict }}"
+    revision_guidance: "${{ result.revision_guidance }}"
+  on_success: next_stage
+  on_failure: escalate_stop

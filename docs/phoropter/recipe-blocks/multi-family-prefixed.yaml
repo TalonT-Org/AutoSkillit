@@ -1,0 +1,103 @@
+# multi-family-prefixed.yaml
+#
+# Multi-family coexistence with prefixed step naming (Case B).
+# When two or more phoropter families share a recipe, the primary
+# family uses canonical step keys WITH phoropter_family annotation;
+# secondary families use prefixed step keys WITHOUT phoropter_family.
+#
+# phoropter_family is intentionally absent from vis-lens steps.
+# Setting phoropter_family on prefixed steps would cause the
+# phoropter-step-interleaving rule to emit false errors whenever
+# recipe-level routing steps (e.g. on_result branches, revise loops)
+# separate the family's phase steps.  A future evolution of the
+# adjacency rule may introduce a registry-aware interleaving check
+# that removes this constraint.
+#
+# Primary family: review-design (canonical keys, annotated)
+# Secondary family: vis-lens (vis_ prefix, unannotated)
+
+# ── review-design family (primary) ────────────────────────────────
+
+dial:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:classify-experiment-type
+    ${{ context.experiment_plan }}
+    ${{ context.scope_report }}
+  phoropter_family: review-design
+  capture:
+    experiment_type: "${{ result.experiment_type }}"
+    is_silent_type: "${{ result.is_silent_type }}"
+    classification_timestamp: "${{ result.classification_timestamp }}"
+  on_success: apply
+  on_failure: escalate_stop
+
+apply:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:apply-review-dimensions
+    ${{ context.experiment_plan }}
+    ${{ context.scope_report }}
+    ${{ context.dimensions_manifest_path }}
+  phoropter_family: review-design
+  skip_when_true: context.is_silent_type
+  capture:
+    findings_manifest_path: "${{ result.findings_manifest_path }}"
+    evaluation_dashboard: "${{ result.evaluation_dashboard }}"
+  retries: 2
+  on_success: synthesize
+  on_failure: synthesize
+
+synthesize:
+  tool: run_python
+  callable: autoskillit.smoke_utils.aggregate_review_verdict
+  phoropter_family: review-design
+  capture:
+    verdict: "${{ result.verdict }}"
+    revision_guidance: "${{ result.revision_guidance }}"
+  on_success: vis_dial
+  on_failure: vis_dial
+
+# ── vis-lens family (secondary, prefixed) ─────────────────────────
+
+vis_dial:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:select-vis-lenses
+    ${{ inputs.source_dir }}
+    ${{ context.experiment_plan }}
+    ${{ context.scope_report }}
+  capture:
+    selected_lenses: "${{ result.selected_lenses }}"
+    lens_context_paths: "${{ result.lens_context_paths }}"
+    disambiguation_rule_applied: "${{ result.disambiguation_rule_applied }}"
+    tier_c_lens: "${{ result.tier_c_lens }}"
+    methodology_tradition: "${{ result.methodology_tradition }}"
+  on_success: vis_apply
+  on_failure: escalate_stop
+
+vis_apply:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:vis-lens-{slug}
+    {context_path}
+    ${{ context.experiment_plan }}
+  capture_list:
+    vis_lens_output_paths: "${{ result.diagram_path }}"
+  retries: 0
+  on_success: vis_synthesize
+  on_failure: vis_synthesize
+
+vis_synthesize:
+  tool: run_skill
+  skill_command: >-
+    /autoskillit:synthesize-vis-plan
+    ${{ inputs.source_dir }}
+    ${{ context.experiment_plan }}
+    {{AUTOSKILLIT_TEMP}}/run-vis-lenses
+  capture:
+    visualization_plan_path: "${{ result.visualization_plan_path }}"
+    report_plan_path: "${{ result.report_plan_path }}"
+    visualization_plan_trace_path: "${{ result.visualization_plan_trace_path }}"
+  on_success: next_stage
+  on_failure: escalate_stop

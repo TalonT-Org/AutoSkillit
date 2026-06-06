@@ -87,6 +87,7 @@ def test_approve_when_synced():
     out = _run_hook_with_git(
         event,
         git_responses=[
+            (0, "worktree /some/clone\n"),  # worktree list --porcelain (no linked)
             (0, ".git"),  # rev-parse --git-dir
             (0, "main"),  # rev-parse --abbrev-ref HEAD
             (0, "0"),  # rev-list --count @{upstream}..HEAD
@@ -101,6 +102,7 @@ def test_deny_when_unpushed_commits():
     out = _run_hook_with_git(
         event,
         git_responses=[
+            (0, "worktree /some/clone\n"),  # worktree list --porcelain (no linked)
             (0, ".git"),  # rev-parse --git-dir
             (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
             (0, "2"),  # rev-list --count @{upstream}..HEAD
@@ -120,6 +122,7 @@ def test_deny_when_no_tracking_branch():
     out = _run_hook_with_git(
         event,
         git_responses=[
+            (0, "worktree /some/clone\n"),  # worktree list --porcelain (no linked)
             (0, ".git"),  # rev-parse --git-dir
             (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
             (128, ""),  # rev-list --count (no upstream)
@@ -140,6 +143,7 @@ def test_deny_when_detached_head():
     out = _run_hook_with_git(
         event,
         git_responses=[
+            (0, "worktree /some/clone\n"),  # worktree list --porcelain (no linked)
             (0, ".git"),  # rev-parse --git-dir
             (0, "HEAD"),  # rev-parse --abbrev-ref HEAD (detached)
         ],
@@ -155,6 +159,7 @@ def test_approve_when_not_git_repo():
     out = _run_hook_with_git(
         event,
         git_responses=[
+            (128, ""),  # worktree list --porcelain fails (not a git repo)
             (128, ""),  # rev-parse --git-dir fails
         ],
     )
@@ -164,7 +169,13 @@ def test_approve_when_not_git_repo():
 def test_approve_on_git_timeout():
     """keep=false + subprocess timeout → approve silently (fail-open)."""
     event = {"tool_input": {"keep": "false", "clone_path": "/some/clone"}}
-    out = _run_hook_mocked(event, side_effects=[subprocess.TimeoutExpired("git", 10)])
+    out = _run_hook_mocked(
+        event,
+        side_effects=[
+            subprocess.TimeoutExpired("git", 10),  # worktree list --porcelain times out
+            subprocess.TimeoutExpired("git", 10),  # rev-parse --git-dir times out
+        ],
+    )
     assert out.strip() == ""
 
 
@@ -180,6 +191,7 @@ def test_approve_when_keep_false_string_and_synced():
     out = _run_hook_with_git(
         event,
         git_responses=[
+            (0, "worktree /some/clone\n"),  # worktree list --porcelain (no linked)
             (0, ".git"),  # rev-parse --git-dir
             (0, "main"),  # rev-parse --abbrev-ref HEAD
             (0, "0"),  # rev-list --count @{upstream}..HEAD
@@ -195,6 +207,7 @@ def test_approve_when_no_upstream_but_sha_matches_remote():
     out = _run_hook_with_git(
         event,
         git_responses=[
+            (0, "worktree /some/clone\n"),  # worktree list --porcelain (no linked)
             (0, ".git"),  # rev-parse --git-dir
             (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
             (128, ""),  # rev-list --count @{upstream}..HEAD → no upstream
@@ -213,6 +226,7 @@ def test_deny_when_no_upstream_and_not_on_remote():
     out = _run_hook_with_git(
         event,
         git_responses=[
+            (0, "worktree /some/clone\n"),  # worktree list --porcelain (no linked)
             (0, ".git"),  # rev-parse --git-dir
             (0, "feat/thing"),  # rev-parse --abbrev-ref HEAD
             (128, ""),  # rev-list --count → no upstream

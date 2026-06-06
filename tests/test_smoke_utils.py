@@ -309,6 +309,22 @@ def test_local_round_exempt_verdicts_constant_exists() -> None:
     assert "approved" not in LOCAL_ROUND_EXEMPT_VERDICTS
 
 
+def test_needs_human_exempt_from_local_rounds() -> None:
+    """needs_human must be exempt from local_review_rounds re-review."""
+    result = check_review_loop(
+        pr_number="42",
+        current_iteration="0",
+        max_iterations="6",
+        previous_verdict="needs_human",
+        local_review_rounds="2",
+    )
+    assert result["had_blocking"] == "false", (
+        "needs_human must yield had_blocking=false regardless of local_review_rounds "
+        "because it indicates review was skipped (graceful degradation) and "
+        "re-review would be pointless."
+    )
+
+
 # ---------------------------------------------------------------------------
 # T_SU_LI1–T_SU_LI5: check_loop_iteration tests (generic loop iteration guard)
 # ---------------------------------------------------------------------------

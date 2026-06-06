@@ -48,6 +48,17 @@ PATH_ARG_SKILLS: frozenset[str] = frozenset(
     }
 )
 
+# Skills that take git branch names as positional arguments.
+# When these skills receive a path-like first argument (starts with '/'),
+# the invocation is malformed — branch names cannot start with '/'.
+# This set must match exactly the skills whose SKILL.md files document
+# branch-name argument parsing (verified by TestBranchArgSkillsContract).
+BRANCH_ARG_SKILLS: frozenset[str] = frozenset(
+    {
+        "review-pr",
+    }
+)
+
 # Token prefixes that unambiguously identify a filesystem path argument.
 _PATH_PREFIXES: tuple[str, ...] = ("/", "./", ".autoskillit/")
 
@@ -101,7 +112,17 @@ def main() -> None:
         sys.exit(0)
 
     skill_name = m.group(1)
-    if skill_name not in PATH_ARG_SKILLS:
+    if skill_name not in PATH_ARG_SKILLS and skill_name not in BRANCH_ARG_SKILLS:
+        sys.exit(0)
+
+    if skill_name in BRANCH_ARG_SKILLS:
+        args_str = skill_command[m.end() :].strip()
+        if args_str and args_str.split()[0].startswith("/"):
+            _deny(
+                f"{SKILL_CMD_DENY_TRIGGER} '{skill_name}': "
+                f"first argument looks like a filesystem path but '{skill_name}' "
+                f"expects a git branch name. Branch names cannot start with '/'."
+            )
         sys.exit(0)
 
     args_str = skill_command[m.end() :].strip()

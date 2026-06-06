@@ -171,6 +171,9 @@ from autoskillit.recipe.rules import (  # noqa: E402
 )
 from autoskillit.recipe.rules import rules_tools as _rules_tools  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_verdict as _rules_verdict  # noqa: E402 F401
+from autoskillit.recipe.rules import (
+    rules_verdict_degradation as _rules_verdict_degradation,  # noqa: E402 F401
+)
 from autoskillit.recipe.rules import rules_worktree as _rules_worktree  # noqa: E402 F401
 from autoskillit.recipe.rules.campaign import (  # noqa: E402
     rules_campaign_capture as _rules_campaign_capture,  # noqa: F401

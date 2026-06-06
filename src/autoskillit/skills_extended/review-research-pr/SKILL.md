@@ -41,7 +41,7 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 
 - Create files outside `{{AUTOSKILLIT_TEMP}}/review-research-pr/`
 - Approve a PR that has `changes_requested` findings
-- Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0
+- Post review comments when `gh` is unavailable — output `verdict=needs_human` and exit 0
 - Review files outside the PR diff — scope all audit to diff content only
 - Modify any source code
 - Flag the absence of a clear experimental conclusion as a deficiency — inconclusive
@@ -54,7 +54,7 @@ a summary verdict. Called by the recipe pipeline after `open_research_pr` opens 
 - Issue all Task calls in a single message to maximize parallelism
 - Output `verdict=` on the final line
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
-- Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=approved)
+- Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=needs_human)
 - Tag the authenticated GitHub user (`gh api user -q .login`) in escalation comments (`needs_human` verdict) — omit the mention silently if username derivation fails
 - Spawn all subagents via `Agent(model="sonnet")`
 - Deduplicate findings by (file, line) pairs before posting
@@ -93,7 +93,7 @@ gh pr list --head "$feature_branch" --base "$base_branch" \
 
 If `gh` is unavailable or not authenticated, or no PR is found:
 - Log "No PR found or gh unavailable — skipping review"
-- Output `verdict=approved`
+- Output `verdict=needs_human`
 - Exit 0 (graceful degradation)
 
 ### Step 2: Get PR Diff and Metadata

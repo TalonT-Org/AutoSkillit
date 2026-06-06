@@ -650,6 +650,33 @@ class TestSkillCommandParsingContract:
             "skill_cmd_guard.PATH_ARG_SKILLS. Update the hardcoded list."
         )
 
+    def test_hook_branch_arg_skills_matches_contract_list(self):
+        mod = self._load_hook_module()
+        assert set(mod.BRANCH_ARG_SKILLS) == set(TestBranchArgSkillsContract.BRANCH_ARG_SKILLS), (
+            "TestBranchArgSkillsContract.BRANCH_ARG_SKILLS is out of sync with "
+            "skill_cmd_guard.BRANCH_ARG_SKILLS. Update the hardcoded list."
+        )
+
+
+class TestBranchArgSkillsContract:
+    """Branch-argument skills must document branch-name argument handling in their SKILL.md."""
+
+    BRANCH_ARG_SKILLS = ["review-pr"]
+    SENTINEL = "branch"
+
+    def test_branch_arg_skills_have_branch_detection_instructions(self):
+        skills_root = _project_root() / "src" / "autoskillit" / "skills_extended"
+        missing = []
+        for skill_name in self.BRANCH_ARG_SKILLS:
+            skill_md = skills_root / skill_name / "SKILL.md"
+            content = skill_md.read_text().lower()
+            if self.SENTINEL not in content:
+                missing.append(skill_name)
+        assert not missing, (
+            f"These SKILL.md files lack branch-argument instructions "
+            f"(missing '{self.SENTINEL}'): {missing}"
+        )
+
 
 class TestResolveFailuresDirtyTreeContract:
     """resolve-failures SKILL.md must document dirty tree pre-check."""

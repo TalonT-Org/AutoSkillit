@@ -348,9 +348,10 @@ class TestCreateImplWorktreeFunctional:
         lines = result.stdout.splitlines()
         non_empty = [ln for ln in lines if ln.strip()]
 
-        assignment_pattern = re.compile(r"^[A-Za-z_]+='?.*'?$")
+        eval_pattern = re.compile(r"^[A-Z_]+='.*'$")
+        run_cmd_pattern = re.compile(r"^[a-z_]+=\S+$")
         for ln in non_empty:
-            assert assignment_pattern.match(ln), (
+            assert eval_pattern.match(ln) or run_cmd_pattern.match(ln), (
                 f"Non-empty stdout line does not match variable assignment pattern: {ln!r}"
             )
 

@@ -273,7 +273,7 @@
       },
       "on_success": "create_impl_worktree",
       "on_failure": "release_issue_failure",
-      "on_context_limit": "create_impl_worktree",
+      "on_context_limit": "verify",
       "note": "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."
     },
     "create_impl_worktree": {

@@ -233,7 +233,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         }
     ),
     "_type_results_execution": frozenset({"core", "execution", "server", "pipeline"}),
-    "_type_backend": frozenset({"core", "execution", "cli", "workspace"}),
+    "_type_backend": frozenset({"core", "execution", "cli", "recipe", "workspace"}),
     "_type_dispatch_identity": frozenset({"core", "fleet", "execution"}),
     "_type_figure_spec": frozenset({"core", "report"}),
     "_type_session_env": frozenset({"core", "cli"}),
@@ -679,6 +679,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "workspace",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
+            "recipe/test_rules_backend_compat.py",
             "recipe/test_rules_skill_content.py",
             "recipe/test_rules_stamp_ownership.py",
             # recipe transitive entries (exercise workspace via deferred imports in
@@ -915,6 +916,7 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
             "recipe/test_recipe_temp_substitution.py",
             "recipe/test_repository.py",
             "recipe/test_research_campaign.py",
+            "recipe/test_rules_backend_compat.py",
             "recipe/test_rules_contracts.py",
             "recipe/test_rules_dataflow_handoff.py",
             "recipe/test_rules_skill_routing.py",

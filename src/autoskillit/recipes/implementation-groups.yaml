@@ -261,7 +261,6 @@ steps:
       step_name: "create_impl_worktree"
     capture:
       worktree_path: "${{ result.worktree_path }}"
-      branch_name: "${{ result.branch_name }}"
     on_success: implement
     on_failure: release_issue_failure
     note: "Creates worktree at orchestrator level (unsandboxed) so .git/ metadata writes succeed regardless of backend sandbox constraints."

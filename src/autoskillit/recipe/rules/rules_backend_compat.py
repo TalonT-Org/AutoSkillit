@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from autoskillit.core import SKILL_TOOLS, Severity
-from autoskillit.core.types._type_backend import CLAUDE_CODE_CAPABILITIES
-from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
+from autoskillit.core import (
+    CLAUDE_CODE_CAPABILITIES,
+    SKILL_CAPABILITY_REGISTRY,
+    SKILL_TOOLS,
+    Severity,
+)
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _has_dynamic_skill_name
 from autoskillit.recipe.contracts import resolve_skill_name
@@ -45,10 +48,11 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
             skill_info.backend_requirements
             and ctx.backend_name not in skill_info.backend_requirements
         ):
+            uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
             cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
             git_detail = (
                 f" (backend lacks git_metadata_writable={_GIT_METADATA_WRITABLE_DEFAULT!r})"
-                if cap_def and _GIT_METADATA_WRITE_CAP in skill_info.uses_capabilities
+                if cap_def and _GIT_METADATA_WRITE_CAP in uses_caps
                 else ""
             )
             findings.append(

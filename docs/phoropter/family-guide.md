@@ -35,7 +35,7 @@ The tradition manifest declares the family's metadata, lens list, and configurat
 
 - `synthesis_strategy` — Enum: `priority_hierarchy`, `electre_iii`, `dex`, `custom` (or null for null strategy)
 - `step_name_prefix` — `null`/absent → canonical names; set → prefixed names (e.g., `vis` → `vis_dial`, `vis_apply`, `vis_synthesize`)
-- `arg_interface` — Enum: `one_arg`, `two_arg`
+- `arg_interface` — Enum: `one_arg`, `two_arg` (mapped to `1-arg`/`2-arg` in `phoropter-registry.yaml`)
 - `output_prefix` — Prefix for output file names
 - `dialing` — `DialingConfig` with `selection_strategy` (`identity`/`property_set`), optional `min_lenses`, `max_lenses`, `always_run`, `synthesis_strategy`
 - `phase_skip` — `PhaseSkip` with required `skip_field` and `skip_semantics` (`skip_when_true`/`skip_when_false`); optional `applies_to`

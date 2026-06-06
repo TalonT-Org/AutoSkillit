@@ -487,11 +487,7 @@ class TestFoodTruckAutoGateBoot:
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.executor = InMemoryHeadlessExecutor()
         tool_ctx.quota_refresh_task = None
-        permissive_resolver = MagicMock()
-        permissive_resolver.resolve.return_value = MagicMock(
-            source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
-        )
-        tool_ctx.skill_resolver = permissive_resolver
+        tool_ctx.skill_resolver = None
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
         monkeypatch.setenv(FOOD_TRUCK_TOOL_TAGS_ENV_VAR, "kitchen-core")

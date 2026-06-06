@@ -182,14 +182,8 @@ class TestGetPipelineReport:
 
     @pytest.mark.anyio
     async def test_accumulates_failures_from_run_skill(self, tool_ctx):
-        from unittest.mock import MagicMock
-
         tool_ctx.gate = DefaultGateState(enabled=True)
-        permissive_resolver = MagicMock()
-        permissive_resolver.resolve.return_value = MagicMock(
-            source=MagicMock(value="bundled"), backend_requirements=frozenset()
-        )
-        tool_ctx.skill_resolver = permissive_resolver
+        tool_ctx.skill_resolver = None
         tool_ctx.runner.push(
             _make_result(
                 returncode=1,

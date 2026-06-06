@@ -825,7 +825,7 @@ class TestBackendRequirements:
             "---\nname: test\nuses_capabilities: [agent_subagent, run_skill]\n---\n# content"
         )
         info = _skill_info_from_frontmatter("test", SkillSource.BUNDLED, skill_md)
-        assert info.backend_requirements == frozenset({"claude-code"})
+        assert info.backend_requirements == frozenset()
 
     def test_investigate_skill_has_no_backend_requirement(self) -> None:
         info = DefaultSkillResolver().resolve("investigate")

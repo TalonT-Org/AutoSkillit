@@ -325,7 +325,7 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
     ),
     "run_skill": SkillCapabilityDef(
         description="run_skill MCP tool call (headless session dispatch)",
-        codex_status="not-applicable",
+        codex_status="works-as-is",
     ),
     "test_check": SkillCapabilityDef(
         description="test_check MCP tool (headless test runner)",

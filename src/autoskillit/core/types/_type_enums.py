@@ -535,6 +535,7 @@ class CodexEventType(StrEnum):
     """
 
     THREAD_STARTED = "thread.started"
+    SESSION_META = "session_meta"
     TURN_STARTED = "turn.started"
     ITEM_STARTED = "item.started"
     ITEM_COMPLETED = "item.completed"

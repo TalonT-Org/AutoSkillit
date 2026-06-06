@@ -19,6 +19,10 @@ def _thread_started_line(thread_id: str) -> str:
     return json.dumps({"type": "thread.started", "thread_id": thread_id})
 
 
+def _session_meta_line(thread_id: str) -> str:
+    return json.dumps({"type": "session_meta", "payload": {"id": thread_id}})
+
+
 def _turn_completed_line(usage: Mapping[str, object]) -> str:
     return json.dumps({"type": "turn.completed", "usage": usage})
 
@@ -101,6 +105,10 @@ class TestScanCodexNdjson:
     def test_scan_thread_started_populates_session_id(self) -> None:
         acc = _scan_codex_ndjson(_thread_started_line("t1"))
         assert acc.session_id == "t1"
+
+    def test_scan_session_meta_populates_session_id(self) -> None:
+        acc = _scan_codex_ndjson(_session_meta_line("t2"))
+        assert acc.session_id == "t2"
 
     def test_scan_item_completed_message_appends_agent_messages(self) -> None:
         acc = _scan_codex_ndjson(_item_completed_message_line("hello world"))
@@ -236,6 +244,12 @@ class TestCodexResultParserStdout:
         parser = CodexResultParser()
         result = parser.parse_stdout(ndjson)
         assert result.session_id == "my-session-id"
+
+    def test_parse_stdout_session_id_from_session_meta(self) -> None:
+        ndjson = _session_meta_line("meta-session-id")
+        parser = CodexResultParser()
+        result = parser.parse_stdout(ndjson)
+        assert result.session_id == "meta-session-id"
 
     def test_parse_stdout_output_joins_agent_messages(self) -> None:
         ndjson = (
@@ -471,6 +485,17 @@ class TestCodexResultParserSessionId:
         )
         result = CodexResultParser().parse_stdout(ndjson)
         assert result.session_id == "codex-thread-99"
+
+    def test_session_meta_extracts_session_id(self) -> None:
+        """session_meta payload.id is surfaced as session_id."""
+        ndjson = "\n".join(
+            [
+                _session_meta_line("codex-meta-42"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.session_id == "codex-meta-42"
 
     def test_missing_thread_started_yields_none_session_id(self) -> None:
         """No thread.started event → session_id is None (empty string coerced to None)."""

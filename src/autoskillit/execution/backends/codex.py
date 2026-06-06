@@ -39,6 +39,7 @@ from autoskillit.core import (
     BareResume,
     ClaudeDirectoryConventions,
     CmdSpec,
+    CodexEventType,
     NamedResume,
     NoResume,
     OutputFormat,
@@ -227,6 +228,14 @@ class CodexEnvPolicy:
         return out
 
 
+_SESSION_START_TYPES: frozenset[str] = frozenset(
+    {
+        CodexEventType.THREAD_STARTED.value,
+        CodexEventType.SESSION_META.value,
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class CodexSessionLocator:
     def locate_session(self, session_id: str, codex_home: Path | None = None) -> Path | None:
@@ -300,10 +309,10 @@ class CodexSessionLocator:
 
     @staticmethod
     def _file_matches_thread(path: Path, thread_id: str) -> bool:
-        """Check if a rollout NDJSON file's thread.started event matches thread_id.
+        """Check if a rollout NDJSON file's session-start event matches thread_id.
 
-        Only reads until the first parseable NDJSON object — thread.started is
-        always the first event in a Codex rollout file.
+        Only reads until the first parseable NDJSON object — the session-start
+        event is always the first event in a Codex rollout file.
         """
         try:
             with open(path, encoding="utf-8") as f:
@@ -315,8 +324,11 @@ class CodexSessionLocator:
                         obj = json.loads(line)
                     except json.JSONDecodeError:
                         return False
-                    if isinstance(obj, dict) and obj.get("type") == "thread.started":
-                        return obj.get("thread_id", "") == thread_id
+                    if isinstance(obj, dict) and obj.get("type") in _SESSION_START_TYPES:
+                        # thread.started uses top-level thread_id;
+                        # session_meta uses payload.id
+                        tid = obj.get("thread_id") or obj.get("payload", {}).get("id", "")
+                        return tid == thread_id
                     return False
         except OSError:
             return False

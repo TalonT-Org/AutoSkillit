@@ -87,12 +87,7 @@ def _find_nominal_verdicts(content: str) -> set[str]:
     severity=Severity.ERROR,
 )
 def _check_verdict_ungated_degradation(ctx: ValidationContext) -> list[RuleFinding]:
-    """Fire when a skill's degradation path emits the same verdict as the nominal path.
-
-    This makes zero-validation exits structurally distinguishable from real reviews
-    at the SKILL.md instruction level.  Any future regression back to a shared
-    verdict is caught at ``task test-all`` time.
-    """
+    """Scan recipe steps for skills whose SKILL.md shares a verdict across both paths."""
     findings: list[RuleFinding] = []
 
     for step_name, step in ctx.recipe.steps.items():

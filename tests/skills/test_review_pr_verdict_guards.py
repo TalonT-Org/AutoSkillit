@@ -129,7 +129,7 @@ def _extract_degradation_block(text: str) -> str:
 
     Finds the 'unavailable' trigger line whose subsequent window contains
     a ``verdict=`` emit, then returns text through the next step heading
-    (or 20 lines if no heading found).
+    (or 15 lines if no heading found).
     """
     lines = text.splitlines()
     trigger_re = re.compile(r"unavailable|graceful.{0,20}degrada", re.IGNORECASE)
@@ -138,7 +138,7 @@ def _extract_degradation_block(text: str) -> str:
     for i, line in enumerate(lines):
         if not trigger_re.search(line):
             continue
-        end = min(len(lines), i + 20)
+        end = min(len(lines), i + 15)
         for j in range(i + 1, end):
             if heading_re.match(lines[j]):
                 end = j

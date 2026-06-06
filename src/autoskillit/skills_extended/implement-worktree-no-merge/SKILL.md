@@ -125,6 +125,7 @@ if context is exhausted before Step 6:
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${BRANCH_NAME}
+has_implementation_progress = true
 ```
 
 **Why emit early?** If context exhaustion occurs during Steps 2–5, the
@@ -219,6 +220,7 @@ Then emit these structured output tokens on their own lines so recipe capture bl
 ```
 worktree_path = ${WORKTREE_PATH}
 branch_name = ${BRANCH_NAME}
+has_implementation_progress = true
 ```
 
 **If this is a `_part_` plan file:** The orchestrator MUST merge this worktree

@@ -126,7 +126,7 @@ families:
 
 ## §4. Generate Lens SKILL.md Files
 
-Each lens in the family needs a `SKILL.md` file generated from the `lens-skill-template.md` template (`src/autoskillit/assets/lens-skill-template.md` — Phase 4 artifact, prerequisite T2-P4-A1-WP2).
+Each lens in the family needs a `SKILL.md` file following the template variable conventions below.
 
 **Template variables:**
 

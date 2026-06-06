@@ -272,7 +272,11 @@ class TestCheckClaudeProcessStateBreakdownBackendGuard:
         from autoskillit.cli.doctor._doctor_runtime import _check_claude_process_state_breakdown
         from autoskillit.core import Severity
 
-        stub = SimpleNamespace(capabilities=SimpleNamespace(process_name="testbot"))
+        stub = SimpleNamespace(
+            capabilities=SimpleNamespace(
+                process_name="testbot", process_name_aliases=frozenset({"testbot"})
+            )
+        )
         header = "PID STAT %CPU COMMAND\n"
         monkeypatch.setattr(
             subprocess,

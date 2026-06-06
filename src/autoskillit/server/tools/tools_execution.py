@@ -808,7 +808,7 @@ async def run_skill(
                 closure: frozenset[str] = frozenset()
                 if target_name:
                     closure = tool_ctx.session_skill_manager.compute_skill_closure(target_name)
-                    if not closure and target_name:
+                    if not closure:
                         return SkillResult.crashed(
                             exception=RuntimeError(
                                 f"Skill '{target_name}' resolved to an empty closure. "
@@ -817,7 +817,7 @@ async def run_skill(
                             skill_command=resolved_command,
                             order_id=effective_order_id,
                         ).to_json()
-                    allow_only = closure if closure else None
+                    allow_only = closure
 
                 session_id = f"headless-{uuid4().hex[:12]}"
                 _cleanup_session_id = session_id

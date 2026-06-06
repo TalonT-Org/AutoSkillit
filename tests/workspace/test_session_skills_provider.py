@@ -414,6 +414,13 @@ def test_session_dir_survives_cleanup_when_codex_uses_fallback(tmp_path: Path) -
 
     mgr.init_session("codex-survives", cook_session=True, backend=codex_backend)
     assert (codex / "codex-survives" / "skills").is_dir()
+    skill_md_files = list((codex / "codex-survives" / "skills").rglob("SKILL.md"))
+    assert skill_md_files, "Expected at least one SKILL.md under session skills dir"
+    sample = skill_md_files[0]
+    assert sample.read_text(), "SKILL.md must not be empty"
+    assert str(sample).startswith(str(codex)), (
+        "SKILL.md must be under persistent codex root, not ephemeral"
+    )
 
 
 def test_cleanup_stale_sweeps_both_roots(tmp_path: Path) -> None:

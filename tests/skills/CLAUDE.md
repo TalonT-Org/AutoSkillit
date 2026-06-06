@@ -10,7 +10,6 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `conftest.py` | Skill test fixtures |
 | `test_adversarial_review_contracts.py` | Contract tests verifying adversarial review agents, maxTurns sufficiency, and SendMessage continuation protocol in make-plan and rectify SKILL.md files |
 | `test_analyze_prs_contracts.py` | Contract tests for analyze-prs SKILL.md batch branch naming convention |
-| `test_arch_lens_context_path.py` | Tests that all arch-lens skills have ## Arguments section and context_path handling |
 | `test_arch_lens_structural.py` | Structural assertions for arch-lens skills (all 13 slugs) |
 | `test_audit_arch_preflight_contracts.py` | Audit-arch skill preflight contract tests |
 | `test_audit_arch_selfvalidation_contracts.py` | Audit-arch skill self-validation contract tests |
@@ -34,7 +33,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_open_integration_pr_domain_analysis.py` | Open integration PR domain analysis tests |
 | `test_open_research_pr_decomposition.py` | Structural guards: decomposed research-PR skills must not invoke sub-skills via the Skill tool |
 | `test_phase2_skills.py` | Phase 2 tests: open-kitchen and close-kitchen SKILL.md files |
-| `test_phoropter_structural.py` | Registry-driven structural test: loads phoropter-registry.yaml for lens discovery, asserts dial-skill SKILL.md existence and output token emission (selected_lenses, lens_context_paths), and verifies recipe step naming conventions against registry step_naming.prefix |
+| `test_phoropter_structural.py` | Registry-driven structural assertions for all phoropter lens families and slugs (vis-lens, arch-lens, exp-lens) discovered from phoropter-registry.yaml |
 | `test_plan_experiment_schema_contracts.py` | Contract tests: plan-experiment YAML frontmatter schema and revision_guidance argument |
 | `test_planner_extract_domain.py` | Planner extract domain tests |
 | `test_planner_refine_cycle_breaking.py` | Tests for planner-refine SKILL.md 2-node cycle-breaking documentation |
@@ -88,7 +87,6 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_validate_test_audit_contracts.py` | Contract tests for the validate-test-audit skill SKILL.md |
 | `test_validate_review_decisions_contracts.py` | Contract tests for the validate-review-decisions skill SKILL.md |
 | `test_vis_lens_methodology_norms.py` | Skill-level integration tests for vis-lens-methodology-norms tradition expansion |
-| `test_vis_lens_structural.py` | Structural assertions for P0 vis-lens skills |
 
 ## Architecture Notes
 

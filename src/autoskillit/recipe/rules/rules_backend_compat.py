@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from autoskillit.core import (
+    CLAUDE_CODE_CAPABILITIES,
     SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
     Severity,
@@ -47,8 +48,9 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         ):
             uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
             cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
+            _required = CLAUDE_CODE_CAPABILITIES.git_metadata_writable
             git_detail = (
-                " (requires git_metadata_writable capability)"
+                f" (requires git_metadata_writable={_required!r})"
                 if cap_def and _GIT_METADATA_WRITE_CAP in uses_caps
                 else ""
             )

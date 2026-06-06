@@ -138,6 +138,7 @@ def flush_session_log(
     file_changes_count: int = 0,
     clone_contamination_reverted: bool = False,
     tracked_comm: str | None = None,
+    comm_aliases: frozenset[str] = frozenset(),
     exception_text: str = "",
     orphaned_tool_result: bool = False,
     raw_stdout: str = "",
@@ -275,7 +276,9 @@ def flush_session_log(
         anomalies = detect_anomalies(proc_snapshots, pid)
         # Identity drift anomaly (post-fix immunity check)
         if _effective_tracked_comm:
-            drift_anomalies = detect_identity_drift(proc_snapshots, _effective_tracked_comm)
+            drift_anomalies = detect_identity_drift(
+                proc_snapshots, _effective_tracked_comm, comm_aliases=comm_aliases
+            )
             anomalies.extend(drift_anomalies)
 
     # Outcome anomaly detection (correlates session result with token usage)

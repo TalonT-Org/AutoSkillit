@@ -331,6 +331,7 @@ def detect_anomalies(
 def detect_identity_drift(
     snapshots: list[dict[str, object]],
     expected_comm: str,
+    comm_aliases: frozenset[str] = frozenset(),
 ) -> list[dict[str, object]]:
     """Detect process identity drift: snapshots whose comm != expected_comm.
 
@@ -342,6 +343,8 @@ def detect_identity_drift(
     Args:
         snapshots: List of snapshot dicts (each may have a 'comm' field).
         expected_comm: The process name we expect every snapshot to describe.
+        comm_aliases: Optional set of acceptable comm values (e.g., for
+            Node.js shebang scripts where /proc/comm reads 'node').
 
     Returns:
         List of IDENTITY_DRIFT anomaly records (one per first-seen mismatch).
@@ -350,9 +353,11 @@ def detect_identity_drift(
     if not snapshots or not expected_comm:
         return anomalies
 
+    acceptable = comm_aliases if comm_aliases else frozenset({expected_comm})
+
     for seq, snap in enumerate(snapshots):
         actual_comm = snap.get("comm", "")
-        if actual_comm and actual_comm != expected_comm:
+        if actual_comm and actual_comm not in acceptable:
             anomalies.append(
                 _anomaly(
                     AnomalyKind.IDENTITY_DRIFT,

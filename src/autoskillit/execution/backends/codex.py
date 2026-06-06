@@ -493,6 +493,7 @@ class CodexBackend:
             min_version="0.130.0",
             version_check_command="codex --version",
             process_name="codex",
+            process_name_aliases=frozenset({"codex", "node"}),
             skills_subdir="skills",
             hook_config_format="toml_nested",
             write_detection_strategy="file_changes",

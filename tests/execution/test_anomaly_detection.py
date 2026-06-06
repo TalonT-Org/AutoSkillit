@@ -314,6 +314,26 @@ def test_identity_drift_kind_exists():
     assert AnomalyKind.IDENTITY_DRIFT == "identity_drift"
 
 
+@pytest.mark.parametrize(
+    ("actual_comm", "aliases", "should_fire"),
+    [
+        ("node", frozenset({"codex", "node"}), False),
+        ("python", frozenset({"codex", "node"}), True),
+        ("codex", frozenset({"codex", "node"}), False),
+    ],
+)
+def test_identity_drift_accepts_comm_aliases(actual_comm, aliases, should_fire):
+    """detect_identity_drift accepts aliased comm values via comm_aliases."""
+    from autoskillit.execution.anomaly_detection import detect_identity_drift
+
+    snap_dicts = [{"comm": actual_comm, "vm_rss_kb": 2048, "oom_score": 10}]
+    anomalies = detect_identity_drift(snap_dicts, expected_comm="codex", comm_aliases=aliases)
+    if should_fire:
+        assert len(anomalies) >= 1
+    else:
+        assert len(anomalies) == 0
+
+
 # ---------------------------------------------------------------------------
 # Outcome anomaly detection tests
 # ---------------------------------------------------------------------------

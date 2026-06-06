@@ -107,6 +107,9 @@ class BackendCapabilities:
     version_check_command: str = ""
     # Binary stem used for backend coherence check at session launch
     process_name: str = ""
+    # All process names the backend binary may appear as in /proc/comm
+    # or ps output (e.g., interpreter names for shebang scripts)
+    process_name_aliases: frozenset[str] = field(default_factory=frozenset)
     # Relative path from session root to the skills directory
     skills_subdir: str = ""
     # Hook config format identifier (e.g. settings.json vs config.toml)
@@ -214,6 +217,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     min_version="",
     version_check_command="claude --version",
     process_name="claude",
+    process_name_aliases=frozenset({"claude"}),
     skills_subdir=".claude/skills",
     write_detection_strategy="tool_names",
     patch_format="unified_diff",

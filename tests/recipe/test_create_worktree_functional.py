@@ -271,14 +271,19 @@ class TestCreateImplWorktreeFunctional:
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         lines = [ln for ln in result.stdout.strip().splitlines() if ln]
-        assert len(lines) == 3, f"Expected exactly 3 stdout lines, got {len(lines)}: {lines}"
+        assert len(lines) == 5, f"Expected exactly 5 stdout lines, got {len(lines)}: {lines}"
 
         keys = {ln.split("=", 1)[0] for ln in lines}
-        assert keys == {"WORKTREE_PATH", "BRANCH_NAME", "BASE_BRANCH"}, (
-            f"Expected keys {{WORKTREE_PATH, BRANCH_NAME, BASE_BRANCH}}, got {keys}"
-        )
+        assert keys == {
+            "WORKTREE_PATH",
+            "BRANCH_NAME",
+            "BASE_BRANCH",
+            "worktree_path",
+            "branch_name",
+        }, f"Expected eval + run_cmd keys, got {keys}"
 
-        for ln in lines:
+        eval_lines = [ln for ln in lines if ln[0].isupper()]
+        for ln in eval_lines:
             key, val = ln.split("=", 1)
             assert val.startswith("'") and val.endswith("'"), (
                 f"Value for {key} must be single-quoted: {val}"
@@ -343,7 +348,7 @@ class TestCreateImplWorktreeFunctional:
         lines = result.stdout.splitlines()
         non_empty = [ln for ln in lines if ln.strip()]
 
-        assignment_pattern = re.compile(r"^[A-Z_]+='.*'$")
+        assignment_pattern = re.compile(r"^[A-Za-z_]+='?.*'?$")
         for ln in non_empty:
             assert assignment_pattern.match(ln), (
                 f"Non-empty stdout line does not match variable assignment pattern: {ln!r}"

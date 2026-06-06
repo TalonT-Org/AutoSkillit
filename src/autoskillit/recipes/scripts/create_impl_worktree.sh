@@ -72,6 +72,10 @@ if [ -n "$REMOTE" ]; then
 fi
 
 # ONLY stdout from this point on — these are the eval-able variable assignments.
+# eval-compatible output (for SKILL.md direct invocation via Claude Code)
 echo "WORKTREE_PATH='${WORKTREE_PATH}'"
 echo "BRANCH_NAME='${WORKTREE_NAME}'"
 echo "BASE_BRANCH='${CURRENT_BRANCH}'"
+# run_cmd-compatible output (for recipe orchestrator capture)
+echo "worktree_path=${WORKTREE_PATH}"
+echo "branch_name=${WORKTREE_NAME}"

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from autoskillit.core import (
-    CLAUDE_CODE_CAPABILITIES,
     SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
     Severity,
@@ -14,8 +13,6 @@ from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 _GIT_METADATA_WRITE_CAP = "git_metadata_write"
-
-_GIT_METADATA_WRITABLE_DEFAULT = CLAUDE_CODE_CAPABILITIES.git_metadata_writable
 
 
 @semantic_rule(
@@ -51,7 +48,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
             uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
             cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
             git_detail = (
-                f" (backend lacks git_metadata_writable={_GIT_METADATA_WRITABLE_DEFAULT!r})"
+                " (requires git_metadata_writable capability)"
                 if cap_def and _GIT_METADATA_WRITE_CAP in uses_caps
                 else ""
             )

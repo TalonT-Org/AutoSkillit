@@ -255,3 +255,49 @@ class TestSkillCmdCheckDeny:
         result = _run_hook({"skill_command": _CANONICAL_BUG})
         reason = result["hookSpecificOutput"]["permissionDecisionReason"]
         assert "relocate" in reason.lower()
+
+
+# ---------------------------------------------------------------------------
+# BRANCH_ARG_SKILLS contract
+# ---------------------------------------------------------------------------
+
+
+class TestBranchArgSkillsContract:
+    """Branch-argument skills must deny path-like first arguments."""
+
+    BRANCH_ARG_SKILLS = ["review-pr"]
+
+    def _load_hook_module(self):
+        import importlib.util
+        import pathlib
+
+        hook_path = (
+            pathlib.Path(__file__).parents[2]
+            / "src"
+            / "autoskillit"
+            / "hooks"
+            / "guards"
+            / "skill_cmd_guard.py"
+        )
+        spec = importlib.util.spec_from_file_location("skill_cmd_guard", hook_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_hook_branch_arg_skills_matches_contract_list(self):
+        """skill_cmd_guard.BRANCH_ARG_SKILLS must match this contract list."""
+        mod = self._load_hook_module()
+        assert set(mod.BRANCH_ARG_SKILLS) == set(self.BRANCH_ARG_SKILLS), (
+            "TestBranchArgSkillsContract.BRANCH_ARG_SKILLS is out of sync with "
+            "skill_cmd_guard.BRANCH_ARG_SKILLS. Update the hardcoded list."
+        )
+
+    def test_branch_arg_skill_denies_path_like_first_arg(self):
+        """review-pr invoked with a /path-like first arg must be denied."""
+        result = _run_hook({"skill_command": "/autoskillit:review-pr /home/user/repo main"})
+        assert _decision(result) == "deny"
+
+    def test_branch_arg_skill_allows_valid_branch_name(self):
+        """review-pr invoked with a valid branch name must be allowed."""
+        result = _run_hook({"skill_command": "/autoskillit:review-pr feature/my-branch main"})
+        assert _decision(result) == "allow"

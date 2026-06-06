@@ -313,3 +313,65 @@ def test_approved_with_comments_no_gate_tag_produces_no_state(tmp_path):
         "approved_with_comments must leave the full gate state unchanged — "
         f"expected {existing!r}, got {state!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T2-11: verdict=approved without gate tag leaves stale LOOP_REQUIRED state
+# (characterization test — documents danger of current design)
+# ---------------------------------------------------------------------------
+
+
+def test_approved_without_gate_tag_leaves_stale_state(tmp_path):
+    """T2-11: Stale LOOP_REQUIRED state persists when approved has no gate tag."""
+    state_path = tmp_path / _STATE_FILE_RELPATH
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = {
+        "gate": "LOOP_REQUIRED",
+        "review_verdict": "changes_requested",
+        "check_review_loop_called": False,
+        "pr_number": "1290",
+        "set_at": "2026-04-26T04:30:00+00:00",
+    }
+    state_path.write_text(json.dumps(existing))
+
+    event = _build_run_skill_event("verdict=approved\n%%ORDER_UP%%")
+    _run_hook(event, tmp_dir=tmp_path)
+
+    state = _read_state(tmp_path)
+    assert state is not None, (
+        "verdict=approved without %%REVIEW_GATE:: tag must NOT clear stale state — "
+        "only an explicit %%REVIEW_GATE::CLEAR%% tag should do that."
+    )
+    assert state == existing, (
+        f"Stale state must be unchanged. Expected {existing!r}, got {state!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T2-12: verdict=needs_human with CLEAR tag removes stale LOOP_REQUIRED state
+# ---------------------------------------------------------------------------
+
+
+def test_needs_human_with_clear_tag_removes_stale_state(tmp_path):
+    """T2-12: verdict=needs_human + %%REVIEW_GATE::CLEAR%% clears stale state."""
+    state_path = tmp_path / _STATE_FILE_RELPATH
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "gate": "LOOP_REQUIRED",
+                "review_verdict": "changes_requested",
+                "check_review_loop_called": False,
+                "pr_number": "1290",
+                "set_at": "2026-04-26T04:30:00+00:00",
+            }
+        )
+    )
+
+    event = _build_run_skill_event(f"verdict=needs_human\n{_TAG_CLEAR}\n%%ORDER_UP%%")
+    _run_hook(event, tmp_dir=tmp_path)
+
+    state = _read_state(tmp_path)
+    assert state is None, (
+        "verdict=needs_human + %%REVIEW_GATE::CLEAR%% must delete the stale state file."
+    )

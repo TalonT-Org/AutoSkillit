@@ -106,6 +106,88 @@ def test_review_pr_own_pr_comment_retry():
     )
 
 
+REVIEW_RESEARCH_PR_SKILL_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "review-research-pr"
+    / "SKILL.md"
+)
+AUDIT_CLAIMS_SKILL_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skills_extended"
+    / "audit-claims"
+    / "SKILL.md"
+)
+
+
+def _extract_degradation_block(text: str) -> str:
+    """Extract the graceful-degradation block from a SKILL.md.
+
+    Returns text from the first 'unavailable' trigger line through the next
+    step heading (or 20 lines if no heading found).
+    """
+    lines = text.splitlines()
+    start = None
+    end = len(lines)
+    for i, line in enumerate(lines):
+        if re.search(r"unavailable|graceful.{0,20}degrada", line, re.IGNORECASE):
+            start = i
+            break
+    if start is None:
+        return ""
+    for i in range(start + 1, min(len(lines), start + 20)):
+        if re.search(r"^#{1,3}\s+Step\s+\d", lines[i]):
+            end = i
+            break
+    return "\n".join(lines[start:end])
+
+
+def test_graceful_degradation_does_not_emit_approved() -> None:
+    """review-pr degradation block must not emit verdict=approved."""
+    text = _skill_text()
+    block = _extract_degradation_block(text)
+    assert block, "Could not find graceful degradation block in review-pr/SKILL.md"
+    assert "verdict=approved" not in block and "verdict = approved" not in block, (
+        "review-pr/SKILL.md must not emit verdict=approved on the graceful-degradation path. "
+        "Use verdict=needs_human instead to distinguish zero-validation exits from real reviews."
+    )
+    assert "verdict=needs_human" in block or "verdict = needs_human" in block, (
+        "review-pr/SKILL.md graceful-degradation block must emit verdict=needs_human."
+    )
+
+
+def test_review_research_pr_graceful_degradation_does_not_emit_approved() -> None:
+    """review-research-pr degradation block must not emit verdict=approved."""
+    text = REVIEW_RESEARCH_PR_SKILL_PATH.read_text()
+    block = _extract_degradation_block(text)
+    assert block, "Could not find graceful degradation block in review-research-pr/SKILL.md"
+    assert "verdict=approved" not in block and "verdict = approved" not in block, (
+        "review-research-pr/SKILL.md must not emit verdict=approved on the graceful-degradation "
+        "path. Use verdict=needs_human instead."
+    )
+    assert "verdict=needs_human" in block or "verdict = needs_human" in block, (
+        "review-research-pr/SKILL.md graceful-degradation block must emit verdict=needs_human."
+    )
+
+
+def test_audit_claims_graceful_degradation_does_not_emit_approved() -> None:
+    """audit-claims degradation block must not emit verdict=approved."""
+    text = AUDIT_CLAIMS_SKILL_PATH.read_text()
+    block = _extract_degradation_block(text)
+    assert block, "Could not find graceful degradation block in audit-claims/SKILL.md"
+    assert "verdict=approved" not in block and "verdict = approved" not in block, (
+        "audit-claims/SKILL.md must not emit verdict=approved on the graceful-degradation path. "
+        "Use verdict=needs_human instead."
+    )
+    assert "verdict=needs_human" in block or "verdict = needs_human" in block, (
+        "audit-claims/SKILL.md graceful-degradation block must emit verdict=needs_human."
+    )
+
+
 def test_contract_yamls_include_approved_with_comments() -> None:
     """All 3 contract YAML files must include approved_with_comments in
     expected_output_patterns and pattern_examples for the review-pr contract."""

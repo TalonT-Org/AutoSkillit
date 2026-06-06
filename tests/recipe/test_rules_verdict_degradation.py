@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import autoskillit.recipe.rules.rules_verdict_degradation as _rvd
 import pytest
 
+import autoskillit.recipe._skill_helpers as _sh
 import autoskillit.recipe.contracts as _contracts
 from autoskillit.core.types import Severity
 from autoskillit.recipe.schema import (
@@ -131,11 +131,12 @@ def test_verdict_ungated_degradation_fires_when_shared_verdict(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Rule fires ERROR when degradation path emits the same verdict as nominal path."""
-    skill_dir = tmp_path / "skills_extended" / _FAKE_SKILL_NAME
+    skills_ext = tmp_path / "skills_extended"
+    skill_dir = skills_ext / _FAKE_SKILL_NAME
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(_SKILL_MD_SHARED_VERDICT)
 
-    monkeypatch.setattr(_rvd, "pkg_root", lambda: tmp_path)
+    monkeypatch.setattr(_sh, "SKILL_SEARCH_DIRS", [skills_ext])
     monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: _MANIFEST)
 
     recipe = _make_recipe()
@@ -154,11 +155,12 @@ def test_verdict_ungated_degradation_does_not_fire_with_distinct_verdict(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Rule does NOT fire when degradation path emits a distinct verdict (needs_human)."""
-    skill_dir = tmp_path / "skills_extended" / _FAKE_SKILL_NAME
+    skills_ext = tmp_path / "skills_extended"
+    skill_dir = skills_ext / _FAKE_SKILL_NAME
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(_SKILL_MD_DISTINCT_VERDICT)
 
-    monkeypatch.setattr(_rvd, "pkg_root", lambda: tmp_path)
+    monkeypatch.setattr(_sh, "SKILL_SEARCH_DIRS", [skills_ext])
     monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: _MANIFEST)
 
     recipe = _make_recipe()

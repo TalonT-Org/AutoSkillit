@@ -44,7 +44,7 @@ comments and emits a verdict for recipe routing.
 
 - Create files outside `{{AUTOSKILLIT_TEMP}}/audit-claims/`
 - Approve a PR that has `changes_requested` findings
-- Post review comments when `gh` is unavailable — output `verdict=approved` and exit 0
+- Post review comments when `gh` is unavailable — output `verdict=needs_human` and exit 0
 - Review files outside the PR diff — scope all audit to diff content only
 - Modify any source code
 - Run deterministic diff annotation (claim positions are report-level, not line-level)
@@ -56,7 +56,7 @@ comments and emits a verdict for recipe routing.
 - Use the explicit `pr_url` argument instead of re-discovering via `gh pr list`
 - Output `verdict=` on the final line
 - Exit 0 in all normal cases; verdict drives recipe routing via on_result, not exit code
-- Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation)
+- Exit non-zero only for unrecoverable errors (e.g., gh CLI truly unavailable after graceful degradation has already output verdict=needs_human)
 - Spawn all subagents via `Agent(model="sonnet")`
 - Deduplicate findings by (file, line) pairs before posting
 - Issue all Task calls in a single message to maximize parallelism
@@ -92,7 +92,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner -C "$worktree_path"
 
 If `gh` is unavailable or not authenticated:
 - Log "gh unavailable — skipping citation audit"
-- Output `verdict=approved`
+- Output `verdict=needs_human`
 - Exit 0 (graceful degradation)
 
 ### Step 2: Get PR Diff

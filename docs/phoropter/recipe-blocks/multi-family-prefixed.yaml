@@ -9,9 +9,7 @@
 # Setting phoropter_family on prefixed steps would cause the
 # phoropter-step-interleaving rule to emit false errors whenever
 # recipe-level routing steps (e.g. on_result branches, revise loops)
-# separate the family's phase steps.  A future evolution of the
-# adjacency rule may introduce a registry-aware interleaving check
-# that removes this constraint.
+# separate the family's phase steps.
 #
 # Primary family: review-design (canonical keys, annotated)
 # Secondary family: vis-lens (vis_ prefix, unannotated)

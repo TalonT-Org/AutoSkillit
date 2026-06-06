@@ -276,8 +276,12 @@ def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
                     "reason": "active_worktrees",
                     "worktree_count": str(len(linked)),
                 }
-    except (subprocess.TimeoutExpired, OSError):
-        pass
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning(
+            "clone_worktree_check_failed",
+            clone_path=clone_path,
+            error=str(exc),
+        )
     try:
         shutil.rmtree(path)
         logger.info("clone_removed", clone_path=clone_path)

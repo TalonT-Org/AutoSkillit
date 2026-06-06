@@ -47,6 +47,7 @@ apply:
   retries: 2
   on_success: synthesize
   on_failure: synthesize
+  on_exhausted: synthesize
 
 synthesize:
   tool: run_python

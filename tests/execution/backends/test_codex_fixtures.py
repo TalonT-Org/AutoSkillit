@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autoskillit.core.types._type_enums import CodexEventType
 from autoskillit.execution.backends._codex_parse import _scan_codex_ndjson
 from autoskillit.execution.process import _marker_is_standalone
 from tests.fixtures.codex import (
@@ -66,12 +67,20 @@ class TestCodexFixtureValidity:
             if line.strip():
                 json.loads(line)
 
-    def test_first_line_is_thread_started(self) -> None:
+    def test_first_line_is_session_start(self) -> None:
         name = HAPPY_PATH_SINGLE_TURN
         events = _load_events(name)
-        assert events[0]["type"] == "thread.started"
-        assert isinstance(events[0]["thread_id"], str)
-        assert events[0]["thread_id"]
+        _SESSION_START_TYPES = {
+            CodexEventType.THREAD_STARTED.value,
+            CodexEventType.SESSION_META.value,
+        }
+        assert events[0]["type"] in _SESSION_START_TYPES
+        if events[0]["type"] == CodexEventType.THREAD_STARTED.value:
+            session_id = events[0]["thread_id"]
+        else:
+            session_id = events[0]["payload"]["id"]
+        assert isinstance(session_id, str)
+        assert session_id
 
     def test_all_lines_are_dicts(self) -> None:
         name = HAPPY_PATH_SINGLE_TURN

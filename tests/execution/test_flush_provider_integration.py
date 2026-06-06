@@ -211,6 +211,7 @@ class TestProviderFieldsReachFlush:
         assert len(crashed_calls) == 1
         outcome = crashed_calls[0]["provider_outcome"]
         assert outcome.provider_used == "minimax"
+        assert "comm_aliases" in crashed_calls[0]
 
     @pytest.mark.anyio
     async def test_cancel_path_provider_used_in_flush_kwargs(
@@ -253,6 +254,7 @@ class TestProviderFieldsReachFlush:
         assert len(cancelled_calls) == 1
         outcome = cancelled_calls[0]["provider_outcome"]
         assert outcome.provider_used == "openai"
+        assert "comm_aliases" in cancelled_calls[0]
 
     @pytest.mark.anyio
     async def test_model_identifier_reaches_flush_session_log(

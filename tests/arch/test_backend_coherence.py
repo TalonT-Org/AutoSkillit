@@ -248,6 +248,14 @@ def test_all_project_local_search_dirs_has_production_reader():
     )
 
 
+def test_codex_backend_process_name_aliases_values():
+    """CodexBackend declares both 'codex' and 'node' as process name aliases."""
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    aliases = CodexBackend().capabilities.process_name_aliases
+    assert aliases == frozenset({"codex", "node"})
+
+
 def test_known_backend_names_matches_registry():
     """KNOWN_BACKEND_NAMES (IL-0) must equal BACKEND_REGISTRY keys (IL-1)."""
     from autoskillit.core import KNOWN_BACKEND_NAMES

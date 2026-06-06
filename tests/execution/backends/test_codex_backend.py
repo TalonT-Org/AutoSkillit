@@ -563,6 +563,11 @@ class TestCodexBuildSkillSessionCmd:
         )
         assert spec.env["CODEX_HOME"] == "/extra"
 
+    def test_codex_capabilities_session_dir_persistent(self) -> None:
+        """CodexBackend declares session_dir_persistent=True for persistent roots."""
+        caps = CodexBackend().capabilities
+        assert caps.session_dir_persistent is True
+
     def test_codex_home_not_set_by_default(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "CODEX_HOME" not in spec.env

@@ -316,7 +316,8 @@ def make_context(
         default_base_branch=config.branching.default_base_branch,
     )
     ephemeral_root = resolve_ephemeral_root()
-    session_mgr = DefaultSessionSkillManager(provider, ephemeral_root)
+    codex_root = temp_dir / "codex-sessions"
+    session_mgr = DefaultSessionSkillManager(provider, ephemeral_root, codex_root=codex_root)
 
     audit = DefaultAuditLog()
     github_api_log = DefaultGitHubApiLog()

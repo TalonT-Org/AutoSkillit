@@ -104,8 +104,16 @@ def git_repo(tmp_path: Path) -> Path:
 def make_session_skill_manager(tmp_path: Path):
     """Factory fixture returning a DefaultSessionSkillManager."""
 
-    def _factory(*, ephemeral_root: Path | None = None) -> DefaultSessionSkillManager:
+    def _factory(
+        *,
+        ephemeral_root: Path | None = None,
+        codex_root: Path | None = None,
+    ) -> DefaultSessionSkillManager:
         provider = SkillsDirectoryProvider()
-        return DefaultSessionSkillManager(provider, ephemeral_root=ephemeral_root or tmp_path)
+        return DefaultSessionSkillManager(
+            provider,
+            ephemeral_root=ephemeral_root or tmp_path,
+            codex_root=codex_root,
+        )
 
     return _factory

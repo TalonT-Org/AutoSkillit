@@ -1042,7 +1042,16 @@ async def run_skill(
                         shutil.rmtree(_cleanup_dir)
                     except Exception:
                         logger.warning(
-                            "session_dir_rmtree_failed",
-                            path=str(_cleanup_dir),
-                            exc_info=True,
+                            "session_dir_rmtree_failed", path=str(_cleanup_dir), exc_info=True
                         )
+                else:
+                    _codex_fallback = tool_ctx.temp_dir / "codex-sessions" / _sid
+                    if _codex_fallback.is_dir():
+                        try:
+                            shutil.rmtree(_codex_fallback)
+                        except Exception:
+                            logger.warning(
+                                "session_dir_rmtree_failed",
+                                path=str(_codex_fallback),
+                                exc_info=True,
+                            )

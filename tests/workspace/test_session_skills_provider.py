@@ -367,6 +367,83 @@ def test_init_session_codex_backend_uses_codex_skills_subdir(
     assert not claude_skills.exists()
 
 
+def test_codex_session_root_is_persistent_not_tmpfs(tmp_path: Path) -> None:
+    """Codex backend sessions use the persistent codex_root, not the ephemeral /dev/shm root."""
+    ephemeral = tmp_path / "ephemeral"
+    codex = tmp_path / "codex-sessions"
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral, codex_root=codex)
+    codex_backend = MagicMock()
+    codex_backend.capabilities = _CODEX_CAPABILITIES
+    codex_backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    codex_backend.ensure_pre_launch.return_value = []
+
+    result = mgr.init_session("codex-persistent", cook_session=True, backend=codex_backend)
+    session_path = Path(result.path)
+    assert session_path.parent == codex
+    assert not (ephemeral / "codex-persistent").exists()
+
+
+def test_claude_session_root_remains_ephemeral(tmp_path: Path) -> None:
+    """Claude Code (no session_dir_persistent) sessions still use the ephemeral root."""
+    ephemeral = tmp_path / "ephemeral"
+    codex = tmp_path / "codex-sessions"
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral, codex_root=codex)
+
+    result = mgr.init_session("claude-ephemeral", cook_session=True)
+    session_path = Path(result.path)
+    assert session_path.parent == ephemeral
+    assert not (codex / "claude-ephemeral").exists()
+
+
+def test_session_dir_survives_cleanup_when_codex_uses_fallback(tmp_path: Path) -> None:
+    """Session dir is created under codex_root for Codex backend.
+
+    The persistent path is not subject to eager cleanup because it is outside
+    the ephemeral root.
+    """
+    ephemeral = tmp_path / "ephemeral"
+    codex = tmp_path / "codex-sessions"
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral, codex_root=codex)
+    codex_backend = MagicMock()
+    codex_backend.capabilities = _CODEX_CAPABILITIES
+    codex_backend.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    codex_backend.ensure_pre_launch.return_value = []
+
+    mgr.init_session("codex-survives", cook_session=True, backend=codex_backend)
+    assert (codex / "codex-survives" / "skills").is_dir()
+
+
+def test_cleanup_stale_sweeps_both_roots(tmp_path: Path) -> None:
+    """cleanup_stale sweeps both ephemeral and codex roots independently."""
+    ephemeral = tmp_path / "ephemeral"
+    codex = tmp_path / "codex-sessions"
+    ephemeral.mkdir()
+    codex.mkdir()
+
+    eph_stale = ephemeral / "eph-stale"
+    eph_fresh = ephemeral / "eph-fresh"
+    codex_stale = codex / "codex-stale"
+    codex_fresh = codex / "codex-fresh"
+    for d in (eph_stale, eph_fresh, codex_stale, codex_fresh):
+        d.mkdir()
+
+    now = time.time()
+    os.utime(eph_stale, (now - 90000, now - 90000))
+    os.utime(codex_stale, (now - 90000, now - 90000))
+
+    provider = SkillsDirectoryProvider()
+    mgr = DefaultSessionSkillManager(provider, ephemeral_root=ephemeral, codex_root=codex)
+    count = mgr.cleanup_stale(max_age_seconds=86400)
+    assert count == 2
+    assert not eph_stale.exists()
+    assert not codex_stale.exists()
+    assert eph_fresh.exists()
+    assert codex_fresh.exists()
+
+
 def test_init_session_returns_validated_add_dir_for_default_backend(tmp_path: Path) -> None:
     """init_session() returns a ValidatedAddDir regardless of backend."""
     from autoskillit.core import ValidatedAddDir

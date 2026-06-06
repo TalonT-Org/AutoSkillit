@@ -100,6 +100,7 @@ def test_backend_capabilities_field_count():
         "inspector_capable",
         "supports_context_window_suffix",
         "git_metadata_writable",
+        "session_dir_persistent",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -171,6 +172,7 @@ def test_backend_capabilities_field_names_locked():
         "git_metadata_writable",
         "skill_sigil",
         "process_name_aliases",
+        "session_dir_persistent",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected

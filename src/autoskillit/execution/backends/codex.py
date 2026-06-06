@@ -507,6 +507,7 @@ class CodexBackend:
             has_unguarded_filesystem_access=True,
             git_metadata_writable=False,
             skill_sigil="$",
+            session_dir_persistent=True,
         )
 
     @property

@@ -19,4 +19,5 @@ _CODEX_CAPABILITIES = BackendCapabilities(
     required_session_files=frozenset({"config.toml"}),
     session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
     skills_subdir="skills",
+    session_dir_persistent=True,
 )

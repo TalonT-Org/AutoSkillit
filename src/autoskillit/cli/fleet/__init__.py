@@ -309,7 +309,7 @@ def fleet_status(
         _render_status_display(state)
 
         if cleanup:
-            from autoskillit.core import sweep_stale_markers
+            from autoskillit.core import resolve_temp_dir, sweep_stale_markers
             from autoskillit.workspace import (
                 DefaultSessionSkillManager,
                 SkillsDirectoryProvider,
@@ -322,6 +322,7 @@ def fleet_status(
                 skill_mgr = DefaultSessionSkillManager(
                     provider=SkillsDirectoryProvider(),
                     ephemeral_root=resolve_ephemeral_root(),
+                    codex_root=resolve_temp_dir(Path.cwd()) / "codex-sessions",
                 )
                 for d in state.dispatches:
                     if d.dispatched_session_id:
@@ -332,9 +333,7 @@ def fleet_status(
                     "Session skill cleanup failed for campaign %s", campaign_id, exc_info=True
                 )
             sweep_stale_markers()
-            kitchen_state_dir = (
-                Path.cwd() / ".autoskillit" / "temp" / "kitchen_state" / campaign_id
-            )
+            kitchen_state_dir = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state" / campaign_id  # fmt: skip  # noqa: E501
             if kitchen_state_dir.is_dir():
                 shutil.rmtree(kitchen_state_dir, ignore_errors=True)
             print(f"Cleanup complete for campaign '{campaign_id}'.")

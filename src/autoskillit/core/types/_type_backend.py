@@ -144,6 +144,12 @@ class BackendCapabilities:
     # Claude Code uses "/" (slash-commands via the Skill tool).
     # Codex uses "$" (dollar-mention via extract_tool_mentions).
     skill_sigil: str = "/"
+    # Whether the backend requires persistent (non-ephemeral) session directories.
+    # When True, session skill directories are placed under the project-relative
+    # temp directory (via resolve_temp_dir) instead of volatile tmpfs (/dev/shm).
+    # This is necessary when subagents inherit the session directory path as an
+    # environment variable and may access it after the parent process exits.
+    session_dir_persistent: bool = False
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (

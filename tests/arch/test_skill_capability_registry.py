@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
+from autoskillit.core.types._type_enums import SessionType
 from autoskillit.workspace.skills import _read_skill_frontmatter
 from tests.arch._helpers import _iter_skill_dirs
 
@@ -88,9 +89,7 @@ def test_codex_status_consistent_with_required_backends():
     assert not violations, "\n".join(f"  {v}" for v in violations)
 
 
-# test_check removed: reclassified to works-as-is (#3781);
-# cross-layer test is the authoritative guard.
-_NOT_APPLICABLE_MCP_CAPABILITIES = {"run_skill", "open_kitchen"}
+_NOT_APPLICABLE_MCP_CAPABILITIES = {"open_kitchen"}
 
 
 def test_mcp_tools_require_claude_code():
@@ -137,46 +136,126 @@ def test_test_check_codex_status_is_works_as_is():
     )
 
 
+def test_run_skill_codex_status_is_works_as_is():
+    assert SKILL_CAPABILITY_REGISTRY["run_skill"].codex_status == "works-as-is", (
+        "run_skill must be classified as works-as-is — it is callable from "
+        "Codex ORCHESTRATOR+HEADLESS sessions via kitchen-core tag visibility"
+    )
+
+
+_CODEX_SESSION_CONTEXTS: list[tuple[str, dict[str, str]]] = [
+    (
+        "skill+headless+autogate",
+        {
+            "AUTOSKILLIT_SESSION_TYPE": "skill",
+            "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_HEADLESS_AUTO_GATE": "1",
+        },
+    ),
+    (
+        "orchestrator+headless",
+        {
+            "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
+            "AUTOSKILLIT_HEADLESS": "1",
+        },
+    ),
+    (
+        "orchestrator+headless+tags",
+        {
+            "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
+            "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS": "plan-review",
+        },
+    ),
+    (
+        "fleet",
+        {
+            "AUTOSKILLIT_SESSION_TYPE": "fleet",
+        },
+    ),
+]
+
+_TESTED_SESSION_TYPES = {
+    env_vars.get("AUTOSKILLIT_SESSION_TYPE", "skill") for _, env_vars in _CODEX_SESSION_CONTEXTS
+}
+
+_ALL_SESSION_TYPES = {st.value for st in SessionType}
+
+_UNTESTED_SESSION_TYPES = _ALL_SESSION_TYPES - _TESTED_SESSION_TYPES
+
+
+def test_all_session_types_covered_by_visibility_matrix():
+    assert not _UNTESTED_SESSION_TYPES, (
+        f"Session types not covered by _CODEX_SESSION_CONTEXTS: "
+        f"{sorted(_UNTESTED_SESSION_TYPES)}. Add a context entry for each."
+    )
+
+
 @pytest.mark.anyio
-async def test_codex_status_matches_tool_visibility(monkeypatch):
+@pytest.mark.parametrize(
+    "ctx_label,env_vars",
+    _CODEX_SESSION_CONTEXTS,
+    ids=[c[0] for c in _CODEX_SESSION_CONTEXTS],
+)
+async def test_codex_status_vs_visibility_matrix(ctx_label, env_vars, monkeypatch):
+    """No tag-gated tool visible in any Codex session context may be classified not-applicable.
+
+    Scoped to GATED_TOOLS | HEADLESS_TOOLS — free-range tools (UNGATED_TOOLS like
+    open_kitchen) are always visible regardless of session type, so their codex_status
+    is not meaningfully testable via tag visibility alone.
+    """
     from autoskillit.core.types._type_constants_registries import (
         GATED_TOOLS,
         HEADLESS_TOOLS,
-        UNGATED_TOOLS,
     )
     from autoskillit.server import mcp
     from autoskillit.server._session_type import _apply_session_type_visibility
 
-    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
-    monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "1")
+    for key, val in env_vars.items():
+        monkeypatch.setenv(key, val)
+    for key in ("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", "AUTOSKILLIT_HEADLESS_AUTO_GATE"):
+        if key not in env_vars:
+            monkeypatch.delenv(key, raising=False)
 
     _apply_session_type_visibility()
     tools = await mcp.list_tools()
     tool_names = {t.name for t in tools}
 
-    assert "test_check" in tool_names, (
-        "test_check must be visible in SKILL+HEADLESS — env misconfigured?"
-    )
-
-    _skill_blocking_gated_tools = {"run_skill", "open_kitchen"}
-    mcp_tool_caps = set(SKILL_CAPABILITY_REGISTRY) & (GATED_TOOLS | HEADLESS_TOOLS | UNGATED_TOOLS)
+    tag_gated_caps = set(SKILL_CAPABILITY_REGISTRY) & (GATED_TOOLS | HEADLESS_TOOLS)
 
     violations = []
-    for cap_name in sorted(mcp_tool_caps):
+    for cap_name in sorted(tag_gated_caps):
         cap = SKILL_CAPABILITY_REGISTRY[cap_name]
-        visible = cap_name in tool_names
-        has_skill_gate = cap_name in _skill_blocking_gated_tools
-
-        if visible and not has_skill_gate and cap.codex_status == "not-applicable":
+        if cap_name in tool_names and cap.codex_status == "not-applicable":
             violations.append(
-                f"{cap_name}: visible in Codex SKILL+HEADLESS session "
-                f"but codex_status='not-applicable'"
+                f"{cap_name}: visible in {ctx_label} but codex_status='not-applicable'"
             )
 
     assert not violations, (
-        "Tools visible in Codex sessions must not be classified as not-applicable:\n"
-        + "\n".join(f"  {v}" for v in violations)
+        f"Tag-gated tools visible in Codex {ctx_label} sessions must not be "
+        f"classified as not-applicable:\n" + "\n".join(f"  {v}" for v in violations)
+    )
+
+
+@pytest.mark.anyio
+async def test_run_skill_visible_in_orchestrator_is_not_blocked(monkeypatch):
+    """run_skill is visible in ORCHESTRATOR+HEADLESS — codex_status must not be not-applicable."""
+    from autoskillit.server import mcp
+    from autoskillit.server._session_type import _apply_session_type_visibility
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
+    monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+    monkeypatch.delenv("AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS", raising=False)
+
+    _apply_session_type_visibility()
+    tools = await mcp.list_tools()
+    tool_names = {t.name for t in tools}
+
+    assert "run_skill" in tool_names, "run_skill must be visible in ORCHESTRATOR+HEADLESS sessions"
+    cap = SKILL_CAPABILITY_REGISTRY["run_skill"]
+    assert cap.codex_status != "not-applicable", (
+        "run_skill is visible in Codex ORCHESTRATOR+HEADLESS sessions — "
+        "codex_status='not-applicable' is a misclassification"
     )
 
 
@@ -189,6 +268,8 @@ def test_reclassified_skills_have_empty_backend_requirements():
         "implement-experiment",
         "implement-worktree",
         "plan-experiment",
+        "planner-elaborate-assignments",
+        "select-directions",
         "setup-project",
     ]
     violations = []

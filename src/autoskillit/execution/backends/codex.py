@@ -492,6 +492,7 @@ class CodexBackend:
             anthropic_provider_capable=False,
             inspector_capable=False,
             has_unguarded_filesystem_access=True,
+            git_metadata_writable=False,
             skill_sigil="$",
         )
 

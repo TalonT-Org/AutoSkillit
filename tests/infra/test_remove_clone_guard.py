@@ -227,3 +227,47 @@ def test_deny_when_no_upstream_and_not_on_remote():
         "no remote tracking branch"
         in data["hookSpecificOutput"]["permissionDecisionReason"].lower()
     )
+
+
+# ── Tests: worktree guard ────────────────────────────────────────────────────
+
+
+def test_deny_when_active_worktrees_exist():
+    """keep=false + active linked worktrees → deny with worktree count."""
+    event = {"tool_input": {"keep": "false", "clone_path": "/some/clone"}}
+    porcelain = (
+        "worktree /some/clone\n"
+        "HEAD abc123\n"
+        "branch refs/heads/main\n"
+        "\n"
+        "worktree /some/worktree1\n"
+        "HEAD def456\n"
+        "branch refs/heads/feat\n"
+    )
+    out = _run_hook_with_git(
+        event,
+        git_responses=[
+            (0, porcelain),  # worktree list --porcelain
+        ],
+    )
+    data = json.loads(out)
+    assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
+    reason = data["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "active linked worktree" in reason
+    assert "/some/worktree1" in reason
+
+
+def test_approve_when_no_linked_worktrees():
+    """keep=false + only main worktree (no linked) → proceed to sync check."""
+    event = {"tool_input": {"keep": "false", "clone_path": "/some/clone"}}
+    porcelain = "worktree /some/clone\nHEAD abc123\nbranch refs/heads/main\n"
+    out = _run_hook_with_git(
+        event,
+        git_responses=[
+            (0, porcelain),  # worktree list --porcelain (only main)
+            (0, ".git"),  # rev-parse --git-dir
+            (0, "main"),  # rev-parse --abbrev-ref HEAD
+            (0, "0"),  # rev-list --count @{upstream}..HEAD
+        ],
+    )
+    assert out.strip() == ""

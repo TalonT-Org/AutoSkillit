@@ -55,12 +55,38 @@ def _git(clone_path: str, *args: str, timeout: int = 10) -> tuple[int, str]:
         return -1, ""
 
 
+def _check_live_worktrees(clone_path: str) -> tuple[bool, str]:
+    """Return (approved, deny_reason). Denies if linked worktrees exist."""
+    rc, output = _git(clone_path, "worktree", "list", "--porcelain")
+    if rc != 0:
+        return True, ""
+    worktrees = []
+    for line in output.splitlines():
+        if line.startswith("worktree "):
+            worktrees.append(line.split(" ", 1)[1].strip())
+    linked = worktrees[1:] if len(worktrees) > 1 else []
+    if linked:
+        paths = "\n  ".join(linked)
+        return False, (
+            f"Clone at {clone_path!r} has {len(linked)} active linked "
+            f"worktree(s):\n  {paths}\n\n"
+            "Remove worktrees first (git worktree remove <path>), "
+            "then re-run remove_clone."
+        )
+    return True, ""
+
+
 def _check_sync(clone_path: str) -> tuple[bool, str]:
     """Return (approved, deny_reason).
 
     approved=True  → allow deletion (no output printed)
     approved=False → deny deletion (deny_reason is the message to display)
     """
+    # Check for active linked worktrees first
+    approved, reason = _check_live_worktrees(clone_path)
+    if not approved:
+        return approved, reason
+
     # Verify it's a git repo (fail-open if not)
     rc, _ = _git(clone_path, "rev-parse", "--git-dir")
     if rc != 0:

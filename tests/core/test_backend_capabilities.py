@@ -99,6 +99,7 @@ def test_backend_capabilities_field_count():
         "plugin_install_capable",
         "inspector_capable",
         "supports_context_window_suffix",
+        "git_metadata_writable",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -166,6 +167,7 @@ def test_backend_capabilities_field_names_locked():
         "plugin_install_capable",
         "inspector_capable",
         "supports_context_window_suffix",
+        "git_metadata_writable",
         "skill_sigil",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}

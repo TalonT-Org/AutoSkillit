@@ -111,20 +111,53 @@ def fetch_merge_queue_data(base_branch: str, cwd: str, output_dir: str) -> dict[
     return {"merge_queue_data_path": str(out_path)}
 
 
-def detect_zero_changes(worktree_path: str, base_branch: str) -> dict[str, str]:
-    """Count commits since branch creation using merge-base."""
-    import subprocess
+def detect_zero_changes(
+    worktree_path: str,
+    base_branch: str,
+    write_evidence_override: str = "false",
+) -> dict[str, str]:
+    """Multi-signal change detection: commits, uncommitted changes, and write evidence."""
+    import subprocess  # noqa: PLC0415
 
-    result = subprocess.run(
-        ["git", "rev-list", "--count", f"{base_branch}..HEAD"],
-        cwd=worktree_path,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=60,
-    )
-    count = int(result.stdout.strip())
-    return {"has_changes": "true" if count > 0 else "false", "commit_count": str(count)}
+    if str(write_evidence_override).lower() == "true":
+        return {
+            "has_changes": "true",
+            "commit_count": "0",
+            "has_uncommitted_changes": "false",
+            "write_evidence_override": "true",
+        }
+
+    try:
+        rev_result = subprocess.run(
+            ["git", "rev-list", "--count", f"{base_branch}..HEAD"],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        count = int(rev_result.stdout.strip()) if rev_result.returncode == 0 else 0
+
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        has_uncommitted = status_result.returncode == 0 and bool(status_result.stdout.strip())
+    except (subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired):
+        return {
+            "has_changes": "true",
+            "commit_count": "0",
+            "has_uncommitted_changes": "unknown",
+        }
+
+    has_changes = count > 0 or has_uncommitted
+    return {
+        "has_changes": "true" if has_changes else "false",
+        "commit_count": str(count),
+        "has_uncommitted_changes": "true" if has_uncommitted else "false",
+    }
 
 
 def check_commits_ahead(cwd: str, base_branch: str) -> dict[str, str]:

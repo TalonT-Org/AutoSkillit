@@ -127,27 +127,26 @@ AUDIT_CLAIMS_SKILL_PATH = (
 def _extract_degradation_block(text: str) -> str:
     """Extract the graceful-degradation block from a SKILL.md.
 
-    Finds the first 'unavailable' trigger line that is inside a Step section
-    (after a ``### Step`` heading), then returns text through the next step
-    heading (or 20 lines if no heading found).
+    Finds the 'unavailable' trigger line whose subsequent window contains
+    a ``verdict=`` emit, then returns text through the next step heading
+    (or 20 lines if no heading found).
     """
     lines = text.splitlines()
-    in_step = False
-    start = None
-    end = len(lines)
+    trigger_re = re.compile(r"unavailable|graceful.{0,20}degrada", re.IGNORECASE)
+    heading_re = re.compile(r"^#{1,3}\s+Step\s+\d")
+    verdict_re = re.compile(r"\bverdict\s*=\s*\w+")
     for i, line in enumerate(lines):
-        if re.search(r"^#{1,3}\s+Step\s+\d", line):
-            in_step = True
-        if in_step and re.search(r"unavailable|graceful.{0,20}degrada", line, re.IGNORECASE):
-            start = i
-            break
-    if start is None:
-        return ""
-    for i in range(start + 1, min(len(lines), start + 20)):
-        if re.search(r"^#{1,3}\s+Step\s+\d", lines[i]):
-            end = i
-            break
-    return "\n".join(lines[start:end])
+        if not trigger_re.search(line):
+            continue
+        end = min(len(lines), i + 20)
+        for j in range(i + 1, end):
+            if heading_re.match(lines[j]):
+                end = j
+                break
+        window = "\n".join(lines[i:end])
+        if verdict_re.search(window):
+            return window
+    return ""
 
 
 def test_graceful_degradation_does_not_emit_approved() -> None:

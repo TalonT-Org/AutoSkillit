@@ -99,6 +99,7 @@ def test_backend_capabilities_field_count():
         "plugin_install_capable",
         "inspector_capable",
         "supports_context_window_suffix",
+        "git_metadata_writable",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -109,6 +110,7 @@ def test_backend_capabilities_field_count():
         "applicable_guards",
         "mcp_env_forward_vars",
         "write_guard_tool_names",
+        "process_name_aliases",
     }
     assert str_fields == {
         "min_version",
@@ -166,7 +168,9 @@ def test_backend_capabilities_field_names_locked():
         "plugin_install_capable",
         "inspector_capable",
         "supports_context_window_suffix",
+        "git_metadata_writable",
         "skill_sigil",
+        "process_name_aliases",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected
@@ -201,6 +205,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.min_version == ""
     assert CLAUDE_CODE_CAPABILITIES.version_check_command == "claude --version"
     assert CLAUDE_CODE_CAPABILITIES.process_name == "claude"
+    assert CLAUDE_CODE_CAPABILITIES.process_name_aliases == frozenset({"claude"})
     assert CLAUDE_CODE_CAPABILITIES.skills_subdir == ".claude/skills"
     assert CLAUDE_CODE_CAPABILITIES.supports_tool_list_changed is False
     assert CLAUDE_CODE_CAPABILITIES.mcp_env_forward_vars == frozenset()

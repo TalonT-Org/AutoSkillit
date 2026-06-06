@@ -463,6 +463,30 @@ class TestRemoveClone:
         result = remove_clone("/nonexistent/clone/path", keep="false")
         assert result == {"removed": "false", "reason": "not_found"}
 
+    def test_blocks_removal_when_active_worktree(self, git_repo: Path) -> None:
+        result = clone_repo(str(git_repo), "test", strategy="clone_local")
+        clone_path = result["clone_path"]
+        wt_path = Path(clone_path) / ".." / "test-worktree"
+        subprocess.run(
+            ["git", "worktree", "add", str(wt_path), "-b", "wt-branch"],
+            cwd=clone_path,
+            capture_output=True,
+            check=True,
+        )
+        try:
+            remove_result = remove_clone(clone_path, keep="false")
+            assert remove_result["removed"] == "false"
+            assert remove_result["reason"] == "active_worktrees"
+            assert remove_result["worktree_count"] == "1"
+            assert Path(clone_path).exists()
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", str(wt_path)],
+                cwd=clone_path,
+                capture_output=True,
+            )
+            shutil.rmtree(Path(clone_path), ignore_errors=True)
+
 
 class TestCloneRepoDetectAndExpand:
     def test_ds4_expands_tilde(self) -> None:

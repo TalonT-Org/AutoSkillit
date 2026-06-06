@@ -214,6 +214,8 @@ skills:
       type: directory_path
     - name: branch_name
       type: string
+    - name: has_implementation_progress
+      type: string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
@@ -346,6 +348,8 @@ skills:
       type: integer
     - name: deviation_manifest_path
       type: optional_string
+    - name: has_implementation_progress
+      type: string
     expected_output_patterns:
     - "worktree_path[ \\t]*=[ \\t]*/.+"
     - "%%ORDER_UP::[a-f0-9]+%%"
@@ -3112,10 +3116,15 @@ callable_contracts:
     - name: base_branch
       type: str
       required: true
+    - name: write_evidence_override
+      type: str
+      required: false
     outputs:
     - name: has_changes
       type: str
     - name: commit_count
+      type: str
+    - name: has_uncommitted_changes
       type: str
   autoskillit.smoke_utils.check_commits_ahead:
     inputs:

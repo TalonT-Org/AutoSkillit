@@ -107,6 +107,9 @@ class BackendCapabilities:
     version_check_command: str = ""
     # Binary stem used for backend coherence check at session launch
     process_name: str = ""
+    # All process names the backend binary may appear as in /proc/comm
+    # or ps output (e.g., interpreter names for shebang scripts)
+    process_name_aliases: frozenset[str] = field(default_factory=frozenset)
     # Relative path from session root to the skills directory
     skills_subdir: str = ""
     # Hook config format identifier (e.g. settings.json vs config.toml)
@@ -135,6 +138,8 @@ class BackendCapabilities:
     supports_context_window_suffix: bool = field(default=False)
     # Gates backend-specific prompt supplements that warn against reading raw package files
     has_unguarded_filesystem_access: bool = field(default=False)
+    # True when backend's git metadata directories (.git/worktrees/) are writable
+    git_metadata_writable: bool = field(default=True)
     # Native skill invocation prefix character used by this backend's model/CLI.
     # Claude Code uses "/" (slash-commands via the Skill tool).
     # Codex uses "$" (dollar-mention via extract_tool_mentions).
@@ -212,6 +217,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     min_version="",
     version_check_command="claude --version",
     process_name="claude",
+    process_name_aliases=frozenset({"claude"}),
     skills_subdir=".claude/skills",
     write_detection_strategy="tool_names",
     patch_format="unified_diff",
@@ -221,6 +227,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     plugin_install_capable=True,
     inspector_capable=False,
     supports_context_window_suffix=True,
+    git_metadata_writable=True,
     skill_sigil="/",
 )
 

@@ -262,6 +262,7 @@ async def _execute_claude_headless(
                 completion_record_types=_step_backend.capabilities.completion_record_types,
                 session_record_types=_step_backend.capabilities.session_record_types,
                 inspector_callback=None,
+                workload_basenames=_step_backend.capabilities.process_name_aliases or None,
             )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
@@ -304,6 +305,7 @@ async def _execute_claude_headless(
                     max_sessions=ctx.config.linux_tracing.max_sessions,
                     model_identity=model_identity,
                     backend=cast(Literal["claude-code", "codex"], _step_backend.name),
+                    comm_aliases=_step_backend.capabilities.process_name_aliases,
                     telemetry=_build_error_path_telemetry(
                         ctx.github_api_log,
                         session_id="",
@@ -366,6 +368,7 @@ async def _execute_claude_headless(
                         max_sessions=ctx.config.linux_tracing.max_sessions,
                         model_identity=model_identity,
                         backend=cast(Literal["claude-code", "codex"], _step_backend.name),
+                        comm_aliases=_step_backend.capabilities.process_name_aliases,
                         telemetry=_build_error_path_telemetry(
                             ctx.github_api_log,
                             session_id="",
@@ -543,6 +546,7 @@ async def _execute_claude_headless(
                 file_changes_count=skill_result.evidence.file_changes_count,
                 clone_contamination_reverted=_clone_reverted,
                 tracked_comm=result.tracked_comm,
+                comm_aliases=_step_backend.capabilities.process_name_aliases,
                 orphaned_tool_result=result.orphaned_tool_result,
                 raw_stdout=result.stdout
                 if (

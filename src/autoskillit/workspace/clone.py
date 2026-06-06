@@ -252,6 +252,37 @@ def remove_clone(clone_path: str, keep: str = "false") -> dict[str, str]:
         logger.warning("clone_not_found", clone_path=clone_path)
         return {"removed": "false", "reason": "not_found"}
     try:
+        wt_result = subprocess.run(
+            ["git", "-C", clone_path, "worktree", "list", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if wt_result.returncode == 0:
+            wt_paths = [
+                line.split(" ", 1)[1].strip()
+                for line in wt_result.stdout.splitlines()
+                if line.startswith("worktree ")
+            ]
+            linked = wt_paths[1:] if len(wt_paths) > 1 else []
+            if linked:
+                logger.warning(
+                    "clone_remove_blocked_active_worktrees",
+                    clone_path=clone_path,
+                    worktree_count=len(linked),
+                )
+                return {
+                    "removed": "false",
+                    "reason": "active_worktrees",
+                    "worktree_count": str(len(linked)),
+                }
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning(
+            "clone_worktree_check_failed",
+            clone_path=clone_path,
+            error=str(exc),
+        )
+    try:
         shutil.rmtree(path)
         logger.info("clone_removed", clone_path=clone_path)
         return {"removed": "true"}

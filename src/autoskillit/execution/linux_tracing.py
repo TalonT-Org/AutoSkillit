@@ -58,11 +58,17 @@ class TraceTargetResolutionError(RuntimeError):
         expected_basename: The basename we were looking for (e.g., 'claude').
     """
 
-    def __init__(self, root_pid: int, expected_basename: str) -> None:
+    def __init__(
+        self,
+        root_pid: int,
+        expected_basename: str,
+        expected_basenames: frozenset[str] | None = None,
+    ) -> None:
         self.root_pid = root_pid
         self.expected_basename = expected_basename
+        label = "|".join(sorted(expected_basenames)) if expected_basenames else expected_basename
         super().__init__(
-            f"resolve_trace_target: timeout waiting for '{expected_basename}' "
+            f"resolve_trace_target: timeout waiting for '{label}' "
             f"to appear as a descendant of PID {root_pid}. "
             f"The workload process did not start within the resolution window. "
             f"Cannot trace: falling back to wrapper PID would recreate issue #806."
@@ -95,6 +101,7 @@ async def resolve_trace_target(
     root_pid: int,
     expected_basename: str,
     timeout: float = 2.0,
+    expected_basenames: frozenset[str] | None = None,
 ) -> TraceTarget:
     """Walk descendants of root_pid to find the workload process by basename.
 
@@ -108,6 +115,9 @@ async def resolve_trace_target(
         root_pid: Spawn PID (e.g., script(1) when PTY mode is active).
         expected_basename: Basename to match (e.g., 'claude', 'python3').
         timeout: Maximum seconds to wait for the workload to appear.
+        expected_basenames: Optional set of acceptable basenames (e.g., for
+            Node.js shebang scripts where /proc/comm reads 'node'). When
+            provided, overrides expected_basename for matching.
 
     Returns:
         TraceTarget with the workload's pid, comm, cmdline, starttime_ticks.
@@ -115,6 +125,7 @@ async def resolve_trace_target(
     Raises:
         TraceTargetResolutionError: When workload not found within timeout.
     """
+    _match_names = expected_basenames if expected_basenames else frozenset({expected_basename})
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -129,9 +140,7 @@ async def resolve_trace_target(
                 cmdline = child.cmdline()
                 if not cmdline:
                     continue
-                basename_matches = name == expected_basename or (
-                    Path(cmdline[0]).name == expected_basename
-                )
+                basename_matches = name in _match_names or Path(cmdline[0]).name in _match_names
                 if not basename_matches:
                     continue
                 # Found the workload — read identity fields from /proc
@@ -152,7 +161,11 @@ async def resolve_trace_target(
 
         await anyio.sleep(0.05)
 
-    raise TraceTargetResolutionError(root_pid=root_pid, expected_basename=expected_basename)
+    raise TraceTargetResolutionError(
+        root_pid=root_pid,
+        expected_basename=expected_basename,
+        expected_basenames=expected_basenames,
+    )
 
 
 def trace_target_from_pid(pid: int) -> TraceTarget:

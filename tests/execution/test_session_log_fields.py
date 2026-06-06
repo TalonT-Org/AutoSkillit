@@ -1170,10 +1170,17 @@ class TestApiRetryFields:
 class TestCodexLogFields:
     """T5: codex_log_path parameter stores codex_log in sessions index."""
 
-    def test_flush_stores_codex_log_in_sessions_index(self, tmp_path):
+    @pytest.mark.parametrize(
+        "event_line",
+        [
+            '{"type":"thread.started","thread_id":"tid"}\n',
+            '{"type":"session_meta","payload":{"id":"tid"}}\n',
+        ],
+    )
+    def test_flush_stores_codex_log_in_sessions_index(self, tmp_path, event_line):
         codex_log = tmp_path / "codex-sessions" / "2026" / "05" / "26" / "rollout.jsonl"
         codex_log.parent.mkdir(parents=True)
-        codex_log.write_text('{"type":"thread.started","thread_id":"tid"}\n')
+        codex_log.write_text(event_line)
         flush_session_log(
             log_dir=str(tmp_path),
             codex_log_path=codex_log,
@@ -1215,9 +1222,18 @@ class TestCodexLogFields:
         entry = json.loads(index)
         assert entry["codex_log"] is None
 
-    def test_flush_codex_log_skips_claude_code_log_not_found_warning(self, tmp_path, caplog):
+    @pytest.mark.parametrize(
+        "event_line",
+        [
+            '{"type":"thread.started","thread_id":"tid"}\n',
+            '{"type":"session_meta","payload":{"id":"tid"}}\n',
+        ],
+    )
+    def test_flush_codex_log_skips_claude_code_log_not_found_warning(
+        self, tmp_path, caplog, event_line
+    ):
         codex_log = tmp_path / "rollout.jsonl"
-        codex_log.write_text('{"type":"thread.started","thread_id":"tid"}\n')
+        codex_log.write_text(event_line)
         flush_session_log(
             log_dir=str(tmp_path),
             codex_log_path=codex_log,

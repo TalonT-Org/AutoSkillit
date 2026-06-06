@@ -70,6 +70,14 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         rationale="patch path extraction routing — P2-A3-WP1 (#3787) co-lands consumer",
         added_date=date(2026, 6, 5),
     ),
+    "git_metadata_writable": ForwardDeclaredField(
+        issue=3843,
+        rationale=(
+            "Codex sandbox git metadata constraint — consumed when "
+            "post-session commit recovery is implemented"
+        ),
+        added_date=date(2026, 6, 5),
+    ),
 }
 
 

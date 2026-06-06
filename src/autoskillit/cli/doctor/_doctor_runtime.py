@@ -100,7 +100,10 @@ def _check_claude_process_state_breakdown(
 ) -> DoctorResult:
     """Check current D-state and CPU usage of claude/codex processes via ps."""
     process_label = backend.capabilities.process_name if backend else "claude"
-    comm_filter = process_label
+    if backend:
+        comm_aliases = backend.capabilities.process_name_aliases or frozenset({process_label})
+    else:
+        comm_aliases = frozenset({"claude"})
     check_name = f"{process_label}_process_state"
 
     try:
@@ -130,7 +133,7 @@ def _check_claude_process_state_breakdown(
         if len(parts) < 4:
             continue
         comm = parts[3]
-        if comm != comm_filter:
+        if comm not in comm_aliases:
             continue
         try:
             rows.append((int(parts[0]), parts[1], float(parts[2])))

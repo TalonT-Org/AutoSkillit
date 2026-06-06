@@ -14,13 +14,18 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def _make_rollout(
-    parent: Path, thread_id: str, name: str = "rollout-2026-05-26T07-30-33-abc.jsonl"
+    parent: Path,
+    thread_id: str,
+    name: str = "rollout-2026-05-26T07-30-33-abc.jsonl",
+    fmt: str = "thread_started",
 ) -> Path:
-    """Helper: create a rollout NDJSON file with thread.started event."""
+    """Helper: create a rollout NDJSON file with a session-start event."""
     f = parent / name
-    f.write_text(
-        f'{{"type":"thread.started","thread_id":"{thread_id}"}}\n{{"type":"turn.completed"}}\n'
-    )
+    if fmt == "session_meta":
+        first_line = f'{{"type":"session_meta","payload":{{"id":"{thread_id}"}}}}'
+    else:
+        first_line = f'{{"type":"thread.started","thread_id":"{thread_id}"}}'
+    f.write_text(f'{first_line}\n{{"type":"turn.completed"}}\n')
     return f
 
 
@@ -184,3 +189,17 @@ class TestCodexSessionLocator:
         f = tmp_path / "no_start.jsonl"
         f.write_text('{"type":"turn.completed"}\n')
         assert CodexSessionLocator._file_matches_thread(f, "any") is False
+
+    @pytest.mark.parametrize("fmt", ["thread_started", "session_meta"])
+    def test_file_matches_thread_both_formats(self, tmp_path: Path, fmt: str) -> None:
+        rollout = _make_rollout(tmp_path, "tid_fmt", fmt=fmt)
+        assert CodexSessionLocator._file_matches_thread(rollout, "tid_fmt") is True
+        assert CodexSessionLocator._file_matches_thread(rollout, "wrong_id") is False
+
+    def test_locate_session_finds_session_meta_format(self, tmp_path: Path) -> None:
+        session_dir = tmp_path / "sessions" / "2026" / "05" / "26"
+        session_dir.mkdir(parents=True)
+        rollout = _make_rollout(session_dir, "tid_meta", fmt="session_meta")
+        locator = CodexSessionLocator()
+        result = locator.locate_session("tid_meta", codex_home=tmp_path)
+        assert result == rollout

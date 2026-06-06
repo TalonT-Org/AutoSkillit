@@ -308,6 +308,7 @@ steps:
       output_dir: '.'
     capture:
       worktree_path: ${{ result.worktree_path }}
+      has_implementation_progress: ${{ result.has_implementation_progress }}
     retries: 0
     on_context_limit: retry_worktree
     on_success: check_changes
@@ -326,6 +327,7 @@ steps:
     capture:
       worktree_path: ${{ result.worktree_path }}
       phases_implemented: ${{ result.phases_implemented }}
+      has_implementation_progress: ${{ result.has_implementation_progress }}
       deviation_manifest_path:
         from: ${{ result.deviation_manifest_path }}
         type: optional_string
@@ -342,6 +344,7 @@ steps:
       callable: autoskillit.smoke_utils.detect_zero_changes
       worktree_path: ${{ context.worktree_path }}
       base_branch: ${{ inputs.base_branch }}
+      write_evidence_override: ${{ context.has_implementation_progress }}
     capture:
       has_changes: ${{ result.has_changes }}
       commit_count: ${{ result.commit_count }}

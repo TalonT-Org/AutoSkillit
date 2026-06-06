@@ -317,7 +317,8 @@
       "capture": {
         "implementation_ref": "${{ result.worktree_path }}",
         "worktree_path": "${{ result.worktree_path }}",
-        "branch_name": "${{ result.branch_name }}"
+        "branch_name": "${{ result.branch_name }}",
+        "has_implementation_progress": "${{ result.has_implementation_progress }}"
       },
       "retries": 0,
       "on_context_limit": "retry_worktree",
@@ -339,6 +340,7 @@
         "worktree_path": "${{ result.worktree_path }}",
         "branch_name": "${{ result.branch_name }}",
         "phases_implemented": "${{ result.phases_implemented }}",
+        "has_implementation_progress": "${{ result.has_implementation_progress }}",
         "deviation_manifest_path": {
           "from": "${{ result.deviation_manifest_path }}",
           "type": "optional_string"
@@ -362,7 +364,8 @@
       "with": {
         "callable": "autoskillit.smoke_utils.detect_zero_changes",
         "worktree_path": "${{ context.implementation_ref }}",
-        "base_branch": "${{ inputs.base_branch }}"
+        "base_branch": "${{ inputs.base_branch }}",
+        "write_evidence_override": "${{ context.has_implementation_progress }}"
       },
       "capture": {
         "has_changes": "${{ result.has_changes }}",

@@ -194,14 +194,16 @@ def test_backend_doctor_coverage():
     source = inspect.getsource(_doctor_runtime)
     tree = ast.parse(source)
     has_capability_field = any(
-        isinstance(node, ast.Attribute) and node.attr in {"version_check_command", "process_name"}
+        isinstance(node, ast.Attribute)
+        and node.attr in {"version_check_command", "process_name", "process_name_aliases"}
         for func_node in ast.walk(tree)
         if isinstance(func_node, ast.FunctionDef)
         and any(arg.arg == "backend" for arg in func_node.args.args + func_node.args.kwonlyargs)
         for node in ast.walk(func_node)
     )
     assert has_capability_field, (
-        "Expected capability-driven dispatch (version_check_command/process_name) "
+        "Expected capability-driven dispatch "
+        "(version_check_command/process_name/process_name_aliases) "
         "in _doctor_runtime; backend-name string comparisons were replaced by P4."
     )
 
@@ -244,6 +246,14 @@ def test_all_project_local_search_dirs_has_production_reader():
         "ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS has no production reader outside its definition. "
         "This means it is dead metadata — wire it into suppression or delivery code."
     )
+
+
+def test_codex_backend_process_name_aliases_values():
+    """CodexBackend declares both 'codex' and 'node' as process name aliases."""
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    aliases = CodexBackend().capabilities.process_name_aliases
+    assert aliases == frozenset({"codex", "node"})
 
 
 def test_known_backend_names_matches_registry():

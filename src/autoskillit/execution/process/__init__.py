@@ -219,6 +219,7 @@ async def run_managed_async(
     session_id: str | None = None,
     stream_parser: StreamParser | None = None,
     inspector_callback: InspectorCallback | None = None,
+    workload_basenames: frozenset[str] | None = None,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -289,6 +290,7 @@ async def run_managed_async(
                         root_pid=proc.pid,
                         expected_basename=_workload_basename,
                         timeout=2.0,
+                        expected_basenames=workload_basenames,
                     )
                 else:
                     # Non-PTY mode: proc.pid IS the workload (direct child)
@@ -629,6 +631,7 @@ class DefaultSubprocessRunner:
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,
+        workload_basenames: frozenset[str] | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -653,4 +656,5 @@ class DefaultSubprocessRunner:
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
             inspector_callback=inspector_callback,
+            workload_basenames=workload_basenames,
         )

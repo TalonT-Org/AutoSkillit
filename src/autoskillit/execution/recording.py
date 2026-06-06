@@ -139,6 +139,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,
+        workload_basenames: frozenset[str] | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -428,6 +429,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,
+        workload_basenames: frozenset[str] | None = None,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -2955,3 +2956,72 @@ def test_enrich_diff_context_requires_output_dir() -> None:
     """enrich_diff_context must raise TypeError when output_dir is not provided."""
     with pytest.raises(TypeError):
         enrich_diff_context(pr_number="1", project_dir="/tmp")  # type: ignore[call-arg]
+
+
+# ---------------------------------------------------------------------------
+# detect_zero_changes: multi-signal change detection
+# ---------------------------------------------------------------------------
+
+_DZC_GIT_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "test",
+    "GIT_AUTHOR_EMAIL": "test@test.com",
+    "GIT_COMMITTER_NAME": "test",
+    "GIT_COMMITTER_EMAIL": "test@test.com",
+}
+
+
+def test_detect_zero_changes_uncommitted_files(tmp_path: Path) -> None:
+    """detect_zero_changes returns has_changes=true for uncommitted files."""
+    from autoskillit.smoke_utils import detect_zero_changes
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    (tmp_path / "new_file.txt").write_text("content")
+    result = detect_zero_changes(str(tmp_path), "HEAD")
+    assert result["has_changes"] == "true"
+    assert result["has_uncommitted_changes"] == "true"
+
+
+def test_detect_zero_changes_write_evidence_override(tmp_path: Path) -> None:
+    """detect_zero_changes returns has_changes=true when write_evidence_override is set."""
+    from autoskillit.smoke_utils import detect_zero_changes
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    result_cap = detect_zero_changes(str(tmp_path), "HEAD", write_evidence_override="True")
+    assert result_cap["has_changes"] == "true"
+    assert result_cap["write_evidence_override"] == "true"
+
+    result_low = detect_zero_changes(str(tmp_path), "HEAD", write_evidence_override="true")
+    assert result_low["has_changes"] == "true"
+
+
+def test_detect_zero_changes_clean_repo(tmp_path: Path) -> None:
+    """detect_zero_changes returns has_changes=false for a clean repo with no commits ahead."""
+    from autoskillit.smoke_utils import detect_zero_changes
+
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "init"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+        env=_DZC_GIT_ENV,
+    )
+    result = detect_zero_changes(str(tmp_path), "HEAD")
+    assert result["has_changes"] == "false"
+    assert result["commit_count"] == "0"
+    assert result["has_uncommitted_changes"] == "false"

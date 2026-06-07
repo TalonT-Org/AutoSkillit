@@ -15,7 +15,7 @@ from pathlib import Path
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.smoke_utils._eval import REQUIRED_CRITERION_KEYS
+from autoskillit.smoke_utils import REQUIRED_CRITERION_KEYS
 
 _TARGET_CALLABLE = "parse_agent_eval_manifests"
 _MANIFEST_ARG = "canary_manifest"

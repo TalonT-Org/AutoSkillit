@@ -144,6 +144,9 @@ src/autoskillit/assets/**/*:
   - assets/
   - contracts/
 
+tests/arch/fixtures/*:
+  - arch/
+
 tests/recipe/fixtures/*:
   - recipe/
 

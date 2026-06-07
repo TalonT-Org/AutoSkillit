@@ -195,7 +195,7 @@ Collect all `subsumption_pairs` from validated L0 responses. For each pair:
 3. Remove the subsumed WP from the output WP list
 4. Update all `depends_on` references: any WP that depended on the subsumed WP should instead depend on the consumer WP
 5. Write voided_wps entry to `$4/work_packages/lifecycle_registry.json`:
-   Read existing registry (or create with defaults `{"voided_phases": [], "voided_assignments": [], "absorbed": {}, "voided_wps": {}}`).
+   Read existing registry (or create with defaults `{"voided_phases": [], "voided_assignments": [], "absorbed": {}, "voided_wps": {}, "archived_stubs": {}}`).
    Add to `voided_wps`: `{subsumed_id: {"merged_into": consumer_id, "reason": reason}}`.
    Write back with `schema_version: 1`.
 6. Log: `WP SUBSUMED: {subsumed_id} → {consumer_id} ({reason})`

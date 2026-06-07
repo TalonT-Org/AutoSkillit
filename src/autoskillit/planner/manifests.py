@@ -10,7 +10,11 @@ from typing import TypedDict
 
 from autoskillit.core import atomic_write, get_logger, read_versioned_json, write_versioned_json
 from autoskillit.planner._sort_utils import _natural_sort_key
-from autoskillit.planner.lifecycle import load_lifecycle_registry, record_lifecycle_event
+from autoskillit.planner.lifecycle import (
+    LifecycleCategory,
+    load_lifecycle_registry,
+    record_lifecycle_event,
+)
 from autoskillit.planner.schema import (
     ASSIGN_ID_RE,
     ASSIGN_RESULT_FILE_RE,
@@ -361,7 +365,7 @@ def expand_assignments(
 
     voided_phase_ids = [phase["id"] for phase in phases if not phase.get("assignments_preview")]
     if voided_phase_ids:
-        record_lifecycle_event(Path(output_dir), "voided_phases", voided_phase_ids)
+        record_lifecycle_event(Path(output_dir), LifecycleCategory.VOIDED_PHASES, voided_phase_ids)
 
     sentinel_dir = _ensure_sentinel_dir(assign_dir, "assign_sentinels")
     manifest = {
@@ -559,7 +563,7 @@ def reconcile_wp_files(planner_dir: str) -> dict[str, str]:
     if moved_ids:
         record_lifecycle_event(
             planner_path,
-            "archived_stubs",
+            LifecycleCategory.ARCHIVED_STUBS,
             {oid: {"reason": "elaboration_failed_orphan"} for oid in moved_ids},
         )
     logger.info("reconcile_wp_files", archived_count=len(moved_ids))

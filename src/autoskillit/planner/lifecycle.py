@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -13,25 +14,46 @@ _REGISTRY_FILENAME = "lifecycle_registry.json"
 _LEGACY_FILENAME = "absorption_registry.json"
 
 
-def record_lifecycle_event(planner_dir: Path, key: str, data: list[str] | dict[str, Any]) -> None:
+class LifecycleCategory(StrEnum):
+    VOIDED_PHASES = "voided_phases"
+    VOIDED_ASSIGNMENTS = "voided_assignments"
+    ABSORBED = "absorbed"
+    VOIDED_WPS = "voided_wps"
+    ARCHIVED_STUBS = "archived_stubs"
+
+
+LIFECYCLE_CATEGORY_DEFAULTS: dict[LifecycleCategory, list | dict] = {
+    LifecycleCategory.VOIDED_PHASES: [],
+    LifecycleCategory.VOIDED_ASSIGNMENTS: [],
+    LifecycleCategory.ABSORBED: {},
+    LifecycleCategory.VOIDED_WPS: {},
+    LifecycleCategory.ARCHIVED_STUBS: {},
+}
+
+for _cat in LifecycleCategory:
+    if _cat not in LIFECYCLE_CATEGORY_DEFAULTS:
+        raise AssertionError(
+            f"LifecycleCategory.{_cat.name} missing from LIFECYCLE_CATEGORY_DEFAULTS"
+        )
+del _cat
+
+
+def record_lifecycle_event(
+    planner_dir: Path, key: LifecycleCategory, data: list[str] | dict[str, Any]
+) -> None:
     wp_dir = planner_dir / "work_packages"
     wp_dir.mkdir(parents=True, exist_ok=True)
     registry_path = wp_dir / _REGISTRY_FILENAME
 
     existing: dict[str, Any] = {
-        "voided_phases": [],
-        "voided_assignments": [],
-        "absorbed": {},
-        "voided_wps": {},
+        cat.value: type(LIFECYCLE_CATEGORY_DEFAULTS[cat])() for cat in LifecycleCategory
     }
     if registry_path.exists():
         loaded = read_versioned_json(registry_path, LIFECYCLE_REGISTRY_VERSION)
         if loaded:
             existing = {
-                "voided_phases": loaded.get("voided_phases", []),
-                "voided_assignments": loaded.get("voided_assignments", []),
-                "absorbed": loaded.get("absorbed", {}),
-                "voided_wps": loaded.get("voided_wps", {}),
+                cat.value: loaded.get(cat.value, type(LIFECYCLE_CATEGORY_DEFAULTS[cat])())
+                for cat in LifecycleCategory
             }
         else:
             logger.warning(
@@ -40,14 +62,15 @@ def record_lifecycle_event(planner_dir: Path, key: str, data: list[str] | dict[s
                 hint="file exists but could not be parsed; merging with blank default",
             )
 
+    key_str = str(key)
     if isinstance(data, list):
-        current = existing.get(key, [])
+        current = existing.get(key_str, [])
         merged = list(dict.fromkeys(current + data))
-        existing[key] = merged
+        existing[key_str] = merged
     elif isinstance(data, dict):
-        current = existing.get(key, {})
+        current = existing.get(key_str, {})
         current.update(data)
-        existing[key] = current
+        existing[key_str] = current
 
     write_versioned_json(registry_path, existing, schema_version=LIFECYCLE_REGISTRY_VERSION)
 
@@ -57,10 +80,7 @@ def load_lifecycle_registry(planner_dir: Path) -> dict[str, Any]:
     registry_path = wp_dir / _REGISTRY_FILENAME
 
     defaults: dict[str, Any] = {
-        "voided_phases": [],
-        "voided_assignments": [],
-        "absorbed": {},
-        "voided_wps": {},
+        cat.value: type(LIFECYCLE_CATEGORY_DEFAULTS[cat])() for cat in LifecycleCategory
     }
 
     if registry_path.exists():

@@ -197,6 +197,14 @@ def _check_assignment_completeness(
                 voided_wp_pairs.add((pn, an))
             except ValueError:
                 logger.warning("malformed_voided_wp_id", voided_wp_id=voided_id)
+    archived_stub_pairs: set[tuple[int, int]] = set()
+    if lifecycle_registry and isinstance(lifecycle_registry.get("archived_stubs"), dict):
+        for archived_id in lifecycle_registry["archived_stubs"]:
+            try:
+                pn, an = parse_planner_id(archived_id)[:2]
+                archived_stub_pairs.add((pn, an))
+            except ValueError:
+                logger.warning("malformed_archived_stub_id", archived_stub_id=archived_id)
     for assign_id, assign in assignment_results.items():
         if assign_id in voided_assign_ids:
             continue
@@ -204,6 +212,8 @@ def _check_assignment_completeness(
         if pair in absorbed_pairs:
             continue
         if pair in voided_wp_pairs:
+            continue
+        if pair in archived_stub_pairs:
             continue
         if pair not in wp_pairs:
             findings.append(
@@ -221,10 +231,12 @@ def _check_dep_references(
     lifecycle_registry: dict[str, Any] | None = None,
 ) -> list[ValidationFinding]:
     voided_wp_ids = set((lifecycle_registry or {}).get("voided_wps", {}).keys())
+    archived_stub_ids = set((lifecycle_registry or {}).get("archived_stubs", {}).keys())
+    exempt_wp_ids = voided_wp_ids | archived_stub_ids
     findings: list[ValidationFinding] = []
     for wp_id, wp in wp_results.items():
         for dep in wp.get("depends_on", []):
-            if dep not in wp_results and dep not in voided_wp_ids:
+            if dep not in wp_results and dep not in exempt_wp_ids:
                 findings.append(
                     {
                         "message": f"WP {wp_id} depends on unknown WP {dep}",

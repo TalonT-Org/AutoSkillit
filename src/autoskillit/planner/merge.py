@@ -8,7 +8,7 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import get_logger, write_versioned_json
-from autoskillit.planner.lifecycle import record_lifecycle_event
+from autoskillit.planner.lifecycle import LifecycleCategory, record_lifecycle_event
 from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
     PHASE_RESULT_FILE_RE,
@@ -457,7 +457,7 @@ def merge_refined_assignments(
 
     voided_ids = [a["id"] for a in all_assignments if not a.get("proposed_work_packages")]
     if voided_ids:
-        record_lifecycle_event(Path(planner_dir), "voided_assignments", voided_ids)
+        record_lifecycle_event(Path(planner_dir), LifecycleCategory.VOIDED_ASSIGNMENTS, voided_ids)
 
     output_path = Path(planner_dir) / "refined_assignments.json"
     write_versioned_json(output_path, {"assignments": all_assignments}, schema_version=1)

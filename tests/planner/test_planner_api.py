@@ -62,6 +62,8 @@ def test_planner_all_exports() -> None:
         "load_lifecycle_registry",
         "reconcile_wp_files",
         "record_lifecycle_event",
+        "LifecycleCategory",
+        "LIFECYCLE_CATEGORY_DEFAULTS",
     }
 
 

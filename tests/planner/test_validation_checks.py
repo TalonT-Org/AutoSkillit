@@ -420,7 +420,7 @@ def test_check_assignment_completeness_all_wps_voided(tmp_path: Path) -> None:
 
 def test_validate_plan_with_voided_wps_passes(tmp_path: Path) -> None:
     """Full validate_plan passes when voided WPs are properly registered."""
-    from autoskillit.planner.lifecycle import record_lifecycle_event
+    from autoskillit.planner.lifecycle import LifecycleCategory, record_lifecycle_event
 
     # Create minimal output structure using proper helpers
     phases_dir = tmp_path / "phases"
@@ -441,7 +441,7 @@ def test_validate_plan_with_voided_wps_passes(tmp_path: Path) -> None:
     # Void the second WP
     record_lifecycle_event(
         tmp_path,
-        "voided_wps",
+        LifecycleCategory.VOIDED_WPS,
         {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
     )
     # Delete its result file

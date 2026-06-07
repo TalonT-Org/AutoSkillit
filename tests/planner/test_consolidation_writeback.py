@@ -424,11 +424,15 @@ def test_consolidate_wps_wp_index_in_work_packages(tmp_path: Path) -> None:
 
 def test_lifecycle_registry_includes_voided_wps(tmp_path: Path) -> None:
     """voided_wps key is supported by lifecycle registry read/write."""
-    from autoskillit.planner.lifecycle import load_lifecycle_registry, record_lifecycle_event
+    from autoskillit.planner.lifecycle import (
+        LifecycleCategory,
+        load_lifecycle_registry,
+        record_lifecycle_event,
+    )
 
     record_lifecycle_event(
         tmp_path,
-        "voided_wps",
+        LifecycleCategory.VOIDED_WPS,
         {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
     )
     registry = load_lifecycle_registry(tmp_path)
@@ -452,11 +456,11 @@ def test_consolidate_wps_deletes_voided_wp_result_files(tmp_path: Path) -> None:
     write_json(wp_dir / "P1-A2-WP1_result.json", make_wp_result("P1-A2-WP1"))
 
     # Record voided_wps in lifecycle registry
-    from autoskillit.planner.lifecycle import record_lifecycle_event
+    from autoskillit.planner.lifecycle import LifecycleCategory, record_lifecycle_event
 
     record_lifecycle_event(
         tmp_path,
-        "voided_wps",
+        LifecycleCategory.VOIDED_WPS,
         {"P1-A2-WP1": {"merged_into": "P1-A1-WP1", "reason": "subsumed"}},
     )
 

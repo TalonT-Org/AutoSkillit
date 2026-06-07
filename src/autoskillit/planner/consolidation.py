@@ -12,7 +12,11 @@ import regex as re
 from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner._dag_ops import break_cycles_greedy_fas, filter_self_references
 from autoskillit.planner._sort_utils import _natural_sort_key
-from autoskillit.planner.lifecycle import load_lifecycle_registry, record_lifecycle_event
+from autoskillit.planner.lifecycle import (
+    LifecycleCategory,
+    load_lifecycle_registry,
+    record_lifecycle_event,
+)
 from autoskillit.planner.schema import validate_wp_result
 
 _ASSIGNMENT_RE = re.compile(r"^(P\d+-A\d+)-")
@@ -344,7 +348,7 @@ def consolidate_wps(
                 for absorbed_id in non_primary_sources
                 if absorbed_id in source_to_merged
             }
-            record_lifecycle_event(planner_path, "absorbed", absorbed_data)
+            record_lifecycle_event(planner_path, LifecycleCategory.ABSORBED, absorbed_data)
 
         # Delete voided WP result files
         for voided_id in voided_wp_ids:

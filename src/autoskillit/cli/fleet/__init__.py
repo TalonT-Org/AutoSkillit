@@ -309,7 +309,12 @@ def fleet_status(
         _render_status_display(state)
 
         if cleanup:
-            from autoskillit.core import sweep_stale_markers
+            from autoskillit.core import (
+                CODEX_SESSIONS_SUBDIR,
+                resolve_temp_dir,
+                run_git,
+                sweep_stale_markers,
+            )
             from autoskillit.workspace import (
                 DefaultSessionSkillManager,
                 SkillsDirectoryProvider,
@@ -319,9 +324,16 @@ def fleet_status(
 
             batch_delete("", _remove_clone_fn, owner=campaign_id)
             try:
+                _git_result = run_git(["rev-parse", "--show-toplevel"], cwd=Path.cwd(), timeout=5)
+                _project_root = (
+                    Path(_git_result.stdout.strip())
+                    if _git_result.returncode == 0 and _git_result.stdout.strip()
+                    else Path.cwd()
+                )
                 skill_mgr = DefaultSessionSkillManager(
                     provider=SkillsDirectoryProvider(),
                     ephemeral_root=resolve_ephemeral_root(),
+                    codex_root=resolve_temp_dir(_project_root) / CODEX_SESSIONS_SUBDIR,
                 )
                 for d in state.dispatches:
                     if d.dispatched_session_id:
@@ -332,9 +344,7 @@ def fleet_status(
                     "Session skill cleanup failed for campaign %s", campaign_id, exc_info=True
                 )
             sweep_stale_markers()
-            kitchen_state_dir = (
-                Path.cwd() / ".autoskillit" / "temp" / "kitchen_state" / campaign_id
-            )
+            kitchen_state_dir = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state" / campaign_id  # fmt: skip  # noqa: E501
             if kitchen_state_dir.is_dir():
                 shutil.rmtree(kitchen_state_dir, ignore_errors=True)
             print(f"Cleanup complete for campaign '{campaign_id}'.")

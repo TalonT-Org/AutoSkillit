@@ -490,9 +490,13 @@ class DefaultSessionSkillManager:
         self,
         provider: SkillsDirectoryProvider,
         ephemeral_root: Path,
+        *,
+        codex_root: Path | None = None,
     ) -> None:
         self._provider = provider
         self._root = ephemeral_root
+        self._codex_root = codex_root
+        self._session_roots: dict[str, Path] = {}
         self._skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
 
     def compute_skill_closure(self, skill_name: str) -> frozenset[str]:
@@ -612,7 +616,16 @@ class DefaultSessionSkillManager:
             else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
         )
 
-        session_skills_dir = self._root / session_id
+        effective_root = self._root
+        if (
+            backend is not None
+            and backend.capabilities.session_dir_persistent
+            and self._codex_root is not None
+        ):
+            effective_root = self._codex_root
+        self._session_roots[session_id] = effective_root
+
+        session_skills_dir = effective_root / session_id
         skills_base = session_skills_dir / self._skills_subdir
         skills_base.mkdir(parents=True, exist_ok=True)
 
@@ -750,7 +763,12 @@ class DefaultSessionSkillManager:
             return False
         activated.add(skill_name)
 
-        skill_dir = self._root / session_id / self._skills_subdir / skill_name
+        skill_dir = (
+            self._session_roots.get(session_id, self._root)
+            / session_id
+            / self._skills_subdir
+            / skill_name
+        )
         skill_md = skill_dir / "SKILL.md"
         if not skill_md.exists():
             try:
@@ -791,7 +809,9 @@ class DefaultSessionSkillManager:
 
     def _activate_pack_deps(self, session_id: str, pack_name: str, activated: set[str]) -> None:
         """Activate all session skills whose category matches *pack_name*."""
-        skills_base = self._root / session_id / self._skills_subdir
+        skills_base = (
+            self._session_roots.get(session_id, self._root) / session_id / self._skills_subdir
+        )
         on_disk: set[str] = set()
         if skills_base.is_dir():
             for skill_dir in sorted(skills_base.iterdir()):
@@ -816,10 +836,21 @@ class DefaultSessionSkillManager:
 
         Returns True if the directory was found and removed, False otherwise.
         """
-        session_dir = self._root / session_id
-        if session_dir.is_dir():
-            shutil.rmtree(session_dir, ignore_errors=True)
-            return True
+        effective_root = self._session_roots.pop(session_id, None)
+        if effective_root is not None:
+            session_dir = effective_root / session_id
+            if session_dir.is_dir():
+                shutil.rmtree(session_dir, ignore_errors=True)
+                return True
+            return False
+        for root in (self._root, self._codex_root):
+            if root is None:
+                continue
+            candidate = root / session_id
+            if candidate.is_dir():
+                logger.debug("cleanup_session_fallback", session_id=session_id, root=str(root))
+                shutil.rmtree(candidate, ignore_errors=True)
+                return True
         return False
 
     def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
@@ -829,13 +860,14 @@ class DefaultSessionSkillManager:
         """
         now = time.time()
         removed = 0
-        if not self._root.exists():
-            return 0
-        for entry in self._root.iterdir():
-            if not entry.is_dir():
+        for root in (self._root, self._codex_root):
+            if root is None or not root.exists():
                 continue
-            last_access = entry.stat().st_atime
-            if now - last_access > max_age_seconds:
-                shutil.rmtree(entry, ignore_errors=True)
-                removed += 1
+            for entry in root.iterdir():
+                if not entry.is_dir():
+                    continue
+                last_access = entry.stat().st_atime
+                if now - last_access > max_age_seconds:
+                    shutil.rmtree(entry, ignore_errors=True)
+                    removed += 1
         return removed

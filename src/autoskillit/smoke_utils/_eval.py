@@ -9,6 +9,9 @@ import regex as re
 
 from autoskillit.smoke_utils._helpers import _load_json, try_load_json
 
+VALID_CRITERION_TYPES: frozenset[str] = frozenset({"precision", "recall", "recognition"})
+REQUIRED_CRITERION_KEYS: frozenset[str] = frozenset({"text", "type"})
+
 
 def parse_eval_manifests(
     canary_manifest: str,
@@ -153,14 +156,14 @@ def parse_agent_eval_manifests(
             return {"success": "false", "error": f"Canary {canary_id} has no detection_criteria"}
 
         for i, c in enumerate(criteria):
-            if not isinstance(c, dict) or "type" not in c or "text" not in c:
+            if not isinstance(c, dict) or not REQUIRED_CRITERION_KEYS <= c.keys():
                 return {
                     "success": "false",
                     "error": (
                         f"Canary {canary_id} criterion {i} must have 'text' and 'type' fields"
                     ),
                 }
-            if c["type"] not in ("precision", "recall", "recognition"):
+            if c["type"] not in VALID_CRITERION_TYPES:
                 return {
                     "success": "false",
                     "error": (f"Canary {canary_id} criterion {i} has invalid type '{c['type']}'"),

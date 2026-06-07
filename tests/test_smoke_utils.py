@@ -2422,7 +2422,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 25 public names."""
+    """smoke_utils.__all__ must list all 27 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2449,8 +2449,10 @@ def test_smoke_utils_all_exports_complete() -> None:
         "parse_eval_manifests",
         "patch_pr_token_summary",
         "pre_iteration_cleanup",
+        "REQUIRED_CRITERION_KEYS",
         "select_review_dimensions",
         "try_load_json",
+        "VALID_CRITERION_TYPES",
     }
     assert set(su.__all__) == expected
 

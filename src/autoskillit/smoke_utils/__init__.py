@@ -4,6 +4,8 @@ Known limitation: functions use hardcoded path conventions from the pipeline rec
 """
 
 from autoskillit.smoke_utils._eval import (
+    REQUIRED_CRITERION_KEYS,
+    VALID_CRITERION_TYPES,
     build_agent_eval_context,
     build_eval_context,
     compile_eval_scorecard,
@@ -36,6 +38,8 @@ from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch
 
 __all__ = [
     "LOCAL_ROUND_EXEMPT_VERDICTS",
+    "REQUIRED_CRITERION_KEYS",
+    "VALID_CRITERION_TYPES",
     "aggregate_review_verdict",
     "annotate_pr_diff",
     "build_agent_eval_context",

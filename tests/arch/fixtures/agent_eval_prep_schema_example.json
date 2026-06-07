@@ -1,0 +1,18 @@
+[
+  {
+    "id": "SCHEMA-EXAMPLE-1",
+    "description": "Schema conformance example — detection_criteria uses structured format",
+    "agent_name": "example-agent",
+    "prompt_template": "Evaluate the following diff:\n\n{diff_content}",
+    "prompt_vars": {
+      "diff_content": "--- a/file.py\n+++ b/file.py\n@@ -1 +1 @@\n-old\n+new"
+    },
+    "reference_path": "tests/arch/fixtures/example_reference.patch",
+    "reference_type": "patch",
+    "gap_description": "Schema conformance validation",
+    "detection_criteria": [
+      {"text": "Agent identifies the change from old to new", "type": "recall"},
+      {"text": "Agent does NOT flag unchanged code as problematic", "type": "precision"}
+    ]
+  }
+]

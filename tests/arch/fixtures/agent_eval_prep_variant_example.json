@@ -1,0 +1,8 @@
+[
+  {
+    "id": "baseline",
+    "label": "Baseline variant",
+    "agent_file": "~/.claude/agents/example-baseline.md",
+    "description": "Control variant for schema conformance test"
+  }
+]

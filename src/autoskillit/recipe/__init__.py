@@ -114,6 +114,9 @@ from autoskillit.recipe.rules import rules_clone as _rules_clone  # noqa: E402 F
 from autoskillit.recipe.rules import rules_cmd as _rules_cmd  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_contracts as _rules_contracts  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_criterion_schema_drift as _rules_criterion_schema_drift,  # noqa: F401
+)
+from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_failure_verdict_bypass as _rules_failure_verdict_bypass,
 )
 from autoskillit.recipe.rules import rules_features as _rules_features  # noqa: E402 F401

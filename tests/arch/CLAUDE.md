@@ -27,6 +27,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_backend_translate_model.py` | Architectural test: translate_model called at all terminal --model sites |
 | `test_no_hardcoded_model_ids_in_translation_tests.py` | AST guard: translation tests must not hardcode alias-resolved model IDs in assert comparisons |
 | `test_audit_feature_gates_skill.py` | Structural integrity tests for the audit-feature-gates skill |
+| `test_agent_eval_schema_conformance.py` | Agent-eval canary manifest schema conformance: constant equality, round-trip, negative test |
 | `test_eval_agent_skill.py` | Structural integrity tests for the eval-agent skill |
 | `test_env_symmetry.py` | Architectural invariant: skill and food-truck builders must set the same required base env vars |
 | `test_mcp_env_forward_coverage.py` | Architectural invariant: mcp_env_forward_vars must appear in CmdSpec.env for all cmd-builders |

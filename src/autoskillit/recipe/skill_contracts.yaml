@@ -3163,6 +3163,39 @@ callable_contracts:
       type: string
     - name: ci_conclusion
       type: string
+  autoskillit.smoke_utils.parse_agent_eval_manifests:
+    inputs:
+    - name: canary_manifest
+      type: str
+      required: true
+    - name: variant_manifest
+      type: str
+      required: true
+    - name: output_dir
+      type: str
+      required: true
+  autoskillit.smoke_utils.build_agent_eval_context:
+    inputs:
+    - name: canary_id
+      type: str
+      required: true
+    - name: output_paths_json
+      type: str
+      required: true
+    - name: eval_run_dir
+      type: str
+      required: true
+  autoskillit.smoke_utils.compile_eval_scorecard:
+    inputs:
+    - name: eval_run_dir
+      type: str
+      required: true
+    - name: canary_manifest
+      type: str
+      required: true
+    - name: variant_manifest
+      type: str
+      required: true
 
 tool_output_contracts:
   wait_for_ci:

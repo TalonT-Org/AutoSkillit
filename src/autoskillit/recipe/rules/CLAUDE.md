@@ -26,6 +26,7 @@ See each subdirectory's CLAUDE.md for details.
 | `rules_clone.py` | Clone/push dataflow rules: missing remote URL, local-strategy capture |
 | `rules_cmd.py` | `run_cmd` echo-capture alignment; git remote command detection; bare git rebase without conflict routing detection; path-typed capture non-empty file guard detection; single-quoted shell expansion suppression detection |
 | `rules_contracts.py` | Skill contract completeness rules |
+| `rules_criterion_schema_drift.py` | criterion-schema-drift: bundled manifests must use structured {text, type} detection_criteria |
 | `rules_failure_verdict_bypass.py` | Detects bypass routes from verdict-gated steps reaching success stop terminals |
 | `rules_features.py` | Feature-gated tool/skill reference validation |
 | `rules_flake_loop.py` | Flake-suspected unwinnable loop detection for merge gate cycles |

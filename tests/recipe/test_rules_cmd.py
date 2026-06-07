@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import Severity
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import _make_workflow
 
@@ -546,7 +547,7 @@ def test_run_cmd_path_capture_without_guard_flagged():
     codes = [f.rule for f in findings]
     assert "run-cmd-path-capture-requires-nonempty-guard" in codes
     finding = next(f for f in findings if f.rule == "run-cmd-path-capture-requires-nonempty-guard")
-    assert finding.severity.value == "warning"
+    assert finding.severity == Severity.WARNING
 
 
 def test_run_cmd_path_capture_with_guard_passes():
@@ -617,7 +618,7 @@ def test_single_quote_expansion_rule_fires_on_dollar_paren():
     codes = [f.rule for f in findings]
     assert "run-cmd-single-quote-expansion" in codes
     finding = next(f for f in findings if f.rule == "run-cmd-single-quote-expansion")
-    assert finding.severity.value == "error"
+    assert finding.severity == Severity.ERROR
     assert "step_a" in finding.step_name
     assert "$(date +%s)" in finding.message
 

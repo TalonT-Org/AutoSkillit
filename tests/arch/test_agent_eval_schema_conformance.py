@@ -79,3 +79,10 @@ def test_invalid_criterion_type_rejected_per_constant(tmp_path: Path):
     )
     assert result["success"] == "false"
     assert "invalid type" in result["error"]
+
+
+def test_semantic_rule_constant_matches_canonical():
+    """Local _REQUIRED_CRITERION_KEYS in semantic rule matches canonical constant."""
+    from autoskillit.recipe.rules.rules_criterion_schema_drift import _REQUIRED_CRITERION_KEYS
+
+    assert _REQUIRED_CRITERION_KEYS == REQUIRED_CRITERION_KEYS

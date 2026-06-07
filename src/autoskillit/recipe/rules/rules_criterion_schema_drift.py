@@ -15,10 +15,10 @@ from pathlib import Path
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
-from autoskillit.smoke_utils import REQUIRED_CRITERION_KEYS
 
 _TARGET_CALLABLE = "parse_agent_eval_manifests"
 _MANIFEST_ARG = "canary_manifest"
+_REQUIRED_CRITERION_KEYS = frozenset({"text", "type"})
 
 
 def _is_criterion_drift(criteria: object) -> bool:
@@ -27,7 +27,7 @@ def _is_criterion_drift(criteria: object) -> bool:
     for entry in criteria:
         if not isinstance(entry, dict):
             return True
-        if not REQUIRED_CRITERION_KEYS <= entry.keys():
+        if not _REQUIRED_CRITERION_KEYS <= entry.keys():
             return True
     return False
 

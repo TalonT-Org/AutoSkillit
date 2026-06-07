@@ -307,7 +307,7 @@
     "create_impl_worktree": {
       "tool": "run_cmd",
       "with": {
-        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh 'impl-${{ context.issue_number }}-$(date +%Y%m%d-%H%M%S)' '{{AUTOSKILLIT_TEMP}}'",
+        "cmd": "bash {{AUTOSKILLIT_SCRIPTS}}/create_impl_worktree.sh \"impl-${{ context.issue_number }}-$(date +%Y%m%d-%H%M%S)\" \"{{AUTOSKILLIT_TEMP}}\"",
         "cwd": "${{ context.work_dir }}",
         "step_name": "create_impl_worktree"
       },

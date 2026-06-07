@@ -23,6 +23,18 @@ CODEX_MCP_TOOL_TIMEOUT_FLOOR: float = 14364.0
 
 CODEX_MCP_STARTUP_TIMEOUT_SEC: float = 30.0
 
+# Per-tool response size budget for Codex MCP tools. Sufficient for current
+# `open_kitchen` response sizes with 2x headroom.
+CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = 50_000
+
+# Keys that must be present in the autoskillit MCP server entry for the Codex
+# backend. Validated against the entry dict actually written by
+# `ensure_codex_mcp_registered` via the arch test
+# `test_required_keys_coverage` in `tests/execution/backends/test_codex_config.py`.
+CODEX_MCP_REQUIRED_KEYS: frozenset[str] = frozenset(
+    {"command", "env_vars", "startup_timeout_sec", "tool_timeout_sec"}
+)
+
 logger = get_logger()
 
 
@@ -219,7 +231,32 @@ def _is_autoskillit_registered(
         return False
     if entry.get("startup_timeout_sec") != CODEX_MCP_STARTUP_TIMEOUT_SEC:
         return False
+    if config.get("tool_output_token_limit", 0) < CODEX_TOOL_OUTPUT_TOKEN_LIMIT:
+        return False
     return True
+
+
+def _ensure_top_level_key(path: Path, *, key: str, value: int) -> None:
+    """Insert `key = value` at the top of a TOML file if not already present.
+
+    `safe_upsert_section` only writes `[section]` blocks; it cannot write bare
+    top-level scalars. This helper handles the bare-scalar case for the
+    corrupt-file path where the entire config needs text-level edits.
+    """
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    pattern = _re.compile(rf"^\s*{_re.escape(key)}\s*=", _re.MULTILINE)
+    if pattern.search(existing):
+        return
+    line = f"{key} = {value}\n"
+    lines = existing.splitlines(keepends=True)
+    insert_at = 0
+    for i, ln in enumerate(lines):
+        if ln.lstrip().startswith("["):
+            insert_at = i
+            break
+        insert_at = i + 1
+    new_lines = lines[:insert_at] + [line] + lines[insert_at:]
+    atomic_write(path, "".join(new_lines))
 
 
 def ensure_codex_mcp_registered(
@@ -252,6 +289,11 @@ def ensure_codex_mcp_registered(
     if result.is_corrupt:
         section_text = _serialize_mcp_autoskillit_section(entry)
         safe_upsert_section(config_path, "[mcp_servers.autoskillit]", section_text)
+        _ensure_top_level_key(
+            config_path,
+            key="tool_output_token_limit",
+            value=CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+        )
         return True
     else:
         config = result.data
@@ -262,5 +304,6 @@ def ensure_codex_mcp_registered(
         ):
             return False
         config.setdefault("mcp_servers", {})["autoskillit"] = entry
+        config.setdefault("tool_output_token_limit", CODEX_TOOL_OUTPUT_TOKEN_LIMIT)
         _write_codex_config(config_path, config, source=result)
         return True

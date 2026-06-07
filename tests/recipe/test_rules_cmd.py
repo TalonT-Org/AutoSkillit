@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import Severity
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import _make_workflow
 
@@ -546,7 +547,7 @@ def test_run_cmd_path_capture_without_guard_flagged():
     codes = [f.rule for f in findings]
     assert "run-cmd-path-capture-requires-nonempty-guard" in codes
     finding = next(f for f in findings if f.rule == "run-cmd-path-capture-requires-nonempty-guard")
-    assert finding.severity.value == "warning"
+    assert finding.severity == Severity.WARNING
 
 
 def test_run_cmd_path_capture_with_guard_passes():
@@ -595,3 +596,103 @@ def test_run_cmd_path_capture_bracket_guard_passes():
     )
     findings = run_semantic_rules(recipe)
     assert all(f.rule != "run-cmd-path-capture-requires-nonempty-guard" for f in findings)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# run-cmd-single-quote-expansion
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_single_quote_expansion_rule_fires_on_dollar_paren():
+    """run_cmd with $(...) inside single quotes → ERROR finding."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "bash script.sh 'arg-$(date +%s)'"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    codes = [f.rule for f in findings]
+    assert "run-cmd-single-quote-expansion" in codes
+    finding = next(f for f in findings if f.rule == "run-cmd-single-quote-expansion")
+    assert finding.severity == Severity.ERROR
+    assert "step_a" in finding.step_name
+    assert "$(date +%s)" in finding.message
+
+
+def test_single_quote_expansion_rule_passes_on_double_quoted_expansion():
+    """run_cmd with $(...) inside double quotes → no finding (expansion works)."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": 'bash script.sh "arg-$(date +%s)"'},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-single-quote-expansion" for f in findings)
+
+
+def test_single_quote_expansion_rule_passes_on_unquoted_expansion():
+    """run_cmd with $(...) unquoted → no finding (expansion works)."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "bash script.sh arg-$(date +%s)"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-single-quote-expansion" for f in findings)
+
+
+def test_single_quote_expansion_rule_passes_on_plain_single_quotes():
+    """run_cmd with single quotes but no expansion → no finding."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "echo 'hello world'"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-single-quote-expansion" for f in findings)
+
+
+def test_single_quote_expansion_rule_passes_on_recipe_ingredient_syntax():
+    """Recipe ${{...}} ingredient syntax inside single quotes is fine."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "echo '${{ context.foo }}'"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-single-quote-expansion" for f in findings)
+
+
+def test_single_quote_expansion_rule_passes_on_top_level_assignment():
+    """run_cmd with top-level $(...) (not inside single quotes) → no finding."""
+    recipe = _make_recipe(
+        {
+            "step_a": {
+                "tool": "run_cmd",
+                "with": {"cmd": "REMOTE=$(git remote get-url upstream)"},
+                "on_success": "END",
+            }
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    assert all(f.rule != "run-cmd-single-quote-expansion" for f in findings)

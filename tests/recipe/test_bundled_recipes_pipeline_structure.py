@@ -1134,3 +1134,40 @@ class TestWorktreeCreationAtOrchestratorLevel:
         assert "context.worktree_path" in cwd, (
             f"implement step cwd must reference context.worktree_path, got {cwd!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Recipe cmd quoting — bundled recipes must not have shell expansion
+# inside single-quoted regions (run-cmd-single-quote-expansion rule).
+# ---------------------------------------------------------------------------
+
+
+class TestNoSingleQuotedShellExpansionInBundledRecipes:
+    """All bundled recipes must avoid shell expansion inside single quotes."""
+
+    @pytest.fixture(scope="class")
+    def recipes(self):
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        recipes_dir = builtin_recipes_dir()
+        return {
+            yaml_path.name: load_recipe(yaml_path)
+            for yaml_path in sorted(recipes_dir.glob("*.yaml"))
+        }
+
+    def test_no_run_cmd_step_uses_single_quoted_expansion(self, recipes) -> None:
+        from autoskillit.recipe.rules.rules_cmd import _SINGLE_QUOTE_EXPANSION_RE
+
+        offenders: list[tuple[str, str, str]] = []
+        for recipe_name, recipe in recipes.items():
+            for step_name, step in recipe.steps.items():
+                if step.tool != "run_cmd":
+                    continue
+                cmd = (step.with_args or {}).get("cmd", "")
+                if not isinstance(cmd, str):
+                    continue
+                for m in _SINGLE_QUOTE_EXPANSION_RE.finditer(cmd):
+                    offenders.append((recipe_name, step_name, m.group()))
+        assert not offenders, (
+            f"Bundled recipes have $(...) command substitution inside single quotes: {offenders}"
+        )

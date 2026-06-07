@@ -13,6 +13,7 @@ from autoskillit.core import ReadResult, Severity
 from autoskillit.execution.backends._codex_config import (
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+    CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
 )
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -38,7 +39,8 @@ class TestCheckMcpServerRegisteredCodexBranch:
                             "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
                             "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                         }
-                    }
+                    },
+                    "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
                 }
             ),
         )

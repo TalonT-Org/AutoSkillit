@@ -17,6 +17,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
+    CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
@@ -1045,7 +1046,7 @@ async def run_skill(
                             "session_dir_rmtree_failed", path=str(_cleanup_dir), exc_info=True
                         )
                 else:
-                    _codex_fallback = tool_ctx.temp_dir / "codex-sessions" / _sid
+                    _codex_fallback = tool_ctx.temp_dir / CODEX_SESSIONS_SUBDIR / _sid
                     if _codex_fallback.is_dir():
                         try:
                             shutil.rmtree(_codex_fallback)

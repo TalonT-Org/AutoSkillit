@@ -20,6 +20,12 @@ _RAW_RESULT_FIELDS = {"stdout", "stderr", "exit_code"}
 # re-discovering a path that should have been captured by an upstream step.
 _FIND_HEURISTIC_RE = re.compile(r"\bfind\b.+\|\s*sort\b.+\|\s*(tail|head)\b")
 
+# Matches a single-quoted region containing $() — bash treats $() as literal text
+# inside single quotes, so command substitution silently fails. We only flag $( )
+# because ${{ ... }} is recipe ingredient syntax (not bash) and backticks are often
+# intentional literal text in commit messages or doc strings.
+_SINGLE_QUOTE_EXPANSION_RE = re.compile(r"'[^']*\$\([^']*'")
+
 
 @semantic_rule(
     name="run-cmd-emit-alignment",
@@ -321,6 +327,39 @@ def _check_run_cmd_path_capture_nonempty_guard(ctx: ValidationContext) -> list[R
                         "does not contain a 'test -s' or '[ -s' non-empty "
                         'file guard. Add `test -s "$FILE" &&` before the '
                         "echo statement to prevent emitting a 0-byte file path."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="run-cmd-single-quote-expansion",
+    description=(
+        "run_cmd step contains $(...) command substitution inside a single-quoted "
+        "region where bash will treat it as literal text. Use double quotes."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_run_cmd_single_quote_expansion(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for name, step in ctx.recipe.steps.items():
+        if step.tool != "run_cmd":
+            continue
+        cmd = (step.with_args or {}).get("cmd", "")
+        if not isinstance(cmd, str):
+            continue
+        for m in _SINGLE_QUOTE_EXPANSION_RE.finditer(cmd):
+            findings.append(
+                RuleFinding(
+                    rule="run-cmd-single-quote-expansion",
+                    severity=Severity.ERROR,
+                    step_name=name,
+                    message=(
+                        f"Step '{name}' has $(...) command substitution inside single "
+                        f"quotes: {m.group()!r}. Single quotes suppress shell expansion — "
+                        "the $(...) is treated as literal text. Use double quotes or "
+                        "leave unquoted."
                     ),
                 )
             )

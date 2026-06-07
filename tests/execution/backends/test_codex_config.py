@@ -8,8 +8,10 @@ import pytest
 from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR
 from autoskillit.execution.backends import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_config import (
+    CODEX_MCP_REQUIRED_KEYS,
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+    CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
     _is_autoskillit_registered,
     _read_codex_config,
     _serialize_toml,
@@ -226,7 +228,8 @@ class TestIsAutoskillitRegistered:
                     "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
-            }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
 
@@ -239,7 +242,8 @@ class TestIsAutoskillitRegistered:
                     "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
-            }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
 
@@ -253,7 +257,8 @@ class TestIsAutoskillitRegistered:
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                     "extra_field": 42,
                 }
-            }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
 
@@ -299,6 +304,35 @@ class TestIsAutoskillitRegistered:
                 f"Should reject config missing {var}"
             )
 
+    def test_missing_tool_output_token_limit_returns_false(self):
+        """Must return False when top-level tool_output_token_limit is missing."""
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                }
+            }
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
+
+    def test_low_tool_output_token_limit_returns_false(self):
+        """Must return False when tool_output_token_limit is below the floor."""
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT - 1,
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
+
 
 class TestEnsureCodexMcpRegistered:
     def test_first_call_returns_true_and_writes(self, tmp_path):
@@ -311,6 +345,17 @@ class TestEnsureCodexMcpRegistered:
         assert "AUTOSKILLIT_HEADLESS" in entry["env_vars"]
         assert entry["startup_timeout_sec"] == CODEX_MCP_STARTUP_TIMEOUT_SEC
         assert entry["tool_timeout_sec"] == CODEX_MCP_TOOL_TIMEOUT_FLOOR
+
+    def test_tool_output_token_limit_written_to_top_level(self, tmp_path):
+        """ensure_codex_mcp_registered must set tool_output_token_limit at the top level."""
+        p = tmp_path / "config.toml"
+        ensure_codex_mcp_registered(config_path=p)
+        config = _read_codex_config(p).data
+        assert "tool_output_token_limit" in config
+        assert config["tool_output_token_limit"] >= 50_000
+        assert "tool_output_token_limit" not in config["mcp_servers"]["autoskillit"], (
+            "tool_output_token_limit is a Codex global key, not a server-entry key"
+        )
 
     def test_headless_auto_gate_true_includes_auto_gate_env(self, tmp_path):
         p = tmp_path / "config.toml"
@@ -468,6 +513,35 @@ class TestDestructiveOverwritePrevention:
         assert result.data["mcp_servers"]["other"]["command"] == "other"
         assert "autoskillit" in result.data["mcp_servers"]
 
+    def test_corrupt_file_path_writes_tool_output_token_limit(self, tmp_path):
+        """The corrupt-file path must also insert tool_output_token_limit at the top level."""
+        p = tmp_path / "config.toml"
+        p.write_text("not valid toml = =", encoding="utf-8")
+        ensure_codex_mcp_registered(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert f"tool_output_token_limit = {CODEX_TOOL_OUTPUT_TOKEN_LIMIT}" in content
+        assert "[mcp_servers.autoskillit]" in content
+
+
+class TestRequiredKeysCoverage:
+    """The CODEX_MCP_REQUIRED_KEYS spec must match the keys actually written by
+    ensure_codex_mcp_registered. This is an arch test — every entry key must
+    be declared in the spec, and every spec key must be present in the entry."""
+
+    def test_required_keys_coverage(self, tmp_path):
+        p = tmp_path / "config.toml"
+        ensure_codex_mcp_registered(config_path=p)
+        config = _read_codex_config(p).data
+        entry = config["mcp_servers"]["autoskillit"]
+        actual_keys = set(entry.keys())
+        assert actual_keys >= CODEX_MCP_REQUIRED_KEYS, (
+            f"Entry is missing required keys: {CODEX_MCP_REQUIRED_KEYS - actual_keys}"
+        )
+        assert actual_keys == CODEX_MCP_REQUIRED_KEYS, (
+            f"Entry has keys not declared in CODEX_MCP_REQUIRED_KEYS: "
+            f"{actual_keys - CODEX_MCP_REQUIRED_KEYS}"
+        )
+
 
 class TestConfigEnvBoundary:
     def test_codex_mcp_config_contains_no_static_private_vars(self, tmp_path):
@@ -505,7 +579,8 @@ class TestConfigEnvBoundary:
                     "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
-            }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
 
@@ -656,7 +731,8 @@ class TestIsRegisteredRequiresAllForwardVars:
                     "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
                     "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                 }
-            }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
         }
 
     def test_all_forward_vars_present_is_registered(self) -> None:

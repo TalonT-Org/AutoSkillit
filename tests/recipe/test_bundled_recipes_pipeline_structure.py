@@ -1156,13 +1156,8 @@ class TestNoSingleQuotedShellExpansionInBundledRecipes:
         }
 
     def test_no_run_cmd_step_uses_single_quoted_expansion(self, recipes) -> None:
-        import re as _re
+        from autoskillit.recipe.rules.rules_cmd import _SINGLE_QUOTE_EXPANSION_RE
 
-        # Match $(...) inside single quotes — bash suppresses command substitution
-        # in single quotes, so the substitution would silently fail. We don't flag
-        # ${{ ... }} (recipe ingredient syntax) or backticks (often intentional
-        # literal text in commit messages / doc strings).
-        single_quote_expansion_re = _re.compile(r"'[^']*\$\([^']*'")
         offenders: list[tuple[str, str, str]] = []
         for recipe_name, recipe in recipes.items():
             for step_name, step in recipe.steps.items():
@@ -1171,7 +1166,7 @@ class TestNoSingleQuotedShellExpansionInBundledRecipes:
                 cmd = (step.with_args or {}).get("cmd", "")
                 if not isinstance(cmd, str):
                     continue
-                for m in single_quote_expansion_re.finditer(cmd):
+                for m in _SINGLE_QUOTE_EXPANSION_RE.finditer(cmd):
                     offenders.append((recipe_name, step_name, m.group()))
         assert not offenders, (
             f"Bundled recipes have $(...) command substitution inside single quotes: {offenders}"

@@ -280,3 +280,15 @@ class TestCodexFixturesParseWithBackend:
 class TestCodexFixtureVersionTracking:
     def test_min_version_matches_backend_capability(self) -> None:
         assert CODEX_FIXTURE_MIN_VERSION == CodexBackend().capabilities.min_version
+
+
+class TestCodexCanaryEventTypes:
+    @pytest.mark.parametrize("name", ALL_FIXTURE_NAMES, ids=ALL_FIXTURE_NAMES)
+    def test_no_unknown_event_types(self, name: str) -> None:
+        events = _load_events(name)
+        for event in events:
+            raw_type = event.get("type", "")
+            result = CodexEventType.from_ndjson(raw_type)
+            assert result is not CodexEventType.UNKNOWN, (
+                f"Fixture {name!r} contains unknown event type: {raw_type!r}"
+            )

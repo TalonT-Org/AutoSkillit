@@ -383,8 +383,8 @@ def _check_callable_verdict_requires_on_result(ctx: ValidationContext) -> list[R
                     message=(
                         f"Step '{step_name}' calls '{callable_path}' which declares "
                         f"output '{output.name}' with allowed_values "
-                        f"{output.allowed_values!r}, but the step uses scalar "
-                        f"on_success/on_failure routing. Replace with an on_result "
+                        f"{output.allowed_values!r}, but the step is missing "
+                        f"on_result routing. Replace with an on_result "
                         f"block that dispatches on each allowed value."
                     ),
                 )

@@ -143,6 +143,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_claude_result_parser.py` | Tests for ClaudeResultParser |
 | `test_claude_session_locator.py` | Tests for ClaudeSessionLocator |
 | `test_claude_stream_parser.py` | Tests for ClaudeStreamParser |
+| `test_backend_contract_base.py` | `BackendContractBase` ABC mixin — `make_backend()` abstract factory + `_require_capability()` skip-gate |
+| `test_backend_contract_base_meta.py` | Verification tests for the `BackendContractBase` mixin acceptance criteria |
 | `test_backend_registry.py` | Tests for backend registry |
 | `test_codex_backend.py` | Tests for CodexFlags, CodexBackend protocol conformance, headless/resume command builders, skill session cmd config adapter, food truck cmd builder |
 | `test_codex_interactive.py` | Parametrized structural validation of CodexBackend.build_interactive_cmd — resume variants, model, system_prompt suppression, add_dirs |

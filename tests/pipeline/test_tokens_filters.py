@@ -592,5 +592,4 @@ def test_step_completeness_normalizes_expected_step_names(tmp_path):
     log = DefaultTokenLog()
     log.load_from_log_dir(tmp_path, kitchen_id_filter="k1")
     missing = log.check_step_completeness(["plan-30", "review"])
-    assert "plan" not in missing
-    assert "review" in missing
+    assert missing == ["review"]

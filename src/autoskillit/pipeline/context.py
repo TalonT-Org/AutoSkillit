@@ -91,6 +91,24 @@ class ToolContext:
     github_client:        GitHubFetcher — fetches GitHub issue content
     ci_watcher:           CIWatcher — watches GitHub Actions CI runs
     merge_queue_watcher:  MergeQueueWatcher — polls GitHub merge queue for a PR
+    github_api_log:       GitHubApiLog — session-scoped GitHub API request accumulator.
+    background:           BackgroundSupervisor — supervised async background task execution.
+                          Auto-initialized to DefaultBackgroundSupervisor when None.
+    output_pattern_resolver: OutputPatternResolver — resolves expected output patterns from
+                          a skill command.
+    write_expected_resolver: WriteExpectedResolver — resolves write-expectation metadata
+                          from skill contracts.
+    read_only_resolver:   ReadOnlyResolver — resolves whether a skill is read-only from
+                          skill contracts.
+    input_contract_resolver: InputContractResolver — resolves input contract specs from
+                          skill contracts.
+    completion_required_resolver: CompletionRequiredResolver — resolves whether a skill
+                          requires the completion marker.
+    quota_refresh_task:   QuotaRefreshTask — cancellable handle for the kitchen-scoped
+                          quota refresh background task.
+    fleet_lock:           FleetLock — semaphore-style guard for concurrent fleet dispatch.
+    build_protected_campaign_ids: CampaignProtector — resolves campaign IDs exempt from
+                          log retention purge.
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
     skill_resolver:       SkillResolver — resolves skill names to source tier
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry

@@ -1,5 +1,5 @@
 """Composition Root: make_context() is the only location that legally instantiates
-all 23 service contracts simultaneously.
+all 24 service contracts simultaneously.
 
 server/ is IL-3 — the only layer permitted to import from both IL-1 (pipeline/)
 and IL-2 (recipe/, migration/) at the same time. This module is the canonical
@@ -170,7 +170,7 @@ def make_context(
     fleet_lock: FleetLock | None = None,
     project_dir: Path | None = None,
 ) -> ToolContext:
-    """Create a fully-wired ToolContext with all 23 service fields populated.
+    """Create a fully-wired ToolContext with all 24 service fields populated.
 
     This is the Composition Root — the only location that should instantiate
     all concrete service implementations simultaneously. Uses a three-step

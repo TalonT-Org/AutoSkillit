@@ -1,8 +1,8 @@
 """Tests that CLAUDE.md and AGENTS.md contain required critical rules.
 
 Encodes behavioral contracts derived from friction analysis (issue #250):
-- FRICT-1B-3: set_project_path initialization rule in §3.3
-- FRICT-3A-1: pre-commit critical rule in §3.1
+- FRICT-1B-3: set_project_path initialization rule in AGENTS.md §3.3
+- FRICT-3A-1: pre-commit critical rule in AGENTS.md §3.1 (shared, not Claude-only)
 - FRICT-5-2: session diagnostics hyphen path convention documented
 - FRICT-7-1: session diagnostics under a dedicated heading, not trailing paragraph
 """
@@ -30,30 +30,43 @@ def agents_md() -> str:
     return path.read_text()
 
 
-def test_claude_md_critical_rules_require_precommit(claude_md: str) -> None:
-    """Code and Implementation section must include a pre-commit critical rule.
+def _section_bounds(lines: list[str], heading_substring: str) -> tuple[int | None, int | None]:
+    """Locate a `##` or `###` section in the AGENTS.md tree.
 
-    Pre-commit hook failures caused ~15 friction events across 15 sessions.
-    Elevating it to a Critical Rule prevents repeat loops (FRICT-3A-1).
+    AGENTS.md uses a `### **3.1. Code and Implementation**` sub-heading rather than a
+    `##` section, so the parser accepts both. Returns (start, end) line indexes.
     """
-    lines = claude_md.splitlines()
     section_start = None
     section_end = None
     for i, line in enumerate(lines):
-        if line.startswith("## ") and "Code and Implementation" in line:
+        if (line.startswith("## ") or line.startswith("### ")) and heading_substring in line:
             section_start = i
-        elif section_start is not None and line.startswith("## "):
+        elif section_start is not None and (line.startswith("## ") or line.startswith("### ")):
             section_end = i
             break
+    return section_start, section_end
 
-    assert section_start is not None, "Code and Implementation section not found in CLAUDE.md"
+
+def test_agents_md_critical_rules_require_precommit(agents_md: str) -> None:
+    """AGENTS.md Code and Implementation section must include a pre-commit critical rule.
+
+    Pre-commit hook failures caused ~15 friction events across 15 sessions.
+    Elevating it to a Critical Rule prevents repeat loops (FRICT-3A-1).
+    The rule is shared (backend-neutral), so it lives in AGENTS.md, not physical
+    CLAUDE.md — CLAUDE.md inherits it through the `@AGENTS.md` include.
+    """
+    lines = agents_md.splitlines()
+    section_start, section_end = _section_bounds(lines, "Code and Implementation")
+    assert section_start is not None, (
+        "AGENTS.md must contain a Code and Implementation section/heading (FRICT-3A-1)"
+    )
     section_text = (
         "\n".join(lines[section_start:section_end])
         if section_end
         else "\n".join(lines[section_start:])
     )
     assert "pre-commit run --all-files" in section_text, (
-        "CLAUDE.md Code and Implementation section must include a Critical Rule "
+        "AGENTS.md Code and Implementation section must include a Critical Rule "
         "requiring 'pre-commit run --all-files' before committing (FRICT-3A-1)."
     )
 

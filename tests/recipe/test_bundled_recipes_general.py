@@ -586,7 +586,7 @@ def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
     """No bundled recipe YAML should reference temp/ without .autoskillit/ prefix.
 
     Bare temp/ references are incorrect; all project-local temp output must be
-    rooted under .autoskillit/temp/ per CLAUDE.md §3.2.
+    rooted under .autoskillit/temp/ per AGENTS.md §3.2.
     """
     import re
 
@@ -601,7 +601,7 @@ def test_no_bare_temp_paths_in_bundled_recipe_notes() -> None:
 
     assert not violations, (
         "Bundled recipe YAML files contain bare temp/ path references.\n"
-        "Replace with .autoskillit/temp/ per CLAUDE.md §3.2:\n" + "\n".join(violations)
+        "Replace with .autoskillit/temp/ per AGENTS.md §3.2:\n" + "\n".join(violations)
     )
 
 

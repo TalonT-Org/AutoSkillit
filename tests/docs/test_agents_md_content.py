@@ -65,23 +65,12 @@ class TestAgentsMdSharedCategories:
 # ── No Claude-specific content ────────────────────────────────────────
 
 FORBIDDEN_TERMS: list[tuple[str, str]] = [
-    ("pre-commit run", "Pre-commit hooks section"),
-    ("task test-all", "Task runner command"),
-    ("task test-check", "Task runner command"),
-    ("task test-filtered", "Task runner command"),
-    ("task install-worktree", "Task runner command"),
-    ("task sync-versions", "Task runner command"),
-    ("HOOK_REGISTRY", "Hook rename rules"),
-    ("RETIRED_SCRIPT_BASENAMES", "Hook rename rules"),
-    ("RETIRED_SKILL_NAMES", "Skill rename rules"),
     ("Pyright", "LSP section"),
     ("goToDefinition", "LSP operations table"),
     ("findReferences", "LSP operations table"),
     ("Skill tool", "Skill invocations section"),
     ("/skill-name", "Skill invocations section"),
-    ("grep_pattern_lint_guard", "Grep tool ERE syntax rule"),
     ("CLAUDE_CODE_EXIT_AFTER_STOP_DELAY", "Claude Code env var"),
-    ("autoskillit init", "Worktree init prohibition"),
     ("Claude Code session UUID", "Section 5 session diagnostics sentence"),
 ]
 
@@ -97,6 +86,39 @@ class TestAgentsMdNoClaude:
     ) -> None:
         assert term not in agents_md, (
             f"Claude-specific term leaked into AGENTS.md: '{term}' (from {source})"
+        )
+
+
+# ── Universal project-rule markers (11 rule families owned by AGENTS.md) ──
+
+UNIVERSAL_PROJECT_RULE_MARKERS: list[tuple[str, str]] = [
+    ("Version Bumps", "version-bumps"),
+    ("pre-commit run --all-files", "pre-commit"),
+    ("HOOK_REGISTRY", "hook-renames"),
+    ("RETIRED_SCRIPT_BASENAMES", "hook-renames"),
+    ("RETIRED_SKILL_NAMES", "skill-renames"),
+    ("ripgrep", "search-tool-ere"),
+    ("autoskillit init", "worktree-init-prohibition"),
+    ("Naming convention", "def-vs-spec-suffixes"),
+    ("git commit --amend", "commit-discipline"),
+    ("task test-all", "task-runner-tests"),
+    ("task test-check", "task-runner-tests"),
+    ("task test-filtered", "task-runner-tests"),
+]
+
+
+class TestAgentsMdUniversalProjectRules:
+    @pytest.mark.parametrize(
+        ("marker", "rule_family"),
+        UNIVERSAL_PROJECT_RULE_MARKERS,
+        ids=[m[1] for m in UNIVERSAL_PROJECT_RULE_MARKERS],
+    )
+    def test_agents_md_owns_universal_rule(
+        self, agents_md: str, marker: str, rule_family: str
+    ) -> None:
+        assert marker in agents_md, (
+            f"Universal project rule '{rule_family}' missing from AGENTS.md: "
+            f"expected marker '{marker}' to be present"
         )
 
 

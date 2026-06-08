@@ -23,6 +23,7 @@ def _write_session_cwd(
     tu_data: dict,
     cwd: str,
     timestamp: str = "2026-03-07T00:00:00+00:00",
+    kitchen_id: str = "",
 ) -> None:
     """Write a session with a cwd field in the sessions.jsonl index."""
     session_dir = log_root / "sessions" / dir_name
@@ -34,6 +35,8 @@ def _write_session_cwd(
         "session_id": dir_name,
         "cwd": cwd,
     }
+    if kitchen_id:
+        index_entry["kitchen_id"] = kitchen_id
     with (log_root / "sessions.jsonl").open("a") as f:
         f.write(json.dumps(index_entry) + "\n")
 
@@ -100,6 +103,53 @@ class TestLoadFromLogDirCwdFilter:
         log = DefaultTokenLog()
         count = log.load_from_log_dir(tmp_path)
         assert count == 2
+
+    def test_cwd_filter_excludes_worktree_sessions(self, tmp_path):
+        """Documents the known limitation: cwd_filter is exact-match only.
+
+        Worktree sessions have cwd == <clone>/.worktrees/<branch> which never
+        matches the clone-root cwd. This test establishes the baseline so any
+        future change to cwd_filter semantics surfaces as a regression here.
+        """
+        clone_root = str(tmp_path / "clone")
+        worktree_path = str(tmp_path / "clone" / ".worktrees" / "fix-42")
+        _write_session_cwd(tmp_path, "sess-clone", self._PLAN_DATA, clone_root)
+        _write_session_cwd(tmp_path, "sess-worktree", self._IMPL_DATA, worktree_path)
+
+        log = DefaultTokenLog()
+        count = log.load_from_log_dir(tmp_path, cwd_filter=clone_root)
+        assert count == 1, "cwd_filter must be exact-match — worktree session is excluded"
+        steps = log.get_report()
+        assert len(steps) == 1
+        assert steps[0]["step_name"] == "plan"
+
+    def test_kitchen_id_filter_includes_worktree_sessions(self, tmp_path):
+        """kitchen_id_filter is cross-cwd safe: it includes worktree sessions.
+
+        All sessions in a kitchen share the same kitchen_id regardless of cwd,
+        so filtering by kitchen_id is structurally immune to worktree path
+        differences. This is the immunity fix that backs the
+        `patch-token-summary-requires-scoping-key` rule.
+        """
+        clone_root = str(tmp_path / "clone")
+        worktree_path = str(tmp_path / "clone" / ".worktrees" / "fix-42")
+        _write_session_cwd(
+            tmp_path, "sess-clone", self._PLAN_DATA, clone_root, kitchen_id="kitchen-abc"
+        )
+        _write_session_cwd(
+            tmp_path,
+            "sess-worktree",
+            self._IMPL_DATA,
+            worktree_path,
+            kitchen_id="kitchen-abc",
+        )
+
+        log = DefaultTokenLog()
+        count = log.load_from_log_dir(tmp_path, kitchen_id_filter="kitchen-abc")
+        assert count == 2
+        steps = log.get_report()
+        step_names = {s["step_name"] for s in steps}
+        assert step_names == {"plan", "implement"}
 
 
 # ---------------------------------------------------------------------------
@@ -488,3 +538,58 @@ def test_token_load_dispatch_id_filter(tmp_path):
     log2 = DefaultTokenLog()
     n2 = log2.load_from_log_dir(tmp_path, dispatch_id_filter="")
     assert n2 == 3
+
+
+# --- check_step_completeness tests ---
+
+
+def test_step_completeness_assertion_detects_missing_steps(tmp_path):
+    """check_step_completeness returns expected steps absent from the loaded set.
+
+    Establishes that the completeness gate works for the most basic case: a
+    recipe declared [plan, review, implement] but only plan and review sessions
+    are present. The missing step ("implement") must be returned.
+    """
+    _write_session_cwd(tmp_path, "sess-plan", _TOKEN_DATA, "/clone", kitchen_id="k1")
+    _write_session_cwd(
+        tmp_path,
+        "sess-review",
+        {**_TOKEN_DATA, "session_label": "review"},
+        "/clone",
+        kitchen_id="k1",
+    )
+    # Deliberately no "implement" session.
+
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path, kitchen_id_filter="k1")
+    missing = log.check_step_completeness(["plan", "review", "implement"])
+    assert missing == ["implement"]
+
+
+def test_step_completeness_returns_empty_when_all_present(tmp_path):
+    """check_step_completeness returns [] when every expected step is loaded."""
+    _write_session_cwd(tmp_path, "sess-plan", _TOKEN_DATA, "/clone", kitchen_id="k1")
+    _write_session_cwd(
+        tmp_path,
+        "sess-impl",
+        {**_TOKEN_DATA, "session_label": "implement"},
+        "/clone",
+        kitchen_id="k1",
+    )
+
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path, kitchen_id_filter="k1")
+    missing = log.check_step_completeness(["plan", "implement"])
+    assert missing == []
+
+
+def test_step_completeness_normalizes_expected_step_names(tmp_path):
+    """check_step_completeness canonicalizes expected steps before comparison."""
+    _write_session_cwd(tmp_path, "sess-plan-30", _TOKEN_DATA, "/clone", kitchen_id="k1")
+    # The session has session_label="plan" (no suffix) but the entry is loaded
+    # under canonical key "plan". Pass a suffixed expected step and verify it
+    # normalizes.
+    log = DefaultTokenLog()
+    log.load_from_log_dir(tmp_path, kitchen_id_filter="k1")
+    missing = log.check_step_completeness(["plan-30", "review"])
+    assert missing == ["review"]

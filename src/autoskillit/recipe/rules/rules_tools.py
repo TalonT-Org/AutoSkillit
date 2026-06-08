@@ -436,48 +436,109 @@ def _check_release_issue_requires_disposition(ctx: ValidationContext) -> list[Ru
 
 
 @semantic_rule(
-    name="patch-token-summary-requires-order-id",
+    name="patch-token-summary-requires-scoping-key",
     description=(
         "run_python step calling patch_pr_token_summary should pass order_id "
-        "for correct multi-clone scoping"
+        "or kitchen_id for correct multi-clone scoping"
     ),
     severity=Severity.WARNING,
 )
-def _check_patch_token_summary_order_id(ctx: ValidationContext) -> list[RuleFinding]:
-    """Warn when a patch_pr_token_summary step does not pass order_id.
+def _check_patch_token_summary_scoping_key(ctx: ValidationContext) -> list[RuleFinding]:
+    """Warn when a patch_pr_token_summary step does not pass a scoping key.
 
-    patch_pr_token_summary uses order_id as the canonical scoping key for fleet
-    sessions where a single order spans multiple clone directories. Without it,
-    the function falls back to cwd_filter which misses sessions from other clones.
-
-    The env-based auto-propagation (AUTOSKILLIT_DISPATCH_ID) handles runtime
-    scoping for fleet sessions automatically; this rule serves as a documentation
-    guard alerting recipe authors to the scoping requirement when building
-    non-fleet callers or when explicit order_id is needed.
+    patch_pr_token_summary accepts either order_id (canonical scoping for fleet
+    sessions spanning multiple clone directories) or kitchen_id (cross-cwd
+    fallback for standalone recipes run inside a kitchen). The function
+    self-resolves kitchen_id from the on-disk hook config when callers don't
+    pass it, so a missing key is non-fatal — this rule serves as a documentation
+    guard alerting recipe authors to the scoping requirement.
     """
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
-        if step.tool != "run_python":
+        is_run_python = step.tool == "run_python" or step.python is not None
+        if not is_run_python:
             continue
-        callable_val = step.with_args.get("callable", "")
+        callable_val = (
+            step.with_args.get("callable", "")
+            if step.tool == "run_python"
+            else (step.python or "")
+        )
         if "patch_pr_token_summary" not in str(callable_val):
             continue
-        if "order_id" not in step.with_args:
+        if "order_id" not in step.with_args and "kitchen_id" not in step.with_args:
             findings.append(
                 RuleFinding(
-                    rule="patch-token-summary-requires-order-id",
+                    rule="patch-token-summary-requires-scoping-key",
                     severity=Severity.WARNING,
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': patch_pr_token_summary call is missing "
-                        f"'order_id' in with args. "
-                        "Fleet sessions auto-propagate via AUTOSKILLIT_DISPATCH_ID, "
-                        "but non-fleet callers need explicit order_id for cross-clone "
-                        "scoping. Add 'order_id: \"${{{{ context.order_id }}}}\"' or "
-                        "similar to suppress this warning."
+                        f"a scoping key (order_id or kitchen_id) in with args. "
+                        "Without one, the function falls back to cwd_filter which "
+                        "silently excludes worktree-scoped sessions. "
+                        "Add 'order_id' or 'kitchen_id' to suppress this warning."
                     ),
                 )
             )
+    return findings
+
+
+@semantic_rule(
+    name="mixed-cwd-without-scoping-key",
+    description=(
+        "patch_token_summary steps must declare order_id or kitchen_id when the "
+        "recipe runs run_skill steps from multiple distinct cwd values — the "
+        "default cwd_filter silently excludes worktree-scoped sessions."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_mixed_cwd_without_scoping_key(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire when a recipe mixes cwd values but lacks a scoping key on patch_token_summary.
+
+    A recipe whose run_skill steps target multiple distinct cwd expressions
+    (e.g., some use context.work_dir and some use context.worktree_path)
+    produces a heterogeneous set of cwd values in the sessions.jsonl index.
+    A patch_token_summary step without order_id or kitchen_id will then fall
+    back to cwd_filter, silently excluding the worktree-scoped sessions.
+    """
+    findings: list[RuleFinding] = []
+    cwd_values: set[str] = set()
+    for step in ctx.recipe.steps.values():
+        if step.tool != "run_skill":
+            continue
+        cwd_val = (step.with_args or {}).get("cwd", "").strip()
+        if cwd_val:
+            cwd_values.add(cwd_val)
+    if len(cwd_values) <= 1:
+        return findings
+
+    for step_name, step in ctx.recipe.steps.items():
+        is_run_python = step.tool == "run_python" or step.python is not None
+        if not is_run_python:
+            continue
+        callable_val = (
+            step.with_args.get("callable", "")
+            if step.tool == "run_python"
+            else (step.python or "")
+        )
+        if "patch_pr_token_summary" not in str(callable_val):
+            continue
+        if "order_id" in step.with_args or "kitchen_id" in step.with_args:
+            continue
+        findings.append(
+            RuleFinding(
+                rule="mixed-cwd-without-scoping-key",
+                severity=Severity.WARNING,
+                step_name=step_name,
+                message=(
+                    f"step '{step_name}': recipe mixes {len(cwd_values)} distinct cwd "
+                    f"values across run_skill steps, but patch_pr_token_summary has no "
+                    f"scoping key (order_id or kitchen_id). cwd_filter will silently "
+                    f"exclude worktree-scoped sessions. Add order_id or kitchen_id to "
+                    f"with_args."
+                ),
+            )
+        )
     return findings
 
 

@@ -142,6 +142,12 @@ def _iter_session_log_entries(
                 continue
 
         if cwd_filter and idx.get("cwd") != cwd_filter:
+            logger.debug(
+                "session_log_skip_cwd_mismatch",
+                dir_name=idx.get("dir_name", ""),
+                entry_cwd=idx.get("cwd", ""),
+                cwd_filter=cwd_filter,
+            )
             continue
 
         if kitchen_id_filter:

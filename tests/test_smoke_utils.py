@@ -31,6 +31,18 @@ from tests.infra._token_summary_helpers import _resolve_session_label
 pytestmark = [pytest.mark.medium]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_kitchen_marker(monkeypatch):
+    """Prevent read_kitchen_id_from_marker from reading real hook config files.
+
+    Tests that need kitchen_id pass it explicitly — the marker is never consulted.
+    """
+    monkeypatch.setattr(
+        "autoskillit.core.read_kitchen_id_from_marker",
+        lambda base=None: "",
+    )
+
+
 # T_SU1
 def test_returns_false_when_bug_report_missing(tmp_path: Path) -> None:
     """Returns {"non_empty": "false"} when bug_report.json does not exist."""
@@ -816,6 +828,130 @@ def test_pts_reads_order_id_from_dispatch_env(
     result = patch_pr_token_summary(PR_URL, cwd="", log_dir=str(tmp_path))
     assert result["success"] == "true"
     assert result["sessions_loaded"] == "2"
+
+
+# T_PTS_K1
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_kitchen_id_fallback_includes_worktree_sessions(
+    mock_run, _mock_sleep, tmp_path: Path
+) -> None:
+    """patch_pr_token_summary falls back to kitchen_id filter when no order_id.
+
+    When the caller passes only a cwd that matches the clone root and the
+    sessions were logged with mixed cwds (clone root + worktree) under a
+    single kitchen_id, the kitchen_id fallback includes the worktree session
+    that cwd_filter would silently drop.
+    """
+    clone_root = "/clone/test"
+    worktree_path = "/clone/test/.worktrees/fix-42"
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s-plan",
+                "cwd": clone_root,
+                "kitchen_id": "kitchen-xyz",
+                "step_name": "plan",
+                "input_tokens": 1000,
+            },
+            {
+                "dir_name": "s-review",
+                "cwd": clone_root,
+                "kitchen_id": "kitchen-xyz",
+                "step_name": "review",
+                "input_tokens": 800,
+            },
+            {
+                "dir_name": "s-implement",
+                "cwd": worktree_path,
+                "kitchen_id": "kitchen-xyz",
+                "step_name": "implement",
+                "input_tokens": 2000,
+            },
+        ],
+    )
+    mock_run.side_effect = _make_gh_mock(get_body="## Summary\nBody")
+    result = patch_pr_token_summary(
+        PR_URL, cwd=clone_root, kitchen_id="kitchen-xyz", log_dir=str(tmp_path)
+    )
+    assert result["success"] == "true"
+    assert result["sessions_loaded"] == "3"
+    patch_call = mock_run.call_args_list[-1]
+    body_arg = [a for a in patch_call[0][0] if a.startswith("body=")][0]
+    assert "plan" in body_arg
+    assert "review" in body_arg
+    assert "implement" in body_arg
+
+
+# T_PTS_K2
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_cwd_filter_silently_excludes_worktree_sessions(
+    mock_run, _mock_sleep, tmp_path: Path
+) -> None:
+    """When caller uses cwd_filter directly, worktree sessions are silently dropped.
+
+    Documents the bug that the kitchen_id fallback fixes: with only cwd_filter
+    available, sessions from the worktree subdir are excluded and the implement
+    step is missing from the PR body.
+    """
+    clone_root = "/clone/test"
+    worktree_path = "/clone/test/.worktrees/fix-42"
+    _write_test_sessions(
+        tmp_path,
+        [
+            {
+                "dir_name": "s-plan",
+                "cwd": clone_root,
+                "step_name": "plan",
+                "input_tokens": 1000,
+            },
+            {
+                "dir_name": "s-implement",
+                "cwd": worktree_path,
+                "step_name": "implement",
+                "input_tokens": 2000,
+            },
+        ],
+    )
+    mock_run.side_effect = _make_gh_mock(get_body="## Summary\nBody")
+    result = patch_pr_token_summary(PR_URL, cwd=clone_root, log_dir=str(tmp_path))
+    assert result["success"] == "true"
+    assert result["sessions_loaded"] == "1"
+    patch_call = mock_run.call_args_list[-1]
+    body_arg = [a for a in patch_call[0][0] if a.startswith("body=")][0]
+    assert "plan" in body_arg
+    assert "implement" not in body_arg, "implement should be silently dropped by cwd_filter"
+
+
+# T_PTS_K3
+@patch("time.sleep")
+@patch("subprocess.run")
+def test_pts_expected_steps_surfaces_missing_in_pr_body(
+    mock_run, _mock_sleep, tmp_path: Path
+) -> None:
+    """When expected_steps is provided, missing steps appear in the PR body."""
+    cwd = "/clone/test"
+    _write_test_sessions(
+        tmp_path,
+        [
+            {"dir_name": "s-plan", "cwd": cwd, "step_name": "plan", "input_tokens": 1000},
+            {"dir_name": "s-review", "cwd": cwd, "step_name": "review", "input_tokens": 800},
+        ],
+    )
+    mock_run.side_effect = _make_gh_mock(get_body="## Summary\nBody")
+    result = patch_pr_token_summary(
+        PR_URL,
+        cwd=cwd,
+        log_dir=str(tmp_path),
+        expected_steps=["plan", "review", "implement"],
+    )
+    assert result["success"] == "true"
+    patch_call = mock_run.call_args_list[-1]
+    body_arg = [a for a in patch_call[0][0] if a.startswith("body=")][0]
+    assert "completeness warning" in body_arg
+    assert "implement" in body_arg
 
 
 # ---------------------------------------------------------------------------

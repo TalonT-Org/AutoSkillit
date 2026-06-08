@@ -860,6 +860,7 @@ def test_flush_co_writes_provenance_record(tmp_path, monkeypatch):
     _flush(
         tmp_path,
         cwd=str(project),
+        project_dir=str(project),
         caller_session_id="caller-abc",
         kitchen_id="kitchen-1",
         dispatch_id="dispatch-1",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -33,11 +34,14 @@ def patch_pr_token_summary(
     log_dir: str = "",
     timeout: int = 60,
     token_log: TokenLog | None = None,
+    kitchen_id: str = "",
+    expected_steps: Sequence[str] | None = None,
 ) -> dict[str, str]:
     import os  # noqa: PLC0415
     import subprocess  # noqa: PLC0415
     import time  # noqa: PLC0415
 
+    from autoskillit.core import read_kitchen_id_from_marker  # noqa: PLC0415
     from autoskillit.execution import resolve_log_dir  # noqa: PLC0415
     from autoskillit.pipeline import DefaultTokenLog, TelemetryFormatter  # noqa: PLC0415
 
@@ -48,22 +52,37 @@ def patch_pr_token_summary(
     owner, repo, pr_number = m.group(1), m.group(2), m.group(3)
 
     effective_order_id = order_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
+    effective_kitchen_id = kitchen_id or read_kitchen_id_from_marker()
 
     log_root = resolve_log_dir(log_dir)
     effective_token_log = token_log if token_log is not None else DefaultTokenLog()
     if effective_order_id:
         count = effective_token_log.load_from_log_dir(log_root, order_id_filter=effective_order_id)
+    elif effective_kitchen_id:
+        count = effective_token_log.load_from_log_dir(
+            log_root, kitchen_id_filter=effective_kitchen_id
+        )
     else:
         count = effective_token_log.load_from_log_dir(log_root, cwd_filter=cwd)
 
     if count == 0:
         return {"success": "false", "error": "No sessions found", "sessions_loaded": "0"}
 
-    scope_kwargs: dict[str, str] = {"order_id": effective_order_id} if effective_order_id else {}
+    scope_kwargs: dict[str, str] = {}
+    if effective_order_id:
+        scope_kwargs["order_id"] = effective_order_id
     steps = effective_token_log.get_report(**scope_kwargs)
     total = effective_token_log.compute_total(**scope_kwargs)
     model_totals = effective_token_log.compute_model_totals(**scope_kwargs)
     combined = TelemetryFormatter.format_pr_telemetry_block(steps, total, model_totals)
+
+    if expected_steps:
+        missing = effective_token_log.check_step_completeness(expected_steps, **scope_kwargs)
+        if missing:
+            combined += "\n\n### Token summary completeness warning\n\n"
+            combined += "Expected steps missing from loaded session logs:\n\n"
+            for step in missing:
+                combined += f"- `{step}`\n"
 
     try:
         read_result = subprocess.run(

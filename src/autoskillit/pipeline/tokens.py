@@ -10,6 +10,7 @@ with a defensive copy getter.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -305,11 +306,20 @@ class DefaultTokenLog:
         ):
             try:
                 data = json.loads(tu_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.debug(
+                    "token_load_skip_unreadable",
+                    path=str(tu_path),
+                    error=str(exc),
+                )
                 continue
 
             raw_step = data.get("session_label") or data.get("step_name", "")
             if not raw_step:
+                logger.debug(
+                    "token_load_skip_missing_step_name",
+                    path=str(tu_path),
+                )
                 continue
 
             step_name = canonical_step_name(raw_step)
@@ -352,3 +362,29 @@ class DefaultTokenLog:
             count += 1
 
         return count
+
+    def check_step_completeness(
+        self,
+        expected_steps: Sequence[str],
+        *,
+        order_id: str = "",
+    ) -> list[str]:
+        """Return expected_steps absent from the in-memory entry set.
+
+        Compares the canonical names of currently-loaded TokenEntry rows against
+        the recipe-declared step list. Useful for surfacing silent data loss:
+        if a step was scheduled but its session log was filtered out, it appears
+        in the returned missing list.
+
+        If order_id is non-empty, only entries for that order are considered.
+
+        Does not raise — the caller decides how to surface missing steps
+        (log warning, include a row in the PR body, etc.).
+        """
+        loaded: set[str] = set()
+        for (oid, step), _e in self._entries.items():
+            if order_id and oid != order_id:
+                continue
+            loaded.add(step)
+        normalized_expected = {canonical_step_name(s) for s in expected_steps if s}
+        return sorted(normalized_expected - loaded)

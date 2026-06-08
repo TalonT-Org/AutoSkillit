@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -84,6 +85,13 @@ class TokenLog(Protocol):
         order_id_filter: str = "",
         dispatch_id_filter: str = "",
     ) -> int: ...
+
+    def check_step_completeness(
+        self,
+        expected_steps: Sequence[str],
+        *,
+        order_id: str = "",
+    ) -> list[str]: ...
 
 
 @runtime_checkable

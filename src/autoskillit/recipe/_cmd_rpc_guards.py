@@ -85,7 +85,7 @@ def check_dropped_ci_loop(
         count = 0
     count += 1
     atomic_write(path, str(count))
-    status = "DROPPED_CI_LIMIT_EXCEEDED" if count > int(max_drops) else "DROPPED_CI_OK"
+    status = "DROPPED_CI_LIMIT_EXCEEDED" if count >= int(max_drops) else "DROPPED_CI_OK"
     return {"status": status, "count": str(count)}
 
 

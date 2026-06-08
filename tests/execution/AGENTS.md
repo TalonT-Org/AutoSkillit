@@ -153,3 +153,4 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_result_parser.py` | Tests for CodexResultParser |
 | `test_codex_config.py` | Tests for TOML read/write primitives, _is_autoskillit_registered, and ensure_codex_mcp_registered |
 | `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |
+| `test_cmd_builder_regression.py` | CmdBuilder regression: frozen-instance, type contracts, origin defaults, empty-binary |

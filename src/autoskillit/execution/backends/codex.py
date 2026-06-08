@@ -412,7 +412,7 @@ def _generate_agent_tomls(session_dir: Path) -> int:
     out_dir.mkdir(exist_ok=True)
     count = 0
     for md_path in sorted(agents_src.glob("*.md")):
-        if md_path.name == "CLAUDE.md":
+        if md_path.name in ("CLAUDE.md", "AGENTS.md"):
             continue
         content = md_path.read_text(encoding="utf-8")
         if not content.startswith("---"):

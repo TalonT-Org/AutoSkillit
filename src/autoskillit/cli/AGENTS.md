@@ -1,0 +1,37 @@
+# cli/
+
+IL-3 CLI layer — entry points for all user-facing commands.
+Sub-packages: doctor/ (see doctor/AGENTS.md), fleet/ (see fleet/AGENTS.md),
+session/ (see session/AGENTS.md), ui/ (see ui/AGENTS.md), update/ (see update/AGENTS.md).
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `app.py` | CLI entry: `serve`, `init`, `config`, `skills`, `recipes`, `doctor`, `update`, etc. |
+| `_restart.py` | `perform_restart()` → `NoReturn`: sets `SKIP_UPDATE_CHECK`, calls `os.execv` |
+| `_hooks.py` | `PreToolUse` hook registration helpers |
+| `_hooks_codex.py` | Re-export shim for Codex hook generation (canonical impl in `execution/backends/_codex_hooks.py`) |
+| `_init_helpers.py` | `autoskillit init` implementation helpers |
+| `_installed_plugins.py` | `InstalledPluginsFile` — canonical accessor for `installed_plugins.json` |
+| `_install_info.py` | `InstallInfo`, `InstallType`, `detect_install()`, `comparison_branch()`, `dismissal_window()`, `upgrade_command()` |
+| `_marketplace.py` | Plugin install/upgrade |
+| `_mcp_names.py` | MCP prefix detection |
+| `_onboarding.py` | First-run detection + guided menu |
+| `_prompts.py` | Prompt builder re-export hub + shared helpers (`_MCP_RETRY_INSTRUCTION`, `_read_full_sous_chef`) |
+| `_prompts_campaign.py` | L3 campaign dispatcher prompt builder |
+| `_prompts_orchestrator.py` | L1/L2 cook session prompt builder + ingredients table + greetings |
+| `_prompts_kitchen.py` | Open-kitchen and fleet-dispatch prompt builders |
+| `_preview.py` | Shared pre-launch preview: flow diagram + ingredient table display |
+| `_serve_guard.py` | Async signal-guarded MCP server bootstrap (extracted from `app.py`) |
+| `_features.py` | `features` subcommand group: list/status commands for feature gate inspection |
+| `_workspace.py` | Workspace clean helpers |
+| `_sessions.py` | `sessions analyze` CLI subcommand for cross-session DFG visualization |
+| `_validate.py` | `validate registries` subcommand for validating user-override registry files |
+
+## Architecture Notes
+
+`app.py` is the Click application root; all sub-packages register their subcommand groups
+against the root Click group. `_serve_guard.py` was extracted from `app.py` to isolate
+the asyncio/signal machinery for testability.

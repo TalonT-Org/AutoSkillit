@@ -205,7 +205,7 @@ scripts/check_contract_freshness.py:
   - infra/
 scripts/check_doc_counts.py:
   - infra/
-scripts/check_sub_claude_md.py:
+scripts/check_sub_agents_md.py:
   - docs/
 scripts/check_tool_annotations.py:
   - arch/
@@ -242,6 +242,9 @@ src/autoskillit/core/__init__.pyi:
   - contracts/
 
 tests/**/CLAUDE.md: []
+tests/**/AGENTS.md: []
+src/**/AGENTS.md: []
+src/**/CLAUDE.md: []
 
 # Eval framework files
 .autoskillit/recipes/eval/*.yaml:

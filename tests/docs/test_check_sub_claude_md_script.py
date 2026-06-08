@@ -1,4 +1,4 @@
-"""Unit and integration tests for scripts/check_sub_claude_md.py."""
+"""Unit and integration tests for scripts/check_sub_agents_md.py."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ import pytest
 pytestmark = pytest.mark.medium
 
 REPO_ROOT = Path(__file__).parent.parent.parent
-_SCRIPT = REPO_ROOT / "scripts" / "check_sub_claude_md.py"
+_SCRIPT = REPO_ROOT / "scripts" / "check_sub_agents_md.py"
 
 
 @pytest.fixture(scope="module")
 def script_mod():
-    spec = importlib.util.spec_from_file_location("check_sub_claude_md", _SCRIPT)
+    spec = importlib.util.spec_from_file_location("check_sub_agents_md", _SCRIPT)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod
@@ -78,10 +78,10 @@ class TestCheckCoverage:
         result = script_mod.check_coverage(tmp_path, ["mypackage/CLAUDE.md"])
         assert result == ["mypackage/CLAUDE.md: missing `__init__.py` in file table"]
 
-    def test_check_coverage_flags_missing_claude_md(self, script_mod, tmp_path):
-        """Returns failure when expected CLAUDE.md path does not exist on disk."""
-        result = script_mod.check_coverage(tmp_path, ["nonexistent/CLAUDE.md"])
-        assert result == ["nonexistent/CLAUDE.md: CLAUDE.md not found"]
+    def test_check_coverage_flags_missing_agents_md(self, script_mod, tmp_path):
+        """Returns failure when expected AGENTS.md path does not exist on disk."""
+        result = script_mod.check_coverage(tmp_path, ["nonexistent/AGENTS.md"])
+        assert result == ["nonexistent/AGENTS.md: AGENTS.md not found"]
 
     def test_check_coverage_multiple_missing_files(self, script_mod, tmp_path):
         """Returns one failure entry per missing file."""

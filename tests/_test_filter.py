@@ -126,7 +126,7 @@ _INFRA_CI_TRIGGER_FILES: frozenset[str] = frozenset(
 
 # Conditions that trigger inclusion of the docs/ directory.
 _DOCS_TRIGGER_PREFIX: str = "docs/"
-_DOCS_TRIGGER_FILES: frozenset[str] = frozenset({"README.md", "CLAUDE.md"})
+_DOCS_TRIGGER_FILES: frozenset[str] = frozenset({"README.md", "CLAUDE.md", "AGENTS.md"})
 
 # Tier-1 unconditional always-run for conservative mode: arch+contracts only.
 # Decoupled from ALWAYS_RUN_AGGRESSIVE so future additions to that constant

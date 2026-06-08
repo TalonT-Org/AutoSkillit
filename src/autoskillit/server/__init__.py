@@ -1,6 +1,6 @@
 """MCP server for orchestrating automated skill-driven workflows.
 
-Tool gating uses two independent layers — see server/CLAUDE.md "Tool Gating
+Tool gating uses two independent layers — see server/AGENTS.md "Tool Gating
 Architecture" section for the full matrix.
 
 Tag-Visibility (FastMCP): kitchen-tagged tools are hidden at startup via

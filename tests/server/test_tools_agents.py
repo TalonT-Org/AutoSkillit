@@ -30,12 +30,14 @@ def test_bundled_agent_files_exist():
         files = [
             p
             for p in agents_dir.glob("*.md")
-            if p.name != "CLAUDE.md" and p.stem.startswith(pack.split("-")[0])
+            if p.name not in ("CLAUDE.md", "AGENTS.md") and p.stem.startswith(pack.split("-")[0])
         ]
         assert files, f"No agent files for pack {pack}"
 
     # plan-review pack specifically should have the 3 expected agents
-    plan_review_files = {p.stem for p in agents_dir.glob("plan-*.md") if p.name != "CLAUDE.md"}
+    plan_review_files = {
+        p.stem for p in agents_dir.glob("plan-*.md") if p.name not in ("CLAUDE.md", "AGENTS.md")
+    }
     expected_agents = {
         "plan-foundation-auditor",
         "plan-interface-mapper",
@@ -232,7 +234,7 @@ def test_agent_definition_frontmatter_valid():
 
     agents_dir = pkg_root() / "agents"
     for md_file in sorted(agents_dir.glob("*.md")):
-        if md_file.name == "CLAUDE.md":
+        if md_file.name in ("CLAUDE.md", "AGENTS.md"):
             continue
         content = md_file.read_text()
         # Split YAML frontmatter from markdown body
@@ -266,7 +268,7 @@ def test_no_retired_agent_name_has_a_live_file():
 
     agents_dir = pkg_root() / "agents"
     for md_file in agents_dir.glob("*.md"):
-        if md_file.name == "CLAUDE.md":
+        if md_file.name in ("CLAUDE.md", "AGENTS.md"):
             continue
         assert md_file.stem not in RETIRED_AGENT_NAMES, (
             f"Retired agent name '{md_file.stem}' still has a live file: {md_file}"
@@ -510,7 +512,7 @@ def test_all_agents_have_structured_output():
     agents_dir = pkg_root() / "agents"
     failures: list[str] = []
     for md_file in sorted(agents_dir.glob("*.md")):
-        if md_file.name == "CLAUDE.md":
+        if md_file.name in ("CLAUDE.md", "AGENTS.md"):
             continue
         if md_file.stem in AGENTS_WITHOUT_STRUCTURED_OUTPUT:
             continue
@@ -543,7 +545,7 @@ def test_agent_tool_list_covers_body_references():
     agents_dir = pkg_root() / "agents"
     failures: list[str] = []
     for md_file in sorted(agents_dir.glob("*.md")):
-        if md_file.name == "CLAUDE.md":
+        if md_file.name in ("CLAUDE.md", "AGENTS.md"):
             continue
         content = md_file.read_text()
         parts = content.split("---", 2)

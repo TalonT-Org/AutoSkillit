@@ -10,25 +10,25 @@ pytestmark = pytest.mark.small
 TESTS_ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED_SUB_CLAUDE_MDS = [
-    "arch/CLAUDE.md",
-    "assets/CLAUDE.md",
-    "cli/CLAUDE.md",
-    "config/CLAUDE.md",
-    "contracts/CLAUDE.md",
-    "core/CLAUDE.md",
-    "docs/CLAUDE.md",
-    "execution/CLAUDE.md",
-    "fleet/CLAUDE.md",
-    "hooks/CLAUDE.md",
-    "infra/CLAUDE.md",
-    "migration/CLAUDE.md",
-    "pipeline/CLAUDE.md",
-    "planner/CLAUDE.md",
-    "recipe/CLAUDE.md",
-    "server/CLAUDE.md",
-    "skills/CLAUDE.md",
-    "skills_extended/CLAUDE.md",
-    "workspace/CLAUDE.md",
+    "arch/AGENTS.md",
+    "assets/AGENTS.md",
+    "cli/AGENTS.md",
+    "config/AGENTS.md",
+    "contracts/AGENTS.md",
+    "core/AGENTS.md",
+    "docs/AGENTS.md",
+    "execution/AGENTS.md",
+    "fleet/AGENTS.md",
+    "hooks/AGENTS.md",
+    "infra/AGENTS.md",
+    "migration/AGENTS.md",
+    "pipeline/AGENTS.md",
+    "planner/AGENTS.md",
+    "recipe/AGENTS.md",
+    "server/AGENTS.md",
+    "skills/AGENTS.md",
+    "skills_extended/AGENTS.md",
+    "workspace/AGENTS.md",
 ]
 
 
@@ -92,32 +92,32 @@ def test_tests_sub_claude_md_no_main_claude_md_duplication():
 
 
 def test_top_level_tests_claude_md_references_all_subdirs():
-    """The top-level tests/CLAUDE.md references each subdirectory's CLAUDE.md."""
-    top_claude_md = TESTS_ROOT / "CLAUDE.md"
-    if not top_claude_md.is_file():
-        pytest.fail("tests/CLAUDE.md does not exist")
-    content = top_claude_md.read_text()
+    """The top-level tests/AGENTS.md references each subdirectory's AGENTS.md."""
+    top_agents_md = TESTS_ROOT / "AGENTS.md"
+    if not top_agents_md.is_file():
+        pytest.fail("tests/AGENTS.md does not exist")
+    content = top_agents_md.read_text()
     failures = []
     for rel_path in EXPECTED_SUB_CLAUDE_MDS:
         subdir = rel_path.split("/")[0]
-        marker = f"see {subdir}/CLAUDE.md"
+        marker = f"see {subdir}/AGENTS.md"
         if marker not in content:
-            failures.append(f"tests/CLAUDE.md missing reference: '{marker}'")
-    assert not failures, "Top-level tree missing sub-CLAUDE.md references:\n" + "\n".join(failures)
+            failures.append(f"tests/AGENTS.md missing reference: '{marker}'")
+    assert not failures, "Top-level tree missing sub-AGENTS.md references:\n" + "\n".join(failures)
 
 
 def test_top_level_tests_claude_md_no_per_file_subdir_listings():
-    """The top-level tests/CLAUDE.md must not contain per-file listings for subdirectories."""
-    top_claude_md = TESTS_ROOT / "CLAUDE.md"
-    if not top_claude_md.is_file():
-        pytest.fail("tests/CLAUDE.md does not exist")
-    content = top_claude_md.read_text()
+    """The top-level tests/AGENTS.md must not contain per-file listings for subdirectories."""
+    top_agents_md = TESTS_ROOT / "AGENTS.md"
+    if not top_agents_md.is_file():
+        pytest.fail("tests/AGENTS.md does not exist")
+    content = top_agents_md.read_text()
     # Per-file listings look like: │   ├── test_*.py lines inside subdir blocks.
     # After decomposition, subdirectory blocks should be single lines only.
     # Check that no test_*.py filename appears indented under a subdirectory marker.
     indented_test_file_re = re.compile(r"│\s+[├└]── test_\w+\.py")
     matches = indented_test_file_re.findall(content)
     assert not matches, (
-        f"tests/CLAUDE.md still contains {len(matches)} per-file listings "
-        f"for subdirectories (should be in sub-CLAUDE.md files): {matches[:5]}"
+        f"tests/AGENTS.md still contains {len(matches)} per-file listings "
+        f"for subdirectories (should be in sub-AGENTS.md files): {matches[:5]}"
     )

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GUARDS_CLAUDE = REPO_ROOT / "src/autoskillit/hooks/guards/CLAUDE.md"
+GUARDS_AGENTS = REPO_ROOT / "src/autoskillit/hooks/guards/AGENTS.md"
 SAFETY_HOOKS = REPO_ROOT / "docs/safety/hooks.md"
 
 RETIRED_GUARD = "leaf_orchestration_guard.py"
@@ -29,11 +29,11 @@ def _extract_section(content: str, heading: str) -> str:
 
 class TestGuardsClaudeMd:
     def test_guards_claude_md_contains_fail_mode_contract_section(self) -> None:
-        content = GUARDS_CLAUDE.read_text()
+        content = GUARDS_AGENTS.read_text()
         assert "### Fail-Mode Contract" in content
 
     def test_guards_claude_md_fail_mode_matrix_lists_three_fail_closed_guards(self) -> None:
-        content = GUARDS_CLAUDE.read_text()
+        content = GUARDS_AGENTS.read_text()
         section = _extract_section(content, "### Fail-Mode Contract")
         for guard in [
             "skill_command_guard.py",
@@ -44,12 +44,12 @@ class TestGuardsClaudeMd:
         assert RETIRED_GUARD not in section
 
     def test_guards_claude_md_documents_design_principle(self) -> None:
-        content = GUARDS_CLAUDE.read_text()
+        content = GUARDS_AGENTS.read_text()
         assert "Garbage-in" in content
         assert "Unknown-tier" in content
 
     def test_old_fail_mode_sentence_replaced(self) -> None:
-        content = GUARDS_CLAUDE.read_text()
+        content = GUARDS_AGENTS.read_text()
         old = (
             "Guards fail-open for malformed input."
             " `skill_command_guard.py` has split error handling"

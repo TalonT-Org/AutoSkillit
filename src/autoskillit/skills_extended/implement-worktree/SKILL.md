@@ -157,8 +157,8 @@ Where practical, delegate test updates to subagents to keep main conversation co
 
 Before running the test suite, confirm the following to prevent avoidable test-fix cycles:
 
-- [ ] **CLAUDE.md architecture section** — if new modules, sub-packages, or files were added,
-  the `## Architecture` section in CLAUDE.md reflects them
+- [ ] **AGENTS.md architecture section** — if new modules, sub-packages, or files were added,
+  the `## Architecture` section in AGENTS.md (or the relevant sub-directory AGENTS.md) reflects them
 - [ ] **Recipe diagrams** — if any recipe YAML file was added or modified, either regenerate
   diagrams (`task diagrams`) or confirm new diagram files are listed in `.gitignore`
 - [ ] **Project-specific registration checks** — if the project maintains a registry of
@@ -166,7 +166,7 @@ Before running the test suite, confirm the following to prevent avoidable test-f
   newly added components are registered. This prevents cascading test failures caused
   by missing registrations rather than implementation bugs.
 - [ ] **Documentation consistency** — if the project maintains architecture documentation
-  or a component count (e.g., in CLAUDE.md, README, or API docs), update it to reflect
+  or a component count (e.g., in AGENTS.md, README, or API docs), update it to reflect
   new components added during this implementation.
 - [ ] **Count-based test assertions** — if tool, skill, or rule counts have changed, update any
   `assert len(...) ==` assertions in the test suite before running `{test_command}`

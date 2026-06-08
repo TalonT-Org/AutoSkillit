@@ -101,17 +101,17 @@ def test_claude_md_def_spec_location_qualified() -> None:
 
 def test_claude_md_mentions_write_guard() -> None:
     main_content = CLAUDE_MD.read_text()
-    guards_claude = CLAUDE_MD.parent / "src" / "autoskillit" / "hooks" / "guards" / "CLAUDE.md"
+    guards_agents = CLAUDE_MD.parent / "src" / "autoskillit" / "hooks" / "guards" / "AGENTS.md"
     assert "write_guard" in main_content or (
-        guards_claude.exists() and "write_guard" in guards_claude.read_text()
+        guards_agents.exists() and "write_guard" in guards_agents.read_text()
     )
 
 
 def test_claude_md_mentions_dispatch_food_truck() -> None:
     main_content = CLAUDE_MD.read_text()
-    tools_claude = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "tools" / "CLAUDE.md"
+    tools_agents = CLAUDE_MD.parent / "src" / "autoskillit" / "server" / "tools" / "AGENTS.md"
     assert "dispatch_food_truck" in main_content or (
-        tools_claude.exists() and "dispatch_food_truck" in tools_claude.read_text()
+        tools_agents.exists() and "dispatch_food_truck" in tools_agents.read_text()
     )
 
 
@@ -124,17 +124,17 @@ def test_agents_md_defines_channel_b() -> None:
     )
 
 
-def test_server_claude_md_has_tool_gating_section() -> None:
-    """server/CLAUDE.md documents the two-layer tool gating architecture."""
-    text = (_SERVER_DIR / "CLAUDE.md").read_text()
+def test_server_agents_md_has_tool_gating_section() -> None:
+    """server/AGENTS.md documents the two-layer tool gating architecture."""
+    text = (_SERVER_DIR / "AGENTS.md").read_text()
     assert "## Tool Gating Architecture" in text
     assert "### Tag-Visibility" in text
     assert "### Application-Gate" in text
 
 
-def test_server_claude_md_gating_matrix_covers_categories() -> None:
-    """server/CLAUDE.md gating matrix includes all five tool categories."""
-    text = (_SERVER_DIR / "CLAUDE.md").read_text()
+def test_server_agents_md_gating_matrix_covers_categories() -> None:
+    """server/AGENTS.md gating matrix includes all five tool categories."""
+    text = (_SERVER_DIR / "AGENTS.md").read_text()
     for category in [
         "Standard kitchen",
         "Fleet tool",

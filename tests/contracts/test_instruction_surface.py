@@ -819,8 +819,8 @@ def test_claude_md_documents_all_source_modules() -> None:
                 missing.append(str(rel))
         else:
             if py_file.name not in content:
-                pkg_claude = py_file.parent / "CLAUDE.md"
-                if not (pkg_claude.exists() and py_file.name in pkg_claude.read_text()):
+                pkg_agents = py_file.parent / "AGENTS.md"
+                if not (pkg_agents.exists() and py_file.name in pkg_agents.read_text()):
                     missing.append(str(rel))
 
     assert not missing, (

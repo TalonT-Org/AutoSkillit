@@ -415,6 +415,7 @@ steps:
       test_stderr: ${{ context.merge_test_stderr }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate'
       work_dir: ${{ context.work_dir }}
+      failed_step: ${{ context.merge_failed_step }}
     capture:
       merge_gate_diagnosis_path: ${{ result.diagnosis_path }}
       merge_gate_ci_conclusion: ${{ result.ci_conclusion }}
@@ -423,6 +424,7 @@ steps:
     optional_context_refs:
     - merge_test_stdout
     - merge_test_stderr
+    - merge_failed_step
     note: >
       Writes a structured diagnosis file from merge gate test output,
       mirroring diagnose-ci format. Routes to fix on both success and
@@ -561,6 +563,7 @@ steps:
       worktree_path: ${{ result.worktree_path }}
       merge_test_stdout: ${{ result.test_stdout }}
       merge_test_stderr: ${{ result.test_stderr }}
+      merge_failed_step: ${{ result.failed_step }}
     on_result:
     - when: result.failed_step == 'dirty_tree'
       route: check_merge_fix_loop

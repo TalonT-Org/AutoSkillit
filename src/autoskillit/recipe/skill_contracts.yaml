@@ -3158,6 +3158,9 @@ callable_contracts:
     - name: output_dir
       type: string
       required: false
+    - name: failed_step
+      type: string
+      required: false
     outputs:
     - name: diagnosis_path
       type: string

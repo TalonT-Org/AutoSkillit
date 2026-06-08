@@ -23,6 +23,14 @@ def _clean_subprocess_env() -> dict[str, str]:
     ``VIRTUAL_ENV`` for venv activation (required when install-worktree
     rebuilds the venv mid-run), and ``PYTHONDONTWRITEBYTECODE`` to match
     the test-suite policy.
+
+    Pins ``PYTHONPATH`` to the parent's ``sys.path`` so the subprocess
+    resolves packages from the same snapshot of site-packages the parent
+    loaded at startup. Without this, concurrent ``uv run`` calls from
+    sibling xdist workers (e.g., ``uv run ruff check`` in
+    test_ci_dev_config) trigger ``uv sync`` which swaps package files
+    mid-run, causing transient ImportError/PackageNotFoundError in the
+    subprocess.
     """
     env: dict[str, str] = {}
     for key in ("PATH", "HOME", "USER", "LANG", "LC_ALL", "VIRTUAL_ENV"):
@@ -34,6 +42,7 @@ def _clean_subprocess_env() -> dict[str, str]:
         if (Path(venv_dir) / "pyvenv.cfg").exists():
             env["VIRTUAL_ENV"] = venv_dir
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONPATH"] = os.pathsep.join(sys.path)
     return env
 
 

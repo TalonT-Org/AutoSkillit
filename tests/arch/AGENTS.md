@@ -115,6 +115,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_skill_search_dir_symmetry.py` | Suppression-delivery symmetry invariants for project-local skill search dirs |
 | `test_doc_fence_filter.py` | Unit and functional tests for `_strip_doc_fenced_blocks` section-aware code fence filter |
 | `test_capability_scanner_fence_immunity.py` | AST regression guard: capability scanners must import and call `_strip_doc_fenced_blocks` |
+| `test_backend_stdlib_boundaries.py` | Stdlib-boundary equality tests: write_guard fallback frozenset ↔ CLAUDE_CODE_CAPABILITIES, session type hook string literals ↔ SessionType enum |
 
 ## Architecture Notes
 

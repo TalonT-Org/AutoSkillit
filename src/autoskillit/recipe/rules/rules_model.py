@@ -33,7 +33,7 @@ def _check_model_empty_on_context_intensive(ctx: ValidationContext) -> list[Rule
             continue
         if "dispatch_items" not in step.with_args:
             continue
-        if step.model and step.model != "":
+        if step.model and step.model.strip():
             continue
         findings.append(
             RuleFinding(

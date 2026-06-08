@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 CODEX_SCHEMA_VERSION: int = 2
+CODEX_FIXTURE_MIN_VERSION: str = "0.130.0"
 
 HAPPY_PATH_SINGLE_TURN: str = "happy_path_single_turn_v0133.ndjson"
 HAPPY_PATH_V0136: str = "happy_path_v0136.ndjson"
@@ -21,6 +22,7 @@ def fixture_path(name: str) -> Path:
 
 
 __all__ = [
+    "CODEX_FIXTURE_MIN_VERSION",
     "CODEX_SCHEMA_VERSION",
     "HAPPY_PATH_SINGLE_TURN",
     "HAPPY_PATH_V0136",

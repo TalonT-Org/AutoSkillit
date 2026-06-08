@@ -8,8 +8,10 @@ import pytest
 
 from autoskillit.core.types._type_enums import CodexEventType
 from autoskillit.execution.backends._codex_parse import _scan_codex_ndjson
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.process import _marker_is_standalone
 from tests.fixtures.codex import (
+    CODEX_FIXTURE_MIN_VERSION,
     CODEX_SCHEMA_VERSION,
     HAPPY_PATH_SINGLE_TURN,
     HAPPY_PATH_V0136,
@@ -56,7 +58,7 @@ class TestCodexFixturePackage:
             assert fixture_path(name).is_file()
 
     def test_all_exports_count(self) -> None:
-        assert len(CODEX_ALL) == 9
+        assert len(CODEX_ALL) == 10
 
 
 class TestCodexFixtureValidity:
@@ -273,3 +275,8 @@ class TestCodexFixturesParseWithBackend:
         assert acc.success is True
         assert acc.session_id == "thread_v0136_marker"
         assert len(acc.agent_messages) > 0
+
+
+class TestCodexFixtureVersionTracking:
+    def test_min_version_matches_backend_capability(self) -> None:
+        assert CODEX_FIXTURE_MIN_VERSION == CodexBackend().capabilities.min_version

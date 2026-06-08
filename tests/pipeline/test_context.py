@@ -445,7 +445,7 @@ def test_toolcontext_protocol_fields_documented_in_docstring() -> None:
         stripped = line.strip()
         if not stripped:
             continue
-        if ":" in stripped and not stripped.startswith(" "):
+        if ":" in stripped and not line.startswith(" "):
             field_name = stripped.split(":")[0].strip()
             documented.add(field_name)
 

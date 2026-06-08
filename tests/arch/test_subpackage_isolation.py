@@ -872,7 +872,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 14,  # +recipe_confirmed_post_hook.py
         "pipeline": 12,
         "fleet": 22,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py; +_reset.py
-        "recipe/rules": 49,  # +audit_impl_plan_scope
+        "recipe/rules": 50,  # +commit_guard_regression_route +rules_model
         "server/tools": 25,  # _auto_overrides.py + _cancellation_shield.py + tools_fleet_reset.py
         "hooks/guards": 31,  # +fleet_claim_guard, +reset_resume_gate
     }

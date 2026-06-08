@@ -38,6 +38,7 @@ See each subdirectory's AGENTS.md for details.
 | `rules_inputs.py` | Input/ingredient validation; version compatibility checks |
 | `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |
 | `rules_merge.py` | `merge_worktree` routing completeness |
+| `rules_model.py` | Model field adequacy: flags context-intensive steps with empty model (dispatch_items users) |
 | `rules_merge_context.py` | Merge gate test output context forwarding enforcement |
 | `rules_merge_queue.py` | Merge queue push routing: `queued_branch` error route enforcement |
 | `rules_optional_capture.py` | Optional capture guard enforcement |

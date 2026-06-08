@@ -13,6 +13,7 @@ Planner manifest, validation, compilation, and merge tests.
 | `test_consolidation_merge.py` | Consolidation core merge behavior and fallback heuristic |
 | `test_consolidation_writeback.py` | Consolidation write-back, pipeline integration, lifecycle registry |
 | `test_consolidation_cycles.py` | Consolidation cycle-breaking via greedy FAS |
+| `test_cross_tier_contracts.py` | Cross-tier dispatch mode contract tests for the planner recipe |
 | `test_dag_ops.py` | Tests for _dag_ops: topological_sort, find_sccs, break_cycles_greedy_fas, filter_self_references |
 | `test_dag_ops_lazy_import.py` | Regression guard: verifies networkx is not eagerly imported at module level in _dag_ops |
 | `test_elaborate_assignments_contract.py` | Contract conformance tests for planner-elaborate-assignments skill |

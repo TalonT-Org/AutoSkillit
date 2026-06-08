@@ -172,3 +172,11 @@ stub_consistency + duplicate_deliverables + dep_references). Sizing-violation,
 missing-element, malformed-ID, and DAG-cycle findings are excluded from the count
 (they are escalated as critical, not fixed). Files-touched overlap findings are in the
 `warnings` array and are not actionable.
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

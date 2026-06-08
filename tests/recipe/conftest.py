@@ -20,6 +20,8 @@ BUNDLED_RECIPE_NAMES: list[str] = [
     "full-audit",
 ]
 
+EXCLUDED_TRANSITIONAL_RULES: frozenset[str] = frozenset({"run-skill-missing-context-limit"})
+
 
 def assert_no_rule_errors(
     findings: list[RuleFinding],

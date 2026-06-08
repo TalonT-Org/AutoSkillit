@@ -193,3 +193,11 @@ Manifest format:
 ```
 consolidation_manifest_dir = $2/work_packages/consolidation
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

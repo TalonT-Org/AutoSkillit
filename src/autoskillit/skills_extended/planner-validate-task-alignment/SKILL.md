@@ -110,3 +110,11 @@ Write all findings to `$3/task_alignment.json`:
 alignment_findings_path = <absolute path to $3/task_alignment.json>
 alignment_finding_count = <N>
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

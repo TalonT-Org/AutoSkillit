@@ -166,3 +166,11 @@ identical to the input `combined_plan.json` (a `PlanDocument` with
 ```
 refined_plan_path = <absolute path to $2/refined_plan.json>
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

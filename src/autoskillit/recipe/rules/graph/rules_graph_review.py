@@ -134,7 +134,7 @@ def _check_review_loop_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
         "deterministic recovery path. Without it, on_failure is used as the "
         "fallback — discarding all uncommitted edits and losing partial progress."
     ),
-    severity=Severity.WARNING,
+    severity=Severity.ERROR,
 )
 def _check_run_skill_missing_context_limit(ctx: ValidationContext) -> list[RuleFinding]:
     recipe = ctx.recipe
@@ -162,7 +162,7 @@ def _check_run_skill_missing_context_limit(ctx: ValidationContext) -> list[RuleF
         findings.append(
             RuleFinding(
                 rule="run-skill-missing-context-limit",
-                severity=Severity.WARNING,
+                severity=Severity.ERROR,
                 step_name=step_name,
                 message=(
                     f"Step '{step_name}' ({step.tool}) has no on_context_limit. "

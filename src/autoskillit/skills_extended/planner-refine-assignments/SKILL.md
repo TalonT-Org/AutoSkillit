@@ -204,3 +204,11 @@ The `assignments` list contains only this phase's assignments (3–5 entries) wi
 ```
 phase_refined_path = <absolute path to $3/refine_contexts/{phase_id}_result.json>
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

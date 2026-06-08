@@ -179,3 +179,11 @@ Finally, write the phase sentinel file to `$2/assignments/assign_sentinels/{phas
 ```
 phase_assignments_result_dir = <absolute path to $2/assignments>
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

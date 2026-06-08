@@ -16,7 +16,7 @@ is the sole writer for this phase's WPs — no concurrent write races.
 
 ## When to Use
 
-- Invoked by the planner recipe once per phase via sequential dispatch (`dispatch_items`)
+- Invoked by the planner recipe once per phase via parallel dispatch (`dispatch_items`)
 - One invocation per phase; handles all WPs within the phase in a single session
 
 ## Arguments
@@ -94,6 +94,10 @@ Each packet contains:
 
 ### Step 4: Spawn L0 subagents in PARALLEL (SINGLE MESSAGE)
 
+Before spawning any L0, filter the WP list to skip any WP whose `$2/work_packages/{wp_id}_result.json`
+already exists on disk. This idempotency guard prevents redundant L0 re-spawns on retry after
+partial completion (e.g., when an L1 session is resumed after context recovery).
+
 **Issue ALL Task tool calls in a single message — one per item — so they execute in parallel. Do NOT iterate across multiple turns.**
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
@@ -145,9 +149,9 @@ For each failed L0, write `$2/work_packages/{wp_id}_result.json` with:
 }
 ```
 
-After writing all WP files, update `$2/work_packages/wp_index.json` by appending compact entries
-for all **successful** results only (skip stubs). Read the current index, append, and write back
-atomically. L1 is the sole writer for this phase's WPs — no concurrent writes.
+After writing all WP files, the manifest is rebuilt downstream by `finalize_wp_manifest`
+which scans disk for all `{wp_id}_result.json` files and writes `wp_index.json` atomically.
+Do not append to `wp_index.json` directly — concurrent L1 sessions would race on the shared file.
 
 Finally, write the phase sentinel file to `$2/work_packages/wp_sentinels/{phase_id}_result.json`:
 ```json
@@ -163,3 +167,11 @@ Finally, write the phase sentinel file to `$2/work_packages/wp_sentinels/{phase_
 ```
 phase_wps_result_dir = <absolute path to $2/work_packages>
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

@@ -366,7 +366,8 @@ class DefaultTokenLog:
     def check_step_completeness(
         self,
         expected_steps: Sequence[str],
-        **scope_kwargs: str,
+        *,
+        order_id: str = "",
     ) -> list[str]:
         """Return expected_steps absent from the in-memory entry set.
 
@@ -375,11 +376,15 @@ class DefaultTokenLog:
         if a step was scheduled but its session log was filtered out, it appears
         in the returned missing list.
 
+        If order_id is non-empty, only entries for that order are considered.
+
         Does not raise — the caller decides how to surface missing steps
         (log warning, include a row in the PR body, etc.).
         """
         loaded: set[str] = set()
-        for (_oid, step), _e in self._entries.items():
+        for (oid, step), _e in self._entries.items():
+            if order_id and oid != order_id:
+                continue
             loaded.add(step)
         normalized_expected = {canonical_step_name(s) for s in expected_steps if s}
         return sorted(normalized_expected - loaded)

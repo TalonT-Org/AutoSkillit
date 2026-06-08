@@ -89,7 +89,8 @@ class TokenLog(Protocol):
     def check_step_completeness(
         self,
         expected_steps: Sequence[str],
-        **scope_kwargs: str,
+        *,
+        order_id: str = "",
     ) -> list[str]: ...
 
 

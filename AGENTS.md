@@ -23,6 +23,22 @@ A coding-agent plugin that orchestrates automated skill-driven workflows using h
   * **No Backward Compatibility Hacks**: No comments about dead code. Remove dead code entirely.
   * **Avoid Redundancy**: Do not duplicate logic or utilities.
   * **Use Current Package Versions**: Web search for current stable versions when adding dependencies.
+  * **Version Bumps**: When bumping the package version, update `pyproject.toml` and run `task sync-versions && uv lock`; then search tests for hardcoded version strings (e.g. `AUTOSKILLIT_INSTALLED_VERSION` monkeypatches) and update them.
+  * **Run pre-commit before committing**: Always run `pre-commit run --all-files` before committing. Do not skip this step even when code appears clean — hooks auto-fix formatting and abort the commit, requiring re-stage and retry.
+  * **Hook Renames**: Renaming a hook script under `src/autoskillit/hooks/` must update `HOOK_REGISTRY` in `hook_registry.py` AND add the old basename to `RETIRED_SCRIPT_BASENAMES` in the same commit. `test_no_retired_name_has_a_live_file` will fail otherwise.
+  * **Skill Renames**: Renaming a skill under `src/autoskillit/skills_extended/` (or `src/autoskillit/skills/`) must update the skill's `SKILL.md` `name:` field AND add the old directory name to `RETIRED_SKILL_NAMES` in `src/autoskillit/core/types/_type_constants.py` in the SAME commit. `test_no_retired_skill_name_has_a_live_directory` will fail otherwise.
+  * **Search-tool ERE syntax**: ripgrep-backed search tools use POSIX ERE — use `|` for OR-alternation in `pattern` arguments. `\|` is Bash grep BRE syntax; ripgrep treats it as a literal backslash-pipe and returns 0 results. Example: `Grep(pattern="foo|bar")` not `Grep(pattern="foo\|bar")`.
+  * **Worktree Init Prohibition**: Never run `autoskillit init` from within a git worktree. `sync_hooks_to_settings()` will raise `RuntimeError` if `pkg_root()` resolves to a worktree. Use `task install-worktree` for worktree setup — it does NOT call `init`.
+  * **Naming convention — `*Def` vs `*Spec` suffixes**:
+    - `*Def` — static definition of a registered entity (e.g., `HookDef`, `PackDef`, `FeatureDef`, `RuleDef`). Typically a `NamedTuple` or `@dataclass(frozen=True)`, used as elements in a registry or lookup table. Typically lives in `core/`; stdlib-only types importable from hook scripts may live at the package root (e.g., `HookDef` in `hook_registry.py`).
+    - `*Spec` — behavioral specification or validation rule (e.g., `ExperimentTypeSpec`, `WriteBehaviorSpec`). Typically a `@dataclass` or `TypedDict` configuring a pipeline or validation stage. Typically lives in `recipe/` or domain layers; `*Spec` types used by IL-0 core protocols live in `core/` (e.g., `WriteBehaviorSpec` in `core/types/_type_results.py`).
+  * **Commit discipline**: Always create NEW commits. Never use `git commit --amend`, `--fixup`, or `--squash` unless the active recipe or SKILL.md explicitly requires it. This applies to all session types including headless sessions.
+
+#### **3.1.a. Pre-commit Hooks**
+
+Run manually with `pre-commit run --all-files`.
+
+Configured hooks: ruff format (auto-fix), ruff check (auto-fix), mypy type checking, uv lock check, gitleaks secret scanning.
 
 ### **3.2. File System**
 
@@ -57,6 +73,9 @@ The project uses pytest with pytest-asyncio. Tests run in parallel via pytest-xd
   * **Always run tests at end of task**
   * **Add tests for new features**
   * **Follow existing test patterns** in `tests/` — avoid test code redundancy
+  * **Run tests**: `task test-all` from the project root (human-facing, runs lint + tests). For automation and MCP tools, `task test-check` is used (unambiguous PASS/FAIL, correct PIPESTATUS capture). Never use `pytest`, `python -m pytest`, or any other test runner directly.
+  * **Worktree setup**: Use `task install-worktree` in worktrees. Never hardcode `uv venv`/`pip install` in skills or plans.
+  * **Filtered tests**: `task test-filtered` runs path-filtered tests (defaults `AUTOSKILLIT_TEST_FILTER=conservative`). Set `AUTOSKILLIT_TEST_BASE_REF` to control the diff base. See `tests/AGENTS.md` for filter modes and algorithm details.
 
 ## **5. Architecture**
 
@@ -68,13 +87,13 @@ generic_automation_mcp/
 ├── docs/
 ├── scripts/
 ├── src/autoskillit/   # see below
-├── tests/             # mirrors src/ layout; see tests/CLAUDE.md
+├── tests/             # mirrors src/ layout; see tests/AGENTS.md
 ├── Taskfile.yml
 ├── install.sh
 └── pyproject.toml
 ```
 
-`src/autoskillit/` packages — each has its own CLAUDE.md with file-level detail (except `recipes/`, `skills/`, and `skills_extended/` — CLAUDE.md files for these are pending):
+`src/autoskillit/` packages — each has its own `AGENTS.md` with file-level detail, plus a thin `CLAUDE.md` shim that imports the corresponding `AGENTS.md` (except `recipes/`, `skills/`, and `skills_extended/` — `AGENTS.md` files for these are pending):
 
 | Package | IL | Purpose |
 |---|---|---|

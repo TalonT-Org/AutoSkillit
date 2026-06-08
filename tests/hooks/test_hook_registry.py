@@ -269,7 +269,7 @@ def test_deny_path_pretooluse_hooks_export_deny_trigger() -> None:
 def test_moved_scripts_must_be_in_retired() -> None:
     """Any script moved from flat hooks/ to a subdirectory must have its flat basename in RETIRED.
 
-    Auto-enforces the CLAUDE.md rule: renaming a hook script must update RETIRED_SCRIPT_BASENAMES
+    Auto-enforces the AGENTS.md rule: renaming a hook script must update RETIRED_SCRIPT_BASENAMES
     in the same commit.  Future directory reorganizations will fail this test automatically.
     """
     from autoskillit.hook_registry import (

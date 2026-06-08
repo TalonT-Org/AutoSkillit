@@ -16,13 +16,13 @@ CI/CD configuration, security, guard coverage, and release sanity tests.
 | `test_anyio_infra.py` | REQ-DEP-001 through REQ-DEP-004: anyio declared as direct dependency |
 | `test_ask_user_question_guard.py` | Tests for the ask_user_question_guard PreToolUse hook |
 | `test_branch_protection_guard.py` | Tests for hooks/branch_protection_guard.py — PreToolUse branch protection |
-| `test_claude_md_critical_rules.py` | Tests that AGENTS.md contains required critical rules from friction analysis |
+| `test_claude_md_critical_rules.py` | Tests that effective `CLAUDE.md` (resolved via the `@AGENTS.md` include) contains required critical rules from friction analysis; direct ownership of shared rules lives in `AGENTS.md` and is covered by `test_docs_critical_rules.py` and `tests/docs/test_agents_md_content.py` |
 | `test_check_pyi_stub_format.py` | Unit tests for scripts/check_pyi_stub_format.py pre-commit hook — validates FunctionDef, ClassDef, and non-relative import rejection |
 | `test_check_pyi_stub_symbols.py` | Unit tests for scripts/check_pyi_stub_symbols.py pre-commit hook — validates missing symbol detection, completeness acceptance, underscore skipping, and __all__ usage |
 | `test_ci_dev_config.py` | Structural enforcement: CI workflow and pre-commit configuration must contain required quality gates |
 | `test_ci_workflow.py` | CI workflow structural tests |
 | `test_ci_shard_config.py` | Tests for CI shard directory configuration consistency |
-| `test_docs_critical_rules.py` | Tests that AGENTS.md contains required critical rules (FRICT-1B-3, FRICT-3A-1, FRICT-5-2, FRICT-7-1) |
+| `test_docs_critical_rules.py` | Tests that `AGENTS.md` (and a few physical-`CLAUDE.md` integrity checks) contain required critical rules (FRICT-1B-3, FRICT-3A-1, FRICT-5-2, FRICT-7-1) |
 | `test_command_guard_completeness.py` | Structural meta-test: command-inspecting guards must cover all command-executing tools |
 | `test_coverage_audit.py` | Tests for scripts/compare-coverage-ast.py — AST extraction and coverage comparison |
 | `test_dependency_pins.py` | Dependency pin guards (REQ-DEP-001, REQ-DEP-002) — pytest 9.x, networkx bounds |

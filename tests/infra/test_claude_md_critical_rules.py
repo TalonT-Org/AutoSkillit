@@ -1,8 +1,12 @@
-"""Tests that CLAUDE.md contains required critical rules and documentation.
+"""Tests that CLAUDE.md (effective content) contains required critical rules and documentation.
+
+The fixture resolves the `@AGENTS.md` import at the top of CLAUDE.md so these tests
+see the effective instruction surface an agent reads at session start. Universal
+rule bodies live in AGENTS.md and are inherited by CLAUDE.md through that include.
 
 Encodes behavioral contracts derived from friction analysis (issue #250):
-- FRICT-1B-3: set_project_path initialization rule in §3.3
-- FRICT-3A-1: pre-commit critical rule in §3.1
+- FRICT-1B-3: set_project_path initialization rule in §3.3 (shared, in AGENTS.md)
+- FRICT-3A-1: pre-commit critical rule in §3.1 (shared, in AGENTS.md, inherited by CLAUDE.md)
 - FRICT-5-2: session diagnostics hyphen path convention documented
 - FRICT-7-1: session diagnostics under a dedicated heading, not trailing paragraph
 """
@@ -29,17 +33,16 @@ def claude_md() -> str:
 
 
 def test_claude_md_critical_rules_require_precommit(claude_md: str) -> None:
-    """CLAUDE.md (effective) must include a pre-commit run rule somewhere.
+    """CLAUDE.md (effective) must include a pre-commit run rule via @AGENTS.md.
 
     Pre-commit hook failures caused ~15 friction events across 15 sessions.
-    The rule lives in the Claude-specific section of CLAUDE.md, not in the
-    generic AGENTS.md §3.1 (AGENTS.md forbids Claude-specific terms).
-    (FRICT-3A-1).
+    The shared rule lives in AGENTS.md §3.1; CLAUDE.md inherits it through the
+    `@AGENTS.md` include at the top of the file (FRICT-3A-1).
     """
     assert "pre-commit run --all-files" in claude_md, (
-        "CLAUDE.md must include a rule requiring 'pre-commit run --all-files' "
-        "before committing (FRICT-3A-1). Add it to the Pre-commit Hooks section "
-        "or Claude-specific Code and Implementation section."
+        "Effective CLAUDE.md must include 'pre-commit run --all-files' — "
+        "the shared rule lives in AGENTS.md §3.1 and CLAUDE.md inherits it "
+        "via the @AGENTS.md include (FRICT-3A-1)."
     )
 
 
@@ -92,7 +95,11 @@ def test_claude_md_no_stale_fidelity_reference(claude_md: str) -> None:
 
 
 def test_claude_md_has_github_api_discipline(claude_md: str) -> None:
-    """CLAUDE.md must include §3.5 GitHub API Call Discipline rule."""
+    """Effective CLAUDE.md must include the GitHub API Call Discipline rule.
+
+    The shared rule lives in AGENTS.md §3.3 and is inherited by CLAUDE.md
+    through the `@AGENTS.md` include.
+    """
     assert "GitHub API Call Discipline" in claude_md
     assert "sleep 1" in claude_md or "asyncio.sleep(1)" in claude_md
 

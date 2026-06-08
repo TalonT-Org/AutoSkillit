@@ -50,7 +50,8 @@ Audit all documentation sources for drift, staleness, and inconsistency against 
 
 Enumerate and audit all of the following:
 
-- **`CLAUDE.md`** — project instructions, architecture tree, file path references, tool/skill counts, layer descriptions
+- **`AGENTS.md`** — shared project instructions, architecture tree, file path references, tool/skill counts, layer descriptions
+- **Physical `CLAUDE.md`** — Claude-only overlay (skill invocation handling, CLAUDE.md modification policy, Pyright LSP guidance, subagent env vars); inherits shared content via `@AGENTS.md`
 - **`docs/architecture/**/*.md`** — component names, module paths, layer assignments
 - **`docs/requirements/**/*.md`** and **`docs/specs/**/*.md`** — API surface, behavioral contracts
 - **All `README.md` files** at any depth in the repository
@@ -65,10 +66,10 @@ Flag findings in these categories (maps to REQ-SKILL-004):
 
 - **Stale claims** — doc asserts X, actual code behavior is Y
 - **Orphaned references** — doc mentions a file, module, tool, class, or skill that no longer exists
-- **Missing docs** — new subsystem or module with no mention in CLAUDE.md tree or arch docs
+- **Missing docs** — new subsystem or module with no mention in `AGENTS.md` tree or arch docs
 - **Path/name drift** — hyphen-vs-underscore mismatches, renamed symbols, old module paths
-- **Count mismatches** — CLAUDE.md states N tools/skills/hooks but actual count differs
-- **Inter-doc contradictions** — CLAUDE.md says A, arch doc says B about the same entity
+- **Count mismatches** — `AGENTS.md` states N tools/skills/hooks but actual count differs
+- **Inter-doc contradictions** — `AGENTS.md` says A, arch doc says B about the same entity
 
 ---
 
@@ -97,7 +98,7 @@ Flag findings in these categories (maps to REQ-SKILL-004):
 
    | Agent | Domain | What to check |
    |---|---|---|
-   | Agent A | `CLAUDE.md` | Architecture tree accuracy, file path references, tool/skill counts, layer descriptions |
+   | Agent A | `AGENTS.md` (and physical `CLAUDE.md` for Claude-only overlay) | Architecture tree accuracy, file path references, tool/skill counts, layer descriptions |
    | Agent B | `docs/architecture/**` | Component names, module paths, layer assignments |
    | Agent C | `docs/requirements/**` and `docs/specs/**` | API surface, behavioral contracts |
    | Agent D | Recipe YAML descriptions + docstrings | Step descriptions, ingredient names, parameter docs |
@@ -158,11 +159,11 @@ Do NOT flag:
 
 **CRITICAL:**
 - Orphaned references to deleted modules/tools
-- CLAUDE.md architecture tree listing a path that doesn't exist
+- `AGENTS.md` architecture tree listing a path that doesn't exist
 
 **HIGH:**
 - Stale behavioral claim that would mislead an implementer
-- Count mismatch (e.g., CLAUDE.md says N skills, actual is M)
+- Count mismatch (e.g., `AGENTS.md` says N skills, actual is M)
 
 **MEDIUM:**
 - Path/name drift (hyphen vs underscore, module moved)

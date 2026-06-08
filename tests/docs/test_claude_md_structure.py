@@ -38,6 +38,22 @@ def test_claude_md_no_shared_content_duplicated() -> None:
         "| Package | IL | Purpose |",
         "| IL-N (single digit)",
         "Session Diagnostics",
+        "Version Bumps",
+        "task sync-versions",
+        "pre-commit run --all-files",
+        "HOOK_REGISTRY",
+        "RETIRED_SCRIPT_BASENAMES",
+        "RETIRED_SKILL_NAMES",
+        "Grep tool uses ripgrep",
+        "autoskillit init",
+        "task install-worktree",
+        "*Def",
+        "*Spec",
+        "git commit --amend",
+        "task test-all",
+        "task test-check",
+        "task test-filtered",
+        "gitleaks",
     ]
     for marker in shared_markers:
         assert marker not in content, (
@@ -82,21 +98,41 @@ def test_claude_md_has_lsp_section() -> None:
     assert "findReferences" in content
 
 
+def test_claude_md_keeps_claude_only_overlay() -> None:
+    content = CLAUDE_MD.read_text()
+    for marker in [
+        "Skill Invocations Are Orders",
+        "CLAUDE.md Modifications",
+        "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY",
+    ]:
+        assert marker in content, (
+            f"CLAUDE.md must retain Claude-only overlay marker {marker!r} "
+            "— this is project-internal Claude Code behavior, not a universal rule"
+        )
+
+
 def test_claude_md_no_precommit_install_line() -> None:
     content = CLAUDE_MD.read_text()
     assert "Install hooks after cloning: `pre-commit install`" not in content
 
 
 def test_claude_md_def_spec_location_qualified() -> None:
-    content = CLAUDE_MD.read_text()
+    content = AGENTS_MD.read_text()
     lines = content.splitlines()
+    suffixes_seen: set[str] = set()
     for line in lines:
-        if "*Def*" in line or "`*Def`" in line:
-            if "Lives in `core/`" in line and "Typically" not in line:
-                raise AssertionError(
-                    "CLAUDE.md *Def rule has unqualified 'Lives in core/' — "
-                    "should say 'Typically lives in core/'"
-                )
+        for suffix in ("*Def", "*Spec"):
+            if f"`{suffix}`" in line or f"{suffix}*" in line:
+                suffixes_seen.add(suffix)
+                if "Lives in `core/`" in line and "Typically" not in line:
+                    raise AssertionError(
+                        f"AGENTS.md {suffix} rule has unqualified 'Lives in core/' — "
+                        f"should say 'Typically lives in core/'"
+                    )
+    assert {"*Def", "*Spec"} <= suffixes_seen, (
+        "AGENTS.md must own the *Def and *Spec naming convention bullets "
+        f"(saw: {sorted(suffixes_seen)})"
+    )
 
 
 def test_claude_md_mentions_write_guard() -> None:

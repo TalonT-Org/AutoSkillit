@@ -76,6 +76,10 @@ def diagnose_merge_gate(
         failure_type = "test"
         subtype = _classify_test_subtype(test_stdout, test_stderr)
         failed_tests = _extract_failed_tests(test_stdout, test_stderr)
+    elif failed_step:
+        failure_type = "test"
+        subtype = "unrecognized_step"
+        failed_tests = []
     else:
         failure_type = "test"
         subtype = _classify_test_subtype(test_stdout, test_stderr)

@@ -1,4 +1,4 @@
-"""Architectural invariant: every BackendCapabilities construction site must explicitly set all fields."""
+"""Arch guard: every BackendCapabilities(...) site must pass all fields as keyword args."""
 
 from __future__ import annotations
 

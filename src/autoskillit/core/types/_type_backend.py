@@ -225,16 +225,21 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     process_name="claude",
     process_name_aliases=frozenset({"claude"}),
     skills_subdir=".claude/skills",
+    hook_config_format="",
     write_detection_strategy="tool_names",
     patch_format="unified_diff",
+    default_skill_sandbox_mode="",
+    mcp_env_forward_vars=frozenset(),
     replay_capable=True,
     record_capable=True,
     anthropic_provider_capable=True,
     plugin_install_capable=True,
     inspector_capable=False,
     supports_context_window_suffix=True,
+    has_unguarded_filesystem_access=False,
     git_metadata_writable=True,
     skill_sigil="/",
+    session_dir_persistent=False,
 )
 
 

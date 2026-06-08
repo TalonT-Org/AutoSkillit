@@ -4,6 +4,7 @@ Re-export facade. Implementation: _cmd_rpc_guards.py, _cmd_rpc_merge.py, _cmd_rp
 """
 
 from autoskillit.recipe._cmd_rpc_guards import (  # noqa: F401
+    check_dropped_ci_loop,
     check_dropped_healthy_loop,
     check_eject_limit,
     commit_guard,

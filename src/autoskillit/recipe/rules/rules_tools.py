@@ -240,6 +240,78 @@ _TOOL_PARAMS: dict[str, frozenset[str]] = {
 }
 
 
+# Registry of context variables that are captured upstream and MUST be forwarded
+# to any tool step that accepts them. Each entry maps a tool name to the set of
+# context-param names that the tool relies on. When a recipe captures one of
+# these variables and a downstream step calls the corresponding tool, the step
+# must reference the variable in its `with:` block — silently defaulting would
+# change tool behavior (e.g., enqueue strategy on a repo where auto-merge is off).
+_TOOL_CONTEXT_PARAMS: dict[str, frozenset[str]] = {
+    "wait_for_merge_queue": frozenset({"auto_merge_available"}),
+    "enqueue_pr": frozenset({"auto_merge_available"}),
+}
+
+
+@semantic_rule(
+    name="context-param-not-forwarded",
+    description=(
+        "Tool step omits a context variable that the tool depends on — recipes must "
+        "forward context parameters explicitly so the tool receives the upstream "
+        "capture value (e.g., auto_merge_available)"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_context_param_not_forwarded(ctx: ValidationContext) -> list[RuleFinding]:
+    """Fire when a tool step omits a known context parameter that the tool depends on.
+
+    The ``_TOOL_CONTEXT_PARAMS`` registry declares which tool-params must be
+    forwarded when the corresponding context variable has been captured
+    upstream. Without this rule, a step calling ``wait_for_merge_queue`` could
+    silently omit ``auto_merge_available`` from its ``with:`` block, falling
+    back to the tool's default (typically ``True``) — even on repos where the
+    upstream ``check_repo_merge_state`` capture indicated auto-merge is
+    disabled. The watcher's internal re-enqueue logic would then attempt
+    ``enablePullRequestAutoMerge`` and fail. See PR #3901.
+    """
+    captured_context: set[str] = set()
+    for step in ctx.recipe.steps.values():
+        if step.capture:
+            captured_context.update(step.capture.keys())
+        if step.capture_list:
+            captured_context.update(step.capture_list.keys())
+
+    if not captured_context:
+        return []
+
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool is None or step.tool not in _TOOL_CONTEXT_PARAMS:
+            continue
+        required_params = _TOOL_CONTEXT_PARAMS[step.tool]
+        for param in required_params:
+            if param not in captured_context:
+                continue
+            with_value = (step.with_args or {}).get(param, "")
+            if f"context.{param}" in with_value:
+                continue
+            findings.append(
+                RuleFinding(
+                    rule="context-param-not-forwarded",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step {step_name!r} calls tool {step.tool!r} but does not "
+                        f"forward the upstream-captured context variable {param!r}. "
+                        f"Add {param}: ${{{{ context.{param} }}}} to the with: block. "
+                        f"Omitting this param causes the tool to use its default "
+                        f"value, which may not match the captured context "
+                        f"(e.g., auto_merge_available for repos with auto-merge disabled)."
+                    ),
+                )
+            )
+    return findings
+
+
 @semantic_rule(
     name="constant-step-with-args",
     description="constant step must not have with args — there is no tool to receive them",

@@ -38,6 +38,12 @@ skills:
     - name: ci_failed_jobs
       type: string
       required: false
+    - name: workflow
+      type: string
+      required: false
+    - name: event
+      type: string
+      required: false
     outputs:
     - name: diagnosis_path
       type: file_path
@@ -2873,6 +2879,19 @@ callable_contracts:
       type: str
     - name: count
       type: str
+  autoskillit.recipe._cmd_rpc.check_dropped_ci_loop:
+    inputs:
+    - name: counter_file
+      type: str
+      required: true
+    - name: max_drops
+      type: str
+      required: false
+    outputs:
+    - name: status
+      type: str
+    - name: count
+      type: str
   autoskillit.recipe._cmd_rpc.commit_guard:
     inputs:
     - name: worktree_path
@@ -3271,3 +3290,26 @@ tool_output_contracts:
           - timed_out
           - no_runs
           - action_required
+  wait_for_merge_queue:
+    result_field: pr_state
+    fields:
+      pr_state:
+        type: str
+        allowed_values:
+          - merged
+          - ejected_ci_failure
+          - dropped_merge_group_ci
+          - dropped_healthy
+          - ejected
+          - stalled
+          - timeout
+          - not_enrolled
+          - error
+        terminal_values:
+          - error
+          - ejected_ci_failure
+        recoverable_values:
+          - dropped_merge_group_ci
+          - dropped_healthy
+          - ejected
+          - stalled

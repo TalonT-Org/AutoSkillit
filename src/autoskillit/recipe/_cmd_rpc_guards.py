@@ -65,6 +65,30 @@ def check_dropped_healthy_loop(
     return {"status": status, "count": str(count)}
 
 
+def check_dropped_ci_loop(
+    counter_file: str,
+    max_drops: str = "2",
+) -> dict[str, str]:
+    """Increment dropped-merge-group-CI counter; return DROPPED_CI_OK or DROPPED_CI_LIMIT_EXCEEDED.
+
+    Mirrors ``check_dropped_healthy_loop`` for the ``dropped_merge_group_ci`` branch.
+    On the first drop, the recipe re-enqueues (``DROPPED_CI_OK``). After the cap,
+    the route escalates to ``diagnose_ci`` (``DROPPED_CI_LIMIT_EXCEEDED``) — the
+    merge-group CI keeps failing, so a re-enqueue is unlikely to help.
+    """
+    max_drops = max_drops or "2"
+    path = Path(counter_file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        count = int(path.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        count = 0
+    count += 1
+    atomic_write(path, str(count))
+    status = "DROPPED_CI_LIMIT_EXCEEDED" if count > int(max_drops) else "DROPPED_CI_OK"
+    return {"status": status, "count": str(count)}
+
+
 def main_repo_guard(clone_path: str) -> dict[str, str]:
     """Stash dirty state from the main repo before merge.
 

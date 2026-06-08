@@ -124,7 +124,7 @@ def test_agents_md_defines_channel_b() -> None:
     )
 
 
-def test_server_claude_md_has_tool_gating_section() -> None:
+def test_server_agents_md_has_tool_gating_section() -> None:
     """server/AGENTS.md documents the two-layer tool gating architecture."""
     text = (_SERVER_DIR / "AGENTS.md").read_text()
     assert "## Tool Gating Architecture" in text
@@ -132,7 +132,7 @@ def test_server_claude_md_has_tool_gating_section() -> None:
     assert "### Application-Gate" in text
 
 
-def test_server_claude_md_gating_matrix_covers_categories() -> None:
+def test_server_agents_md_gating_matrix_covers_categories() -> None:
     """server/AGENTS.md gating matrix includes all five tool categories."""
     text = (_SERVER_DIR / "AGENTS.md").read_text()
     for category in [

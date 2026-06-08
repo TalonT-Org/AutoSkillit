@@ -929,22 +929,37 @@ def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_r
     for step in recipe.steps.values():
         if step.tool == "wait_for_merge_queue" and step.with_args:
             step.with_args.pop("max_merge_group_drops", None)
-    # Remove the run_python guard step so the dropped_merge_group_ci arm routes
-    # directly to diagnose_ci, and rewire the wait_for_queue condition to
-    # point to a bare re-enqueue target.
-    for step in list(recipe.steps.values()):
-        if step.tool == "wait_for_merge_queue" and step.on_result is not None:
-            step.on_result = copy.deepcopy(step.on_result)
-            for cond in step.on_result.conditions:
-                if cond.when and "dropped_merge_group_ci" in cond.when:
-                    cond.route = "reenter_merge_queue_cheap"
-        if step.tool == "run_python" and step.on_result is not None:
-            callable_val = (step.with_args or {}).get("callable", "")
-            if "check_dropped_ci_loop" in str(callable_val):
-                # Disable this guard by routing both arms to a re-enqueue target.
-                step.on_result = copy.deepcopy(step.on_result)
-                for cond in step.on_result.conditions:
-                    cond.route = "reenter_merge_queue_cheap"
+    # Remove the run_python guard step entirely and insert a bare passthrough
+    # step that routes back to the wait_for_merge_queue step.  The passthrough
+    # is NOT run_python and NOT enqueue_pr, so the unbounded-cycle per-branch
+    # analysis won't suppress it — the BFS will reach the MQ step and fire.
+    from autoskillit.recipe.schema import RecipeStep
+
+    guard_step_names = [
+        name
+        for name, step in recipe.steps.items()
+        if step.tool == "run_python"
+        and "check_dropped_ci_loop" in str((step.with_args or {}).get("callable", ""))
+    ]
+    for name in guard_step_names:
+        del recipe.steps[name]
+    passthrough_name = "_test_dmgci_passthrough"
+    mq_step_names = [
+        name
+        for name, step in recipe.steps.items()
+        if step.tool == "wait_for_merge_queue" and step.on_result is not None
+    ]
+    for step_name in mq_step_names:
+        step = recipe.steps[step_name]
+        step.on_result = copy.deepcopy(step.on_result)
+        for cond in step.on_result.conditions:
+            if cond.when and "dropped_merge_group_ci" in cond.when:
+                cond.route = passthrough_name
+        recipe.steps[passthrough_name] = RecipeStep(
+            name=passthrough_name,
+            action="route",
+            on_success=step_name,
+        )
 
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]

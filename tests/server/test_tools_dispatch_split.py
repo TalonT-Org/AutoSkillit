@@ -2,7 +2,7 @@
 
 import pytest
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def test_dispatch_tool_importable():

@@ -34,9 +34,13 @@ _FLEET_CROSS_DIR_FILES: frozenset[Path] = frozenset(
         _TESTS_ROOT / "server" / "test_tools_dispatch.py",
         _TESTS_ROOT / "server" / "test_tools_dispatch_validation.py",
         _TESTS_ROOT / "server" / "test_tools_dispatch_params.py",
+        _TESTS_ROOT / "server" / "test_tools_config.py",
+        _TESTS_ROOT / "server" / "test_claim_liveness.py",
+        _TESTS_ROOT / "server" / "test_tools_dispatch_split.py",
         _TESTS_ROOT / "cli" / "test_food_truck_prompt.py",
         _TESTS_ROOT / "cli" / "test_l3_orchestrator_prompt.py",
         _TESTS_ROOT / "cli" / "test_reap.py",
+        _TESTS_ROOT / "integration" / "test_fleet_concurrency.py",
     ]
 )
 

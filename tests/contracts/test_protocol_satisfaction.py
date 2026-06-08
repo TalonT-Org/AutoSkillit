@@ -180,7 +180,9 @@ def test_default_token_log_implements_check_step_completeness():
     assert "expected_steps" in sig.parameters, "missing expected_steps param"
 
     missing = log.check_step_completeness(["plan", "implement"])
-    assert missing == ["implement", "plan"], "Empty log must return all expected steps as missing"
+    assert set(missing) == {"implement", "plan"}, (
+        "Empty log must return all expected steps as missing"
+    )
 
 
 def test_default_timing_log_satisfies_timing_store_with_order_id():

@@ -1747,6 +1747,7 @@
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
+        "auto_merge_available": "${{ context.auto_merge_available }}",
         "timeout_seconds": 60,
         "poll_interval": 10,
         "max_merge_group_drops": 1
@@ -1799,6 +1800,7 @@
         "timeout_seconds": 900,
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
+        "auto_merge_available": "${{ context.auto_merge_available }}",
         "max_merge_group_drops": 1
       },
       "capture": {
@@ -1815,7 +1817,7 @@
         },
         {
           "when": "${{ result.pr_state }} == dropped_merge_group_ci",
-          "route": "diagnose_ci"
+          "route": "check_dropped_ci_loop"
         },
         {
           "when": "${{ result.pr_state }} == not_enrolled",
@@ -1843,7 +1845,7 @@
       ],
       "on_failure": "register_clone_unconfirmed",
       "skip_when_false": "inputs.open_pr",
-      "note": "Waits up to 15 minutes for the PR to merge through the queue. merged → release_issue_success to apply staged label, then register_clone_success. release_issue_success is optional with skip_when_false: inputs.issue_url — when issue_url is absent the step is silently skipped and pipeline continues to register_clone_success. ejected_ci_failure → diagnose_ci (CI failure; conflict resolution cannot fix this). not_enrolled → release_issue_failure (enrollment failed; repo configuration error). ejected → conflict fix cycle then re-enter. stalled → lightweight re-enrollment via enqueue_pr. timeout → register_clone_unconfirmed (release claim without staged label; merge unconfirmed).\n"
+      "note": "Waits up to 15 minutes for the PR to merge through the queue. merged → release_issue_success to apply staged label, then register_clone_success. release_issue_success is optional with skip_when_false: inputs.issue_url — when issue_url is absent the step is silently skipped and pipeline continues to register_clone_success. ejected_ci_failure → diagnose_ci (CI failure; conflict resolution cannot fix this). dropped_merge_group_ci → check_dropped_ci_loop (re-enqueue on first drop, escalate to diagnose_ci after the cap is exceeded). not_enrolled → release_issue_failure (enrollment failed; repo configuration error). ejected → conflict fix cycle then re-enter. stalled → lightweight re-enrollment via enqueue_pr. timeout → register_clone_unconfirmed (release claim without staged label; merge unconfirmed).\n"
     },
     "reenroll_stalled_pr": {
       "tool": "enqueue_pr",
@@ -1918,7 +1920,26 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Circuit breaker for the dropped_healthy re-enrollment loop. After 2 consecutive unexplained drops with healthy PR-branch CI, escalates to release_issue_failure instead of looping. Matches the check_eject_limit pattern used for the ejected path. DROPPED_MERGE_GROUP_CI (confirmed merge-group CI failure) is routed directly to diagnose_ci and never reaches this step.\n"
+      "note": "Circuit breaker for the dropped_healthy re-enrollment loop. After 2 consecutive unexplained drops with healthy PR-branch CI, escalates to release_issue_failure instead of looping. Matches the check_eject_limit pattern used for the ejected path. DROPPED_MERGE_GROUP_CI (confirmed merge-group CI failure) is routed through check_dropped_ci_loop instead and never reaches this step.\n"
+    },
+    "check_dropped_ci_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.recipe._cmd_rpc.check_dropped_ci_loop",
+        "counter_file": "${{ context.work_dir }}/{{AUTOSKILLIT_TEMP}}/dropped_ci_count",
+        "max_drops": "2"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.status }} == DROPPED_CI_LIMIT_EXCEEDED",
+          "route": "diagnose_ci"
+        },
+        {
+          "route": "reenter_merge_queue_cheap"
+        }
+      ],
+      "on_failure": "diagnose_ci",
+      "note": "Circuit breaker for the dropped_merge_group_ci re-enrollment loop. Tracks merge-group-CI drop count in a file-based counter. On the first drop, re-enqueues via reenter_merge_queue_cheap (transient CI failure is often self-healing). After 2 consecutive drops, escalates to diagnose_ci — the merge-group CI is persistently failing, so a re-enqueue is unlikely to help. Mirrors the check_dropped_healthy_loop pattern for the dropped_healthy branch.\n"
     },
     "queue_ejected_fix": {
       "tool": "run_python",
@@ -2005,6 +2026,7 @@
         "pr_number": "${{ context.pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
+        "auto_merge_available": "${{ context.auto_merge_available }}",
         "timeout_seconds": "60",
         "max_merge_group_drops": "1"
       },

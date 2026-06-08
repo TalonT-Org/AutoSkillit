@@ -311,6 +311,7 @@
         "timeout_seconds": 900,
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
+        "auto_merge_available": "${{ context.auto_merge_available }}",
         "max_merge_group_drops": 1
       },
       "capture": {
@@ -507,6 +508,7 @@
         "pr_number": "${{ context.current_pr_number }}",
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
+        "auto_merge_available": "${{ context.auto_merge_available }}",
         "timeout_seconds": "60",
         "max_merge_group_drops": "1"
       },
@@ -615,6 +617,7 @@
         "target_branch": "${{ inputs.base_branch }}",
         "cwd": "${{ context.work_dir }}",
         "remote_url": "${{ context.remote_url }}",
+        "auto_merge_available": "${{ context.auto_merge_available }}",
         "timeout_seconds": 60,
         "poll_interval": 10,
         "max_merge_group_drops": 1

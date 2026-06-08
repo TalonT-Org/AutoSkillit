@@ -243,12 +243,12 @@ def load_all_methodology_traditions(
         user_dir = Path(project_dir) / ".autoskillit" / "methodology-traditions"
         user_traditions = _load_traditions_from_dir(user_dir)
         for spec in user_traditions.values():
-            if spec.schema_version and spec.schema_version != "1.0":
+            if spec.schema_version and spec.schema_version != "1.0.0":
                 logger.warning(
                     "User methodology tradition has schema_version mismatch; loading continues",
                     tradition_name=spec.name,
                     schema_version=spec.schema_version,
-                    expected_schema_version="1.0",
+                    expected_schema_version="1.0.0",
                 )
         traditions.update(user_traditions)
 

@@ -19,7 +19,7 @@ from autoskillit.recipe import (
 
 validate_app = App(name="validate", help="Validation commands.")
 
-EXPECTED_SCHEMA_VERSION = "1.0"
+EXPECTED_SCHEMA_VERSION = "1.0.0"
 
 
 @dataclass

@@ -2893,6 +2893,8 @@ callable_contracts:
       type: str
     - name: regression_lines
       type: str
+    - name: verdict
+      type: str
   autoskillit.recipe._cmd_rpc.main_repo_guard:
     inputs:
     - name: clone_path

@@ -1,6 +1,6 @@
 ---
 name: retry-worktree
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model, cross_skill_ref, git_metadata_write]
 description: Worktree retry executor. ALWAYS invoke this skill when instructed to continue or retry an implementation in an existing worktree. Do not resume editing files directly — use this skill first to load the retry workflow.
 hooks:
   PreToolUse:

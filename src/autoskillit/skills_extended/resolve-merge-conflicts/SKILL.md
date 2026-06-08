@@ -1,6 +1,7 @@
 ---
 name: resolve-merge-conflicts
 categories: [github]
+uses_capabilities: [git_metadata_write]
 description: >
   Goal-aware resolution of rebase conflicts when merging a conflict-resolution worktree
   back into the integration branch. Analyzes the intent of each side of a conflict,

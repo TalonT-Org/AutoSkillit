@@ -432,7 +432,11 @@ def test_toolcontext_protocol_fields_documented_in_docstring() -> None:
     fields_start = None
     for i, line in enumerate(lines):
         if line.strip() == "Fields":
-            fields_start = i + 2  # skip the "------" underline
+            for j in range(i + 1, len(lines)):
+                candidate = lines[j].strip()
+                if candidate and not all(c == "-" for c in candidate):
+                    fields_start = j
+                    break
             break
     assert fields_start is not None, "ToolContext docstring missing Fields section"
 

@@ -15,7 +15,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.medium]
+pytestmark = [pytest.mark.medium, pytest.mark.feature("fleet")]
 
 # -------------------------------------------------------------------
 # Cross-caller concurrency test (requires cli layer)

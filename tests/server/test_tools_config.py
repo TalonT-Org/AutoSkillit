@@ -10,7 +10,7 @@ from autoskillit.config import AutomationConfig
 from autoskillit.fleet._semaphore import FleetSemaphore
 from tests.server.conftest import _make_mock_ctx
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 _HOOK_CONFIG_RELPATH = (".autoskillit", "temp", ".hook_config.json")

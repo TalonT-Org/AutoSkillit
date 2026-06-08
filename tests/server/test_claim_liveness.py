@@ -11,7 +11,7 @@ from autoskillit.fleet import DispatchRecord, DispatchStatus
 from autoskillit.server.tools.tools_issue_composite import claim_and_resolve_issue
 from autoskillit.server.tools.tools_issue_labels import claim_issue
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 _ISSUE_URL = "https://github.com/owner/repo/issues/42"
 _CLAIM_MODULE = "autoskillit.server.tools._claim_helpers"

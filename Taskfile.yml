@@ -305,14 +305,14 @@ tasks:
         if [[ -f ".git" ]]; then
           echo "Worktree detected — creating isolated venv"
           uv venv --clear .venv
-          uv pip install -e '.[dev]' --python .venv/bin/python
+          uv sync --frozen --all-extras
         elif [[ -d ".venv" ]]; then
           echo "Main directory — installing into existing venv"
-          uv pip install -e '.[dev]' --python .venv/bin/python
+          uv sync --frozen --all-extras
         else
           echo "Main directory — creating venv and installing"
           uv venv --clear .venv
-          uv pip install -e '.[dev]' --python .venv/bin/python
+          uv sync --frozen --all-extras
         fi
         echo "Done: $(.venv/bin/python --version)"
         if command -v pre-commit >/dev/null 2>&1; then

@@ -2884,6 +2884,16 @@ callable_contracts:
     outputs:
     - name: committed
       type: str
+      allowed_values: ["false", "true", "regression_detected"]
+  autoskillit.recipe._cmd_rpc.main_repo_guard:
+    inputs:
+    - name: clone_path
+      type: str
+      required: true
+    outputs:
+    - name: cleaned
+      type: str
+      allowed_values: ["false", "true", "force", "failed"]
   autoskillit.recipe._cmd_rpc.review_path_rebase:
     inputs:
     - name: work_dir

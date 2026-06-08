@@ -8,7 +8,7 @@ Semantic validation rule modules for recipe analysis (46 flat rule files + 4 sub
 |---|---|---|
 | `campaign/` | 5 rules | Campaign capture, deps, dispatch, flow, ingredients |
 | `ci/` | 4 rules | CI config hygiene, conflict, guards, merge queue |
-| `dataflow/` | 4 rules | Dataflow capture, callable, handoff, multipart |
+| `dataflow/` | 4 rules | Dataflow capture, callable, handoff, multipart, callable verdict routing completeness |
 | `graph/` | 4 rules | Graph cycles, output, review, routes |
 
 See each subdirectory's CLAUDE.md for details.

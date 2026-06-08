@@ -455,7 +455,10 @@ steps:
       callable: "autoskillit.recipe._cmd_rpc.commit_guard"
       worktree_path: "${{ context.worktree_path }}"
       base_branch: "${{ inputs.base_branch }}"
-    on_success: main_repo_guard
+    on_result:
+    - when: ${{ result.committed }} == 'regression_detected'
+      route: release_issue_failure
+    - route: main_repo_guard
     on_failure: main_repo_guard
     note: >
       Belt-and-suspenders guard: auto-commits any uncommitted changes before merge.
@@ -467,7 +470,10 @@ steps:
     with:
       callable: "autoskillit.recipe._cmd_rpc.main_repo_guard"
       clone_path: "${{ context.work_dir }}"
-    on_success: merge
+    on_result:
+    - when: ${{ result.cleaned }} == 'failed'
+      route: release_issue_failure
+    - route: merge
     on_failure: merge
     note: >
       Stashes uncommitted changes in the main repo before merge. Catches dirty state

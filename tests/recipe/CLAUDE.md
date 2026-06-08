@@ -28,6 +28,8 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_bundled_recipes_research_design.py` | Tests for research-design bundled recipe structure |
 | `test_bundled_recipes_review_pr.py` | Tests for review-pr bundled recipe structure |
 | `test_callable_contracts.py` | Contract tests for run_python callable inputs and outputs |
+| `test_contracts_types.py` | Tests for the SkillOutput dataclass — allowed_values field for callable verdict routing |
+| `test_contracts_manifest.py` | Tests for get_skill_contract and get_callable_contract allowed_values promotion from YAML |
 | `test_campaign_loader.py` | Tests for campaign recipe loading |
 | `test_create_worktree_functional.py` | Functional tests for scripts/recipe/create_worktree.sh — actually executes the script against real git repos |
 | `test_deep_staleness.py` | Tests for deep staleness detection — rule file mtime scan and session-type bypass for fleet sessions |
@@ -135,6 +137,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_dataflow_handoff.py` | Tests for dataflow handoff semantic validation rule |
 | `test_rules_dataflow_merge.py` | Tests for dataflow merge semantic validation rule |
 | `test_rules_dataflow_nullable.py` | Tests for dataflow nullable semantic validation rule |
+| `test_rules_dataflow_callable.py` | Tests for unrouted-callable-verdict and callable-verdict-requires-on-result semantic rules |
 | `test_rules_work_dir_misplacement.py` | Tests for work-dir-arg-misplacement semantic rule: flags run_python steps with work_dir in args for callables that don't accept it |
 | `test_rules_dedup.py` | Tests for dedup semantic validation rule |
 | `test_rules_features.py` | Tests for features semantic validation rule |

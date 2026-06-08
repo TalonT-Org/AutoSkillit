@@ -25,6 +25,7 @@ class SkillInput:
 class SkillOutput:
     name: str
     type: str
+    allowed_values: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

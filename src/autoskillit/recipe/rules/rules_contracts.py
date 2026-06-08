@@ -440,8 +440,10 @@ def _check_result_field_drift(ctx: ValidationContext) -> list[RuleFinding]:
 def _check_example_covers_all_allowed_values(ctx: ValidationContext) -> list[RuleFinding]:
     """Error when any allowed_value has no corresponding pattern_examples entry.
 
-    Reads allowed_values from the raw manifest dict (not SkillContract, which does not
-    promote allowed_values into SkillOutput). An example 'covers' a value when the
+    Reads allowed_values from the raw manifest dict (not SkillContract — although
+    SkillOutput now carries allowed_values for both skill and callable contracts,
+    this rule continues to read from the manifest dict to keep pattern_examples
+    lookup local to the same data source). An example 'covers' a value when the
     example text contains a match for '{output_name}\\s*=\\s*{re.escape(value)}'.
     """
     findings: list[RuleFinding] = []

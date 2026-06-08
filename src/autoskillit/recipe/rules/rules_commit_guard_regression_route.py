@@ -12,12 +12,13 @@ from __future__ import annotations
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.schema import RecipeStep
 
 _COMMIT_GUARD_CALLABLE = "autoskillit.recipe._cmd_rpc.commit_guard"
 _REGRESSION_PREDICATE = "regression_detected"
 
 
-def _has_regression_route(step) -> bool:
+def _has_regression_route(step: RecipeStep) -> bool:
     if step.on_result is None:
         return False
     for cond in step.on_result.conditions:

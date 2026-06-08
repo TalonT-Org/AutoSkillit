@@ -456,7 +456,7 @@ steps:
       worktree_path: "${{ context.worktree_path }}"
       base_branch: "${{ inputs.base_branch }}"
     on_result:
-    - when: "${{ result.committed }} == 'regression_detected'"
+    - when: ${{ result.committed }} == 'regression_detected'
       route: release_issue_failure
     - route: main_repo_guard
     on_failure: main_repo_guard
@@ -471,7 +471,7 @@ steps:
       callable: "autoskillit.recipe._cmd_rpc.main_repo_guard"
       clone_path: "${{ context.work_dir }}"
     on_result:
-    - when: "${{ result.cleaned }} == 'failed'"
+    - when: ${{ result.cleaned }} == 'failed'
       route: release_issue_failure
     - route: merge
     on_failure: merge

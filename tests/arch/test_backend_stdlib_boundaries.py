@@ -217,3 +217,8 @@ def test_session_type_hook_strings_match_enum() -> None:
         f"Unrecognized session type literals in hook files: {sorted(unrecognized)}. "
         f"Valid SessionType values: {sorted(valid_values)}"
     )
+    missing = valid_values - found_literals
+    assert not missing, (
+        f"SessionType values not referenced in any hook file: {sorted(missing)}. "
+        "A hook may have been refactored to a pattern the scanner no longer recognises."
+    )

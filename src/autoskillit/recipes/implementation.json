@@ -418,7 +418,8 @@
         "test_stdout": "${{ context.merge_test_stdout }}",
         "test_stderr": "${{ context.merge_test_stderr }}",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-merge-gate",
-        "work_dir": "${{ context.work_dir }}"
+        "work_dir": "${{ context.work_dir }}",
+        "failed_step": "${{ context.merge_failed_step }}"
       },
       "capture": {
         "merge_gate_diagnosis_path": "${{ result.diagnosis_path }}",
@@ -428,7 +429,8 @@
       "on_failure": "merge_gate_fix",
       "optional_context_refs": [
         "merge_test_stdout",
-        "merge_test_stderr"
+        "merge_test_stderr",
+        "merge_failed_step"
       ],
       "note": "Writes a structured diagnosis file from merge gate test output, mirroring diagnose-ci format. Routes to fix on both success and failure — fix proceeds without context if diagnosis fails. Uses distinct context keys (merge_gate_*) to avoid collision with ci_watch/diagnose_ci context variables from the CI path.\n"
     },
@@ -575,7 +577,8 @@
         "cleanup_succeeded": "${{ result.cleanup_succeeded }}",
         "worktree_path": "${{ result.worktree_path }}",
         "merge_test_stdout": "${{ result.test_stdout }}",
-        "merge_test_stderr": "${{ result.test_stderr }}"
+        "merge_test_stderr": "${{ result.test_stderr }}",
+        "merge_failed_step": "${{ result.failed_step }}"
       },
       "on_result": [
         {

@@ -1176,7 +1176,7 @@ def test_commit_guard_allows_file_split(tmp_path: Path) -> None:
     )
 
 
-def test_commit_guard_allows_intentional_reduction(tmp_path: Path) -> None:
+def test_commit_guard_detects_pure_reduction_as_regression(tmp_path: Path) -> None:
     """commit_guard detects bulk reduction as regression when no content redistribution exists.
 
     A 50→20 line reduction on a single file with no compensating new files triggers

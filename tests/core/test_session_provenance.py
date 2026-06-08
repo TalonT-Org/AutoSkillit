@@ -134,3 +134,31 @@ class TestReadProvenanceForSession:
         path.write_text("\n\n" + json.dumps({"session_id": "found"}) + "\n\n")
         result = read_provenance_for_session("found")
         assert result is not None
+        assert result["session_id"] == "found"
+
+
+class TestProvenanceAnchoredToProjectDir:
+    """The provenance file must be written under project_dir, not the session cwd.
+
+    Worktree-scoped sessions pass cwd=<worktree-path> to flush_session_log. If
+    project_dir falls back to cwd, the provenance is written inside the
+    worktree and is destroyed when the worktree is cleaned up. Anchoring to
+    project_dir keeps the project-level provenance file complete.
+    """
+
+    def test_provenance_written_to_project_dir_not_cwd(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+
+        project_dir = tmp_path / "clone"
+        worktree_dir = project_dir / ".worktrees" / "fix-42"
+        worktree_dir.mkdir(parents=True)
+
+        write_provenance_record(_make_record(session_id="wt-sess"), project_dir=project_dir)
+        provenance_path = project_dir / ".autoskillit" / "temp" / "session_provenance.jsonl"
+        assert provenance_path.exists(), "Provenance must land under project_dir"
+
+        worktree_provenance = worktree_dir / ".autoskillit" / "temp" / "session_provenance.jsonl"
+        assert not worktree_provenance.exists(), "Provenance must not be written to cwd"

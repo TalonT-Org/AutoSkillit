@@ -167,6 +167,22 @@ def test_default_token_log_satisfies_token_store_with_order_id():
     assert "input_tokens" in total
 
 
+def test_default_token_log_implements_check_step_completeness():
+    """DefaultTokenLog must implement the check_step_completeness TokenLog method."""
+    import inspect
+
+    from autoskillit.pipeline.tokens import DefaultTokenLog
+
+    log = DefaultTokenLog()
+    method = getattr(log, "check_step_completeness", None)
+    assert method is not None, "DefaultTokenLog must implement check_step_completeness"
+    sig = inspect.signature(method)
+    assert "expected_steps" in sig.parameters, "missing expected_steps param"
+
+    missing = log.check_step_completeness(["plan", "implement"])
+    assert missing == ["implement", "plan"], "Empty log must return all expected steps as missing"
+
+
 def test_default_timing_log_satisfies_timing_store_with_order_id():
     """F-2: DefaultTimingLog satisfies updated TimingLog Protocol (includes order_id params)."""
     from autoskillit.core import TimingLog

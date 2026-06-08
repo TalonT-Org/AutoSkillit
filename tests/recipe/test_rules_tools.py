@@ -695,3 +695,173 @@ def test_all_bundled_recipes_pass_push_after_edit_rule() -> None:
     assert not violations, (
         "push-after-edit-requires-force fired on bundled recipes:\n" + "\n".join(violations)
     )
+
+
+# ---------------------------------------------------------------------------
+# patch-token-summary-requires-scoping-key rule tests
+# ---------------------------------------------------------------------------
+
+
+def _make_patch_token_summary_recipe(
+    with_args: dict[str, str] | None = None,
+    *,
+    python_shorthand: bool = False,
+) -> Recipe:
+    """Build a minimal recipe whose single step calls patch_pr_token_summary."""
+    if python_shorthand:
+        step = RecipeStep(
+            python="autoskillit.smoke_utils.patch_pr_token_summary",
+            with_args=with_args or {},
+        )
+    else:
+        step = RecipeStep(
+            tool="run_python",
+            with_args={
+                "callable": "autoskillit.smoke_utils.patch_pr_token_summary",
+                **(with_args or {}),
+            },
+        )
+    return Recipe(
+        name="test-recipe",
+        description="patch_pr_token_summary fixture.",
+        version="0.2.0",
+        kitchen_rules="Use run_skill only.",
+        steps={"patch_summary": step},
+    )
+
+
+def test_patch_token_summary_requires_scoping_key_fires_warning() -> None:
+    """patch_pr_token_summary without order_id or kitchen_id triggers WARNING."""
+    recipe = _make_patch_token_summary_recipe()
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "patch-token-summary-requires-scoping-key"]
+    assert len(matched) == 1, "Expected exactly one scoping-key finding"
+    assert matched[0].severity == Severity.WARNING
+    assert "scoping key" in matched[0].message
+
+
+def test_patch_token_summary_silent_when_order_id_wired() -> None:
+    """patch_pr_token_summary with order_id in with_args produces zero findings."""
+    recipe = _make_patch_token_summary_recipe({"order_id": "${{ context.order_id }}"})
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "patch-token-summary-requires-scoping-key"]
+    assert not matched, "order_id should satisfy the scoping-key requirement"
+
+
+def test_patch_token_summary_silent_when_kitchen_id_wired() -> None:
+    """patch_pr_token_summary with kitchen_id in with_args produces zero findings."""
+    recipe = _make_patch_token_summary_recipe({"kitchen_id": "${{ env.AUTOSKILLIT_KITCHEN_ID }}"})
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "patch-token-summary-requires-scoping-key"]
+    assert not matched, "kitchen_id should satisfy the scoping-key requirement"
+
+
+def test_patch_token_summary_python_shorthand_detected() -> None:
+    """python: shorthand for patch_pr_token_summary is detected by the rule."""
+    recipe = _make_patch_token_summary_recipe(python_shorthand=True)
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "patch-token-summary-requires-scoping-key"]
+    assert len(matched) == 1, "python: shorthand must be detected"
+    assert matched[0].severity == Severity.WARNING
+
+
+# ---------------------------------------------------------------------------
+# mixed-cwd-without-scoping-key rule tests
+# ---------------------------------------------------------------------------
+
+
+def _make_mixed_cwd_recipe(
+    patch_token_with_args: dict[str, str] | None = None,
+) -> Recipe:
+    """Recipe with two run_skill steps at different cwds plus a patch_token_summary."""
+    plan_step = RecipeStep(
+        tool="run_skill",
+        with_args={
+            "skill_command": "/autoskillit:plan",
+            "cwd": "${{ context.work_dir }}",
+        },
+    )
+    impl_step = RecipeStep(
+        tool="run_skill",
+        with_args={
+            "skill_command": "/autoskillit:implement",
+            "cwd": "${{ context.worktree_path }}",
+        },
+    )
+    patch_args = {"callable": "autoskillit.smoke_utils.patch_pr_token_summary"}
+    if patch_token_with_args:
+        patch_args.update(patch_token_with_args)
+    patch_step = RecipeStep(tool="run_python", with_args=patch_args)
+    return Recipe(
+        name="test-recipe",
+        description="Mixed-cwd fixture.",
+        version="0.2.0",
+        kitchen_rules="Use run_skill only.",
+        steps={
+            "plan": plan_step,
+            "implement": impl_step,
+            "patch_summary": patch_step,
+        },
+    )
+
+
+def test_mixed_cwd_without_scoping_key_fires_error() -> None:
+    """Mixed cwds + no scoping key fires Severity.ERROR."""
+    recipe = _make_mixed_cwd_recipe()
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "mixed-cwd-without-scoping-key"]
+    assert len(matched) == 1
+    assert matched[0].severity == Severity.ERROR
+    assert "cwd" in matched[0].message.lower()
+
+
+def test_mixed_cwd_silent_when_order_id_wired() -> None:
+    """Mixed cwds + order_id in patch_token_summary: no mixed-cwd error."""
+    recipe = _make_mixed_cwd_recipe({"order_id": "${{ context.order_id }}"})
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "mixed-cwd-without-scoping-key"]
+    assert not matched, "order_id should suppress the mixed-cwd error"
+
+
+def test_mixed_cwd_silent_when_kitchen_id_wired() -> None:
+    """Mixed cwds + kitchen_id in patch_token_summary: no mixed-cwd error."""
+    recipe = _make_mixed_cwd_recipe({"kitchen_id": "${{ env.AUTOSKILLIT_KITCHEN_ID }}"})
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "mixed-cwd-without-scoping-key"]
+    assert not matched, "kitchen_id should suppress the mixed-cwd error"
+
+
+def test_mixed_cwd_rule_does_not_fire_on_single_cwd() -> None:
+    """When all run_skill steps share a cwd, the mixed-cwd rule stays silent."""
+    single_cwd_step = RecipeStep(
+        tool="run_skill",
+        with_args={
+            "skill_command": "/autoskillit:plan",
+            "cwd": "${{ context.work_dir }}",
+        },
+    )
+    other_step = RecipeStep(
+        tool="run_skill",
+        with_args={
+            "skill_command": "/autoskillit:implement",
+            "cwd": "${{ context.work_dir }}",
+        },
+    )
+    patch_step = RecipeStep(
+        tool="run_python",
+        with_args={"callable": "autoskillit.smoke_utils.patch_pr_token_summary"},
+    )
+    recipe = Recipe(
+        name="test-recipe",
+        description="Single-cwd fixture.",
+        version="0.2.0",
+        kitchen_rules="Use run_skill only.",
+        steps={
+            "plan": single_cwd_step,
+            "implement": other_step,
+            "patch_summary": patch_step,
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    matched = [f for f in findings if f.rule == "mixed-cwd-without-scoping-key"]
+    assert not matched, "Single-cwd recipes must not trigger the rule"

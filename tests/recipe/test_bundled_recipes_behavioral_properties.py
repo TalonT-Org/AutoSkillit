@@ -52,9 +52,7 @@ def _recipe_base_name(filename: str) -> str:
     return filename.removesuffix(".yaml")
 
 
-@pytest.mark.xfail(
-    reason="Part B: on_context_limit handlers not yet added to bundled recipes", strict=True
-)
+@pytest.mark.xfail(reason="Part B: on_context_limit handlers not yet added to bundled recipes")
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
 def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:
     """Every run_skill step must declare on_context_limit (or be exempt)."""

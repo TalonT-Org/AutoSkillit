@@ -31,6 +31,11 @@ def _is_callable_explicit_condition(when: str | None, value: str) -> bool:
     return bool(re.search(rf"\b{re.escape(value)}\b", when))
 
 
+def _has_catch_all(conditions: list) -> bool:
+    """Return True if the conditions list includes a catch-all arm (no `when`)."""
+    return any(cond.when is None or cond.when.strip() == "true" for cond in conditions)
+
+
 def _get_provided_args(with_args: dict) -> set[str]:
     _nested = with_args.get("args")
     nested_args: set[str] = set(_nested.keys()) if isinstance(_nested, dict) else set()
@@ -318,6 +323,10 @@ def _check_unrouted_callable_verdict(ctx: ValidationContext) -> list[RuleFinding
                 for v in output.allowed_values
                 if not any(_is_callable_explicit_condition(cond.when, v) for cond in conditions)
             ]
+            if not unrouted:
+                continue
+            if _has_catch_all(conditions):
+                continue
             for v in unrouted:
                 findings.append(
                     RuleFinding(

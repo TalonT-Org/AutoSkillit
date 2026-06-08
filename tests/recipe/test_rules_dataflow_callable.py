@@ -32,10 +32,10 @@ def _callable_manifest(contract: dict[str, Any]) -> dict[str, Any]:
     return {"callable_contracts": {"autoskillit.test.fake_callable": contract}}
 
 
-def test_unrouted_callable_verdict_fires_when_value_missing(
+def test_unrouted_callable_verdict_fires_when_value_missing_no_catch_all(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Rule fires ERROR when an allowed_value on a callable output is unrouted in on_result."""
+    """Rule fires ERROR when an allowed_value is unrouted and there is no catch-all arm."""
     manifest = _callable_manifest(
         {
             "inputs": [{"name": "worktree_path", "type": "str", "required": True}],
@@ -66,8 +66,7 @@ def test_unrouted_callable_verdict_fires_when_value_missing(
                     when="${{ result.committed }} == 'b'",
                     route="next_step",
                 ),
-                # Missing 'c' — should fire.
-                StepResultCondition(route="next_step"),
+                # No catch-all and no explicit condition for 'c' — should fire.
             ]
         ),
     )
@@ -83,6 +82,53 @@ def test_unrouted_callable_verdict_fires_when_value_missing(
     assert unrouted[0].severity == Severity.ERROR
     assert unrouted[0].step_name == "guard"
     assert "'c'" in unrouted[0].message
+
+
+def test_unrouted_callable_verdict_tolerates_catch_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rule does NOT fire when unrouted values are covered by a catch-all arm."""
+    manifest = _callable_manifest(
+        {
+            "inputs": [{"name": "worktree_path", "type": "str", "required": True}],
+            "outputs": [
+                {
+                    "name": "committed",
+                    "type": "str",
+                    "allowed_values": ["a", "b", "c"],
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(_r, "load_bundled_manifest", lambda: manifest)
+
+    step = RecipeStep(
+        tool="run_python",
+        with_args={
+            "callable": "autoskillit.test.fake_callable",
+            "worktree_path": "/tmp",
+        },
+        on_result=StepResultRoute(
+            conditions=[
+                StepResultCondition(
+                    when="${{ result.committed }} == 'a'",
+                    route="error_step",
+                ),
+                # 'b' and 'c' fall through to catch-all — acceptable.
+                StepResultCondition(route="next_step"),
+            ]
+        ),
+    )
+    recipe = _make_recipe(
+        {
+            "guard": step,
+            "next_step": RecipeStep(action="stop", message="ok"),
+            "error_step": RecipeStep(action="stop", message="error"),
+        }
+    )
+    findings = run_semantic_rules(recipe)
+    unrouted = [f for f in findings if f.rule == "unrouted-callable-verdict"]
+    assert unrouted == []
 
 
 def test_unrouted_callable_verdict_passes_when_all_values_routed(

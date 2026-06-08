@@ -53,3 +53,35 @@ def test_all_backends_explicitly_set_all_capabilities_fields() -> None:
             f"{label} ({relpath}): keyword mismatch — "
             f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
         )
+
+
+def test_construction_sites_list_is_exhaustive() -> None:
+    """_CONSTRUCTION_SITES must list every BackendCapabilities(...) call site in src."""
+    from autoskillit.core import pkg_root
+
+    src_root = pkg_root()
+    found_relpaths: list[str] = []
+
+    for py_file in sorted(src_root.rglob("*.py")):
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "BackendCapabilities"
+            ):
+                found_relpaths.append(py_file.relative_to(src_root).as_posix())
+                break
+
+    listed_relpaths = {relpath for _, relpath in _CONSTRUCTION_SITES}
+    undeclared = set(found_relpaths) - listed_relpaths
+    assert not undeclared, (
+        f"BackendCapabilities(...) call sites found in src but missing from "
+        f"_CONSTRUCTION_SITES: {sorted(undeclared)}. "
+        f"Add them to _CONSTRUCTION_SITES to ensure they are checked."
+    )

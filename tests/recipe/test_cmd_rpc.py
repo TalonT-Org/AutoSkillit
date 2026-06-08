@@ -1133,3 +1133,196 @@ def test_commit_guard_skips_regression_no_implementation_commits(tmp_path: Path)
     assert result["committed"] == "true", (
         f"Expected committed=true (no implementation commits) but got: {result}"
     )
+
+
+def test_commit_guard_allows_file_split(tmp_path: Path) -> None:
+    """commit_guard must allow file splits: content moved from tracked file to new untracked file.
+
+    Reproduces the false-positive scenario from issue #3887: a 40-line tracked file
+    is reduced to 10 lines while 30 lines are moved into a new untracked file. The
+    regression check must compensate for the new file's line count.
+    """
+    _init_git_repo_on_main(tmp_path)
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    original = "\n".join(f"line_{i} = {i}" for i in range(40)) + "\n"
+    (tmp_path / "module_a.py").write_text(original)
+    subprocess.run(
+        ["git", "add", "--", "module_a.py"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "feat: add module_a"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    # Reduce module_a.py to 10 lines, move the rest to a new untracked module_b.py
+    (tmp_path / "module_a.py").write_text("\n".join(f"line_{i} = {i}" for i in range(10)) + "\n")
+    moved = "\n".join(f"line_{i} = {i}" for i in range(10, 40)) + "\n"
+    (tmp_path / "module_b.py").write_text(moved)
+    result = commit_guard(worktree_path=str(tmp_path), base_branch="main")
+    assert result["committed"] == "true", (
+        f"Expected committed=true for file split but got: {result}"
+    )
+
+
+def test_commit_guard_allows_intentional_reduction(tmp_path: Path) -> None:
+    """commit_guard must allow pure dead-code removal: net line loss with no compensating files.
+
+    Intentional cleanup that removes 30 lines from a 50-line file (no content
+    redistribution) is permitted. The regression check uses new-file accounting
+    and per-file balance to distinguish content-movement from content-loss patterns.
+    """
+    _init_git_repo_on_main(tmp_path)
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    original = "\n".join(f"line_{i} = {i}" for i in range(50)) + "\n"
+    (tmp_path / "module_a.py").write_text(original)
+    subprocess.run(
+        ["git", "add", "--", "module_a.py"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "feat: add module_a"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    # Reduce to 20 lines, no compensating file
+    (tmp_path / "module_a.py").write_text("\n".join(f"line_{i} = {i}" for i in range(20)) + "\n")
+    result = commit_guard(worktree_path=str(tmp_path), base_branch="main")
+    assert result["committed"] == "true", (
+        f"Expected committed=true for intentional reduction but got: {result}"
+    )
+
+
+def test_commit_guard_regression_result_structure(tmp_path: Path) -> None:
+    """commit_guard regression_detected result must include the diagnostic keys."""
+    _init_git_repo_on_main(tmp_path)
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    for i, name in enumerate(("module_a.py", "module_b.py", "module_c.py")):
+        (tmp_path / name).write_text("\n".join(f"line_{j} = {j}" for j in range(20)) + "\n")
+    subprocess.run(
+        ["git", "add", "--", "module_a.py", "module_b.py", "module_c.py"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "feat: add implementation"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=_GIT_ENV,
+    )
+    for name in ("module_a.py", "module_b.py", "module_c.py"):
+        (tmp_path / name).write_text("line_0 = 0\n")
+    result = commit_guard(worktree_path=str(tmp_path), base_branch="main")
+    assert result["committed"] == "regression_detected", (
+        f"Expected regression_detected but got: {result}"
+    )
+    for key in ("reverted_files", "implementation_net", "working_tree_net", "regression_lines"):
+        assert key in result, f"Missing diagnostic key {key!r} in result: {result}"
+
+
+def test_check_regression_unit_with_mocked_git(tmp_path: Path) -> None:
+    """Unit-test _check_regression classification with controlled numstat strings.
+
+    Tests the multi-signal classification logic without a real git repo by patching
+    run_git to return crafted numstat outputs. Three cases:
+    - New-file accounting offsets source reduction → no regression
+    - Pure deletion with no compensating new files → regression detected
+    - Aggregate > 10 but all per-file < 5 with no untracked files → no regression
+    """
+    from unittest.mock import MagicMock
+
+    from autoskillit.recipe._cmd_rpc_guards import _check_regression
+
+    def _make_git_result(stdout: str, returncode: int = 0) -> MagicMock:
+        result = MagicMock()
+        result.stdout = stdout
+        result.returncode = returncode
+        return result
+
+    def _patched_run_git(args: list[str], **kwargs):
+        cmd = args[0] if args else ""
+        if cmd == "merge-base":
+            return _make_git_result("abc123\n")
+        if "diff" in args and "HEAD" in args:
+            return _make_git_result("40\t0\tmodule_a.py\n")
+        if "diff" in args:
+            return _make_git_result("10\t0\tmodule_a.py\n")
+        return _make_git_result("")
+
+    # Case 1: file split — untracked new file with 30 lines offsets the 30-line reduction.
+    file_status_split = {"module_a.py": " M", "module_b.py": "??"}
+    files_split = ["module_a.py", "module_b.py"]
+    with patch("autoskillit.recipe._cmd_rpc_guards.run_git", side_effect=_patched_run_git):
+        # Need to patch the line-count helper used by new-file accounting as well.
+        with patch(
+            "autoskillit.recipe._cmd_rpc_guards._count_lines_in_files",
+            return_value=30,
+        ):
+            result = _check_regression(str(tmp_path), files_split, "main", file_status_split)
+    assert result is None, f"Expected None (file split) but got: {result}"
+
+    # Case 2: pure deletion with no compensating new files → regression.
+    file_status_pure = {"module_a.py": " M", "module_b.py": " M"}
+    files_pure = ["module_a.py", "module_b.py"]
+    with patch("autoskillit.recipe._cmd_rpc_guards.run_git", side_effect=_patched_run_git):
+        with patch(
+            "autoskillit.recipe._cmd_rpc_guards._count_lines_in_files",
+            return_value=0,
+        ):
+            result = _check_regression(str(tmp_path), files_pure, "main", file_status_pure)
+    assert result is not None, "Expected regression detection for pure deletion"
+    assert result["committed"] == "regression_detected"
+
+    # Case 3: aggregate > 10 but per-file < 5 with no untracked files → no regression.
+    def _small_per_file(args: list[str], **kwargs):
+        cmd = args[0] if args else ""
+        if cmd == "merge-base":
+            return _make_git_result("abc123\n")
+        if "diff" in args and "HEAD" in args:
+            # 3 files, each with 5 net add = 15 committed_net
+            return _make_git_result("4\t0\ta.py\n4\t0\tb.py\n4\t0\tc.py\n")
+        if "diff" in args:
+            # 3 files, each with 1 net loss = -3 wt_net → regression_lines = 18
+            return _make_git_result("0\t1\ta.py\n0\t1\tb.py\n0\t1\tc.py\n")
+        return _make_git_result("")
+
+    file_status_small = {"a.py": " M", "b.py": " M", "c.py": " M"}
+    files_small = ["a.py", "b.py", "c.py"]
+    with patch("autoskillit.recipe._cmd_rpc_guards.run_git", side_effect=_small_per_file):
+        with patch(
+            "autoskillit.recipe._cmd_rpc_guards._count_lines_in_files",
+            return_value=0,
+        ):
+            result = _check_regression(str(tmp_path), files_small, "main", file_status_small)
+    assert result is None, f"Expected None (aggregate > 10 but per-file all < 5) but got: {result}"

@@ -605,7 +605,7 @@ class TestImplementationPipelineStructure:
             assert "all_plan_paths" in step.capture or "all_plan_paths" in step.capture_list, (
                 f"{recipe.name} {step_name} must capture all_plan_paths"
             )
-            captures = step.capture or step.capture_list
+            captures = step.capture if "all_plan_paths" in step.capture else step.capture_list
             assert "result.plan_path" in captures["all_plan_paths"].from_, (
                 f"{recipe.name} {step_name} all_plan_paths must accumulate result.plan_path"
             )

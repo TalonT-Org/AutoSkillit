@@ -111,7 +111,7 @@ def test_research_recipe_passes_semantic_rules(recipe):
     errors = validate_recipe_structure(recipe)
     assert not errors, f"Structural validation errors: {errors}"
     findings = run_semantic_rules(recipe)
-    _KNOWN_NON_CONFORMING = {"audit-impl-remediation-route"}
+    _KNOWN_NON_CONFORMING = {"audit-impl-remediation-route", "mixed-cwd-without-scoping-key"}
     fired_rules = {f.rule for f in findings if f.severity == Severity.ERROR}
     for rule_name in _KNOWN_NON_CONFORMING:
         assert rule_name in fired_rules, (

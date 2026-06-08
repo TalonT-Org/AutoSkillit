@@ -29,7 +29,11 @@ _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 
 
 _KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {
-    "research": {"audit-impl-remediation-route"},
+    "implementation": {"mixed-cwd-without-scoping-key"},
+    "implementation-groups": {"mixed-cwd-without-scoping-key"},
+    "merge-prs": {"mixed-cwd-without-scoping-key"},
+    "remediation": {"mixed-cwd-without-scoping-key"},
+    "research": {"audit-impl-remediation-route", "mixed-cwd-without-scoping-key"},
     "agent-eval": {"all-dispatchable-stops-have-sentinel", "dead-output"},
     "skill-eval": {"all-dispatchable-stops-have-sentinel", "dead-output"},
 }

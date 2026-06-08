@@ -31,6 +31,18 @@ from tests.infra._token_summary_helpers import _resolve_session_label
 pytestmark = [pytest.mark.medium]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_kitchen_marker(monkeypatch):
+    """Prevent read_kitchen_id_from_marker from reading real hook config files.
+
+    Tests that need kitchen_id pass it explicitly — the marker is never consulted.
+    """
+    monkeypatch.setattr(
+        "autoskillit.core.read_kitchen_id_from_marker",
+        lambda base=None: "",
+    )
+
+
 # T_SU1
 def test_returns_false_when_bug_report_missing(tmp_path: Path) -> None:
     """Returns {"non_empty": "false"} when bug_report.json does not exist."""

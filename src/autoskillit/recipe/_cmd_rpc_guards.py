@@ -76,7 +76,10 @@ def check_dropped_ci_loop(
     the route escalates to ``diagnose_ci`` (``DROPPED_CI_LIMIT_EXCEEDED``) — the
     merge-group CI keeps failing, so a re-enqueue is unlikely to help.
     """
-    max_drops = max_drops or "2"
+    try:
+        limit = int(max_drops) if max_drops else 2
+    except ValueError:
+        limit = 2
     path = Path(counter_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -85,7 +88,7 @@ def check_dropped_ci_loop(
         count = 0
     count += 1
     atomic_write(path, str(count))
-    status = "DROPPED_CI_LIMIT_EXCEEDED" if count >= int(max_drops) else "DROPPED_CI_OK"
+    status = "DROPPED_CI_LIMIT_EXCEEDED" if count >= limit else "DROPPED_CI_OK"
     return {"status": status, "count": str(count)}
 
 

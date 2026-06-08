@@ -40,7 +40,13 @@ CONTEXT_LIMIT_EXEMPT_STEPS: dict[str, set[str]] = {
 }
 
 PARALLEL_ELIGIBLE_DISPATCH_STEPS: dict[str, set[str]] = {
-    "planner": {"elaborate_wps"},
+    "planner": {
+        "elaborate_phases",
+        "elaborate_assignments",
+        "elaborate_wps",
+        "refine_assignments",
+        "refine_wps",
+    },
 }
 
 CONTEXT_INTENSIVE_STEPS: dict[str, set[str]] = {

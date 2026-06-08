@@ -6,10 +6,13 @@ import hashlib
 from pathlib import Path
 
 import pytest
+import regex as re
 
 from autoskillit.core.types import CaptureEntrySpec, RecipeSource
 from autoskillit.recipe.io import (
+    RECIPE_SCAN_DIRS,
     builtin_recipes_dir,
+    builtin_sub_recipes_dir,
     list_recipes,
     load_recipe,
 )
@@ -238,15 +241,6 @@ class TestRecipeVersionField:
 
     def test_all_bundled_recipes_have_semver_recipe_version(self):
         """Every bundled recipe with recipe_version uses X.Y.Z semver format."""
-        import regex as re
-
-        from autoskillit.recipe.io import (
-            RECIPE_SCAN_DIRS,
-            builtin_recipes_dir,
-            builtin_sub_recipes_dir,
-            load_recipe,
-        )
-
         semver_re = re.compile(r"^\d+\.\d+\.\d+$")
         base = builtin_recipes_dir()
         yaml_paths: list[Path] = []

@@ -538,6 +538,7 @@ class CodexEventType(StrEnum):
     SESSION_META = "session_meta"
     TURN_STARTED = "turn.started"
     ITEM_STARTED = "item.started"
+    ITEM_UPDATED = "item.updated"
     ITEM_COMPLETED = "item.completed"
     TURN_COMPLETED = "turn.completed"
     TURN_FAILED = "turn.failed"

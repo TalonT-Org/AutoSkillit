@@ -9,6 +9,7 @@ from autoskillit.core import (
     BackendEventKind,
     CanonicalTokenUsage,
     CodexEventData,
+    CodexEventType,
     CodexItemType,
     StreamParser,
 )
@@ -559,5 +560,48 @@ class TestCodexParserUnrecognizedTypeWarning:
             parser.parse_line(line)
         assert any(
             log["event"] == "codex_ndjson_unknown_item_type" and log["log_level"] == "warning"
+            for log in cap
+        )
+
+
+class TestCodexParserItemUpdated:
+    def test_item_updated_enum_value(self) -> None:
+        assert CodexEventType.ITEM_UPDATED.value == "item.updated"
+
+    def test_item_updated_from_ndjson(self) -> None:
+        result = CodexEventType.from_ndjson("item.updated")
+        assert result == CodexEventType.ITEM_UPDATED
+        assert result != CodexEventType.UNKNOWN
+
+    def test_scan_ndjson_silently_discards_item_updated(self) -> None:
+        line = json.dumps({"type": "item.updated"})
+        with structlog.testing.capture_logs() as cap:
+            acc = _scan_codex_ndjson(line)
+        assert not acc.agent_messages
+        assert not acc.command_executions
+        assert not acc.mcp_tool_calls
+        assert not acc.file_changes
+        assert acc.session_id == ""
+        assert acc.success is False
+        assert not any(log["event"] == "codex_ndjson_unknown_event_type" for log in cap)
+
+    def test_parse_line_item_updated_yields_ignored_no_warning(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps({"type": "item.updated"})
+        with structlog.testing.capture_logs() as cap:
+            event = parser.parse_line(line)
+        assert event is not None
+        assert event.kind == BackendEventKind.IGNORED
+        assert event.is_terminal is False
+        assert event.has_marker is False
+        assert not any(log["event"] == "codex_ndjson_unknown_event_type" for log in cap)
+
+    def test_unknown_event_type_still_warns_after_item_updated_guard(self) -> None:
+        parser = CodexStreamParser()
+        line = json.dumps({"type": "brand_new_unknown_event"})
+        with structlog.testing.capture_logs() as cap:
+            parser.parse_line(line)
+        assert any(
+            log["event"] == "codex_ndjson_unknown_event_type" and log["log_level"] == "warning"
             for log in cap
         )

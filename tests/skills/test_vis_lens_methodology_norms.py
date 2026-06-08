@@ -323,7 +323,7 @@ def test_tradition_schema_valid(tradition_name: str) -> None:
     assert isinstance(spec, MethodologyTraditionSpec)
     assert spec.name == tradition_name
     assert spec.display_name, "display_name must be non-empty"
-    assert spec.schema_version == "1.0"
+    assert spec.schema_version == "1.0.0"
     assert isinstance(spec.priority, int) and spec.priority >= 1
     assert len(spec.detection_keywords) >= 2, "need >= 2 detection keywords for matching"
     assert isinstance(spec.mandatory_figures, list)

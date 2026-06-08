@@ -14,7 +14,7 @@ import pytest
 
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
 from autoskillit.workspace.skills import _read_skill_frontmatter
-from tests.arch._helpers import _iter_skill_dirs, _strip_frontmatter
+from tests.arch._helpers import _iter_skill_dirs, _strip_doc_fenced_blocks, _strip_frontmatter
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -34,13 +34,14 @@ _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
 
 
 def _detect_capabilities(body: str, skill_name: str) -> set[str]:
+    filtered = _strip_doc_fenced_blocks(body)
     detected: set[str] = set()
     for cap_name, patterns in _CAPABILITY_PATTERNS.items():
         for pat in patterns:
-            if pat.search(body):
+            if pat.search(filtered):
                 detected.add(cap_name)
                 break
-    for line in body.splitlines():
+    for line in filtered.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue

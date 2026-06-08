@@ -9,7 +9,7 @@ import pytest
 from autoskillit.core import paths
 from autoskillit.core.types._type_constants_registries import SKILL_CAPABILITY_REGISTRY
 from autoskillit.workspace.skills import _read_skill_frontmatter
-from tests.arch._helpers import _strip_frontmatter
+from tests.arch._helpers import _strip_doc_fenced_blocks, _strip_frontmatter
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -20,10 +20,11 @@ _GENUINE_CLAUDE_CODE_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 
 def _has_genuine_claude_code_dependency(body: str, skill_name: str) -> bool:
+    filtered = _strip_doc_fenced_blocks(body)
     for pat in _GENUINE_CLAUDE_CODE_PATTERNS:
-        if pat.search(body):
+        if pat.search(filtered):
             return True
-    for line in body.splitlines():
+    for line in filtered.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#") or stripped.startswith("|"):
             continue

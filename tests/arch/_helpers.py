@@ -462,6 +462,52 @@ def _strip_frontmatter(content: str) -> str:
     return m.group(2) if m else content
 
 
+_STEP_HEADING_RE = _stdlib_re.compile(r"(?:Step\s+\d|^\d+[\.\):\s])")
+
+
+def _strip_doc_fenced_blocks(body: str) -> str:
+    """Strip fenced code blocks from non-step documentation sections.
+
+    Preserves code fence content under numbered step headings
+    (### Step N, #### N.N) since those contain executable instructions.
+    Strips fence content under all other headings to prevent false
+    capability detection from illustrative documentation examples.
+
+    Inline backtick spans are NOT stripped — they appear in prose
+    descriptions of genuine capabilities (e.g., resolve-failures).
+    """
+    lines = body.split("\n")
+    result: list[str] = []
+    in_step_section = False
+    in_fence = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped.startswith("#") and not in_fence:
+            heading_text = stripped.lstrip("#").strip()
+            in_step_section = bool(_STEP_HEADING_RE.match(heading_text))
+
+        if stripped.startswith("```"):
+            if not in_fence:
+                in_fence = True
+                if not in_step_section:
+                    continue
+            else:
+                in_fence = False
+                if not in_step_section:
+                    continue
+            result.append(line)
+            continue
+
+        if in_fence and not in_step_section:
+            continue
+
+        result.append(line)
+
+    return "\n".join(result)
+
+
 def _iter_skill_dirs() -> Iterator[tuple[str, Path]]:
     from autoskillit.core import paths
 

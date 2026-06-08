@@ -14,7 +14,7 @@ import pytest
 
 from autoskillit.core.paths import pkg_root
 from autoskillit.workspace.skills import _read_skill_frontmatter
-from tests.arch._helpers import _strip_frontmatter
+from tests.arch._helpers import _strip_doc_fenced_blocks, _strip_frontmatter
 
 pytestmark = [pytest.mark.small]
 
@@ -52,12 +52,13 @@ def test_skill_commit_prohibits_amend(skill_dir: Path) -> None:
     new commits.  Skills with no commit instructions (or only descriptive mentions without
     -m flag) are considered low-risk and pass."""
     text = (skill_dir / "SKILL.md").read_text()
+    scan_text = _strip_doc_fenced_blocks(_strip_frontmatter(text))
 
-    if not _GIT_COMMIT_INSTRUCTION_RE.search(text):
+    if not _GIT_COMMIT_INSTRUCTION_RE.search(scan_text):
         return
 
-    has_prohibition = bool(_AMEND_PROHIBITION_RE.search(text))
-    has_new_commit_language = bool(_NEW_COMMIT_RE.search(text))
+    has_prohibition = bool(_AMEND_PROHIBITION_RE.search(scan_text))
+    has_new_commit_language = bool(_NEW_COMMIT_RE.search(scan_text))
 
     assert has_prohibition or has_new_commit_language, (
         f"Skill {skill_dir.name!r} contains 'git commit' instructions but does not "
@@ -70,7 +71,7 @@ def test_skill_commit_prohibits_amend(skill_dir: Path) -> None:
 def test_git_commit_skills_declare_metadata_write(skill_dir: Path) -> None:
     """Skills with 'git commit -m' instructions must declare git_metadata_write."""
     content = (skill_dir / "SKILL.md").read_text()
-    body = _strip_frontmatter(content)
+    body = _strip_doc_fenced_blocks(_strip_frontmatter(content))
     if not _GIT_COMMIT_INSTRUCTION_RE.search(body):
         return
     fm = _read_skill_frontmatter(skill_dir / "SKILL.md")

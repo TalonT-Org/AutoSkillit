@@ -14,8 +14,6 @@ logger = get_logger(__name__)
 
 
 class _RegressionVerdict(StrEnum):
-    CLEAR = "clear"
-    CONTENT_MOVED = "content_moved"
     POSSIBLE_REVERSION = "possible_reversion"
 
 

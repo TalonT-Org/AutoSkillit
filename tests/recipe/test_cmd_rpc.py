@@ -1177,11 +1177,11 @@ def test_commit_guard_allows_file_split(tmp_path: Path) -> None:
 
 
 def test_commit_guard_allows_intentional_reduction(tmp_path: Path) -> None:
-    """commit_guard must allow pure dead-code removal: net line loss with no compensating files.
+    """commit_guard detects bulk reduction as regression when no content redistribution exists.
 
-    Intentional cleanup that removes 30 lines from a 50-line file (no content
-    redistribution) is permitted. The regression check uses new-file accounting
-    and per-file balance to distinguish content-movement from content-loss patterns.
+    A 50→20 line reduction on a single file with no compensating new files triggers
+    regression_detected — the guard cannot distinguish dead-code removal from accidental
+    reversion without corroborating content-movement evidence.
     """
     _init_git_repo_on_main(tmp_path)
     subprocess.run(
@@ -1210,8 +1210,8 @@ def test_commit_guard_allows_intentional_reduction(tmp_path: Path) -> None:
     # Reduce to 20 lines, no compensating file
     (tmp_path / "module_a.py").write_text("\n".join(f"line_{i} = {i}" for i in range(20)) + "\n")
     result = commit_guard(worktree_path=str(tmp_path), base_branch="main")
-    assert result["committed"] == "true", (
-        f"Expected committed=true for intentional reduction but got: {result}"
+    assert result["committed"] == "regression_detected", (
+        f"Expected regression_detected for bulk reduction without redistribution but got: {result}"
     )
 
 

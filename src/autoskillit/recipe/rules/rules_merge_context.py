@@ -42,6 +42,38 @@ def _find_resolve_failures_step(
     return None
 
 
+def _find_diagnose_merge_gate_step(
+    start: str, ctx: ValidationContext
+) -> tuple[str, RecipeStep] | None:
+    """BFS from start to find the first run_python step calling diagnose_merge_gate.
+
+    Stops traversal through any merge_worktree step that already captures
+    result.failed_step, since that step re-establishes context independently.
+
+    Returns (step_name, step) or None.
+    """
+    visited: set[str] = {start}
+    frontier: set[str] = ctx.step_graph.get(start, set()) - visited
+    while frontier:
+        visited |= frontier
+        next_frontier: set[str] = set()
+        for name in frontier:
+            step = ctx.recipe.steps.get(name)
+            if step is None:
+                continue
+            if step.tool == "run_python":
+                callable_val = str(step.with_args.get("callable", ""))
+                if callable_val == "autoskillit.smoke_utils.diagnose_merge_gate":
+                    return name, step
+            if step.tool == "merge_worktree" and any(
+                "failed_step" in v.from_ for v in (step.capture or {}).values()
+            ):
+                continue
+            next_frontier |= ctx.step_graph.get(name, set()) - visited
+        frontier = next_frontier
+    return None
+
+
 @semantic_rule(
     name="merge-test-gate-context-not-forwarded",
     description=(
@@ -123,5 +155,70 @@ def _check_merge_test_gate_context_not_forwarded(
                         ),
                     )
                 )
+
+    return findings
+
+
+@semantic_rule(
+    name="merge-failed-step-not-captured",
+    description=(
+        "A merge_worktree step routes on result.failed_step to a step chain that "
+        "reaches a run_python step calling autoskillit.smoke_utils.diagnose_merge_gate, "
+        "but the merge_worktree capture block does not include a field capturing "
+        "result.failed_step. Without this capture, diagnose_merge_gate receives no "
+        "failed_step argument and falls through to failure_type=test, misclassifying "
+        "pre-test failures (dirty_tree, rebase, etc.) as test failures and creating an "
+        "unwinnable retry loop."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_merge_failed_step_not_captured(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "merge_worktree":
+            continue
+        if not step.on_result or not step.on_result.conditions:
+            continue
+
+        failed_step_routes: set[str] = set()
+        for cond in step.on_result.conditions:
+            if cond.when is None:
+                continue
+            m = _FAILED_STEP_PATTERN.search(cond.when)
+            if m:
+                failed_step_routes.add(cond.route)
+
+        if not failed_step_routes:
+            continue
+
+        has_failed_step_capture = any(
+            "failed_step" in v.from_ for v in (step.capture or {}).values()
+        )
+        if has_failed_step_capture:
+            continue
+
+        for route_target in failed_step_routes:
+            result = _find_diagnose_merge_gate_step(route_target, ctx)
+            if result is None:
+                continue
+            dg_step_name, _ = result
+            findings.append(
+                RuleFinding(
+                    rule="merge-failed-step-not-captured",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"merge_worktree step '{step_name}' routes on result.failed_step "
+                        f"to a chain that reaches diagnose_merge_gate step "
+                        f"'{dg_step_name}', but its capture block is missing "
+                        f"result.failed_step. Add "
+                        f"'merge_failed_step: ${{{{ result.failed_step }}}}' to capture "
+                        f"and pass 'failed_step: ${{{{ context.merge_failed_step }}}}' "
+                        f"to diagnose_merge_gate so pre-test failures (dirty_tree, rebase, "
+                        f"etc.) are classified as failure_type=pre_test."
+                    ),
+                )
+            )
 
     return findings

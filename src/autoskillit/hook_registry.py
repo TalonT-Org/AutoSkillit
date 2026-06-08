@@ -208,6 +208,11 @@ HOOK_REGISTRY: list[HookDef] = [
         session_scope="headless_only",
     ),
     HookDef(
+        matcher=r"Bash|mcp__.*autoskillit.*__(run_cmd|run_python)",
+        scripts=["guards/recipe_read_guard.py"],
+        session_scope="headless_only",
+    ),
+    HookDef(
         matcher=r"Bash|Agent",
         scripts=["guards/background_exec_guard.py"],
         session_scope="headless_only",
@@ -334,6 +339,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "test_runner_guard.py",
         "fleet_claim_guard.py",
         "reset_resume_gate.py",
+        "recipe_read_guard.py",
     }
 )
 

@@ -27,6 +27,14 @@ CODEX_MCP_STARTUP_TIMEOUT_SEC: float = 30.0
 # `open_kitchen` response sizes with 2x headroom.
 CODEX_TOOL_OUTPUT_TOKEN_LIMIT: int = 50_000
 
+# Disable Codex auto-compaction by setting the limit to an unreachable value.
+# Auto-compaction at 90% of 258K context window can destroy recipe content
+# loaded by `open_kitchen`, leaving the agent without the recipe steps it
+# needs to complete the pipeline. Defense-in-depth is provided by the
+# `recipe_read_guard.py` PreToolUse hook which prevents the agent from
+# re-reading recipe files via run_cmd/run_python after compaction.
+CODEX_AUTO_COMPACT_LIMIT: int = 999_999_999
+
 # Keys that must be present in the autoskillit MCP server entry for the Codex
 # backend. Validated against the entry dict actually written by
 # `ensure_codex_mcp_registered` via the arch test
@@ -233,6 +241,8 @@ def _is_autoskillit_registered(
         return False
     if config.get("tool_output_token_limit", 0) < CODEX_TOOL_OUTPUT_TOKEN_LIMIT:
         return False
+    if config.get("model_auto_compact_token_limit", 0) < CODEX_AUTO_COMPACT_LIMIT:
+        return False
     return True
 
 
@@ -294,6 +304,11 @@ def ensure_codex_mcp_registered(
             key="tool_output_token_limit",
             value=CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
         )
+        _ensure_top_level_key(
+            config_path,
+            key="model_auto_compact_token_limit",
+            value=CODEX_AUTO_COMPACT_LIMIT,
+        )
         return True
     else:
         config = result.data
@@ -305,5 +320,6 @@ def ensure_codex_mcp_registered(
             return False
         config.setdefault("mcp_servers", {})["autoskillit"] = entry
         config.setdefault("tool_output_token_limit", CODEX_TOOL_OUTPUT_TOKEN_LIMIT)
+        config["model_auto_compact_token_limit"] = CODEX_AUTO_COMPACT_LIMIT
         _write_codex_config(config_path, config, source=result)
         return True

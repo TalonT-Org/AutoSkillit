@@ -8,6 +8,7 @@ import pytest
 from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, HEADLESS_AUTO_GATE_ENV_VAR
 from autoskillit.execution.backends import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_config import (
+    CODEX_AUTO_COMPACT_LIMIT,
     CODEX_MCP_REQUIRED_KEYS,
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
@@ -230,6 +231,7 @@ class TestIsAutoskillitRegistered:
                 }
             },
             "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
 
@@ -244,6 +246,7 @@ class TestIsAutoskillitRegistered:
                 }
             },
             "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
 
@@ -259,6 +262,7 @@ class TestIsAutoskillitRegistered:
                 }
             },
             "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=False) is True
 
@@ -333,6 +337,53 @@ class TestIsAutoskillitRegistered:
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
 
+    def test_missing_auto_compact_limit_returns_false(self):
+        """Must return False when model_auto_compact_token_limit is missing."""
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
+
+    def test_low_auto_compact_limit_returns_false(self):
+        """Must return False when model_auto_compact_token_limit is below the sentinel."""
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "model_auto_compact_token_limit": 100_000,
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is False
+
+    def test_auto_compact_limit_at_sentinel_returns_true(self):
+        """Must return True when model_auto_compact_token_limit is at the sentinel."""
+        config = {
+            "mcp_servers": {
+                "autoskillit": {
+                    "command": "autoskillit",
+                    "env_vars": sorted(CODEX_MCP_ENV_FORWARD_VARS),
+                    "startup_timeout_sec": CODEX_MCP_STARTUP_TIMEOUT_SEC,
+                    "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+                }
+            },
+            "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
+        }
+        assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
+
 
 class TestEnsureCodexMcpRegistered:
     def test_first_call_returns_true_and_writes(self, tmp_path):
@@ -356,6 +407,27 @@ class TestEnsureCodexMcpRegistered:
         assert "tool_output_token_limit" not in config["mcp_servers"]["autoskillit"], (
             "tool_output_token_limit is a Codex global key, not a server-entry key"
         )
+
+    def test_auto_compact_limit_written_to_top_level(self, tmp_path):
+        """ensure_codex_mcp_registered must set model_auto_compact_token_limit at the top level."""
+        p = tmp_path / "config.toml"
+        ensure_codex_mcp_registered(config_path=p)
+        config = _read_codex_config(p).data
+        assert config["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
+        assert "model_auto_compact_token_limit" not in config.get("mcp_servers", {}).get(
+            "autoskillit", {}
+        )
+
+    def test_stale_auto_compact_limit_triggers_rewrite(self, tmp_path):
+        """A below-sentinel limit must trigger a rewrite to the sentinel."""
+        p = tmp_path / "config.toml"
+        ensure_codex_mcp_registered(config_path=p)
+        text = p.read_text().replace(str(CODEX_AUTO_COMPACT_LIMIT), "100000")
+        p.write_text(text)
+        result = ensure_codex_mcp_registered(config_path=p)
+        assert result is True
+        config = _read_codex_config(p).data
+        assert config["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
 
     def test_headless_auto_gate_true_includes_auto_gate_env(self, tmp_path):
         p = tmp_path / "config.toml"
@@ -522,6 +594,14 @@ class TestDestructiveOverwritePrevention:
         assert f"tool_output_token_limit = {CODEX_TOOL_OUTPUT_TOKEN_LIMIT}" in content
         assert "[mcp_servers.autoskillit]" in content
 
+    def test_corrupt_file_writes_auto_compact_limit(self, tmp_path):
+        """The corrupt-file path must also insert the auto-compact limit at the top."""
+        p = tmp_path / "config.toml"
+        p.write_text("not valid toml = =", encoding="utf-8")
+        ensure_codex_mcp_registered(config_path=p)
+        content = p.read_text(encoding="utf-8")
+        assert f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}" in content
+
 
 class TestRequiredKeysCoverage:
     """The CODEX_MCP_REQUIRED_KEYS spec must match the keys actually written by
@@ -581,6 +661,7 @@ class TestConfigEnvBoundary:
                 }
             },
             "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
         assert _is_autoskillit_registered(config, headless_auto_gate=True) is True
 
@@ -733,6 +814,7 @@ class TestIsRegisteredRequiresAllForwardVars:
                 }
             },
             "tool_output_token_limit": CODEX_TOOL_OUTPUT_TOKEN_LIMIT,
+            "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
         }
 
     def test_all_forward_vars_present_is_registered(self) -> None:

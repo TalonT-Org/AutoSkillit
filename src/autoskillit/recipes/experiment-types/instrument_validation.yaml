@@ -1,5 +1,5 @@
 name: instrument_validation
-schema_version: "1.0"
+schema_version: "1.0.0"
 priority: 7
 is_fallback: false
 classification_triggers:

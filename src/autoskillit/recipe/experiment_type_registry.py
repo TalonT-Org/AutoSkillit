@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger, load_yaml, pkg_root
-from autoskillit.recipe._registry_utils import _MISSING_MTIME, dir_mtime, parse_int_field
+from autoskillit.recipe._registry_utils import (
+    _MISSING_MTIME,
+    EXPECTED_SCHEMA_VERSION,
+    dir_mtime,
+    parse_int_field,
+)
 
 logger = get_logger(__name__)
 
@@ -137,12 +142,12 @@ def load_all_experiment_types(
         user_dir = Path(project_dir) / ".autoskillit" / "experiment-types"
         user_types = _load_types_from_dir(user_dir)
         for spec in user_types.values():
-            if spec.schema_version and spec.schema_version != "1.0":
+            if spec.schema_version and spec.schema_version != EXPECTED_SCHEMA_VERSION:
                 logger.warning(
                     "User experiment type has schema_version mismatch; loading continues",
                     type_name=spec.name,
                     schema_version=spec.schema_version,
-                    expected_schema_version="1.0",
+                    expected_schema_version=EXPECTED_SCHEMA_VERSION,
                 )
         types.update(user_types)
 

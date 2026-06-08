@@ -1,6 +1,6 @@
 {
   "name": "single_subject",
-  "schema_version": "1.0",
+  "schema_version": "1.0.0",
   "priority": 9,
   "is_fallback": false,
   "classification_triggers": [

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Final
 
+EXPECTED_SCHEMA_VERSION: Final = "1.0.0"
 _MISSING_MTIME: float = -1.0
 
 

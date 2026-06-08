@@ -2,6 +2,7 @@
   "name": "research",
   "description": "Research sub-recipe: gather context, analyze findings, and produce a structured research report for the parent recipe.\n",
   "summary": "gather → analyze → report",
+  "recipe_version": "1.0.0",
   "ingredients": {
     "source_dir": {
       "description": "Source repository (inherited from parent recipe context)",

@@ -1,5 +1,5 @@
 name: robustness_audit
-schema_version: "1.0"
+schema_version: "1.0.0"
 priority: 8
 is_fallback: false
 classification_triggers:

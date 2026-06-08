@@ -23,7 +23,7 @@ def _write_yaml(tmp_path: Path, registry_type: str, filename: str, content: str)
 
 VALID_EXPERIMENT_TYPE = """\
 name: my-test-type
-schema_version: "1.0"
+schema_version: "1.0.0"
 priority: 1
 classification_triggers:
   - trigger_alpha
@@ -49,7 +49,7 @@ l1_severity:
 VALID_METHODOLOGY_TRADITION = """\
 name: my-test-tradition
 display_name: My Test Tradition
-schema_version: "1.0"
+schema_version: "1.0.0"
 priority: 1
 canonical_guideline:
   title: Test Guideline
@@ -118,7 +118,7 @@ class TestValidateRegistries:
         """Schema-version mismatch produces ⚠ warning and exits 0."""
         monkeypatch.chdir(tmp_path)
         yaml_content = VALID_EXPERIMENT_TYPE.replace(
-            'schema_version: "1.0"', 'schema_version: "0.9"'
+            'schema_version: "1.0.0"', 'schema_version: "0.9"'
         )
         _write_yaml(tmp_path, "experiment-types", "warn_type.yaml", yaml_content)
 
@@ -126,7 +126,7 @@ class TestValidateRegistries:
         out = capsys.readouterr().out
         assert "⚠" in out
         assert "schema_version" in out
-        assert "expected '1.0'" in out
+        assert "expected '1.0.0'" in out
 
     # T_VAL_3: Missing 'name' field produces ✗ error and exit 1
     def test_missing_name_error(
@@ -324,7 +324,7 @@ class TestValidateRegistries:
         """Exit code 0 when only warnings (no errors)."""
         monkeypatch.chdir(tmp_path)
         yaml_content = VALID_EXPERIMENT_TYPE.replace(
-            'schema_version: "1.0"', 'schema_version: "0.9"'
+            'schema_version: "1.0.0"', 'schema_version: "0.9"'
         )
         _write_yaml(tmp_path, "experiment-types", "warn_only.yaml", yaml_content)
 
@@ -343,7 +343,9 @@ class TestValidateRegistries:
         """Summary line includes correct counts."""
         monkeypatch.chdir(tmp_path)
         _write_yaml(tmp_path, "experiment-types", "valid_type.yaml", VALID_EXPERIMENT_TYPE)
-        yaml_warn = VALID_EXPERIMENT_TYPE.replace('schema_version: "1.0"', 'schema_version: "0.9"')
+        yaml_warn = VALID_EXPERIMENT_TYPE.replace(
+            'schema_version: "1.0.0"', 'schema_version: "0.9"'
+        )
         _write_yaml(tmp_path, "experiment-types", "warn_type.yaml", yaml_warn)
         yaml_err = VALID_EXPERIMENT_TYPE.replace("name: my-test-type\n", "")
         _write_yaml(tmp_path, "experiment-types", "error_type.yaml", yaml_err)

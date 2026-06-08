@@ -7,7 +7,7 @@ summary: 'clone > setup_remote > analyze_prs > create_batch_branch > [loop per P
   > check_mergeability > (resolve_integration_conflicts > force_push_after_rebase)?
   > review_pr_integration > (resolve_review_integration > re_push_review_integration)?
   > ci_watch_pr > cleanup'
-recipe_version: 1.0.0
+recipe_version: "1.0.0"
 requires_packs:
 - github
 - ci

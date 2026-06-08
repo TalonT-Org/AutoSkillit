@@ -3,7 +3,7 @@ description: Investigate a bug, plan a fix, open a PR
 summary: bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > investigate
   > rectify > dry-walkthrough > implement > test > merge (per plan part) > (audit-impl?)
   > (open_pr?) > push > cleanup
-recipe_version: 1.0.0
+recipe_version: "1.0.0"
 requires_packs:
 - github
 - ci

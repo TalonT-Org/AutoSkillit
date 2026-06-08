@@ -305,10 +305,10 @@ def test_no_citation_markers_in_yaml_files() -> None:
 
 
 def test_all_types_have_schema_version() -> None:
-    """Every bundled type has schema_version == '1.0'."""
+    """Every bundled type has schema_version == '1.0.0'."""
     types = load_all_experiment_types()
     for spec in types:
-        assert spec.schema_version == "1.0", (
+        assert spec.schema_version == "1.0.0", (
             f"{spec.name}: schema_version = {spec.schema_version!r}"
         )
 
@@ -438,7 +438,7 @@ def test_new_type_full_schema_valid(type_name: str) -> None:
         assert weight in VALID_WEIGHT_VALUES, f"{type_name}.{dim} = {weight!r}"
     assert isinstance(spec.classification_triggers, list)
     assert len(spec.classification_triggers) >= 1
-    assert spec.schema_version == "1.0"
+    assert spec.schema_version == "1.0.0"
     assert spec.is_fallback is False
     non_fallback_count = sum(1 for s in types if not s.is_fallback)
     assert 1 <= spec.priority <= non_fallback_count
@@ -537,7 +537,7 @@ def test_user_types_interleave_by_priority(tmp_path: Path) -> None:
 
 
 def test_schema_mismatch_warns(tmp_path: Path) -> None:
-    """A user type with schema_version != '1.0' triggers a WARNING but still loads."""
+    """A user type with schema_version != '1.0.0' triggers a WARNING but still loads."""
     import structlog.testing
 
     user_dir = tmp_path / ".autoskillit" / "experiment-types"

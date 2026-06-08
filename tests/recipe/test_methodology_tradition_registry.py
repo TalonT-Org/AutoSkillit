@@ -68,7 +68,7 @@ def test_each_tradition_has_required_fields() -> None:
 def test_all_traditions_have_schema_version_1_0() -> None:
     traditions = load_all_methodology_traditions()
     for spec in traditions:
-        assert spec.schema_version == "1.0", (
+        assert spec.schema_version == "1.0.0", (
             f"{spec.name}: schema_version = {spec.schema_version!r}"
         )
 
@@ -115,7 +115,7 @@ def test_user_override_replaces_bundled(tmp_path: Path) -> None:
         yaml.dump(
             {
                 "name": "controlled_intervention",
-                "schema_version": "1.0",
+                "schema_version": "1.0.0",
                 "priority": 1,
                 "display_name": "My Custom RCT",
                 "canonical_guideline": {
@@ -145,7 +145,7 @@ def test_user_new_tradition_is_added(tmp_path: Path) -> None:
         yaml.dump(
             {
                 "name": "my_new_tradition",
-                "schema_version": "1.0",
+                "schema_version": "1.0.0",
                 "priority": 99,
                 "display_name": "My New Tradition",
                 "canonical_guideline": {
@@ -263,7 +263,7 @@ def test_detection_keywords_are_distinct() -> None:
 
 _MINIMAL_TRADITION_YAML = {
     "name": "test_tradition",
-    "schema_version": "1.0",
+    "schema_version": "1.0.0",
     "priority": 99,
     "display_name": "Test Tradition",
     "canonical_guideline": {
@@ -281,7 +281,7 @@ _MINIMAL_TRADITION_YAML = {
 
 _MINIMAL_TRADITION_YAML_2 = {
     "name": "test_tradition_2",
-    "schema_version": "1.0",
+    "schema_version": "1.0.0",
     "priority": 99,
     "display_name": "Test Tradition 2",
     "canonical_guideline": {

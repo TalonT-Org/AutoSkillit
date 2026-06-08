@@ -6,10 +6,13 @@ import hashlib
 from pathlib import Path
 
 import pytest
+import regex as re
 
 from autoskillit.core.types import CaptureEntrySpec, RecipeSource
 from autoskillit.recipe.io import (
+    RECIPE_SCAN_DIRS,
     builtin_recipes_dir,
+    builtin_sub_recipes_dir,
     list_recipes,
     load_recipe,
 )
@@ -235,6 +238,26 @@ class TestRecipeVersionField:
         p.write_text(yaml_content)
         with pytest.raises(ValueError, match="recipe_version must be a quoted string"):
             load_recipe(p)
+
+    def test_all_bundled_recipes_have_semver_recipe_version(self):
+        """Every bundled recipe with recipe_version uses X.Y.Z semver format."""
+        semver_re = re.compile(r"^\d+\.\d+\.\d+$")
+        base = builtin_recipes_dir()
+        yaml_paths: list[Path] = []
+        for scan_dir in RECIPE_SCAN_DIRS:
+            scan_path = base / scan_dir if scan_dir != "." else base
+            if scan_path.is_dir():
+                yaml_paths.extend(sorted(scan_path.glob("*.yaml")))
+        sub_dir = builtin_sub_recipes_dir()
+        if sub_dir.is_dir():
+            yaml_paths.extend(sorted(sub_dir.glob("*.yaml")))
+        for yaml_path in yaml_paths:
+            recipe = load_recipe(yaml_path)
+            if recipe.recipe_version is not None:
+                assert semver_re.match(recipe.recipe_version), (
+                    f"{yaml_path.name}: recipe_version {recipe.recipe_version!r} "
+                    f"is not in X.Y.Z semver format"
+                )
 
 
 class TestContentHash:

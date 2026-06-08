@@ -131,6 +131,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_ci_loops.py` | Tests for ci-timed-out-self-loop-unguarded and ci-conflict-path-missing-auto-trigger rules |
 | `test_rules_clone.py` | Tests for clone semantic validation rule |
 | `test_rules_cmd.py` | Tests for cmd semantic validation rule |
+| `test_rules_commit_guard_regression_route.py` | Tests for `commit-guard-regression-route-missing` semantic validation rule |
 | `test_rules_conditional_push.py` | Tests for conditional_push semantic validation rule |
 | `test_rules_contracts.py` | Tests for contracts semantic validation rule |
 | `test_rules_dataflow_capture.py` | Tests for dataflow capture semantic validation rule |

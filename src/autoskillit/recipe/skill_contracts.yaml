@@ -2885,6 +2885,16 @@ callable_contracts:
     - name: committed
       type: str
       allowed_values: ["false", "true", "regression_detected"]
+    - name: reverted_files
+      type: str
+    - name: implementation_net
+      type: str
+    - name: working_tree_net
+      type: str
+    - name: regression_lines
+      type: str
+    - name: verdict
+      type: str
   autoskillit.recipe._cmd_rpc.main_repo_guard:
     inputs:
     - name: clone_path

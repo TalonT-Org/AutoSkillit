@@ -5,11 +5,16 @@ from __future__ import annotations
 import shutil
 import subprocess
 from datetime import date
+from enum import StrEnum
 from pathlib import Path
 
 from autoskillit.core import atomic_write, get_logger, is_generated_path, run_git
 
 logger = get_logger(__name__)
+
+
+class _RegressionVerdict(StrEnum):
+    POSSIBLE_REVERSION = "possible_reversion"
 
 
 def compute_branch(
@@ -173,15 +178,33 @@ def _parse_numstat_per_file(numstat_output: str) -> dict[str, int]:
     return result
 
 
+def _count_lines_in_files(worktree_path: str, files: list[str]) -> int:
+    """Count total lines across the given files (for new-file accounting)."""
+    total = 0
+    for f in files:
+        path = Path(worktree_path) / f
+        if not path.is_file():
+            continue
+        try:
+            with path.open("rb") as fh:
+                total += sum(1 for _ in fh)
+        except OSError:
+            continue
+    return total
+
+
 def _check_regression(
     worktree_path: str,
     files_to_add: list[str],
     base_branch: str,
+    file_status: dict[str, str],
 ) -> dict[str, str] | None:
     """Detect if pending changes would revert implementation commits.
 
     Returns a regression dict if the pending dirty files would net-revert
-    more than 10 implementation lines. Returns None to proceed normally.
+    more than 10 implementation lines, with corroborating per-file evidence
+    that is not explained by content movement into new untracked files.
+    Returns None to proceed normally.
     """
     mb = run_git(["merge-base", "HEAD", base_branch], cwd=worktree_path)
     if mb.returncode != 0:
@@ -213,6 +236,30 @@ def _check_regression(
     committed_per_file = _parse_numstat_per_file(committed_diff.stdout)
     wt_per_file = _parse_numstat_per_file(wt_diff.stdout)
 
+    sources_with_regression: set[str] = set()
+    for f in files_to_add:
+        c_net = committed_per_file.get(f, 0)
+        w_net = wt_per_file.get(f, 0)
+        if c_net - w_net > 5:
+            sources_with_regression.add(f)
+
+    untracked_destinations: list[str] = []
+    for f in files_to_add:
+        if file_status.get(f) != "??":
+            continue
+        f_dir = str(Path(f).parent)
+        for source in sources_with_regression:
+            s_dir = str(Path(source).parent)
+            if f_dir == s_dir or f.startswith(s_dir + "/") or s_dir == ".":
+                untracked_destinations.append(f)
+                break
+
+    if untracked_destinations:
+        new_file_lines = _count_lines_in_files(worktree_path, untracked_destinations)
+        adjusted_regression = regression_lines - new_file_lines
+        if adjusted_regression <= 10:
+            return None  # CONTENT_MOVED: accounted for by new untracked files
+
     reverted_files: list[str] = []
     for f in files_to_add:
         c_net = committed_per_file.get(f, 0)
@@ -220,8 +267,12 @@ def _check_regression(
         if c_net - w_net > 5:
             reverted_files.append(f)
 
+    if not reverted_files:
+        return None  # CLEAR: no per-file reversion evidence
+
     return {
         "committed": "regression_detected",
+        "verdict": _RegressionVerdict.POSSIBLE_REVERSION.value,
         "reverted_files": ", ".join(reverted_files),
         "implementation_net": str(committed_net),
         "working_tree_net": str(wt_net),
@@ -241,6 +292,7 @@ def commit_guard(worktree_path: str, base_branch: str = "") -> dict[str, str]:
             result.returncode, result.args, result.stdout, result.stderr
         )
     files_to_add: list[str] = []
+    file_status: dict[str, str] = {}
     parts = result.stdout.decode("utf-8", errors="surrogateescape").split("\0")
     i = 0
     while i < len(parts):
@@ -254,13 +306,14 @@ def commit_guard(worktree_path: str, base_branch: str = "") -> dict[str, str]:
             i += 1
         if path and not is_generated_path(path):
             files_to_add.append(path)
+            file_status[path] = xy
         i += 1
 
     if not files_to_add:
         return {"committed": "false"}
 
     if base_branch:
-        regression = _check_regression(worktree_path, files_to_add, base_branch)
+        regression = _check_regression(worktree_path, files_to_add, base_branch, file_status)
         if regression is not None:
             return regression
 

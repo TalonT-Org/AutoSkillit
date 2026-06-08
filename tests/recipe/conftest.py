@@ -20,6 +20,8 @@ BUNDLED_RECIPE_NAMES: list[str] = [
     "full-audit",
 ]
 
+EXCLUDED_TRANSITIONAL_RULES: frozenset[str] = frozenset({"run-skill-missing-context-limit"})
+
 
 def assert_no_rule_errors(
     findings: list[RuleFinding],
@@ -31,19 +33,6 @@ def assert_no_rule_errors(
     assert not errors, (
         f"Unexpected ERROR findings{f' in {context}' if context else ''}: "
         f"{[(f.rule, f.step_name, f.message) for f in errors]}"
-    )
-
-
-def assert_no_rule_warnings(
-    findings: list[RuleFinding],
-    *,
-    context: str = "",
-) -> None:
-    """Assert that findings contain no WARNING-severity violations."""
-    warnings = [f for f in findings if f.severity == Severity.WARNING]
-    assert not warnings, (
-        f"Unexpected WARNING findings{f' in {context}' if context else ''}: "
-        f"{[(f.rule, f.step_name, f.message) for f in warnings]}"
     )
 
 

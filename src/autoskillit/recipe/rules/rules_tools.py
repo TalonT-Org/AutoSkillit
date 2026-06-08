@@ -291,7 +291,7 @@ def _check_context_param_not_forwarded(ctx: ValidationContext) -> list[RuleFindi
         for param in required_params:
             if param not in captured_context:
                 continue
-            with_value = (step.with_args or {}).get(param, "")
+            with_value = str((step.with_args or {}).get(param, ""))
             if f"context.{param}" in with_value:
                 continue
             findings.append(

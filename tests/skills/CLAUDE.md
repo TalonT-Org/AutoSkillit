@@ -70,6 +70,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_skill_body_cleanliness.py` | Assert that no SKILL.md body references %%ORDER_UP%% |
 | `test_skill_md_path_brace_consistency.py` | Structural guard: no SKILL.md may use single-brace {AUTOSKILLIT_TEMP} — must use double-brace {{AUTOSKILLIT_TEMP}} |
 | `test_skill_commit_discipline.py` | Prohibition tests: skills with git commit instructions must explicitly forbid --amend |
+| `test_make_plan_capability_accuracy.py` | Semantic guard: make-plan must not declare git_metadata_write capability |
 | `test_skill_compliance.py` | SKILL.md compliance tests: structural invariants for skill composition safety |
 | `test_skill_genericization.py` | Verify skill SKILL.md files contain no project-specific AutoSkillit internals |
 | `test_skill_md_spawn_syntax.py` | Regression guard: SKILL.md subagent spawn instructions must use unambiguous Agent(model="sonnet") syntax (issue #3367) |

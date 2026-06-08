@@ -112,6 +112,8 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_codex_env_forward_bridge.py` | Cross-layer bridge: CODEX_MCP_ENV_FORWARD_VARS ↔ cmd builders ↔ capabilities parity |
 | `test_codex_timeout_coherence.py` | Cross-system timeout hierarchy: Codex MCP tool_timeout_sec must exceed max session duration |
 | `test_skill_search_dir_symmetry.py` | Suppression-delivery symmetry invariants for project-local skill search dirs |
+| `test_doc_fence_filter.py` | Unit and functional tests for `_strip_doc_fenced_blocks` section-aware code fence filter |
+| `test_capability_scanner_fence_immunity.py` | AST regression guard: capability scanners must import and call `_strip_doc_fenced_blocks` |
 
 ## Architecture Notes
 

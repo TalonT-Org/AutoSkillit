@@ -27,7 +27,7 @@ def resolve_failures_text() -> str:
 
 @pytest.fixture(scope="module")
 def tests_claude_md_text() -> str:
-    p = pkg_root().parent.parent / "tests" / "CLAUDE.md"
+    p = pkg_root().parent.parent / "tests" / "AGENTS.md"
     return p.read_text()
 
 

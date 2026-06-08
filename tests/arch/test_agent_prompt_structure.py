@@ -49,7 +49,7 @@ def test_agent_definitions_with_must_gate_have_fallback() -> None:
     """Agent definitions with MUST+process-verb gates must document inconclusive outcomes."""
     failures: list[str] = []
     for md_file in sorted(_AGENTS_DIR.glob("*.md")):
-        if md_file.name == "CLAUDE.md":
+        if md_file.name in ("CLAUDE.md", "AGENTS.md"):
             continue
         content = md_file.read_text()
         parts = content.split("---", 2)
@@ -107,7 +107,7 @@ def test_agent_definitions_output_format_mentions_empty_array() -> None:
     """Every agent definition that specifies JSON array output must document what [] means."""
     failures: list[str] = []
     for md_file in sorted(_AGENTS_DIR.glob("*.md")):
-        if md_file.name == "CLAUDE.md":
+        if md_file.name in ("CLAUDE.md", "AGENTS.md"):
             continue
         content = md_file.read_text()
         parts = content.split("---", 2)

@@ -40,6 +40,9 @@ _IGNORE_FILES: frozenset[str] = frozenset(
     {
         "LICENSE",
         "tests/CLAUDE.md",
+        "tests/AGENTS.md",
+        ".github/CLAUDE.md",
+        ".github/AGENTS.md",
         # Generated/state files in .autoskillit/ that carry no test-routing signal.
         ".autoskillit/.gitignore",
         ".autoskillit/.onboarded",
@@ -52,6 +55,7 @@ _IGNORE_PATTERNS: tuple[str, ...] = (
     "*.gif",
     "**/.gitkeep",
     "tests/*/CLAUDE.md",  # Per-subdirectory documentation (no test-routing signal)
+    "tests/*/AGENTS.md",  # Per-subdirectory documentation (no test-routing signal)
 )
 
 # Combined PathSpec built once from _IGNORE_PATTERNS to avoid O(files×patterns)

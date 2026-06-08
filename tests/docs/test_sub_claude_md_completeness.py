@@ -10,38 +10,38 @@ pytestmark = pytest.mark.small
 SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
 EXPECTED_SUB_CLAUDE_MDS = [
-    "core/types/CLAUDE.md",
-    "core/runtime/CLAUDE.md",
-    "execution/headless/CLAUDE.md",
-    "execution/process/CLAUDE.md",
-    "execution/session/CLAUDE.md",
-    "execution/merge_queue/CLAUDE.md",
-    "recipe/rules/CLAUDE.md",
-    "recipe/rules/campaign/CLAUDE.md",
-    "recipe/rules/ci/CLAUDE.md",
-    "recipe/rules/dataflow/CLAUDE.md",
-    "recipe/rules/graph/CLAUDE.md",
-    "server/tools/CLAUDE.md",
-    "cli/doctor/CLAUDE.md",
-    "cli/fleet/CLAUDE.md",
-    "cli/session/CLAUDE.md",
-    "cli/ui/CLAUDE.md",
-    "cli/update/CLAUDE.md",
-    "hooks/guards/CLAUDE.md",
-    "hooks/formatters/CLAUDE.md",
-    "CLAUDE.md",  # src/autoskillit/ package root
-    "core/CLAUDE.md",
-    "config/CLAUDE.md",
-    "pipeline/CLAUDE.md",
-    "execution/CLAUDE.md",
-    "workspace/CLAUDE.md",
-    "planner/CLAUDE.md",
-    "recipe/CLAUDE.md",
-    "migration/CLAUDE.md",
-    "fleet/CLAUDE.md",
-    "cli/CLAUDE.md",
-    "hooks/CLAUDE.md",
-    "agents/CLAUDE.md",
+    "core/types/AGENTS.md",
+    "core/runtime/AGENTS.md",
+    "execution/headless/AGENTS.md",
+    "execution/process/AGENTS.md",
+    "execution/session/AGENTS.md",
+    "execution/merge_queue/AGENTS.md",
+    "recipe/rules/AGENTS.md",
+    "recipe/rules/campaign/AGENTS.md",
+    "recipe/rules/ci/AGENTS.md",
+    "recipe/rules/dataflow/AGENTS.md",
+    "recipe/rules/graph/AGENTS.md",
+    "server/tools/AGENTS.md",
+    "cli/doctor/AGENTS.md",
+    "cli/fleet/AGENTS.md",
+    "cli/session/AGENTS.md",
+    "cli/ui/AGENTS.md",
+    "cli/update/AGENTS.md",
+    "hooks/guards/AGENTS.md",
+    "hooks/formatters/AGENTS.md",
+    "AGENTS.md",  # src/autoskillit/ package root
+    "core/AGENTS.md",
+    "config/AGENTS.md",
+    "pipeline/AGENTS.md",
+    "execution/AGENTS.md",
+    "workspace/AGENTS.md",
+    "planner/AGENTS.md",
+    "recipe/AGENTS.md",
+    "migration/AGENTS.md",
+    "fleet/AGENTS.md",
+    "cli/AGENTS.md",
+    "hooks/AGENTS.md",
+    "agents/AGENTS.md",
 ]
 
 
@@ -90,10 +90,10 @@ def test_sub_claude_md_has_file_table():
 
 
 def test_channel_b_defined_in_process_claude_md():
-    process_md = SRC_ROOT / "execution" / "process" / "CLAUDE.md"
-    assert process_md.is_file(), "execution/process/CLAUDE.md does not exist"
+    process_md = SRC_ROOT / "execution" / "process" / "AGENTS.md"
+    assert process_md.is_file(), "execution/process/AGENTS.md does not exist"
     content = process_md.read_text()
-    assert "Channel B" in content, "execution/process/CLAUDE.md must define Channel B"
+    assert "Channel B" in content, "execution/process/AGENTS.md must define Channel B"
     assert "JSONL" in content, "Channel B definition must mention JSONL"
 
 

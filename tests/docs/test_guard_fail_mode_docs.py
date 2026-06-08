@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GUARDS_CLAUDE = REPO_ROOT / "src/autoskillit/hooks/guards/CLAUDE.md"
+GUARDS_CLAUDE = REPO_ROOT / "src/autoskillit/hooks/guards/AGENTS.md"
 SAFETY_HOOKS = REPO_ROOT / "docs/safety/hooks.md"
 
 RETIRED_GUARD = "leaf_orchestration_guard.py"

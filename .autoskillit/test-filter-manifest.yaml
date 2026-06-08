@@ -242,6 +242,9 @@ src/autoskillit/core/__init__.pyi:
   - contracts/
 
 tests/**/CLAUDE.md: []
+tests/**/AGENTS.md: []
+src/**/AGENTS.md: []
+src/**/CLAUDE.md: []
 
 # Eval framework files
 .autoskillit/recipes/eval/*.yaml:

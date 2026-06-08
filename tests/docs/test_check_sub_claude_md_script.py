@@ -81,7 +81,7 @@ class TestCheckCoverage:
     def test_check_coverage_flags_missing_claude_md(self, script_mod, tmp_path):
         """Returns failure when expected CLAUDE.md path does not exist on disk."""
         result = script_mod.check_coverage(tmp_path, ["nonexistent/CLAUDE.md"])
-        assert result == ["nonexistent/CLAUDE.md: CLAUDE.md not found"]
+        assert result == ["nonexistent/CLAUDE.md: AGENTS.md not found"]
 
     def test_check_coverage_multiple_missing_files(self, script_mod, tmp_path):
         """Returns one failure entry per missing file."""

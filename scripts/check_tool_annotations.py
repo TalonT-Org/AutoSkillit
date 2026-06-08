@@ -69,7 +69,7 @@ def main() -> int:
         print("readOnlyHint violations found:\n")
         for v in violations:
             print(f"  {v}")
-        print("\nAll tools must have readOnlyHint=True. See server/CLAUDE.md for rationale.")
+        print("\nAll tools must have readOnlyHint=True. See server/AGENTS.md for rationale.")
         return 1
     print("All tool annotations correct: readOnlyHint=True.")
     return 0

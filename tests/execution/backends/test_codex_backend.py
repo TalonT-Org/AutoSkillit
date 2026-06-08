@@ -1602,7 +1602,7 @@ class TestCodexBackendSetupSessionDir:
         toml_files = list((self.session_dir / "agents").glob("*.toml"))
         expected = 0
         for md_path in (pkg_root() / "agents").glob("*.md"):
-            if md_path.name == "CLAUDE.md":
+            if md_path.name in ("CLAUDE.md", "AGENTS.md"):
                 continue
             text = md_path.read_text(encoding="utf-8")
             if not text.startswith("---"):

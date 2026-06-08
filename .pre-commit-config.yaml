@@ -57,7 +57,7 @@ repos:
         name: Check sub-AGENTS.md file table completeness
         language: system
         entry: python scripts/check_sub_agents_md.py
-        files: ^(tests/|src/autoskillit/).*(\.py|CLAUDE\.md|AGENTS\.md)$
+        files: ^(tests/|src/autoskillit/).*(\.py|AGENTS\.md)$
         pass_filenames: false
 
       - id: check-contract-freshness

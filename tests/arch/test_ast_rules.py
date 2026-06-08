@@ -17,7 +17,7 @@ at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
 Those rules belong in the toolchain, not duplicated here.
 
 Exemptions:
-  - cli/app.py, cli/_doctor.py, cli/_session_cook.py: user-facing print() OK
+  - cli/app.py, cli/_doctor.py, cli/_session_cook.py: user-facing terminal output OK
 """
 
 from __future__ import annotations

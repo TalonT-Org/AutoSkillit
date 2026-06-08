@@ -259,10 +259,10 @@ List ALL gaps — every source file without a corresponding test file.
 
 1. **MCP tool registry completeness** — find the gate frozensets (`GATED_TOOLS`, `UNGATED_TOOLS`) and cross-reference every tool name against handler functions and documentation:
 
-| Tool Name | In Gate Frozenset (which) | Handler Function | Handler File:Line | @app.tool() registered? | In CLAUDE.md? | Notes |
+| Tool Name | In Gate Frozenset (which) | Handler Function | Handler File:Line | @app.tool() registered? | In AGENTS.md? | Notes |
 |---|---|---|---|---|---|---|
 
-Flag any tool in the frozenset without a handler, any handler not in the frozenset, and any CLAUDE.md attribution to the wrong file.
+Flag any tool in the frozenset without a handler, any handler not in the frozenset, and any documentation attribution to the wrong file (shared tools belong in AGENTS.md; Claude-only overlay tools belong in physical CLAUDE.md).
 
 2. **Decorator-based rule registry** — for `@semantic_rule` (or equivalent auto-registration decorator) find all decorated functions vs all emitted finding IDs:
 
@@ -276,11 +276,11 @@ Flag cases where one decorated function emits findings under different IDs than 
 | Command | Registered at File:Line | Documented? | Notes |
 |---|---|---|---|
 
-Flag commands registered in code but absent from CLAUDE.md.
+Flag commands registered in code but absent from AGENTS.md (shared commands) or physical/effective CLAUDE.md (Claude-only overlay).
 
 4. **Skill/plugin registry completeness** — count skill directories (those with `SKILL.md`) and verify count matches documented claim:
 
-| Skill Directory | Has SKILL.md? | Listed in CLAUDE.md? | Name Match? |
+| Skill Directory | Has SKILL.md? | Listed in AGENTS.md? | Name Match? |
 |---|---|---|---|
 
 ---
@@ -381,35 +381,35 @@ Flag duplicates (same name in different agents).
 
 ### C10: Documentation-Code Alignment
 
-**Question:** Does the project's primary architectural documentation (CLAUDE.md) accurately describe the actual code — no stale attributions, wrong names, or missing entries?
+**Question:** Does the project's primary architectural documentation (root `AGENTS.md` for shared content, root physical `CLAUDE.md` for the Claude-only overlay) accurately describe the actual code — no stale attributions, wrong names, or missing entries?
 
-This dimension is distinct from audit-arch (which checks rule violations) and from C6 (which checks registry completeness). C10 checks whether PROSE DOCUMENTATION matches CODE REALITY. In this repo, CLAUDE.md is loaded as context in every Claude Code session, so inaccuracies there are directly load-bearing: a wrong file attribution misleads every investigation that uses CLAUDE.md as a starting point.
+This dimension is distinct from audit-arch (which checks rule violations) and from C6 (which checks registry completeness). C10 checks whether PROSE DOCUMENTATION matches CODE REALITY. In this repo, `AGENTS.md` is the shared instruction surface; physical `CLAUDE.md` adds a Claude-only overlay on top via `@AGENTS.md`. Inaccuracies in either are load-bearing: a wrong file attribution misleads every investigation that uses these docs as a starting point.
 
 **Audit Strategy:**
 
-1. **Tool-to-file attribution** — for every tool listed in the CLAUDE.md MCP tools table or server module descriptions, verify the documented handler file matches the actual location:
+1. **Tool-to-file attribution** — for every tool listed in the `AGENTS.md` MCP tools table or server module descriptions, verify the documented handler file matches the actual location (use physical `CLAUDE.md` only when checking the Claude-only overlay):
 
-| Tool Name | CLAUDE.md Claims File | Actual Handler File:Line | Match? |
+| Tool Name | AGENTS.md Claims File | Actual Handler File:Line | Match? |
 |---|---|---|---|
 
-2. **`__init__.py` re-export descriptions** — for every sub-package whose CLAUDE.md description mentions re-exported symbols, verify the named symbols actually appear in that package's `__all__`:
+2. **`__init__.py` re-export descriptions** — for every sub-package whose `AGENTS.md` description mentions re-exported symbols, verify the named symbols actually appear in that package's `__all__`:
 
-| Sub-package | CLAUDE.md States Exports | Actual `__all__` | Missing from Docs | Wrong Names |
+| Sub-package | AGENTS.md States Exports | Actual `__all__` | Missing from Docs | Wrong Names |
 |---|---|---|---|---|
 
-3. **Test file listing accuracy** — compare the `tests/` section of CLAUDE.md against actual test files on disk:
+3. **Test file listing accuracy** — compare the `tests/` section of `AGENTS.md` against actual test files on disk:
 
-| Test File (CLAUDE.md) | Exists on Disk? | | Test File (on disk) | In CLAUDE.md? |
+| Test File (AGENTS.md) | Exists on Disk? | | Test File (on disk) | In AGENTS.md? |
 |---|---|---|---|---|
 
-Flag files listed in CLAUDE.md that do not exist, and files on disk not listed in CLAUDE.md.
+Flag files listed in `AGENTS.md` that do not exist, and files on disk not listed in `AGENTS.md`.
 
-4. **Key Components description accuracy** — for each module entry in CLAUDE.md's Key Components section, verify:
+4. **Key Components description accuracy** — for each module entry in `AGENTS.md`'s Key Components section, verify:
    - The described functions/classes actually exist at the stated location
    - The described public API matches the actual function signatures (param names, return types)
    - Any numeric claims (e.g., "7 checks", "15 gated tools") match the actual count in code
 
-| CLAUDE.md Claim | File:Line | Verified? | Actual |
+| AGENTS.md Claim | File:Line | Verified? | Actual |
 |---|---|---|---|
 
 ---
@@ -435,7 +435,7 @@ Spawn subagents for each cohesion dimension. Each subagent MUST be instructed:
 | 1 | C1, C4 | Structural symmetry + naming consistency (side-by-side comparison tables) |
 | 2 | C2, C8 | Interface completeness + export surface (Protocol/DI audit + __init__ gaps) |
 | 3 | C3, C9 | Feature locality + error handling (file mapping + exception census) |
-| 4 | C5, C10 | Test-source alignment + documentation-code alignment (enumerate EVERY source module, cross-reference CLAUDE.md) |
+| 4 | C5, C10 | Test-source alignment + documentation-code alignment (enumerate EVERY source module, cross-reference AGENTS.md; consult physical CLAUDE.md only for Claude-only overlay) |
 | 5 | C6, C7 | Registration completeness + recipe-to-skill coherence (registry gap tables + YAML reference resolution) |
 
 ### Step 2: Consolidate Findings
@@ -537,14 +537,14 @@ These exceptions apply to cohesion audit findings. Before reporting, verify the 
 
 ### C10 File-Verification Rule
 
-Before claiming a documentation error, read the actual file at the cited path — don't rely on the CLAUDE.md ASCII tree representation.
+Before claiming a documentation error, read the actual file at the cited path — don't rely on the `AGENTS.md` ASCII tree representation.
 *Source: [C10-D] April cohesion round.*
 
 ### Project-Specific Exceptions (PS)
 
 **PS-3** — `test_check` in `server/tools_workspace.py` omits the `_require_enabled()` guard by design: it uses the dual-tag headless detection path and must be callable from both interactive and headless sessions.
 
-**PS-5** — CLAUDE.md findings tracked in #713. Suppress cohesion findings related to CLAUDE.md accuracy until #713 closes.
+**PS-5** — `CLAUDE.md` findings tracked in #713. Suppress cohesion findings related to `CLAUDE.md` accuracy until #713 closes (shared documentation drift should target `AGENTS.md`).
 
 **PS-6** — `remove_clone` string booleans (`"true"`/`"false"`) are a domain contract baked into recipe YAMLs; converting to Python `bool` would break recipe compatibility.
 

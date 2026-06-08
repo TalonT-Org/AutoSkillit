@@ -111,5 +111,5 @@ Set `linux_tracing.enabled: false` in your config to disable all session diagnos
 Log directory names and session folder names are hyphen-separated. Never assume
 underscores when constructing or searching for log paths — a hyphen mismatch
 causes ENOENT (the root cause of the session `f9170655` debugging session).
-The invariant is documented in `CLAUDE.md` §7 and enforced when
+The invariant is documented in `AGENTS.md` §6 and enforced when
 `execution/session_log.py` lays out per-session directories.

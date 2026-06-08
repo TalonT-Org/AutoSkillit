@@ -29,6 +29,7 @@ def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
+        sys.stderr.write("recipe_read_guard: malformed stdin — failing open\n")
         sys.exit(0)
 
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":

@@ -293,7 +293,7 @@ def test_write_expected_resolver_mode(
 
 
 def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
-    """Sync test: _cook.py and _factory.py must call DefaultSessionSkillManager
+    """Sync test: _session_cook.py and _factory.py must call DefaultSessionSkillManager
     with the same number of positional arguments.
 
     Both are separate entry points (REQ-TIER-011) and must not be merged, but they
@@ -317,17 +317,17 @@ def test_cook_and_factory_session_skill_manager_ctor_args_in_sync() -> None:
         return -1
 
     root = pkg_root()
-    cook_path = root / "cli" / "session" / "_cook.py"
+    cook_path = root / "cli" / "session" / "_session_cook.py"
     factory_path = root / "server" / "_factory.py"
 
     cook_count = _count_ctor_positional_args(cook_path)
     factory_count = _count_ctor_positional_args(factory_path)
 
-    assert cook_count != -1, "No DefaultSessionSkillManager call found in _cook.py"
+    assert cook_count != -1, "No DefaultSessionSkillManager call found in _session_cook.py"
     assert factory_count != -1, "No DefaultSessionSkillManager call found in _factory.py"
     assert cook_count == factory_count, (
         f"DefaultSessionSkillManager constructor arg count mismatch:\n"
-        f"  _cook.py:    {cook_count} positional arg(s)\n"
+        f"  _session_cook.py:    {cook_count} positional arg(s)\n"
         f"  _factory.py: {factory_count} positional arg(s)\n"
         "Align both call sites or update this test if the API intentionally diverged."
     )

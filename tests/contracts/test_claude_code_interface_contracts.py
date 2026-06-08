@@ -242,7 +242,7 @@ class TestCookAddDirStructure:
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
 
-        from autoskillit.cli.session._cook import cook
+        from autoskillit.cli.session._session_cook import cook
 
         # Use a fixed ephemeral root so cleanup is deterministic
         from autoskillit.workspace.session_skills import (
@@ -256,7 +256,7 @@ class TestCookAddDirStructure:
         real_mgr = DefaultSessionSkillManager(
             SkillsDirectoryProvider(), ephemeral_root=ephemeral_root
         )
-        # _cook.py imports DefaultSessionSkillManager from autoskillit.workspace
+        # _session_cook.py imports DefaultSessionSkillManager from autoskillit.workspace
         # inside the cook() function body (lazy import), so patching
         # autoskillit.workspace.DefaultSessionSkillManager intercepts it.
         init_session_calls: list[bool] = []

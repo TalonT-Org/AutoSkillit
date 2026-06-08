@@ -333,7 +333,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
       server/git.py            — REQ-IMP-005 exemption
       server/tools/tools_kitchen.py — REQ-IMP-006 ban (covered separately)
       cli/app.py               — REQ-IMP-004 exemption (Typer composition)
-      cli/session/_cook.py     — REQ-IMP-011: session cook orchestrates recipe +
+      cli/session/_session_cook.py — REQ-IMP-011: session cook orchestrates recipe +
                                  workspace + execution
       cli/_workspace.py        — REQ-IMP-012: workspace CLI wires execution + workspace packages
 
@@ -347,7 +347,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("server/git.py"),
         Path("server/tools/tools_kitchen.py"),
         Path("cli/app.py"),
-        Path("cli/session/_cook.py"),  # REQ-IMP-011
+        Path("cli/session/_session_cook.py"),  # REQ-IMP-011
         Path("cli/_workspace.py"),  # REQ-IMP-012
         Path("cli/_hooks_codex.py"),  # Re-export shim for execution/backends/_codex_hooks
     }

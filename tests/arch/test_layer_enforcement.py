@@ -1284,7 +1284,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
     allowlist: dict[Path, set[str]] = {
         Path("server/_factory.py"): {"*"},  # Composition Root
         Path("cli/_workspace.py"): {"DefaultSubprocessRunner"},  # CLI worktree listing
-        Path("cli/session/_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
+        Path("cli/session/_session_cook.py"): {"DefaultSessionSkillManager"},  # interactive cook
         Path("cli/fleet/__init__.py"): {
             "DefaultSessionSkillManager",  # interactive cleanup
         },

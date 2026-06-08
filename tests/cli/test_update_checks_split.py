@@ -34,11 +34,11 @@ def test_update_checks_facade_public_api():
 
 
 def test_order_module_file_exists():
-    assert (_CLI_SRC / "session" / "_order.py").exists()
+    assert (_CLI_SRC / "session" / "_session_order.py").exists()
 
 
 def test_order_importable_from_submodule():
-    from autoskillit.cli.session._order import _get_subsets_needed, order  # noqa: F401
+    from autoskillit.cli.session._session_order import _get_subsets_needed, order  # noqa: F401
 
 
 _CLI_TESTS = Path(__file__).parent

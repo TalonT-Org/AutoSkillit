@@ -1,4 +1,4 @@
-"""Tests for YAML parse-failure write guards in _order.py config helpers."""
+"""Tests for YAML parse-failure write guards in _session_order.py config helpers."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def _write_config(path: Path, content: str) -> None:
 
 class TestConfigYamlParseFailureGuard:
     def test_enable_packs_refuses_overwrite_on_corrupt_yaml(self, tmp_path: Path) -> None:
-        from autoskillit.cli.session._order import _enable_packs_permanently
+        from autoskillit.cli.session._session_order import _enable_packs_permanently
 
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         corrupt_content = "{{{invalid"
@@ -28,7 +28,7 @@ class TestConfigYamlParseFailureGuard:
         assert config_path.read_text() == corrupt_content
 
     def test_enable_subsets_refuses_overwrite_on_corrupt_yaml(self, tmp_path: Path) -> None:
-        from autoskillit.cli.session._order import _enable_subsets_permanently
+        from autoskillit.cli.session._session_order import _enable_subsets_permanently
 
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         corrupt_content = "{{{invalid"
@@ -40,7 +40,7 @@ class TestConfigYamlParseFailureGuard:
         assert config_path.read_text() == corrupt_content
 
     def test_enable_packs_works_on_missing_file(self, tmp_path: Path) -> None:
-        from autoskillit.cli.session._order import _enable_packs_permanently
+        from autoskillit.cli.session._session_order import _enable_packs_permanently
 
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         assert not config_path.exists()
@@ -52,7 +52,7 @@ class TestConfigYamlParseFailureGuard:
         assert "pack1" in content
 
     def test_enable_packs_works_on_valid_file(self, tmp_path: Path) -> None:
-        from autoskillit.cli.session._order import _enable_packs_permanently
+        from autoskillit.cli.session._session_order import _enable_packs_permanently
 
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         _write_config(config_path, "packs:\n  enabled:\n    - existing_pack\n")

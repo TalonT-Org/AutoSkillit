@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -16,16 +17,22 @@ def _clean_subprocess_env() -> dict[str, str]:
 
     The parent process (MCP server or xdist worker) may carry env vars that
     interfere with clean Python imports in a freshly-created venv (e.g.,
-    stale ``VIRTUAL_ENV``, ``PYTHONPATH``, or MCP transport vars that trigger
-    circular imports in dependency packages). Pass only what the subprocess
-    needs: ``PATH`` for executable resolution, ``HOME`` for site-packages
-    discovery, and ``PYTHONDONTWRITEBYTECODE`` to match the test-suite policy.
+    stale ``PYTHONPATH`` or MCP transport vars that trigger circular imports
+    in dependency packages). Pass only what the subprocess needs: ``PATH``
+    for executable resolution, ``HOME`` for site-packages discovery,
+    ``VIRTUAL_ENV`` for venv activation (required when install-worktree
+    rebuilds the venv mid-run), and ``PYTHONDONTWRITEBYTECODE`` to match
+    the test-suite policy.
     """
     env: dict[str, str] = {}
-    for key in ("PATH", "HOME", "USER", "LANG", "LC_ALL"):
+    for key in ("PATH", "HOME", "USER", "LANG", "LC_ALL", "VIRTUAL_ENV"):
         val = os.environ.get(key)
         if val is not None:
             env[key] = val
+    if "VIRTUAL_ENV" not in env:
+        venv_dir = str(Path(sys.executable).resolve().parent.parent)
+        if (Path(venv_dir) / "pyvenv.cfg").exists():
+            env["VIRTUAL_ENV"] = venv_dir
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
 

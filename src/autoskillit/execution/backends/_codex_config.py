@@ -35,7 +35,7 @@ CODEX_MCP_REQUIRED_KEYS: frozenset[str] = frozenset(
     {"command", "env_vars", "startup_timeout_sec", "tool_timeout_sec"}
 )
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 def _format_toml_value(v: Any) -> str:

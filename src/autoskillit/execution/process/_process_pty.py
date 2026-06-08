@@ -6,9 +6,9 @@ import shlex
 import shutil
 import sys
 
-import structlog
+from autoskillit.core import get_logger
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 def pty_wrap_command(cmd: list[str]) -> list[str]:

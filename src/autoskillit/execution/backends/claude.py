@@ -69,7 +69,7 @@ from autoskillit.execution.backends._cmd_builder import CmdBuilder
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session import parse_session_result
 
-log = logging.getLogger(__name__)  # noqa: TID251
+log = logging.getLogger(__name__)  # noqa: TID251 — stdlib fallback: used before configure_logging(); structlog proxy would emit to stderr via import-time WriteLoggerFactory
 
 __all__ = [
     "ClaudeCodeBackend",

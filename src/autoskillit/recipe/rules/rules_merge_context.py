@@ -47,6 +47,9 @@ def _find_diagnose_merge_gate_step(
 ) -> tuple[str, RecipeStep] | None:
     """BFS from start to find the first run_python step calling diagnose_merge_gate.
 
+    Stops traversal through any merge_worktree step that already captures
+    result.failed_step, since that step re-establishes context independently.
+
     Returns (step_name, step) or None.
     """
     visited: set[str] = {start}
@@ -62,6 +65,10 @@ def _find_diagnose_merge_gate_step(
                 callable_val = str(step.with_args.get("callable", ""))
                 if callable_val == "autoskillit.smoke_utils.diagnose_merge_gate":
                     return name, step
+            if step.tool == "merge_worktree" and any(
+                "failed_step" in v.from_ for v in (step.capture or {}).values()
+            ):
+                continue
             next_frontier |= ctx.step_graph.get(name, set()) - visited
         frontier = next_frontier
     return None

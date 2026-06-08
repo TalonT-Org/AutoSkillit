@@ -79,7 +79,10 @@ def main() -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(payload)
         os.replace(tmp, str(marker_path))
-    except Exception:
+    except Exception as e:
+        sys.stderr.write(
+            f"recipe_confirmed_post_hook: failed to write marker {marker_path}: {e}\n"
+        )
         try:
             os.unlink(tmp)
         except OSError:

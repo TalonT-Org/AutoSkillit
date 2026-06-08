@@ -62,14 +62,14 @@ class TestPreCommitConfig:
         """
         config = load_yaml(PRECOMMIT_CONFIG)
         hooks = [hook for repo in config.get("repos", []) for hook in repo.get("hooks", [])]
-        sub_claude_hooks = [h for h in hooks if "check_sub_claude_md" in h.get("entry", "")]
+        sub_claude_hooks = [h for h in hooks if "check_sub_agents_md" in h.get("entry", "")]
         assert sub_claude_hooks, (
-            "Missing 'check-sub-claude-md' hook in .pre-commit-config.yaml — "
-            "add it to catch sub-CLAUDE.md coverage gaps before CI"
+            "Missing 'check-sub-agents-md' hook in .pre-commit-config.yaml — "
+            "add it to catch sub-AGENTS.md coverage gaps before CI"
         )
         hook = sub_claude_hooks[0]
         assert hook.get("pass_filenames") is False, (
-            "check-sub-claude-md hook must use pass_filenames: false — "
+            "check-sub-agents-md hook must use pass_filenames: false — "
             "the script does its own filesystem scan"
         )
 

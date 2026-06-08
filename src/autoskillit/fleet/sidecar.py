@@ -9,7 +9,7 @@ from typing import Literal, NamedTuple
 
 from autoskillit.core import ensure_project_temp, get_logger
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 class SidecarReadStatus(StrEnum):

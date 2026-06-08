@@ -634,6 +634,41 @@ def test_wait_for_queue_routing_covers_every_pr_state(recipe_fixture, request) -
 
 
 # ---------------------------------------------------------------------------
+# Context-param forwarding invariant — every wait_for_merge_queue must
+# forward context.auto_merge_available (Bug A regression guard from PR #3901).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("recipe_fixture", QUEUE_RECIPES)
+def test_wait_for_merge_queue_steps_forward_auto_merge_available(recipe_fixture, request) -> None:
+    """Every wait_for_merge_queue step must forward context.auto_merge_available.
+
+    Without this forwarding, the watcher's internal re-enqueue path uses its
+    default (typically ``True``) for ``auto_merge_available`` — which is wrong
+    on repos where ``check_repo_merge_state`` captured ``auto_merge_available=false``.
+    See PR #3901.
+    """
+    recipe = request.getfixturevalue(recipe_fixture)
+    mq_steps = {
+        name: step for name, step in recipe.steps.items() if step.tool == "wait_for_merge_queue"
+    }
+    assert mq_steps, f"{recipe_fixture}: no wait_for_merge_queue steps found"
+
+    for step_name, step in mq_steps.items():
+        with_args = step.with_args or {}
+        assert "auto_merge_available" in with_args, (
+            f"{recipe_fixture}: {step_name} (wait_for_merge_queue) is missing "
+            f"auto_merge_available in its with: block — recipes must forward "
+            f"context.auto_merge_available so the watcher uses the captured value."
+        )
+        value = with_args["auto_merge_available"]
+        assert "context.auto_merge_available" in value, (
+            f"{recipe_fixture}: {step_name}.auto_merge_available must reference "
+            f"{{{{ context.auto_merge_available }}}}, got: {value!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Auto-discovery structural guards
 # ---------------------------------------------------------------------------
 
@@ -882,8 +917,9 @@ class TestMergePrsPreEnqueueCiGate:
 
 
 def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_recipe) -> None:
-    """unbounded-cycle must fire ERROR for the dropped_merge_group_ci → diagnose_ci path
-    when max_merge_group_drops is absent (no watcher-internal guard)."""
+    """unbounded-cycle must fire ERROR for the dropped_merge_group_ci branch
+    when BOTH the watcher-internal guard (max_merge_group_drops) AND the
+    run_python loop guard step are absent (double-removal test)."""
     import copy
 
     from autoskillit.core.types import Severity
@@ -893,6 +929,37 @@ def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_r
     for step in recipe.steps.values():
         if step.tool == "wait_for_merge_queue" and step.with_args:
             step.with_args.pop("max_merge_group_drops", None)
+    # Remove the run_python guard step entirely and insert a bare passthrough
+    # step that routes back to the wait_for_merge_queue step.  The passthrough
+    # is NOT run_python and NOT enqueue_pr, so the unbounded-cycle per-branch
+    # analysis won't suppress it — the BFS will reach the MQ step and fire.
+    from autoskillit.recipe.schema import RecipeStep
+
+    guard_step_names = [
+        name
+        for name, step in recipe.steps.items()
+        if step.tool == "run_python"
+        and "check_dropped_ci_loop" in str((step.with_args or {}).get("callable", ""))
+    ]
+    for name in guard_step_names:
+        del recipe.steps[name]
+    passthrough_name = "_test_dmgci_passthrough"
+    mq_step_names = [
+        name
+        for name, step in recipe.steps.items()
+        if step.tool == "wait_for_merge_queue" and step.on_result is not None
+    ]
+    for step_name in mq_step_names:
+        step = recipe.steps[step_name]
+        step.on_result = copy.deepcopy(step.on_result)
+        for cond in step.on_result.conditions:
+            if cond.when and "dropped_merge_group_ci" in cond.when:
+                cond.route = passthrough_name
+        recipe.steps[passthrough_name] = RecipeStep(
+            name=passthrough_name,
+            action="route",
+            on_success=step_name,
+        )
 
     findings = run_semantic_rules(recipe)
     cycle_findings = [f for f in findings if f.rule == "unbounded-cycle"]
@@ -909,7 +976,9 @@ def test_unbounded_cycle_fires_for_unguarded_dropped_merge_group_ci_branch(any_r
 
 
 def test_unbounded_cycle_suppressed_when_dropped_merge_group_ci_has_guard(any_recipe) -> None:
-    """unbounded-cycle must NOT fire for dropped_merge_group_ci when max_merge_group_drops >= 1."""
+    """unbounded-cycle must NOT fire for dropped_merge_group_ci when EITHER
+    the watcher-internal guard (max_merge_group_drops >= 1) OR the run_python
+    loop guard step (check_dropped_ci_loop) is present."""
     from autoskillit.core.types import Severity
     from autoskillit.recipe.validator import run_semantic_rules
 
@@ -934,13 +1003,15 @@ def test_unbounded_cycle_suppressed_when_dropped_merge_group_ci_has_guard(any_re
     ]
     assert not dmgci_error_findings, (
         f"unbounded-cycle must NOT fire ERROR for guarded dropped_merge_group_ci branch in "
-        f"{any_recipe.name} (max_merge_group_drops >= 1); got: "
+        f"{any_recipe.name}; got: "
         f"{[(f.step_name, f.message[:80]) for f in dmgci_error_findings]}"
     )
 
 
 def test_dropped_merge_group_ci_reenqueue_guard_fires_without_guard(any_recipe) -> None:
-    """Semantic rule I9 must fire ERROR when max_merge_group_drops is absent."""
+    """Semantic rule I9 must fire ERROR when BOTH the watcher-internal guard
+    (max_merge_group_drops) AND the run_python loop guard step are absent
+    (double-removal test)."""
     import copy
 
     from autoskillit.core.types import Severity
@@ -950,6 +1021,18 @@ def test_dropped_merge_group_ci_reenqueue_guard_fires_without_guard(any_recipe) 
     for step in recipe.steps.values():
         if step.tool == "wait_for_merge_queue" and step.with_args:
             step.with_args.pop("max_merge_group_drops", None)
+    for step in list(recipe.steps.values()):
+        if step.tool == "wait_for_merge_queue" and step.on_result is not None:
+            step.on_result = copy.deepcopy(step.on_result)
+            for cond in step.on_result.conditions:
+                if cond.when and "dropped_merge_group_ci" in cond.when:
+                    cond.route = "reenter_merge_queue_cheap"
+        if step.tool == "run_python" and step.on_result is not None:
+            callable_val = (step.with_args or {}).get("callable", "")
+            if "check_dropped_ci_loop" in str(callable_val):
+                step.on_result = copy.deepcopy(step.on_result)
+                for cond in step.on_result.conditions:
+                    cond.route = "reenter_merge_queue_cheap"
 
     findings = run_semantic_rules(recipe)
     i9_findings = [
@@ -958,25 +1041,28 @@ def test_dropped_merge_group_ci_reenqueue_guard_fires_without_guard(any_recipe) 
         if f.rule == "dropped-merge-group-ci-unguarded-reenqueue-loop"
         and f.severity == Severity.ERROR
     ]
-    assert i9_findings, (
-        f"Rule I9 must fire ERROR for unguarded dropped_merge_group_ci in {recipe.name}"
-    )
+    assert i9_findings, f"Rule I9 must fire ERROR when both guards absent in {recipe.name}"
 
 
 def test_dropped_merge_group_ci_reenqueue_guard_suppressed_with_guard(any_recipe) -> None:
-    """Semantic rule I9 must NOT fire when max_merge_group_drops >= 1."""
+    """Semantic rule I9 must NOT fire when EITHER the watcher-internal guard
+    (max_merge_group_drops >= 1) OR the run_python loop guard step is present."""
     from autoskillit.recipe.validator import run_semantic_rules
 
-    mq_steps_with_guard = [
-        s
-        for s in any_recipe.steps.values()
-        if s.tool == "wait_for_merge_queue"
+    has_watcher_guard = any(
+        s.tool == "wait_for_merge_queue"
         and s.with_args
         and int(s.with_args.get("max_merge_group_drops", 0)) >= 1
-    ]
-    assert mq_steps_with_guard, (
-        f"Precondition: {any_recipe.name} must have at least one wait_for_merge_queue step "
-        f"with max_merge_group_drops >= 1 for this test to be meaningful"
+        for s in any_recipe.steps.values()
+    )
+    has_rp_guard = any(
+        s.tool == "run_python"
+        and "check_dropped_ci_loop" in str((s.with_args or {}).get("callable", ""))
+        for s in any_recipe.steps.values()
+    )
+    assert has_watcher_guard or has_rp_guard, (
+        f"Precondition: {any_recipe.name} must have at least one guard "
+        f"(max_merge_group_drops >= 1 or a check_dropped_ci_loop step)"
     )
 
     findings = run_semantic_rules(any_recipe)

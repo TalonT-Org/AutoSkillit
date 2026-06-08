@@ -18,6 +18,6 @@ IL-1 progressive resolution planner — phases, work packages, manifest generati
 | `lifecycle.py` | `record_lifecycle_event`, `load_lifecycle_registry` — unified lifecycle provenance for voided/absorbed entities |
 
 ## Architecture Notes
-import from `server/` or `recipe/`. `validation.py` performs a DAG cycle check before any
+The planner layer must not import from `server/` or `recipe/`. `validation.py` performs a DAG cycle check before any
 compilation proceeds. `consolidation.py` runs as a post-pass after all elaboration phases
 complete.

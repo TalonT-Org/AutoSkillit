@@ -105,6 +105,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_enqueue_ready_type_enforcement.py` | AST guard: mutation methods (_enqueue_direct, _enable_auto_merge_direct) must accept EnqueueReady, not str |
 | `test_origin_isolation_contract.py` | AST + shell lint guard: no hardcoded "origin" in git remote operations outside allowlist; shell scripts must try upstream before origin |
 | `test_backend_annotation_context_awareness.py` | Context-aware pattern detection: distinguishes self-referential autoskillit: documentation from genuine cross-skill dependencies |
+| `test_backend_capabilities_construction.py` | AST guard: every BackendCapabilities(...) construction site must explicitly provide all field names as keyword args |
 | `test_skill_backend_annotation_accuracy.py` | Reverse-direction annotation validation: skills with backend_requirements: [claude-code] must have genuine Claude-Code-only dependency |
 | `test_skill_backend_annotations.py` | Bidirectional annotation enforcement: forward (pattern → uses_capabilities), reverse (annotation → justified), co-requirement, and derivation checks |
 | `test_skill_capability_registry.py` | Capability registry consistency: every SKILL_CAPABILITY_REGISTRY key consumed, backend_requirements derivable from uses_capabilities, no unknown capabilities declared |

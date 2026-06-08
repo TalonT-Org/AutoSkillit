@@ -1,7 +1,7 @@
 ---
 name: resolve-research-review
 categories: [research]
-uses_capabilities: [agent_model]
+uses_capabilities: [agent_model, git_metadata_write]
 description: >
   Fetch PR review comments from review-research-pr, run research-aware intent
   validation (ACCEPT/REJECT/DISCUSS), apply targeted fixes, escalate unrerunnable

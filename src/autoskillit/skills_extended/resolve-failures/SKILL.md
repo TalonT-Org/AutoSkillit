@@ -1,6 +1,6 @@
 ---
 name: resolve-failures
-uses_capabilities: [cross_skill_ref, run_skill, test_check]
+uses_capabilities: [cross_skill_ref, git_metadata_write, run_skill, test_check]
 description: Failure resolution executor. ALWAYS invoke this skill when instructed to fix test failures in a worktree. Do not read test output or edit code directly — use this skill first to load the failure resolution workflow.
 hooks:
   PreToolUse:

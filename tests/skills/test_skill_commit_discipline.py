@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from autoskillit.workspace.skills import _read_skill_frontmatter
+from tests.arch._helpers import _strip_frontmatter
 
 pytestmark = [pytest.mark.small]
 
@@ -61,4 +63,21 @@ def test_skill_commit_prohibits_amend(skill_dir: Path) -> None:
         f"Skill {skill_dir.name!r} contains 'git commit' instructions but does not "
         "explicitly prohibit '--amend' or require new commits. "
         "Add 'do NOT use --amend' or 'always create new commits' near each commit instruction."
+    )
+
+
+@pytest.mark.parametrize("skill_dir", _SKILL_DIRS, ids=lambda d: d.name)
+def test_git_commit_skills_declare_metadata_write(skill_dir: Path) -> None:
+    """Skills with 'git commit -m' instructions must declare git_metadata_write."""
+    content = (skill_dir / "SKILL.md").read_text()
+    body = _strip_frontmatter(content)
+    if not _GIT_COMMIT_INSTRUCTION_RE.search(body):
+        return
+    fm = _read_skill_frontmatter(skill_dir / "SKILL.md")
+    caps = set(fm.get("uses_capabilities", []))
+    assert "git_metadata_write" in caps, (
+        f"Skill {skill_dir.name!r} contains 'git commit -m' instructions but does not "
+        "declare 'git_metadata_write' in uses_capabilities. "
+        "Any skill that commits in a worktree must declare this capability "
+        "to prevent dispatch to backends where .git/ metadata is read-only."
     )

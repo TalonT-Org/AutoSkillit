@@ -1,7 +1,7 @@
 ---
 name: resolve-claims-review
 categories: [research]
-uses_capabilities: [agent_model]
+uses_capabilities: [agent_model, git_metadata_write]
 description: >
   Fetch claim findings from audit-claims, run citation-aware intent validation
   (ACCEPT/REJECT/DISCUSS), apply targeted citation fixes, escalate findings

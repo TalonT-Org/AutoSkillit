@@ -340,7 +340,10 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
         codex_status="fix-required",
     ),
     "git_metadata_write": SkillCapabilityDef(
-        description="Requires .git/ metadata write access (git worktree add, git checkout -b)",
+        description=(
+            "Requires .git/ metadata write access (git commit, git rebase, "
+            "git worktree add, git checkout -b)"
+        ),
         codex_status="not-applicable",
     ),
 }

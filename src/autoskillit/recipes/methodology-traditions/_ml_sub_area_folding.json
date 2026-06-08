@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.0.0",
   "ml_sub_area_folding": [
     {
       "sub_area": "foundation_models",

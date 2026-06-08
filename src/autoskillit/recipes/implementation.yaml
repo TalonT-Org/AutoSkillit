@@ -3,7 +3,7 @@ description: Plan, implement, test, and merge a task end-to-end
 summary: bootstrap_clone > (claim_and_resolve?) > (create_and_publish?) > make-plan
   > (review-approach?) > dry-walkthrough > implement > test > merge (per plan part)
   > (audit-impl?) > (open_pr?) > push > cleanup
-recipe_version: 1.0.0
+recipe_version: "1.0.0"
 requires_packs:
 - github
 - ci

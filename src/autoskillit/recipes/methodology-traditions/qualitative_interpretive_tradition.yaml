@@ -1,5 +1,5 @@
 name: qualitative_interpretive_tradition
-schema_version: "1.0"
+schema_version: "1.0.0"
 priority: 11
 display_name: "Qualitative Interpretive Research"
 canonical_guideline:

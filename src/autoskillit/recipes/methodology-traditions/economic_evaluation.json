@@ -1,6 +1,6 @@
 {
   "name": "economic_evaluation",
-  "schema_version": "1.0",
+  "schema_version": "1.0.0",
   "priority": 9,
   "display_name": "Economic Evaluation",
   "canonical_guideline": {

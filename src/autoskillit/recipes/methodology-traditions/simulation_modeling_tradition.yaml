@@ -1,5 +1,5 @@
 name: simulation_modeling_tradition
-schema_version: "1.0"
+schema_version: "1.0.0"
 priority: 6
 display_name: "Simulation and Modeling (ABM/Computational)"
 canonical_guideline:

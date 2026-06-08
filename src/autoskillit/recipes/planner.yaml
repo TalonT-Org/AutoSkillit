@@ -1,5 +1,5 @@
 name: planner
-recipe_version: "2"
+recipe_version: "2.0.0"
 description: |
   Progressive decomposition: phases, assignments, work packages
 summary: "init > analyze > [domain?] > gen-phases > parallel-phases > parallel-assignments > sequential-wps > reconcile > validate/refine > compile"

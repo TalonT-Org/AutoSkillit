@@ -1,5 +1,5 @@
 name: quality_improvement
-schema_version: "1.0"
+schema_version: "1.0.0"
 priority: 8
 display_name: "Quality Improvement and Patient Safety"
 canonical_guideline:

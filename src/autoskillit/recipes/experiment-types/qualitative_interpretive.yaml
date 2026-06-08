@@ -1,5 +1,5 @@
 name: qualitative_interpretive
-schema_version: "1.0"
+schema_version: "1.0.0"
 priority: 11
 is_fallback: false
 classification_triggers:

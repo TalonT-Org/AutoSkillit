@@ -90,6 +90,55 @@ def _bridge_session_registry(session_id: str) -> None:
         raise
 
 
+def _check_recipe_reload_block(session_id: str, tool_input: dict) -> dict | None:
+    """Block open_kitchen(name=...) if a recipe-confirmed marker exists for this session.
+
+    Returns a deny payload dict if blocked, or None if allowed.
+    """
+    from pathlib import Path as _Path
+
+    recipe_name = tool_input.get("name") or None
+    if not recipe_name:
+        return None
+
+    if tool_input.get("ingredients_only", False):
+        return None
+
+    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
+    if state_override:
+        state_dir = _Path(state_override) / "kitchen_state"
+    else:
+        campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+        base = _Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
+        state_dir = base / campaign_id if campaign_id else base
+
+    confirmed_path = state_dir / f"{session_id}_recipe_confirmed.json"
+    if not confirmed_path.exists():
+        return None
+
+    try:
+        marker = json.loads(confirmed_path.read_text(encoding="utf-8"))
+        if marker.get("session_id") != session_id:
+            return None
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": (
+                f"RECIPE ALREADY LOADED: This session already loaded recipe "
+                f"'{recipe_name}'. The recipe is instructions, not runtime state "
+                "— re-loading cannot change pipeline behavior. If the user "
+                "requests enabling or disabling a step mid-run, execute or skip "
+                "it directly. To re-open the kitchen gate without loading a "
+                "recipe, call open_kitchen() without a name parameter."
+            ),
+        }
+    }
+
+
 def main() -> None:
     try:
         data = json.loads(sys.stdin.read())
@@ -145,6 +194,14 @@ def main() -> None:
         tool_input = data.get("tool_input") or {}
         if isinstance(tool_input, dict):
             recipe_name = tool_input.get("name") or None
+
+        # Check for recipe reload block before writing the marker
+        if session_id and isinstance(tool_input, dict):
+            denial = _check_recipe_reload_block(session_id, tool_input)
+            if denial:
+                sys.stdout.write(json.dumps(denial) + "\n")
+                sys.exit(0)
+
         if session_id:
             _write_kitchen_marker(session_id, recipe_name)
             try:

@@ -239,3 +239,127 @@ def test_guard_bridge_no_op_when_no_launch_id(tmp_path: Path) -> None:
     assert result.returncode == 0, f"Hook failed: {result.stderr}"
     registry = read_registry(project_dir)
     assert registry["abc"]["claude_session_id"] is None
+
+
+# --- Recipe Reload Guard: T2 tests ---
+
+
+def _write_confirmed_marker(tmp_path: Path, session_id: str) -> None:
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / f"{session_id}_recipe_confirmed.json").write_text(
+        json.dumps({"session_id": session_id, "confirmed_at": "2026-06-08T00:00:00+00:00"})
+    )
+
+
+def _run_guard_with_session(
+    tmp_path: Path,
+    session_id: str,
+    tool_input: dict,
+    env_extra: dict | None = None,
+) -> dict:
+    hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
+    hook_input = {
+        "tool_name": "mcp__autoskillit__open_kitchen",
+        "tool_input": tool_input,
+        "session_id": session_id,
+        "hook_event_name": "PreToolUse",
+    }
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_STATE_DIR")
+    }
+    env["AUTOSKILLIT_STATE_DIR"] = str(tmp_path)
+    if env_extra:
+        env.update(env_extra)
+    result = subprocess.run(
+        [sys.executable, str(hook_path)],
+        input=json.dumps(hook_input),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
+
+
+# T2-1: Reload blocked after confirmed marker
+def test_reload_blocked_after_confirmed_marker(tmp_path: Path) -> None:
+    _write_confirmed_marker(tmp_path, "sess-abc")
+    result = _run_guard_with_session(tmp_path, "sess-abc", {"name": "implementation"})
+    assert result["returncode"] == 0
+    payload = json.loads(result["stdout"])
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "RECIPE ALREADY LOADED" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+# T2-2: Gate-only open allowed after confirmed
+def test_gate_only_open_allowed_after_confirmed(tmp_path: Path) -> None:
+    _write_confirmed_marker(tmp_path, "sess-abc")
+    result = _run_guard_with_session(tmp_path, "sess-abc", {})
+    assert result["returncode"] == 0
+    # Either no stdout, or stdout with permissionDecision != "deny"
+    if result["stdout"].strip():
+        payload = json.loads(result["stdout"])
+        assert payload.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+
+# T2-3: ingredients_only=True allowed after confirmed
+def test_ingredients_only_allowed_after_confirmed(tmp_path: Path) -> None:
+    _write_confirmed_marker(tmp_path, "sess-abc")
+    result = _run_guard_with_session(
+        tmp_path, "sess-abc", {"name": "impl", "ingredients_only": True}
+    )
+    assert result["returncode"] == 0
+    if result["stdout"].strip():
+        payload = json.loads(result["stdout"])
+        assert payload.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+
+# T2-4: Different session_id not blocked
+def test_different_session_id_not_blocked(tmp_path: Path) -> None:
+    _write_confirmed_marker(tmp_path, "sess-other")
+    result = _run_guard_with_session(tmp_path, "sess-abc", {"name": "implementation"})
+    assert result["returncode"] == 0
+    if result["stdout"].strip():
+        payload = json.loads(result["stdout"])
+        assert payload.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+
+# T2-5: No confirmed marker allows load (initialization phase)
+def test_no_confirmed_marker_allows_load(tmp_path: Path) -> None:
+    # Do NOT create any confirmed marker
+    result = _run_guard_with_session(tmp_path, "sess-abc", {"name": "implementation"})
+    assert result["returncode"] == 0
+    if result["stdout"].strip():
+        payload = json.loads(result["stdout"])
+        assert payload.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+
+# T2-6: Corrupted confirmed marker fails open
+def test_corrupted_confirmed_marker_fails_open(tmp_path: Path) -> None:
+    state_dir = tmp_path / "kitchen_state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "sess-abc_recipe_confirmed.json").write_text("not-valid-json")
+    result = _run_guard_with_session(tmp_path, "sess-abc", {"name": "implementation"})
+    assert result["returncode"] == 0
+    if result["stdout"].strip():
+        payload = json.loads(result["stdout"])
+        assert payload.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+
+# T2-7: Reload denied in headless orchestrator after confirmed
+def test_reload_denied_in_headless_orchestrator_after_confirmed(tmp_path: Path) -> None:
+    _write_confirmed_marker(tmp_path, "sess-abc")
+    result = _run_guard_with_session(
+        tmp_path,
+        "sess-abc",
+        {"name": "implementation"},
+        env_extra={
+            "AUTOSKILLIT_HEADLESS": "1",
+            "AUTOSKILLIT_SESSION_TYPE": "orchestrator",
+        },
+    )
+    assert result["returncode"] == 0
+    payload = json.loads(result["stdout"])
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"

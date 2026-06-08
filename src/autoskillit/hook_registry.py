@@ -75,6 +75,7 @@ class HookDef:
 # token_summary_hook (+ quota_post)       | works-as-is
 # review_gate_post_hook                  | works-as-is
 # resume_gate_post_hook                  | works-as-is
+# recipe_confirmed_post_hook             | works-as-is
 # lint_after_edit_hook                   | degraded
 # skill_load_post_hook                   | not-applicable
 # skill_load_guard                       | fix-required
@@ -228,7 +229,12 @@ HOOK_REGISTRY: list[HookDef] = [
     HookDef(
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__run_skill.*",
-        scripts=["token_summary_hook.py", "quota_post_hook.py", "pipeline_step_post_hook.py"],
+        scripts=[
+            "token_summary_hook.py",
+            "quota_post_hook.py",
+            "pipeline_step_post_hook.py",
+            "recipe_confirmed_post_hook.py",
+        ],
     ),
     HookDef(
         event_type="PostToolUse",

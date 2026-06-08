@@ -122,6 +122,7 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "skill_load_guard.py",
         "resume_gate_post_hook.py",
         "reset_resume_gate.py",
+        "recipe_confirmed_post_hook.py",
     }
 )
 

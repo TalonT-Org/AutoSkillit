@@ -869,7 +869,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "core": 21,
         "core/types": 30,
         "cli": 21,
-        "hooks": 13,
+        "hooks": 14,  # +recipe_confirmed_post_hook.py
         "pipeline": 12,
         "fleet": 22,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py; +_reset.py
         "recipe/rules": 48,  # +commit_guard_regression_route

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -23,14 +24,6 @@ def _clean_subprocess_env() -> dict[str, str]:
     ``VIRTUAL_ENV`` for venv activation (required when install-worktree
     rebuilds the venv mid-run), and ``PYTHONDONTWRITEBYTECODE`` to match
     the test-suite policy.
-
-    Pins ``PYTHONPATH`` to the parent's ``sys.path`` so the subprocess
-    resolves packages from the same snapshot of site-packages the parent
-    loaded at startup. Without this, concurrent ``uv run`` calls from
-    sibling xdist workers (e.g., ``uv run ruff check`` in
-    test_ci_dev_config) trigger ``uv sync`` which swaps package files
-    mid-run, causing transient ImportError/PackageNotFoundError in the
-    subprocess.
     """
     env: dict[str, str] = {}
     for key in ("PATH", "HOME", "USER", "LANG", "LC_ALL", "VIRTUAL_ENV"):
@@ -42,8 +35,39 @@ def _clean_subprocess_env() -> dict[str, str]:
         if (Path(venv_dir) / "pyvenv.cfg").exists():
             env["VIRTUAL_ENV"] = venv_dir
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    env["PYTHONPATH"] = os.pathsep.join(sys.path)
     return env
+
+
+def _run_import_subprocess(code: str) -> subprocess.CompletedProcess[str]:
+    """Run import-checking code in a subprocess resilient to venv churn.
+
+    Under xdist, sibling workers may trigger ``uv run`` (e.g., ruff check
+    in test_ci_dev_config) which calls ``uv sync``, swapping ``.dist-info``
+    directories in the shared ``.venv`` mid-run. This causes
+    ``PackageNotFoundError`` in third-party ``__init__.py`` files (e.g.,
+    fastmcp) that call ``importlib.metadata.version()`` at import time.
+
+    Retry once on import-infrastructure errors since the race window is
+    short (typically < 1 s while ``uv sync`` replaces metadata dirs).
+    """
+    env = _clean_subprocess_env()
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if result.returncode != 0 and (
+        "PackageNotFoundError" in result.stderr or "No module named" in result.stderr
+    ):
+        time.sleep(1)
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+    return result
 
 
 def test_server_import_loads_fleet_package_eagerly() -> None:
@@ -57,12 +81,7 @@ def test_server_import_loads_fleet_package_eagerly() -> None:
         "fleet_modules = [k for k in sys.modules if k.startswith('autoskillit.fleet')]; "
         "print(bool(fleet_modules))"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        env=_clean_subprocess_env(),
-    )
+    result = _run_import_subprocess(code)
     assert result.returncode == 0, (
         f"Subprocess crashed (rc={result.returncode}):\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
@@ -77,12 +96,7 @@ def test_cli_app_import_does_not_load_fleet_package() -> None:
         "fleet_modules = [k for k in sys.modules if k.startswith('autoskillit.fleet')]; "
         "print(fleet_modules)"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        env=_clean_subprocess_env(),
-    )
+    result = _run_import_subprocess(code)
     assert result.returncode == 0, (
         f"Subprocess crashed (rc={result.returncode}):\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"

@@ -103,6 +103,8 @@ UNIVERSAL_PROJECT_RULE_MARKERS: list[tuple[str, str]] = [
     ("autoskillit init", "worktree-init-prohibition"),
     ("task install-worktree", "worktree-init-prohibition"),
     ("Naming convention", "def-vs-spec-suffixes"),
+    ("*Def", "def-vs-spec-suffixes"),
+    ("*Spec", "def-vs-spec-suffixes"),
     ("git commit --amend", "commit-discipline"),
     ("--fixup", "commit-discipline"),
     ("--squash", "commit-discipline"),

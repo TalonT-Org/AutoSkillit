@@ -12,9 +12,31 @@ _ENV_ERROR_RE = re.compile(
     r"ModuleNotFoundError|ImportError|FileNotFoundError|No such file", re.IGNORECASE
 )
 
+_PRE_TEST_STEPS = frozenset(
+    {
+        "dirty_tree",
+        "dirty_main_repo",
+        "rebase",
+        "path_validation",
+        "protected_branch",
+        "branch_detection",
+        "fetch",
+        "pre_rebase_check",
+        "merge_commits_detected",
+        "generated_file_cleanup",
+        "editable_install_guard",
+        "embedded_worktree",
+        "ref_coherence",
+        "merge",
+    }
+)
+_TEST_STEPS = frozenset({"test_gate", "post_rebase_test_gate"})
 
-def _classify_subtype(test_stdout: str, test_stderr: str) -> str:
+
+def _classify_test_subtype(test_stdout: str, test_stderr: str) -> str:
     combined = f"{test_stdout}\n{test_stderr}"
+    if not combined.strip():
+        return "no_test_output"
     if _TIMEOUT_RE.search(combined):
         return "timing_race"
     if _ENV_ERROR_RE.search(combined):
@@ -33,6 +55,7 @@ def diagnose_merge_gate(
     test_stdout: str = "",
     test_stderr: str = "",
     output_dir: str = "",
+    failed_step: str = "",
     **_kwargs: object,
 ) -> dict[str, str]:
     """Write a structured merge gate failure diagnosis file and return its path.
@@ -40,9 +63,23 @@ def diagnose_merge_gate(
     Called by run_python from the diagnose_merge_gate step in remediation.yaml,
     implementation.yaml, and implementation-groups.yaml. Parses merge gate test
     output and writes a diagnosis file in the same format as diagnose-ci output.
+
+    When `failed_step` is provided (e.g. "dirty_tree", "test_gate"), the
+    classification is routed to the pre-test or test path explicitly. Without
+    it, the legacy behavior of classifying from output content alone is used.
     """
-    subtype = _classify_subtype(test_stdout, test_stderr)
-    failed_tests = _extract_failed_tests(test_stdout, test_stderr)
+    if failed_step in _PRE_TEST_STEPS:
+        failure_type = "pre_test"
+        subtype = failed_step
+        failed_tests: list[str] = []
+    elif failed_step in _TEST_STEPS:
+        failure_type = "test"
+        subtype = _classify_test_subtype(test_stdout, test_stderr)
+        failed_tests = _extract_failed_tests(test_stdout, test_stderr)
+    else:
+        failure_type = "test"
+        subtype = _classify_test_subtype(test_stdout, test_stderr)
+        failed_tests = _extract_failed_tests(test_stdout, test_stderr)
 
     if not output_dir or not Path(output_dir).is_absolute():
         raise ValueError(f"output_dir must be absolute, got {output_dir!r}")
@@ -56,13 +93,14 @@ def diagnose_merge_gate(
     content = (
         "# Merge Gate Test Failure Diagnosis\n\n"
         "## Classification\n"
-        "failure_type = test\n"
+        f"failure_type = {failure_type}\n"
         f"failure_subtype = {subtype}\n\n"
         "## Failed Tests\n"
         f"{failed_section}\n\n"
         "## Log Excerpt\n"
         f"```\n{log_excerpt}\n```\n\n"
         "## Structured Output\n"
+        f"failure_type = {failure_type}\n"
         f"failure_subtype = {subtype}\n"
     )
 

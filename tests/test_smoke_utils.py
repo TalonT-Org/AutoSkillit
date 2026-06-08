@@ -2378,6 +2378,60 @@ def test_diagnose_merge_gate_extracts_failure_subtype(tmp_path: object) -> None:
     assert "failure_subtype = timing_race" in content_t
 
 
+def test_diagnose_merge_gate_dirty_tree_step(tmp_path: object) -> None:
+    """When failed_step is dirty_tree, subtype must be dirty_tree not unknown."""
+    from pathlib import Path
+
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    output_dir = tmp_path  # type: ignore[union-attr]
+    result = diagnose_merge_gate(
+        test_stdout="",
+        test_stderr="",
+        output_dir=str(output_dir),
+        failed_step="dirty_tree",
+    )
+    content = Path(result["diagnosis_path"]).read_text()
+    assert "failure_subtype = dirty_tree" in content
+    assert "failure_type = pre_test" in content
+
+
+def test_diagnose_merge_gate_test_gate_empty_output(tmp_path: object) -> None:
+    """test_gate with empty output means collection failed, not unknown."""
+    from pathlib import Path
+
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    output_dir = tmp_path  # type: ignore[union-attr]
+    result = diagnose_merge_gate(
+        test_stdout="",
+        test_stderr="",
+        output_dir=str(output_dir),
+        failed_step="test_gate",
+    )
+    content = Path(result["diagnosis_path"]).read_text()
+    assert "failure_subtype = no_test_output" in content
+    assert "failure_type = test" in content
+
+
+def test_diagnose_merge_gate_test_gate_with_output(tmp_path: object) -> None:
+    """test_gate with FAILED lines still classifies as deterministic."""
+    from pathlib import Path
+
+    from autoskillit.smoke_utils._merge_gate_diagnosis import diagnose_merge_gate
+
+    output_dir = tmp_path  # type: ignore[union-attr]
+    result = diagnose_merge_gate(
+        test_stdout="FAILED tests/test_x.py::test_y",
+        test_stderr="",
+        output_dir=str(output_dir),
+        failed_step="test_gate",
+    )
+    content = Path(result["diagnosis_path"]).read_text()
+    assert "failure_subtype = deterministic" in content
+    assert "failure_type = test" in content
+
+
 def test_diagnose_merge_gate_handles_empty_output(tmp_path: object) -> None:
     """callable with empty/absent test output returns graceful fallback."""
     from pathlib import Path
@@ -2389,7 +2443,8 @@ def test_diagnose_merge_gate_handles_empty_output(tmp_path: object) -> None:
     diag_path = Path(result["diagnosis_path"])
     assert diag_path.exists()
     content = diag_path.read_text()
-    assert "failure_subtype = unknown" in content
+    assert "failure_subtype = no_test_output" in content
+    assert "failure_type = test" in content
 
 
 def test_diagnose_merge_gate_returns_ci_conclusion_failure(tmp_path: object) -> None:

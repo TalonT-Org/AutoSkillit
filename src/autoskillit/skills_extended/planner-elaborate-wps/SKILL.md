@@ -167,3 +167,11 @@ Finally, write the phase sentinel file to `$2/work_packages/wp_sentinels/{phase_
 ```
 phase_wps_result_dir = <absolute path to $2/work_packages>
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

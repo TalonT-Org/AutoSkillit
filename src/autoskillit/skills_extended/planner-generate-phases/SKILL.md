@@ -152,3 +152,11 @@ phase_manifest_path = <absolute path to phase_manifest.json>
 phase_count = <N>
 phase_ids = <comma-separated list of phase IDs, e.g. P1,P2,P3>
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

@@ -45,7 +45,6 @@ _KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {
     "implementation": {"run-skill-missing-context-limit"},
     "implementation-groups": {"run-skill-missing-context-limit"},
     "merge-prs": {"run-skill-missing-context-limit"},
-    "planner": {"run-skill-missing-context-limit"},
     "remediation": {"run-skill-missing-context-limit"},
     "research-design": {"run-skill-missing-context-limit"},
     "research-implement": {"run-skill-missing-context-limit"},

@@ -130,7 +130,7 @@ steps:
 
   elaborate_phases:
     tool: run_skill
-    model: ""
+    model: "opus[1m]"
     with:
       skill_command: "/autoskillit:planner-elaborate-phase ${{ context.plan_snapshot_path }} {phase_id} ${{ context.planner_dir }}/phases"
       cwd: "${{ inputs.source_dir }}"
@@ -192,7 +192,7 @@ steps:
 
   elaborate_assignments:
     tool: run_skill
-    model: ""
+    model: "opus[1m]"
     with:
       skill_command: "/autoskillit:planner-elaborate-assignments {context_path} ${{ context.planner_dir }}"
       cwd: "${{ inputs.source_dir }}"

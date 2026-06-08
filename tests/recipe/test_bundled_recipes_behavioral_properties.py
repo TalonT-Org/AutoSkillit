@@ -52,7 +52,9 @@ def _recipe_base_name(filename: str) -> str:
     return filename.removesuffix(".yaml")
 
 
-@pytest.mark.xfail(reason="Part B: on_context_limit handlers not yet added to bundled recipes")
+@pytest.mark.xfail(
+    reason="on_context_limit handlers not yet added to all bundled recipes", strict=False
+)
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
 def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:
     """Every run_skill step must declare on_context_limit (or be exempt)."""
@@ -88,9 +90,6 @@ def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:
     )
 
 
-@pytest.mark.xfail(
-    reason="Part B: elaborate_wps not yet switched to parallel dispatch", strict=True
-)
 @pytest.mark.parametrize(
     "recipe_name",
     [n for n in _RECIPE_NAMES if _recipe_base_name(n) in PARALLEL_ELIGIBLE_DISPATCH_STEPS],
@@ -114,9 +113,6 @@ def test_parallel_eligible_steps_use_parallel_dispatch(recipe_name: str) -> None
         )
 
 
-@pytest.mark.xfail(
-    reason="Part B: explicit model not yet added to context-intensive steps", strict=True
-)
 @pytest.mark.parametrize(
     "recipe_name",
     [n for n in _RECIPE_NAMES if _recipe_base_name(n) in CONTEXT_INTENSIVE_STEPS],

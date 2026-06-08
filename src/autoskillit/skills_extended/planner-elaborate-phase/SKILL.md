@@ -120,3 +120,11 @@ Do NOT write `phase_number` or `name_slug` — the backend derives these at load
 ```
 elab_result_path = <absolute path to $3/{id}_result.json>
 ```
+
+## Context Limit Behavior
+
+This skill writes result files to the output directory during execution.
+If context is exhausted mid-execution:
+
+1. Commit any pending file writes to disk before exiting.
+2. The caller's `on_context_limit` routing handles recovery — do not attempt partial structured output.

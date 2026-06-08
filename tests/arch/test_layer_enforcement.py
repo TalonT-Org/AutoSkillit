@@ -1447,6 +1447,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_headless_clone_guard_integration.py": frozenset(
         {"autoskillit.pipeline"}
     ),
+    # cross-tier dispatch contract loads the planner recipe to verify dispatch modes
+    "tests/planner/test_cross_tier_contracts.py": frozenset({"autoskillit.recipe"}),
     # reader-agreement test verifies that token_summary_hook._load_sessions and
     # DefaultTokenLog.load_from_log_dir agree on model identity after flush_session_log
     "tests/execution/test_session_log_fields.py": frozenset(

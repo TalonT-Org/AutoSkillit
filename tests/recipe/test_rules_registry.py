@@ -103,7 +103,6 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
         "implementation-groups.yaml": {"run-skill-missing-context-limit"},
         "implementation.yaml": {"run-skill-missing-context-limit"},
         "merge-prs.yaml": {"run-skill-missing-context-limit"},
-        "planner.yaml": {"run-skill-missing-context-limit"},
         "remediation.yaml": {"run-skill-missing-context-limit"},
         "research-design.yaml": {"run-skill-missing-context-limit"},
         "research-implement.yaml": {"run-skill-missing-context-limit"},

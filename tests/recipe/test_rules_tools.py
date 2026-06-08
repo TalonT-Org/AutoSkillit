@@ -865,3 +865,43 @@ def test_mixed_cwd_rule_does_not_fire_on_single_cwd() -> None:
     findings = run_semantic_rules(recipe)
     matched = [f for f in findings if f.rule == "mixed-cwd-without-scoping-key"]
     assert not matched, "Single-cwd recipes must not trigger the rule"
+
+
+# ---------------------------------------------------------------------------
+# tool_output_contracts: wait_for_merge_queue → pr_state
+# ---------------------------------------------------------------------------
+
+
+def test_wait_for_merge_queue_has_tool_output_contract() -> None:
+    """wait_for_merge_queue must declare a tool_output_contract on pr_state.
+
+    The contract drives the ``on-result-missing-tool-output-value`` rule which
+    validates routing completeness for the recoverable values (dropped_merge_group_ci,
+    dropped_healthy, ejected, stalled). Without this contract the rule cannot
+    detect missing routing arms.
+    """
+    from autoskillit.core import PRState
+    from autoskillit.recipe.contracts import get_tool_output_contract, load_bundled_manifest
+
+    manifest = load_bundled_manifest()
+    contract = get_tool_output_contract("wait_for_merge_queue", manifest)
+    assert contract is not None, "wait_for_merge_queue must declare a tool_output_contract"
+    assert contract.result_field == "pr_state"
+
+    field_spec = contract.fields["pr_state"]
+    expected_allowed = {s.value for s in PRState}
+    assert set(field_spec.allowed_values) == expected_allowed, (
+        f"pr_state.allowed_values must cover every PRState value; "
+        f"missing: {expected_allowed - set(field_spec.allowed_values)}"
+    )
+
+    expected_recoverable = {
+        "dropped_merge_group_ci",
+        "dropped_healthy",
+        "ejected",
+        "stalled",
+    }
+    assert expected_recoverable.issubset(field_spec.recoverable_values), (
+        f"pr_state.recoverable_values must include {expected_recoverable}; "
+        f"got: {set(field_spec.recoverable_values)}"
+    )

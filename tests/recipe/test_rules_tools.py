@@ -805,13 +805,13 @@ def _make_mixed_cwd_recipe(
     )
 
 
-def test_mixed_cwd_without_scoping_key_fires_error() -> None:
-    """Mixed cwds + no scoping key fires Severity.ERROR."""
+def test_mixed_cwd_without_scoping_key_fires_warning() -> None:
+    """Mixed cwds + no scoping key fires Severity.WARNING."""
     recipe = _make_mixed_cwd_recipe()
     findings = run_semantic_rules(recipe)
     matched = [f for f in findings if f.rule == "mixed-cwd-without-scoping-key"]
     assert len(matched) == 1
-    assert matched[0].severity == Severity.ERROR
+    assert matched[0].severity == Severity.WARNING
     assert "cwd" in matched[0].message.lower()
 
 

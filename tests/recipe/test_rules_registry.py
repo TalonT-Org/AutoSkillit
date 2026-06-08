@@ -94,11 +94,7 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
     assert yaml_files
 
     _KNOWN_NON_CONFORMING: dict[str, set[str]] = {
-        "implementation.yaml": {"mixed-cwd-without-scoping-key"},
-        "implementation-groups.yaml": {"mixed-cwd-without-scoping-key"},
-        "merge-prs.yaml": {"mixed-cwd-without-scoping-key"},
-        "remediation.yaml": {"mixed-cwd-without-scoping-key"},
-        "research.yaml": {"audit-impl-remediation-route", "mixed-cwd-without-scoping-key"},
+        "research.yaml": {"audit-impl-remediation-route"},
     }
     for path in yaml_files:
         wf = load_recipe(path)

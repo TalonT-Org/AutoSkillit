@@ -490,7 +490,7 @@ def _check_patch_token_summary_scoping_key(ctx: ValidationContext) -> list[RuleF
         "recipe runs run_skill steps from multiple distinct cwd values — the "
         "default cwd_filter silently excludes worktree-scoped sessions."
     ),
-    severity=Severity.ERROR,
+    severity=Severity.WARNING,
 )
 def _check_mixed_cwd_without_scoping_key(ctx: ValidationContext) -> list[RuleFinding]:
     """Fire when a recipe mixes cwd values but lacks a scoping key on patch_token_summary.
@@ -528,7 +528,7 @@ def _check_mixed_cwd_without_scoping_key(ctx: ValidationContext) -> list[RuleFin
         findings.append(
             RuleFinding(
                 rule="mixed-cwd-without-scoping-key",
-                severity=Severity.ERROR,
+                severity=Severity.WARNING,
                 step_name=step_name,
                 message=(
                     f"step '{step_name}': recipe mixes {len(cwd_values)} distinct cwd "

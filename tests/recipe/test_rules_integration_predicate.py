@@ -131,15 +131,12 @@ class TestRecipeIntegrationPredicateRouting:
 
     def test_both_recipes_no_error_semantic_findings(self) -> None:
         """Both recipes pass semantic rules with no ERROR-severity findings."""
-        _excluded = {"mixed-cwd-without-scoping-key"}
         for recipe, name in [
             (self.if_recipe, "remediation"),
             (self.ip_recipe, "implementation"),
         ]:
             findings = run_semantic_rules(recipe)
-            errors = [
-                f for f in findings if f.severity == Severity.ERROR and f.rule not in _excluded
-            ]
+            errors = [f for f in findings if f.severity == Severity.ERROR]
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )

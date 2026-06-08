@@ -53,10 +53,10 @@ repos:
         files: ^src/autoskillit/server/tools_
         pass_filenames: false
 
-      - id: check-sub-claude-md
+      - id: check-sub-agents-md
         name: Check sub-AGENTS.md file table completeness
         language: system
-        entry: python scripts/check_sub_claude_md.py
+        entry: python scripts/check_sub_agents_md.py
         files: ^(tests/|src/autoskillit/).*(\.py|CLAUDE\.md|AGENTS\.md)$
         pass_filenames: false
 

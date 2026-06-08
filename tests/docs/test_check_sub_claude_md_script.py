@@ -1,4 +1,4 @@
-"""Unit and integration tests for scripts/check_sub_claude_md.py."""
+"""Unit and integration tests for scripts/check_sub_agents_md.py."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ import pytest
 pytestmark = pytest.mark.medium
 
 REPO_ROOT = Path(__file__).parent.parent.parent
-_SCRIPT = REPO_ROOT / "scripts" / "check_sub_claude_md.py"
+_SCRIPT = REPO_ROOT / "scripts" / "check_sub_agents_md.py"
 
 
 @pytest.fixture(scope="module")
 def script_mod():
-    spec = importlib.util.spec_from_file_location("check_sub_claude_md", _SCRIPT)
+    spec = importlib.util.spec_from_file_location("check_sub_agents_md", _SCRIPT)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod

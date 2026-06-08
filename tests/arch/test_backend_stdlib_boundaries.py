@@ -74,9 +74,10 @@ def test_write_guard_fallback_matches_claude_code_capabilities() -> None:
 class _SessionTypeStringVisitor(ast.NodeVisitor):
     """Collects string literals compared against AUTOSKILLIT_SESSION_TYPE values.
 
-    Two-pass scoped visitor: first discovers which variables hold session type
-    values (from os.environ.get reads), then only collects strings from Compare
-    nodes involving those variables and from SESSION_TYPE-named frozenset constants.
+    Fixed-point scoped visitor: first discovers which variables hold session type
+    values (from os.environ.get reads), then propagates through derived assignments
+    until convergence, then collects strings from Compare nodes and SESSION_TYPE
+    frozenset constants involving those variables.
     """
 
     def __init__(self) -> None:
@@ -101,9 +102,12 @@ class _SessionTypeStringVisitor(ast.NodeVisitor):
             if self._is_session_type_env_read(value):
                 self._session_type_vars.add(name)
 
-        for name, value in assigns:
-            if name not in self._session_type_vars and self._derives_from_known_var(value):
-                self._session_type_vars.add(name)
+        prev_size = -1
+        while len(self._session_type_vars) > prev_size:
+            prev_size = len(self._session_type_vars)
+            for name, value in assigns:
+                if name not in self._session_type_vars and self._derives_from_known_var(value):
+                    self._session_type_vars.add(name)
 
     @staticmethod
     def _is_session_type_env_read(node: ast.expr) -> bool:

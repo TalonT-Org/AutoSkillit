@@ -54,7 +54,12 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         for inp in skill_data.get("inputs", [])
     ]
     outputs = [
-        SkillOutput(name=out["name"], type=out["type"]) for out in skill_data.get("outputs", [])
+        SkillOutput(
+            name=out["name"],
+            type=out["type"],
+            allowed_values=out.get("allowed_values", []),
+        )
+        for out in skill_data.get("outputs", [])
     ]
     patterns = skill_data.get("expected_output_patterns", [])
     examples = skill_data.get("pattern_examples", [])
@@ -138,7 +143,14 @@ def get_callable_contract(
         )
         for inp in entry.get("inputs", [])
     ]
-    outputs = [SkillOutput(name=out["name"], type=out["type"]) for out in entry.get("outputs", [])]
+    outputs = [
+        SkillOutput(
+            name=out["name"],
+            type=out["type"],
+            allowed_values=out.get("allowed_values", []),
+        )
+        for out in entry.get("outputs", [])
+    ]
     return SkillContract(inputs=inputs, outputs=outputs)
 
 

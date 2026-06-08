@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import inspect
 
+import regex as re
+
 from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import (
@@ -15,6 +17,18 @@ from autoskillit.recipe.contracts import (
 from autoskillit.recipe.registry import RuleFinding, semantic_rule
 
 logger = get_logger(__name__)
+
+
+def _is_callable_explicit_condition(when: str | None, value: str) -> bool:
+    """Return True iff the `when` predicate explicitly references the given value.
+
+    A `when` of None or "true" is treated as a catch-all and is NOT explicit
+    for any specific value — this mirrors the run_skill rule logic in
+    rules_verdict.py:25-31.
+    """
+    if when is None or when.strip() == "true":
+        return False
+    return bool(re.search(rf"\b{re.escape(value)}\b", when))
 
 
 def _get_provided_args(with_args: dict) -> set[str]:
@@ -265,6 +279,104 @@ def _check_work_dir_arg_misplacement(ctx: ValidationContext) -> list[RuleFinding
                         f"Step '{step_name}' has work_dir inside args but "
                         f"'{callable_path}' does not accept a work_dir parameter. "
                         f"Move work_dir to the top-level with: block for path anchoring."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="unrouted-callable-verdict",
+    description=(
+        "run_python steps with on_result must explicitly route every allowed value "
+        "declared in the callable contract — unrouted values cause the recipe to "
+        "deadlock at runtime when a multi-valued verdict (e.g. "
+        "regression_detected, failed) has no matching condition"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_unrouted_callable_verdict(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        if step.on_result is None:
+            continue
+        callable_path = step.with_args.get("callable", "")
+        if not callable_path:
+            continue
+        contract = get_callable_contract(callable_path, manifest)
+        if contract is None:
+            continue
+        conditions = step.on_result.conditions
+        for output in contract.outputs:
+            if not output.allowed_values:
+                continue
+            unrouted = [
+                v
+                for v in output.allowed_values
+                if not any(_is_callable_explicit_condition(cond.when, v) for cond in conditions)
+            ]
+            for v in unrouted:
+                findings.append(
+                    RuleFinding(
+                        rule="unrouted-callable-verdict",
+                        severity=Severity.ERROR,
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' has callable "
+                            f"'{callable_path}' which declares output "
+                            f"'{output.name}' with allowed_values including "
+                            f"{v!r}, but the on_result block has no condition "
+                            f"explicitly routing that value. Add a per-value "
+                            f"when: \"${{{{ result.{output.name} }}}} == '{v}'\" "
+                            f"condition or remove the value from allowed_values."
+                        ),
+                    )
+                )
+    return findings
+
+
+@semantic_rule(
+    name="callable-verdict-requires-on-result",
+    description=(
+        "run_python steps whose callable contract declares any output with "
+        "allowed_values must use on_result routing — on_success/on_failure cannot "
+        "distinguish multi-valued verdicts and will deadlock on values like "
+        "regression_detected or failed"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_callable_verdict_requires_on_result(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    manifest = load_bundled_manifest()
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        if step.on_result is not None:
+            continue
+        callable_path = step.with_args.get("callable", "")
+        if not callable_path:
+            continue
+        contract = get_callable_contract(callable_path, manifest)
+        if contract is None:
+            continue
+        verdict_outputs = [out for out in contract.outputs if out.allowed_values]
+        if not verdict_outputs:
+            continue
+        for output in verdict_outputs:
+            findings.append(
+                RuleFinding(
+                    rule="callable-verdict-requires-on-result",
+                    severity=Severity.ERROR,
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' calls '{callable_path}' which declares "
+                        f"output '{output.name}' with allowed_values "
+                        f"{output.allowed_values!r}, but the step uses scalar "
+                        f"on_success/on_failure routing. Replace with an on_result "
+                        f"block that dispatches on each allowed value."
                     ),
                 )
             )

@@ -48,7 +48,7 @@ def _run_cook_session(
     project_dir: Path,
 ) -> str | None:
     """Run the cook subprocess; return session_id if a reload sentinel was written."""
-    from autoskillit.cli.session._reload import consume_reload_sentinel
+    from autoskillit.cli.session._session_reload import consume_reload_sentinel
 
     with terminal_guard():
         result = subprocess.run(cmd, env=env)
@@ -147,7 +147,7 @@ def cook(
 
     from autoskillit.cli._installed_plugins import InstalledPluginsFile
     from autoskillit.cli._onboarding import is_first_run, run_onboarding_menu
-    from autoskillit.cli.session._constants import SESSION_TYPE_COOK
+    from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK
     from autoskillit.core import (
         _AUTOSKILLIT_PLUGIN_KEY,
         LAUNCH_ID_ENV_VAR,

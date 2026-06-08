@@ -26,8 +26,8 @@ from autoskillit.cli._serve_guard import serve_with_signal_guard
 from autoskillit.cli._sessions import sessions_app
 from autoskillit.cli._validate import validate_app
 from autoskillit.cli.fleet import fleet_app
-from autoskillit.cli.session._cook import cook as cook_interactive
-from autoskillit.cli.session._order import _recipes_dir_for, order
+from autoskillit.cli.session._session_cook import cook as cook_interactive
+from autoskillit.cli.session._session_order import _recipes_dir_for, order
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
@@ -442,7 +442,7 @@ def workspace_clean(
 @recipes_app.command(name="list")
 def recipes_list():
     """List available recipes with sources."""
-    from autoskillit.cli.session._cook import _print_recipes_list
+    from autoskillit.cli.session._session_cook import _print_recipes_list
 
     _print_recipes_list()
 

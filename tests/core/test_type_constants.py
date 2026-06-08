@@ -328,7 +328,7 @@ def test_free_range_tools_contains_expected_names():
 
 
 # ---------------------------------------------------------------------------
-# T4: SESSION_TYPE_COOK/ORDER moved to cli/session/_constants.py
+# T4: SESSION_TYPE_COOK/ORDER moved to cli/session/_session_constants.py
 # ---------------------------------------------------------------------------
 
 

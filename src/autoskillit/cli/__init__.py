@@ -48,7 +48,7 @@ from autoskillit.cli.app import (
 )
 from autoskillit.cli.doctor import DoctorResult
 from autoskillit.cli.fleet import fleet_campaign, fleet_dispatch, fleet_list, fleet_status
-from autoskillit.cli.session._cook import cook
+from autoskillit.cli.session._session_cook import cook
 from autoskillit.hook_registry import HookDriftResult
 
 doctor_cmd = _doctor_cmd

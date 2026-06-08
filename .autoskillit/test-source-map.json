@@ -272,11 +272,11 @@
     "tests/cli/test_fleet_session.py",
     "tests/cli/test_reload_loop.py"
   ],
-  "src/autoskillit/cli/session/_constants.py": [
+  "src/autoskillit/cli/session/_session_constants.py": [
     "tests/cli/test_cook_env_scrub.py",
     "tests/execution/test_commands.py"
   ],
-  "src/autoskillit/cli/session/_cook.py": [
+  "src/autoskillit/cli/session/_session_cook.py": [
     "tests/cli/test_cook_env_scrub.py",
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_interactive.py",
@@ -288,14 +288,14 @@
     "tests/contracts/test_claude_code_interface_contracts.py",
     "tests/execution/test_commands.py"
   ],
-  "src/autoskillit/cli/session/_order.py": [
+  "src/autoskillit/cli/session/_session_order.py": [
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_command.py",
     "tests/cli/test_cook_order_picker.py",
     "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_order_config.py"
   ],
-  "src/autoskillit/cli/session/_reload.py": [
+  "src/autoskillit/cli/session/_session_reload.py": [
     "tests/cli/test_cook_env_scrub.py",
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_ide_isolation.py",

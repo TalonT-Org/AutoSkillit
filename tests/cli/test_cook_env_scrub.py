@@ -130,12 +130,12 @@ def test_cook_command_env_excludes_ide_vars(
         patch("sys.stdin.isatty", return_value=True),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         patch(
-            "autoskillit.cli.session._cook.subprocess.run",
+            "autoskillit.cli.session._session_cook.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
-        patch("autoskillit.cli.session._cook.terminal_guard"),
+        patch("autoskillit.cli.session._session_cook.terminal_guard"),
     ):
-        from autoskillit.cli.session._cook import cook
+        from autoskillit.cli.session._session_cook import cook
 
         cook()
 
@@ -163,12 +163,12 @@ def test_cook_command_env_has_max_mcp_output_tokens(
         patch("sys.stdin.isatty", return_value=True),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         patch(
-            "autoskillit.cli.session._cook.subprocess.run",
+            "autoskillit.cli.session._session_cook.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_run,
-        patch("autoskillit.cli.session._cook.terminal_guard"),
+        patch("autoskillit.cli.session._session_cook.terminal_guard"),
     ):
-        from autoskillit.cli.session._cook import cook
+        from autoskillit.cli.session._session_cook import cook
 
         cook()
 

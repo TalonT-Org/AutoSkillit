@@ -196,7 +196,7 @@ def test_run_interactive_session_forwards_system_prompt_with_bare_resume(
 
 
 def test_session_type_cook_order_in_cli_session() -> None:
-    from autoskillit.cli.session._constants import SESSION_TYPE_COOK, SESSION_TYPE_ORDER
+    from autoskillit.cli.session._session_constants import SESSION_TYPE_COOK, SESSION_TYPE_ORDER
 
     assert SESSION_TYPE_COOK == "cook"
     assert SESSION_TYPE_ORDER == "order"

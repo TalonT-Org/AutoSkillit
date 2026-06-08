@@ -82,7 +82,7 @@ def _run_interactive_session(
         for err in pre_launch_errors:
             print(f"ERROR: {err}", file=sys.stderr)
         sys.exit(1)
-    from autoskillit.cli.session._reload import consume_reload_sentinel
+    from autoskillit.cli.session._session_reload import consume_reload_sentinel
     from autoskillit.cli.ui._terminal import terminal_guard
     from autoskillit.core import (
         MARKETPLACE_PREFIX,
@@ -143,7 +143,7 @@ def _run_interactive_session(
 def _write_order_entry(project_dir: Path, recipe_name: str | None) -> dict[str, str]:
     import uuid
 
-    from autoskillit.cli.session._constants import SESSION_TYPE_ORDER
+    from autoskillit.cli.session._session_constants import SESSION_TYPE_ORDER
     from autoskillit.core import (
         LAUNCH_ID_ENV_VAR,
         SESSION_TYPE_ENV_VAR,

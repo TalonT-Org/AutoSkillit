@@ -91,7 +91,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_codex_flag_metadata_coverage.py` | Closed categorization guard: every CodexFlags member must appear in VARIADIC_CODEX_FLAGS or NON_VARIADIC_CODEX_FLAGS; model alias/effort key parity |
 | `test_provider_extras_denylist.py` | Structural and AST enforcement: provider-extras filter sites must use named *_DENYLIST constants |
 | `test_flag_metadata_coverage.py` | Closed categorization guard: every ClaudeFlags member must appear in VARIADIC_CLAUDE_FLAGS or NON_VARIADIC_CLAUDE_FLAGS |
-| `test_interactive_ordering_gate.py` | AST guard: _session_launch.py and _cook.py must import and call assert_interactive_ordering before subprocess invocation |
+| `test_interactive_ordering_gate.py` | AST guard: _session_launch.py and _session_cook.py must import and call assert_interactive_ordering before subprocess invocation |
 | `test_watcher_signal_consistency.py` | Structural guard: all process watchers must call `_has_active_execution_marker` |
 | `test_write_restriction_coverage.py` | Architectural invariant: skills with prose write restrictions in NEVER blocks have runtime enforcement (read_only, output_dir, or allowlist) |
 | `test_cross_skill_handoff_paths.py` | Architectural test: cross-skill artifact read paths (e.g., resolve-review reading review-pr outputs) must be compatible with the producer skill's recipe output_dir |

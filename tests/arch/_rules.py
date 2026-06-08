@@ -56,7 +56,7 @@ _LOGGER_METHODS = frozenset({"debug", "info", "warning", "error", "critical", "e
 
 _PRINT_EXEMPT = frozenset(
     {
-        "_cook.py",
+        "_session_cook.py",
         "_preview.py",
         "_features.py",
         "_menu.py",
@@ -68,7 +68,7 @@ _PRINT_EXEMPT = frozenset(
         "_fleet.py",
         "__init__.py",
         "_init_helpers.py",
-        "_order.py",
+        "_session_order.py",
         "_onboarding.py",
         "_session_launch.py",
         "_timed_input.py",

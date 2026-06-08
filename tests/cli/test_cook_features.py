@@ -27,9 +27,9 @@ class TestOrderSubsetGate:
         import importlib
         import sys as _sys
 
-        _app_mod = _sys.modules.get("autoskillit.cli.session._order") or importlib.import_module(
-            "autoskillit.cli.session._order"
-        )
+        _app_mod = _sys.modules.get(
+            "autoskillit.cli.session._session_order"
+        ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_get_ingredients_table", lambda *a, **kw: "| col | val |")
 
     def _make_config_mock(self, disabled: list[str]) -> MagicMock:
@@ -125,9 +125,9 @@ class TestOrderSubsetGate:
         def _fake_enable(project_dir, subsets):
             called_with.append((project_dir, subsets))
 
-        _app_mod = _sys.modules.get("autoskillit.cli.session._order") or importlib.import_module(
-            "autoskillit.cli.session._order"
-        )
+        _app_mod = _sys.modules.get(
+            "autoskillit.cli.session._session_order"
+        ) or importlib.import_module("autoskillit.cli.session._session_order")
         monkeypatch.setattr(_app_mod, "_enable_subsets_permanently", _fake_enable)
         inputs = iter(["2", "n"])
         monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))

@@ -1,6 +1,6 @@
 """AST guard: interactive launch sites must call assert_interactive_ordering.
 
-Ensures that _session_launch.py and _cook.py both call
+Ensures that _session_launch.py and _session_cook.py both call
 assert_interactive_ordering after build_interactive_cmd and before
 the subprocess invocation, preventing silent ordering regressions.
 """
@@ -34,7 +34,7 @@ def _session_launch_source() -> str:
 
 
 def _cook_source() -> str:
-    return (paths.pkg_root() / "cli" / "session" / "_cook.py").read_text()
+    return (paths.pkg_root() / "cli" / "session" / "_session_cook.py").read_text()
 
 
 def test_session_launch_calls_assert_interactive_ordering():
@@ -51,7 +51,7 @@ def test_cook_calls_assert_interactive_ordering():
     source = _cook_source()
     tree = ast.parse(source)
     assert _has_call(tree, _GATE_NAME), (
-        f"_cook.py does not call {_GATE_NAME}(). "
+        f"_session_cook.py does not call {_GATE_NAME}(). "
         "Interactive launch sites must validate CmdSpec ordering before "
         "passing to subprocess."
     )
@@ -81,6 +81,6 @@ def test_session_launch_imports_assert_interactive_ordering():
 def test_cook_imports_assert_interactive_ordering():
     imported_names = _collect_imported_names(_cook_source())
     assert _GATE_NAME in imported_names, (
-        f"_cook.py does not import {_GATE_NAME}. "
+        f"_session_cook.py does not import {_GATE_NAME}. "
         "It must be imported and called before subprocess invocation."
     )

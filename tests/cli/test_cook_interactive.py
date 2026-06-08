@@ -141,7 +141,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -169,7 +169,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -202,7 +202,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -232,7 +232,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -263,7 +263,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -299,7 +299,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -334,7 +334,7 @@ class TestCookInteractive:
             patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -366,7 +366,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
             patch("shutil.rmtree", side_effect=tracking_rmtree),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -399,7 +399,7 @@ class TestCookInteractive:
                 return_value="picker-uuid-abc",
             ),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(resume=True)
 
@@ -433,7 +433,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
             patch("autoskillit.core.find_latest_session_id", side_effect=fake_discover),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(resume=True, session_id="explicit-abc")
 
@@ -459,7 +459,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
             patch("autoskillit.cli.session._session_picker.pick_session", return_value=None),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(resume=True)
 
@@ -571,7 +571,7 @@ class TestCookInteractive:
             patch("autoskillit.cli.session._session_picker.pick_session", fake_pick_session),
             patch("autoskillit.core.write_registry_entry"),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(resume=True)
 
@@ -610,7 +610,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
             patch("autoskillit.core.write_registry_entry"),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(backend=_MockBackend())
 
@@ -650,7 +650,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
             patch("autoskillit.core.write_registry_entry"),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(backend=_MockBackend())
 
@@ -692,7 +692,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
             patch("autoskillit.core.write_registry_entry"),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(backend=_CustomBackend())
 
@@ -730,7 +730,7 @@ class TestCookInteractive:
             patch("subprocess.run", return_value=MagicMock(returncode=0)),
             patch("autoskillit.core.write_registry_entry"),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(backend=_CapturingBackend())
 
@@ -780,7 +780,7 @@ class TestCookInteractive:
                 side_effect=lambda name: get_backend_called.append(name),
             ),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook(backend=_InjectedBackend())
 
@@ -829,7 +829,7 @@ class TestCookInteractive:
                 side_effect=lambda name: (get_backend_called.append(name), _FakeBackend())[1],
             ),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -880,7 +880,7 @@ class TestCookInteractive:
             patch("autoskillit.config.load_config", return_value=mock_config),
             patch("autoskillit.execution.get_backend", side_effect=fake_get_backend),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 
@@ -934,7 +934,7 @@ class TestCookInteractive:
                 side_effect=tracking_claude_code_backend,
             ),
         ):
-            import autoskillit.cli.session._cook as module
+            import autoskillit.cli.session._session_cook as module
 
             module.cook()
 

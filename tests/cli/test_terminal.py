@@ -420,7 +420,7 @@ class TestCookTerminalGuard:
 
     def test_cook_restores_terminal_on_keyboard_interrupt(self, monkeypatch, tmp_path):
         """cook() must restore terminal even when subprocess.run raises KeyboardInterrupt."""
-        import autoskillit.cli.session._cook as cook_mod
+        import autoskillit.cli.session._session_cook as cook_mod
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         monkeypatch.setattr("sys.stdin.fileno", lambda: 0)
@@ -436,7 +436,7 @@ class TestCookTerminalGuard:
         )
         monkeypatch.setattr("autoskillit.cli.ui._terminal.termios.error", termios.error)
         monkeypatch.setattr(
-            "autoskillit.cli.session._cook.subprocess.run",
+            "autoskillit.cli.session._session_cook.subprocess.run",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),
         )
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/claude")

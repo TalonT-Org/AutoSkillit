@@ -17,7 +17,7 @@ at pre-commit time (see pyproject.toml [tool.ruff.lint.flake8-tidy-imports]).
 Those rules belong in the toolchain, not duplicated here.
 
 Exemptions:
-  - cli/app.py, cli/_doctor.py, cli/_cook.py: may use print() for user-facing terminal output
+  - cli/app.py, cli/_doctor.py, cli/_session_cook.py: user-facing terminal output OK
 """
 
 from __future__ import annotations
@@ -416,7 +416,7 @@ def test_no_raw_claude_list_construction() -> None:
     """
     ALLOWED = {
         ("_marketplace.py", "install"),
-        ("_cook.py", "cook"),
+        ("_session_cook.py", "cook"),
         ("claude.py", "build_interactive_cmd"),
         ("claude.py", "build_headless_cmd"),
         ("claude.py", "build_resume_cmd"),
@@ -845,7 +845,7 @@ def test_no_is_plugin_installed_in_cook() -> None:
 
     Same rationale as test_no_is_plugin_installed_in_session_launch.
     """
-    source = Path("src/autoskillit/cli/session/_cook.py").read_text()
+    source = Path("src/autoskillit/cli/session/_session_cook.py").read_text()
     tree = ast.parse(source)
     calls = [
         n.func.id
@@ -853,7 +853,7 @@ def test_no_is_plugin_installed_in_cook() -> None:
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
     ]
     assert "_is_plugin_installed" not in calls, (
-        "_cook.py calls _is_plugin_installed — replace with "
+        "_session_cook.py calls _is_plugin_installed — replace with "
         "detect_autoskillit_mcp_prefix() == MARKETPLACE_PREFIX"
     )
 

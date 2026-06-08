@@ -89,7 +89,7 @@ def test_sub_claude_md_has_file_table():
     assert not failures, "Sub-CLAUDE.md template violations:\n" + "\n".join(failures)
 
 
-def test_channel_b_defined_in_process_claude_md():
+def test_channel_b_defined_in_process_agents_md():
     process_md = SRC_ROOT / "execution" / "process" / "AGENTS.md"
     assert process_md.is_file(), "execution/process/AGENTS.md does not exist"
     content = process_md.read_text()

@@ -78,10 +78,10 @@ class TestCheckCoverage:
         result = script_mod.check_coverage(tmp_path, ["mypackage/CLAUDE.md"])
         assert result == ["mypackage/CLAUDE.md: missing `__init__.py` in file table"]
 
-    def test_check_coverage_flags_missing_claude_md(self, script_mod, tmp_path):
-        """Returns failure when expected CLAUDE.md path does not exist on disk."""
-        result = script_mod.check_coverage(tmp_path, ["nonexistent/CLAUDE.md"])
-        assert result == ["nonexistent/CLAUDE.md: AGENTS.md not found"]
+    def test_check_coverage_flags_missing_agents_md(self, script_mod, tmp_path):
+        """Returns failure when expected AGENTS.md path does not exist on disk."""
+        result = script_mod.check_coverage(tmp_path, ["nonexistent/AGENTS.md"])
+        assert result == ["nonexistent/AGENTS.md: AGENTS.md not found"]
 
     def test_check_coverage_multiple_missing_files(self, script_mod, tmp_path):
         """Returns one failure entry per missing file."""

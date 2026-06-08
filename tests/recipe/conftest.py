@@ -34,6 +34,19 @@ def assert_no_rule_errors(
     )
 
 
+def assert_no_rule_warnings(
+    findings: list[RuleFinding],
+    *,
+    context: str = "",
+) -> None:
+    """Assert that findings contain no WARNING-severity violations."""
+    warnings = [f for f in findings if f.severity == Severity.WARNING]
+    assert not warnings, (
+        f"Unexpected WARNING findings{f' in {context}' if context else ''}: "
+        f"{[(f.rule, f.step_name, f.message) for f in warnings]}"
+    )
+
+
 @pytest.fixture(scope="module")
 def pmp_recipe():
     return load_recipe(builtin_recipes_dir() / "merge-prs.yaml")

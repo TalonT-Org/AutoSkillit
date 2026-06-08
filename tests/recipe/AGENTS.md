@@ -18,6 +18,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_audit_trail_recipe_contracts.py` | Tests for research.yaml audit-trail captures and threading |
 | `test_bem_wrapper_structure.py` | Tests for BEM wrapper recipe structure |
 | `test_bundled_model_field.py` | Tests that all run_skill steps declare a model: field across bundled recipes |
+| `test_bundled_recipes_behavioral_properties.py` | Behavioral property registry tests: on_context_limit coverage, parallel dispatch mode, explicit model for context-intensive steps |
 | `test_bundled_recipe_hidden_policy.py` | Tests for hidden policy in bundled recipes |
 | `test_content_integrity.py` | Tests that served recipe content has no residual optional: true or skip_when_false signals after truthy resolution |
 | `test_bundled_recipes_general.py` | General structural tests for all bundled recipes |

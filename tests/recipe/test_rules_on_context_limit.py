@@ -217,8 +217,8 @@ class TestOnContextLimitField:
 class TestRunSkillMissingContextLimit:
     """Tests for run-skill-missing-context-limit semantic rule."""
 
-    def test_run_skill_without_on_context_limit_produces_warning(self) -> None:
-        """A run_skill step without on_context_limit must produce a WARNING."""
+    def test_run_skill_without_on_context_limit_produces_error(self) -> None:
+        """A run_skill step without on_context_limit must produce an ERROR."""
         recipe = Recipe(
             name="test",
             description="test",
@@ -238,17 +238,17 @@ class TestRunSkillMissingContextLimit:
             },
         )
         findings = run_semantic_rules(recipe)
-        warnings = [f for f in findings if f.severity == Severity.WARNING]
+        errors = [f for f in findings if f.severity == Severity.ERROR]
         assert any(
             f.rule == "run-skill-missing-context-limit" and f.step_name == "resolve_review"
-            for f in warnings
+            for f in errors
         ), (
-            f"Expected run-skill-missing-context-limit warning, got: "
+            f"Expected run-skill-missing-context-limit error, got: "
             f"{[f.to_dict() for f in findings]}"
         )
 
-    def test_run_skill_with_on_context_limit_produces_no_warning(self) -> None:
-        """A run_skill step with on_context_limit set must not produce this warning."""
+    def test_run_skill_with_on_context_limit_produces_no_error(self) -> None:
+        """A run_skill step with on_context_limit set must not produce this error."""
         recipe = Recipe(
             name="test",
             description="test",
@@ -276,10 +276,10 @@ class TestRunSkillMissingContextLimit:
         findings = run_semantic_rules(recipe)
         missing_ctx_limit = [f for f in findings if f.rule == "run-skill-missing-context-limit"]
         assert not missing_ctx_limit, (
-            f"Expected no run-skill-missing-context-limit warning: {missing_ctx_limit}"
+            f"Expected no run-skill-missing-context-limit error: {missing_ctx_limit}"
         )
 
-    def test_non_skill_step_without_on_context_limit_produces_no_warning(self) -> None:
+    def test_non_skill_step_without_on_context_limit_produces_no_error(self) -> None:
         """A non-run_skill step (e.g. push_to_remote) without on_context_limit is fine."""
         recipe = Recipe(
             name="test",
@@ -302,7 +302,7 @@ class TestRunSkillMissingContextLimit:
         missing_ctx_limit = [f for f in findings if f.rule == "run-skill-missing-context-limit"]
         assert not missing_ctx_limit
 
-    def test_recovery_step_itself_exempt_from_warning(self) -> None:
+    def test_recovery_step_itself_exempt_from_error(self) -> None:
         """A step that is an on_context_limit target of another step needs no recovery."""
         recipe = Recipe(
             name="test",
@@ -336,10 +336,10 @@ class TestRunSkillMissingContextLimit:
         ]
         assert not missing_ctx_limit, (
             "retry_worktree is an on_context_limit target — it IS the recovery "
-            "path and should not trigger the missing-context-limit warning"
+            "path and should not trigger the missing-context-limit error"
         )
 
-    def test_terminal_step_exempt_from_warning(self) -> None:
+    def test_terminal_step_exempt_from_error(self) -> None:
         """A run_skill step with action=stop needs no on_context_limit."""
         recipe = Recipe(
             name="test",
@@ -359,3 +359,32 @@ class TestRunSkillMissingContextLimit:
         findings = run_semantic_rules(recipe)
         missing_ctx_limit = [f for f in findings if f.rule == "run-skill-missing-context-limit"]
         assert not missing_ctx_limit
+
+
+def test_run_skill_missing_context_limit_is_error_severity() -> None:
+    """The missing-context-limit rule must fire at ERROR severity for assert_no_rule_errors."""
+    recipe = Recipe(
+        name="test",
+        description="test",
+        summary="test",
+        ingredients={},
+        kitchen_rules=["test"],
+        steps={
+            "resolve_review": RecipeStep(
+                tool="run_skill",
+                on_success="done",
+                on_failure="cleanup",
+                retries=2,
+                with_args={"skill_command": "/autoskillit:resolve-review x", "cwd": "/tmp"},
+            ),
+            "cleanup": RecipeStep(action="stop", message="done"),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+    findings = run_semantic_rules(recipe)
+    cl_findings = [f for f in findings if f.rule == "run-skill-missing-context-limit"]
+    assert cl_findings, "Rule should fire"
+    assert all(f.severity == Severity.ERROR for f in cl_findings), (
+        f"RuleFinding severity must be ERROR, not WARNING. "
+        f"Got: {[(f.severity, f.step_name) for f in cl_findings]}"
+    )

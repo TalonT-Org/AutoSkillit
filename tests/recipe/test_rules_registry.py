@@ -94,7 +94,20 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
     assert yaml_files
 
     _KNOWN_NON_CONFORMING: dict[str, set[str]] = {
-        "research.yaml": {"audit-impl-remediation-route"},
+        "research.yaml": {
+            "audit-impl-remediation-route",
+            "run-skill-missing-context-limit",
+        },
+        "bem-wrapper.yaml": {"run-skill-missing-context-limit"},
+        "full-audit.yaml": {"run-skill-missing-context-limit"},
+        "implementation-groups.yaml": {"run-skill-missing-context-limit"},
+        "implementation.yaml": {"run-skill-missing-context-limit"},
+        "merge-prs.yaml": {"run-skill-missing-context-limit"},
+        "planner.yaml": {"run-skill-missing-context-limit"},
+        "remediation.yaml": {"run-skill-missing-context-limit"},
+        "research-design.yaml": {"run-skill-missing-context-limit"},
+        "research-implement.yaml": {"run-skill-missing-context-limit"},
+        "research-review.yaml": {"run-skill-missing-context-limit"},
     }
     for path in yaml_files:
         wf = load_recipe(path)

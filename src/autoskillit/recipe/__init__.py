@@ -145,6 +145,7 @@ from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_merge_context as _rules_merge_context,
 )
 from autoskillit.recipe.rules import rules_merge_queue as _rules_merge_queue  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_model as _rules_model  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402
     rules_optional_capture as _rules_optional_capture,  # noqa: F401
 )

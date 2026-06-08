@@ -384,7 +384,10 @@ skills:
     inputs:
     - name: plan_path
       type: file_path
-      required: true
+      required: false
+    - name: all_plan_paths
+      type: file_path
+      required: false
     - name: branch_name
       type: string
       required: false

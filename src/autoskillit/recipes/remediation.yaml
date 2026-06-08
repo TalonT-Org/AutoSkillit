@@ -280,6 +280,7 @@ steps:
       step_name: rectify
     capture:
       plan_path: ${{ result.plan_path }}
+      all_plan_paths: ${{ result.plan_path }}
     capture_list:
       plan_parts: ${{ result.plan_parts }}
     retries: 0
@@ -287,6 +288,12 @@ steps:
     on_failure: release_issue_failure
     note: 'Glob plan_dir for *_part_*.md or single plan file. Sort alphabetically
       into plan_parts[].
+
+      ACCUMULATION: all_plan_paths accumulates across any re-entries to the rectify step.
+      On re-entry, the agent MUST append the captured plan_path to context.all_plan_paths
+      using a comma separator instead of letting the capture block overwrite the
+      accumulated value. When verdict=false_positive, do NOT overwrite all_plan_paths —
+      preserve the existing accumulated value from prior plan executions.
 
       '
   review_approach:
@@ -754,7 +761,7 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:audit-impl ${{ context.plan_path }} ${{ context.branch_name
+      skill_command: /autoskillit:audit-impl ${{ context.all_plan_paths }} ${{ context.branch_name
         }} ${{ inputs.base_branch }} deviation_manifest_path=${{ context.deviation_manifest_path
         }}
       cwd: ${{ context.work_dir }}
@@ -794,6 +801,7 @@ steps:
       output_dir: '.'
     capture:
       plan_path: ${{ result.plan_path }}
+      all_plan_paths: ${{ result.plan_path }}
       verdict: ${{ result.verdict }}
     capture_list:
       plan_parts: ${{ result.plan_parts }}
@@ -811,7 +819,11 @@ steps:
       the skill_command at runtime: "/autoskillit:make-plan {remediation_path}\n\naudit_remediation_mode=true"
       VERDICT: The skill emits verdict=plan (produce implementation plan) or verdict=false_positive
       (audit finding is a false positive, skip implement). false_positive routes to
-      check_has_commits.
+      check_has_commits. ACCUMULATION: all_plan_paths accumulates across any re-entries
+      to the make_plan step. On re-entry, the agent MUST append the captured plan_path
+      to context.all_plan_paths using a comma separator instead of letting the capture
+      block overwrite the accumulated value. When verdict=false_positive, do NOT overwrite
+      all_plan_paths — preserve the existing accumulated value from prior plan executions.
 
       '
   commit_guard:
@@ -958,7 +970,7 @@ steps:
     model: ''
     retries: 1
     with:
-      skill_command: /autoskillit:prepare-pr ${{ context.plan_path }} ${{ inputs.run_name
+      skill_command: /autoskillit:prepare-pr ${{ context.all_plan_paths }} ${{ inputs.run_name
         }} ${{ inputs.base_branch }} ${{ context.issue_number }} ${{ inputs.arch_lenses }}
       cwd: ${{ context.work_dir }}
       output_dir: '.'

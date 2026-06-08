@@ -45,6 +45,7 @@ Hook script behavior, registration, and bridge tests.
 | `test_fleet_claim_guard.py` | Tests for fleet_claim_guard.py PreToolUse hook — blocks fresh dispatch on in-progress issues |
 | `test_resume_gate_post_hook.py` | Tests for resume_gate_post_hook.py PostToolUse hook — records resume attempts to state file under flock |
 | `test_reset_resume_gate.py` | Tests for reset_resume_gate.py PreToolUse guard — deny/allow, name→UUID resolution, REFUSED bypass, fail-open |
+| `test_recipe_confirmed_post_hook.py` | Tests for recipe_confirmed_post_hook.py PostToolUse hook — marker write, idempotency, fail-open |
 
 ## Architecture Notes
 

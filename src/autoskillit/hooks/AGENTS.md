@@ -17,6 +17,7 @@ Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS
 | `session_start_hook.py` | Injects open-kitchen reminder on resume |
 | `skill_load_post_hook.py` | `PostToolUse`: writes skill-loaded flag for non-Anthropic provider guard |
 | `pipeline_step_post_hook.py` | `PostToolUse`: auto-marks pipeline steps complete after `run_skill` |
+| `recipe_confirmed_post_hook.py` | `PostToolUse`: writes recipe-load-confirmed marker after first successful `run_skill` |
 | `resume_gate_post_hook.py` | `PostToolUse`: records resume attempts to `resume_gate_state.json` for the reset_dispatch resume gate |
 | `ingredient_lock_guard.py` | PreToolUse guard script (see guards/AGENTS.md) |
 | `_hook_utils.py` | Shared stdlib-only utilities for hook scripts (e.g., `find_project_root`) |

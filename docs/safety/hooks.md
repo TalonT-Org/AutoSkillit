@@ -1,6 +1,6 @@
 # Hooks
 
-AutoSkillit registers 24 Claude Code hook scripts: 18 PreToolUse, 5 PostToolUse,
+AutoSkillit registers 25 Claude Code hook scripts: 18 PreToolUse, 6 PostToolUse,
 and 1 SessionStart. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
@@ -134,7 +134,7 @@ dependencies. Permission is always `allow` — the server-side `_check_pipeline_
 in `run_skill` is the primary enforcer. Fails open on missing tracker or
 malformed input.
 
-## PostToolUse hooks (5)
+## PostToolUse hooks (6)
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools
@@ -168,6 +168,13 @@ After a successful `run_skill`, auto-marks the step as `complete` in the
 pipeline tracker file. Appends a progress banner via `updatedMCPToolOutput`.
 Uses `AUTOSKILLIT_DISPATCH_ID` env fallback for `order_id` resolution to
 handle fleet-dispatched pipelines. Fails open on missing tracker or errors.
+
+### `recipe_confirmed_post_hook.py`
+**Guarded tool:** `run_skill`
+Writes a `{session_id}_recipe_confirmed.json` marker to `kitchen_state/`
+after the first successful `run_skill` completes. This marker is read by
+`open_kitchen_guard.py` to block mid-run recipe reloads. Idempotent —
+skips writing if the marker already exists. Fails open on all error paths.
 
 ## SessionStart hook (1)
 

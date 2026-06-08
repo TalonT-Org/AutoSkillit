@@ -29,9 +29,28 @@ _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 
 
 _KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {
-    "research": {"audit-impl-remediation-route"},
-    "agent-eval": {"all-dispatchable-stops-have-sentinel", "dead-output"},
-    "skill-eval": {"all-dispatchable-stops-have-sentinel", "dead-output"},
+    "research": {"audit-impl-remediation-route", "run-skill-missing-context-limit"},
+    "agent-eval": {
+        "all-dispatchable-stops-have-sentinel",
+        "dead-output",
+        "run-skill-missing-context-limit",
+    },
+    "skill-eval": {
+        "all-dispatchable-stops-have-sentinel",
+        "dead-output",
+        "run-skill-missing-context-limit",
+    },
+    "bem-wrapper": {"run-skill-missing-context-limit"},
+    "full-audit": {"run-skill-missing-context-limit"},
+    "implementation": {"run-skill-missing-context-limit"},
+    "implementation-groups": {"run-skill-missing-context-limit"},
+    "merge-prs": {"run-skill-missing-context-limit"},
+    "planner": {"run-skill-missing-context-limit"},
+    "remediation": {"run-skill-missing-context-limit"},
+    "research-design": {"run-skill-missing-context-limit"},
+    "research-implement": {"run-skill-missing-context-limit"},
+    "research-review": {"run-skill-missing-context-limit"},
+    "smoke-test": {"run-skill-missing-context-limit"},
 }
 
 

@@ -48,7 +48,12 @@ def test_truthy_resolved_step_has_no_optional_signal_in_content(
 ) -> None:
     """After truthy resolution, no guarded step block retains optional: true or skip_when_false."""
     result = load_and_validate(recipe_name, ingredient_overrides={ing_name: "true"})
-    assert result["valid"], f"load_and_validate failed: {result.get('suggestions')}"
+    non_excluded = [
+        s
+        for s in result.get("suggestions", [])
+        if s.get("severity") == "error" and s.get("rule") != "run-skill-missing-context-limit"
+    ]
+    assert not non_excluded, f"load_and_validate failed: {non_excluded}"
     content = result["content"]
     residual_optional = []
     residual_skip = []

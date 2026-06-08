@@ -884,7 +884,7 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:audit-impl ${{ context.plan_path }} ${{ context.base_sha }} ${{ inputs.base_branch }} deviation_manifest_path=${{ context.deviation_manifest_path }}",
+        "skill_command": "/autoskillit:audit-impl ${{ context.all_plan_paths }} ${{ context.base_sha }} ${{ inputs.base_branch }} deviation_manifest_path=${{ context.deviation_manifest_path }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "audit_impl",
         "output_dir": "{{AUTOSKILLIT_TEMP}}/audit-impl"

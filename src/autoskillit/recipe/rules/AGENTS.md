@@ -46,6 +46,7 @@ See each subdirectory's AGENTS.md for details.
 | `rules_pseudocode_sync.py` | SKILL.md pseudocode constant-reference divergence from run_python callables |
 | `rules_reachability.py` | Symbolic BFS reachability; capture-inversion detection |
 | `rules_audit_impl_topology.py` | audit-impl-diff-topology-mismatch semantic rule |
+| `rules_audit_impl_plan_scope.py` | audit-impl-plan-scope-mismatch semantic rule: ensures audit-impl uses context.all_plan_paths in recipes with remediation loops |
 | `rules_remediation.py` | audit-impl remediation_path capture routing rules |
 | `rules_recipe.py` | Sub-recipe reference validity and `with_args` hygiene |
 | `rules_route_gate.py` | Route gate shared-stop detection; fallback and primary path convergence |

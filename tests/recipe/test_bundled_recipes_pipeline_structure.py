@@ -584,6 +584,45 @@ class TestImplementationPipelineStructure:
         assert "ACCUMULATION" in note
         assert "all_plan_paths" in note
 
+    def test_audit_impl_uses_all_plan_paths(self, recipe) -> None:
+        """audit_impl must reference context.all_plan_paths so remediation re-entry accumulates."""
+        cmd = recipe.steps["audit_impl"].with_args.get("skill_command", "")
+        assert "context.all_plan_paths" in cmd, (
+            f"{recipe.name} audit_impl must reference context.all_plan_paths"
+        )
+        assert "context.plan_path" not in cmd, (
+            f"{recipe.name} audit_impl must not reference context.plan_path"
+        )
+
+    def test_plan_step_captures_all_plan_paths(self, recipe) -> None:
+        """Plan-producing steps must capture all_plan_paths in capture or capture_list."""
+        if recipe.name == "remediation":
+            plan_step_names = ("rectify", "make_plan")
+        else:
+            plan_step_names = ("plan",)
+        for step_name in plan_step_names:
+            step = recipe.steps[step_name]
+            assert "all_plan_paths" in step.capture or "all_plan_paths" in step.capture_list, (
+                f"{recipe.name} {step_name} must capture all_plan_paths"
+            )
+            captures = step.capture if "all_plan_paths" in step.capture else step.capture_list
+            assert "result.plan_path" in captures["all_plan_paths"].from_, (
+                f"{recipe.name} {step_name} all_plan_paths must accumulate result.plan_path"
+            )
+
+    def test_all_plan_paths_available_at_audit_impl(self, recipe) -> None:
+        """all_plan_paths must be in available context when audit_impl executes."""
+        from autoskillit.recipe.io import iter_steps_with_context
+
+        for name, _step, available in iter_steps_with_context(recipe):
+            if name == "audit_impl":
+                assert "all_plan_paths" in available, (
+                    f"{recipe.name} audit_impl must have all_plan_paths in available context"
+                )
+                break
+        else:
+            pytest.fail(f"{recipe.name} has no audit_impl step")
+
     def test_ip_no_group_step(self, recipe) -> None:
         """implementation.yaml must not contain a group step."""
         assert "group" not in recipe.steps

@@ -152,6 +152,43 @@ def resolve_kitchen_id() -> str:
     return os.environ.get("AUTOSKILLIT_CAMPAIGN_ID") or str(uuid4())
 
 
+def read_kitchen_id_from_marker(base: Path | None = None) -> str:
+    """Read kitchen_id from the on-disk hook config written by open_kitchen.
+
+    Looks for ``.autoskillit/temp/.hook_config.json`` and
+    ``.autoskillit/temp/.hook_config_overlay.json`` under ``base`` (defaults to
+    ``Path.cwd()``) and returns ``data["kitchen_id"]`` with fallback to
+    ``data["pipeline_id"]`` for configs written before the rename.
+
+    Returns "" when the file is absent, unreadable, or contains no kitchen_id.
+    Stdlib-only — safe for import from hook subprocesses and the IL-0 core
+    layer. Duplicates the inline logic from
+    ``hooks/token_summary_hook.py:_read_kitchen_id`` so callers in core and
+    smoke_utils can resolve the active kitchen without depending on
+    ``hooks/`` (which would violate the IL-0 import constraint).
+    """
+    root = base if base is not None else Path.cwd()
+    try:
+        base_path = root / ".autoskillit" / "temp" / ".hook_config.json"
+        overlay_path = root / ".autoskillit" / "temp" / ".hook_config_overlay.json"
+        merged: dict = {}
+        if base_path.exists():
+            loaded = json.loads(base_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                merged = dict(loaded)
+        if overlay_path.exists():
+            overlay = json.loads(overlay_path.read_text(encoding="utf-8"))
+            if isinstance(overlay, dict):
+                for k, v in overlay.items():
+                    if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+                        merged[k] = {**merged[k], **v}
+                    else:
+                        merged[k] = v
+        return str(merged.get("kitchen_id") or merged.get("pipeline_id", ""))
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+        return ""
+
+
 def find_caller_session_id(project_dir: Path | None = None) -> str:
     """Return the session_id from the freshest valid kitchen marker.
 

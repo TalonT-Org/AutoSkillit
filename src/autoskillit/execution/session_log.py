@@ -558,7 +558,7 @@ def flush_session_log(
                 step_name=step_name,
                 timestamp=start_ts or end_ts or "",
             ),
-            project_dir=Path(cwd),
+            project_dir=Path(project_dir) if project_dir else None,
         )
 
     # Retention: keep at most _MAX_SESSIONS session directories

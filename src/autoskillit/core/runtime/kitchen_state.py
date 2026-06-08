@@ -162,10 +162,7 @@ def read_kitchen_id_from_marker(base: Path | None = None) -> str:
 
     Returns "" when the file is absent, unreadable, or contains no kitchen_id.
     Stdlib-only — safe for import from hook subprocesses and the IL-0 core
-    layer. Duplicates the inline logic from
-    ``hooks/token_summary_hook.py:_read_kitchen_id`` so callers in core and
-    smoke_utils can resolve the active kitchen without depending on
-    ``hooks/`` (which would violate the IL-0 import constraint).
+    layer.
     """
     root = base if base is not None else Path.cwd()
     try:

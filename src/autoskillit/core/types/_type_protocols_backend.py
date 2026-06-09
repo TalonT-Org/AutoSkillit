@@ -67,6 +67,8 @@ class SessionLocator(Protocol):
 
     def locate_session(self, session_id: str) -> Path | None: ...
 
+    def project_log_dir(self, cwd: str) -> Path: ...
+
 
 @runtime_checkable
 class CodingAgentBackend(Protocol):

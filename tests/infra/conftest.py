@@ -33,11 +33,57 @@ def _run_skill_json_producer() -> dict:
     return result
 
 
+def _dispatch_food_truck_json_producer() -> dict:
+    """Return union of all JSON keys from dispatch_food_truck envelope producers.
+
+    Covers DispatchCompleted (default + with optional fields),
+    DispatchRejected, and fleet_error() shapes.
+    """
+    import dataclasses
+    import json
+
+    from autoskillit.core import FleetErrorCode, fleet_error
+    from autoskillit.fleet.state_types import DispatchCompleted, DispatchRejected, DispatchStatus
+
+    base = DispatchCompleted(
+        success=True,
+        dispatch_status=DispatchStatus.SUCCESS,
+        dispatch_id="d1",
+        dispatched_session_id="s1",
+        reason="ok",
+    )
+    with_optionals = dataclasses.replace(
+        base,
+        l3_raw_body="raw body text",
+        l3_parse_error="parse error text",
+        resume_checkpoint={"step": 1, "completed_items": ["a"]},
+        health_report={"status": "healthy", "findings": []},
+    )
+    rejected = DispatchRejected(
+        error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
+        message="quota limit hit",
+        details={"limit": 10},
+        dispatch_id="d2",
+    )
+    error_str = fleet_error(FleetErrorCode.FLEET_ACQUIRE_TIMEOUT, "could not acquire lock")
+    result: dict = {}
+    for envelope_str in (
+        base.to_envelope(),
+        with_optionals.to_envelope(),
+        rejected.to_envelope(),
+        error_str,
+    ):
+        result.update(json.loads(envelope_str))
+    return result
+
+
 def _build_registry() -> dict[str, FormatterCoverageDef]:
     from autoskillit.core.types._type_results import CloneSuccessResult
     from autoskillit.hooks.formatters.pretty_output_hook import (
         _FMT_CLONE_REPO_RENDERED,
         _FMT_CLONE_REPO_SUPPRESSED,
+        _FMT_DISPATCH_FOOD_TRUCK_RENDERED,
+        _FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED,
         _FMT_KITCHEN_STATUS_RENDERED,
         _FMT_KITCHEN_STATUS_SUPPRESSED,
         _FMT_LIST_RECIPES_RENDERED,
@@ -62,6 +108,7 @@ def _build_registry() -> dict[str, FormatterCoverageDef]:
     from autoskillit.recipe._api import ListRecipesResult, LoadRecipeResult
     from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
     from autoskillit.server.tools._types import (
+        DispatchEnvelopeResult,
         KitchenStatusResult,
         MergeWorktreeResult,
         RunCmdResult,
@@ -92,6 +139,12 @@ def _build_registry() -> dict[str, FormatterCoverageDef]:
             typed_dict=MergeWorktreeResult,
             rendered=_FMT_MERGE_WORKTREE_RENDERED,
             suppressed=_FMT_MERGE_WORKTREE_SUPPRESSED,
+        ),
+        "dispatch_food_truck": FormatterCoverageDef(
+            typed_dict=DispatchEnvelopeResult,
+            rendered=_FMT_DISPATCH_FOOD_TRUCK_RENDERED,
+            suppressed=_FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED,
+            json_producer=_dispatch_food_truck_json_producer,
         ),
         "get_token_summary": FormatterCoverageDef(
             typed_dict=TokenSummaryResult,

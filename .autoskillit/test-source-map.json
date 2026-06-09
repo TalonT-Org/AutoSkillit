@@ -22,10 +22,6 @@
     "tests/cli/test_init_helpers.py",
     "tests/hooks/test_codex_hooks.py"
   ],
-  "src/autoskillit/execution/backends/_codex_hooks.py": [
-    "tests/hooks/test_codex_hooks.py",
-    "tests/cli/test_init_helpers.py"
-  ],
   "src/autoskillit/cli/_init_helpers.py": [
     "tests/cli/test_app_main.py",
     "tests/cli/test_cli_hooks.py",
@@ -288,12 +284,29 @@
     "tests/contracts/test_claude_code_interface_contracts.py",
     "tests/execution/test_commands.py"
   ],
+  "src/autoskillit/cli/session/_session_launch.py": [
+    "tests/cli/test_cook_env_scrub.py",
+    "tests/cli/test_cook_features.py",
+    "tests/cli/test_cook_ide_isolation.py",
+    "tests/cli/test_cook_order_command.py",
+    "tests/cli/test_cook_order_picker.py",
+    "tests/cli/test_cook_order_prompt.py",
+    "tests/cli/test_fleet_campaign.py",
+    "tests/cli/test_fleet_dispatch.py",
+    "tests/cli/test_order_resume.py",
+    "tests/cli/test_reload_loop.py",
+    "tests/cli/test_session_launch.py",
+    "tests/cli/test_terminal.py"
+  ],
   "src/autoskillit/cli/session/_session_order.py": [
     "tests/cli/test_cook_features.py",
     "tests/cli/test_cook_order_command.py",
     "tests/cli/test_cook_order_picker.py",
     "tests/cli/test_cook_order_prompt.py",
     "tests/cli/test_order_config.py"
+  ],
+  "src/autoskillit/cli/session/_session_picker.py": [
+    "tests/cli/test_session_picker.py"
   ],
   "src/autoskillit/cli/session/_session_reload.py": [
     "tests/cli/test_cook_env_scrub.py",
@@ -310,23 +323,6 @@
     "tests/cli/test_session_launch.py",
     "tests/contracts/test_claude_code_interface_contracts.py",
     "tests/execution/test_commands.py"
-  ],
-  "src/autoskillit/cli/session/_session_launch.py": [
-    "tests/cli/test_cook_env_scrub.py",
-    "tests/cli/test_cook_features.py",
-    "tests/cli/test_cook_ide_isolation.py",
-    "tests/cli/test_cook_order_command.py",
-    "tests/cli/test_cook_order_picker.py",
-    "tests/cli/test_cook_order_prompt.py",
-    "tests/cli/test_fleet_campaign.py",
-    "tests/cli/test_fleet_dispatch.py",
-    "tests/cli/test_order_resume.py",
-    "tests/cli/test_reload_loop.py",
-    "tests/cli/test_session_launch.py",
-    "tests/cli/test_terminal.py"
-  ],
-  "src/autoskillit/cli/session/_session_picker.py": [
-    "tests/cli/test_session_picker.py"
   ],
   "src/autoskillit/cli/ui/_ansi.py": [
     "tests/cli/test_ansi.py",
@@ -3311,6 +3307,10 @@
     "tests/hooks/test_codex_hooks.py",
     "tests/server/test_lifespan.py"
   ],
+  "src/autoskillit/execution/backends/_codex_hooks.py": [
+    "tests/hooks/test_codex_hooks.py",
+    "tests/cli/test_init_helpers.py"
+  ],
   "src/autoskillit/execution/backends/_codex_parse.py": [
     "tests/execution/backends/test_codex_fixtures.py",
     "tests/execution/backends/test_codex_result_parser.py",
@@ -5682,6 +5682,7 @@
     "tests/planner/test_schema_conformance.py",
     "tests/planner/test_validation_checks.py",
     "tests/planner/test_validation_core.py",
+    "tests/planner/test_validation_deliverable_committability.py",
     "tests/planner/test_validation_discovery.py"
   ],
   "src/autoskillit/recipe/_analysis.py": [
@@ -10586,6 +10587,9 @@
     "tests/server/test_tools_kitchen_gate_features.py",
     "tests/server/test_tools_load_recipe.py",
     "tests/server/test_tools_recipe.py"
+  ],
+  "src/autoskillit/recipe/rules/rules_gitignored_deliverable.py": [
+    "tests/recipe/test_rules_gitignored_deliverable.py"
   ],
   "src/autoskillit/recipe/rules/rules_ingredient_step_name.py": [
     "tests/cli/test_cook_features.py",

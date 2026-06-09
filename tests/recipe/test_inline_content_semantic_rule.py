@@ -54,7 +54,7 @@ def _make_skill_md_with_blockquote(var: str) -> str:
 
 @pytest.mark.xfail(
     reason="inline-content-in-subagent-prompt rule not yet implemented (#3636 prerequisite)",
-    strict=False,
+    strict=True,
 )
 @pytest.mark.parametrize(
     "banned_var",

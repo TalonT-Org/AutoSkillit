@@ -150,3 +150,132 @@ def test_rule_findings_match_rule_def_severity() -> None:
         "RuleFinding severity must match the @semantic_rule decorator severity "
         "or go through make_finding():\n" + "\n".join(violations)
     )
+
+
+_DISPATCH_READY_TEST = (
+    Path(__file__).resolve().parents[1] / "recipe" / "test_bundled_recipes_dispatch_ready.py"
+)
+
+_ALLOWLIST_CAP = 5
+
+
+def _collect_allowlist_rule_names() -> set[str]:
+    """Extract all rule-name string values from _KNOWN_NON_CONFORMING_RULES."""
+    tree = ast.parse(_DISPATCH_READY_TEST.read_text())
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        target = node.targets[0] if node.targets else None
+        if not isinstance(target, ast.Name) or target.id != "_KNOWN_NON_CONFORMING_RULES":
+            continue
+        if not isinstance(node.value, ast.Dict):
+            continue
+        for v in node.value.values:
+            if isinstance(v, ast.Set):
+                for elt in v.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        names.add(elt.value)
+            elif isinstance(v, ast.Dict):
+                for inner_v in v.values:
+                    if isinstance(inner_v, ast.Set):
+                        for elt in inner_v.elts:
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                names.add(elt.value)
+    return names
+
+
+def test_dispatch_readiness_allowlist_size_cap() -> None:
+    """Dispatch-readiness allowlists must not grow beyond current size.
+
+    If this test fails, a new exemption was added. This forces the developer
+    to either: (a) fix the recipe, (b) revert the severity promotion, or
+    (c) explicitly increase the cap with justification.
+    """
+    rule_names = _collect_allowlist_rule_names()
+    assert len(rule_names) <= _ALLOWLIST_CAP, (
+        f"Dispatch-readiness allowlist has {len(rule_names)} entries "
+        f"(cap: {_ALLOWLIST_CAP}): {sorted(rule_names)}. "
+        "Fix the recipe or revert the severity promotion instead of adding exemptions."
+    )
+
+
+def _collect_error_severity_rules() -> set[str]:
+    """Extract rule names whose @semantic_rule decorator has severity=Severity.ERROR."""
+    error_rules: set[str] = set()
+    for path in _iter_rule_modules():
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            dec = _find_semantic_rule_decorator(node)
+            if dec is None:
+                continue
+            sev = _decorator_severity(dec)
+            if sev is not None and "ERROR" in sev:
+                error_rules.add(node.name)
+    return error_rules
+
+
+def test_error_severity_rules_have_no_dispatch_ready_exemptions() -> None:
+    """Every ERROR-severity rule must have zero entries in the dispatch-ready allowlist.
+
+    This enforces the policy: fix all recipes FIRST, then promote to ERROR.
+    A severity promotion paired with an allowlist entry is a contradiction —
+    the rule claims to be blocking but the test infrastructure lets it pass.
+    """
+    error_rules = _collect_error_severity_rules()
+    allowlist_rules = _collect_allowlist_rule_names()
+    overlap = error_rules & allowlist_rules
+    assert not overlap, (
+        f"ERROR-severity rules appear in dispatch-ready allowlist: {sorted(overlap)}. "
+        "Fix all bundled recipes for these rules BEFORE promoting to ERROR severity."
+    )
+
+
+def _is_xfail_strict_false(node: ast.AST) -> bool:
+    """Check if an AST node is pytest.mark.xfail(strict=False) or pytest.xfail(strict=False)."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    is_xfail = False
+    if isinstance(func, ast.Name) and func.id == "xfail":
+        is_xfail = True
+    elif isinstance(func, ast.Attribute) and func.attr == "xfail":
+        is_xfail = True
+    if not is_xfail:
+        return False
+    for kw in node.keywords:
+        if kw.arg == "strict" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
+            return True
+    return False
+
+
+def test_no_strict_false_xfail_in_recipe_and_contract_tests() -> None:
+    """Recipe and contract tests must not use xfail(strict=False).
+
+    strict=False makes a test incapable of ever causing CI failure,
+    regardless of whether the underlying condition is met or not.
+    Use strict=True or remove the xfail entirely.
+    """
+    tests_dir = Path(__file__).resolve().parents[1]
+    excluded = tests_dir / "hooks" / "test_write_guard.py"
+    violations: list[str] = []
+    for subdir in ("recipe", "contracts"):
+        scan_dir = tests_dir / subdir
+        for py_file in sorted(scan_dir.rglob("*.py")):
+            if py_file.resolve() == excluded.resolve():
+                continue
+            if py_file.name.startswith("test_"):
+                tree = ast.parse(py_file.read_text())
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        for dec in node.decorator_list:
+                            if _is_xfail_strict_false(dec):
+                                rel = py_file.relative_to(tests_dir.parent)
+                                violations.append(f"{rel}:{dec.lineno} — {node.name}")
+    assert not violations, (
+        "xfail(strict=False) found in recipe/contract tests:\n"
+        + "\n".join(violations)
+        + "\nUse strict=True or remove the xfail entirely."
+    )

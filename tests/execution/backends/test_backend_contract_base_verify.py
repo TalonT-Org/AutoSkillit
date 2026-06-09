@@ -73,8 +73,13 @@ class TestBackendContractBaseStructure:
         assert test_funcs == [], f"Found test functions: {test_funcs}"
 
     def test_no_autouse_fixture_in_mixin_file(self) -> None:
-        source = MIXIN_SOURCE.read_text()
-        assert "autouse" not in source
+        tree = ast.parse(MIXIN_SOURCE.read_text())
+        autouse_nodes = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.keyword) and node.arg == "autouse"
+        ]
+        assert autouse_nodes == [], "Found autouse keyword argument in mixin file"
 
     def test_no_headless_exclusive_vars_import(self) -> None:
         tree = ast.parse(MIXIN_SOURCE.read_text())

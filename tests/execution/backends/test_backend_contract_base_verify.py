@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-import inspect
+import typing
 from pathlib import Path
 
 import pytest
@@ -49,7 +49,7 @@ class TestBackendContractBaseStructure:
         assert getattr(BackendContractBase.make_backend, "__isabstractmethod__", False)
 
     def test_make_backend_return_annotation(self) -> None:
-        hints = inspect.get_type_hints(BackendContractBase.make_backend)
+        hints = typing.get_type_hints(BackendContractBase.make_backend)
         assert hints["return"] is CodingAgentBackend
 
     def test_pytest_does_not_collect_mixin(self) -> None:

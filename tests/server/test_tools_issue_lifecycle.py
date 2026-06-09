@@ -71,6 +71,65 @@ def test_build_headless_error_response_fields() -> None:
     assert resp["exit_code"] == 1
 
 
+def test_build_headless_error_response_propagates_extra_fields() -> None:
+    """extra_fields merges partial-result data without overwriting the canonical 7 fields."""
+    result = _make_skill_result(
+        success=False,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+        session_id="abc",
+        subtype="contract_recovery",
+    )
+    resp = _build_headless_error_response(
+        result,
+        error="contract_recovery",
+        extra_fields={
+            "partial_issue_url": "https://github.com/owner/repo/issues/42",
+            "partial_issue_number": 42,
+        },
+    )
+    assert resp["partial_issue_url"] == "https://github.com/owner/repo/issues/42"
+    assert resp["partial_issue_number"] == 42
+    # Canonical 7 fields remain intact.
+    assert resp["success"] is False
+    assert resp["status"] == "failed"
+    assert resp["error"] == "contract_recovery"
+    assert resp["session_id"] == "abc"
+    assert resp["stderr"] == ""
+    assert resp["subtype"] == "contract_recovery"
+    assert resp["exit_code"] == 0
+
+
+def test_build_headless_error_response_extra_fields_cannot_override_canonical() -> None:
+    """extra_fields cannot overwrite any of the 7 canonical keys (defense in depth)."""
+    result = _make_skill_result(
+        success=False,
+        session_id="real-session",
+        subtype="timeout",
+        exit_code=1,
+        stderr="real stderr",
+    )
+    resp = _build_headless_error_response(
+        result,
+        error="real error",
+        extra_fields={
+            "error": "injected",
+            "session_id": "spoofed",
+            "stderr": "injected stderr",
+            "subtype": "injected subtype",
+            "exit_code": 999,
+            "status": "spoofed",
+            "success": True,
+        },
+    )
+    assert resp["error"] == "real error"
+    assert resp["session_id"] == "real-session"
+    assert resp["stderr"] == "real stderr"
+    assert resp["subtype"] == "timeout"
+    assert resp["exit_code"] == 1
+    assert resp["status"] == "failed"
+    assert resp["success"] is False
+
+
 def test_retry_reason_to_error_uses_enum_value() -> None:
     """Non-NONE RetryReason → returns its .value string."""
     result = _make_skill_result(success=False, retry_reason=RetryReason.STALE)
@@ -221,6 +280,46 @@ async def test_prepare_issue_block_parse_error(tool_ctx_kitchen_open) -> None:
     result = json.loads(await prepare_issue("Title", "Body"))
     assert result["success"] is False
     assert result["error"] == "no result block found"
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_contract_recovery_includes_partial_issue_url(
+    tool_ctx_kitchen_open,
+) -> None:
+    """CONTRACT_RECOVERY with URL in result.result → partial_issue_url propagated to caller."""
+    skill_result = _make_skill_result(
+        success=False,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+        result=(
+            "I created the issue.\n\n"
+            "issue_url = https://github.com/owner/repo/issues/42\n\n"
+            "Now applying labels..."
+        ),
+    )
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
+
+    result = json.loads(await prepare_issue("Title", "Body"))
+    assert result["success"] is False
+    assert result["partial_issue_url"] == "https://github.com/owner/repo/issues/42"
+    assert result["partial_issue_number"] == 42
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_failure_without_issue_url_has_no_partial_fields(
+    tool_ctx_kitchen_open,
+) -> None:
+    """Generic failure (no URL anywhere in result.result) → no partial_issue_* fields."""
+    skill_result = _make_skill_result(
+        success=False, result="Session timed out before any side effect"
+    )
+    tool_ctx_kitchen_open.executor = AsyncMock()
+    tool_ctx_kitchen_open.executor.run = AsyncMock(return_value=skill_result)
+
+    result = json.loads(await prepare_issue("Title", "Body"))
+    assert result["success"] is False
+    assert "partial_issue_url" not in result
+    assert "partial_issue_number" not in result
 
 
 @pytest.mark.anyio

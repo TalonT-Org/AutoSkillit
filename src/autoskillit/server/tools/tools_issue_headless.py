@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+import regex as re
 import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -36,12 +37,31 @@ _BLOCK_PARSE_ERRORS: frozenset[str] = frozenset(
     {"no result block found", "result block contained invalid JSON"}
 )
 
+# Canonical 7 fields of the headless error envelope. extra_fields cannot overwrite
+# any of these — see _build_headless_error_response for the contract.
+_CANONICAL_KEYS: frozenset[str] = frozenset(
+    {"success", "status", "error", "session_id", "stderr", "subtype", "exit_code"}
+)
+
+# Regex for partial-issue-data extraction: a GitHub issue URL anywhere in the
+# session's full text output. Used to recover evidence of side effects that
+# already happened (gh issue create) even when the structured output block is
+# missing or malformed.
+_ISSUE_URL_RE: re.Pattern[str] = re.compile(
+    r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/(\d+)"
+)
+
+# Regex for partial-enrich-data extraction: matches "Enriched issue #NNN" prose
+# emitted by the enrich-issues skill before its structured output block.
+_ENRICHED_ISSUE_RE: re.Pattern[str] = re.compile(r"Enriched issue #(\d+)")
+
 
 def _build_headless_error_response(
     result: SkillResult,
     *,
     error: str,
     status: str = "failed",
+    extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Canonical error response for tools that invoke headless sessions.
 
@@ -49,8 +69,13 @@ def _build_headless_error_response(
     builder. Do not hand-roll error dicts — that pattern caused silent omission of
     diagnostic fields (issue #384). Adding a field here propagates to all paths
     automatically.
+
+    Callers may pass ``extra_fields`` to attach partial-result evidence (e.g.,
+    ``partial_issue_url`` when a headless session created an issue but failed to
+    emit a parseable result block). ``extra_fields`` is filtered against
+    ``_CANONICAL_KEYS`` — it cannot overwrite any of the 7 canonical fields.
     """
-    return {
+    resp: dict[str, Any] = {
         "success": False,
         "status": status,
         "error": error,
@@ -59,6 +84,9 @@ def _build_headless_error_response(
         "subtype": result.subtype or "",
         "exit_code": result.exit_code if result.exit_code is not None else -1,
     }
+    if extra_fields:
+        resp.update({k: v for k, v in extra_fields.items() if k not in _CANONICAL_KEYS})
+    return resp
 
 
 def _retry_reason_to_error(result: SkillResult) -> str:
@@ -73,6 +101,76 @@ def _retry_reason_to_error(result: SkillResult) -> str:
     ):
         return result.retry_reason.value
     return result.subtype or "skill session failed"
+
+
+def _extract_partial_issue_data(result_text: str) -> dict[str, Any]:
+    """Mine a failed session's full text output for evidence of a created issue.
+
+    The prepare-issue skill creates a GitHub issue at Step 5, then applies
+    classification/labels/requirements on later steps. If the session fails mid-
+    execution (CONTRACT_RECOVERY, drain race, malformed block), the caller needs
+    to know which issue was created so it does not re-create it.
+
+    Strategy:
+      1. Try _parse_prepare_result to find a successfully-parsed block; if the
+         block parsed, return its issue_url/issue_number as partial fields.
+      2. If the block is present but JSON is malformed, the issue may still
+         have been created — search the full text for a GitHub issue URL via
+         _ISSUE_URL_RE and return the FIRST match.
+      3. If no URL is found anywhere, return an empty dict (no partial data).
+    """
+    if not result_text:
+        return {}
+
+    parsed = _parse_prepare_result(result_text)
+    if "error" not in parsed and (parsed.get("issue_url") or parsed.get("issue_number")):
+        out: dict[str, Any] = {}
+        if "issue_url" in parsed:
+            out["partial_issue_url"] = parsed["issue_url"]
+        if "issue_number" in parsed:
+            out["partial_issue_number"] = parsed["issue_number"]
+        return out
+
+    m = _ISSUE_URL_RE.search(result_text)
+    if m:
+        number = int(m.group(1))
+        url = m.group(0)
+        return {"partial_issue_url": url, "partial_issue_number": number}
+    return {}
+
+
+def _extract_partial_enrich_data(result_text: str) -> dict[str, Any]:
+    """Mine a failed session's full text output for evidence of enriched issues.
+
+    The enrich-issues skill edits issues in batches; if it fails mid-batch
+    (CONTRACT_RECOVERY, drain race, malformed block), the caller needs to know
+    which issues were already enriched so it does not re-edit them.
+
+    Strategy:
+      1. Try _parse_enrich_result; if the block parsed, return its 'enriched'
+         list as partial_issues_enriched.
+      2. If the block is absent or malformed, search the full text for
+         "Enriched issue #NNN" patterns and return the matched issue numbers
+         (in document order, deduplicated).
+      3. If no matches, return an empty dict (no partial data).
+    """
+    if not result_text:
+        return {}
+
+    parsed = _parse_enrich_result(result_text)
+    if "error" not in parsed and parsed.get("enriched"):
+        return {"partial_issues_enriched": list(parsed["enriched"])}
+
+    seen: set[int] = set()
+    ordered: list[int] = []
+    for m in _ENRICHED_ISSUE_RE.finditer(result_text):
+        n = int(m.group(1))
+        if n not in seen:
+            seen.add(n)
+            ordered.append(n)
+    if ordered:
+        return {"partial_issues_enriched": ordered}
+    return {}
 
 
 def _without_success_key(d: dict[str, Any]) -> dict[str, Any]:
@@ -224,8 +322,11 @@ async def prepare_issue(
             )
 
             if not result.success:
+                extra = _extract_partial_issue_data(result.result) if result.result else {}
                 return json.dumps(
-                    _build_headless_error_response(result, error=_retry_reason_to_error(result))
+                    _build_headless_error_response(
+                        result, error=_retry_reason_to_error(result), extra_fields=extra
+                    )
                 )
 
             if result.result is None or not result.result.strip():
@@ -242,7 +343,12 @@ async def prepare_issue(
             # The sentinel errors from _parse_prepare_result signal a block-extraction failure —
             # these are not the same as skill-internal errors embedded in a valid block.
             if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-                return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+                extra = _extract_partial_issue_data(result.result)
+                return json.dumps(
+                    _build_headless_error_response(
+                        result, error=parsed["error"], extra_fields=extra
+                    )
+                )
 
             # Block parsed successfully. result.success=True is the authoritative signal —
             # the parsed block's "success" field (if any) must not overwrite it.
@@ -334,8 +440,11 @@ async def enrich_issues(
             )
 
             if not result.success:
+                extra = _extract_partial_enrich_data(result.result) if result.result else {}
                 return json.dumps(
-                    _build_headless_error_response(result, error=_retry_reason_to_error(result))
+                    _build_headless_error_response(
+                        result, error=_retry_reason_to_error(result), extra_fields=extra
+                    )
                 )
 
             if result.result is None or not result.result.strip():
@@ -348,7 +457,12 @@ async def enrich_issues(
 
             parsed = _parse_enrich_result(result.result)
             if parsed.get("error") in _BLOCK_PARSE_ERRORS:
-                return json.dumps(_build_headless_error_response(result, error=parsed["error"]))
+                extra = _extract_partial_enrich_data(result.result)
+                return json.dumps(
+                    _build_headless_error_response(
+                        result, error=parsed["error"], extra_fields=extra
+                    )
+                )
 
             return json.dumps(
                 {

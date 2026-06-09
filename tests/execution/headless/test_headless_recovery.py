@@ -153,3 +153,30 @@ class TestNudgePtyMode:
             f"Expected last_pty_mode=False when pty_override=False, "
             f"got {mock_runner.last_pty_mode!r}"
         )
+
+
+def test_nudge_skips_for_block_delimiter_patterns() -> None:
+    """Block-delimited patterns (---{name}---) are not path-capture, so hints=[].
+
+    _is_path_capture_pattern returns None for block delimiters (no path-capture token
+    in the pattern, no '=' after the token). The for-loop in _extract_missing_token_hints
+    skips such patterns, leaving hints empty. This means _attempt_contract_nudge (which
+    short-circuits to None when hints=[]) cannot recover block-delimited skills — the
+    caller always falls through to the failure path.
+    """
+    from autoskillit.execution.headless._headless_recovery import _extract_missing_token_hints
+
+    result_parser = Mock()
+    parsed_session = Mock()
+    parsed_session.output = "irrelevant output text"
+    parsed_session.raw = {"tool_uses": []}
+    result_parser.parse_stdout.return_value = parsed_session
+
+    hints = _extract_missing_token_hints(
+        stdout="",
+        expected_output_patterns=["---prepare-issue-result---"],
+        result_parser=result_parser,
+        write_tool_names=frozenset({"Write", "Edit"}),
+    )
+
+    assert hints == []

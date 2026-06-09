@@ -38,6 +38,7 @@ Planner manifest, validation, compilation, and merge tests.
 | `test_sort_utils.py` | Tests for _natural_sort_key |
 | `test_typed_dict_conformance.py` | TypedDict conformance: required-key sets, factory validation |
 | `test_validation_core.py` | Core validate_plan happy/fail paths and severity model |
+| `test_validation_deliverable_committability.py` | _check_gitignored_deliverables: reject WP deliverables in gitignored paths |
 | `test_validation_checks.py` | Individual _check_* function unit tests |
 | `test_validation_discovery.py` | discover_tier_files, _load_* tier loaders, DAG decomposition, lifecycle registry |
 

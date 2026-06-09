@@ -184,3 +184,30 @@ def test_dry_walkthrough_step4_pip_enforcement_prescribes_install_worktree(
     assert "worktree_setup.command" in skill_text, (
         "Step 4 must reference worktree_setup.command as the config-driven alternative."
     )
+
+
+def test_dry_walkthrough_step4_includes_gitignore_check(skill_text: str) -> None:
+    """Step 4 PROJECT RULES CHECKLIST must include a gitignore/committability check
+    for plan-prescribed deliverable output paths."""
+    step_4_idx = skill_text.find("### Step 4:")
+    step_45_idx = skill_text.find("Step 4.5")
+    assert step_4_idx != -1 and step_45_idx != -1
+    step_4_section = skill_text[step_4_idx:step_45_idx]
+    has_gitignore_keyword = (
+        "gitignore" in step_4_section.lower()
+        or "committable" in step_4_section.lower()
+        or "git check-ignore" in step_4_section
+    )
+    assert has_gitignore_keyword, (
+        "Step 4 PROJECT RULES CHECKLIST must include a check for gitignored or "
+        "non-committable deliverable output paths. Plan deliverables written to "
+        "gitignored directories (e.g. .autoskillit/temp/) cannot appear in git diff, "
+        "creating unresolvable audit-impl MISSING findings."
+    )
+    has_path_keyword = (
+        "deliverable" in step_4_section.lower() or "output" in step_4_section.lower()
+    )
+    assert has_path_keyword, (
+        "Step 4 gitignore check must reference deliverable paths or output files "
+        "so the checklist item is specific about what to verify."
+    )

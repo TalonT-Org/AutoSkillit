@@ -48,6 +48,12 @@ def test_coding_agent_backend_has_setup_session_dir_method():
     assert callable(getattr(CodingAgentBackend, "setup_session_dir", None))
 
 
+def test_session_locator_has_project_log_dir_method():
+    from autoskillit.core import SessionLocator
+
+    assert callable(getattr(SessionLocator, "project_log_dir", None))
+
+
 def test_no_autoskillit_imports_in_protocols_backend():
     from autoskillit.core import paths
 

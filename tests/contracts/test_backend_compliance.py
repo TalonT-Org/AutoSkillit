@@ -103,6 +103,19 @@ class TestBackendCompliance:
         assert SessionLocator in ClaudeSessionLocator.__mro__
         assert SessionLocator in CodexSessionLocator.__mro__
 
+    def test_all_backends_project_log_dir_returns_path(self):
+        from pathlib import Path
+
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            locator = cls().session_locator()
+            result = locator.project_log_dir("/tmp")
+            assert isinstance(result, Path), (
+                f"{type(locator).__name__}.project_log_dir must return Path"
+            )
+
     def test_all_backends_capabilities_is_backend_capabilities(self):
         from autoskillit.core import BackendCapabilities
         from autoskillit.execution.backends import BACKEND_REGISTRY

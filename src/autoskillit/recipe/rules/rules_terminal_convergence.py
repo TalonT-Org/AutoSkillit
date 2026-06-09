@@ -8,7 +8,7 @@ import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 _REASON_RE = re.compile(r'"reason"\s*:\s*"([^"]+)"')
@@ -72,9 +72,8 @@ def _check_success_stop_reason_uniqueness(ctx: ValidationContext) -> list[RuleFi
                 shared_ancestors = ancestors_by_step[name_a] & ancestors_by_step[name_b]
                 if shared_ancestors:
                     findings.append(
-                        RuleFinding(
-                            rule="success-stop-reason-uniqueness",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="success-stop-reason-uniqueness",
                             step_name=name_a,
                             message=(
                                 f"Stop steps '{name_a}' and '{name_b}' both emit "
@@ -82,13 +81,13 @@ def _check_success_stop_reason_uniqueness(ctx: ValidationContext) -> list[RuleFi
                                 f"ancestors. Distinct success paths must use distinct "
                                 f"reason strings for fleet outcome classification."
                             ),
+                            severity=Severity.ERROR,
                         )
                     )
                 else:
                     findings.append(
-                        RuleFinding(
-                            rule="success-stop-reason-uniqueness",
-                            severity=Severity.WARNING,
+                        make_finding(
+                            rule_name="success-stop-reason-uniqueness",
                             step_name=name_a,
                             message=(
                                 f"Stop steps '{name_a}' and '{name_b}' both emit "
@@ -96,6 +95,7 @@ def _check_success_stop_reason_uniqueness(ctx: ValidationContext) -> list[RuleFi
                                 f"distinct reason strings for fleet outcome "
                                 f"classification."
                             ),
+                            severity=Severity.WARNING,
                         )
                     )
 

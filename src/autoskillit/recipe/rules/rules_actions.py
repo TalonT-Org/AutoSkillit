@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 logger = get_logger(__name__)
@@ -34,9 +34,8 @@ def _check_stop_step_has_no_routing(ctx: ValidationContext) -> list[RuleFinding]
         )
         if has_routing:
             findings.append(
-                RuleFinding(
-                    rule="stop-step-has-no-routing",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="stop-step-has-no-routing",
                     step_name=step_name,
                     message=(
                         f"Stop step '{step_name}' has outbound routing fields. "
@@ -63,9 +62,8 @@ def _check_stop_step_message_quality(ctx: ValidationContext) -> list[RuleFinding
         # long enough to reject single-word placeholders caught by _PLACEHOLDER_MESSAGES.
         if len(msg) < 10 or msg.lower() in _PLACEHOLDER_MESSAGES:
             findings.append(
-                RuleFinding(
-                    rule="stop-step-message-quality",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="stop-step-message-quality",
                     step_name=step_name,
                     message=(
                         f"Stop step '{step_name}' has a weak message: {msg!r}. "
@@ -88,9 +86,8 @@ def _check_recipe_has_terminal_step(ctx: ValidationContext) -> list[RuleFinding]
     has_stop = any(step.action == "stop" for step in ctx.recipe.steps.values())
     if not has_stop:
         return [
-            RuleFinding(
-                rule="recipe-has-terminal-step",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="recipe-has-terminal-step",
                 step_name="",
                 message=(
                     "Recipe has no stop step. Every recipe must have at least one "
@@ -113,9 +110,8 @@ def _check_route_step_requires_on_result(ctx: ValidationContext) -> list[RuleFin
             continue
         if step.on_result is None:
             findings.append(
-                RuleFinding(
-                    rule="route-step-requires-on-result",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="route-step-requires-on-result",
                     step_name=step_name,
                     message=(
                         f"Route step '{step_name}' has no on_result block. "
@@ -153,9 +149,8 @@ def _check_silent_failure_skill_step(ctx: ValidationContext) -> list[RuleFinding
         if any(phrase in note for phrase in _SILENT_FAILURE_INDICATIVE_PHRASES):
             continue
         findings.append(
-            RuleFinding(
-                rule="silent-failure-skill-step",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="silent-failure-skill-step",
                 step_name=step_name,
                 message=(
                     f"Step '{step_name}' routes both success and failure to "

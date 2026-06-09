@@ -11,7 +11,7 @@ from autoskillit.core import (
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _has_dynamic_skill_name
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _GIT_METADATA_WRITE_CAP = "git_metadata_write"
 
@@ -55,9 +55,8 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                 else ""
             )
             findings.append(
-                RuleFinding(
-                    rule="backend-incompatible-skill",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="backend-incompatible-skill",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': skill '{skill_name}' requires backend "

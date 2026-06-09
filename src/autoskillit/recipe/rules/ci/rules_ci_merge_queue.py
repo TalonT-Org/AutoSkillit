@@ -6,7 +6,7 @@ import regex as re
 
 from autoskillit.core import PRState, Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # ---------------------------------------------------------------------------
 # wait_for_merge_queue routing rules (I7 + I8)
@@ -75,15 +75,12 @@ def _check_wait_for_merge_queue_routing_covers_all_pr_states(
         missing = _REQUIRED_MQ_PR_STATES - covered
         if missing:
             findings.append(
-                RuleFinding(
-                    rule="wait-for-merge-queue-routing-covers-all-pr-states",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="wait-for-merge-queue-routing-covers-all-pr-states",
                     step_name=step_name,
-                    message=(
-                        f"Step {step_name!r} is missing explicit routing arms for "
-                        f"PRState values: {sorted(missing)}. Every non-error PRState "
-                        f"must have an explicit when condition in on_result."
-                    ),
+                    message=f"Step {step_name!r} is missing explicit routing arms for "
+                    f"PRState values: {sorted(missing)}. Every non-error PRState "
+                    f"must have an explicit when condition in on_result.",
                 )
             )
     return findings
@@ -114,30 +111,24 @@ def _check_wait_for_merge_queue_routing_conforms_to_expected_targets(
             for route in fallback_routes:
                 if route != _MQ_EXPECTED_FALLBACK:
                     findings.append(
-                        RuleFinding(
-                            rule="wait-for-merge-queue-routing-conforms-to-expected-targets",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="wait-for-merge-queue-routing-conforms-to-expected-targets",
                             step_name=step_name,
-                            message=(
-                                f"Step {step_name!r} has fallback route {route!r} but "
-                                f"expected {_MQ_EXPECTED_FALLBACK!r}. The fallback must "
-                                f"route to register_clone_unconfirmed so unrecognised states "
-                                f"are escalated, not silently treated as success."
-                            ),
+                            message=f"Step {step_name!r} has fallback route {route!r} but "
+                            f"expected {_MQ_EXPECTED_FALLBACK!r}. The fallback must "
+                            f"route to register_clone_unconfirmed so unrecognised states "
+                            f"are escalated, not silently treated as success.",
                         )
                     )
         # Check on_failure
         if step.on_failure is not None and step.on_failure != _MQ_EXPECTED_FALLBACK:
             findings.append(
-                RuleFinding(
-                    rule="wait-for-merge-queue-routing-conforms-to-expected-targets",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="wait-for-merge-queue-routing-conforms-to-expected-targets",
                     step_name=step_name,
-                    message=(
-                        f"Step {step_name!r} has on_failure={step.on_failure!r} but "
-                        f"expected {_MQ_EXPECTED_FALLBACK!r}. Tool errors must route "
-                        f"to register_clone_unconfirmed, not a success-path step."
-                    ),
+                    message=f"Step {step_name!r} has on_failure={step.on_failure!r} but "
+                    f"expected {_MQ_EXPECTED_FALLBACK!r}. Tool errors must route "
+                    f"to register_clone_unconfirmed, not a success-path step.",
                 )
             )
     return findings
@@ -214,18 +205,15 @@ def _check_dropped_merge_group_ci_reenqueue_guard(
             frontier = next_frontier
         if mq_reachable:
             findings.append(
-                RuleFinding(
-                    rule="dropped-merge-group-ci-unguarded-reenqueue-loop",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="dropped-merge-group-ci-unguarded-reenqueue-loop",
                     step_name=step_name,
-                    message=(
-                        f"Step {step_name!r} routes dropped_merge_group_ci → "
-                        f"{dmgci_target!r} without a direct loop guard. The path "
-                        f"reaches wait_for_merge_queue, creating an unbounded "
-                        f"re-enqueue loop. Add a run_python guard step (e.g. "
-                        f"check_dropped_merge_group_ci_loop) between the "
-                        f"wait_for_merge_queue and diagnose_ci steps."
-                    ),
+                    message=f"Step {step_name!r} routes dropped_merge_group_ci → "
+                    f"{dmgci_target!r} without a direct loop guard. The path "
+                    f"reaches wait_for_merge_queue, creating an unbounded "
+                    f"re-enqueue loop. Add a run_python guard step (e.g. "
+                    f"check_dropped_merge_group_ci_loop) between the "
+                    f"wait_for_merge_queue and diagnose_ci steps.",
                 )
             )
     return findings

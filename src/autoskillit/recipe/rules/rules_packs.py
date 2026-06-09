@@ -6,7 +6,7 @@ from autoskillit.core import PACK_REGISTRY, SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -21,9 +21,8 @@ def _check_unknown_required_pack(ctx: ValidationContext) -> list[RuleFinding]:
         if pack_name not in PACK_REGISTRY and pack_name not in seen_reported:
             seen_reported.add(pack_name)
             findings.append(
-                RuleFinding(
-                    rule="unknown-required-pack",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="unknown-required-pack",
                     step_name="(top-level)",
                     message=(
                         f"Pack {pack_name!r} in requires_packs is not in PACK_REGISTRY. "
@@ -71,9 +70,8 @@ def _check_undeclared_pack_requirement(ctx: ValidationContext) -> list[RuleFindi
         for cat in sorted(categories & default_disabled):
             if cat not in declared_packs:
                 findings.append(
-                    RuleFinding(
-                        rule="undeclared-pack-requirement",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="undeclared-pack-requirement",
                         step_name=step_name,
                         message=(
                             f"step '{step_name}': skill_command '{skill_cmd}' references "

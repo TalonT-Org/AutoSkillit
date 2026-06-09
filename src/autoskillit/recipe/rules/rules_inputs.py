@@ -22,7 +22,7 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.io import iter_steps_with_context
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import _TERMINAL_TARGETS
 
 logger = get_logger(__name__)
@@ -41,15 +41,12 @@ def _check_outdated_version(ctx: ValidationContext) -> list[RuleFinding]:
 
     if Version(script_ver) < Version(AUTOSKILLIT_INSTALLED_VERSION):
         return [
-            RuleFinding(
-                rule="outdated-recipe-version",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="outdated-recipe-version",
                 step_name="(top-level)",
-                message=(
-                    f"Recipe version {script_ver} is behind installed "
-                    f"version {AUTOSKILLIT_INSTALLED_VERSION}."
-                    " Run 'autoskillit migrate' to update."
-                ),
+                message=f"Recipe version {script_ver} is behind installed "
+                f"version {AUTOSKILLIT_INSTALLED_VERSION}."
+                " Run 'autoskillit migrate' to update.",
             )
         ]
 
@@ -103,9 +100,8 @@ def _check_unsatisfied_skill_input(ctx: ValidationContext) -> list[RuleFinding]:
                                     f"not a recipe ingredient."
                                 )
                             findings.append(
-                                RuleFinding(
-                                    rule="missing-ingredient",
-                                    severity=Severity.ERROR,
+                                make_finding(
+                                    rule_name="missing-ingredient",
                                     step_name=step_name,
                                     message=msg,
                                 )
@@ -142,16 +138,13 @@ def _check_missing_recommended_input(ctx: ValidationContext) -> list[RuleFinding
                 continue
             if not re.search(rf"(?:^|\s){re.escape(inp.name)}=", skill_cmd):
                 findings.append(
-                    RuleFinding(
-                        rule="missing-recommended-input",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="missing-recommended-input",
                         step_name=step_name,
-                        message=(
-                            f"Step '{step_name}' invokes {skill_name} which recommends "
-                            f"'{inp.name}' for full-quality output, but the step does not "
-                            f"pass it. Add '{inp.name}=${{{{ context.{inp.name} }}}}' to "
-                            f"the skill_command or add a pre-computation step."
-                        ),
+                        message=f"Step '{step_name}' invokes {skill_name} which recommends "
+                        f"'{inp.name}' for full-quality output, but the step does not "
+                        f"pass it. Add '{inp.name}=${{{{ context.{inp.name} }}}}' to "
+                        f"the skill_command or add a pre-computation step.",
                     )
                 )
 
@@ -203,18 +196,15 @@ def _check_shadowed_required_inputs(ctx: ValidationContext) -> list[RuleFinding]
             if name not in available_context and name not in ingredient_names:
                 continue
             findings.append(
-                RuleFinding(
-                    rule="shadowed-required-input",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="shadowed-required-input",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' invokes /{skill_name} which requires "
-                        f"'{name}' (type: {req_input.type}), and '{name}' is available "
-                        f"in the recipe context, but the skill_command passes prose text "
-                        f"instead of the template reference. "
-                        f"Replace the prose placeholder with "
-                        f"'${{{{ context.{name} }}}}'."
-                    ),
+                    message=f"Step '{step_name}' invokes /{skill_name} which requires "
+                    f"'{name}' (type: {req_input.type}), and '{name}' is available "
+                    f"in the recipe context, but the skill_command passes prose text "
+                    f"instead of the template reference. "
+                    f"Replace the prose placeholder with "
+                    f"'${{{{ context.{name} }}}}'.",
                 )
             )
 
@@ -252,14 +242,11 @@ def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
     for step_name in wf.steps:
         if step_name != first_step and step_name not in referenced:
             findings.append(
-                RuleFinding(
-                    rule="unreachable-step",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="unreachable-step",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' is not the entry point and no other step "
-                        f"routes to it. It will never execute. Remove it or add routing."
-                    ),
+                    message=f"Step '{step_name}' is not the entry point and no other step "
+                    f"routes to it. It will never execute. Remove it or add routing.",
                 )
             )
     return findings
@@ -290,15 +277,12 @@ def _check_pipeline_internal_not_hidden(
         desc = getattr(ing, "description", "") or ""
         if _PIPELINE_INTERNAL_PATTERN.search(desc):
             findings.append(
-                RuleFinding(
-                    rule="pipeline-internal-not-hidden",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="pipeline-internal-not-hidden",
                     step_name=name,
-                    message=(
-                        f"Ingredient '{name}' description suggests it is set by pipeline "
-                        f"automation, not by users. Add `hidden: true` to suppress it from "
-                        f"the agent's ingredients table."
-                    ),
+                    message=f"Ingredient '{name}' description suggests it is set by pipeline "
+                    f"automation, not by users. Add `hidden: true` to suppress it from "
+                    f"the agent's ingredients table.",
                 )
             )
     return findings
@@ -321,16 +305,13 @@ def _check_required_without_default(
             continue
         if getattr(ing, "required", False) and getattr(ing, "default", None) is None:
             findings.append(
-                RuleFinding(
-                    rule="required-ingredient-no-default",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="required-ingredient-no-default",
                     step_name=f"ingredient:{name}",
-                    message=(
-                        f"Ingredient '{name}' is required but has no default value. "
-                        "This may cause the orchestrator to call AskUserQuestion "
-                        "before open_kitchen. Consider adding a default value or "
-                        "marking as hidden."
-                    ),
+                    message=f"Ingredient '{name}' is required but has no default value. "
+                    "This may cause the orchestrator to call AskUserQuestion "
+                    "before open_kitchen. Consider adding a default value or "
+                    "marking as hidden.",
                 )
             )
     return findings
@@ -356,14 +337,11 @@ def _check_research_output_mode_enum(
     default = getattr(ing, "default", None)
     if default not in {"pr", "local"}:
         return [
-            RuleFinding(
-                rule="research-output-mode-enum",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="research-output-mode-enum",
                 step_name="output_mode",
-                message=(
-                    f"output_mode.default must be 'pr' or 'local', got {default!r}. "
-                    "Only two modes are supported (issue body overrides gist §1)."
-                ),
+                message=f"output_mode.default must be 'pr' or 'local', got {default!r}. "
+                "Only two modes are supported (issue body overrides gist §1).",
             )
         ]
     return []
@@ -392,15 +370,12 @@ def _check_ingredient_type_default_invalid(ctx: ValidationContext) -> list[RuleF
         # Empty string default is the auto-detect sentinel — invalid for integer types
         if default == "":
             findings.append(
-                RuleFinding(
-                    rule="ingredient-type-default-invalid",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="ingredient-type-default-invalid",
                     step_name=ing_name,
-                    message=(
-                        f"Ingredient '{ing_name}' has type='integer' but default='' "
-                        "(auto-detect sentinel). Integer-typed ingredients must use an "
-                        "explicit numeric default. Suggested fix: default='3'."
-                    ),
+                    message=f"Ingredient '{ing_name}' has type='integer' but default='' "
+                    "(auto-detect sentinel). Integer-typed ingredients must use an "
+                    "explicit numeric default. Suggested fix: default='3'.",
                 )
             )
             continue
@@ -412,13 +387,12 @@ def _check_ingredient_type_default_invalid(ctx: ValidationContext) -> list[RuleF
                 continue
             except ValueError as exc:
                 findings.append(
-                    RuleFinding(
-                        rule="ingredient-type-default-invalid",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="ingredient-type-default-invalid",
                         step_name=ing_name,
                         message=(
-                            f"Ingredient '{ing_name}' has type='integer' but default={default!r} "
-                            f"is not parseable as an integer ({exc})."
+                            f"Ingredient '{ing_name}' has type='integer' but "
+                            f"default={default!r} is not parseable as an integer ({exc})."
                         ),
                     )
                 )
@@ -427,15 +401,12 @@ def _check_ingredient_type_default_invalid(ctx: ValidationContext) -> list[RuleF
         # None default with required=False and no explicit value — silently absent numeric field
         if default is None and not required:
             findings.append(
-                RuleFinding(
-                    rule="ingredient-type-default-invalid",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="ingredient-type-default-invalid",
                     step_name=ing_name,
-                    message=(
-                        f"Ingredient '{ing_name}' has type='integer', required=False, and "
-                        f"default=None. Integer-typed non-required ingredients must declare "
-                        f"an explicit default to avoid ambiguity."
-                    ),
+                    message=f"Ingredient '{ing_name}' has type='integer', required=False, and "
+                    f"default=None. Integer-typed non-required ingredients must declare "
+                    f"an explicit default to avoid ambiguity.",
                 )
             )
     return findings
@@ -465,15 +436,12 @@ def _check_local_rounds_alignment(ctx: ValidationContext) -> list[RuleFinding]:
     if local_default == 0 or local_default < max_default:
         return []
     return [
-        RuleFinding(
-            rule="local-rounds-max-retries-alignment",
-            severity=Severity.WARNING,
+        make_finding(
+            rule_name="local-rounds-max-retries-alignment",
             step_name="(ingredients)",
-            message=(
-                f"local_review_rounds default ({local_default}) >= "
-                f"review_max_retries default ({max_default}). Mode will never "
-                f"transition from local to github with default configuration."
-            ),
+            message=f"local_review_rounds default ({local_default}) >= "
+            f"review_max_retries default ({max_default}). Mode will never "
+            f"transition from local to github with default configuration.",
         )
     ]
 
@@ -510,28 +478,22 @@ def _check_ingredient_condition_value_domain(
                     continue
                 if operand in _DISPLAY_ONLY_VALUES:
                     findings.append(
-                        RuleFinding(
-                            rule="ingredient-condition-value-domain",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="ingredient-condition-value-domain",
                             step_name=step_name,
-                            message=(
-                                f"Condition on inputs.{ing_name} uses display-only "
-                                f"value '{operand}' — use the raw YAML value instead "
-                                f"(ingredient default: '{ing.default}')."
-                            ),
+                            message=f"Condition on inputs.{ing_name} uses display-only "
+                            f"value '{operand}' — use the raw YAML value instead "
+                            f"(ingredient default: '{ing.default}').",
                         )
                     )
                 elif ing.default in ("true", "false") and operand.lower() not in ("true", "false"):
                     findings.append(
-                        RuleFinding(
-                            rule="ingredient-condition-value-domain",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="ingredient-condition-value-domain",
                             step_name=step_name,
-                            message=(
-                                f"Condition on inputs.{ing_name} uses '{operand}' "
-                                f"which is not in the boolean value domain "
-                                f"{{'true', 'false'}} (ingredient default: '{ing.default}')."
-                            ),
+                            message=f"Condition on inputs.{ing_name} uses '{operand}' "
+                            f"which is not in the boolean value domain "
+                            f"{{'true', 'false'}} (ingredient default: '{ing.default}').",
                         )
                     )
     return findings
@@ -565,30 +527,25 @@ def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> l
             continue
         if name not in _KNOWN_CONFIG_AUTHORITY_KEYS:
             findings.append(
-                RuleFinding(
-                    rule="config-authority-requires-resolve-source",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="config-authority-requires-resolve-source",
                     step_name="(top-level)",
-                    message=(
-                        f"Ingredient {name!r} declares authority='config' but is not a key "
-                        f"returned by resolve_ingredient_defaults(). "
-                        f"Known config-authoritative keys: "
-                        f"{sorted(_KNOWN_CONFIG_AUTHORITY_KEYS)}. "
-                        "Remove the authority field or use a supported key."
-                    ),
+                    message=f"Ingredient {name!r} declares authority='config' but is not a key "
+                    f"returned by resolve_ingredient_defaults(). "
+                    f"Known config-authoritative keys: "
+                    f"{sorted(_KNOWN_CONFIG_AUTHORITY_KEYS)}. "
+                    "Remove the authority field or use a supported key.",
                 )
             )
         elif getattr(ing, "required", False) and getattr(ing, "default", None) is None:
             findings.append(
-                RuleFinding(
-                    rule="config-authority-requires-resolve-source",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="config-authority-requires-resolve-source",
                     step_name="(top-level)",
-                    message=(
-                        f"Ingredient {name!r} declares authority='config' and required=True "
-                        "with no default — config always supplies the value, so required=True "
-                        "is redundant."
-                    ),
+                    message=f"Ingredient {name!r} declares authority='config' and required=True "
+                    "with no default — config always supplies the value, so required=True "
+                    "is redundant.",
+                    severity=Severity.WARNING,
                 )
             )
     return findings

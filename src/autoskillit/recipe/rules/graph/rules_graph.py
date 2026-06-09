@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _STRUCTURAL_ON_RESULT_TOOLS = {"run_python", "wait_for_ci"}
 
@@ -139,9 +139,8 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                             return
 
                     findings.append(
-                        RuleFinding(
-                            rule="unbounded-cycle",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="unbounded-cycle",
                             step_name=node,
                             message=(
                                 f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
@@ -165,7 +164,6 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                 )
 
                 if has_failure_exit:
-                    severity = Severity.WARNING
                     message = (
                         f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
                         f"The cycle has a conditional exit path but no structural bound on "
@@ -173,7 +171,6 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                         f"to enforce a maximum iteration count."
                     )
                 else:
-                    severity = Severity.ERROR
                     message = (
                         f"Routing cycle detected: {' → '.join(cycle_steps)} → {neighbor}. "
                         f"No step in this cycle has an exit edge — this cycle has no "
@@ -182,11 +179,11 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                         f"outside the cycle."
                     )
                 findings.append(
-                    RuleFinding(
-                        rule="unbounded-cycle",
-                        severity=severity,
+                    make_finding(
+                        rule_name="unbounded-cycle",
                         step_name=node,
                         message=message,
+                        severity=Severity.WARNING if has_failure_exit else Severity.ERROR,
                     )
                 )
         rec_stack.discard(node)
@@ -253,18 +250,15 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                     else cond.when
                 )
                 findings.append(
-                    RuleFinding(
-                        rule="unbounded-cycle",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="unbounded-cycle",
                         step_name=step_name,
-                        message=(
-                            f"Per-branch cycle: {step_name}[{branch_label}] → "
-                            f"{target} reaches wait_for_merge_queue without a "
-                            f"direct guard step. The {branch_label} branch has no "
-                            f"run_python guard at its immediate route target, so "
-                            f"the re-enqueue loop is unbounded. Add a "
-                            f"check_dropped_merge_group_ci_loop guard step."
-                        ),
+                        message=f"Per-branch cycle: {step_name}[{branch_label}] → "
+                        f"{target} reaches wait_for_merge_queue without a "
+                        f"direct guard step. The {branch_label} branch has no "
+                        f"run_python guard at its immediate route target, so "
+                        f"the re-enqueue loop is unbounded. Add a "
+                        f"check_dropped_merge_group_ci_loop guard step.",
                     )
                 )
 

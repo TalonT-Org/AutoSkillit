@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 _DISPATCHABLE_KINDS = frozenset({RecipeKind.FOOD_TRUCK, RecipeKind.STANDARD})
@@ -24,9 +24,8 @@ def _check_all_dispatchable_stops_have_sentinel(ctx: ValidationContext) -> list[
             continue
         if not step.message or "sentinel" not in step.message.lower():
             findings.append(
-                RuleFinding(
-                    rule="all-dispatchable-stops-have-sentinel",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="all-dispatchable-stops-have-sentinel",
                     step_name=step_name,
                     message=(
                         f"Stop step '{step_name}' does not reference L3 sentinel in its message. "
@@ -58,9 +57,8 @@ def _check_food_truck_escalate_route_coverage(
     if not escalate_routes:
         return []
     return [
-        RuleFinding(
-            rule="escalate-route-coverage",
-            severity=Severity.WARNING,
+        make_finding(
+            rule_name="escalate-route-coverage",
             step_name="(top-level)",
             message=(
                 f"Food-truck recipe uses escalate routing in: {', '.join(escalate_routes)}. "

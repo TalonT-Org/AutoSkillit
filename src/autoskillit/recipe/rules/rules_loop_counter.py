@@ -8,7 +8,7 @@ from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe._analysis_graph import _extract_routing_edges
 from autoskillit.recipe._rule_helpers import _build_graph_without_nodes
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _CTX_VAR_RE = _re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
 
@@ -119,9 +119,8 @@ def _check_loop_counter_cross_path_sharing(ctx: ValidationContext) -> list[RuleF
 
         p1, p2 = pair
         findings.append(
-            RuleFinding(
-                rule="loop-counter-cross-path-sharing",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="loop-counter-cross-path-sharing",
                 step_name=step_name,
                 message=(
                     f"Step '{step_name}' uses counter '{counter_var}' but is "
@@ -181,9 +180,8 @@ def _check_loop_guard_before_verify(ctx: ValidationContext) -> list[RuleFinding]
 
         if routes_to_guard:
             findings.append(
-                RuleFinding(
-                    rule="loop-guard-before-verify",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="loop-guard-before-verify",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' increments the loop counter before the "

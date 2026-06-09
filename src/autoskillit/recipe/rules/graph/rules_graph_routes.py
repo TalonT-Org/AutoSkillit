@@ -5,7 +5,7 @@ from __future__ import annotations
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import _CONTEXT_REF_RE
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -27,15 +27,12 @@ def _check_on_result_missing_failure_route(ctx: ValidationContext) -> list[RuleF
         if not (is_tool_invocation and step.on_result is not None and step.on_failure is None):
             continue
         findings.append(
-            RuleFinding(
-                rule="on-result-missing-failure-route",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="on-result-missing-failure-route",
                 step_name=step_name,
-                message=(
-                    f"Step '{step_name}' uses on_result but has no on_failure. "
-                    f"If the tool call fails before a verdict is returned, the "
-                    f"orchestrator has no route. Add on_failure: <target>."
-                ),
+                message=f"Step '{step_name}' uses on_result but has no on_failure. "
+                f"If the tool call fails before a verdict is returned, the "
+                f"orchestrator has no route. Add on_failure: <target>.",
             )
         )
     return findings
@@ -58,15 +55,12 @@ def _check_tool_step_missing_failure_route(ctx: ValidationContext) -> list[RuleF
         if not (is_tool_invocation and step.on_failure is None):
             continue
         findings.append(
-            RuleFinding(
-                rule="tool-step-missing-failure-route",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="tool-step-missing-failure-route",
                 step_name=step_name,
-                message=(
-                    f"Step '{step_name}' invokes a tool/python callable but has no "
-                    f"on_failure route. Add on_failure: <target> (use 'escalate' to "
-                    f"abort the recipe on failure)."
-                ),
+                message=f"Step '{step_name}' invokes a tool/python callable but has no "
+                f"on_failure route. Add on_failure: <target> (use 'escalate' to "
+                f"abort the recipe on failure).",
             )
         )
     return findings
@@ -90,14 +84,11 @@ def _check_tool_step_missing_success_route(ctx: ValidationContext) -> list[RuleF
         if not (is_tool_invocation and not has_success_route):
             continue
         findings.append(
-            RuleFinding(
-                rule="tool-step-missing-success-route",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="tool-step-missing-success-route",
                 step_name=step_name,
-                message=(
-                    f"Step '{step_name}' invokes a tool/python callable but has no "
-                    f"success route (on_success or on_result). Add on_success: <target>."
-                ),
+                message=f"Step '{step_name}' invokes a tool/python callable but has no "
+                f"success route (on_success or on_result). Add on_success: <target>.",
             )
         )
     return findings
@@ -138,15 +129,12 @@ def _check_push_before_audit(ctx: ValidationContext) -> list[RuleFinding]:
 
     violations = sorted(push_steps & reachable_without_audit)
     return [
-        RuleFinding(
-            rule="push-before-audit",
-            severity=Severity.WARNING,
+        make_finding(
+            rule_name="push-before-audit",
             step_name=name,
-            message=(
-                f"'{name}' uses push_to_remote but is reachable from the entry "
-                "point without passing through an audit-impl skill step. "
-                "Ensure audit-impl runs before any push_to_remote."
-            ),
+            message=f"'{name}' uses push_to_remote but is reachable from the entry "
+            "point without passing through an audit-impl skill step. "
+            "Ensure audit-impl runs before any push_to_remote.",
         )
         for name in violations
     ]
@@ -168,16 +156,13 @@ def _check_rate_limit_route_missing(ctx: ValidationContext) -> list[RuleFinding]
             continue
         if step.on_context_limit is not None and step.on_rate_limit is None:
             findings.append(
-                RuleFinding(
-                    rule="rate-limit-route-missing",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="rate-limit-route-missing",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' defines on_context_limit but not "
-                        f"on_rate_limit. Transient 429 rate limits will fall back "
-                        f"to on_context_limit routing. Add on_rate_limit: <target> "
-                        f"to handle rate limits explicitly."
-                    ),
+                    message=f"Step '{step_name}' defines on_context_limit but not "
+                    f"on_rate_limit. Transient 429 rate limits will fall back "
+                    f"to on_context_limit routing. Add on_rate_limit: <target> "
+                    f"to handle rate limits explicitly.",
                 )
             )
     return findings
@@ -207,18 +192,15 @@ def _check_clone_root_as_worktree(ctx: ValidationContext) -> list[RuleFinding]:
                     cap_expr = captures.get(var_name, "")
                     if "result.clone_path" in cap_expr:
                         findings.append(
-                            RuleFinding(
-                                rule="clone-root-as-worktree",
-                                severity=Severity.ERROR,
+                            make_finding(
+                                rule_name="clone-root-as-worktree",
                                 step_name=step_name,
-                                message=(
-                                    f"Step '{step_name}' passes worktree_path via "
-                                    f"'context.{var_name}', which was captured from "
-                                    f"result.clone_path. clone_path is the root of the "
-                                    f"cloned repository, not a git worktree. "
-                                    f"Capture worktree_path from result.worktree_path "
-                                    f"(e.g., from an implement-worktree step's capture block)."
-                                ),
+                                message=f"Step '{step_name}' passes worktree_path via "
+                                f"'context.{var_name}', which was captured from "
+                                f"result.clone_path. clone_path is the root of the "
+                                f"cloned repository, not a git worktree. "
+                                f"Capture worktree_path from result.worktree_path "
+                                f"(e.g., from an implement-worktree step's capture block).",
                             )
                         )
 

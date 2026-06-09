@@ -14,7 +14,7 @@ from autoskillit.recipe.contracts import (
     get_callable_contract,
     load_bundled_manifest,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -76,14 +76,11 @@ def _check_missing_callable_input(ctx: ValidationContext) -> list[RuleFinding]:
         missing = required_inputs - provided_args
         for arg_name in sorted(missing):
             findings.append(
-                RuleFinding(
-                    rule="missing-callable-input",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="missing-callable-input",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' calls '{callable_path}' but does not pass "
-                        f"required input '{arg_name}'. Add it to the step's args block."
-                    ),
+                    message=f"Step '{step_name}' calls '{callable_path}' but does not pass "
+                    f"required input '{arg_name}'. Add it to the step's args block.",
                 )
             )
     return findings
@@ -117,14 +114,11 @@ def _check_callable_signature_mismatch(ctx: ValidationContext) -> list[RuleFindi
         invalid = provided_args - valid_params
         for arg_name in sorted(invalid):
             findings.append(
-                RuleFinding(
-                    rule="callable-signature-mismatch",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="callable-signature-mismatch",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' passes arg '{arg_name}' to '{callable_path}' "
-                        f"but the callable does not accept that parameter."
-                    ),
+                    message=f"Step '{step_name}' passes arg '{arg_name}' to '{callable_path}' "
+                    f"but the callable does not accept that parameter.",
                 )
             )
     return findings
@@ -168,15 +162,14 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
                     if ref in produced_context or ref in recipe_inputs:
                         continue
                     findings.append(
-                        RuleFinding(
-                            rule="downstream-context-gap",
-                            severity=Severity.WARNING,
+                        make_finding(
+                            rule_name="downstream-context-gap",
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' references ${{{{ context.{ref}}}}} in its "
                                 f"skill_command but '{ref}' is not produced by any prior step's "
-                                f"capture block and is not a recipe input."
-                                " The variable is unreachable."
+                                f"capture block and is not a recipe input. "
+                                "The variable is unreachable."
                             ),
                         )
                     )
@@ -224,16 +217,13 @@ def _check_nullable_optional_context_ref(ctx: ValidationContext) -> list[RuleFin
             for ref in _CONTEXT_REF_RE.findall(arg_val):
                 if ref in optional_refs:
                     findings.append(
-                        RuleFinding(
-                            rule="nullable-optional-context-ref",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="nullable-optional-context-ref",
                             step_name=step_name,
-                            message=(
-                                f"Step '{step_name}' passes optional context ref '{ref}' "
-                                f"to non-nullable input '{inp_name}' of callable "
-                                f"'{callable_path}'. Add null coercion in the callable "
-                                f"or remove from optional_context_refs."
-                            ),
+                            message=f"Step '{step_name}' passes optional context ref '{ref}' "
+                            f"to non-nullable input '{inp_name}' of callable "
+                            f"'{callable_path}'. Add null coercion in the callable "
+                            f"or remove from optional_context_refs.",
                         )
                     )
     return findings
@@ -276,15 +266,12 @@ def _check_work_dir_arg_misplacement(ctx: ValidationContext) -> list[RuleFinding
             continue
         if "work_dir" not in sig.parameters:
             findings.append(
-                RuleFinding(
-                    rule="work-dir-arg-misplacement",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="work-dir-arg-misplacement",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' has work_dir inside args but "
-                        f"'{callable_path}' does not accept a work_dir parameter. "
-                        f"Move work_dir to the top-level with: block for path anchoring."
-                    ),
+                    message=f"Step '{step_name}' has work_dir inside args but "
+                    f"'{callable_path}' does not accept a work_dir parameter. "
+                    f"Move work_dir to the top-level with: block for path anchoring.",
                 )
             )
     return findings
@@ -329,19 +316,16 @@ def _check_unrouted_callable_verdict(ctx: ValidationContext) -> list[RuleFinding
                 continue
             for v in unrouted:
                 findings.append(
-                    RuleFinding(
-                        rule="unrouted-callable-verdict",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="unrouted-callable-verdict",
                         step_name=step_name,
-                        message=(
-                            f"Step '{step_name}' has callable "
-                            f"'{callable_path}' which declares output "
-                            f"'{output.name}' with allowed_values including "
-                            f"{v!r}, but the on_result block has no condition "
-                            f"explicitly routing that value. Add a per-value "
-                            f"when: \"${{{{ result.{output.name} }}}} == '{v}'\" "
-                            f"condition or remove the value from allowed_values."
-                        ),
+                        message=f"Step '{step_name}' has callable "
+                        f"'{callable_path}' which declares output "
+                        f"'{output.name}' with allowed_values including "
+                        f"{v!r}, but the on_result block has no condition "
+                        f"explicitly routing that value. Add a per-value "
+                        f"when: \"${{{{ result.{output.name} }}}} == '{v}'\" "
+                        f"condition or remove the value from allowed_values.",
                     )
                 )
     return findings
@@ -376,17 +360,14 @@ def _check_callable_verdict_requires_on_result(ctx: ValidationContext) -> list[R
             continue
         for output in verdict_outputs:
             findings.append(
-                RuleFinding(
-                    rule="callable-verdict-requires-on-result",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="callable-verdict-requires-on-result",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' calls '{callable_path}' which declares "
-                        f"output '{output.name}' with allowed_values "
-                        f"{output.allowed_values!r}, but the step is missing "
-                        f"on_result routing. Replace with an on_result "
-                        f"block that dispatches on each allowed value."
-                    ),
+                    message=f"Step '{step_name}' calls '{callable_path}' which declares "
+                    f"output '{output.name}' with allowed_values "
+                    f"{output.allowed_values!r}, but the step is missing "
+                    f"on_result routing. Replace with an on_result "
+                    f"block that dispatches on each allowed value.",
                 )
             )
     return findings

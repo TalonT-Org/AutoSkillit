@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 
@@ -68,9 +68,8 @@ def _check_route_gate_shared_stop(ctx: ValidationContext) -> list[RuleFinding]:
             shared = fallback_stops & primary_stops
             for stop_name in shared:
                 findings.append(
-                    RuleFinding(
-                        rule="route-gate-shared-stop",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="route-gate-shared-stop",
                         step_name=step_name,
                         message=(
                             f"Route gate '{step_name}' fallback path and primary path "

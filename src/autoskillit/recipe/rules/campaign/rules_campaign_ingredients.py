@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _load_dispatch_target
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeIngredient, RecipeKind
 
 if TYPE_CHECKING:
@@ -51,15 +51,12 @@ def _check_dispatch_ingredients_keys_in_target_schema(ctx: ValidationContext) ->
         for key in d.ingredients:
             if key not in target.ingredients:
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-ingredients-keys-in-target-schema",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-ingredients-keys-in-target-schema",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} passes ingredient {key!r} to recipe "
-                            f"{d.recipe!r}, but that recipe does not declare ingredient {key!r}. "
-                            f"Known ingredients: {sorted(target.ingredients)}"
-                        ),
+                        message=f"Dispatch {d.name!r} passes ingredient {key!r} to recipe "
+                        f"{d.recipe!r}, but that recipe does not declare ingredient {key!r}. "
+                        f"Known ingredients: {sorted(target.ingredients)}",
                     )
                 )
     return findings
@@ -93,16 +90,13 @@ def _check_campaign_dangling_ingredient(ctx: ValidationContext) -> list[RuleFind
                 continue
             if ing_name in target.ingredients and ing_name not in forwarded_keys:
                 findings.append(
-                    RuleFinding(
-                        rule="campaign-dangling-ingredient",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="campaign-dangling-ingredient",
                         step_name="(top-level)",
-                        message=(
-                            f"Campaign ingredient {ing_name!r} is declared by target "
-                            f"recipe {d.recipe!r} (dispatch {d.name!r}) but is not "
-                            f"forwarded in the dispatch's ingredients block. The sub-recipe "
-                            f"will use its own default instead of the campaign-level value."
-                        ),
+                        message=f"Campaign ingredient {ing_name!r} is declared by target "
+                        f"recipe {d.recipe!r} (dispatch {d.name!r}) but is not "
+                        f"forwarded in the dispatch's ingredients block. The sub-recipe "
+                        f"will use its own default instead of the campaign-level value.",
                     )
                 )
     return findings
@@ -133,16 +127,13 @@ def _check_dispatch_required_ingredient_provided(
         for key, ing in target.ingredients.items():
             if ing.required and ing.default is None and key not in effective_ingredients:
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-required-ingredient-provided",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-required-ingredient-provided",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} targets recipe {d.recipe!r} which "
-                            f"declares ingredient {key!r} as required (no default), "
-                            f"but the dispatch does not provide it. "
-                            f"Provided: {sorted(d.ingredients)}."
-                        ),
+                        message=f"Dispatch {d.name!r} targets recipe {d.recipe!r} which "
+                        f"declares ingredient {key!r} as required (no default), "
+                        f"but the dispatch does not provide it. "
+                        f"Provided: {sorted(d.ingredients)}.",
                     )
                 )
     return findings
@@ -161,15 +152,12 @@ def _check_dispatch_ingredient_values_are_strings(ctx: ValidationContext) -> lis
         for key, val in d.ingredients.items():
             if not isinstance(val, str):
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-ingredient-values-are-strings",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-ingredient-values-are-strings",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} ingredient {key!r} has non-string value "
-                            f"{val!r} ({type(val).__name__}). YAML auto-coercion detected — "
-                            "quote the value in YAML."
-                        ),
+                        message=f"Dispatch {d.name!r} ingredient {key!r} has non-string value "
+                        f"{val!r} ({type(val).__name__}). YAML auto-coercion detected — "
+                        "quote the value in YAML.",
                     )
                 )
     return findings

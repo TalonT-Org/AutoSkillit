@@ -19,7 +19,7 @@ from autoskillit.core import SKILL_TOOLS, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import push_reachable
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -113,10 +113,9 @@ def _check_conditional_skill_ungated_push(ctx: ValidationContext) -> list[RuleFi
         # The step is NOT properly gated — fire an error.
         if not declared:
             findings.append(
-                RuleFinding(
-                    rule="conditional-skill-ungated-push",
+                make_finding(
+                    rule_name="conditional-skill-ungated-push",
                     step_name=step_name,
-                    severity=Severity.ERROR,
                     message=(
                         f"Step '{step_name}' invokes skill '{skill}' "
                         f"(write_behavior=conditional) but the skill declares no "
@@ -128,10 +127,9 @@ def _check_conditional_skill_ungated_push(ctx: ValidationContext) -> list[RuleFi
             )
         else:
             findings.append(
-                RuleFinding(
-                    rule="conditional-skill-ungated-push",
+                make_finding(
+                    rule_name="conditional-skill-ungated-push",
                     step_name=step_name,
-                    severity=Severity.ERROR,
                     message=(
                         f"Step '{step_name}' (skill '{skill}', write_behavior=conditional) "
                         f"reaches push step '{push_step}' without an on_result: gate "

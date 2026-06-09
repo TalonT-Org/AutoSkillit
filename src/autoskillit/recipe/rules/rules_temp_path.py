@@ -13,7 +13,7 @@ import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
 
 _BARE_TEMP_RE = re.compile(r"\{\{AUTOSKILLIT_TEMP\}\}/")
@@ -65,9 +65,8 @@ def _check_non_unique_output_path(ctx: ValidationContext) -> list[RuleFinding]:
                     if _is_dry_walkthrough_step(step):
                         continue
                     findings.append(
-                        RuleFinding(
-                            rule="non-unique-output-path",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="non-unique-output-path",
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' uses bare '{{{{AUTOSKILLIT_TEMP}}}}' "
@@ -80,9 +79,8 @@ def _check_non_unique_output_path(ctx: ValidationContext) -> list[RuleFinding]:
             else:
                 if _BARE_TEMP_RE.search(val) and not _CONTEXT_SCOPED_RE.search(val):
                     findings.append(
-                        RuleFinding(
-                            rule="non-unique-output-path",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="non-unique-output-path",
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' uses a bare "

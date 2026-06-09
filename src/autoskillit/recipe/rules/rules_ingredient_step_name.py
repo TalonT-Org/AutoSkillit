@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _DESCRIPTIVE_SUFFIXES = frozenset({"_enabled", "_mode", "_level", "_flag"})
 
@@ -40,9 +40,8 @@ def _check_ingredient_step_name_asymmetry(ctx: ValidationContext) -> list[RuleFi
         if any(ing_name.endswith(suffix) for suffix in _DESCRIPTIVE_SUFFIXES):
             continue
         findings.append(
-            RuleFinding(
-                rule="ingredient-step-name-asymmetry",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="ingredient-step-name-asymmetry",
                 step_name=step_name,
                 message=(
                     f"Ingredient '{ing_name}' gates only step '{step_name}' "

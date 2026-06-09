@@ -7,7 +7,7 @@ import regex as re
 from autoskillit.core import Severity, get_logger, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import get_tool_output_contract, load_bundled_manifest
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -114,17 +114,14 @@ def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
 
         if reachable_without_push:
             findings.append(
-                RuleFinding(
-                    rule="merge-base-unpublished",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="merge-base-unpublished",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' uses context.{context_var} as base_branch "
-                        f"for merge_worktree, but no push_to_remote step that pushes "
-                        f"context.{context_var} precedes it on all reachable paths. "
-                        f"A locally-created branch must be published (push_to_remote) "
-                        f"before merge_worktree can rebase against it."
-                    ),
+                    message=f"Step '{step_name}' uses context.{context_var} as base_branch "
+                    f"for merge_worktree, but no push_to_remote step that pushes "
+                    f"context.{context_var} precedes it on all reachable paths. "
+                    f"A locally-created branch must be published (push_to_remote) "
+                    f"before merge_worktree can rebase against it.",
                 )
             )
 
@@ -172,17 +169,14 @@ def _check_on_result_missing_tool_output_value(ctx: ValidationContext) -> list[R
         if not unrouted_recoverable:
             continue
         findings.append(
-            RuleFinding(
-                rule="on-result-missing-tool-output-value",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="on-result-missing-tool-output-value",
                 step_name=step_name,
-                message=(
-                    f"Step '{step_name}' (tool: {step.tool}) has recoverable "
-                    f"output values {sorted(unrouted_recoverable)} not explicitly "
-                    f"routed in on_result. The catch-all routes to terminal step "
-                    f"'{catchall_route}' (action: stop), silently terminating on "
-                    f"these recoverable outcomes."
-                ),
+                message=f"Step '{step_name}' (tool: {step.tool}) has recoverable "
+                f"output values {sorted(unrouted_recoverable)} not explicitly "
+                f"routed in on_result. The catch-all routes to terminal step "
+                f"'{catchall_route}' (action: stop), silently terminating on "
+                f"these recoverable outcomes.",
             )
         )
     return findings
@@ -233,15 +227,12 @@ def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]
             if captured_outputs:
                 for output_name in captured_outputs:
                     findings.append(
-                        RuleFinding(
-                            rule="skill-result-routing-gap",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="skill-result-routing-gap",
                             step_name=step_name,
-                            message=(
-                                f"Step '{step_name}' captures '{output_name}' but has no "
-                                f"on_result conditions to route its allowed values "
-                                f"{outputs_with_allowed_values[output_name]}."
-                            ),
+                            message=f"Step '{step_name}' captures '{output_name}' but has no "
+                            f"on_result conditions to route its allowed values "
+                            f"{outputs_with_allowed_values[output_name]}.",
                         )
                     )
             continue
@@ -266,15 +257,12 @@ def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]
             if is_terminal:
                 continue
             findings.append(
-                RuleFinding(
-                    rule="skill-result-routing-gap",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="skill-result-routing-gap",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' has allowed value(s) {unrouted} of "
-                        f"'{output_name}' not explicitly routed in on_result. "
-                        f"Catch-all routes to non-terminal step '{catchall_route}'."
-                    ),
+                    message=f"Step '{step_name}' has allowed value(s) {unrouted} of "
+                    f"'{output_name}' not explicitly routed in on_result. "
+                    f"Catch-all routes to non-terminal step '{catchall_route}'.",
                 )
             )
     return findings

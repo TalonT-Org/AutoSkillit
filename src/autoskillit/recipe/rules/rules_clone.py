@@ -30,7 +30,7 @@ from autoskillit.core import (
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable
 from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import _TERMINAL_TARGETS
 
 logger = get_logger(__name__)
@@ -53,9 +53,8 @@ def _check_plan_parts_captured(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if "plan_parts" not in step.capture_list:
             findings.append(
-                RuleFinding(
-                    rule="multipart-plan-parts-not-captured",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="multipart-plan-parts-not-captured",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' calls a multi-part skill but does not capture "
@@ -85,9 +84,8 @@ def _check_skill_command_prefix(ctx: ValidationContext) -> list[RuleFinding]:
             continue  # absent key — fail-open
         if not skill_cmd.strip().startswith(SKILL_COMMAND_PREFIX):
             findings.append(
-                RuleFinding(
-                    rule="skill-command-missing-prefix",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skill-command-missing-prefix",
                     step_name=step_name,
                     message=(
                         f"skill_command {skill_cmd!r} does not start with '/'. "
@@ -108,7 +106,7 @@ def _check_skill_command_prefix(ctx: ValidationContext) -> list[RuleFinding]:
 def _check_push_missing_explicit_remote_url(ctx: ValidationContext) -> list[RuleFinding]:
     recipe = ctx.recipe
     return [
-        RuleFinding("push-missing-explicit-remote-url", Severity.WARNING, n, "missing remote_url")
+        make_finding("push-missing-explicit-remote-url", n, "missing remote_url")
         for n, step in recipe.steps.items()
         if step.tool == "push_to_remote" and "remote_url" not in (step.with_args or {})
     ]
@@ -175,7 +173,7 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
             continue
 
         if strategy == "clone_local":
-            severity = Severity.ERROR
+            finding_severity = Severity.ERROR
             explanation = (
                 f'clone step "{step_name}" uses strategy="clone_local" and captures '
                 f"remote_url from result. Under clone_local, remote_url is always "
@@ -184,7 +182,7 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
                 f"network clone is intended."
             )
         elif _TEMPLATE_RE.search(strategy):
-            severity = Severity.WARNING
+            finding_severity = Severity.WARNING
             explanation = (
                 f'clone step "{step_name}" uses a templated strategy ({strategy!r}) '
                 f"that cannot be statically determined. If the strategy resolves to "
@@ -192,7 +190,7 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
                 f"consumers of context.remote_url will receive an empty string."
             )
         else:
-            severity = Severity.WARNING
+            finding_severity = Severity.WARNING
             explanation = (
                 f'clone step "{step_name}" uses an unrecognised strategy ({strategy!r}) '
                 f"and captures remote_url. If this strategy produces an empty remote_url, "
@@ -202,11 +200,11 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
             )
 
         findings.append(
-            RuleFinding(
-                rule="clone-local-strategy-with-remote-url-capture",
-                severity=severity,
+            make_finding(
+                rule_name="clone-local-strategy-with-remote-url-capture",
                 step_name=step_name,
                 message=explanation,
+                severity=finding_severity,
             )
         )
 
@@ -295,9 +293,8 @@ def _check_clone_terminal_requires_registration(ctx: ValidationContext) -> list[
         step = recipe.steps[sn]
         if step.action == "stop":
             findings.append(
-                RuleFinding(
-                    rule="clone-terminal-requires-registration",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="clone-terminal-requires-registration",
                     step_name=clone_step_name,
                     message=(
                         f"Clone step '{clone_step_name}' has a path to terminal step '{sn}' "

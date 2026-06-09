@@ -7,7 +7,7 @@ import regex as re
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import cmd_keyword_pattern
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # ---------------------------------------------------------------------------
 # Detection patterns
@@ -77,9 +77,8 @@ def _check_inline_script_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
 
         if _CONTROL_FLOW_RE.search(stripped):
             findings.append(
-                RuleFinding(
-                    rule="inline-script-in-cmd",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="inline-script-in-cmd",
                     step_name=name,
                     message=(
                         f"Step '{name}' contains shell control flow in cmd. "
@@ -91,9 +90,8 @@ def _check_inline_script_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
 
         if _BASH_BUILTINS_RE.search(stripped):
             findings.append(
-                RuleFinding(
-                    rule="inline-script-in-cmd",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="inline-script-in-cmd",
                     step_name=name,
                     message=(
                         f"Step '{name}' contains bash builtins "
@@ -108,9 +106,8 @@ def _check_inline_script_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
         chain_count = len(_AND_CHAIN_RE.findall(cmd))
         if chain_count > 3 and var_count >= 1:
             findings.append(
-                RuleFinding(
-                    rule="inline-script-in-cmd",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="inline-script-in-cmd",
                     step_name=name,
                     message=(
                         f"Step '{name}' has {chain_count} &&-chains with "
@@ -124,15 +121,15 @@ def _check_inline_script_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
         logical_lines = _count_logical_lines(cmd)
         if logical_lines > 3 and var_count > 2:
             findings.append(
-                RuleFinding(
-                    rule="inline-script-in-cmd",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="inline-script-in-cmd",
                     step_name=name,
                     message=(
                         f"Step '{name}' has {logical_lines} logical lines and "
                         f"{var_count} variable assignments. "
                         "Consider extracting to a script."
                     ),
+                    severity=Severity.WARNING,
                 )
             )
 
@@ -157,9 +154,8 @@ def _check_inline_python_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
 
         if _PYTHON3_C_RE.search(cmd):
             findings.append(
-                RuleFinding(
-                    rule="inline-python-in-cmd",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="inline-python-in-cmd",
                     step_name=name,
                     message=(
                         f"Step '{name}' uses python3 -c in cmd. Convert to a run_python callable."

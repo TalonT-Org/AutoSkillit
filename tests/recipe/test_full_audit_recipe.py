@@ -141,11 +141,7 @@ def test_full_audit_semantic_rules_no_errors() -> None:
     )
     ctx = make_validation_context(recipe, available_skills=known_skills)
     findings = run_semantic_rules(ctx)
-    errors = [
-        f
-        for f in findings
-        if f.severity == Severity.ERROR and f.rule != "run-skill-missing-context-limit"
-    ]
+    errors = [f for f in findings if f.severity == Severity.ERROR]
     assert not errors, f"Semantic rule errors: {[f.rule + ': ' + f.message for f in errors]}"
 
 

@@ -7,7 +7,7 @@ import regex as re
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN, count_skill_args
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
 
 logger = get_logger(__name__)
@@ -121,9 +121,8 @@ def _check_merge_test_gate_context_not_forwarded(
 
             if not capture_ok:
                 findings.append(
-                    RuleFinding(
-                        rule="merge-test-gate-context-not-forwarded",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="merge-test-gate-context-not-forwarded",
                         step_name=step_name,
                         message=(
                             f"merge_worktree step '{step_name}' routes test_gate/"
@@ -139,9 +138,8 @@ def _check_merge_test_gate_context_not_forwarded(
             cmd = rf_step.with_args.get("skill_command", "")
             if count_skill_args(cmd) <= 3:
                 findings.append(
-                    RuleFinding(
-                        rule="merge-test-gate-context-not-forwarded",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="merge-test-gate-context-not-forwarded",
                         step_name=rf_step_name,
                         message=(
                             f"Step '{rf_step_name}' invokes resolve-failures with only "
@@ -204,9 +202,8 @@ def _check_merge_failed_step_not_captured(ctx: ValidationContext) -> list[RuleFi
                 continue
             dg_step_name, _ = result
             findings.append(
-                RuleFinding(
-                    rule="merge-failed-step-not-captured",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="merge-failed-step-not-captured",
                     step_name=step_name,
                     message=(
                         f"merge_worktree step '{step_name}' routes on result.failed_step "

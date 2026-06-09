@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
 
 _COMMIT_GUARD_CALLABLE = "autoskillit.recipe._cmd_rpc.commit_guard"
@@ -50,9 +50,8 @@ def _check_commit_guard_regression_route(ctx: ValidationContext) -> list[RuleFin
         if _has_regression_route(step):
             continue
         findings.append(
-            RuleFinding(
-                rule="commit-guard-regression-route-missing",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="commit-guard-regression-route-missing",
                 step_name=step_name,
                 message=(
                     f"Step '{step_name}' calls commit_guard with base_branch but "

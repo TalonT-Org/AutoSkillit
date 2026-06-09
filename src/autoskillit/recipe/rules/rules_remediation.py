@@ -5,7 +5,7 @@ from __future__ import annotations
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import StepResultRoute
 
 TERMINAL_SENTINELS = frozenset(("done", "escalate"))
@@ -66,9 +66,8 @@ def _check_audit_impl_remediation_route(ctx: ValidationContext) -> list[RuleFind
             continue
         if not _has_non_terminal_non_go_route(ctx, step.on_result):
             findings.append(
-                RuleFinding(
-                    rule="audit-impl-remediation-route",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="audit-impl-remediation-route",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' captures 'remediation_path' from audit-impl "

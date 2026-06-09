@@ -74,6 +74,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_pyright_suppression_allowlist.py` | REQ-PYRIGHT-001: pyright/type-ignore suppression allowlist + count budget |
 | `test_python_no_hardcoded_temp.py` | Architectural invariant: no literal `.autoskillit/temp` outside the whitelist |
 | `test_recipe_rule_registration.py` | REQ-RECIPE-001: every recipe/rules_*.py file must be imported by recipe/__init__.py |
+| `test_rule_severity_consistency.py` | AST guards: rule functions must use make_finding()/make_block_finding() and RuleFinding severity must match @semantic_rule decorator severity |
 | `test_regex_guards.py` | Arch guard: keyword regexes in cmd-scanning rules must use path-safe lookbehind guards |
 | `test_regex_import.py` | Structural guard: src/ must use `import regex as re`, not bare `import re` (hooks/ exempt) |
 | `test_registry.py` | Symbolic rule registry tests (RuleDescriptor, RULES, Violation) |

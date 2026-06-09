@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # ---------------------------------------------------------------------------
 # ci-failure-missing-conflict-gate helpers
@@ -95,17 +95,14 @@ def _check_ci_failure_conflict_gate(ctx: ValidationContext) -> list[RuleFinding]
         unguarded = reachable & code_resolution_steps
         if unguarded:
             findings.append(
-                RuleFinding(
-                    rule="ci-failure-missing-conflict-gate",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="ci-failure-missing-conflict-gate",
                     step_name=name,
-                    message=(
-                        f"Step '{name}' routes CI failures to code-level resolution "
-                        f"({', '.join(sorted(unguarded))}) without a stale-base detection gate. "
-                        "Insert a run_cmd step using 'git merge-base --is-ancestor' (or a "
-                        "resolve-merge-conflicts skill step) before any resolve-failures "
-                        "invocation on the CI failure path."
-                    ),
+                    message=f"Step '{name}' routes CI failures to code-level resolution "
+                    f"({', '.join(sorted(unguarded))}) without a stale-base detection gate. "
+                    "Insert a run_cmd step using 'git merge-base --is-ancestor' (or a "
+                    "resolve-merge-conflicts skill step) before any resolve-failures "
+                    "invocation on the CI failure path.",
                 )
             )
     return findings
@@ -142,17 +139,14 @@ def _check_mergeability_conflicting_direct(ctx: ValidationContext) -> list[RuleF
             unguarded_gates = reachable & exit_code_gates
             if unguarded_gates:
                 findings.append(
-                    RuleFinding(
-                        rule="mergeability-conflicting-direct-to-resolution",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="mergeability-conflicting-direct-to-resolution",
                         step_name=name,
-                        message=(
-                            f"Step '{name}' routes CONFLICTING to '{cond.route}' which "
-                            f"reaches exit-code gate(s) "
-                            f"({', '.join(sorted(unguarded_gates))}) "
-                            f"before conflict resolution. GitHub's CONFLICTING status is "
-                            f"authoritative — route directly to resolve-merge-conflicts."
-                        ),
+                        message=f"Step '{name}' routes CONFLICTING to '{cond.route}' which "
+                        f"reaches exit-code gate(s) "
+                        f"({', '.join(sorted(unguarded_gates))}) "
+                        f"before conflict resolution. GitHub's CONFLICTING status is "
+                        f"authoritative — route directly to resolve-merge-conflicts.",
                     )
                 )
     return findings
@@ -190,15 +184,12 @@ def _check_ci_conflict_path_missing_auto_trigger(ctx: ValidationContext) -> list
         auto_trigger = (step.with_args or {}).get("auto_trigger", "")
         if str(auto_trigger).lower() != "true":
             findings.append(
-                RuleFinding(
-                    rule="ci-conflict-path-missing-auto-trigger",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="ci-conflict-path-missing-auto-trigger",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' is on a conflict-resolution path but lacks "
-                        f"auto_trigger: 'true' in with_args. After a conflict fix push, "
-                        f"CI may not have fired yet — auto_trigger is mandatory here."
-                    ),
+                    message=f"Step '{step_name}' is on a conflict-resolution path but lacks "
+                    f"auto_trigger: 'true' in with_args. After a conflict fix push, "
+                    f"CI may not have fired yet — auto_trigger is mandatory here.",
                 )
             )
     return findings
@@ -317,16 +308,13 @@ def _check_conflict_escalation_missing_ci_diagnosis(ctx: ValidationContext) -> l
             }
             if unguarded_terminals:
                 findings.append(
-                    RuleFinding(
-                        rule="conflict-escalation-missing-ci-diagnosis",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="conflict-escalation-missing-ci-diagnosis",
                         step_name=step_name,
-                        message=(
-                            f"Step '{step_name}' routes conflict escalation/failure to "
-                            f"terminal(s) ({', '.join(sorted(unguarded_terminals))}) "
-                            f"without passing through a diagnose-ci step. "
-                            f"CI log context is lost on escalation."
-                        ),
+                        message=f"Step '{step_name}' routes conflict escalation/failure to "
+                        f"terminal(s) ({', '.join(sorted(unguarded_terminals))}) "
+                        f"without passing through a diagnose-ci step. "
+                        f"CI log context is lost on escalation.",
                     )
                 )
                 break

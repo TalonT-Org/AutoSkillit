@@ -29,28 +29,45 @@ _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 
 
 _KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {
-    "research": {"audit-impl-remediation-route", "run-skill-missing-context-limit"},
+    "research": {"audit-impl-remediation-route"},
     "agent-eval": {
         "all-dispatchable-stops-have-sentinel",
         "dead-output",
-        "run-skill-missing-context-limit",
     },
     "skill-eval": {
         "all-dispatchable-stops-have-sentinel",
         "dead-output",
-        "run-skill-missing-context-limit",
     },
-    "bem-wrapper": {"run-skill-missing-context-limit"},
-    "full-audit": {"run-skill-missing-context-limit"},
-    "implementation": {"run-skill-missing-context-limit"},
-    "implementation-groups": {"run-skill-missing-context-limit"},
-    "merge-prs": {"run-skill-missing-context-limit"},
-    "remediation": {"run-skill-missing-context-limit"},
-    "research-design": {"run-skill-missing-context-limit"},
-    "research-implement": {"run-skill-missing-context-limit"},
-    "research-review": {"run-skill-missing-context-limit"},
-    "smoke-test": {"run-skill-missing-context-limit"},
 }
+
+_RECIPES_WITH_OTHER_ERROR_RULES: frozenset[str] = frozenset(
+    k for k, v in _KNOWN_NON_CONFORMING_RULES.items() if v
+)
+
+_DISPATCH_GATE_STEMS = [s for s in _RECIPE_STEMS if s not in _RECIPES_WITH_OTHER_ERROR_RULES]
+
+
+@pytest.mark.parametrize("recipe_name", _DISPATCH_GATE_STEMS)
+def test_bundled_recipe_dispatch_gate_no_exemptions(recipe_name: str) -> None:
+    """Mirror the fleet/_api.py:365 hard gate — no per-rule allowlist.
+
+    Recipes with pre-existing ERROR-severity findings from OTHER rules
+    are excluded from this test. As those rules are fixed, recipes are
+    automatically included here.
+
+    If this test fails, fleet dispatch is broken for this recipe.
+    """
+    result = load_and_validate(recipe_name, project_dir=_PROJECT_ROOT)
+    assert "error" not in result, f"Recipe '{recipe_name}' failed to load"
+    assert result.get("valid") is True, (
+        f"Recipe '{recipe_name}' would be REJECTED by fleet dispatch gate. "
+        f"Error findings: "
+        + "; ".join(
+            f"[{s.get('rule')}] {s.get('message', '')[:80]}"
+            for s in result.get("suggestions", [])
+            if s.get("severity") == "error"
+        )
+    )
 
 
 @pytest.mark.parametrize("recipe_name", _RECIPE_STEMS)

@@ -17,7 +17,7 @@ from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe._skill_placeholder_parser import extract_python_blocks
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 if TYPE_CHECKING:
     from autoskillit.recipe._analysis import ValidationContext
@@ -149,9 +149,8 @@ def _check_pseudocode_callable_divergence(ctx: ValidationContext) -> list[RuleFi
                 # Check if ALL members are inlined as literals without the constant name
                 if members and all(_member_inlined_in_block(m, all_blocks) for m in members):
                     findings.append(
-                        RuleFinding(
-                            rule="pseudocode-callable-divergence",
-                            severity=Severity.WARNING,
+                        make_finding(
+                            rule_name="pseudocode-callable-divergence",
                             step_name=step_name,
                             message=(
                                 f"step '{step_name}': SKILL.md for '{skill_name}' inlines "

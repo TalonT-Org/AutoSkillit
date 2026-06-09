@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # Callables that discover files via glob and require a scoped directory argument.
 SCOPED_CALLABLES: dict[str, str] = {
@@ -40,9 +40,8 @@ def _check_callable_scoped_discovery(ctx: ValidationContext) -> list[RuleFinding
             if callable_leaf == callable_name:
                 if required_key not in step.with_args:
                     findings.append(
-                        RuleFinding(
-                            rule="callable-requires-scoped-discovery",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="callable-requires-scoped-discovery",
                             step_name=step_name,
                             message=(
                                 f"step '{step_name}': {callable_name} call is "

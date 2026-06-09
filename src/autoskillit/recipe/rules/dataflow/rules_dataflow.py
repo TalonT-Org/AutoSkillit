@@ -11,7 +11,7 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
     resolve_skill_name,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -29,15 +29,12 @@ def _check_weak_constraint_text(ctx: ValidationContext) -> list[RuleFinding]:
     if found < len(PIPELINE_FORBIDDEN_TOOLS):
         tool_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
         return [
-            RuleFinding(
-                rule="weak-constraint-text",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="weak-constraint-text",
                 step_name="(recipe)",
-                message=(
-                    "Recipe kitchen_rules do not enumerate forbidden native tools. "
-                    f"Name specific tools ({tool_list}) "
-                    "for orchestrator discipline."
-                ),
+                message="Recipe kitchen_rules do not enumerate forbidden native tools. "
+                f"Name specific tools ({tool_list}) "
+                "for orchestrator discipline.",
             )
         ]
     return []
@@ -68,15 +65,12 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
         contract = get_skill_contract(skill_name, manifest)
         if contract is None:
             findings.append(
-                RuleFinding(
-                    rule="undeclared-capture-key",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="undeclared-capture-key",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' captures from skill '{skill_name}' "
-                        f"which has no outputs contract entry in skill_contracts.yaml. "
-                        f"Add an outputs section to verify capture correctness."
-                    ),
+                    message=f"Step '{step_name}' captures from skill '{skill_name}' "
+                    f"which has no outputs contract entry in skill_contracts.yaml. "
+                    f"Add an outputs section to verify capture correctness.",
                 )
             )
             continue
@@ -87,15 +81,12 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
             for ref_key in RESULT_CAPTURE_RE.findall(capture_expr.from_):
                 if ref_key not in declared_keys:
                     findings.append(
-                        RuleFinding(
-                            rule="undeclared-capture-key",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="undeclared-capture-key",
                             step_name=step_name,
-                            message=(
-                                f"Step '{step_name}' captures result.{ref_key} "
-                                f"but skill '{skill_name}' does not declare '{ref_key}' "
-                                f"in its outputs contract."
-                            ),
+                            message=f"Step '{step_name}' captures result.{ref_key} "
+                            f"but skill '{skill_name}' does not declare '{ref_key}' "
+                            f"in its outputs contract.",
                         )
                     )
 
@@ -103,9 +94,8 @@ def _check_capture_output_coverage(ctx: ValidationContext) -> list[RuleFinding]:
             for ref_key in RESULT_CAPTURE_RE.findall(capture_expr.from_):
                 if ref_key not in declared_keys:
                     findings.append(
-                        RuleFinding(
-                            rule="undeclared-capture-key",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="undeclared-capture-key",
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' captures result.{ref_key} via capture_list "
@@ -159,16 +149,13 @@ def _check_python_capture_output_coverage(ctx: ValidationContext) -> list[RuleFi
         contract = get_callable_contract(callable_path, manifest)
         if contract is None:
             findings.append(
-                RuleFinding(
-                    rule="undeclared-python-capture-key",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="undeclared-python-capture-key",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' references result.* fields from callable "
-                        f"'{callable_path}' which has no callable contract entry in "
-                        f"skill_contracts.yaml. Add a callable_contracts section to "
-                        f"verify capture correctness."
-                    ),
+                    message=f"Step '{step_name}' references result.* fields from callable "
+                    f"'{callable_path}' which has no callable contract entry in "
+                    f"skill_contracts.yaml. Add a callable_contracts section to "
+                    f"verify capture correctness.",
                 )
             )
             continue
@@ -177,15 +164,12 @@ def _check_python_capture_output_coverage(ctx: ValidationContext) -> list[RuleFi
         for ref_key in result_refs:
             if ref_key not in declared_keys:
                 findings.append(
-                    RuleFinding(
-                        rule="undeclared-python-capture-key",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="undeclared-python-capture-key",
                         step_name=step_name,
-                        message=(
-                            f"Step '{step_name}' references result.{ref_key} "
-                            f"but callable '{callable_path}' does not declare "
-                            f"'{ref_key}' in its outputs contract."
-                        ),
+                        message=f"Step '{step_name}' references result.{ref_key} "
+                        f"but callable '{callable_path}' does not declare "
+                        f"'{ref_key}' in its outputs contract.",
                     )
                 )
 
@@ -210,11 +194,11 @@ def _check_dead_output(ctx: ValidationContext) -> list[RuleFinding]:
             and w.field not in (step.capture or {})
         )
         findings.append(
-            RuleFinding(
-                rule="dead-output",
-                severity=Severity.WARNING if is_capture_list_only else Severity.ERROR,
+            make_finding(
+                rule_name="dead-output",
                 step_name=w.step_name,
                 message=w.message,
+                severity=Severity.WARNING if is_capture_list_only else Severity.ERROR,
             )
         )
     return findings

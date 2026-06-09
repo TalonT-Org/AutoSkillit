@@ -9,7 +9,7 @@ from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _STAMP_OWNERS: dict[str, str] = {
     DRY_WALKTHROUGH_VERIFIED_MARKER: "dry-walkthrough",
@@ -62,9 +62,8 @@ def _check_exclusive_stamp_ownership(ctx: ValidationContext) -> list[RuleFinding
                 continue
             if _has_write_instruction(content, stamp):
                 findings.append(
-                    RuleFinding(
-                        rule="exclusive-stamp-ownership",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="exclusive-stamp-ownership",
                         step_name=step_name,
                         message=(
                             f"Skill '{skill_name}' contains the stamp "

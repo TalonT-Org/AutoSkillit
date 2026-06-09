@@ -58,12 +58,22 @@ def _recipe_base_name(filename: str) -> str:
     return filename.removesuffix(".yaml")
 
 
-@pytest.mark.xfail(
-    reason="on_context_limit handlers not yet added to all bundled recipes", strict=False
-)
+_CONTEXT_LIMIT_COMPLIANT_RECIPES: set[str] = {
+    "consolidate-health-reports",
+    "implement-findings",
+    "planner",
+    "promote-to-main",
+    "promote-to-main-wrapper",
+    "research-archive",
+    "research-campaign",
+}
+
+
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
 def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:
     """Every run_skill step must declare on_context_limit (or be exempt)."""
+    if _recipe_base_name(recipe_name) not in _CONTEXT_LIMIT_COMPLIANT_RECIPES:
+        pytest.xfail("on_context_limit handlers not yet added to all bundled recipes")
     recipe_path = next(p for p in _BUNDLED_ONLY if p.name == recipe_name)
     recipe = load_recipe(recipe_path)
     exempt = CONTEXT_LIMIT_EXEMPT_STEPS.get(_recipe_base_name(recipe_name), set())

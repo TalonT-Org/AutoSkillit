@@ -21,7 +21,7 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
     resolve_skill_name,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -295,18 +295,15 @@ def _check_context_param_not_forwarded(ctx: ValidationContext) -> list[RuleFindi
             if f"context.{param}" in with_value:
                 continue
             findings.append(
-                RuleFinding(
-                    rule="context-param-not-forwarded",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="context-param-not-forwarded",
                     step_name=step_name,
-                    message=(
-                        f"Step {step_name!r} calls tool {step.tool!r} but does not "
-                        f"forward the upstream-captured context variable {param!r}. "
-                        f"Add {param}: ${{{{ context.{param} }}}} to the with: block. "
-                        f"Omitting this param causes the tool to use its default "
-                        f"value, which may not match the captured context "
-                        f"(e.g., auto_merge_available for repos with auto-merge disabled)."
-                    ),
+                    message=f"Step {step_name!r} calls tool {step.tool!r} but does not "
+                    f"forward the upstream-captured context variable {param!r}. "
+                    f"Add {param}: ${{{{ context.{param} }}}} to the with: block. "
+                    f"Omitting this param causes the tool to use its default "
+                    f"value, which may not match the captured context "
+                    f"(e.g., auto_merge_available for repos with auto-merge disabled).",
                 )
             )
     return findings
@@ -322,15 +319,12 @@ def _check_constant_step_no_with_args(ctx: ValidationContext) -> list[RuleFindin
     for step_name, step in ctx.recipe.steps.items():
         if step.constant is not None and step.with_args:
             findings.append(
-                RuleFinding(
-                    rule="constant-step-with-args",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="constant-step-with-args",
                     step_name=step_name,
-                    message=(
-                        f"step '{step_name}' is a constant step but has 'with' args "
-                        f"({list(step.with_args.keys())}). "
-                        f"constant steps have no tool to receive arguments."
-                    ),
+                    message=f"step '{step_name}' is a constant step but has 'with' args "
+                    f"({list(step.with_args.keys())}). "
+                    f"constant steps have no tool to receive arguments.",
                 )
             )
     return findings
@@ -348,9 +342,8 @@ def _check_unknown_tool(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if step.tool not in _ALL_TOOLS:
             findings.append(
-                RuleFinding(
-                    rule="unknown-tool",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="unknown-tool",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': tool '{step.tool}' is not a registered MCP tool. "
@@ -380,16 +373,13 @@ def _check_subset_disabled_tool(ctx: ValidationContext) -> list[RuleFinding]:
         if overlap:
             disabled_subset = next(iter(sorted(overlap)))
             findings.append(
-                RuleFinding(
-                    rule="subset-disabled-tool",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="subset-disabled-tool",
                     step_name=step_name,
-                    message=(
-                        f"step '{step_name}': tool '{step.tool}' belongs to "
-                        f"the disabled subset '{disabled_subset}'. Enable "
-                        f"'{disabled_subset}' in .autoskillit/config.yaml "
-                        f"subsets.disabled to use this tool."
-                    ),
+                    message=f"step '{step_name}': tool '{step.tool}' belongs to "
+                    f"the disabled subset '{disabled_subset}'. Enable "
+                    f"'{disabled_subset}' in .autoskillit/config.yaml "
+                    f"subsets.disabled to use this tool.",
                 )
             )
     return findings
@@ -409,15 +399,12 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
         for key in step.with_args:
             if key not in known_params:
                 findings.append(
-                    RuleFinding(
-                        rule="dead-with-param",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="dead-with-param",
                         step_name=step_name,
-                        message=(
-                            f"step '{step_name}': with key '{key}' is not a known "
-                            f"parameter of tool '{step.tool}'. "
-                            f"Known parameters: {sorted(known_params)}"
-                        ),
+                        message=f"step '{step_name}': with key '{key}' is not a known "
+                        f"parameter of tool '{step.tool}'. "
+                        f"Known parameters: {sorted(known_params)}",
                     )
                 )
     return findings
@@ -458,9 +445,8 @@ def _check_rebase_then_push_requires_force(ctx: ValidationContext) -> list[RuleF
             # Found a rebase predecessor — check that this push step has force='true'.
             if step.with_args.get("force", "").strip().lower() != "true":
                 findings.append(
-                    RuleFinding(
-                        rule="rebase-then-push-requires-force",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="rebase-then-push-requires-force",
                         step_name=step_name,
                         message=(
                             f"push_to_remote step '{step_name}' follows resolve-merge-conflicts "
@@ -491,17 +477,14 @@ def _check_release_issue_requires_disposition(ctx: ValidationContext) -> list[Ru
         has_target_branch = bool(step.with_args.get("target_branch"))
         if not has_fail_label and not has_target_branch:
             findings.append(
-                RuleFinding(
-                    rule="release-issue-requires-disposition",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="release-issue-requires-disposition",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' calls release_issue without fail_label or "
-                        f"target_branch. close_issue alone is not a valid disposition — "
-                        f"without target_branch, the tool cannot determine whether to stage "
-                        f"(non-default branch) or close (promotion target). Add target_branch "
-                        f"for success/staging paths or fail_label for failure paths."
-                    ),
+                    message=f"Step '{step_name}' calls release_issue without fail_label or "
+                    f"target_branch. close_issue alone is not a valid disposition — "
+                    f"without target_branch, the tool cannot determine whether to stage "
+                    f"(non-default branch) or close (promotion target). Add target_branch "
+                    f"for success/staging paths or fail_label for failure paths.",
                 )
             )
     return findings
@@ -539,17 +522,14 @@ def _check_patch_token_summary_scoping_key(ctx: ValidationContext) -> list[RuleF
             continue
         if "order_id" not in step.with_args and "kitchen_id" not in step.with_args:
             findings.append(
-                RuleFinding(
-                    rule="patch-token-summary-requires-scoping-key",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="patch-token-summary-requires-scoping-key",
                     step_name=step_name,
-                    message=(
-                        f"step '{step_name}': patch_pr_token_summary call is missing "
-                        f"a scoping key (order_id or kitchen_id) in with args. "
-                        "Without one, the function falls back to cwd_filter which "
-                        "silently excludes worktree-scoped sessions. "
-                        "Add 'order_id' or 'kitchen_id' to suppress this warning."
-                    ),
+                    message=f"step '{step_name}': patch_pr_token_summary call is missing "
+                    f"a scoping key (order_id or kitchen_id) in with args. "
+                    "Without one, the function falls back to cwd_filter which "
+                    "silently excludes worktree-scoped sessions. "
+                    "Add 'order_id' or 'kitchen_id' to suppress this warning.",
                 )
             )
     return findings
@@ -598,17 +578,14 @@ def _check_mixed_cwd_without_scoping_key(ctx: ValidationContext) -> list[RuleFin
         if "order_id" in step.with_args or "kitchen_id" in step.with_args:
             continue
         findings.append(
-            RuleFinding(
-                rule="mixed-cwd-without-scoping-key",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="mixed-cwd-without-scoping-key",
                 step_name=step_name,
-                message=(
-                    f"step '{step_name}': recipe mixes {len(cwd_values)} distinct cwd "
-                    f"values across run_skill steps, but patch_pr_token_summary has no "
-                    f"scoping key (order_id or kitchen_id). cwd_filter will silently "
-                    f"exclude worktree-scoped sessions. Add order_id or kitchen_id to "
-                    f"with_args."
-                ),
+                message=f"step '{step_name}': recipe mixes {len(cwd_values)} distinct cwd "
+                f"values across run_skill steps, but patch_pr_token_summary has no "
+                f"scoping key (order_id or kitchen_id). cwd_filter will silently "
+                f"exclude worktree-scoped sessions. Add order_id or kitchen_id to "
+                f"with_args.",
             )
         )
     return findings
@@ -673,16 +650,13 @@ def _check_push_after_edit_requires_force(ctx: ValidationContext) -> list[RuleFi
             (step.with_args or {}).get("force", "").strip().lower() != "true"
         ):
             findings.append(
-                RuleFinding(
-                    rule="push-after-edit-requires-force",
+                make_finding(
+                    rule_name="push-after-edit-requires-force",
                     step_name=step_name,
-                    severity=Severity.ERROR,
-                    message=(
-                        f"push_to_remote step '{step_name}' follows write-behavior skill "
-                        f"step '{found_write_skill}' but is missing force='true'. "
-                        "A write-behavior skill rewrites commit history — a force push "
-                        "(--force-with-lease) is required to update the remote."
-                    ),
+                    message=f"push_to_remote step '{step_name}' follows write-behavior skill "
+                    f"step '{found_write_skill}' but is missing force='true'. "
+                    "A write-behavior skill rewrites commit history — a force push "
+                    "(--force-with-lease) is required to update the remote.",
                 )
             )
 
@@ -711,14 +685,11 @@ def _check_run_python_requires_work_dir(ctx: ValidationContext) -> list[RuleFind
         )
         if has_relative_path_like and "work_dir" not in with_args:
             findings.append(
-                RuleFinding(
-                    rule="run-python-requires-work-dir",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="run-python-requires-work-dir",
                     step_name=step_name,
-                    message=(
-                        f"step '{step_name}' has relative path-like args "
-                        "but no work_dir — add work_dir to anchor paths"
-                    ),
+                    message=f"step '{step_name}' has relative path-like args "
+                    "but no work_dir — add work_dir to anchor paths",
                 )
             )
         work_dir_val = with_args.get("work_dir")
@@ -729,15 +700,12 @@ def _check_run_python_requires_work_dir(ctx: ValidationContext) -> list[RuleFind
             and not PurePosixPath(work_dir_val).is_absolute()
         ):
             findings.append(
-                RuleFinding(
-                    rule="run-python-requires-work-dir",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="run-python-requires-work-dir",
                     step_name=step_name,
-                    message=(
-                        f"step '{step_name}' has work_dir='{work_dir_val}' "
-                        "which is not absolute and not a template — "
-                        "use an absolute path or template expression"
-                    ),
+                    message=f"step '{step_name}' has work_dir='{work_dir_val}' "
+                    "which is not absolute and not a template — "
+                    "use an absolute path or template expression",
                 )
             )
     return findings

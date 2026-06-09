@@ -9,7 +9,7 @@ import regex as re
 from autoskillit.core import DispatchGateType, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _load_dispatch_target
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import CAMPAIGN_REF_RE, RecipeKind
 
 if TYPE_CHECKING:
@@ -62,16 +62,13 @@ def _check_campaign_ingredient_refs_have_prior_capture(
             for ref in CAMPAIGN_REF_RE.findall(ing_val):
                 if ref not in available_captures:
                     findings.append(
-                        RuleFinding(
-                            rule="campaign-ingredient-refs-have-prior-capture",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="campaign-ingredient-refs-have-prior-capture",
                             step_name="(top-level)",
-                            message=(
-                                f"Dispatch {d.name!r} ingredient {ing_key!r} references "
-                                f"${{{{ campaign.{ref} }}}} but no ancestor dispatch "
-                                f"(via depends_on) captures {ref!r}. "
-                                f"Available captured keys: {sorted(available_captures)}"
-                            ),
+                            message=f"Dispatch {d.name!r} ingredient {ing_key!r} references "
+                            f"${{{{ campaign.{ref} }}}} but no ancestor dispatch "
+                            f"(via depends_on) captures {ref!r}. "
+                            f"Available captured keys: {sorted(available_captures)}",
                         )
                     )
     return findings
@@ -96,14 +93,11 @@ def _check_autoskillit_version_compatible(ctx: ValidationContext) -> list[RuleFi
         required = Version(ctx.recipe.version)
         if required > installed:
             return [
-                RuleFinding(
-                    rule="autoskillit-version-compatible",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="autoskillit-version-compatible",
                     step_name="(top-level)",
-                    message=(
-                        f"Campaign requires autoskillit>={ctx.recipe.version} "
-                        f"but installed version is {installed}."
-                    ),
+                    message=f"Campaign requires autoskillit>={ctx.recipe.version} "
+                    f"but installed version is {installed}.",
                 )
             ]
     except Exception:
@@ -125,14 +119,11 @@ def _check_gate_dispatch_valid_type(ctx: ValidationContext) -> list[RuleFinding]
             continue
         if d.gate not in _VALID_GATE_TYPES:
             findings.append(
-                RuleFinding(
-                    rule="gate-dispatch-valid-type",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="gate-dispatch-valid-type",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} has gate={d.gate!r} which is not a valid "
-                        f"gate type. Supported types: {sorted(_VALID_GATE_TYPES)}"
-                    ),
+                    message=f"Dispatch {d.name!r} has gate={d.gate!r} which is not a valid "
+                    f"gate type. Supported types: {sorted(_VALID_GATE_TYPES)}",
                 )
             )
     return findings
@@ -152,14 +143,11 @@ def _check_gate_dispatch_has_message(ctx: ValidationContext) -> list[RuleFinding
             continue
         if not (d.message or "").strip():
             findings.append(
-                RuleFinding(
-                    rule="gate-dispatch-has-message",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="gate-dispatch-has-message",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} has gate={d.gate!r} but 'message' is empty. "
-                        "A non-empty message is required for gate dispatches."
-                    ),
+                    message=f"Dispatch {d.name!r} has gate={d.gate!r} but 'message' is empty. "
+                    "A non-empty message is required for gate dispatches.",
                 )
             )
     return findings
@@ -179,15 +167,12 @@ def _check_gate_dispatch_no_recipe(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if d.recipe or d.task:
             findings.append(
-                RuleFinding(
-                    rule="gate-dispatch-no-recipe",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="gate-dispatch-no-recipe",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} has gate={d.gate!r} but also specifies "
-                        f"recipe={d.recipe!r} or task={d.task!r}. "
-                        "Gate dispatches must not specify recipe or task."
-                    ),
+                    message=f"Dispatch {d.name!r} has gate={d.gate!r} but also specifies "
+                    f"recipe={d.recipe!r} or task={d.task!r}. "
+                    "Gate dispatches must not specify recipe or task.",
                 )
             )
     return findings
@@ -215,16 +200,13 @@ def _check_campaign_path_coherence(ctx: ValidationContext) -> list[RuleFinding]:
             if step.capture and "worktree_path" in step.capture:
                 if "worktree_path" not in d.capture:
                     findings.append(
-                        RuleFinding(
-                            rule="campaign-path-coherence",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="campaign-path-coherence",
                             step_name="(top-level)",
-                            message=(
-                                f"Dispatch '{d.name}' invokes recipe '{d.recipe}' which "
-                                f"captures worktree_path at step '{step.name}', but the "
-                                f"dispatch does not re-capture worktree_path. Downstream "
-                                f"dispatches will receive a stale worktree path."
-                            ),
+                            message=f"Dispatch '{d.name}' invokes recipe '{d.recipe}' which "
+                            f"captures worktree_path at step '{step.name}', but the "
+                            f"dispatch does not re-capture worktree_path. Downstream "
+                            f"dispatches will receive a stale worktree path.",
                         )
                     )
                 break
@@ -253,15 +235,12 @@ def _check_campaign_path_type_enforce(ctx: ValidationContext) -> list[RuleFindin
             if getattr(ing, "type", None) == "worktree_relative_path":
                 if "worktree_path" not in d.ingredients:
                     findings.append(
-                        RuleFinding(
-                            rule="campaign-path-type-enforce",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="campaign-path-type-enforce",
                             step_name="(top-level)",
-                            message=(
-                                f"Dispatch '{d.name}' provides ingredient '{key}' "
-                                f"(type: worktree_relative_path) without a corresponding "
-                                f"worktree_path anchor."
-                            ),
+                            message=f"Dispatch '{d.name}' provides ingredient '{key}' "
+                            f"(type: worktree_relative_path) without a corresponding "
+                            f"worktree_path anchor.",
                         )
                     )
     return findings
@@ -281,14 +260,11 @@ def _check_gate_dispatch_no_capture(ctx: ValidationContext) -> list[RuleFinding]
             continue
         if d.capture:
             findings.append(
-                RuleFinding(
-                    rule="gate-dispatch-no-capture",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="gate-dispatch-no-capture",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} has gate={d.gate!r} but also specifies "
-                        f"capture. Gate dispatches produce no L3 session output."
-                    ),
+                    message=f"Dispatch {d.name!r} has gate={d.gate!r} but also specifies "
+                    f"capture. Gate dispatches produce no L3 session output.",
                 )
             )
     return findings
@@ -314,15 +290,12 @@ def _check_dispatch_skip_when_valid(ctx: ValidationContext) -> list[RuleFinding]
         for ref in _INPUTS_REF_RE.findall(d.skip_when):
             if ref not in campaign_ingredients:
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-skip-when-valid-expression",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-skip-when-valid-expression",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} skip_when references "
-                            f"${{{{ inputs.{ref} }}}} but {ref!r} is not a declared "
-                            f"campaign ingredient. Available: {sorted(campaign_ingredients)}"
-                        ),
+                        message=f"Dispatch {d.name!r} skip_when references "
+                        f"${{{{ inputs.{ref} }}}} but {ref!r} is not a declared "
+                        f"campaign ingredient. Available: {sorted(campaign_ingredients)}",
                     )
                 )
 
@@ -336,30 +309,24 @@ def _check_dispatch_skip_when_valid(ctx: ValidationContext) -> list[RuleFinding]
         for ref in CAMPAIGN_REF_RE.findall(d.skip_when):
             if ref not in available_captures:
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-skip-when-valid-expression",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-skip-when-valid-expression",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} skip_when references "
-                            f"${{{{ campaign.{ref} }}}} but no ancestor dispatch "
-                            f"(via depends_on) captures {ref!r}. "
-                            f"Available captured keys: {sorted(available_captures)}"
-                        ),
+                        message=f"Dispatch {d.name!r} skip_when references "
+                        f"${{{{ campaign.{ref} }}}} but no ancestor dispatch "
+                        f"(via depends_on) captures {ref!r}. "
+                        f"Available captured keys: {sorted(available_captures)}",
                     )
                 )
 
         normalized = _ANY_TEMPLATE_REF_RE.sub("X", d.skip_when).strip()
         if not _SKIP_EXPR_RE.match(normalized):
             findings.append(
-                RuleFinding(
-                    rule="dispatch-skip-when-valid-expression",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="dispatch-skip-when-valid-expression",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} skip_when expression has invalid format: "
-                        f"{d.skip_when!r}. Expected: '<lhs> == <rhs>' or '<lhs> != <rhs>'."
-                    ),
+                    message=f"Dispatch {d.name!r} skip_when expression has invalid format: "
+                    f"{d.skip_when!r}. Expected: '<lhs> == <rhs>' or '<lhs> != <rhs>'.",
                 )
             )
     return findings

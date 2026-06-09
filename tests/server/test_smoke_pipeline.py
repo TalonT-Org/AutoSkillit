@@ -88,6 +88,8 @@ class TestSmokeScriptValidation:
             f for f in result.get("findings", []) if f.get("severity") == "error"
         ]
         assert not non_excluded_errors, f"Unexpected errors: {non_excluded_errors}"
+        contract_errors = [c for c in result.get("contracts", []) if c.get("severity") == "error"]
+        assert not contract_errors, f"Contract violations: {contract_errors}"
         assert result["errors"] == []
 
     async def test_script_discoverable(self, smoke_project: Path) -> None:

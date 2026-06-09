@@ -545,6 +545,7 @@ def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> l
                     message=f"Ingredient {name!r} declares authority='config' and required=True "
                     "with no default — config always supplies the value, so required=True "
                     "is redundant.",
+                    severity=Severity.WARNING,
                 )
             )
     return findings

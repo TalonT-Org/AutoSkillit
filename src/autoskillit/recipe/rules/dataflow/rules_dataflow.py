@@ -187,7 +187,18 @@ def _check_dead_output(ctx: ValidationContext) -> list[RuleFinding]:
     for w in ctx.dataflow.warnings:
         if w.code != "DEAD_OUTPUT":
             continue
+        step = ctx.recipe.steps.get(w.step_name)
+        is_capture_list_only = (
+            step is not None
+            and w.field in (step.capture_list or {})
+            and w.field not in (step.capture or {})
+        )
         findings.append(
-            make_finding(rule_name="dead-output", step_name=w.step_name, message=w.message)
+            make_finding(
+                rule_name="dead-output",
+                step_name=w.step_name,
+                message=w.message,
+                severity=Severity.WARNING if is_capture_list_only else Severity.ERROR,
+            )
         )
     return findings

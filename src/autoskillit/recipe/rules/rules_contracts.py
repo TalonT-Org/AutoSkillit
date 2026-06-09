@@ -232,6 +232,7 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                         "write_behavior='always' must not have "
                         "write_expected_when (contradictory)."
                     ),
+                    severity=Severity.WARNING,
                 )
             )
         for pattern in wew:
@@ -325,6 +326,7 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
                                 f"Skill '{name}' SKILL.md at {skill_md} could not be read; "
                                 f"always-has-no-write-exit check was skipped for this step."
                             ),
+                            severity=Severity.WARNING,
                         )
                     )
                     break

@@ -67,6 +67,7 @@ def _check_source_isolation(ctx: ValidationContext) -> list[RuleFinding]:
                         f"Skills modify files — operating on the source repo without "
                         f"clone isolation is unsafe."
                     ),
+                    severity=Severity.WARNING,
                 )
             )
     return findings

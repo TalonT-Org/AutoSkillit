@@ -179,7 +179,12 @@ def _check_unbounded_cycles(ctx: ValidationContext) -> list[RuleFinding]:
                         f"outside the cycle."
                     )
                 findings.append(
-                    make_finding(rule_name="unbounded-cycle", step_name=node, message=message)
+                    make_finding(
+                        rule_name="unbounded-cycle",
+                        step_name=node,
+                        message=message,
+                        severity=Severity.WARNING if has_failure_exit else Severity.ERROR,
+                    )
                 )
         rec_stack.discard(node)
 

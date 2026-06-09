@@ -242,6 +242,7 @@ def _check_dispatch_capture_type_matches_contract_optionality(
                         step_name="(top-level)",
                         message=f"Cannot verify capture type compatibility for dispatch "
                         f"{d.name!r} — target recipe {d.recipe!r} could not be loaded.",
+                        severity=Severity.WARNING,
                     )
                 )
                 continue

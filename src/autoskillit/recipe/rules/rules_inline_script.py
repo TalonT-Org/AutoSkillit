@@ -129,6 +129,7 @@ def _check_inline_script_in_cmd(ctx: ValidationContext) -> list[RuleFinding]:
                         f"{var_count} variable assignments. "
                         "Consider extracting to a script."
                     ),
+                    severity=Severity.WARNING,
                 )
             )
 

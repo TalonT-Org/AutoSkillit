@@ -39,7 +39,7 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
     ):
         findings.append(
             make_finding(
-                rule_name="multipart-glob-note",
+                rule_name="multipart-iteration-notes",
                 step_name="plan",
                 message="Recipe uses make-plan or rectify but neither the 'plan' step note nor "
                 "the planning step's own note contains '*_part_*.md'. Agents will not "
@@ -55,13 +55,14 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
     if not any(kw in rules_text for kw in sequential_keywords):
         findings.append(
             make_finding(
-                rule_name="multipart-sequential-kitchen-rule",
+                rule_name="multipart-iteration-notes",
                 step_name="kitchen_rules",
                 message="Recipe uses make-plan or rectify but kitchen_rules do not contain "
                 "a sequential execution constraint. Without it, agents may "
                 "batch-verify all parts before "
                 "implementing any. Add a rule such as: 'SEQUENTIAL EXECUTION: complete full "
                 "cycle per part before advancing.'",
+                severity=Severity.WARNING,
             )
         )
 
@@ -79,7 +80,7 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
         if not has_more_parts_route:
             findings.append(
                 make_finding(
-                    rule_name="multipart-route-back",
+                    rule_name="multipart-iteration-notes",
                     step_name="next_or_done",
                     message="Recipe uses make-plan or rectify but next_or_done does not route "
                     "'more_parts' back to a recipe step. Sequential part processing requires "

@@ -517,6 +517,7 @@ def _check_no_gh_issue_comment(ctx: ValidationContext) -> list[RuleFinding]:
                             f"Skill '{skill_name}' contains 'gh issue comment'. "
                             "Use 'gh issue edit --body-file' instead."
                         ),
+                        severity=Severity.ERROR,
                     )
                 )
                 break

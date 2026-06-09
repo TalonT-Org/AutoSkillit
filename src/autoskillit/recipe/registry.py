@@ -100,27 +100,47 @@ def semantic_rule(
     return decorator
 
 
-def make_finding(rule_name: str, step_name: str, message: str) -> RuleFinding:
-    """Create a RuleFinding using the registered severity for the named rule."""
+def make_finding(
+    rule_name: str,
+    step_name: str,
+    message: str,
+    *,
+    severity: Severity | None = None,
+) -> RuleFinding:
+    """Create a RuleFinding using the registered severity for the named rule.
+
+    When *severity* is provided it overrides the registry default — use for
+    rules that intentionally emit findings at a lower severity for specific
+    sub-conditions (e.g. WARNING for a cycle that has a conditional exit).
+    """
     rule_def = next((r for r in _RULE_REGISTRY if r.name == rule_name), None)
     if rule_def is None:
         raise ValueError(f"Unknown rule: {rule_name!r}")
     return RuleFinding(
         rule=rule_name,
-        severity=rule_def.severity,
+        severity=severity if severity is not None else rule_def.severity,
         step_name=step_name,
         message=message,
     )
 
 
-def make_block_finding(rule_name: str, step_name: str, message: str) -> RuleFinding:
-    """Create a RuleFinding using the registered severity for the named block rule."""
+def make_block_finding(
+    rule_name: str,
+    step_name: str,
+    message: str,
+    *,
+    severity: Severity | None = None,
+) -> RuleFinding:
+    """Create a RuleFinding using the registered severity for the named block rule.
+
+    When *severity* is provided it overrides the registry default.
+    """
     rule_def = next((r for r in _BLOCK_RULE_REGISTRY if r.name == rule_name), None)
     if rule_def is None:
         raise ValueError(f"Unknown block rule: {rule_name!r}")
     return RuleFinding(
         rule=rule_name,
-        severity=rule_def.severity,
+        severity=severity if severity is not None else rule_def.severity,
         step_name=step_name,
         message=message,
     )

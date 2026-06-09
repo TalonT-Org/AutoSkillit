@@ -81,6 +81,7 @@ def _check_success_stop_reason_uniqueness(ctx: ValidationContext) -> list[RuleFi
                                 f"ancestors. Distinct success paths must use distinct "
                                 f"reason strings for fleet outcome classification."
                             ),
+                            severity=Severity.ERROR,
                         )
                     )
                 else:
@@ -94,6 +95,7 @@ def _check_success_stop_reason_uniqueness(ctx: ValidationContext) -> list[RuleFi
                                 f"distinct reason strings for fleet outcome "
                                 f"classification."
                             ),
+                            severity=Severity.ERROR,
                         )
                     )
 

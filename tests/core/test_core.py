@@ -121,8 +121,11 @@ def test_claude_code_path_functions_signature_fidelity():
     assert ann is not inspect.Parameter.empty
     import typing
 
-    args = typing.get_args(ann)
-    assert type(None) in args, f"Expected NoneType in return annotation, got {ann!r}"
+    # get_type_hints() resolves string annotations (from __future__ import annotations)
+    hints = typing.get_type_hints(claude_code_log_path)
+    ret = hints.get("return")
+    args = typing.get_args(ret)
+    assert type(None) in args, f"Expected NoneType in return annotation, got {ret!r}"
 
 
 def test_closure_walk_does_not_detect_lazy_init():

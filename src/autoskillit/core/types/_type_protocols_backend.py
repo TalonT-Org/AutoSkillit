@@ -67,7 +67,13 @@ class SessionLocator(Protocol):
 
     def locate_session(self, session_id: str) -> Path | None: ...
 
-    def project_log_dir(self, cwd: str) -> Path: ...
+    def project_log_dir(self, cwd: str) -> Path:
+        """Return the log directory for the given project.
+
+        ``cwd`` is a hint — implementations MAY ignore it when the backend
+        uses a global session store rather than per-project directories.
+        """
+        ...
 
 
 @runtime_checkable

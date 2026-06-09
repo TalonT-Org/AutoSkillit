@@ -70,7 +70,7 @@ def test_quota_modules_do_not_reference_backend_capabilities() -> None:
     for relpath in _QUOTA_MODULES:
         filepath = src_root / relpath
         if not filepath.exists():
-            continue
+            pytest.fail(f"{relpath!r} not found — update _QUOTA_MODULES")
         tree = ast.parse(filepath.read_text())
         visitor = _CapabilityRefVisitor(
             check_capabilities_attr=relpath not in _CAPABILITIES_ATTR_EXEMPT

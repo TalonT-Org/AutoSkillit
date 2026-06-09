@@ -117,8 +117,10 @@ def _fmt_gate_error(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
+_GENERIC_NESTED_VALUE_MAX_CHARS = 2000
+
+
 def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
-    """Generic key-value formatter for tools without dedicated formatters."""
     lines = [f"## {short_name}", ""]
     for key, val in data.items():
         if isinstance(val, list):
@@ -129,21 +131,20 @@ def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
                 lines.append(f"{key}:")
                 for item in val[:20]:
                     lines.append(f"  - {item}")
-                if len(val) > 20:
-                    lines.append(f"  ... and {len(val) - 20} more")
             else:
-                # Non-string list (list-of-dicts or mixed): render per-item up to 20-item cap
                 lines.append(f"{key}:")
                 for item in val[:20]:
                     if isinstance(item, dict):
-                        # Render first two key-value pairs inline for readability
-                        parts = [f"{k}: {v}" for k, v in list(item.items())[:2]]
-                        lines.append(f"  - {', '.join(parts)}")
+                        kvs = [
+                            f"{k}: {(s := str(v))[:120] + ('...' if len(s) > 120 else '')}"
+                            for k, v in item.items()
+                        ]
+                        lines.append(f"  - {', '.join(kvs)}")
                     else:
-                        compact = json.dumps(item, separators=(",", ":"))
-                        lines.append(f"  - {compact[:200]}")
-                if len(val) > 20:
-                    lines.append(f"  ... and {len(val) - 20} more")
+                        c = json.dumps(item, separators=(",", ":"))
+                        lines.append(f"  - {c[:2000] + '...' if len(c) > 2000 else c}")
+            if len(val) > 20:
+                lines.append(f"  ... and {len(val) - 20} more")
         elif isinstance(val, dict):
             if not val:
                 lines.append(f"{key}: {{}}")
@@ -151,10 +152,8 @@ def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
                 lines.append(f"{key}:")
                 for k, v in val.items():
                     if isinstance(v, (dict, list)):
-                        compact = json.dumps(v, separators=(",", ":"))
-                        if len(compact) > 200:
-                            compact = compact[:200] + "..."
-                        lines.append(f"  {k}: {compact}")
+                        c = json.dumps(v, separators=(",", ":"))
+                        lines.append(f"  {k}: {c[:2000] + '...' if len(c) > 2000 else c}")
                     else:
                         lines.append(f"  {k}: {v}")
         else:

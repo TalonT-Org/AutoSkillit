@@ -98,7 +98,10 @@ def main() -> None:
 
         result_summary = ""
         if inner:
-            result_summary = json.dumps(inner)[:200]
+            full = json.dumps(inner)
+            result_summary = full[:200]
+            if len(full) > 200:
+                result_summary += "..."
 
         banner = (
             f"--- Pipeline Tracker ---\n"

@@ -273,3 +273,56 @@ def test_fmt_generic_list_of_dicts_caps_at_20_items():
     assert "item-19" in text
     assert "item-20" not in text
     assert "and 5 more" in text
+
+
+# PHK-49: list-of-dicts must render all fields, not just first 2
+def test_fmt_generic_list_of_dicts_renders_all_fields():
+    """_fmt_generic must render all dict fields, not just the first 2."""
+    from tests.infra._pretty_output_helpers import _make_event
+
+    failures = [
+        {
+            "timestamp": "2026-06-09T12:00:00Z",
+            "skill_command": "/dispatch",
+            "exit_code": 1,
+            "subtype": "tool_exception",
+            "needs_retry": True,
+            "retry_reason": "timeout",
+            "stderr": "Connection refused",
+        }
+    ]
+    event = _make_event("get_pipeline_report", {"failures": failures})
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "timestamp" in text
+    assert "skill_command" in text
+    assert "exit_code" in text
+    assert "subtype" in text
+    assert "needs_retry" in text
+    assert "retry_reason" in text
+    assert "stderr" in text
+
+
+# PHK-50: non-string list items must include ellipsis when truncated
+def test_fmt_generic_non_string_list_items_have_ellipsis_when_truncated():
+    """_fmt_generic must append '...' when truncating non-string list items."""
+    from tests.infra._pretty_output_helpers import _make_event
+
+    big_nested = list(range(2000))
+    event = _make_event("some_tool", {"items": [big_nested]})
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "..." in text
+
+
+# PHK-51: nested dict/list values render in full when under the raised limit
+def test_fmt_generic_nested_dict_value_renders_in_full():
+    """_fmt_generic must render nested dict values fully when under the configurable limit."""
+    from tests.infra._pretty_output_helpers import _make_event
+
+    nested = {f"key_{i}": f"value_{i}" for i in range(20)}
+    event = _make_event("some_tool", {"metadata": nested})
+    out, _ = _run_hook(event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    for i in range(20):
+        assert f"key_{i}" in text, f"key_{i} missing from nested dict output"

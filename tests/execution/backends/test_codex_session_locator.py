@@ -34,8 +34,8 @@ class TestCodexSessionLocator:
         session_dir = tmp_path / "sessions" / "2026" / "05" / "26"
         session_dir.mkdir(parents=True)
         rollout = _make_rollout(session_dir, "tid_abc123")
-        locator = CodexSessionLocator()
-        result = locator.locate_session("tid_abc123", codex_home=tmp_path)
+        locator = CodexSessionLocator(codex_home=tmp_path)
+        result = locator.locate_session("tid_abc123")
         assert result == rollout
 
     def test_locate_session_skips_non_matching_thread_id(self, tmp_path: Path) -> None:
@@ -98,8 +98,8 @@ class TestCodexSessionLocator:
         assert locator.locate_session("crashed_xyz789") is None
 
     def test_locate_session_returns_none_when_sessions_dir_absent(self, tmp_path: Path) -> None:
-        locator = CodexSessionLocator()
-        result = locator.locate_session("any_id", codex_home=tmp_path)
+        locator = CodexSessionLocator(codex_home=tmp_path)
+        result = locator.locate_session("any_id")
         assert result is None
 
     def test_codex_home_priority_over_env_var(
@@ -119,8 +119,8 @@ class TestCodexSessionLocator:
 
         monkeypatch.setenv("CODEX_HOME", str(env_path))
 
-        locator = CodexSessionLocator()
-        result = locator.locate_session("tid_priority", codex_home=param_path)
+        locator = CodexSessionLocator(codex_home=param_path)
+        result = locator.locate_session("tid_priority")
 
         assert result == rollout
 
@@ -200,6 +200,6 @@ class TestCodexSessionLocator:
         session_dir = tmp_path / "sessions" / "2026" / "05" / "26"
         session_dir.mkdir(parents=True)
         rollout = _make_rollout(session_dir, "tid_meta", fmt="session_meta")
-        locator = CodexSessionLocator()
-        result = locator.locate_session("tid_meta", codex_home=tmp_path)
+        locator = CodexSessionLocator(codex_home=tmp_path)
+        result = locator.locate_session("tid_meta")
         assert result == rollout

@@ -96,6 +96,13 @@ class TestBackendCompliance:
         for cls in BACKEND_REGISTRY.values():
             assert isinstance(cls().session_locator(), SessionLocator)
 
+    def test_locator_classes_nominally_subclass_session_locator(self):
+        from autoskillit.core import SessionLocator
+        from autoskillit.execution.backends import ClaudeSessionLocator, CodexSessionLocator
+
+        assert SessionLocator in ClaudeSessionLocator.__mro__
+        assert SessionLocator in CodexSessionLocator.__mro__
+
     def test_all_backends_capabilities_is_backend_capabilities(self):
         from autoskillit.core import BackendCapabilities
         from autoskillit.execution.backends import BACKEND_REGISTRY

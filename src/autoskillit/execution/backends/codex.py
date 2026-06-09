@@ -46,6 +46,7 @@ from autoskillit.core import (
     PluginSource,
     ResumeSpec,
     SessionCheckpoint,
+    SessionLocator,
     SkillSessionConfig,
     ValidatedAddDir,
     atomic_write,
@@ -237,8 +238,10 @@ _SESSION_START_TYPES: frozenset[str] = frozenset(
 
 
 @dataclass(frozen=True, slots=True)
-class CodexSessionLocator:
-    def locate_session(self, session_id: str, codex_home: Path | None = None) -> Path | None:
+class CodexSessionLocator(SessionLocator):
+    codex_home: Path | None = None
+
+    def locate_session(self, session_id: str) -> Path | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None
 
@@ -247,8 +250,8 @@ class CodexSessionLocator:
         #    ephemeral CODEX_HOME may be cleaned up by the time we search
         candidates.append(default_log_dir() / "codex-sessions")
         # 2. Explicit codex_home or CODEX_HOME env var
-        if codex_home is not None:
-            candidates.append(codex_home / "sessions")
+        if self.codex_home is not None:
+            candidates.append(self.codex_home / "sessions")
         else:
             env_home = os.environ.get("CODEX_HOME")
             if env_home:

@@ -371,7 +371,7 @@ class CodexSessionLocator(SessionLocator):
     def session_log_path(self, cwd: str, session_id: str) -> Path | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None
-        return None
+        return self.locate_session(session_id)
 
 
 def _validate_codex_config() -> list[str]:

@@ -33,7 +33,7 @@ class TestMultipartIterationRule:
         )
         warnings = run_semantic_rules(recipe)
         rule_names = [w.rule for w in warnings]
-        assert "multipart-glob-note" in rule_names
+        assert "multipart-iteration-notes" in rule_names
 
     def test_mi2_multipart_rule_passes_compliant_recipe(self) -> None:
         """T_MI2: Validator emits no multipart warnings when all conventions are present."""
@@ -125,7 +125,7 @@ class TestMultipartIterationRule:
         )
         warnings = run_semantic_rules(recipe)
         rule_names = [w.rule for w in warnings]
-        assert "multipart-route-back" in rule_names
+        assert "multipart-iteration-notes" in rule_names
 
 
 @pytest.fixture

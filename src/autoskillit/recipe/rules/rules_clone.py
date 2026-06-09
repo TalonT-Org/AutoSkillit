@@ -173,6 +173,7 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
             continue
 
         if strategy == "clone_local":
+            finding_severity = Severity.ERROR
             explanation = (
                 f'clone step "{step_name}" uses strategy="clone_local" and captures '
                 f"remote_url from result. Under clone_local, remote_url is always "
@@ -181,6 +182,7 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
                 f"network clone is intended."
             )
         elif _TEMPLATE_RE.search(strategy):
+            finding_severity = Severity.WARNING
             explanation = (
                 f'clone step "{step_name}" uses a templated strategy ({strategy!r}) '
                 f"that cannot be statically determined. If the strategy resolves to "
@@ -188,6 +190,7 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
                 f"consumers of context.remote_url will receive an empty string."
             )
         else:
+            finding_severity = Severity.WARNING
             explanation = (
                 f'clone step "{step_name}" uses an unrecognised strategy ({strategy!r}) '
                 f"and captures remote_url. If this strategy produces an empty remote_url, "
@@ -201,6 +204,7 @@ def _check_clone_local_remote_url_capture(ctx: ValidationContext) -> list[RuleFi
                 rule_name="clone-local-strategy-with-remote-url-capture",
                 step_name=step_name,
                 message=explanation,
+                severity=finding_severity,
             )
         )
 

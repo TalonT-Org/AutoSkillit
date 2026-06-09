@@ -641,6 +641,30 @@ class TestEnrichIssuesTool:
         assert response["stderr"] == "Warning: contract stale"
         assert response["session_id"] == "enrich-123"
 
+    @pytest.mark.anyio
+    async def test_enrich_issues_contract_recovery_includes_partial_enriched(
+        self, tool_ctx_kitchen_open
+    ):
+        """CONTRACT_RECOVERY with enriched issue numbers → partial_issues_enriched propagated."""
+        mock_executor = AsyncMock()
+        mock_executor.run.return_value = SkillResult(
+            success=False,
+            result=(
+                "Enriched issue #100.\nEnriched issue #101.\nFailed on issue #102 (timeout)..."
+            ),
+            session_id="enrich-partial",
+            subtype="contract_recovery",
+            is_error=True,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.CONTRACT_RECOVERY,
+            stderr="",
+        )
+        tool_ctx_kitchen_open.executor = mock_executor
+        response = json.loads(await enrich_issues())
+        assert response["success"] is False
+        assert response["partial_issues_enriched"] == [100, 101]
+
 
 _REQUIRED_FAILURE_KEYS = frozenset(
     {"success", "error", "session_id", "stderr", "subtype", "exit_code"}
@@ -767,6 +791,69 @@ async def test_headless_tool_failure_paths_include_all_diagnostic_fields(
     assert response["success"] is False
     assert response["stderr"] == skill_result_kwargs["stderr"]
     assert response["session_id"] == skill_result_kwargs["session_id"]
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_contract_recovery_propagates_partial_url(
+    tool_ctx_kitchen_open,
+):
+    """CONTRACT_RECOVERY: prepare_issue surfaces partial_issue_url alongside canonical fields."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = SkillResult(
+        success=False,
+        result="Created issue\nhttps://github.com/owner/repo/issues/42\nNow labeling...",
+        session_id="s-contract",
+        stderr="e-contract",
+        subtype="contract_recovery",
+        is_error=True,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+    )
+    tool_ctx_kitchen_open.executor = mock_executor
+
+    response = json.loads(await prepare_issue("Title", "Body"))
+    # Canonical contract preserved.
+    missing = _REQUIRED_FAILURE_KEYS - set(response.keys())
+    assert not missing, f"missing failure response keys: {missing}"
+    assert response["success"] is False
+    # Partial-result propagation.
+    assert response["partial_issue_url"] == "https://github.com/owner/repo/issues/42"
+    assert response["partial_issue_number"] == 42
+
+
+@pytest.mark.anyio
+async def test_prepare_issue_block_parse_error_propagates_partial_url(
+    tool_ctx_kitchen_open,
+):
+    """Block-parse-error path: prepare_issue surfaces partial_issue_url from result text."""
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = SkillResult(
+        success=True,
+        result=(
+            "Created https://github.com/owner/repo/issues/42\n"
+            "---prepare-issue-result---\n"
+            "{bad json\n"
+            "---/prepare-issue-result---"
+        ),
+        session_id="s-parse",
+        stderr="e-parse",
+        subtype="success",
+        is_error=False,
+        exit_code=0,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+    )
+    tool_ctx_kitchen_open.executor = mock_executor
+
+    response = json.loads(await prepare_issue("Title", "Body"))
+    # Canonical contract preserved.
+    missing = _REQUIRED_FAILURE_KEYS - set(response.keys())
+    assert not missing, f"missing failure response keys: {missing}"
+    assert response["success"] is False
+    # Partial-result propagation.
+    assert response["partial_issue_url"] == "https://github.com/owner/repo/issues/42"
+    assert response["partial_issue_number"] == 42
 
 
 class TestGetPrReviews:

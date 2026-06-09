@@ -54,6 +54,8 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                 if cap_def and _GIT_METADATA_WRITE_CAP in uses_caps
                 else ""
             )
+            is_guarded = bool(step.skip_when_false or step.skip_when_true or step.optional)
+            effective_severity = Severity.WARNING if is_guarded else Severity.ERROR
             findings.append(
                 make_finding(
                     rule_name="backend-incompatible-skill",
@@ -63,6 +65,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                         f"{sorted(skill_info.backend_requirements)} but recipe targets "
                         f"backend '{ctx.backend_name}'.{git_detail}"
                     ),
+                    severity=effective_severity,
                 )
             )
     return findings

@@ -22,6 +22,7 @@ from autoskillit.smoke_utils import (
     compile_eval_scorecard,
     consolidate_health_reports,
     enrich_diff_context,
+    gate_backend_write,
     parse_agent_eval_manifests,
     parse_eval_manifests,
     patch_pr_token_summary,
@@ -2613,7 +2614,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 27 public names."""
+    """smoke_utils.__all__ must list all 28 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2634,6 +2635,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "diagnose_merge_gate",
         "enrich_diff_context",
         "fetch_merge_queue_data",
+        "gate_backend_write",
         "init_counter",
         "LOCAL_ROUND_EXEMPT_VERDICTS",
         "parse_agent_eval_manifests",
@@ -2668,6 +2670,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "diagnose_merge_gate",
         "enrich_diff_context",
         "fetch_merge_queue_data",
+        "gate_backend_write",
         "init_counter",
         "parse_agent_eval_manifests",
         "parse_eval_manifests",
@@ -3234,3 +3237,35 @@ def test_detect_zero_changes_clean_repo(tmp_path: Path) -> None:
     assert result["has_changes"] == "false"
     assert result["commit_count"] == "0"
     assert result["has_uncommitted_changes"] == "false"
+
+
+# T_GBW1-T_GBW3
+def test_gate_backend_write_true() -> None:
+    """Returns {"backend_capable": "true"} when backend_supports_git_write is "true"."""
+    assert gate_backend_write("true") == {"backend_capable": "true"}
+
+
+def test_gate_backend_write_TRUE_case_insensitive() -> None:
+    """Returns {"backend_capable": "true"} for uppercase TRUE."""
+    assert gate_backend_write("TRUE") == {"backend_capable": "true"}
+
+
+def test_gate_backend_write_default() -> None:
+    """Returns {"backend_capable": "true"} when no argument provided."""
+    assert gate_backend_write() == {"backend_capable": "true"}
+
+
+# T_GBW4-T_GBW6
+def test_gate_backend_write_false() -> None:
+    """Returns {"backend_capable": "false"} when backend_supports_git_write is "false"."""
+    assert gate_backend_write("false") == {"backend_capable": "false"}
+
+
+def test_gate_backend_write_zero() -> None:
+    """Returns {"backend_capable": "false"} for "0"."""
+    assert gate_backend_write("0") == {"backend_capable": "false"}
+
+
+def test_gate_backend_write_empty() -> None:
+    """Returns {"backend_capable": "false"} for empty string."""
+    assert gate_backend_write("") == {"backend_capable": "false"}

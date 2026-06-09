@@ -37,6 +37,11 @@ ingredients:
   arch_lenses:
     description: Generate architecture lens diagrams for the PR
     default: 'false'
+  backend_supports_git_write:
+    description: Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.
+    default: 'true'
+    hidden: true
+    authority: config
   auto_merge:
     description: Automatically merge the PR after required checks pass — via merge
       queue when available, direct merge otherwise
@@ -322,8 +327,10 @@ steps:
       has_implementation_progress: ${{ result.has_implementation_progress }}
     retries: 0
     on_context_limit: retry_worktree
-    on_success: check_changes
+    on_success: gate_backend_write
     on_failure: release_issue_failure
+    optional: true
+    skip_when_false: inputs.backend_supports_git_write
     note: Extracts worktree_path from result for use in subsequent steps.
   retry_worktree:
     tool: run_skill
@@ -348,6 +355,18 @@ steps:
     - route: check_changes
     on_context_limit: check_changes
     on_exhausted: release_issue_failure
+    on_failure: release_issue_failure
+    optional: true
+    skip_when_false: inputs.backend_supports_git_write
+  gate_backend_write:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.gate_backend_write
+      backend_supports_git_write: ${{ inputs.backend_supports_git_write }}
+    on_result:
+    - when: ${{ result.backend_capable }} == false
+      route: release_issue_failure
+    - route: check_changes
     on_failure: release_issue_failure
   check_changes:
     tool: run_python
@@ -669,6 +688,8 @@ steps:
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     on_rate_limit: release_issue_failure
+    optional: true
+    skip_when_false: inputs.backend_supports_git_write
     optional_context_refs:
     - merge_gate_ci_conclusion
     - merge_gate_diagnosis_path
@@ -723,6 +744,8 @@ steps:
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     on_rate_limit: release_issue_failure
+    optional: true
+    skip_when_false: inputs.backend_supports_git_write
     optional_context_refs:
     - merge_gate_ci_conclusion
     - merge_gate_diagnosis_path
@@ -774,6 +797,8 @@ steps:
     on_context_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
+    optional: true
+    skip_when_false: inputs.backend_supports_git_write
   inter_part_push:
     tool: push_to_remote
     with:
@@ -1069,6 +1094,8 @@ steps:
     - when: ${{ result.verdict }} == 'ci_only_failure'
       route: release_issue_failure
     on_failure: release_issue_failure
+    optional: true
+    skip_when_false: inputs.backend_supports_git_write
     optional_context_refs:
     - review_mode
     note: 'Runs when review_pr reports issues (verdict=changes_requested). The clone
@@ -1111,6 +1138,8 @@ steps:
     on_context_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
+    optional: true
+    skip_when_false: inputs.backend_supports_git_write
   re_push_review:
     tool: push_to_remote
     with:

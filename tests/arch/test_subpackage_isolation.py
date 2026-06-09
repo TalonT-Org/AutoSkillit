@@ -873,7 +873,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 22,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py; +_reset.py
         "recipe/rules": 50,  # +commit_guard_regression_route +rules_model
-        "server/tools": 25,  # _auto_overrides.py + _cancellation_shield.py + tools_fleet_reset.py
+        "server/tools": 26,  # _auto_overrides.py + _cancellation_shield.py + tools_fleet_reset.py
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
     }
     violations: list[str] = []
@@ -959,10 +959,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "co-located with the execution engine that calls them",
     ),
     "tools_kitchen.py": (
-        1107,
+        1110,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
-        "for ingredient key validation; splitting would cross import-layer boundaries",
+        "for ingredient key validation; splitting would cross import-layer boundaries; "
+        "backend capability override injection in get_recipe adds 3 lines",
     ),
     "tools_execution.py": (
         1060,

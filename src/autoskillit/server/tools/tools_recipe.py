@@ -21,6 +21,7 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -211,6 +212,7 @@ async def load_recipe(
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
+            _session_overrides.update(_backend_capability_overrides(tool_ctx.backend))
             _config_layer = build_config_authoritative_layer(_defaults)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
             result = tool_ctx.recipes.load_and_validate(

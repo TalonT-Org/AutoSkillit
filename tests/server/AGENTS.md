@@ -130,6 +130,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_agents.py` | Tests for agent pack registry, MCP resources, and `unlock_agent_pack` |
 | `test_track_response_size.py` | Tests for the track_response_size decorator in autoskillit.server._notify |
 | `test_wire_compat.py` | Wire compatibility tests |
+| `test_backend_ingredient_injection.py` | Tests for backend_capability_overrides injection via open_kitchen, load_recipe, and get_recipe resource |
 
 | `test_tools_git_branch_isolation.py` | Integration tests for create_and_publish_branch with clone-isolated origin topology |
 | `test_tools_observability_scope.py` | Tests for bound_contextvars exception scope completeness: exception-path coverage, AST structural guard, any() assertion ban |

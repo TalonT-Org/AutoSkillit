@@ -1333,3 +1333,30 @@ steps:
         ingredient_overrides={"task": "some task"},
     )
     assert "${{ inputs.task }}" in result["content"]
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_prune_redirects_implement_to_gate_backend_write(recipe_name: str) -> None:
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    pruned, resolutions = _prune_skipped_steps(
+        recipe, ingredient_overrides={"backend_supports_git_write": "false"}
+    )
+    assert "implement" not in pruned.steps
+    assert resolutions["implement"] is False
+    assert "gate_backend_write" in pruned.steps
+    assert pruned.steps["create_impl_worktree"].on_success == "gate_backend_write"
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_gate_backend_write_has_failure_route(recipe_name: str) -> None:
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    step = recipe.steps["gate_backend_write"]
+    assert step.tool == "run_python"
+    assert step.on_result is not None
+    failure_routes = [c.route for c in step.on_result.conditions if c.when and "false" in c.when]
+    assert "release_issue_failure" in failure_routes

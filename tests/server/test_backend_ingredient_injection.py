@@ -80,27 +80,32 @@ class TestOpenKitchenInjection:
         mock_ctx.recipes.find.return_value = None
         mock_ctx.temp_dir = tmp_path
 
-        with patch(
-            "autoskillit.server.tools.tools_kitchen._get_ctx",
-            return_value=mock_ctx,
-        ):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+        mock_mcp_ctx = AsyncMock()
+        mock_mcp_ctx.enable_components = AsyncMock()
+
+        with (
+            patch(
+                "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
                 return_value={},
-            ):
-                with patch(
-                    "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
-                    new=AsyncMock(return_value=None),
-                ):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
-                        new=AsyncMock(side_effect=lambda r, *a, **kw: r),
-                    ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen._redisable_subsets",
-                            new=AsyncMock(return_value=None),
-                        ):
-                            await open_kitchen(name="demo")
+            ),
+            patch(
+                "autoskillit.server._misc._apply_triage_gate",
+                new_callable=AsyncMock,
+                side_effect=lambda r, *a, **kw: r,
+            ),
+            patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
+        ):
+            await open_kitchen(name="demo", ctx=mock_mcp_ctx)
 
         call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
         overrides = call_kwargs["ingredient_overrides"]
@@ -126,27 +131,32 @@ class TestOpenKitchenInjection:
         mock_ctx.recipes.find.return_value = None
         mock_ctx.temp_dir = tmp_path
 
-        with patch(
-            "autoskillit.server.tools.tools_kitchen._get_ctx",
-            return_value=mock_ctx,
-        ):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+        mock_mcp_ctx = AsyncMock()
+        mock_mcp_ctx.enable_components = AsyncMock()
+
+        with (
+            patch(
+                "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
                 return_value={},
-            ):
-                with patch(
-                    "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
-                    new=AsyncMock(return_value=None),
-                ):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
-                        new=AsyncMock(side_effect=lambda r, *a, **kw: r),
-                    ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen._redisable_subsets",
-                            new=AsyncMock(return_value=None),
-                        ):
-                            await open_kitchen(name="demo")
+            ),
+            patch(
+                "autoskillit.server._misc._apply_triage_gate",
+                new_callable=AsyncMock,
+                side_effect=lambda r, *a, **kw: r,
+            ),
+            patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
+        ):
+            await open_kitchen(name="demo", ctx=mock_mcp_ctx)
 
         call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
         overrides = call_kwargs["ingredient_overrides"]
@@ -178,19 +188,26 @@ class TestLoadRecipeInjection:
         mock_ctx.recipes.find.return_value = None
         mock_ctx.temp_dir = tmp_path
 
-        with patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
-            return_value=mock_ctx,
-        ):
-            with patch(
-                "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+        with (
+            patch(
+                "autoskillit.server.tools.tools_recipe._require_enabled",
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+                return_value=mock_ctx,
+            ),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
                 return_value={},
-            ):
-                with patch(
-                    "autoskillit.server.tools.tools_recipe._apply_triage_gate",
-                    new=AsyncMock(side_effect=lambda r, *a, **kw: r),
-                ):
-                    await load_recipe(name="demo")
+            ),
+            patch(
+                "autoskillit.server._misc._apply_triage_gate",
+                new_callable=AsyncMock,
+                side_effect=lambda r, *a, **kw: r,
+            ),
+        ):
+            await load_recipe(name="demo")
 
         call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
         overrides = call_kwargs["ingredient_overrides"]
@@ -214,19 +231,26 @@ class TestLoadRecipeInjection:
         mock_ctx.recipes.find.return_value = None
         mock_ctx.temp_dir = tmp_path
 
-        with patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
-            return_value=mock_ctx,
-        ):
-            with patch(
-                "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+        with (
+            patch(
+                "autoskillit.server.tools.tools_recipe._require_enabled",
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+                return_value=mock_ctx,
+            ),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
                 return_value={},
-            ):
-                with patch(
-                    "autoskillit.server.tools.tools_recipe._apply_triage_gate",
-                    new=AsyncMock(side_effect=lambda r, *a, **kw: r),
-                ):
-                    await load_recipe(name="demo")
+            ),
+            patch(
+                "autoskillit.server._misc._apply_triage_gate",
+                new_callable=AsyncMock,
+                side_effect=lambda r, *a, **kw: r,
+            ),
+        ):
+            await load_recipe(name="demo")
 
         call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
         overrides = call_kwargs["ingredient_overrides"]
@@ -251,15 +275,17 @@ class TestGetRecipeResourceInjection:
             "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
         }
 
-        with patch(
-            "autoskillit.server.tools.tools_kitchen._get_ctx_or_none",
-            return_value=mock_ctx,
-        ):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+        with (
+            patch(
+                "autoskillit.server._state._get_ctx_or_none",
+                return_value=mock_ctx,
+            ),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
                 return_value={},
-            ):
-                get_recipe("demo")
+            ),
+        ):
+            get_recipe("demo")
 
         call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
         overrides = call_kwargs["ingredient_overrides"]
@@ -277,15 +303,17 @@ class TestGetRecipeResourceInjection:
             "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
         }
 
-        with patch(
-            "autoskillit.server.tools.tools_kitchen._get_ctx_or_none",
-            return_value=mock_ctx,
-        ):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+        with (
+            patch(
+                "autoskillit.server._state._get_ctx_or_none",
+                return_value=mock_ctx,
+            ),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
                 return_value={},
-            ):
-                get_recipe("demo")
+            ),
+        ):
+            get_recipe("demo")
 
         call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
         overrides = call_kwargs["ingredient_overrides"]

@@ -41,6 +41,7 @@ from autoskillit.core import (
     ResumeSpec,
     SessionCheckpoint,
     SessionEvent,
+    SessionLocator,
     SkillSessionConfig,
     ValidatedAddDir,
     YAMLError,
@@ -93,7 +94,7 @@ class ClaudeEnvPolicy:
 
 
 @dataclass(frozen=True, slots=True)
-class ClaudeSessionLocator:
+class ClaudeSessionLocator(SessionLocator):
     def locate_session(self, session_id: str) -> Path | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None

@@ -971,12 +971,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "for fabricated skill name rejection add defense-in-depth checks",
     ),
     "execution/backends/codex.py": (
-        1031,
+        1034,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
         "session_meta NDJSON support and process_name_aliases add ~8 lines; "
-        "explicit plugin_install_capable + supports_context_window_suffix kwargs for arch guard",
+        "explicit plugin_install_capable + supports_context_window_suffix kwargs for arch guard; "
+        "CodexSessionLocator nominally subclasses SessionLocator Protocol with codex_home "
+        "promoted from locate_session parameter to frozen dataclass field (3 net lines: "
+        "field declaration, blank line between field and method, SessionLocator in import block)",
     ),
 }
 

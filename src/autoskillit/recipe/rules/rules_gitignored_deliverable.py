@@ -32,7 +32,7 @@ def _downstream_audit_impl_exists(ctx: ValidationContext, start: str) -> bool:
         step = ctx.recipe.steps.get(step_name)
         if step is None or step.tool != "run_skill":
             continue
-        skill = resolve_skill_name(step.with_args.get("skill_command", ""))
+        skill = resolve_skill_name((step.with_args or {}).get("skill_command", ""))
         if skill == "audit-impl":
             return True
     return False

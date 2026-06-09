@@ -39,6 +39,11 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _fmt_dispatch import (  # type: ignore[import-not-found]  # noqa: E402, F401
+    _FMT_DISPATCH_FOOD_TRUCK_RENDERED,
+    _FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED,
+    _fmt_dispatch_food_truck,
+)
 from _fmt_execution import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _FMT_MERGE_WORKTREE_RENDERED,
     _FMT_MERGE_WORKTREE_SUPPRESSED,
@@ -112,8 +117,10 @@ def _fmt_gate_error(data: dict, _pipeline: bool) -> str:
     return "\n".join(lines)
 
 
+_GENERIC_NESTED_VALUE_MAX_CHARS = 2000
+
+
 def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
-    """Generic key-value formatter for tools without dedicated formatters."""
     lines = [f"## {short_name}", ""]
     for key, val in data.items():
         if isinstance(val, list):
@@ -124,21 +131,20 @@ def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
                 lines.append(f"{key}:")
                 for item in val[:20]:
                     lines.append(f"  - {item}")
-                if len(val) > 20:
-                    lines.append(f"  ... and {len(val) - 20} more")
             else:
-                # Non-string list (list-of-dicts or mixed): render per-item up to 20-item cap
                 lines.append(f"{key}:")
                 for item in val[:20]:
                     if isinstance(item, dict):
-                        # Render first two key-value pairs inline for readability
-                        parts = [f"{k}: {v}" for k, v in list(item.items())[:2]]
-                        lines.append(f"  - {', '.join(parts)}")
+                        kvs = [
+                            f"{k}: {(s := str(v))[:120] + ('...' if len(s) > 120 else '')}"
+                            for k, v in item.items()
+                        ]
+                        lines.append(f"  - {', '.join(kvs)}")
                     else:
-                        compact = json.dumps(item, separators=(",", ":"))
-                        lines.append(f"  - {compact[:200]}")
-                if len(val) > 20:
-                    lines.append(f"  ... and {len(val) - 20} more")
+                        c = json.dumps(item, separators=(",", ":"))
+                        lines.append(f"  - {c[:2000] + '...' if len(c) > 2000 else c}")
+            if len(val) > 20:
+                lines.append(f"  ... and {len(val) - 20} more")
         elif isinstance(val, dict):
             if not val:
                 lines.append(f"{key}: {{}}")
@@ -146,10 +152,8 @@ def _fmt_generic(short_name: str, data: dict, _pipeline: bool) -> str:
                 lines.append(f"{key}:")
                 for k, v in val.items():
                     if isinstance(v, (dict, list)):
-                        compact = json.dumps(v, separators=(",", ":"))
-                        if len(compact) > 200:
-                            compact = compact[:200] + "..."
-                        lines.append(f"  {k}: {compact}")
+                        c = json.dumps(v, separators=(",", ":"))
+                        lines.append(f"  {k}: {c[:2000] + '...' if len(c) > 2000 else c}")
                     else:
                         lines.append(f"  {k}: {v}")
         else:
@@ -163,6 +167,7 @@ _FORMATTERS: dict[str, Callable[..., str]] = {
     "run_cmd": _fmt_run_cmd,
     "test_check": _fmt_test_check,
     "merge_worktree": _fmt_merge_worktree,
+    "dispatch_food_truck": _fmt_dispatch_food_truck,
     "get_token_summary": _fmt_get_token_summary,
     "get_timing_summary": _fmt_get_timing_summary,
     "kitchen_status": _fmt_kitchen_status,
@@ -211,7 +216,6 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "disable_quota_guard",  # simple success/error result
         "register_clone_status",  # simple registered/error result
         "batch_cleanup_clones",  # bulk delete summary dict
-        "dispatch_food_truck",  # JSON dispatch envelope, generic renders correctly
         "reload_session",  # simple status dict, generic renders correctly
         "analyze_tool_sequences",  # DFG analysis result, generic renders correctly
         "record_gate_dispatch",  # simple success/error result

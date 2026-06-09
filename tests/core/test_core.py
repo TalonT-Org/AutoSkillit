@@ -107,6 +107,19 @@ def test_core_pyi_uses_as_form():
                 )
 
 
+def test_claude_code_path_functions_signature_fidelity():
+    import inspect
+
+    from autoskillit.core import claude_code_log_path, claude_code_project_dir
+
+    sig_proj = inspect.signature(claude_code_project_dir)
+    assert list(sig_proj.parameters.keys()) == ["cwd"]
+
+    sig_log = inspect.signature(claude_code_log_path)
+    assert list(sig_log.parameters.keys()) == ["cwd", "session_id"]
+    assert sig_log.return_annotation is not inspect.Parameter.empty
+
+
 def test_closure_walk_does_not_detect_lazy_init():
     import sys
     from pathlib import Path

@@ -65,9 +65,7 @@ class TestMultipartIterationRule:
         )
         warnings = run_semantic_rules(recipe)
         rule_names = [w.rule for w in warnings]
-        assert "multipart-glob-note" not in rule_names
-        assert "multipart-sequential-kitchen-rule" not in rule_names
-        assert "multipart-route-back" not in rule_names
+        assert "multipart-iteration-notes" not in rule_names
 
     def test_mi3_multipart_rule_passes_non_verify_backroute(self) -> None:
         """T_MI3: multipart-route-back must NOT fire when more_parts routes to dry_walkthrough."""
@@ -100,7 +98,7 @@ class TestMultipartIterationRule:
         )
         warnings = run_semantic_rules(recipe)
         rule_names = [w.rule for w in warnings]
-        assert "multipart-route-back" not in rule_names
+        assert "multipart-iteration-notes" not in rule_names
 
     def test_mi4_multipart_rule_fires_when_no_more_parts_route(self) -> None:
         """T_MI4: multipart-route-back fires when next_or_done has no more_parts condition."""

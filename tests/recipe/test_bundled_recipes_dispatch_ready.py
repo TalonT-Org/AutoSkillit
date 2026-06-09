@@ -28,20 +28,20 @@ _RECIPE_STEMS = all_validated_recipe_names(_PROJECT_ROOT)
 _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 
 
+_KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {
+    "research": {"audit-impl-remediation-route"},
+    "agent-eval": {
+        "all-dispatchable-stops-have-sentinel",
+        "dead-output",
+    },
+    "skill-eval": {
+        "all-dispatchable-stops-have-sentinel",
+        "dead-output",
+    },
+}
+
 _RECIPES_WITH_OTHER_ERROR_RULES: frozenset[str] = frozenset(
-    name
-    for name, rules in {
-        "research": {"audit-impl-remediation-route"},
-        "agent-eval": {
-            "all-dispatchable-stops-have-sentinel",
-            "dead-output",
-        },
-        "skill-eval": {
-            "all-dispatchable-stops-have-sentinel",
-            "dead-output",
-        },
-    }.items()
-    if rules
+    k for k, v in _KNOWN_NON_CONFORMING_RULES.items() if v
 )
 
 _DISPATCH_GATE_STEMS = [s for s in _RECIPE_STEMS if s not in _RECIPES_WITH_OTHER_ERROR_RULES]
@@ -68,19 +68,6 @@ def test_bundled_recipe_dispatch_gate_no_exemptions(recipe_name: str) -> None:
             if s.get("severity") == "error"
         )
     )
-
-
-_KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {
-    "research": {"audit-impl-remediation-route"},
-    "agent-eval": {
-        "all-dispatchable-stops-have-sentinel",
-        "dead-output",
-    },
-    "skill-eval": {
-        "all-dispatchable-stops-have-sentinel",
-        "dead-output",
-    },
-}
 
 
 @pytest.mark.parametrize("recipe_name", _RECIPE_STEMS)

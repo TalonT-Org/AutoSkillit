@@ -3,6 +3,7 @@ from __future__ import annotations
 from autoskillit.core import CodingAgentBackend
 
 from ._codex_config import (
+    CODEX_AUTO_COMPACT_LIMIT,
     CODEX_MCP_REQUIRED_KEYS,
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
@@ -80,6 +81,7 @@ __all__ = [
     "CODEX_MCP_TOOL_TIMEOUT_FLOOR",
     "CODEX_MCP_REQUIRED_KEYS",
     "CODEX_TOOL_OUTPUT_TOKEN_LIMIT",
+    "CODEX_AUTO_COMPACT_LIMIT",
     "NON_VARIADIC_CODEX_FLAGS",
     "VARIADIC_CODEX_FLAGS",
     "_is_autoskillit_registered",

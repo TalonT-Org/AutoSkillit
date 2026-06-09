@@ -164,14 +164,19 @@ def _collect_allowlist_rule_names() -> set[str]:
     tree = ast.parse(_DISPATCH_READY_TEST.read_text())
     names: set[str] = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
+        if isinstance(node, ast.AnnAssign):
+            target = node.target
+            value = node.value
+        elif isinstance(node, ast.Assign):
+            target = node.targets[0] if node.targets else None
+            value = node.value
+        else:
             continue
-        target = node.targets[0] if node.targets else None
         if not isinstance(target, ast.Name) or target.id != "_KNOWN_NON_CONFORMING_RULES":
             continue
-        if not isinstance(node.value, ast.Dict):
+        if not isinstance(value, ast.Dict):
             continue
-        for v in node.value.values:
+        for v in value.values:
             if isinstance(v, ast.Set):
                 for elt in v.elts:
                     if isinstance(elt, ast.Constant) and isinstance(elt.value, str):

@@ -73,6 +73,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_pty_coherence.py` | Dispatch-type-aware PTY allocation guards: AST enforcement that dispatch_food_truck passes pty_override=False and _attempt_contract_nudge accepts pty_override |
 | `test_pyright_suppression_allowlist.py` | REQ-PYRIGHT-001: pyright/type-ignore suppression allowlist + count budget |
 | `test_python_no_hardcoded_temp.py` | Architectural invariant: no literal `.autoskillit/temp` outside the whitelist |
+| `test_quota_capability_isolation.py` | AST guard: quota modules must not reference BackendCapabilities fields |
 | `test_recipe_rule_registration.py` | REQ-RECIPE-001: every recipe/rules_*.py file must be imported by recipe/__init__.py |
 | `test_rule_severity_consistency.py` | AST guards: rule functions must use make_finding()/make_block_finding() and RuleFinding severity must match @semantic_rule decorator severity |
 | `test_regex_guards.py` | Arch guard: keyword regexes in cmd-scanning rules must use path-safe lookbehind guards |

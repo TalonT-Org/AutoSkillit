@@ -32,6 +32,11 @@ ingredients:
   arch_lenses:
     description: Generate architecture lens diagrams for the PR
     default: "false"
+  backend_supports_git_write:
+    description: Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.
+    default: 'true'
+    hidden: true
+    authority: config
   auto_merge:
     description: >-
       Automatically merge the PR after required checks pass —
@@ -280,6 +285,8 @@ steps:
     on_context_limit: retry_worktree
     on_success: test
     on_failure: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.backend_supports_git_write"
     note: "Extracts worktree_path from result for use in subsequent steps."
 
   retry_worktree:
@@ -301,6 +308,8 @@ steps:
     on_context_limit: test
     on_exhausted: release_issue_failure
     on_failure: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.backend_supports_git_write"
 
   test:
     tool: test_check
@@ -563,6 +572,8 @@ steps:
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     on_rate_limit: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.backend_supports_git_write"
     optional_context_refs:
     - merge_gate_ci_conclusion
     - merge_gate_diagnosis_path
@@ -614,6 +625,8 @@ steps:
     on_failure: release_issue_failure
     on_context_limit: release_issue_failure
     on_rate_limit: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.backend_supports_git_write"
     optional_context_refs:
     - merge_gate_ci_conclusion
     - merge_gate_diagnosis_path
@@ -667,6 +680,8 @@ steps:
     on_context_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.backend_supports_git_write"
 
   inter_part_push:
     tool: push_to_remote
@@ -961,6 +976,8 @@ steps:
     - when: "${{ result.verdict }} == 'ci_only_failure'"
       route: release_issue_failure
     on_failure: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.backend_supports_git_write"
     optional_context_refs:
     - review_mode
     note: >
@@ -1003,6 +1020,8 @@ steps:
     on_context_limit: release_issue_failure
     retries: 1
     on_exhausted: release_issue_failure
+    optional: true
+    skip_when_false: "inputs.backend_supports_git_write"
   re_push_review:
     tool: push_to_remote
     with:

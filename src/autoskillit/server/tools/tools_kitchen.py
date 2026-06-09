@@ -56,6 +56,7 @@ from autoskillit.server._misc import (
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -374,12 +375,13 @@ def get_recipe(name: str) -> str:
 
     _defaults = resolve_ingredient_defaults(ctx.project_dir)
     _config_layer = build_config_authoritative_layer(_defaults)
+    _backend_overrides = _backend_capability_overrides(ctx.backend)
     try:
         result = ctx.recipes.load_and_validate(
             name,
             ctx.project_dir,
             resolved_defaults=_defaults,
-            ingredient_overrides=_config_layer,
+            ingredient_overrides={**_backend_overrides, **_config_layer},
             backend_name=ctx.backend.name if ctx.backend else None,
         )
     except ProcessStaleError:
@@ -532,6 +534,7 @@ async def open_kitchen(
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
+            _session_overrides.update(_backend_capability_overrides(tool_ctx.backend))
             _config_layer = build_config_authoritative_layer(_defaults)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
             # Runtime enum check: output_mode must be validated before recipe loading

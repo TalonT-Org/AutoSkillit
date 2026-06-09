@@ -60,7 +60,7 @@ class TestBackendIncompatibleSkillRule:
         findings = run_semantic_rules(ctx)
         compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
-        assert compat_findings[0].severity == Severity.WARNING
+        assert compat_findings[0].severity == Severity.ERROR
         assert "investigate" in compat_findings[0].message
         assert "codex" in compat_findings[0].message
 
@@ -171,7 +171,7 @@ class TestBackendNameThreadingAPI:
         suggestions = result.get("suggestions", [])
         compat_findings = [f for f in suggestions if f.get("rule") == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
-        assert compat_findings[0]["severity"] == "warning"
+        assert compat_findings[0]["severity"] == "error"
 
     def test_validate_from_path_threads_backend_name(self, tmp_path):
         from autoskillit.recipe._api_listing import validate_from_path
@@ -187,7 +187,7 @@ class TestBackendNameThreadingAPI:
         findings = result.get("findings", [])
         compat_findings = [f for f in findings if f.get("rule") == "backend-incompatible-skill"]
         assert len(compat_findings) == 1
-        assert compat_findings[0]["severity"] == "warning"
+        assert compat_findings[0]["severity"] == "error"
 
     def test_cache_key_varies_by_backend_name(self, tmp_path, monkeypatch):
         import autoskillit.recipe._api as api_mod
@@ -245,7 +245,36 @@ class TestBundledRecipeBackendCompat:
             f"Expected at least 1 backend-incompatible-skill finding for {recipe_name} "
             f"on codex backend (implement step uses git_metadata_write skill)"
         )
-        assert any("implement" in f.step_name for f in compat_findings)
+        step_names = {f.step_name for f in compat_findings}
+        expected_steps = {
+            "implement",
+            "retry_worktree",
+            "fix",
+            "merge_gate_fix",
+            "rebase_conflict_fix",
+            "resolve_review",
+            "resolve_pre_review_conflicts",
+        }
+        recipe_aware_expected = expected_steps - {"assess", "merge_gate_assess"}
+        if recipe_name == "remediation":
+            recipe_aware_expected = (expected_steps - {"fix", "merge_gate_fix"}) | {
+                "assess",
+                "merge_gate_assess",
+            }
+        missing = recipe_aware_expected - step_names
+        assert not missing, (
+            f"Expected findings for steps {missing} in {recipe_name} on codex backend, "
+            f"got findings for: {step_names}"
+        )
+        guarded_steps = {
+            name for name in step_names if recipe.steps[name].skip_when_false is not None
+        }
+        for f in compat_findings:
+            if f.step_name in guarded_steps:
+                assert f.severity == Severity.WARNING, (
+                    f"Step {f.step_name!r} has skip_when_false guard; expected WARNING, "
+                    f"got {f.severity}"
+                )
 
     def test_claude_code_backend_no_findings(self, recipe_name) -> None:
         from autoskillit.recipe._analysis import make_validation_context
@@ -267,3 +296,175 @@ class TestBundledRecipeBackendCompat:
             f"No backend-incompatible-skill findings expected for {recipe_name} "
             f"on claude-code backend, got: {compat_findings}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Severity promotion — guarded steps remain WARNING, unguarded escalate to ERROR
+# ---------------------------------------------------------------------------
+
+
+def _make_guarded_recipe(skip_when_false: str | None = None, optional: bool = False) -> Recipe:
+    step: RecipeStep
+    if skip_when_false is not None:
+        step = RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/investigate something", "cwd": "/tmp"},
+            skip_when_false=skip_when_false,
+            optional=optional,
+        )
+    elif optional:
+        step = RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/investigate something", "cwd": "/tmp"},
+            optional=True,
+        )
+    else:
+        step = RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/investigate something", "cwd": "/tmp"},
+        )
+    return Recipe(name="test-recipe", description="test", steps={"run-skill-step": step})
+
+
+class TestSeverityPromotion:
+    """Unguarded backend-incompatible steps fire ERROR; guarded ones fire WARNING."""
+
+    def test_unguarded_incompatible_step_fires_error(self) -> None:
+        recipe = _make_guarded_recipe(skip_when_false=None, optional=False)
+        resolver = _mock_resolver(_make_skill_info())
+        ctx = make_validation_context(
+            recipe,
+            backend_name="codex",
+            skill_resolver=resolver,
+            available_skills=frozenset({"investigate"}),
+        )
+        findings = run_semantic_rules(ctx)
+        compat = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert len(compat) == 1
+        assert compat[0].severity == Severity.ERROR
+
+    def test_guarded_incompatible_step_fires_warning(self) -> None:
+        recipe = _make_guarded_recipe(skip_when_false="inputs.some_guard", optional=False)
+        resolver = _mock_resolver(_make_skill_info())
+        ctx = make_validation_context(
+            recipe,
+            backend_name="codex",
+            skill_resolver=resolver,
+            available_skills=frozenset({"investigate"}),
+        )
+        findings = run_semantic_rules(ctx)
+        compat = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert len(compat) == 1
+        assert compat[0].severity == Severity.WARNING
+
+    def test_optional_incompatible_step_fires_warning(self) -> None:
+        recipe = _make_guarded_recipe(skip_when_false=None, optional=True)
+        resolver = _mock_resolver(_make_skill_info())
+        ctx = make_validation_context(
+            recipe,
+            backend_name="codex",
+            skill_resolver=resolver,
+            available_skills=frozenset({"investigate"}),
+        )
+        findings = run_semantic_rules(ctx)
+        compat = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert len(compat) == 1
+        assert compat[0].severity == Severity.WARNING
+
+    def test_skip_when_true_incompatible_step_fires_warning(self) -> None:
+        step = RecipeStep(
+            tool="run_skill",
+            with_args={"skill_command": "/investigate something", "cwd": "/tmp"},
+            skip_when_true="inputs.some_flag",
+        )
+        recipe = Recipe(
+            name="test-recipe",
+            description="test",
+            steps={"run-skill-step": step},
+        )
+        resolver = _mock_resolver(_make_skill_info())
+        ctx = make_validation_context(
+            recipe,
+            backend_name="codex",
+            skill_resolver=resolver,
+            available_skills=frozenset({"investigate"}),
+        )
+        findings = run_semantic_rules(ctx)
+        compat = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert len(compat) == 1
+        assert compat[0].severity == Severity.WARNING
+
+
+# ---------------------------------------------------------------------------
+# Bundled recipe ingredient declaration tests
+# ---------------------------------------------------------------------------
+
+
+class TestBundledRecipeIngredientDeclaration:
+    """Bundled recipes declare backend_supports_git_write as hidden config-authoritative."""
+
+    @pytest.fixture(
+        scope="class",
+        params=["implementation", "implementation-groups", "remediation"],
+        ids=lambda x: x,
+    )
+    def recipe_name(self, request: pytest.FixtureRequest) -> str:
+        return request.param
+
+    def test_bundled_recipes_declare_backend_supports_git_write(self, recipe_name) -> None:
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        assert "backend_supports_git_write" in recipe.ingredients, (
+            f"Recipe {recipe_name!r} must declare 'backend_supports_git_write' ingredient"
+        )
+        ing = recipe.ingredients["backend_supports_git_write"]
+        assert ing.hidden is True, f"backend_supports_git_write must be hidden in {recipe_name}"
+        assert ing.authority == "config", (
+            f"backend_supports_git_write must be authority=config in {recipe_name}"
+        )
+        assert ing.default == "true", (
+            f"backend_supports_git_write default must be 'true' in {recipe_name}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Bundled recipe step guard tests
+# ---------------------------------------------------------------------------
+
+
+class TestBundledRecipeStepGuards:
+    """Every git_metadata_write step in bundled recipes has a skip_when_false guard."""
+
+    @pytest.fixture(
+        scope="class",
+        params=["implementation", "implementation-groups", "remediation"],
+        ids=lambda x: x,
+    )
+    def recipe_name(self, request: pytest.FixtureRequest) -> str:
+        return request.param
+
+    def test_git_metadata_write_steps_have_skip_guard(self, recipe_name) -> None:
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+        from autoskillit.workspace.skills import DefaultSkillResolver
+
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        resolver = DefaultSkillResolver()
+        for step_name, step in recipe.steps.items():
+            if step.tool != "run_skill":
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            if not skill_cmd or not skill_cmd.startswith("/"):
+                continue
+            skill_info = resolver.resolve(skill_cmd.split()[0].lstrip("/"))
+            if skill_info is None:
+                continue
+            if (
+                not skill_info.uses_capabilities
+                or "git_metadata_write" not in skill_info.uses_capabilities
+            ):
+                continue
+            assert step.skip_when_false is not None, (
+                f"Step {step_name!r} in {recipe_name!r} dispatches git_metadata_write skill "
+                f"'{skill_info.name}' but has no skip_when_false guard"
+            )

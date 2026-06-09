@@ -1,0 +1,292 @@
+"""Tests for backend_capability_overrides injection in recipe-loading entry points.
+
+Verifies that ``backend_supports_git_write`` is correctly derived from
+``ToolContext.backend.capabilities.git_metadata_writable`` and injected into
+``ingredient_overrides`` by open_kitchen, load_recipe, and the recipe://
+resource handler.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from autoskillit.core import CodingAgentBackend
+
+pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _make_backend_with_capability(git_writable: bool) -> CodingAgentBackend:
+    """Return a MagicMock that quacks like CodingAgentBackend with the given capability."""
+    backend = MagicMock(spec=CodingAgentBackend)
+    backend.name = "claude-code" if git_writable else "codex"
+    backend.capabilities = SimpleNamespace(
+        git_metadata_writable=git_writable,
+        supports_tool_list_changed=True,
+    )
+    return backend
+
+
+# ---------------------------------------------------------------------------
+# _backend_capability_overrides unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestBackendCapabilityOverrides:
+    def test_none_backend_returns_true(self) -> None:
+        from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
+
+        assert _backend_capability_overrides(None) == {"backend_supports_git_write": "true"}
+
+    def test_git_writable_backend_returns_true(self) -> None:
+        from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
+
+        backend = _make_backend_with_capability(True)
+        assert _backend_capability_overrides(backend) == {"backend_supports_git_write": "true"}
+
+    def test_non_writable_backend_returns_false(self) -> None:
+        from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
+
+        backend = _make_backend_with_capability(False)
+        assert _backend_capability_overrides(backend) == {"backend_supports_git_write": "false"}
+
+
+# ---------------------------------------------------------------------------
+# open_kitchen injection
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+class TestOpenKitchenInjection:
+    async def test_codex_backend_injects_false(self, tmp_path) -> None:
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        mock_ctx = MagicMock()
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.config.features = {}
+        mock_ctx.config.experimental_enabled = False
+        mock_ctx.backend = _make_backend_with_capability(False)
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+            "valid": True,
+            "suggestions": [],
+            "ingredients_table": None,
+        }
+        mock_ctx.recipes.find.return_value = None
+        mock_ctx.temp_dir = tmp_path
+
+        with patch(
+            "autoskillit.server.tools.tools_kitchen._get_ctx",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                return_value={},
+            ):
+                with patch(
+                    "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+                    new=AsyncMock(return_value=None),
+                ):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+                        new=AsyncMock(side_effect=lambda r, *a, **kw: r),
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen._redisable_subsets",
+                            new=AsyncMock(return_value=None),
+                        ):
+                            await open_kitchen(name="demo")
+
+        call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+        overrides = call_kwargs["ingredient_overrides"]
+        assert overrides.get("backend_supports_git_write") == "false"
+
+    async def test_claude_code_backend_injects_true(self, tmp_path) -> None:
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        mock_ctx = MagicMock()
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.config.features = {}
+        mock_ctx.config.experimental_enabled = False
+        mock_ctx.backend = _make_backend_with_capability(True)
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+            "valid": True,
+            "suggestions": [],
+            "ingredients_table": None,
+        }
+        mock_ctx.recipes.find.return_value = None
+        mock_ctx.temp_dir = tmp_path
+
+        with patch(
+            "autoskillit.server.tools.tools_kitchen._get_ctx",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                return_value={},
+            ):
+                with patch(
+                    "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+                    new=AsyncMock(return_value=None),
+                ):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+                        new=AsyncMock(side_effect=lambda r, *a, **kw: r),
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen._redisable_subsets",
+                            new=AsyncMock(return_value=None),
+                        ):
+                            await open_kitchen(name="demo")
+
+        call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+        overrides = call_kwargs["ingredient_overrides"]
+        assert overrides.get("backend_supports_git_write") == "true"
+
+
+# ---------------------------------------------------------------------------
+# load_recipe injection
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+class TestLoadRecipeInjection:
+    async def test_codex_backend_injects_false(self, tmp_path) -> None:
+        from autoskillit.server.tools.tools_recipe import load_recipe
+
+        mock_ctx = MagicMock()
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.config.workspace.temp_dir = ".autoskillit/temp"
+        mock_ctx.backend = _make_backend_with_capability(False)
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+            "valid": True,
+            "suggestions": [],
+        }
+        mock_ctx.recipes.find.return_value = None
+        mock_ctx.temp_dir = tmp_path
+
+        with patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+                return_value={},
+            ):
+                with patch(
+                    "autoskillit.server.tools.tools_recipe._apply_triage_gate",
+                    new=AsyncMock(side_effect=lambda r, *a, **kw: r),
+                ):
+                    await load_recipe(name="demo")
+
+        call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+        overrides = call_kwargs["ingredient_overrides"]
+        assert overrides.get("backend_supports_git_write") == "false"
+
+    async def test_claude_code_backend_injects_true(self, tmp_path) -> None:
+        from autoskillit.server.tools.tools_recipe import load_recipe
+
+        mock_ctx = MagicMock()
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.config.workspace.temp_dir = ".autoskillit/temp"
+        mock_ctx.backend = _make_backend_with_capability(True)
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+            "valid": True,
+            "suggestions": [],
+        }
+        mock_ctx.recipes.find.return_value = None
+        mock_ctx.temp_dir = tmp_path
+
+        with patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+                return_value={},
+            ):
+                with patch(
+                    "autoskillit.server.tools.tools_recipe._apply_triage_gate",
+                    new=AsyncMock(side_effect=lambda r, *a, **kw: r),
+                ):
+                    await load_recipe(name="demo")
+
+        call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+        overrides = call_kwargs["ingredient_overrides"]
+        assert overrides.get("backend_supports_git_write") == "true"
+
+
+# ---------------------------------------------------------------------------
+# get_recipe resource injection
+# ---------------------------------------------------------------------------
+
+
+class TestGetRecipeResourceInjection:
+    def test_codex_backend_injects_false(self, tmp_path) -> None:
+        from autoskillit.server.tools.tools_kitchen import get_recipe
+
+        mock_ctx = MagicMock()
+        mock_ctx.project_dir = tmp_path
+        mock_ctx.backend = _make_backend_with_capability(False)
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        }
+
+        with patch(
+            "autoskillit.server.tools.tools_kitchen._get_ctx_or_none",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                return_value={},
+            ):
+                get_recipe("demo")
+
+        call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+        overrides = call_kwargs["ingredient_overrides"]
+        assert overrides.get("backend_supports_git_write") == "false"
+
+    def test_claude_code_backend_injects_true(self, tmp_path) -> None:
+        from autoskillit.server.tools.tools_kitchen import get_recipe
+
+        mock_ctx = MagicMock()
+        mock_ctx.project_dir = tmp_path
+        mock_ctx.backend = _make_backend_with_capability(True)
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        }
+
+        with patch(
+            "autoskillit.server.tools.tools_kitchen._get_ctx_or_none",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                return_value={},
+            ):
+                get_recipe("demo")
+
+        call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+        overrides = call_kwargs["ingredient_overrides"]
+        assert overrides.get("backend_supports_git_write") == "true"

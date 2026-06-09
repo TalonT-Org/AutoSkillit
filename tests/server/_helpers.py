@@ -80,7 +80,7 @@ _PATCHED_DEFAULTS = {
     "dispatch_id": "test-dispatch-999",
 }
 
-_SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir"})
+_SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir", "backend_supports_git_write"})
 
 _MINIMAL_SCRIPT_YAML = """\
 name: test-script

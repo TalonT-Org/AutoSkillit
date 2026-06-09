@@ -424,7 +424,8 @@
       "tool": "run_python",
       "with": {
         "callable": "autoskillit.planner.validate_plan",
-        "output_dir": "${{ context.planner_dir }}"
+        "output_dir": "${{ context.planner_dir }}",
+        "source_dir": "${{ inputs.source_dir }}"
       },
       "capture": {
         "verdict": "${{ result.verdict }}",

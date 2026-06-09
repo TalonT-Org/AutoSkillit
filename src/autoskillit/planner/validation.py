@@ -10,6 +10,7 @@ and are never consumed here.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -365,6 +366,47 @@ def _check_duplicate_deliverables(wp_results: dict[str, dict]) -> list[Validatio
     return findings
 
 
+def _check_gitignored_deliverables(
+    wp_results: dict[str, dict],
+    repo_root: Path,
+) -> list[ValidationFinding]:
+    """Reject deliverables whose paths resolve to gitignored locations.
+
+    Gitignored files cannot appear in ``git diff`` and will cause audit-impl to
+    issue unresolvable MISSING findings.
+    """
+    findings: list[ValidationFinding] = []
+    for wp_id, wp in wp_results.items():
+        for d in wp.get("deliverables", []):
+            d_path = Path(d)
+            if d_path.is_absolute():
+                resolved = d_path.resolve()
+            else:
+                resolved = (repo_root / d).resolve()
+            try:
+                result = subprocess.run(
+                    ["git", "check-ignore", "-q", str(resolved)],
+                    cwd=str(repo_root),
+                    capture_output=True,
+                )
+            except OSError:
+                continue
+            if result.returncode != 0:
+                continue
+            findings.append(
+                {
+                    "message": (
+                        f"WP {wp_id} deliverable '{d}' resolves to a gitignored path. "
+                        "Gitignored files cannot appear in git diff and will cause "
+                        "audit-impl to issue unresolvable MISSING findings."
+                    ),
+                    "severity": "error",
+                    "check": "gitignored_deliverable",
+                }
+            )
+    return findings
+
+
 def _check_duplicate_files_touched(wp_results: dict[str, dict]) -> list[ValidationFinding]:
     file_map: dict[str, list[str]] = {}
     for wp_id, wp in wp_results.items():
@@ -455,7 +497,7 @@ def _check_stub_consistency(
     return findings
 
 
-def validate_plan(output_dir: str) -> dict[str, str]:
+def validate_plan(output_dir: str, source_dir: str | None = None) -> dict[str, str]:
     root = Path(output_dir)
     phase_results, phase_rejected = _load_phase_results(root)
     assignment_results, assign_rejected = _load_assignment_results(root)
@@ -487,6 +529,8 @@ def validate_plan(output_dir: str) -> dict[str, str]:
     all_findings.extend(_check_version_bump_steps(wp_results))
     all_findings.extend(_check_failed_wps(wp_manifest))
     all_findings.extend(_check_stub_consistency(wp_results, wp_manifest))
+    if source_dir is not None:
+        all_findings.extend(_check_gitignored_deliverables(wp_results, Path(source_dir)))
 
     discovery_warnings: list[ValidationFinding] = []
     for f in phase_rejected:

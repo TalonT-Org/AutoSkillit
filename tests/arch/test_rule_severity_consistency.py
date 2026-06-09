@@ -200,6 +200,18 @@ def test_dispatch_readiness_allowlist_size_cap() -> None:
     )
 
 
+def _decorator_rule_name(dec: ast.Call) -> str | None:
+    """Extract the ``name=`` keyword string value from a decorator call."""
+    for kw in dec.keywords:
+        if (
+            kw.arg == "name"
+            and isinstance(kw.value, ast.Constant)
+            and isinstance(kw.value.value, str)
+        ):
+            return kw.value.value
+    return None
+
+
 def _collect_error_severity_rules() -> set[str]:
     """Extract rule names whose @semantic_rule decorator has severity=Severity.ERROR."""
     error_rules: set[str] = set()
@@ -213,7 +225,9 @@ def _collect_error_severity_rules() -> set[str]:
                 continue
             sev = _decorator_severity(dec)
             if sev is not None and "ERROR" in sev:
-                error_rules.add(node.name)
+                rule_name = _decorator_rule_name(dec)
+                if rule_name is not None:
+                    error_rules.add(rule_name)
     return error_rules
 
 

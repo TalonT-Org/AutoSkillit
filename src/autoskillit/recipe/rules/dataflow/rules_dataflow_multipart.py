@@ -5,7 +5,7 @@ from __future__ import annotations
 from autoskillit.core import SKILL_TOOLS, Severity, extract_skill_name
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -38,18 +38,15 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
         "*_part_*.md" in note for note in multipart_step_notes
     ):
         findings.append(
-            RuleFinding(
-                rule="multipart-glob-note",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="multipart-glob-note",
                 step_name="plan",
-                message=(
-                    "Recipe uses make-plan or rectify but neither the 'plan' step note nor "
-                    "the planning step's own note contains '*_part_*.md'. Agents will not "
-                    "know to glob for multi-part plan files. Add: "
-                    "'Glob plan_dir for *_part_*.md or single plan file.' to the plan "
-                    "step's note (or to the make-plan/rectify step's note if no separate "
-                    "'plan' step exists)."
-                ),
+                message="Recipe uses make-plan or rectify but neither the 'plan' step note nor "
+                "the planning step's own note contains '*_part_*.md'. Agents will not "
+                "know to glob for multi-part plan files. Add: "
+                "'Glob plan_dir for *_part_*.md or single plan file.' to the plan "
+                "step's note (or to the make-plan/rectify step's note if no separate "
+                "'plan' step exists).",
             )
         )
 
@@ -57,17 +54,14 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
     rules_text = " ".join(wf.kitchen_rules)
     if not any(kw in rules_text for kw in sequential_keywords):
         findings.append(
-            RuleFinding(
-                rule="multipart-sequential-kitchen-rule",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="multipart-sequential-kitchen-rule",
                 step_name="kitchen_rules",
-                message=(
-                    "Recipe uses make-plan or rectify but kitchen_rules do not contain "
-                    "a sequential execution constraint. Without it, agents may "
-                    "batch-verify all parts before "
-                    "implementing any. Add a rule such as: 'SEQUENTIAL EXECUTION: complete full "
-                    "cycle per part before advancing.'"
-                ),
+                message="Recipe uses make-plan or rectify but kitchen_rules do not contain "
+                "a sequential execution constraint. Without it, agents may "
+                "batch-verify all parts before "
+                "implementing any. Add a rule such as: 'SEQUENTIAL EXECUTION: complete full "
+                "cycle per part before advancing.'",
             )
         )
 
@@ -84,15 +78,12 @@ def _check_multipart_iteration_notes(ctx: ValidationContext) -> list[RuleFinding
             )
         if not has_more_parts_route:
             findings.append(
-                RuleFinding(
-                    rule="multipart-route-back",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="multipart-route-back",
                     step_name="next_or_done",
-                    message=(
-                        "Recipe uses make-plan or rectify but next_or_done does not route "
-                        "'more_parts' back to a recipe step. Sequential part processing requires "
-                        "a more_parts → <loop-back-step> condition in the on_result routes."
-                    ),
+                    message="Recipe uses make-plan or rectify but next_or_done does not route "
+                    "'more_parts' back to a recipe step. Sequential part processing requires "
+                    "a more_parts → <loop-back-step> condition in the on_result routes.",
                 )
             )
 

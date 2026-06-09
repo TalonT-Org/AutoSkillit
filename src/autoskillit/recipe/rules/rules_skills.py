@@ -10,7 +10,7 @@ from autoskillit.recipe._skill_helpers import (
     _has_dynamic_skill_name,
 )
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -32,9 +32,8 @@ def _check_unknown_skill_command(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if skill_name not in known:
             findings.append(
-                RuleFinding(
-                    rule="unknown-skill-command",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="unknown-skill-command",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': skill_command '{skill_cmd}' references "
@@ -81,9 +80,8 @@ def _check_subset_disabled_skill(ctx: ValidationContext) -> list[RuleFinding]:
         if overlap:
             disabled_subset = next(iter(sorted(overlap)))
             findings.append(
-                RuleFinding(
-                    rule="subset-disabled-skill",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="subset-disabled-skill",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': skill_command '{skill_cmd}' references "
@@ -131,9 +129,8 @@ def _check_project_local_skill_override(ctx: ValidationContext) -> list[RuleFind
         skill_name = name_part[:space] if space >= 0 else name_part
         if skill_name in overrides:
             findings.append(
-                RuleFinding(
-                    rule="project-local-skill-override",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="project-local-skill-override",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': skill_command '{skill_cmd}' references "

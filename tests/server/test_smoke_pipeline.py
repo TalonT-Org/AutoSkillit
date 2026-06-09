@@ -85,9 +85,7 @@ class TestSmokeScriptValidation:
     async def test_script_validates(self, smoke_script_path: Path) -> None:
         result = json.loads(await validate_recipe(script_path=str(smoke_script_path)))
         non_excluded_errors = [
-            f
-            for f in result.get("findings", [])
-            if f.get("severity") == "error" and f.get("rule") != "run-skill-missing-context-limit"
+            f for f in result.get("findings", []) if f.get("severity") == "error"
         ]
         assert not non_excluded_errors, f"Unexpected errors: {non_excluded_errors}"
         assert result["errors"] == []

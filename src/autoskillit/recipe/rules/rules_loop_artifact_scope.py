@@ -5,7 +5,7 @@ from __future__ import annotations
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _find_cycle_members
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -39,9 +39,8 @@ def _check_loop_artifact_scope(ctx: ValidationContext) -> list[RuleFinding]:
                 continue
             cycle_list = sorted(cycle_set)
             findings.append(
-                RuleFinding(
-                    rule="loop-iterated-step-requires-iteration-scoped-output",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="loop-iterated-step-requires-iteration-scoped-output",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' is in a loop cycle but uses a static "

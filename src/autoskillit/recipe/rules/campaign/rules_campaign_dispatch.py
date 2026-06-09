@@ -10,7 +10,7 @@ import regex as re
 from autoskillit.core import RECIPE_PACK_REGISTRY, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _load_dispatch_target
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 if TYPE_CHECKING:
@@ -32,14 +32,11 @@ def _check_campaign_kind_is_campaign(ctx: ValidationContext) -> list[RuleFinding
     if ctx.recipe.kind == RecipeKind.CAMPAIGN:
         return []
     return [
-        RuleFinding(
-            rule="campaign-kind-is-campaign",
-            severity=Severity.ERROR,
+        make_finding(
+            rule_name="campaign-kind-is-campaign",
             step_name="(top-level)",
-            message=(
-                "Recipe has dispatches but kind is not 'campaign'. "
-                "Set 'kind: campaign' in the recipe header."
-            ),
+            message="Recipe has dispatches but kind is not 'campaign'. "
+            "Set 'kind: campaign' in the recipe header.",
         )
     ]
 
@@ -55,9 +52,8 @@ def _check_campaign_has_dispatches(ctx: ValidationContext) -> list[RuleFinding]:
     if ctx.recipe.dispatches:
         return []
     return [
-        RuleFinding(
-            rule="campaign-has-dispatches",
-            severity=Severity.ERROR,
+        make_finding(
+            rule_name="campaign-has-dispatches",
             step_name="(top-level)",
             message="Campaign recipe must have at least one dispatch in 'dispatches'.",
         )
@@ -77,9 +73,8 @@ def _check_dispatch_names_unique(ctx: ValidationContext) -> list[RuleFinding]:
     for name, count in counts.items():
         if count > 1:
             findings.append(
-                RuleFinding(
-                    rule="dispatch-names-unique",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="dispatch-names-unique",
                     step_name="(top-level)",
                     message=f"Dispatch name {name!r} appears {count} times; names must be unique.",
                 )
@@ -99,14 +94,11 @@ def _check_dispatch_names_kebab_case(ctx: ValidationContext) -> list[RuleFinding
     for d in ctx.recipe.dispatches:
         if not _KEBAB_RE.match(d.name):
             findings.append(
-                RuleFinding(
-                    rule="dispatch-names-kebab-case",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="dispatch-names-kebab-case",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch name {d.name!r} is not kebab-case. "
-                        "Use lowercase letters, digits, and hyphens only."
-                    ),
+                    message=f"Dispatch name {d.name!r} is not kebab-case. "
+                    "Use lowercase letters, digits, and hyphens only.",
                 )
             )
     return findings
@@ -128,14 +120,11 @@ def _check_dispatch_recipe_exists(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if d.recipe not in ctx.available_recipes:
             findings.append(
-                RuleFinding(
-                    rule="dispatch-recipe-exists",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="dispatch-recipe-exists",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} references recipe {d.recipe!r} "
-                        "which is not in the known recipe set."
-                    ),
+                    message=f"Dispatch {d.name!r} references recipe {d.recipe!r} "
+                    "which is not in the known recipe set.",
                 )
             )
     return findings
@@ -158,14 +147,11 @@ def _check_dispatch_recipe_is_standard(ctx: ValidationContext) -> list[RuleFindi
             continue
         if target.kind == RecipeKind.CAMPAIGN:
             findings.append(
-                RuleFinding(
-                    rule="dispatch-recipe-is-standard",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="dispatch-recipe-is-standard",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} targets recipe {d.recipe!r} which is itself a "
-                        "campaign recipe. Campaign nesting is not supported."
-                    ),
+                    message=f"Dispatch {d.name!r} targets recipe {d.recipe!r} which is itself a "
+                    "campaign recipe. Campaign nesting is not supported.",
                 )
             )
     return findings
@@ -192,15 +178,12 @@ def _check_dispatch_recipe_in_declared_packs(ctx: ValidationContext) -> list[Rul
             continue
         if not (set(target.categories) & set(ctx.recipe.requires_recipe_packs)):
             findings.append(
-                RuleFinding(
-                    rule="dispatch-recipe-in-declared-packs",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="dispatch-recipe-in-declared-packs",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} targets recipe {d.recipe!r} whose categories "
-                        f"{target.categories!r} do not overlap with the campaign's declared "
-                        f"packs {ctx.recipe.requires_recipe_packs!r}."
-                    ),
+                    message=f"Dispatch {d.name!r} targets recipe {d.recipe!r} whose categories "
+                    f"{target.categories!r} do not overlap with the campaign's declared "
+                    f"packs {ctx.recipe.requires_recipe_packs!r}.",
                 )
             )
     return findings
@@ -220,14 +203,11 @@ def _check_campaign_requires_recipe_packs_exist(ctx: ValidationContext) -> list[
         if pack_name not in RECIPE_PACK_REGISTRY and pack_name not in seen:
             seen.add(pack_name)
             findings.append(
-                RuleFinding(
-                    rule="campaign-requires-recipe-packs-exist",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="campaign-requires-recipe-packs-exist",
                     step_name="(top-level)",
-                    message=(
-                        f"Pack {pack_name!r} in requires_recipe_packs is not in "
-                        f"RECIPE_PACK_REGISTRY. Known packs: {sorted(RECIPE_PACK_REGISTRY)}"
-                    ),
+                    message=f"Pack {pack_name!r} in requires_recipe_packs is not in "
+                    f"RECIPE_PACK_REGISTRY. Known packs: {sorted(RECIPE_PACK_REGISTRY)}",
                 )
             )
     return findings
@@ -247,9 +227,8 @@ def _check_campaign_task_non_empty(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if not d.task.strip():
             findings.append(
-                RuleFinding(
-                    rule="campaign-task-non-empty",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="campaign-task-non-empty",
                     step_name="(top-level)",
                     message=f"Dispatch {d.name!r} has an empty 'task' field.",
                 )

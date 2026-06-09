@@ -25,7 +25,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
     shell_vars_assigned,
 )
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _PSEUDOCODE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
@@ -95,9 +95,8 @@ def _check_undefined_bash_placeholder(ctx: ValidationContext) -> list[RuleFindin
 
         if undefined:
             findings.append(
-                RuleFinding(
-                    rule="undefined-bash-placeholder",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="undefined-bash-placeholder",
                     step_name=step_name,
                     message=(
                         f"Skill '{skill_name}' bash block uses undefined {{placeholder}}: "
@@ -157,9 +156,8 @@ def _check_hardcoded_origin_remote(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if _has_hardcoded_origin_in_bash(bash_blocks):
             findings.append(
-                RuleFinding(
-                    rule="hardcoded-origin-remote",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="hardcoded-origin-remote",
                     step_name=step_name,
                     message=(
                         f"Skill '{skill_name}' bash block uses the literal remote name 'origin' "
@@ -210,9 +208,8 @@ def _check_blind_git_add_in_skill(ctx: ValidationContext) -> list[RuleFinding]:
             for line in block.splitlines():
                 if _BLIND_GIT_ADD_RE.search(line):
                     findings.append(
-                        RuleFinding(
-                            rule="blind-git-add-in-skill",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="blind-git-add-in-skill",
                             step_name=step_name,
                             message=(
                                 f"Skill '{skill_name}' SKILL.md contains blind "
@@ -274,9 +271,8 @@ def _check_no_interpreter_mediated_writes(ctx: ValidationContext) -> list[RuleFi
                 violations.append("python block")
         if violations:
             findings.append(
-                RuleFinding(
-                    rule="interpreter-mediated-write-in-skill",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="interpreter-mediated-write-in-skill",
                     step_name=step_name,
                     message=(
                         f"Skill '{skill_name}' SKILL.md contains interpreter-mediated "
@@ -330,9 +326,8 @@ def _check_no_autoskillit_import(ctx: ValidationContext) -> list[RuleFinding]:
                 match = pattern.search(block)
                 if match:
                     findings.append(
-                        RuleFinding(
-                            rule="no-autoskillit-import-in-skill-python-block",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="no-autoskillit-import-in-skill-python-block",
                             step_name=step_name,
                             message=(
                                 f"Skill '{skill_name}' bash block contains `autoskillit` import "
@@ -399,9 +394,8 @@ def _check_no_grep_bre_alternation(ctx: ValidationContext) -> list[RuleFinding]:
                     violations.append(line.strip())
         if violations:
             findings.append(
-                RuleFinding(
-                    rule="grep-bre-alternation-in-skill",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="grep-bre-alternation-in-skill",
                     step_name=step_name,
                     message=(
                         f"Skill '{skill_name}' bash block uses grep BRE \\| alternation "
@@ -473,9 +467,8 @@ def _check_output_section_no_markdown_directive(ctx: ValidationContext) -> list[
 
         if not _NO_MARKDOWN_DIRECTIVE_PATTERN.search(output_section):
             findings.append(
-                RuleFinding(
-                    rule="output-section-no-markdown-directive",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="output-section-no-markdown-directive",
                     step_name=step_name,
                     message=(
                         f"SKILL.md for '{skill_name}' has expected_output_patterns but its "
@@ -517,9 +510,8 @@ def _check_no_gh_issue_comment(ctx: ValidationContext) -> list[RuleFinding]:
         for block in extract_bash_blocks(content):
             if _GH_ISSUE_COMMENT_RE.search(block):
                 findings.append(
-                    RuleFinding(
-                        rule="skill-no-issue-comments",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="skill-no-issue-comments",
                         step_name=step_name,
                         message=(
                             f"Skill '{skill_name}' contains 'gh issue comment'. "
@@ -613,9 +605,8 @@ def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list
         if unprotected:
             boundary_desc = "; ".join(f"'{b}' in section '{h}'" for b, h in unprotected)
             findings.append(
-                RuleFinding(
-                    rule="transition-boundary-anti-confirmation",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="transition-boundary-anti-confirmation",
                     step_name=step_name,
                     message=(
                         f"Skill '{skill_name}' has unprotected transition "
@@ -682,9 +673,8 @@ def _check_executable_field_content_validity(
                 continue
             if not _CONTENT_VALIDITY_SIGNALS_RE.search(block):
                 findings.append(
-                    RuleFinding(
-                        rule="executable-field-content-validity",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="executable-field-content-validity",
                         step_name=step_name,
                         message=(
                             f"V-rule {m.group(1)} in {skill_name} mentions an executable "
@@ -739,9 +729,8 @@ def _check_reviews_post_requires_input_flag(ctx: ValidationContext) -> list[Rule
             collapsed = _LINE_CONTINUATION_RE.sub(" ", subsection)
             if _REVIEWS_POST_RE.search(collapsed) and "--input -" not in collapsed:
                 findings.append(
-                    RuleFinding(
-                        rule="reviews-post-requires-input-flag",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="reviews-post-requires-input-flag",
                         step_name=step_name,
                         message=(
                             f"Skill '{skill_name}' has a section that POSTs to the GitHub "
@@ -806,9 +795,8 @@ def _check_source_attribution_directive(ctx: ValidationContext) -> list[RuleFind
 
         if not _SOURCE_PROHIBITION_RE.search(content):
             findings.append(
-                RuleFinding(
-                    rule="source-attribution-directive",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="source-attribution-directive",
                     step_name=step_name,
                     message=(
                         f"SKILL.md for '{skill_name}' has source_pin_fields but lacks "
@@ -862,9 +850,8 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
             for block in section_graphql:
                 if not section_bash_graphql:
                     findings.append(
-                        RuleFinding(
-                            rule="graphql-query-requires-shell-invocation",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="graphql-query-requires-shell-invocation",
                             step_name=step_name,
                             message=(
                                 f"Skill '{skill_name}' has a graphql block in a section "
@@ -881,9 +868,8 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
                     )
                     if not flag_found:
                         findings.append(
-                            RuleFinding(
-                                rule="graphql-query-requires-shell-invocation",
-                                severity=Severity.ERROR,
+                            make_finding(
+                                rule_name="graphql-query-requires-shell-invocation",
                                 step_name=step_name,
                                 message=(
                                     f"Skill '{skill_name}' graphql variable '${var}' has no "
@@ -899,9 +885,8 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
                 and not section_bash_graphql
             ):
                 findings.append(
-                    RuleFinding(
-                        rule="graphql-query-requires-shell-invocation",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="graphql-query-requires-shell-invocation",
                         step_name=step_name,
                         message=(
                             f"Skill '{skill_name}' has a section referencing GraphQL "

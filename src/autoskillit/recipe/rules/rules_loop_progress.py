@@ -14,7 +14,7 @@ from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -55,9 +55,8 @@ def _check_loop_body_capture(ctx: ValidationContext) -> list[RuleFinding]:
             if step.capture is None or len(step.capture) == 0:
                 cycle_list = sorted(cycle_set)
                 findings.append(
-                    RuleFinding(
-                        rule="loop-body-uncaptured-output",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="loop-body-uncaptured-output",
                         step_name=step_name,
                         message=(
                             f"Step '{step_name}' in loop [{'→'.join(cycle_list)}] "

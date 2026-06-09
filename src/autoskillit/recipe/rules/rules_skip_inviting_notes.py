@@ -6,7 +6,7 @@ import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -34,9 +34,8 @@ def _check_skip_inviting_notes(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if re.search(r"never\s+blocks?", note, re.IGNORECASE):
             findings.append(
-                RuleFinding(
-                    rule="skip-inviting-note-text",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skip-inviting-note-text",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' note contains skip-inviting phrase 'never blocks'. "
@@ -47,9 +46,8 @@ def _check_skip_inviting_notes(ctx: ValidationContext) -> list[RuleFinding]:
             )
         elif re.search(r"best[- ]effort", note, re.IGNORECASE):
             findings.append(
-                RuleFinding(
-                    rule="skip-inviting-note-text",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skip-inviting-note-text",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' note contains skip-inviting phrase 'best-effort'. "
@@ -59,9 +57,8 @@ def _check_skip_inviting_notes(ctx: ValidationContext) -> list[RuleFinding]:
             )
         elif re.search(r"optional[=: ]+true", note, re.IGNORECASE):
             findings.append(
-                RuleFinding(
-                    rule="skip-inviting-note-text",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skip-inviting-note-text",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' note contains literal "
@@ -72,9 +69,8 @@ def _check_skip_inviting_notes(ctx: ValidationContext) -> list[RuleFinding]:
             )
         elif re.search(r"can be skipped", note, re.IGNORECASE):
             findings.append(
-                RuleFinding(
-                    rule="skip-inviting-note-text",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skip-inviting-note-text",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' note contains skip-inviting phrase 'can be skipped'. "
@@ -84,9 +80,8 @@ def _check_skip_inviting_notes(ctx: ValidationContext) -> list[RuleFinding]:
             )
         elif re.search(r"non[- ]critical", note, re.IGNORECASE):
             findings.append(
-                RuleFinding(
-                    rule="skip-inviting-note-text",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skip-inviting-note-text",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' note contains skip-inviting phrase 'non-critical'. "
@@ -96,9 +91,8 @@ def _check_skip_inviting_notes(ctx: ValidationContext) -> list[RuleFinding]:
             )
         elif re.search(r"not required", note, re.IGNORECASE):
             findings.append(
-                RuleFinding(
-                    rule="skip-inviting-note-text",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skip-inviting-note-text",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' note contains skip-inviting phrase 'not required'. "

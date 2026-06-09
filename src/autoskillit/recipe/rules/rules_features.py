@@ -16,7 +16,7 @@ from autoskillit.core import (
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _get_skill_category_map
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 def _tools_for_feature(fdef: FeatureDef) -> frozenset[str]:
@@ -56,9 +56,8 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
             # --- Tool check ---
             if step.tool and step.tool in feature_tools[fdef]:
                 findings.append(
-                    RuleFinding(
-                        rule="feature-gate-tool-reference",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="feature-gate-tool-reference",
                         step_name=step_name,
                         message=(
                             f"step '{step_name}': tool '{step.tool}' belongs to "
@@ -75,9 +74,8 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
                 and (step.with_args or {}).get("callable", "").startswith(fdef.import_package)
             ):
                 findings.append(
-                    RuleFinding(
-                        rule="feature-gate-tool-reference",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="feature-gate-tool-reference",
                         step_name=step_name,
                         message=(
                             f"step '{step_name}': run_python callable "
@@ -99,9 +97,8 @@ def check_feature_gated_tools(ctx: ValidationContext) -> list[RuleFinding]:
             categories = category_map.get(skill_name, frozenset())
             if categories & fdef.skill_categories:
                 findings.append(
-                    RuleFinding(
-                        rule="feature-gate-tool-reference",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="feature-gate-tool-reference",
                         step_name=step_name,
                         message=(
                             f"step '{step_name}': skill_command '{skill_cmd}' references "
@@ -143,9 +140,8 @@ def check_requires_features_declared(ctx: ValidationContext) -> list[RuleFinding
                 continue
             if feat_name not in declared_features:
                 findings.append(
-                    RuleFinding(
-                        rule="undeclared-feature-requirement",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="undeclared-feature-requirement",
                         step_name=step_name,
                         message=(
                             f"step '{step_name}': skill_command '{skill_cmd}' references "
@@ -171,9 +167,8 @@ def check_provider_requires_profile(ctx: ValidationContext) -> list[RuleFinding]
     for step_name, step in ctx.recipe.steps.items():
         if step.provider is not None and step.provider not in ctx.provider_profiles:
             findings.append(
-                RuleFinding(
-                    rule="provider-requires-profile",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="provider-requires-profile",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': provider '{step.provider}' is not a "

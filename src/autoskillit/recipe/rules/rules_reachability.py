@@ -27,7 +27,7 @@ from autoskillit.recipe._analysis import (
     _bfs_with_facts,
     bfs_reachable,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # Regex to find ${{ context.X }} references anywhere in a string value.
 _CTX_REF_RE = re.compile(r"\$\{\{\s*context\.(\w+)\s*\}\}")
@@ -130,9 +130,8 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
                 continue  # no producer anywhere — not an inversion, different bug
 
             findings.append(
-                RuleFinding(
-                    rule="capture-inversion-detection",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="capture-inversion-detection",
                     step_name=step_name,
                     message=(
                         f"Step {step_name!r} reads context.{var} but the producer "
@@ -190,9 +189,8 @@ def _check_event_scope_requires_upstream_capture(ctx: ValidationContext) -> list
             else "no producer for merge_group_trigger"
         )
         findings.append(
-            RuleFinding(
-                rule="event-scope-requires-upstream-capture",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="event-scope-requires-upstream-capture",
                 step_name=step_name,
                 message=(
                     f"wait_for_ci step {step_name!r} hardcodes event={event!r} without "

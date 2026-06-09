@@ -10,7 +10,7 @@ from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._git_helpers import _GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE
 from autoskillit.recipe.contracts import RESULT_CAPTURE_RE
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # Raw tool output fields — these are populated directly from the tool JSON response,
 # no echo statement in the cmd is required to capture them.
@@ -57,9 +57,8 @@ def _check_run_cmd_emit_alignment(ctx: ValidationContext) -> list[RuleFinding]:
             echo_pattern = re.compile(rf'\becho\s+"?{re.escape(result_key)}=')
             if not echo_pattern.search(cmd):
                 findings.append(
-                    RuleFinding(
-                        rule="run-cmd-emit-alignment",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="run-cmd-emit-alignment",
                         step_name=name,
                         message=(
                             f"Step '{name}' captures '{cap_key}' from result.{result_key} "
@@ -89,9 +88,8 @@ def _check_unbundled_script_ref(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if re.match(r"^\s*bash\s+scripts/", cmd):
             findings.append(
-                RuleFinding(
-                    rule="run-cmd-unbundled-script-ref",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="run-cmd-unbundled-script-ref",
                     step_name=name,
                     message=(
                         f"Step '{name}' uses a relative scripts/ path in cmd. "
@@ -121,9 +119,8 @@ def _check_run_cmd_find_rediscovery(ctx: ValidationContext) -> list[RuleFinding]
             continue
         if _FIND_HEURISTIC_RE.search(cmd):
             findings.append(
-                RuleFinding(
-                    rule="run-cmd-find-rediscovery",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="run-cmd-find-rediscovery",
                     step_name=name,
                     message=(
                         f"Step '{name}' uses a `find | sort | tail` heuristic to select "
@@ -157,9 +154,8 @@ def _check_hardcoded_origin_in_run_cmd(ctx: ValidationContext) -> list[RuleFindi
                 continue
             if _GIT_REMOTE_COMMAND_RE.search(stripped) and _LITERAL_ORIGIN_RE.search(stripped):
                 findings.append(
-                    RuleFinding(
-                        rule="hardcoded-origin-in-run-cmd",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="hardcoded-origin-in-run-cmd",
                         step_name=name,
                         message=(
                             f"Step '{name}' uses hardcoded 'origin' in a git command. "
@@ -197,9 +193,8 @@ def _check_run_cmd_script_exists(ctx: ValidationContext) -> list[RuleFinding]:
         script_path = Path(m.group(1))
         if not script_path.is_file():
             findings.append(
-                RuleFinding(
-                    rule="run-cmd-script-exists",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="run-cmd-script-exists",
                     step_name=name,
                     message=f"Step '{name}' runs bash {m.group(1)} but the script does not exist.",
                 )
@@ -275,9 +270,8 @@ def _check_run_cmd_bare_rebase(ctx: ValidationContext) -> list[RuleFinding]:
         if _has_conflict_routing(step, ctx.recipe):
             continue
         findings.append(
-            RuleFinding(
-                rule="run-cmd-bare-rebase-without-conflict-routing",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="run-cmd-bare-rebase-without-conflict-routing",
                 step_name=name,
                 message=(
                     f"Step '{name}' performs a bare git rebase via run_cmd but does not "
@@ -318,9 +312,8 @@ def _check_run_cmd_path_capture_nonempty_guard(ctx: ValidationContext) -> list[R
             continue
         if not _NONEMPTY_GUARD_RE.search(cmd):
             findings.append(
-                RuleFinding(
-                    rule="run-cmd-path-capture-requires-nonempty-guard",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="run-cmd-path-capture-requires-nonempty-guard",
                     step_name=name,
                     message=(
                         f"Step '{name}' captures a path-typed value but cmd "
@@ -351,9 +344,8 @@ def _check_run_cmd_single_quote_expansion(ctx: ValidationContext) -> list[RuleFi
             continue
         for m in _SINGLE_QUOTE_EXPANSION_RE.finditer(cmd):
             findings.append(
-                RuleFinding(
-                    rule="run-cmd-single-quote-expansion",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="run-cmd-single-quote-expansion",
                     step_name=name,
                     message=(
                         f"Step '{name}' has $(...) command substitution inside single "

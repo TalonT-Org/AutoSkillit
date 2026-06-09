@@ -12,7 +12,7 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_step_graph
 from autoskillit.recipe._rule_helpers import is_success_stop
 from autoskillit.recipe._skill_helpers import get_allowed_values_for_skill
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -81,9 +81,8 @@ def _check_failure_verdict_bypass_reachable(ctx: ValidationContext) -> list[Rule
                     and is_success_stop(reached_step)
                 ):
                     findings.append(
-                        RuleFinding(
-                            rule="failure-verdict-bypass-reachable",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="failure-verdict-bypass-reachable",
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' has failure verdicts routed via on_result "

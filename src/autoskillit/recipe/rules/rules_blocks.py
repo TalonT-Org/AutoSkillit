@@ -16,7 +16,7 @@ from typing import Any
 
 from autoskillit.core import Severity, load_yaml, pkg_root
 from autoskillit.recipe._api_cache import YamlFileCache
-from autoskillit.recipe.registry import BlockContext, RuleFinding, block_rule
+from autoskillit.recipe.registry import BlockContext, RuleFinding, block_rule, make_block_finding
 
 _BUDGETS_CACHE = YamlFileCache()
 
@@ -57,15 +57,12 @@ def _check_block_run_cmd_budget(bctx: BlockContext) -> list[RuleFinding]:
     if actual <= budget:
         return []
     return [
-        RuleFinding(
-            rule="block-run-cmd-budget",
-            severity=Severity.ERROR,
+        make_block_finding(
+            rule_name="block-run-cmd-budget",
             step_name=bctx.block.entry,
-            message=(
-                f"Block {bctx.block.name!r} contains {actual} run_cmd step"
-                f"{'s' if actual != 1 else ''} (budget: {budget}). "
-                f"Consolidate into an MCP tool."
-            ),
+            message=f"Block {bctx.block.name!r} contains {actual} run_cmd step"
+            f"{'s' if actual != 1 else ''} (budget: {budget}). "
+            f"Consolidate into an MCP tool.",
         )
     ]
 
@@ -85,15 +82,12 @@ def _check_block_mcp_tool_budget(bctx: BlockContext) -> list[RuleFinding]:
     if actual <= budget:
         return []
     return [
-        RuleFinding(
-            rule="block-mcp-tool-budget",
-            severity=Severity.ERROR,
+        make_block_finding(
+            rule_name="block-mcp-tool-budget",
             step_name=bctx.block.entry,
-            message=(
-                f"Block {bctx.block.name!r} contains {actual} MCP tool call"
-                f"{'s' if actual != 1 else ''} (budget: {budget}). "
-                f"Reduce to a single consolidated tool call."
-            ),
+            message=f"Block {bctx.block.name!r} contains {actual} MCP tool call"
+            f"{'s' if actual != 1 else ''} (budget: {budget}). "
+            f"Reduce to a single consolidated tool call.",
         )
     ]
 
@@ -112,17 +106,14 @@ def _check_block_gh_api_forbidden(bctx: BlockContext) -> list[RuleFinding]:
     if bctx.block.gh_api_occurrences == 0:
         return []
     return [
-        RuleFinding(
-            rule="block-gh-api-forbidden",
-            severity=Severity.ERROR,
+        make_block_finding(
+            rule_name="block-gh-api-forbidden",
             step_name=bctx.block.entry,
-            message=(
-                f"Block {bctx.block.name!r} has {bctx.block.gh_api_occurrences} "
-                f"'gh api' shell invocation"
-                f"{'s' if bctx.block.gh_api_occurrences != 1 else ''}. "
-                f"MCP tools must own all GitHub API calls in declared blocks; "
-                f"consolidate into a single MCP tool call."
-            ),
+            message=f"Block {bctx.block.name!r} has {bctx.block.gh_api_occurrences} "
+            f"'gh api' shell invocation"
+            f"{'s' if bctx.block.gh_api_occurrences != 1 else ''}. "
+            f"MCP tools must own all GitHub API calls in declared blocks; "
+            f"consolidate into a single MCP tool call.",
         )
     ]
 
@@ -142,15 +133,12 @@ def _check_block_single_producer(bctx: BlockContext) -> list[RuleFinding]:
     for cap_key, producer_names in producers.items():
         if len(producer_names) > 1:
             findings.append(
-                RuleFinding(
-                    rule="block-single-producer",
-                    severity=Severity.WARNING,
+                make_block_finding(
+                    rule_name="block-single-producer",
                     step_name=bctx.block.entry,
-                    message=(
-                        f"Block {bctx.block.name!r}: capture key {cap_key!r} is produced by "
-                        f"{len(producer_names)} steps ({', '.join(producer_names)}); "
-                        f"expected exactly one producer."
-                    ),
+                    message=f"Block {bctx.block.name!r}: capture key {cap_key!r} is produced by "
+                    f"{len(producer_names)} steps ({', '.join(producer_names)}); "
+                    f"expected exactly one producer.",
                 )
             )
     return findings
@@ -179,30 +167,24 @@ def _check_block_entry_exit_reachable(bctx: BlockContext) -> list[RuleFinding]:
     findings = []
     if len(entry_candidates) != 1:
         findings.append(
-            RuleFinding(
-                rule="block-entry-exit-reachable",
-                severity=Severity.WARNING,
+            make_block_finding(
+                rule_name="block-entry-exit-reachable",
                 step_name=bctx.block.entry,
-                message=(
-                    f"Block {bctx.block.name!r} has {len(entry_candidates)} entry candidates "
-                    f"(expected 1): "
-                    f"{[s.name for s in entry_candidates]}. "
-                    f"Block members must form a single connected region."
-                ),
+                message=f"Block {bctx.block.name!r} has {len(entry_candidates)} entry candidates "
+                f"(expected 1): "
+                f"{[s.name for s in entry_candidates]}. "
+                f"Block members must form a single connected region.",
             )
         )
     if len(exit_candidates) != 1:
         findings.append(
-            RuleFinding(
-                rule="block-entry-exit-reachable",
-                severity=Severity.WARNING,
+            make_block_finding(
+                rule_name="block-entry-exit-reachable",
                 step_name=bctx.block.exit,
-                message=(
-                    f"Block {bctx.block.name!r} has {len(exit_candidates)} exit candidates "
-                    f"(expected 1): "
-                    f"{[s.name for s in exit_candidates]}. "
-                    f"Block members must form a single connected region."
-                ),
+                message=f"Block {bctx.block.name!r} has {len(exit_candidates)} exit candidates "
+                f"(expected 1): "
+                f"{[s.name for s in exit_candidates]}. "
+                f"Block members must form a single connected region.",
             )
         )
     return findings

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 
@@ -22,14 +22,11 @@ def _check_depends_on_refers_to_valid_dispatches(ctx: ValidationContext) -> list
         for dep in d.depends_on:
             if dep not in all_names:
                 findings.append(
-                    RuleFinding(
-                        rule="depends-on-refers-to-valid-dispatches",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="depends-on-refers-to-valid-dispatches",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} depends_on {dep!r} which is not a known "
-                            f"dispatch name. Known names: {sorted(all_names)}"
-                        ),
+                        message=f"Dispatch {d.name!r} depends_on {dep!r} which is not a known "
+                        f"dispatch name. Known names: {sorted(all_names)}",
                     )
                 )
     return findings
@@ -60,9 +57,8 @@ def _check_depends_on_acyclic(ctx: ValidationContext) -> list[RuleFinding]:
                 cycle_start = path.index(neighbor) if neighbor in path else 0
                 cycle = path[cycle_start:] + [neighbor]
                 findings.append(
-                    RuleFinding(
-                        rule="depends-on-acyclic",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="depends-on-acyclic",
                         step_name="(top-level)",
                         message=(
                             f"Circular dependency detected in dispatches: {' -> '.join(cycle)}"
@@ -90,15 +86,12 @@ def _check_campaign_dispatch_depends_on_is_sequential(ctx: ValidationContext) ->
     for d in ctx.recipe.dispatches:
         if len(d.depends_on) > 1:
             findings.append(
-                RuleFinding(
-                    rule="campaign-dispatch-depends-on-is-sequential",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="campaign-dispatch-depends-on-is-sequential",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} has {len(d.depends_on)} entries in depends_on "
-                        f"({d.depends_on!r}). Campaign dispatches must form a linear chain: "
-                        "each dispatch may depend on at most one predecessor."
-                    ),
+                    message=f"Dispatch {d.name!r} has {len(d.depends_on)} entries in depends_on "
+                    f"({d.depends_on!r}). Campaign dispatches must form a linear chain: "
+                    "each dispatch may depend on at most one predecessor.",
                 )
             )
     return findings

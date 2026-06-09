@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
@@ -25,9 +25,8 @@ def _check_env_key_in_with_args(ctx: ValidationContext) -> list[RuleFinding]:
     for step_name, step in ctx.recipe.steps.items():
         if "env" in step.with_args:
             findings.append(
-                RuleFinding(
-                    rule="env-key-in-with-args",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="env-key-in-with-args",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}' contains an env: key in with_args. "
@@ -52,9 +51,8 @@ def _check_unknown_sub_recipe(ctx: ValidationContext) -> list[RuleFinding]:
     for step_name, step in ctx.recipe.steps.items():
         if step.sub_recipe is not None and step.sub_recipe not in ctx.available_sub_recipes:
             findings.append(
-                RuleFinding(
-                    rule="unknown-sub-recipe",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="unknown-sub-recipe",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': sub_recipe '{step.sub_recipe}' is not a "
@@ -107,9 +105,8 @@ def _detect_cycles(
         sr_name = step.sub_recipe
         if sr_name in chain_set:
             findings.append(
-                RuleFinding(
-                    rule="circular-sub-recipe",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="circular-sub-recipe",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}': sub_recipe '{sr_name}' creates a circular "

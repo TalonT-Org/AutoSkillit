@@ -6,7 +6,7 @@ from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _get_bundled_skill_names
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -29,9 +29,8 @@ def _check_step_skill_name_mismatch(ctx: ValidationContext) -> list[RuleFinding]
         normalized_key = step_name.replace("_", "-")
         if normalized_key in known and normalized_key != invoked_skill:
             findings.append(
-                RuleFinding(
-                    rule="step-skill-name-mismatch",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="step-skill-name-mismatch",
                     step_name=step_name,
                     message=(
                         f"step '{step_name}' invokes skill '{invoked_skill}' but "

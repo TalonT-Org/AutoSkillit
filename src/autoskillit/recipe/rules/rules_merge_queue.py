@@ -5,7 +5,7 @@ from __future__ import annotations
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_graph import _extract_routing_edges
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _MERGE_QUEUE_WAIT_TOOLS = frozenset({"wait_for_merge_queue"})
 _PUSH_TOOLS = frozenset({"push_to_remote"})
@@ -122,9 +122,8 @@ def _check_push_after_queue_has_queued_branch_route(
             continue
         if not _step_has_queued_branch_route(step_name, ctx):
             findings.append(
-                RuleFinding(
-                    rule="push-after-queue-requires-queued-branch-route",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="push-after-queue-requires-queued-branch-route",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' uses push_to_remote and is reachable from a "

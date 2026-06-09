@@ -17,7 +17,7 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import (
     get_allowed_values_for_skill as _get_allowed_values_for_skill,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -118,9 +118,8 @@ def _check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
                 continue
             for value in unrouted:
                 findings.append(
-                    RuleFinding(
-                        rule="unrouted-verdict-value",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="unrouted-verdict-value",
                         step_name=step_name,
                         message=(
                             f"Step '{step_name}' captures '{output_name}' from "
@@ -191,9 +190,8 @@ def _check_verdict_routing_asymmetry(ctx: ValidationContext) -> list[RuleFinding
         continuation_steps = [name for name, cls in entries if cls == "continuation"]
         if escalation_steps and continuation_steps:
             findings.append(
-                RuleFinding(
-                    rule="verdict-routing-asymmetry",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="verdict-routing-asymmetry",
                     step_name=escalation_steps[0],
                     message=(
                         f"Verdict '{value}' from '{skill_name}' routes to escalation "
@@ -262,9 +260,8 @@ def _check_on_result_values_in_allowed_values(ctx: ValidationContext) -> list[Ru
                     continue
                 if value not in allowed_by_output[output_name]:
                     findings.append(
-                        RuleFinding(
-                            rule="on-result-values-in-allowed-values",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="on-result-values-in-allowed-values",
                             step_name=step_name,
                             message=(
                                 f"Step '{step_name}' routes {output_name} == '{value}' "
@@ -330,9 +327,8 @@ def _check_verdict_output_requires_on_result(ctx: ValidationContext) -> list[Rul
 
         for output_name, allowed_values in verdict_outputs.items():
             findings.append(
-                RuleFinding(
-                    rule="verdict-output-requires-on-result",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="verdict-output-requires-on-result",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' invokes '{skill_name}' which declares "

@@ -11,7 +11,7 @@ from autoskillit.recipe._rule_helpers import (
     is_failure_stop,
     is_success_stop,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _FAILURE_NAME_PATTERNS = frozenset({"escalate", "failure", "error", "reject"})
 
@@ -64,9 +64,8 @@ def _check_stop_sentinel_direction(ctx: ValidationContext) -> list[RuleFinding]:
 
         if on_failure_path and is_success_stop(step):
             findings.append(
-                RuleFinding(
-                    rule=RULE_NAME,
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name=RULE_NAME,
                     step_name=step_name,
                     message=(
                         f"Stop step '{step_name}' is on a failure path but emits "
@@ -76,9 +75,8 @@ def _check_stop_sentinel_direction(ctx: ValidationContext) -> list[RuleFinding]:
             )
         elif not on_failure_path and is_failure_stop(step):
             findings.append(
-                RuleFinding(
-                    rule=RULE_NAME,
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name=RULE_NAME,
                     step_name=step_name,
                     message=(
                         f"Stop step '{step_name}' is on a success path but emits "

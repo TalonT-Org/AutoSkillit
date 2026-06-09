@@ -14,7 +14,7 @@ from pathlib import Path
 from autoskillit.core import Severity, load_yaml, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._api_cache import YamlFileCache
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _PHOROPTER_PHASES: tuple[str, ...] = ("dial", "apply", "synthesize")
 
@@ -82,9 +82,8 @@ def _check_phoropter_phase_order(ctx: ValidationContext) -> list[RuleFinding]:
         expected_phase = expected_next.get(family, "dial")
         if canonical != expected_phase:
             findings.append(
-                RuleFinding(
-                    rule="phoropter-phase-order",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="phoropter-phase-order",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' (canonical: '{canonical}') in phoropter family "
@@ -140,9 +139,8 @@ def _check_phoropter_interleaving(ctx: ValidationContext) -> list[RuleFinding]:
         else:
             for fam, last_phase in list(in_progress.items()):
                 findings.append(
-                    RuleFinding(
-                        rule="phoropter-step-interleaving",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="phoropter-step-interleaving",
                         step_name=step_name,
                         message=(
                             f"Step '{step_name}' interrupts phoropter family '{fam}' "

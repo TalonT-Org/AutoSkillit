@@ -10,7 +10,7 @@ from autoskillit.core import pkg_root
 from autoskillit.recipe import load_and_validate
 from autoskillit.recipe._recipe_composition import _step_block_pattern
 from autoskillit.recipe.io import load_recipe
-from tests.recipe.conftest import BUNDLED_RECIPE_NAMES, EXCLUDED_TRANSITIONAL_RULES
+from tests.recipe.conftest import BUNDLED_RECIPE_NAMES
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -48,22 +48,8 @@ def test_truthy_resolved_step_has_no_optional_signal_in_content(
 ) -> None:
     """After truthy resolution, no guarded step block retains optional: true or skip_when_false."""
     result = load_and_validate(recipe_name, ingredient_overrides={ing_name: "true"})
-    non_excluded = [
-        s
-        for s in result.get("suggestions", [])
-        if s.get("severity") == "error" and s.get("rule") not in EXCLUDED_TRANSITIONAL_RULES
-    ]
-    assert not non_excluded, f"load_and_validate failed: {non_excluded}"
-    if not result.get("valid", True):
-        has_excluded = any(
-            s.get("rule") in EXCLUDED_TRANSITIONAL_RULES
-            for s in result.get("suggestions", [])
-            if s.get("severity") == "error"
-        )
-        assert has_excluded, (
-            f"load_and_validate structurally invalid (not due to excluded rule): "
-            f"suggestions={result.get('suggestions')}"
-        )
+    error_findings = [s for s in result.get("suggestions", []) if s.get("severity") == "error"]
+    assert not error_findings, f"load_and_validate failed: {error_findings}"
     content = result["content"]
     residual_optional = []
     residual_skip = []

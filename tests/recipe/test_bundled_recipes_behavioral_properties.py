@@ -59,7 +59,7 @@ def _recipe_base_name(filename: str) -> str:
 
 
 @pytest.mark.xfail(
-    reason="on_context_limit handlers not yet added to all bundled recipes", strict=False
+    reason="on_context_limit handlers not yet added to all bundled recipes", strict=True
 )
 @pytest.mark.parametrize("recipe_name", _RECIPE_NAMES)
 def test_run_skill_steps_declare_on_context_limit(recipe_name: str) -> None:

@@ -9,7 +9,7 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
     resolve_skill_name,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -45,16 +45,13 @@ def _check_implicit_handoff(ctx: ValidationContext) -> list[RuleFinding]:
             continue
         if not step.capture and not step.capture_list:
             findings.append(
-                RuleFinding(
-                    rule="implicit-handoff",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="implicit-handoff",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' calls '/autoskillit:{skill_name}' "
-                        f"which declares {len(contract['outputs'])} output(s) "
-                        f"but has no capture: or capture_list: block. Add a capture: block to "
-                        f"thread the skill's structured output into pipeline context."
-                    ),
+                    message=f"Step '{step_name}' calls '/autoskillit:{skill_name}' "
+                    f"which declares {len(contract['outputs'])} output(s) "
+                    f"but has no capture: or capture_list: block. Add a capture: block to "
+                    f"thread the skill's structured output into pipeline context.",
                 )
             )
     return findings
@@ -78,16 +75,13 @@ def _check_merge_cleanup_captured(ctx: ValidationContext) -> list[RuleFinding]:
         ) or any("result.cleanup_succeeded" in v.from_ for v in (step.capture_list or {}).values())
         if not captures_cleanup:
             findings.append(
-                RuleFinding(
-                    rule="merge-cleanup-uncaptured",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="merge-cleanup-uncaptured",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' calls merge_worktree but does not capture "
-                        f"'cleanup_succeeded'. Add a capture entry such as "
-                        f'cleanup_ok: "${{{{ result.cleanup_succeeded }}}}" '
-                        f"so cleanup failures (orphaned worktree/branch) are not silently ignored."
-                    ),
+                    message=f"Step '{step_name}' calls merge_worktree but does not capture "
+                    f"'cleanup_succeeded'. Add a capture entry such as "
+                    f'cleanup_ok: "${{{{ result.cleanup_succeeded }}}}" '
+                    f"so cleanup failures (orphaned worktree/branch) are not silently ignored.",
                 )
             )
 
@@ -105,12 +99,7 @@ def _check_merge_cleanup_captured(ctx: ValidationContext) -> list[RuleFinding]:
 )
 def _check_stale_ref_after_merge(ctx: ValidationContext) -> list[RuleFinding]:
     return [
-        RuleFinding(
-            rule="stale-ref-after-merge",
-            severity=Severity.WARNING,
-            step_name=w.step_name,
-            message=w.message,
-        )
+        make_finding(rule_name="stale-ref-after-merge", step_name=w.step_name, message=w.message)
         for w in ctx.dataflow.warnings
         if w.code == "REF_INVALIDATED"
     ]
@@ -183,18 +172,15 @@ def _check_uncaptured_handoff_consumer(ctx: ValidationContext) -> list[RuleFindi
 
             input_names = ", ".join(inp.name for inp in unwired)
             findings.append(
-                RuleFinding(
-                    rule="uncaptured-handoff-consumer",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="uncaptured-handoff-consumer",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' invokes '{producer_skill}' which declares no "
-                        f"structured outputs (outputs: []). Its successor '{successor_name}' "
-                        f"('{consumer_skill}') has optional file-path inputs ({input_names}) "
-                        f"not provided via ${{{{ context.* }}}} references. If '{producer_skill}' "
-                        f"writes files consumed by '{consumer_skill}', add output emission to "
-                        f"the skill and a capture: block on this step."
-                    ),
+                    message=f"Step '{step_name}' invokes '{producer_skill}' which declares no "
+                    f"structured outputs (outputs: []). Its successor '{successor_name}' "
+                    f"('{consumer_skill}') has optional file-path inputs ({input_names}) "
+                    f"not provided via ${{{{ context.* }}}} references. If '{producer_skill}' "
+                    f"writes files consumed by '{consumer_skill}', add output emission to "
+                    f"the skill and a capture: block on this step.",
                 )
             )
 

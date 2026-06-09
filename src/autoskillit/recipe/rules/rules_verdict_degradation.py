@@ -17,7 +17,7 @@ from autoskillit.recipe._skill_helpers import (
     get_allowed_values_for_skill,
 )
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -134,9 +134,8 @@ def _check_verdict_ungated_degradation(ctx: ValidationContext) -> list[RuleFindi
         # The bug: the degradation verdict is ALSO used on the nominal path.
         if degradation_verdict in nominal_verdicts and degradation_verdict in verdict_allowed:
             findings.append(
-                RuleFinding(
-                    rule="verdict-ungated-degradation",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="verdict-ungated-degradation",
                     step_name=step_name,
                     message=(
                         f"Skill '{name}' emits verdict='{degradation_verdict}' on its "

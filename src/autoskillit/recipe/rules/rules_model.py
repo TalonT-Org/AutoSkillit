@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -36,9 +36,8 @@ def _check_model_empty_on_context_intensive(ctx: ValidationContext) -> list[Rule
         if step.model and step.model.strip():
             continue
         findings.append(
-            RuleFinding(
-                rule="model-empty-string-on-context-intensive-step",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="model-empty-string-on-context-intensive-step",
                 step_name=step_name,
                 message=(
                     f"Step '{step_name}' uses dispatch_items but has no explicit model. "

@@ -6,7 +6,7 @@ from autoskillit.core import SKILL_TOOLS, Severity, get_logger, resolve_skill_na
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable_without_barrier
 from autoskillit.recipe.contracts import load_bundled_manifest
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -61,27 +61,21 @@ def _check_pass_through_validity(ctx: ValidationContext) -> list[RuleFinding]:
         for pt_name in step.pass_through:
             if pt_name not in captured_outputs:
                 findings.append(
-                    RuleFinding(
-                        rule="pass-through-validity",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="pass-through-validity",
                         step_name=step_name,
-                        message=(
-                            f"pass_through references '{pt_name}' but this output "
-                            f"is not captured by step '{step_name}'."
-                        ),
+                        message=f"pass_through references '{pt_name}' but this output "
+                        f"is not captured by step '{step_name}'.",
                     )
                 )
             elif pt_name in used_in_when:
                 findings.append(
-                    RuleFinding(
-                        rule="pass-through-validity",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="pass-through-validity",
                         step_name=step_name,
-                        message=(
-                            f"pass_through references '{pt_name}' but this output "
-                            f"is used in a when clause of step '{step_name}' on_result, "
-                            f"indicating it controls routing."
-                        ),
+                        message=f"pass_through references '{pt_name}' but this output "
+                        f"is used in a when clause of step '{step_name}' on_result, "
+                        f"indicating it controls routing.",
                     )
                 )
     return findings
@@ -112,16 +106,13 @@ def _check_review_loop_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
         return []
 
     return [
-        RuleFinding(
-            rule="review-loop-waypoint-guard",
-            severity=Severity.ERROR,
+        make_finding(
+            rule_name="review-loop-waypoint-guard",
             step_name="review_pr",
-            message=(
-                "check_repo_ci_event is reachable from review_pr without crossing "
-                "check_review_loop. All review_pr verdicts must route through "
-                "check_review_loop so review_loop_count is always incremented and "
-                "review_mode can graduate from 'local' to 'github'."
-            ),
+            message="check_repo_ci_event is reachable from review_pr without crossing "
+            "check_review_loop. All review_pr verdicts must route through "
+            "check_review_loop so review_loop_count is always incremented and "
+            "review_mode can graduate from 'local' to 'github'.",
         )
     ]
 
@@ -129,12 +120,12 @@ def _check_review_loop_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
 @semantic_rule(
     name="run-skill-missing-context-limit",
     description=(
-        "All run_skill and run_python steps must declare on_context_limit. "
+        "All run_skill steps must declare on_context_limit. "
         "When context is exhausted mid-execution, the orchestrator needs a "
         "deterministic recovery path. Without it, on_failure is used as the "
         "fallback — discarding all uncommitted edits and losing partial progress."
     ),
-    severity=Severity.ERROR,
+    severity=Severity.WARNING,
 )
 def _check_run_skill_missing_context_limit(ctx: ValidationContext) -> list[RuleFinding]:
     recipe = ctx.recipe
@@ -160,16 +151,13 @@ def _check_run_skill_missing_context_limit(ctx: ValidationContext) -> list[RuleF
         if step_name in context_limit_targets:
             continue
         findings.append(
-            RuleFinding(
-                rule="run-skill-missing-context-limit",
-                severity=Severity.ERROR,
+            make_finding(
+                rule_name="run-skill-missing-context-limit",
                 step_name=step_name,
-                message=(
-                    f"Step '{step_name}' ({step.tool}) has no on_context_limit. "
-                    f"If context is exhausted mid-execution, on_failure is used as "
-                    f"fallback — discarding uncommitted edits and losing partial progress. "
-                    f"Add on_context_limit: <recovery_step>."
-                ),
+                message=f"Step '{step_name}' ({step.tool}) has no on_context_limit. "
+                f"If context is exhausted mid-execution, on_failure is used as "
+                f"fallback — discarding uncommitted edits and losing partial progress. "
+                f"Add on_context_limit: <recovery_step>.",
             )
         )
     return findings
@@ -200,15 +188,12 @@ def _check_review_mode_reentry_waypoint(ctx: ValidationContext) -> list[RuleFind
         return []
 
     return [
-        RuleFinding(
-            rule="review-mode-reentry-waypoint-guard",
-            severity=Severity.ERROR,
+        make_finding(
+            rule_name="review-mode-reentry-waypoint-guard",
             step_name="check_review_loop",
-            message=(
-                "review_pr is reachable from check_review_loop without crossing "
-                "annotate_pr_diff. All loop re-entry paths must traverse "
-                "annotate_pr_diff so review_mode is recomputed with the updated "
-                "review_loop_count on every iteration."
-            ),
+            message="review_pr is reachable from check_review_loop without crossing "
+            "annotate_pr_diff. All loop re-entry paths must traverse "
+            "annotate_pr_diff so review_mode is recomputed with the updated "
+            "review_loop_count on every iteration.",
         )
     ]

@@ -7,7 +7,7 @@ import regex as re
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe.contracts import INPUT_REF_RE
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -44,9 +44,8 @@ def _check_source_isolation(ctx: ValidationContext) -> list[RuleFinding]:
         # Rule 1: git-mutating tools with inputs.* cwd — always ERROR
         if step.tool in _GIT_MUTATING_TOOLS:
             findings.append(
-                RuleFinding(
-                    rule="source-isolation-violation",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="source-isolation-violation",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' uses '{step.tool}' with cwd pointing at the "
@@ -59,9 +58,8 @@ def _check_source_isolation(ctx: ValidationContext) -> list[RuleFinding]:
         # Rule 1 extension: run_skill with inputs.* cwd and no clone — WARNING
         if step.tool == "run_skill" and not has_clone:
             findings.append(
-                RuleFinding(
-                    rule="source-isolation-violation",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="source-isolation-violation",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' runs a skill with cwd pointing at the source "
@@ -92,9 +90,8 @@ def _check_git_mutation_on_source(ctx: ValidationContext) -> list[RuleFinding]:
         if not _GIT_MUTATION_RE.search(cmd):
             continue
         findings.append(
-            RuleFinding(
-                rule="git-mutation-on-source",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="git-mutation-on-source",
                 step_name=step_name,
                 message=(
                     f"Step '{step_name}' runs a git-mutating command with cwd pointing "

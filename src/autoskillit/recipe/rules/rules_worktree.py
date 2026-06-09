@@ -16,7 +16,7 @@ from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_success_step_gr
 from autoskillit.recipe._rule_helpers import _find_cycle_members
 from autoskillit.recipe.contracts import INPUT_REF_RE, load_bundled_manifest, resolve_skill_name
 from autoskillit.recipe.io import iter_steps_with_context
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe
@@ -43,15 +43,12 @@ def _check_model_on_non_skill(ctx: ValidationContext) -> list[RuleFinding]:
     for step_name, step in wf.steps.items():
         if step.model and step.tool not in SKILL_TOOLS:
             findings.append(
-                RuleFinding(
-                    rule="model-on-non-skill-step",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="model-on-non-skill-step",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' has 'model: {step.model}' but uses "
-                        f"tool '{step.tool}'. The model field only affects "
-                        f"run_skill. Remove it to avoid confusion."
-                    ),
+                    message=f"Step '{step_name}' has 'model: {step.model}' but uses "
+                    f"tool '{step.tool}'. The model field only affects "
+                    f"run_skill. Remove it to avoid confusion.",
                 )
             )
     return findings
@@ -74,16 +71,13 @@ def _check_retries_on_worktree_modifying_skill(ctx: ValidationContext) -> list[R
         skill_name = resolve_skill_name(skill_cmd)
         if skill_name and skill_name in _WORKTREE_MODIFYING_SKILLS:
             findings.append(
-                RuleFinding(
-                    rule="retries-on-worktree-modifying-skill",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="retries-on-worktree-modifying-skill",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' creates a worktree but has "
-                        f"`retries: {step.retries}`. Each retry creates a new orphaned "
-                        f"worktree. Set `retries: 0` and use "
-                        f"`on_context_limit: <resume-step>` to resume in the existing worktree."
-                    ),
+                    message=f"Step '{step_name}' creates a worktree but has "
+                    f"`retries: {step.retries}`. Each retry creates a new orphaned "
+                    f"worktree. Set `retries: 0` and use "
+                    f"`on_context_limit: <resume-step>` to resume in the existing worktree.",
                 )
             )
     return findings
@@ -111,15 +105,12 @@ def _check_missing_context_limit_on_worktree(ctx: ValidationContext) -> list[Rul
             continue
         if step.retries <= 0 and step.on_context_limit is None:
             findings.append(
-                RuleFinding(
-                    rule="missing-context-limit-on-worktree",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="missing-context-limit-on-worktree",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' invokes '{skill}' with retries:0 "
-                        f"but has no on_context_limit route. Partial worktree progress "
-                        f"is unreachable if the session hits a context limit."
-                    ),
+                    message=f"Step '{step_name}' invokes '{skill}' with retries:0 "
+                    f"but has no on_context_limit route. Partial worktree progress "
+                    f"is unreachable if the session hits a context limit.",
                 )
             )
     return findings
@@ -142,9 +133,8 @@ def _check_retry_worktree_cwd(ctx: ValidationContext) -> list[RuleFinding]:
         cwd = step.with_args.get("cwd", "")
         if "${{ context." not in cwd:
             findings.append(
-                RuleFinding(
-                    rule="retry-worktree-cwd",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="retry-worktree-cwd",
                     step_name=step_name,
                     message=f"Step '{step_name}': retry-worktree cwd must use a context variable.",
                 )
@@ -170,16 +160,13 @@ def _check_relative_worktree_path_in_cmd(ctx: ValidationContext) -> list[RuleFin
         cmd = step.with_args.get("cmd", "")
         if "../worktrees/" in cmd:
             findings.append(
-                RuleFinding(
-                    rule="relative-worktree-path-in-cmd",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="relative-worktree-path-in-cmd",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' uses a relative '../worktrees/' path in its cmd. "
-                        f"This causes nested worktree directories when source_dir is "
-                        f"itself a worktree. Resolve the main repo root via "
-                        f"'git rev-parse --path-format=absolute --git-common-dir' first."
-                    ),
+                    message=f"Step '{step_name}' uses a relative '../worktrees/' path in its cmd. "
+                    f"This causes nested worktree directories when source_dir is "
+                    f"itself a worktree. Resolve the main repo root via "
+                    f"'git rev-parse --path-format=absolute --git-common-dir' first.",
                 )
             )
     return findings
@@ -225,16 +212,13 @@ def _check_file_writing_skill_missing_context_limit(
         if skill_data.get("write_behavior") != "always":
             continue
         findings.append(
-            RuleFinding(
-                rule="file-writing-skill-missing-context-limit",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="file-writing-skill-missing-context-limit",
                 step_name=step_name,
-                message=(
-                    f"Step '{step_name}' invokes '{skill}' (write_behavior=always) "
-                    f"but has no on_context_limit route. Context exhaustion mid-edit "
-                    f"will strand uncommitted changes on disk and fall through to "
-                    f"on_failure, losing progress. Add on_context_limit routing."
-                ),
+                message=f"Step '{step_name}' invokes '{skill}' (write_behavior=always) "
+                f"but has no on_context_limit route. Context exhaustion mid-edit "
+                f"will strand uncommitted changes on disk and fall through to "
+                f"on_failure, losing progress. Add on_context_limit routing.",
             )
         )
     return findings
@@ -262,15 +246,12 @@ def _check_superseded_input_after_capture(ctx: ValidationContext) -> list[RuleFi
                 for key in INPUT_REF_RE.findall(value):
                     if key in superseded_keys:
                         findings.append(
-                            RuleFinding(
-                                rule="superseded-input-after-capture",
-                                severity=Severity.ERROR,
+                            make_finding(
+                                rule_name="superseded-input-after-capture",
                                 step_name=step_name,
-                                message=(
-                                    f"Step '{step_name}' references inputs.{key} in "
-                                    f"{field_name} after a worktree-modifying skill "
-                                    f"captured context.{key}. Use context.{key} instead."
-                                ),
+                                message=f"Step '{step_name}' references inputs.{key} in "
+                                f"{field_name} after a worktree-modifying skill "
+                                f"captured context.{key}. Use context.{key} instead.",
                             )
                         )
 
@@ -297,17 +278,14 @@ def _check_capture_list_requires_retries_zero(ctx: ValidationContext) -> list[Ru
     for step_name, step in wf.steps.items():
         if step.capture_list and step.retries > 0:
             findings.append(
-                RuleFinding(
-                    rule="capture-list-requires-retries-zero",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="capture-list-requires-retries-zero",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' uses capture_list (accumulated across "
-                        f"pipeline iterations) but has retries: {step.retries}. Each retry "
-                        f"re-initializes the list, producing duplicate entries. "
-                        f"Set retries: 0 and use on_context_limit routing to resume "
-                        f"in the existing worktree."
-                    ),
+                    message=f"Step '{step_name}' uses capture_list (accumulated across "
+                    f"pipeline iterations) but has retries: {step.retries}. Each retry "
+                    f"re-initializes the list, producing duplicate entries. "
+                    f"Set retries: 0 and use on_context_limit routing to resume "
+                    f"in the existing worktree.",
                 )
             )
     return findings
@@ -393,19 +371,16 @@ def _check_worktree_clobber_without_merge(ctx: ValidationContext) -> list[RuleFi
                 vars_str = ", ".join(f"'{v}'" for v in sorted(captured_vars))
                 flagged_steps.add(step_name)
                 findings.append(
-                    RuleFinding(
-                        rule="worktree-clobber-without-merge",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="worktree-clobber-without-merge",
                         step_name=step_name,
-                        message=(
-                            f"Step '{step_name}' creates a worktree and captures "
-                            f"{vars_str} but is reachable again via [{cycle_path}] "
-                            f"without an intervening merge_worktree step consuming "
-                            f"any of those context variables. The second invocation "
-                            f"will overwrite the reference, orphaning the first worktree. "
-                            f"Add a merge or cleanup step before re-entering the "
-                            f"worktree-creating step."
-                        ),
+                        message=f"Step '{step_name}' creates a worktree and captures "
+                        f"{vars_str} but is reachable again via [{cycle_path}] "
+                        f"without an intervening merge_worktree step consuming "
+                        f"any of those context variables. The second invocation "
+                        f"will overwrite the reference, orphaning the first worktree. "
+                        f"Add a merge or cleanup step before re-entering the "
+                        f"worktree-creating step.",
                     )
                 )
 

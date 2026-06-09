@@ -15,7 +15,7 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
     resolve_skill_name,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeStep
 
 
@@ -126,9 +126,8 @@ def _check_capture_type_matches_contract_optionality(ctx: ValidationContext) -> 
             field_name = m.group(1)
             if field_name in optional_fields and cap_entry.value_type == "string":
                 findings.append(
-                    RuleFinding(
-                        rule="capture-type-matches-contract-optionality",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="capture-type-matches-contract-optionality",
                         step_name=step_name,
                         message=(
                             f"Step '{step_name}' capture key '{cap_key}' captures field "
@@ -188,9 +187,8 @@ def _check_optional_capture_requires_guard(ctx: ValidationContext) -> list[RuleF
         for captured_key in step.capture:
             if not _has_guard_for_key(step_name, captured_key, ctx.recipe.steps):
                 findings.append(
-                    RuleFinding(
-                        rule="optional-capture-requires-guard",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="optional-capture-requires-guard",
                         step_name=step_name,
                         message=(
                             f"Step '{step_name}' has an optional capture group in "

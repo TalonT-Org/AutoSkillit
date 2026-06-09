@@ -14,7 +14,7 @@ from pathlib import Path
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _TARGET_CALLABLE = "parse_agent_eval_manifests"
 _MANIFEST_ARG = "canary_manifest"
@@ -68,9 +68,8 @@ def _check_criterion_schema_drift(ctx: ValidationContext) -> list[RuleFinding]:
             criteria = canary.get("detection_criteria", [])
             if _is_criterion_drift(criteria):
                 findings.append(
-                    RuleFinding(
-                        rule="criterion-schema-drift",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="criterion-schema-drift",
                         step_name=step_name,
                         message=(
                             f"Canary {canary_id} in {manifest_path} uses plain-string "

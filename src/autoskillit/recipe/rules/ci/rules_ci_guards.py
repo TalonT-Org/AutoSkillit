@@ -6,7 +6,7 @@ import regex as re
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext, _extract_routing_edges
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _CI_APPLICABLE_RE = re.compile(r"ci_applicable")
 _PRIMARY_CI_EVENT_RE = re.compile(r"context\.(conflict_)?ci_event\s*\}\}")
@@ -55,17 +55,14 @@ def _check_ci_wait_requires_applicability_guard(ctx: ValidationContext) -> list[
                 queue.extend(new_preds)
         if not has_guard:
             findings.append(
-                RuleFinding(
-                    rule="ci-wait-requires-applicability-guard",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="ci-wait-requires-applicability-guard",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' calls wait_for_ci with a ci_event from "
-                        f"check_repo_merge_state but has no upstream action:route step "
-                        f"that checks ci_applicable. When ci_applicable=false, "
-                        f"wait_for_ci will exhaust its timeout budget polling for CI runs "
-                        f"that will never appear."
-                    ),
+                    message=f"Step '{step_name}' calls wait_for_ci with a ci_event from "
+                    f"check_repo_merge_state but has no upstream action:route step "
+                    f"that checks ci_applicable. When ci_applicable=false, "
+                    f"wait_for_ci will exhaust its timeout budget polling for CI runs "
+                    f"that will never appear.",
                 )
             )
     return findings
@@ -96,15 +93,12 @@ def _check_ci_timed_out_self_loop_unguarded(ctx: ValidationContext) -> list[Rule
         for route in timed_out_routes:
             if route == step_name:
                 findings.append(
-                    RuleFinding(
-                        rule="ci-timed-out-self-loop-unguarded",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="ci-timed-out-self-loop-unguarded",
                         step_name=step_name,
-                        message=(
-                            f"Step '{step_name}' has a timed_out self-loop with no "
-                            f"check_loop_iteration guard on the path. "
-                            f"Unbounded polling can result from this pattern."
-                        ),
+                        message=f"Step '{step_name}' has a timed_out self-loop with no "
+                        f"check_loop_iteration guard on the path. "
+                        f"Unbounded polling can result from this pattern.",
                     )
                 )
     return findings
@@ -175,16 +169,13 @@ def _check_enqueue_missing_ci_gate(ctx: ValidationContext) -> list[RuleFinding]:
     for enqueue_name in enqueue_steps:
         if enqueue_name in reachable_without_gate:
             findings.append(
-                RuleFinding(
-                    rule="enqueue-missing-ci-gate",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="enqueue-missing-ci-gate",
                     step_name=enqueue_name,
-                    message=(
-                        f"Step '{enqueue_name}' calls enqueue_pr but is reachable from "
-                        "recipe entry without passing through a wait_for_ci step. "
-                        "Add a CI gate (wait_for_ci) before enqueue to prevent premature "
-                        "queue enrollment."
-                    ),
+                    message=f"Step '{enqueue_name}' calls enqueue_pr but is reachable from "
+                    "recipe entry without passing through a wait_for_ci step. "
+                    "Add a CI gate (wait_for_ci) before enqueue to prevent premature "
+                    "queue enrollment.",
                 )
             )
     return findings
@@ -256,17 +247,14 @@ def _check_ci_cwd_branch_context_mismatch(ctx: ValidationContext) -> list[RuleFi
 
         if _is_worktree_branch_ref(branch_var) and _is_clone_cwd_ref(cwd_var):
             findings.append(
-                RuleFinding(
-                    rule="ci-cwd-branch-context-mismatch",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="ci-cwd-branch-context-mismatch",
                     step_name=step_name,
-                    message=(
-                        f"Step '{step_name}' watches worktree branch "
-                        f"(context.{branch_var}) but cwd uses clone root "
-                        f"(context.{cwd_var}). git rev-parse HEAD in the clone root "
-                        f"returns the batch/base branch SHA, not the worktree branch SHA. "
-                        f"Use cwd: '${{{{ context.worktree_path }}}}' or pass head_sha explicitly."
-                    ),
+                    message=f"Step '{step_name}' watches worktree branch "
+                    f"(context.{branch_var}) but cwd uses clone root "
+                    f"(context.{cwd_var}). git rev-parse HEAD in the clone root "
+                    f"returns the batch/base branch SHA, not the worktree branch SHA. "
+                    f"Use cwd: '${{{{ context.worktree_path }}}}' or pass head_sha explicitly.",
                 )
             )
     return findings

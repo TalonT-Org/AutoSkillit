@@ -20,7 +20,7 @@ from autoskillit.recipe._skill_placeholder_parser import (
     has_dynamic_write_path,
 )
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -119,9 +119,8 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
                 # Recipe output_dir is a subdirectory of the SKILL.md declared scope
                 # and includes iteration scoping — SKILL.md paths will be blocked
                 findings.append(
-                    RuleFinding(
-                        rule="skill-write-path-recipe-alignment",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="skill-write-path-recipe-alignment",
                         step_name=step_name,
                         message=(
                             f"Skill '{skill_name}' NEVER block declares write scope "

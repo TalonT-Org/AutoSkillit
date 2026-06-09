@@ -6,7 +6,7 @@ from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe._recipe_composition import _is_ingredient_truthy
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 
 @semantic_rule(
@@ -23,9 +23,8 @@ def _check_optional_without_skip_when(ctx: ValidationContext) -> list[RuleFindin
     for name, step in wf.steps.items():
         if step.optional and not step.skip_when_false:
             findings.append(
-                RuleFinding(
-                    rule="optional-without-skip-when",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="optional-without-skip-when",
                     step_name=name,
                     message=(
                         f"Step '{name}' is optional: true but has no skip_when_false. "
@@ -55,9 +54,8 @@ def _check_skip_when_false_undeclared(ctx: ValidationContext) -> list[RuleFindin
         ref = step.skip_when_false
         if not ref.startswith("inputs."):
             findings.append(
-                RuleFinding(
-                    rule="skip-when-false-undeclared",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="skip-when-false-undeclared",
                     step_name=name,
                     message=(
                         f"Step '{name}': skip_when_false '{ref}' must use 'inputs.<name>' format."
@@ -68,9 +66,8 @@ def _check_skip_when_false_undeclared(ctx: ValidationContext) -> list[RuleFindin
         ingredient_name = ref[len("inputs.") :]
         if ingredient_name not in declared_ingredients:
             findings.append(
-                RuleFinding(
-                    rule="skip-when-false-undeclared",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="skip-when-false-undeclared",
                     step_name=name,
                     message=(
                         f"Step '{name}': skip_when_false references undeclared ingredient "
@@ -101,9 +98,8 @@ def _advisory_step_missing_context_limit(ctx: ValidationContext) -> list[RuleFin
         if step.on_context_limit is not None:
             continue
         findings.append(
-            RuleFinding(
-                rule="advisory-step-missing-context-limit",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="advisory-step-missing-context-limit",
                 step_name=step_name,
                 message=(
                     f"Step '{step_name}' is advisory (skip_when_false={step.skip_when_false!r}) "
@@ -139,9 +135,8 @@ def _check_skip_when_false_on_hidden(ctx: ValidationContext) -> list[RuleFinding
         ing = ctx.recipe.ingredients.get(ingredient_name)
         if ing is not None and ing.hidden:
             findings.append(
-                RuleFinding(
-                    rule="skip-when-false-on-hidden",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skip-when-false-on-hidden",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}': skip_when_false references hidden ingredient "
@@ -219,9 +214,8 @@ def _check_skip_when_false_on_non_boolean(ctx: ValidationContext) -> list[RuleFi
                 "truthy (presence check). Verify this is the intended behavior."
             )
         findings.append(
-            RuleFinding(
-                rule="skip-when-false-on-non-boolean",
-                severity=Severity.WARNING,
+            make_finding(
+                rule_name="skip-when-false-on-non-boolean",
                 step_name=step_name,
                 message=message,
             )
@@ -248,9 +242,8 @@ def _check_skip_guard_falsy_default(ctx: ValidationContext) -> list[RuleFinding]
         default = ing.default if ing else None
         if default is None or not _is_ingredient_truthy(str(default)):
             findings.append(
-                RuleFinding(
-                    rule="skip-guard-falsy-default",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="skip-guard-falsy-default",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}': skip_when_false references '{ingredient_name}' "
@@ -281,9 +274,8 @@ def _check_hidden_input_ref_in_template(ctx: ValidationContext) -> list[RuleFind
             ing = recipe.ingredients.get(name)
             if ing is not None and ing.hidden:
                 findings.append(
-                    RuleFinding(
-                        rule="hidden-input-ref-in-template",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="hidden-input-ref-in-template",
                         step_name=location,
                         message=(
                             f"{location}: template ${{{{ inputs.{name} }}}} references hidden "

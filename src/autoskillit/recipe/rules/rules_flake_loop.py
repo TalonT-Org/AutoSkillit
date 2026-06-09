@@ -5,7 +5,7 @@ from __future__ import annotations
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN, count_skill_args
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -57,9 +57,8 @@ def _check_flake_suspected_unwinnable_loop(ctx: ValidationContext) -> list[RuleF
 
         if count_skill_args(cmd) <= 3:
             findings.append(
-                RuleFinding(
-                    rule="flake-suspected-unwinnable-loop",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="flake-suspected-unwinnable-loop",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' invokes resolve-failures with only "

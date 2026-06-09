@@ -217,8 +217,8 @@ class TestOnContextLimitField:
 class TestRunSkillMissingContextLimit:
     """Tests for run-skill-missing-context-limit semantic rule."""
 
-    def test_run_skill_without_on_context_limit_produces_error(self) -> None:
-        """A run_skill step without on_context_limit must produce an ERROR."""
+    def test_run_skill_without_on_context_limit_produces_warning(self) -> None:
+        """A run_skill step without on_context_limit must produce a WARNING."""
         recipe = Recipe(
             name="test",
             description="test",
@@ -238,12 +238,12 @@ class TestRunSkillMissingContextLimit:
             },
         )
         findings = run_semantic_rules(recipe)
-        errors = [f for f in findings if f.severity == Severity.ERROR]
+        warnings = [f for f in findings if f.severity == Severity.WARNING]
         assert any(
             f.rule == "run-skill-missing-context-limit" and f.step_name == "resolve_review"
-            for f in errors
+            for f in warnings
         ), (
-            f"Expected run-skill-missing-context-limit error, got: "
+            f"Expected run-skill-missing-context-limit warning, got: "
             f"{[f.to_dict() for f in findings]}"
         )
 
@@ -361,8 +361,8 @@ class TestRunSkillMissingContextLimit:
         assert not missing_ctx_limit
 
 
-def test_run_skill_missing_context_limit_is_error_severity() -> None:
-    """The missing-context-limit rule must fire at ERROR severity for assert_no_rule_errors."""
+def test_run_skill_missing_context_limit_is_warning_severity() -> None:
+    """The missing-context-limit rule must fire at WARNING severity."""
     recipe = Recipe(
         name="test",
         description="test",
@@ -384,7 +384,7 @@ def test_run_skill_missing_context_limit_is_error_severity() -> None:
     findings = run_semantic_rules(recipe)
     cl_findings = [f for f in findings if f.rule == "run-skill-missing-context-limit"]
     assert cl_findings, "Rule should fire"
-    assert all(f.severity == Severity.ERROR for f in cl_findings), (
-        f"RuleFinding severity must be ERROR, not WARNING. "
+    assert all(f.severity == Severity.WARNING for f in cl_findings), (
+        f"RuleFinding severity must be WARNING. "
         f"Got: {[(f.severity, f.step_name) for f in cl_findings]}"
     )

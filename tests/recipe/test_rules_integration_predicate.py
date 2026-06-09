@@ -136,11 +136,7 @@ class TestRecipeIntegrationPredicateRouting:
             (self.ip_recipe, "implementation"),
         ]:
             findings = run_semantic_rules(recipe)
-            errors = [
-                f
-                for f in findings
-                if f.severity == Severity.ERROR and f.rule != "run-skill-missing-context-limit"
-            ]
+            errors = [f for f in findings if f.severity == Severity.ERROR]
             assert errors == [], f"{name} has ERROR-severity semantic findings: " + str(
                 [(f.rule, f.step_name, f.message) for f in errors]
             )

@@ -11,7 +11,7 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
     resolve_skill_name,
 )
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # Must match _INTENTIONALLY_EXCLUDED_PATH_TOKENS in _headless_path_tokens.py.
 # Cannot import directly: recipe (IL-2) cannot depend on execution (IL-1).
@@ -72,9 +72,8 @@ def _check_missing_output_patterns(ctx: ValidationContext) -> list[RuleFinding]:
         file_outputs = [o for o in contract.outputs if o.type == "file_path"]
         if file_outputs and not contract.expected_output_patterns:
             findings.append(
-                RuleFinding(
-                    rule="missing-output-patterns",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="missing-output-patterns",
                     step_name=step_name,
                     message=(
                         f"Skill '{name}' has {len(file_outputs)} file_path output(s) "
@@ -117,9 +116,8 @@ def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
                 )
             except re.error:
                 findings.append(
-                    RuleFinding(
-                        rule="pattern-examples-match",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="pattern-examples-match",
                         step_name=step_name,
                         message=(
                             f"Skill '{name}': pattern {pattern!r} is not a valid regex "
@@ -130,9 +128,8 @@ def _check_pattern_examples_match(ctx: ValidationContext) -> list[RuleFinding]:
                 continue
             if not matched:
                 findings.append(
-                    RuleFinding(
-                        rule="pattern-examples-match",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="pattern-examples-match",
                         step_name=step_name,
                         message=(
                             f"Skill '{name}': pattern {pattern!r} does not match "
@@ -165,9 +162,8 @@ def _check_missing_pattern_examples(ctx: ValidationContext) -> list[RuleFinding]
             continue
         if contract.expected_output_patterns and not contract.pattern_examples:
             findings.append(
-                RuleFinding(
-                    rule="missing-pattern-examples",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="missing-pattern-examples",
                     step_name=step_name,
                     message=(
                         f"Skill '{name}' has expected_output_patterns but no "
@@ -210,35 +206,32 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
 
         if wb is not None and wb not in _VALID_WRITE_BEHAVIORS:
             findings.append(
-                RuleFinding(
-                    rule="write-behavior-consistency",
+                make_finding(
+                    rule_name="write-behavior-consistency",
                     step_name=step_name,
                     message=(
                         f"Invalid write_behavior '{wb}'. "
                         "Must be 'always', 'conditional', or absent."
                     ),
-                    severity=Severity.ERROR,
                 )
             )
         if wb == "conditional" and not wew:
             findings.append(
-                RuleFinding(
-                    rule="write-behavior-consistency",
+                make_finding(
+                    rule_name="write-behavior-consistency",
                     step_name=step_name,
                     message="write_behavior='conditional' requires non-empty write_expected_when.",
-                    severity=Severity.ERROR,
                 )
             )
         if wb == "always" and wew:
             findings.append(
-                RuleFinding(
-                    rule="write-behavior-consistency",
+                make_finding(
+                    rule_name="write-behavior-consistency",
                     step_name=step_name,
                     message=(
                         "write_behavior='always' must not have "
                         "write_expected_when (contradictory)."
                     ),
-                    severity=Severity.WARNING,
                 )
             )
         for pattern in wew:
@@ -246,11 +239,10 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                 re.compile(pattern)
             except re.error as exc:
                 findings.append(
-                    RuleFinding(
-                        rule="write-behavior-consistency",
+                    make_finding(
+                        rule_name="write-behavior-consistency",
                         step_name=step_name,
                         message=f"Invalid regex in write_expected_when: {exc}",
-                        severity=Severity.ERROR,
                     )
                 )
 
@@ -326,9 +318,8 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
                         skill_md,
                     )
                     findings.append(
-                        RuleFinding(
-                            rule="always-has-no-write-exit",
-                            severity=Severity.WARNING,
+                        make_finding(
+                            rule_name="always-has-no-write-exit",
                             step_name=step_name,
                             message=(
                                 f"Skill '{name}' SKILL.md at {skill_md} could not be read; "
@@ -340,9 +331,8 @@ def _check_always_has_no_write_exit(ctx: ValidationContext) -> list[RuleFinding]
                 for phrase in _ALWAYS_WITH_NO_WRITE_EXIT_PHRASES:
                     if re.search(phrase, content):
                         findings.append(
-                            RuleFinding(
-                                rule="always-has-no-write-exit",
-                                severity=Severity.ERROR,
+                            make_finding(
+                                rule_name="always-has-no-write-exit",
                                 step_name=step_name,
                                 message=(
                                     f"Skill '{name}' declares write_behavior='always' "
@@ -414,9 +404,8 @@ def _check_result_field_drift(ctx: ValidationContext) -> list[RuleFinding]:
             if removed:
                 parts.append(f"missing from contract: {sorted(removed)}")
             findings.append(
-                RuleFinding(
-                    rule="result-field-drift",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="result-field-drift",
                     step_name=step_name,
                     message=(
                         f"Skill '{name}' result_fields in skill_contracts.yaml diverge from "
@@ -476,9 +465,8 @@ def _check_example_covers_all_allowed_values(ctx: ValidationContext) -> list[Rul
                 pattern = re.compile(re.escape(output_name) + r"\s*=\s*" + re.escape(value))
                 if not any(pattern.search(ex) for ex in contract.pattern_examples):
                     findings.append(
-                        RuleFinding(
-                            rule="example-covers-all-allowed-values",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="example-covers-all-allowed-values",
                             step_name=step_name,
                             message=(
                                 f"Skill '{name}': allowed_value '{value}' on output "
@@ -538,9 +526,8 @@ def _check_all_examples_match_all_patterns(ctx: ValidationContext) -> list[RuleF
                 if not matched:
                     preview = repr(example[:60])
                     findings.append(
-                        RuleFinding(
-                            rule="all-examples-match-all-patterns",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="all-examples-match-all-patterns",
                             step_name=step_name,
                             message=(
                                 f"Skill '{name}': example {preview} does not match "
@@ -604,9 +591,8 @@ def _check_path_output_recovery_coverage(ctx: ValidationContext) -> list[RuleFin
             )
             if not matched:
                 findings.append(
-                    RuleFinding(
-                        rule="path-output-recovery-coverage",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="path-output-recovery-coverage",
                         step_name=step_name,
                         message=(
                             f"Skill '{name}': output '{output.name}' (type={output.type!r}) "
@@ -655,10 +641,9 @@ def _check_write_skill_requires_source_output_dir(ctx: ValidationContext) -> lis
             continue
         if "output_dir" not in (step.with_args or {}):
             findings.append(
-                RuleFinding(
-                    rule="write-skill-requires-source-output-dir",
+                make_finding(
+                    rule_name="write-skill-requires-source-output-dir",
                     step_name=step_name,
-                    severity=Severity.ERROR,
                     message=(
                         f"Step '{step_name}' invokes skill '{name}' "
                         f"(write_behavior={contract.write_behavior!r}) but declares "

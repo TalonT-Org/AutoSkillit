@@ -6,7 +6,7 @@ from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _SHA_INDICATORS = ("base_sha", "impl_base_sha")
 
@@ -69,9 +69,8 @@ def _check_audit_impl_diff_topology(ctx: ValidationContext) -> list[RuleFinding]
         )
         if not has_merge_predecessor:
             findings.append(
-                RuleFinding(
-                    rule="audit-impl-diff-topology-mismatch",
-                    severity=Severity.WARNING,
+                make_finding(
+                    rule_name="audit-impl-diff-topology-mismatch",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' invokes audit-impl with SHA-mode "

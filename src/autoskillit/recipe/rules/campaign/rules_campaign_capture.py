@@ -23,7 +23,7 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.io import find_recipe_by_name, load_recipe
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import RecipeKind
 
 if TYPE_CHECKING:
@@ -49,15 +49,12 @@ def _check_dispatch_capture_keys_are_identifiers(ctx: ValidationContext) -> list
         for key in d.capture:
             if not _IDENT_RE.match(key):
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-capture-keys-are-identifiers",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-capture-keys-are-identifiers",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} capture key {key!r} is not a valid"
-                            " identifier. Use only letters, digits, and underscores"
-                            " (must start with letter or _)."
-                        ),
+                        message=f"Dispatch {d.name!r} capture key {key!r} is not a valid"
+                        " identifier. Use only letters, digits, and underscores"
+                        " (must start with letter or _).",
                     )
                 )
     return findings
@@ -76,13 +73,12 @@ def _check_dispatch_capture_value_references_result(ctx: ValidationContext) -> l
         for key, entry in d.capture.items():
             if not _RESULT_TEMPLATE_RE.match(entry.from_.strip()):
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-capture-value-references-result",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-capture-value-references-result",
                         step_name="(top-level)",
                         message=(
-                            f"Dispatch {d.name!r} capture[{key!r}] value {entry.from_!r} must use "
-                            "${{ result.<field_name> }} syntax."
+                            f"Dispatch {d.name!r} capture[{key!r}] value {entry.from_!r} must "
+                            f"use ${{ result.<field_name> }} syntax."
                         ),
                     )
                 )
@@ -140,15 +136,12 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
         sentinel_fields = _extract_sentinel_fields(target)
         if not sentinel_fields:
             findings.append(
-                RuleFinding(
-                    rule="dispatch-capture-field-in-sentinel",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="dispatch-capture-field-in-sentinel",
                     step_name="(top-level)",
-                    message=(
-                        f"Dispatch {d.name!r} has captures but target recipe "
-                        f"{d.recipe!r} has no parseable sentinel stop step. Add an "
-                        f"'Example sentinel: {{...}}' JSON block to the success stop step."
-                    ),
+                    message=f"Dispatch {d.name!r} has captures but target recipe "
+                    f"{d.recipe!r} has no parseable sentinel stop step. Add an "
+                    f"'Example sentinel: {{...}}' JSON block to the success stop step.",
                 )
             )
             continue
@@ -159,16 +152,13 @@ def _check_dispatch_capture_field_in_sentinel(ctx: ValidationContext) -> list[Ru
             field_name = match.group(1)
             if field_name not in sentinel_fields:
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-capture-field-in-sentinel",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-capture-field-in-sentinel",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} captures {cap_key!r} as "
-                            f"${{{{ result.{field_name} }}}} but target recipe "
-                            f"{d.recipe!r} sentinel does not list field {field_name!r}. "
-                            f"Known: {sorted(sentinel_fields)}."
-                        ),
+                        message=f"Dispatch {d.name!r} captures {cap_key!r} as "
+                        f"${{{{ result.{field_name} }}}} but target recipe "
+                        f"{d.recipe!r} sentinel does not list field {field_name!r}. "
+                        f"Known: {sorted(sentinel_fields)}.",
                     )
                 )
     return findings
@@ -202,16 +192,13 @@ def _check_dispatch_capture_field_in_all_sentinels(
             missing_in = [i for i, fields in enumerate(per_stop) if field_name not in fields]
             if missing_in:
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-capture-field-in-all-sentinels",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="dispatch-capture-field-in-all-sentinels",
                         step_name="(top-level)",
-                        message=(
-                            f"Dispatch {d.name!r} captures {cap_key!r} as "
-                            f"${{{{ result.{field_name} }}}} but not all sentinel stop "
-                            f"paths in {d.recipe!r} emit field {field_name!r}. Missing "
-                            f"from {len(missing_in)} of {len(per_stop)} paths."
-                        ),
+                        message=f"Dispatch {d.name!r} captures {cap_key!r} as "
+                        f"${{{{ result.{field_name} }}}} but not all sentinel stop "
+                        f"paths in {d.recipe!r} emit field {field_name!r}. Missing "
+                        f"from {len(missing_in)} of {len(per_stop)} paths.",
                     )
                 )
     return findings
@@ -250,14 +237,11 @@ def _check_dispatch_capture_type_matches_contract_optionality(
                     )
             if target is None:
                 findings.append(
-                    RuleFinding(
-                        rule="dispatch-capture-type-matches-contract-optionality",
-                        severity=Severity.WARNING,
+                    make_finding(
+                        rule_name="dispatch-capture-type-matches-contract-optionality",
                         step_name="(top-level)",
-                        message=(
-                            f"Cannot verify capture type compatibility for dispatch "
-                            f"{d.name!r} — target recipe {d.recipe!r} could not be loaded."
-                        ),
+                        message=f"Cannot verify capture type compatibility for dispatch "
+                        f"{d.name!r} — target recipe {d.recipe!r} could not be loaded.",
                     )
                 )
                 continue
@@ -287,16 +271,13 @@ def _check_dispatch_capture_type_matches_contract_optionality(
                 optional_fields = _identify_optional_output_fields(contract)
                 if field_name in optional_fields and cap_entry.value_type == "string":
                     findings.append(
-                        RuleFinding(
-                            rule="dispatch-capture-type-matches-contract-optionality",
-                            severity=Severity.ERROR,
+                        make_finding(
+                            rule_name="dispatch-capture-type-matches-contract-optionality",
                             step_name="(top-level)",
-                            message=(
-                                f"Dispatch {d.name!r} capture key {cap_key!r} captures "
-                                f"field '{field_name}' with value_type='string' but target "
-                                f"recipe {d.recipe!r} skill contract allows empty values "
-                                f"for this field. Use 'type: optional_string'."
-                            ),
+                            message=f"Dispatch {d.name!r} capture key {cap_key!r} captures "
+                            f"field '{field_name}' with value_type='string' but target "
+                            f"recipe {d.recipe!r} skill contract allows empty values "
+                            f"for this field. Use 'type: optional_string'.",
                         )
                     )
                     break  # one finding per cap_key is enough

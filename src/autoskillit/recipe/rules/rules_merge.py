@@ -7,7 +7,7 @@ import regex as re
 from autoskillit.core import MergeFailedStep, Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe._rule_helpers import _is_loop_guard_step
-from autoskillit.recipe.registry import RuleFinding, semantic_rule
+from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 logger = get_logger(__name__)
 
@@ -98,9 +98,8 @@ def _check_merge_routing_completeness(ctx: ValidationContext) -> list[RuleFindin
         missing = _RECOVERABLE_FAILED_STEPS - matched
         if missing:
             findings.append(
-                RuleFinding(
-                    rule="merge-routing-incomplete",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="merge-routing-incomplete",
                     step_name=step_name,
                     message=(
                         f"merge_worktree on_result is missing explicit routes for "
@@ -160,9 +159,8 @@ def _check_merge_failure_skill_domain_mismatch(
             required_skill = _REQUIRED_SKILL_BY_DOMAIN[domain]
             if actual_skill != required_skill:
                 findings.append(
-                    RuleFinding(
-                        rule="merge-failure-skill-domain-mismatch",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="merge-failure-skill-domain-mismatch",
                         step_name=step_name,
                         message=(
                             f"failed_step == '{failed_step_value}' (domain: {domain}) "
@@ -232,9 +230,8 @@ def _check_merge_fix_cycle_without_guard(ctx: ValidationContext) -> list[RuleFin
 
         if not has_guard:
             findings.append(
-                RuleFinding(
-                    rule="merge-fix-cycle-without-iteration-guard",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="merge-fix-cycle-without-iteration-guard",
                     step_name=step_name,
                     message=(
                         f"merge_worktree step '{step_name}' routes recoverable failures "
@@ -275,9 +272,8 @@ def _check_gh_pr_merge_silent_success_degradation(ctx: ValidationContext) -> lis
             continue
         if step.on_failure == "register_clone_success":
             findings.append(
-                RuleFinding(
-                    rule="gh-pr-merge-silent-success-routing",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="gh-pr-merge-silent-success-routing",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' runs 'gh pr merge' but routes "
@@ -307,9 +303,8 @@ def _check_merge_without_commit_guard(ctx: ValidationContext) -> list[RuleFindin
             continue
         if not _has_commit_guard_ancestor(step_name, ctx):
             findings.append(
-                RuleFinding(
-                    rule="merge-without-commit-guard",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="merge-without-commit-guard",
                     step_name=step_name,
                     message=(
                         f"merge_worktree step '{step_name}' has no commit_guard predecessor. "
@@ -388,9 +383,8 @@ def _check_release_issue_on_unconfirmed_merge(ctx: ValidationContext) -> list[Ru
         step = ctx.recipe.steps.get(step_name)
         if step and step.tool == "release_issue":
             findings.append(
-                RuleFinding(
-                    rule="release-issue-on-unconfirmed-merge",
-                    severity=Severity.ERROR,
+                make_finding(
+                    rule_name="release-issue-on-unconfirmed-merge",
                     step_name=step_name,
                     message=(
                         f"Step '{step_name}' calls release_issue but is reachable from a "
@@ -452,9 +446,8 @@ def _check_merge_enrollment_auto_consistency(ctx: ValidationContext) -> list[Rul
         for reached in reachable:
             if _is_auto_flagged_step(reached, ctx):
                 findings.append(
-                    RuleFinding(
-                        rule="merge-enrollment-auto-consistency",
-                        severity=Severity.ERROR,
+                    make_finding(
+                        rule_name="merge-enrollment-auto-consistency",
                         step_name=reached,
                         message=(
                             f"Step '{reached}' uses --auto or toggle_auto_merge but is "

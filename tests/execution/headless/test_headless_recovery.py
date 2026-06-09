@@ -155,7 +155,8 @@ class TestNudgePtyMode:
         )
 
 
-def test_nudge_skips_for_block_delimiter_patterns() -> None:
+@pytest.mark.anyio
+async def test_nudge_skips_for_block_delimiter_patterns(tmp_path: Path) -> None:
     """Block-delimited patterns (---{name}---) are not path-capture, so hints=[].
 
     _is_path_capture_pattern returns None for block delimiters (no path-capture token
@@ -164,7 +165,12 @@ def test_nudge_skips_for_block_delimiter_patterns() -> None:
     short-circuits to None when hints=[]) cannot recover block-delimited skills — the
     caller always falls through to the failure path.
     """
-    from autoskillit.execution.headless._headless_recovery import _extract_missing_token_hints
+    from autoskillit.execution.headless._headless_recovery import (
+        _attempt_contract_nudge,
+        _extract_missing_token_hints,
+    )
+    from tests.execution.conftest import _mock_backend
+    from tests.fakes import MockSubprocessRunner
 
     result_parser = Mock()
     parsed_session = Mock()
@@ -180,3 +186,40 @@ def test_nudge_skips_for_block_delimiter_patterns() -> None:
     )
 
     assert hints == []
+
+    # Verify _attempt_contract_nudge short-circuits to None when hints is empty
+    skill_result = SkillResult(
+        success=False,
+        result="",
+        session_id="test-session",
+        subtype="empty_output",
+        is_error=False,
+        exit_code=0,
+        needs_retry=True,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+        stderr="",
+        kill_reason=KillReason.NATURAL_EXIT,
+        evidence=WriteEvidence.none_observed(),
+    )
+    subprocess_result = SubprocessResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        termination=TerminationReason.NATURAL_EXIT,
+        pid=0,
+    )
+    backend = _mock_backend(pty_required=False, session_resume_capable=True)
+    runner = MockSubprocessRunner()
+
+    nudge_result = await _attempt_contract_nudge(
+        skill_result=skill_result,
+        subprocess_result=subprocess_result,
+        expected_output_patterns=["---prepare-issue-result---"],
+        completion_marker="%%NUDGE_DONE%%",
+        cwd=str(tmp_path),
+        runner=runner,
+        backend=backend,
+        result_parser=result_parser,
+    )
+
+    assert nudge_result is None

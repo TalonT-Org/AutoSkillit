@@ -203,3 +203,31 @@ class TestCodexSessionLocator:
         locator = CodexSessionLocator(codex_home=tmp_path)
         result = locator.locate_session("tid_meta")
         assert result == rollout
+
+    def test_project_log_dir_returns_codex_sessions_subdir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.default_log_dir", lambda: tmp_path / "logs"
+        )
+        locator = CodexSessionLocator()
+        result = locator.project_log_dir("/any/cwd")
+        assert result == tmp_path / "logs" / "codex-sessions"
+
+    def test_project_log_dir_ignores_cwd_argument(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.default_log_dir", lambda: tmp_path / "logs"
+        )
+        locator = CodexSessionLocator()
+        assert locator.project_log_dir("/path/a") == locator.project_log_dir("/path/b")
+
+    def test_project_log_dir_return_type_is_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "autoskillit.execution.backends.codex.default_log_dir", lambda: tmp_path / "logs"
+        )
+        locator = CodexSessionLocator()
+        assert isinstance(locator.project_log_dir("/x"), Path)

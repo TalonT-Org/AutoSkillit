@@ -508,6 +508,7 @@ _KNOWN_CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
         "post_run_diagnostics",
         "is_fleet_dispatch",
         "dispatch_id",
+        "backend_supports_git_write",
     }
 )
 

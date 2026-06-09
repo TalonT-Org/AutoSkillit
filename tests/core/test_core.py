@@ -117,7 +117,12 @@ def test_claude_code_path_functions_signature_fidelity():
 
     sig_log = inspect.signature(claude_code_log_path)
     assert list(sig_log.parameters.keys()) == ["cwd", "session_id"]
-    assert sig_log.return_annotation is not inspect.Parameter.empty
+    ann = sig_log.return_annotation
+    assert ann is not inspect.Parameter.empty
+    import typing
+
+    args = typing.get_args(ann)
+    assert type(None) in args, f"Expected NoneType in return annotation, got {ann!r}"
 
 
 def test_closure_walk_does_not_detect_lazy_init():

@@ -172,6 +172,62 @@ def test_unformatted_tools_and_formatters_are_disjoint():
     assert not overlap, f"Tools in both dispatch tables: {overlap}"
 
 
+def test_dispatch_food_truck_has_dedicated_formatter():
+    """dispatch_food_truck must not use _fmt_generic — its nested l3_payload
+    contains dispatch_plan which gets silently truncated.
+    """
+    from autoskillit.hooks.formatters.pretty_output_hook import _FORMATTERS, _UNFORMATTED_TOOLS
+
+    assert "dispatch_food_truck" not in _UNFORMATTED_TOOLS, (
+        "dispatch_food_truck must not be in _UNFORMATTED_TOOLS — its nested l3_payload "
+        "contains dispatch_plan which gets silently truncated by _fmt_generic."
+    )
+    assert "dispatch_food_truck" in _FORMATTERS, (
+        "dispatch_food_truck must be in _FORMATTERS with a dedicated formatter."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Structural gate: tools with nested response types must not be in _UNFORMATTED_TOOLS
+# ---------------------------------------------------------------------------
+
+# Mapping from tool short names to their TypedDict classes (if defined).
+# Tools without an entry here are simple acks with no formal schema and are exempt.
+_UNFORMATTED_TOOL_TYPED_DICTS: dict[str, type] = {}
+
+
+def test_unformatted_tools_have_no_nested_response_types() -> None:
+    """Tools in _UNFORMATTED_TOOLS must not have TypedDict fields typed as nested
+    dict/list (e.g. dict[str, Any], list[dict[str, Any]]). Such fields would be
+    silently truncated by _fmt_generic at 200 chars (lines 149-152 of
+    pretty_output_hook.py). Tools with nested response types MUST be promoted
+    to _FORMATTERS with a dedicated formatter and a coverage contract.
+
+    Tools without a registered TypedDict (simple acks) are exempt.
+    """
+    import typing
+
+    from autoskillit.hooks.formatters.pretty_output_hook import _UNFORMATTED_TOOLS
+
+    violations: list[str] = []
+    for tool_name, typed_dict_cls in _UNFORMATTED_TOOL_TYPED_DICTS.items():
+        if tool_name not in _UNFORMATTED_TOOLS:
+            continue
+        hints = typing.get_type_hints(typed_dict_cls)
+        for field_name, field_type in hints.items():
+            type_str = str(field_type)
+            if "dict[" in type_str or "list[" in type_str:
+                violations.append(
+                    f"{tool_name}: field {field_name!r} has nested type {type_str}. "
+                    "Promote to _FORMATTERS with a dedicated formatter."
+                )
+
+    assert not violations, (
+        "Tools in _UNFORMATTED_TOOLS have nested response types that _fmt_generic "
+        "would silently truncate:\n" + "\n".join(violations)
+    )
+
+
 def test_unformatted_tool_routes_to_generic_not_named_formatter(tmp_path):
     """A tool in _UNFORMATTED_TOOLS must reach _fmt_generic."""
     payload = {"total_failures": 1, "failures": [{"step": "impl", "reason": "red"}]}

@@ -19,6 +19,7 @@ __all__ = [
     "TokenSummaryResult",
     "TimingSummaryResult",
     "KitchenStatusResult",
+    "DispatchEnvelopeResult",
 ]
 
 
@@ -158,3 +159,34 @@ class KitchenStatusResult(TypedDict, total=False):
     warning: str
     success: bool
     error: str
+
+
+class DispatchEnvelopeResult(TypedDict, total=False):
+    """Typed return contract for dispatch_food_truck — union of all response paths.
+
+    Covers DispatchCompleted.to_envelope(), DispatchRejected.to_envelope(),
+    and fleet_error() output. The error paths do NOT carry a ``subtype`` key
+    so they reach this formatter rather than the gate_error/tool_exception
+    guards. Nested structured fields (l3_payload, health_report, token_usage,
+    resume_checkpoint) must be rendered without size-based truncation to
+    preserve dispatch_plan visibility for downstream orchestrators.
+    """
+
+    success: bool
+    dispatch_status: str
+    dispatch_id: str
+    dispatched_session_id: str
+    reason: str
+    token_usage: dict[str, Any]
+    l3_payload: dict[str, Any] | None
+    l3_parse_source: str
+    lifespan_started: bool
+    l3_raw_body: str
+    l3_parse_error: str
+    resume_checkpoint: dict[str, Any]
+    health_report: dict[str, Any] | None
+    stderr: str
+    elapsed_seconds: float
+    error: str
+    user_visible_message: str
+    details: dict[str, Any] | None

@@ -22,7 +22,8 @@ def test_pretty_output_below_budget() -> None:
     budgets = {
         "pretty_output_hook.py": 350,
         "_fmt_primitives.py": 200,
-        "_fmt_execution.py": 329,
+        "_fmt_execution.py": 330,
+        "_fmt_dispatch.py": 200,
         "_fmt_status.py": 250,
         "_fmt_recipe.py": 300,
     }

@@ -39,6 +39,11 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _fmt_dispatch import (  # type: ignore[import-not-found]  # noqa: E402, F401
+    _FMT_DISPATCH_FOOD_TRUCK_RENDERED,
+    _FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED,
+    _fmt_dispatch_food_truck,
+)
 from _fmt_execution import (  # type: ignore[import-not-found]  # noqa: E402, F401
     _FMT_MERGE_WORKTREE_RENDERED,
     _FMT_MERGE_WORKTREE_SUPPRESSED,
@@ -163,6 +168,7 @@ _FORMATTERS: dict[str, Callable[..., str]] = {
     "run_cmd": _fmt_run_cmd,
     "test_check": _fmt_test_check,
     "merge_worktree": _fmt_merge_worktree,
+    "dispatch_food_truck": _fmt_dispatch_food_truck,
     "get_token_summary": _fmt_get_token_summary,
     "get_timing_summary": _fmt_get_timing_summary,
     "kitchen_status": _fmt_kitchen_status,
@@ -211,7 +217,6 @@ _UNFORMATTED_TOOLS: frozenset[str] = frozenset(
         "disable_quota_guard",  # simple success/error result
         "register_clone_status",  # simple registered/error result
         "batch_cleanup_clones",  # bulk delete summary dict
-        "dispatch_food_truck",  # JSON dispatch envelope, generic renders correctly
         "reload_session",  # simple status dict, generic renders correctly
         "analyze_tool_sequences",  # DFG analysis result, generic renders correctly
         "record_gate_dispatch",  # simple success/error result

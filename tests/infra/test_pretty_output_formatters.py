@@ -854,3 +854,76 @@ def test_fmt_test_check_handles_condensed_fail_output():
     assert "FAILED test_x.py::test_y" in result
     assert "assert False" in result
     assert "FAIL" in result
+
+
+# PHK-FMT-DISPATCH: dispatch_food_truck 6-group envelope must survive formatting
+def test_dispatch_food_truck_six_group_plan_preserved():
+    """A realistic dispatch_food_truck envelope with 6 dispatch groups must have
+    ALL groups visible in the formatted output. _fmt_generic silently truncates
+    nested dict/list values at 200 chars (lines 149-152 of pretty_output_hook.py),
+    destroying dispatch_plan visibility for downstream orchestrators.
+    """
+    from tests.infra._pretty_output_helpers import _wrap_for_claude_code
+
+    payload = {
+        "success": True,
+        "dispatch_status": "completed_clean",
+        "dispatch_id": "d-test-001",
+        "dispatched_session_id": "s-test-001",
+        "reason": "all steps completed",
+        "token_usage": {"input": 1000, "output": 500},
+        "l3_payload": {
+            "dispatch_plan": [
+                {"group": 1, "parallel": ["https://github.com/org/repo/issues/1001"]},
+                {"group": 2, "parallel": ["https://github.com/org/repo/issues/1002"]},
+                {"group": 3, "parallel": ["https://github.com/org/repo/issues/1003"]},
+                {"group": 4, "parallel": ["https://github.com/org/repo/issues/1004"]},
+                {"group": 5, "parallel": ["https://github.com/org/repo/issues/1005"]},
+                {"group": 6, "parallel": ["https://github.com/org/repo/issues/1006"]},
+            ],
+            "execution_map": "/path/to/execution_map.json",
+            "completed_items": ["issue-1", "issue-2"],
+        },
+        "l3_parse_source": "sentinel",
+        "lifespan_started": True,
+        "stderr": "",
+        "elapsed_seconds": 45.2,
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    for group_num in range(1, 7):
+        assert f'"group": {group_num}' in text, (
+            f"Group {group_num} missing from dispatch_food_truck output. "
+            f"_fmt_generic truncates nested dict/list values at 200 chars. Output: {text!r}"
+        )
+
+
+# PHK-FMT-DISPATCH-ERR: dispatch_food_truck error envelope (DispatchRejected) must render
+def test_dispatch_food_truck_error_envelope_preserves_diagnostics():
+    """A dispatch_food_truck error envelope (success=False) must show error code and
+    user_visible_message. The error path does NOT have a subtype key, so it does NOT
+    get intercepted by gate_error/tool_exception guards. It must reach a dedicated
+    formatter that renders the error fields explicitly.
+    """
+    from tests.infra._pretty_output_helpers import _wrap_for_claude_code
+
+    payload = {
+        "success": False,
+        "error": "fleet_quota_exhausted",
+        "user_visible_message": "quota limit hit for this session",
+        "details": {"limit": 10, "current": 10},
+        "dispatch_id": "d-rejected-001",
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "fleet_quota_exhausted" in text
+    assert "quota limit hit" in text
+    assert "dispatch_id: d-rejected-001" in text

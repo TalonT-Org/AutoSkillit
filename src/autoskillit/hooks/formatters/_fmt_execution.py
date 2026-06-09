@@ -1,7 +1,9 @@
 """Execution-tool formatters for the pretty_output split.
 
-Hosts the per-tool formatters for ``run_skill``, ``run_cmd``, ``test_check``,
-and ``merge_worktree``. Stdlib-only at runtime.
+Hosts ``run_skill``, ``run_cmd``, ``test_check``, ``merge_worktree``. Stdlib-only.
+
+The ``dispatch_food_truck`` formatter lives in ``_fmt_dispatch.py`` to keep
+this module under its file size budget (REQ-FILE-001).
 """
 
 from __future__ import annotations

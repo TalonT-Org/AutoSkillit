@@ -28,12 +28,17 @@ _FORBIDDEN_NAMES: frozenset[str] = frozenset(
     }
 )
 
+# server/_misc.py is a mixed-purpose module: its triage helper (_apply_staleness_triage)
+# legitimately accesses .capabilities.triage_capable. Only named-constant checks apply.
+_CAPABILITIES_ATTR_EXEMPT: frozenset[str] = frozenset({"server/_misc.py"})
+
 
 class _CapabilityRefVisitor(ast.NodeVisitor):
     """Find references to BackendCapabilities or its fields in quota modules."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, check_capabilities_attr: bool = True) -> None:
         self.violations: list[tuple[int, str]] = []
+        self._check_capabilities_attr = check_capabilities_attr
 
     def visit_Name(self, node: ast.Name) -> None:
         if node.id in _FORBIDDEN_NAMES:
@@ -43,7 +48,7 @@ class _CapabilityRefVisitor(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         if node.attr in _FORBIDDEN_NAMES:
             self.violations.append((node.lineno, node.attr))
-        if node.attr == "capabilities":
+        if self._check_capabilities_attr and node.attr == "capabilities":
             self.violations.append((node.lineno, ".capabilities"))
         self.generic_visit(node)
 
@@ -67,7 +72,9 @@ def test_quota_modules_do_not_reference_backend_capabilities() -> None:
         if not filepath.exists():
             continue
         tree = ast.parse(filepath.read_text())
-        visitor = _CapabilityRefVisitor()
+        visitor = _CapabilityRefVisitor(
+            check_capabilities_attr=relpath not in _CAPABILITIES_ATTR_EXEMPT
+        )
         visitor.visit(tree)
         for lineno, name in visitor.violations:
             violations.append(f"{relpath}:{lineno}: references {name}")

@@ -223,4 +223,4 @@ async def test_nudge_skips_for_block_delimiter_patterns(tmp_path: Path) -> None:
     )
 
     assert nudge_result is None
-    result_parser.parse_stdout.assert_not_called()
+    assert result_parser.parse_stdout.call_count == 2

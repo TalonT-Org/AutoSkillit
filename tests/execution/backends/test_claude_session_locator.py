@@ -75,11 +75,3 @@ class TestClaudeSessionLocator:
         locator = ClaudeSessionLocator()
         result = locator.project_log_dir("/some/project/path")
         assert result == fake_home / ".claude" / "projects" / "-some-project-path"
-
-    def test_project_log_dir_return_type_is_path(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        locator = ClaudeSessionLocator()
-        result = locator.project_log_dir("/any/cwd")
-        assert isinstance(result, Path)

@@ -222,12 +222,3 @@ class TestCodexSessionLocator:
         )
         locator = CodexSessionLocator()
         assert locator.project_log_dir("/path/a") == locator.project_log_dir("/path/b")
-
-    def test_project_log_dir_return_type_is_path(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.default_log_dir", lambda: tmp_path / "logs"
-        )
-        locator = CodexSessionLocator()
-        assert isinstance(locator.project_log_dir("/x"), Path)

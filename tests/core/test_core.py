@@ -107,6 +107,28 @@ def test_core_pyi_uses_as_form():
                 )
 
 
+def test_claude_code_path_functions_signature_fidelity():
+    import inspect
+
+    from autoskillit.core import claude_code_log_path, claude_code_project_dir
+
+    sig_proj = inspect.signature(claude_code_project_dir)
+    assert list(sig_proj.parameters.keys()) == ["cwd"]
+
+    sig_log = inspect.signature(claude_code_log_path)
+    assert list(sig_log.parameters.keys()) == ["cwd", "session_id"]
+    ann = sig_log.return_annotation
+    assert ann is not inspect.Parameter.empty
+    import typing
+
+    # get_type_hints() resolves string annotations (from __future__ import annotations)
+    hints = typing.get_type_hints(claude_code_log_path)
+    ret = hints.get("return")
+    args = typing.get_args(ret)
+    assert args, f"Expected a generic/union return annotation, got {ret!r}"
+    assert type(None) in args, f"Expected NoneType in return annotation, got {ret!r}"
+
+
 def test_closure_walk_does_not_detect_lazy_init():
     import sys
     from pathlib import Path

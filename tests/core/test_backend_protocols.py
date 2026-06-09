@@ -54,6 +54,12 @@ def test_session_locator_has_project_log_dir_method():
     assert callable(getattr(SessionLocator, "project_log_dir", None))
 
 
+def test_session_locator_has_session_log_path_method():
+    from autoskillit.core import SessionLocator
+
+    assert callable(getattr(SessionLocator, "session_log_path", None))
+
+
 def test_no_autoskillit_imports_in_protocols_backend():
     from autoskillit.core import paths
 

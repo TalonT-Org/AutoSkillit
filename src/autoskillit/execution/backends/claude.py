@@ -46,6 +46,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     YAMLError,
     build_agent_env,
+    claude_code_log_path,
     claude_code_project_dir,
     extract_skill_name,
     fast_loads,
@@ -112,6 +113,9 @@ class ClaudeSessionLocator(SessionLocator):
 
     def project_log_dir(self, cwd: str) -> Path:
         return claude_code_project_dir(cwd)
+
+    def session_log_path(self, cwd: str, session_id: str) -> Path | None:
+        return claude_code_log_path(cwd, session_id)
 
 
 @dataclass(frozen=True, slots=True)

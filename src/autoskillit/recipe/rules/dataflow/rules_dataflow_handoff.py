@@ -106,6 +106,27 @@ def _check_stale_ref_after_merge(ctx: ValidationContext) -> list[RuleFinding]:
 
 
 @semantic_rule(
+    name="stale-captured-path-after-merge",
+    description=(
+        "An output path token captured from a worktree-scoped step is consumed "
+        "by a step that executes after merge_worktree, which deletes the worktree "
+        "containing the path."
+    ),
+    severity=Severity.WARNING,
+)
+def _check_stale_captured_path_after_merge(ctx: ValidationContext) -> list[RuleFinding]:
+    return [
+        make_finding(
+            rule_name="stale-captured-path-after-merge",
+            step_name=w.step_name,
+            message=w.message,
+        )
+        for w in ctx.dataflow.warnings
+        if w.code == "CAPTURED_PATH_INVALIDATED"
+    ]
+
+
+@semantic_rule(
     name="uncaptured-handoff-consumer",
     description=(
         "Skill with no declared outputs before a consumer with unwired optional file-path inputs"

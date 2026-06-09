@@ -116,6 +116,28 @@ class TestBackendCompliance:
                 f"{type(locator).__name__}.project_log_dir must return Path"
             )
 
+    def test_all_backends_session_locator_has_session_log_path(self):
+        from pathlib import Path
+
+        from autoskillit.execution.backends import BACKEND_REGISTRY
+        from autoskillit.execution.backends.claude import ClaudeSessionLocator
+        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+
+        for cls in BACKEND_REGISTRY.values():
+            locator = cls().session_locator()
+            result_sentinel = locator.session_log_path("/tmp", "")
+            assert result_sentinel is None, (
+                f"{type(locator).__name__}.session_log_path must return None for empty session_id"
+            )
+            result_valid = locator.session_log_path("/tmp", "abc123")
+            assert result_valid is None or isinstance(result_valid, Path), (
+                f"{type(locator).__name__}.session_log_path must return Path or None"
+            )
+            if isinstance(locator, ClaudeSessionLocator):
+                assert isinstance(result_valid, Path), (
+                    "ClaudeSessionLocator.session_log_path must return Path for valid session_id"
+                )
+
     def test_all_backends_capabilities_is_backend_capabilities(self):
         from autoskillit.core import BackendCapabilities
         from autoskillit.execution.backends import BACKEND_REGISTRY

@@ -365,6 +365,11 @@ class CodexSessionLocator(SessionLocator):
                 result.append(obj)
         return result
 
+    def session_log_path(self, cwd: str, session_id: str) -> Path | None:
+        if not session_id or session_id.startswith(("no_session_", "crashed_")):
+            return None
+        return None
+
     def project_log_dir(self, cwd: str) -> Path:  # cwd unused; Codex uses a global session store
         return default_log_dir() / "codex-sessions"
 

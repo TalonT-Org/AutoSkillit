@@ -15,11 +15,8 @@ import pytest
 
 from autoskillit.planner.validation import _check_gitignored_deliverables, validate_plan
 from tests.planner.conftest import (
-    make_assignment_result,
     make_minimal_output_dir,
-    make_phase_result,
     make_wp_result,
-    write_json,
 )
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
@@ -27,7 +24,7 @@ pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.featu
 
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
-    """Create a minimal git repo with .autoskillit/.gitignore containing temp/."""
+    """Create a minimal git repo with a .gitignore at root containing temp/."""
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
@@ -46,9 +43,7 @@ def git_repo(tmp_path: Path) -> Path:
         check=True,
         capture_output=True,
     )
-    gitignore_dir = repo / ".autoskillit"
-    gitignore_dir.mkdir()
-    (gitignore_dir / ".gitignore").write_text("temp/\n")
+    (repo / ".gitignore").write_text("temp/\n")
     return repo
 
 
@@ -118,21 +113,12 @@ def test_relative_temp_path_detected(git_repo: Path) -> None:
 
 def test_validate_plan_includes_gitignored_deliverable_check(git_repo: Path) -> None:
     """Integration test: validate_plan() wires the gitignored check via source_dir."""
-    planner_dir = make_minimal_output_dir(git_repo / "planner_artifacts")
-    write_json(
-        planner_dir / "phases" / "P1_phase_result.json",
-        make_phase_result(1),
-    )
-    write_json(
-        planner_dir / "assignments" / "P1-A1_assignment_result.json",
-        make_assignment_result(1, 1),
-    )
-    write_json(
-        planner_dir / "work_packages" / "P1-A1-WP1_wp_result.json",
-        make_wp_result("P1-A1-WP1", deliverables=[".autoskillit/temp/bad.md"]),
+    planner_dir = make_minimal_output_dir(
+        git_repo / "planner_artifacts",
+        deliverables_override=[".autoskillit/temp/bad.md"],
     )
     result = validate_plan(str(planner_dir), source_dir=str(git_repo))
-    assert "gitignored_deliverable" in result.get("verdict", "") or result["verdict"] == "fail"
+    assert result["verdict"] == "fail"
     validation_data = json.loads((planner_dir / "validation.json").read_text())
     check_names = {f["check"] for f in validation_data.get("findings", [])}
     assert "gitignored_deliverable" in check_names

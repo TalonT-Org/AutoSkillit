@@ -677,7 +677,10 @@ async def _run_dispatch(
 
     marker_dir: Path | None = None
     if _locator is not None:
-        marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
+        try:
+            marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
+        except OSError:
+            pass
 
     from autoskillit.core import execution_marker  # noqa: PLC0415
 
@@ -864,9 +867,12 @@ async def _run_dispatch(
             dispatch_sidecar_path, tool_ctx.github_client, issue_url=_issue_urls_raw
         )
 
-    project_log_dir = (
-        str(_locator.project_log_dir(str(tool_ctx.project_dir))) if _locator is not None else ""
-    )
+    project_log_dir = ""
+    if _locator is not None:
+        try:
+            project_log_dir = str(_locator.project_log_dir(str(tool_ctx.project_dir)))
+        except OSError:
+            logger.warning("project_log_dir_unavailable", exc_info=True)
 
     if (
         resume_session_id

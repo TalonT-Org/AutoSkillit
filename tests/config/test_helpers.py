@@ -203,3 +203,15 @@ def test_server_authoritative_ingredients_covers_resolved_defaults(tmp_path):
     assert not missing, (
         f"Config-resolvable keys missing from SERVER_AUTHORITATIVE_INGREDIENTS: {missing}"
     )
+
+
+def test_config_authority_keys_superset_of_server_authoritative() -> None:
+    """CONFIG_AUTHORITY_KEYS in core must be a superset of SERVER_AUTHORITATIVE_INGREDIENTS."""
+    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
+    from autoskillit.core import CONFIG_AUTHORITY_KEYS
+
+    assert SERVER_AUTHORITATIVE_INGREDIENTS <= CONFIG_AUTHORITY_KEYS
+    assert CONFIG_AUTHORITY_KEYS - SERVER_AUTHORITATIVE_INGREDIENTS == {
+        "source_dir",
+        "backend_supports_git_write",
+    }

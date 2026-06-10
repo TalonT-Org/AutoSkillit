@@ -300,6 +300,25 @@ def test_skill_tools_matches_expected() -> None:
     assert SKILL_TOOLS == frozenset({"run_skill"})
 
 
+def test_config_authority_keys_constant() -> None:
+    """CONFIG_AUTHORITY_KEYS must be a frozenset of exactly the 8 known config-authority keys."""
+    from autoskillit.core import CONFIG_AUTHORITY_KEYS
+
+    assert isinstance(CONFIG_AUTHORITY_KEYS, frozenset)
+    assert CONFIG_AUTHORITY_KEYS == frozenset(
+        {
+            "source_dir",
+            "base_branch",
+            "local_review_rounds",
+            "adversarial_review_level",
+            "post_run_diagnostics",
+            "is_fleet_dispatch",
+            "dispatch_id",
+            "backend_supports_git_write",
+        }
+    )
+
+
 def test_provider_profile_in_private_env_vars() -> None:
     """AUTOSKILLIT_PROVIDER_PROFILE must be in AUTOSKILLIT_PRIVATE_ENV_VARS."""
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS

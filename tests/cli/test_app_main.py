@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -44,10 +46,6 @@ def test_serve_activity_check_uses_backend_derived_marker_dir(
     tmp_path: Path,
 ) -> None:
     """serve() must derive _marker_dir via backend.session_locator().project_log_dir()."""
-    import asyncio
-    import importlib
-    from unittest.mock import MagicMock
-
     app_module = importlib.import_module("autoskillit.cli.app")
 
     monkeypatch.chdir(tmp_path)
@@ -88,7 +86,7 @@ def test_serve_activity_check_uses_backend_derived_marker_dir(
         str(tmp_path)
     )
 
-    assert captured_activity_check, "serve_with_signal_guard was not called"
+    assert len(captured_activity_check) == 1, "serve_with_signal_guard was not called exactly once"
 
     seen_marker_dirs: list = []
     monkeypatch.setattr(

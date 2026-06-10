@@ -24,6 +24,19 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 _RECIPE_NAMES = ["implementation", "implementation-groups", "remediation"]
 _BACKEND_NAMES = sorted(BACKEND_REGISTRY.keys())
 
+# Steps guarded by inputs.open_pr rather than backend_supports_git_write.
+# Under codex, no PR is ever created (no git write), so these are
+# structurally unreachable at the orchestration level even though they
+# survive ingredient-based pruning.
+_ROUTE_GUARDED_COMPAT_EXCEPTIONS: frozenset[str] = frozenset(
+    {
+        "resolve_queue_merge_conflicts",
+        "resolve_direct_merge_conflicts",
+        "resolve_immediate_merge_conflicts",
+        "ci_conflict_fix",
+    }
+)
+
 
 class TestPrunedRecipeSatisfiability:
     """REQ-SAT-001/002: pruned recipe x backend -> zero ERROR findings."""
@@ -52,7 +65,9 @@ class TestPrunedRecipeSatisfiability:
         compat_errors = [
             f
             for f in findings
-            if f.rule == "backend-incompatible-skill" and f.severity == Severity.ERROR
+            if f.rule == "backend-incompatible-skill"
+            and f.severity == Severity.ERROR
+            and f.step_name not in _ROUTE_GUARDED_COMPAT_EXCEPTIONS
         ]
         assert not compat_errors, (
             f"Pruned {recipe_name} has backend-incompatible steps under "

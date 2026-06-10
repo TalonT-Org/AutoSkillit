@@ -729,6 +729,9 @@
         {
           "when": "${{ result.verdict }} == 'no_test_infrastructure'",
           "route": "release_issue_failure"
+        },
+        {
+          "route": "release_issue_failure"
         }
       ],
       "on_context_limit": "release_issue_failure",
@@ -803,6 +806,9 @@
         },
         {
           "when": "${{ result.verdict }} == 'no_test_infrastructure'",
+          "route": "release_issue_failure"
+        },
+        {
           "route": "release_issue_failure"
         }
       ],

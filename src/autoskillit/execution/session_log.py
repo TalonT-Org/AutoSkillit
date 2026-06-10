@@ -153,8 +153,8 @@ def flush_session_log(
     is_resume: bool = False,
     codex_log_path: Path | None = None,
     backend: Literal["claude-code", "codex"] = "claude-code",
-    session_locator: SessionLocator | None = None,
     telemetry: SessionTelemetry,
+    session_locator: SessionLocator | None = None,
 ) -> None:
     """Flush session diagnostics to disk.
 

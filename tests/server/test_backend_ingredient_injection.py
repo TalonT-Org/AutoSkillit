@@ -8,6 +8,7 @@ resource handler.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -447,3 +448,42 @@ def test_backend_capability_overrides_matches_registry():
 
     result = _backend_capability_overrides(backend=None)
     assert set(result) == BACKEND_CAPABILITY_INGREDIENTS
+
+
+# ---------------------------------------------------------------------------
+# Real-composition pruning via load_and_validate
+# ---------------------------------------------------------------------------
+
+
+class TestRealCompositionPruning:
+    """REQ-PRUNE-001: real load_and_validate removes guarded steps under codex."""
+
+    _GIT_WRITE_STEPS = {
+        "implement",
+        "fix",
+        "merge_gate_fix",
+        "retry_worktree",
+        "rebase_conflict_fix",
+        "resolve_review",
+        "resolve_pre_review_conflicts",
+        "resolve_pre_resolve_conflicts",
+        "resolve_ci",
+    }
+
+    def test_codex_overrides_remove_guarded_steps_from_content(self, tmp_path: Path) -> None:
+        from autoskillit.recipe._api import load_and_validate
+        from autoskillit.workspace.skills import DefaultSkillResolver
+
+        resolver = DefaultSkillResolver()
+        result = load_and_validate(
+            "implementation",
+            project_dir=tmp_path,
+            ingredient_overrides={"backend_supports_git_write": "false"},
+            backend_name="codex",
+            lister=resolver,
+        )
+        content = result["content"]
+        for step_name in self._GIT_WRITE_STEPS:
+            assert f"  {step_name}:" not in content, (
+                f"Guarded step {step_name!r} still present as YAML key in pruned content"
+            )

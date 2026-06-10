@@ -680,6 +680,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "workspace",
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
+            "recipe/test_backend_reachability.py",
             "recipe/test_rules_backend_compat.py",
             "recipe/test_rules_skill_content.py",
             "recipe/test_rules_stamp_ownership.py",
@@ -715,6 +716,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_sub_recipe_loading.py",
             "recipe/test_sub_recipe_validation.py",
             # Server file-level entries:
+            "server/test_backend_ingredient_injection.py",
             "server/test_factory.py",
             "server/test_tools_clone.py",
             "server/test_tools_execution_routing.py",
@@ -735,7 +737,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "core",
             "hooks/test_recipe_contract_freshness.py",
             "migration",
-            # Server file-level entries (12 of 52 import autoskillit.recipe):
+            # Server file-level entries (13 of 52 import autoskillit.recipe):
+            "server/test_backend_ingredient_injection.py",
             "server/test_factory.py",
             "server/test_tools_dispatch_validation.py",
             "server/test_tools_kitchen_gate_features.py",
@@ -763,6 +766,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_zero_write_detection.py",
             # Fleet file-level entries (8 of N import autoskillit.recipe):
             "fleet/test_fleet_e2e.py",
+            "fleet/test_fleet_e2e_codex.py",
             "fleet/test_campaign_capture.py",
             "fleet/test_pack_enforcement.py",
             "fleet/test_pack_enforcement_e2e.py",

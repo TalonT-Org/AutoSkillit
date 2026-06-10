@@ -48,28 +48,32 @@ def _has_contract_tests(skill_name: str) -> bool:
 def test_recipe_skills_have_contract_tests() -> None:
     """Every skill dispatched by a recipe run_skill step should have contract tests."""
     KNOWN_EXCEPTIONS = {
+        # --- Audit skills: output is analytical, not contractually structured ---
         "audit-tests",
         "audit-cohesion",
         "audit-arch",
         "audit-feature-gates",
         "audit-docs",
         "audit-review-decisions",
+        "audit-impl",
+        "audit-claims",
+        # --- Planning/orchestration skills: multi-turn, context-dependent ---
         "make-plan",
         "review-approach",
-        "audit-impl",
         "rectify",
         "compose-pr",
         "prepare-pr",
         "scope",
         "bem-scope",
-        "diagnose-ci",
         "investigate",
-        "implement-worktree-no-merge",
-        "resolve-failures",
-        "retry-worktree",
-        "resolve-merge-conflicts",
         "build-execution-map",
         "promote-to-main",
+        "select-directions",
+        "setup-environment",
+        "make-groups",
+        "compose-research-pr",
+        "bundle-local-report",
+        # --- Planner pipeline skills: internal orchestration ---
         "planner-analyze",
         "planner-generate-phases",
         "planner-elaborate-phase",
@@ -82,13 +86,19 @@ def test_recipe_skills_have_contract_tests() -> None:
         "planner-validate-task-alignment",
         "planner-reconcile-deps",
         "planner-assess-review-approach",
-        "select-directions",
-        "setup-environment",
-        "make-groups",
+        # --- Merge-gate/remediation cluster (REQ-EXC-001 audit, #3977):
+        #     These skills are dispatched only within recipe pipelines where
+        #     the orchestrator manages session setup, error routing, and
+        #     retry logic. Backend compatibility is enforced structurally
+        #     by REQ-SAT-001 (test_backend_reachability.py) which asserts
+        #     incompatible steps are pruned before dispatch. ---
+        "diagnose-ci",
+        "implement-worktree-no-merge",
+        "resolve-failures",
+        "retry-worktree",
+        "resolve-merge-conflicts",
+        # --- Lens prefix: all exp-lens-* skills ---
         "exp-lens-",
-        "compose-research-pr",
-        "audit-claims",
-        "bundle-local-report",
     }
     failures: list[str] = []
     for recipe_name, skill_name in _skill_based_steps():

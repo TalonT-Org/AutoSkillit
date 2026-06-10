@@ -414,3 +414,45 @@ def test_generate_recipe_diagram_removed() -> None:
         "generate_recipe_diagram still exists in diagrams module. "
         "Diagram rendering must be handled by /render-recipe skill only."
     )
+
+
+# ---------------------------------------------------------------------------
+# T-PRUNE-1: diagram pruning annotation consistency
+# ---------------------------------------------------------------------------
+
+
+def test_diagram_reflects_pruning_annotations() -> None:
+    """When backend_supports_git_write is false, the served diagram includes a
+    pruning footer listing steps that were pruned, and those step names must
+    not appear as step definitions in the served content.
+    """
+    from autoskillit.recipe._api import load_and_validate
+
+    result = load_and_validate(
+        "implementation",
+        ingredient_overrides={"backend_supports_git_write": "false"},
+    )
+
+    diagram = result.get("diagram")
+    assert diagram is not None, "Diagram should not be None for bundled recipe"
+
+    assert "Steps pruned under current backend/ingredient configuration:" in diagram, (
+        "Diagram must contain a pruning annotation footer when steps are pruned. "
+        f"Got diagram:\n{diagram[-500:]}"
+    )
+
+    assert "resolve_ci" in diagram, (
+        "Pruning footer should list resolve_ci (skipped when backend_supports_git_write is false)"
+    )
+    assert "resolve_pre_resolve_conflicts" in diagram, (
+        "Pruning footer should list resolve_pre_resolve_conflicts"
+    )
+
+    content = result.get("content", "")
+    assert "resolve_ci:" not in content, (
+        "resolve_ci must be pruned from content when backend_supports_git_write is false"
+    )
+    assert "resolve_pre_resolve_conflicts:" not in content, (
+        "resolve_pre_resolve_conflicts must be pruned from content when "
+        "backend_supports_git_write is false"
+    )

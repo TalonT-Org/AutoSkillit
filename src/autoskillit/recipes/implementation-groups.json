@@ -1512,6 +1512,8 @@
       "retries": 2,
       "on_exhausted": "release_issue_failure",
       "on_context_limit": "release_issue_failure",
+      "optional": true,
+      "skip_when_false": "inputs.backend_supports_git_write",
       "on_result": [
         {
           "when": "${{ result.verdict }} == 'real_fix'",
@@ -1531,6 +1533,9 @@
         },
         {
           "when": "${{ result.verdict }} == 'no_test_infrastructure'",
+          "route": "release_issue_failure"
+        },
+        {
           "route": "release_issue_failure"
         }
       ],
@@ -1570,6 +1575,8 @@
       "capture": {
         "conflict_escalation_required": "${{ result.escalation_required }}"
       },
+      "optional": true,
+      "skip_when_false": "inputs.backend_supports_git_write",
       "on_result": [
         {
           "when": "${{ result.escalation_required }} == true",

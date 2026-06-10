@@ -105,3 +105,29 @@ def diagram_stale_to_suggestions(recipe_name: str) -> list[dict[str, str]]:
             ),
         }
     ]
+
+
+def annotate_diagram_with_pruning(diagram: str, skip_resolutions: dict[str, bool | None]) -> str:
+    """Append a Markdown footer listing steps pruned at serve time.
+
+    Args:
+        diagram: The raw diagram Markdown string.
+        skip_resolutions: Map of step name to its skip_when_false resolution.
+            Steps with value ``False`` are listed as pruned.
+
+    Returns:
+        The diagram with a pruning annotation footer appended, or unchanged
+        if no steps were pruned or the diagram is empty.
+    """
+    pruned = sorted(name for name, resolved in skip_resolutions.items() if resolved is False)
+    if not pruned:
+        return diagram
+    step_list = ", ".join(pruned)
+    footer = (
+        "\n\n---\n"
+        "**Steps pruned under current backend/ingredient configuration:**\n"
+        f"{step_list}\n\n"
+        "> These steps appear in the full recipe graph above but are skipped\n"
+        "> at runtime due to `skip_when_false` guards evaluating to false.\n"
+    )
+    return diagram.rstrip("\n") + footer

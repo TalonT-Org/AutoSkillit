@@ -104,6 +104,33 @@ def test_pre_merge_fix_on_context_limit_routes_to_failure(recipe_name: str) -> N
     )
 
 
+@pytest.mark.parametrize("recipe_name", _PRE_MERGE_CYCLE_RECIPES)
+def test_on_result_has_catch_all(recipe_name: str) -> None:
+    """Resolve-failures and resolve-merge-conflicts steps must have a bare
+    (no-when) catch-all as the final on_result condition, ensuring routing
+    is defined for unrecognized verdicts from these open-ended-verdict skills.
+    """
+    _CATCH_ALL_REQUIRED_SKILLS = {"resolve-failures", "resolve-merge-conflicts"}
+    recipe = load_recipe(_resolve_recipe_path(recipe_name))
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        skill = resolve_skill_name(skill_cmd)
+        if skill not in _CATCH_ALL_REQUIRED_SKILLS:
+            continue
+        assert step.on_result is not None and step.on_result.conditions, (
+            f"{recipe_name}.{step_name}: step dispatches {skill!r} but has no "
+            f"on_result routing — unrecognized verdicts would be silently dropped"
+        )
+        conditions = step.on_result.conditions
+        last = conditions[-1]
+        assert last.when is None, (
+            f"{recipe_name}.{step_name}: on_result final condition must be a bare "
+            f"catch-all (no `when` clause), got: {last.when!r}"
+        )
+
+
 def test_every_bundled_recipe_declares_requires_packs() -> None:
     """All top-level bundled recipes must declare a non-empty requires_packs."""
     for path in _BUNDLED_ROOT_ONLY:

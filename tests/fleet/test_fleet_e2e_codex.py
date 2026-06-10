@@ -12,6 +12,7 @@ import json
 import os
 import stat
 import sys
+import warnings
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any, cast
@@ -162,6 +163,14 @@ class TestCodexFleetE2E:
                         leaked.append(c)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
+        if leaked:
+            pids = [c.pid for c in leaked]
+            warnings.warn(
+                f"codex_runtime fixture: {len(leaked)} leaked process(es) detected "
+                f"and killed in teardown: pids={pids}",
+                ResourceWarning,
+                stacklevel=2,
+            )
         for c in leaked:
             try:
                 c.kill()

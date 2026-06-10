@@ -278,7 +278,7 @@ class TestCLIOrderPicker:
         )
         picker_calls: list = []
 
-        def fake_pick_session(session_type: str, project_dir, project_log_dir) -> None:
+        def fake_pick_session(session_type: str, project_dir, project_log_dir) -> str | None:
             picker_calls.append(session_type)
             return None
 

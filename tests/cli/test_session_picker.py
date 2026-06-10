@@ -24,18 +24,12 @@ def _make_index(tmp_path: Path, entries: list[dict]) -> Path:
     return tmp_path
 
 
-def test_pick_session_no_sessions_returns_none(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pick_session_no_sessions_returns_none(tmp_path: Path) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     claude_dir = tmp_path / "claude-projects"
     claude_dir.mkdir()
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_picker.claude_code_project_dir",
-        lambda _: claude_dir,
-    )
-    result = pick_session("cook", project_dir)
+    result = pick_session("cook", project_dir, claude_dir)
     assert result is None
 
 
@@ -65,14 +59,10 @@ def test_pick_session_filters_cook(
     bridge_claude_session_id(project_dir, "lid-cook", "cook-uuid-1")
     bridge_claude_session_id(project_dir, "lid-order", "order-uuid-1")
 
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_picker.claude_code_project_dir",
-        lambda _: claude_dir,
-    )
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "1")
 
-    result = pick_session("cook", project_dir)
+    result = pick_session("cook", project_dir, claude_dir)
     assert result == "cook-uuid-1"
 
 
@@ -100,14 +90,10 @@ def test_pick_session_filters_order(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     bridge_claude_session_id(project_dir, "lid-cook", "cook-uuid-1")
     bridge_claude_session_id(project_dir, "lid-order", "order-uuid-1")
 
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_picker.claude_code_project_dir",
-        lambda _: claude_dir,
-    )
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "1")
 
-    result = pick_session("order", project_dir)
+    result = pick_session("order", project_dir, claude_dir)
     assert result == "order-uuid-1"
 
 
@@ -129,7 +115,7 @@ def test_greeting_heuristic_open_kitchen_order() -> None:
     assert result == "order"
 
 
-def test_sidechain_sessions_excluded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_sidechain_sessions_excluded(tmp_path: Path) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     claude_dir = tmp_path / "claude"
@@ -140,12 +126,7 @@ def test_sidechain_sessions_excluded(tmp_path: Path, monkeypatch: pytest.MonkeyP
     ]
     (claude_dir / "sessions-index.json").write_text(json.dumps(entries), encoding="utf-8")
 
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_picker.claude_code_project_dir",
-        lambda _: claude_dir,
-    )
-
-    result = pick_session("cook", project_dir)
+    result = pick_session("cook", project_dir, claude_dir)
     assert result is None
 
 

@@ -59,14 +59,22 @@ class TestBackendCompatGate:
 
 
 class TestBackendCompatGateFailClosed:
-    """Fail-closed unit tests for _check_backend_compat gate.
+    """Defensive unit tests for _check_backend_compat gate.
 
-    These test _check_backend_compat directly to verify fail-closed behavior
-    when skill_resolver or effective_backend_obj is None.
+    These call _check_backend_compat directly with parameter combinations
+    that do not arise at the sole production call site in run_skill
+    (where target_name is only set when skill_resolver is not None).
+    They verify the function's internal fail-closed logic as a defense
+    against future callers or refactors that change the calling contract.
     """
 
     def test_compat_check_rejects_when_skill_resolver_is_none(self):
-        """Gate rejects when skill_resolver is None and a skill is referenced."""
+        """_check_backend_compat rejects when skill_resolver is None and target_name is set.
+
+        Note: in run_skill, target_name is only populated when skill_resolver
+        is not None, so this combination does not arise at the current call site.
+        This test validates the function's own defensive guard.
+        """
         import json
 
         from autoskillit.server.tools.tools_execution import _check_backend_compat

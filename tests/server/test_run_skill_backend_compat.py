@@ -101,42 +101,65 @@ class TestBackendCompatGateFailClosed:
 
     @pytest.mark.anyio
     async def test_provider_override_allows_skill_requiring_claude_code(
-        self, tool_ctx_kitchen_open
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
     ):
         """Provider override fires before compat check: a codex backend with
         ANTHROPIC_BASE_URL provider_extras is rerouted to claude-code, so a
         claude-code-only skill passes the compat gate.
         """
         import json
-        from unittest.mock import AsyncMock
+        from unittest.mock import MagicMock
 
-        # Backend that does NOT support anthropic_provider_capable (e.g. codex)
-        from autoskillit.core.types import AGENT_BACKEND_CODEX
+        from autoskillit.core import ValidatedAddDir
+        from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
         from autoskillit.server.tools.tools_execution import run_skill
+        from tests.fakes import InMemoryHeadlessExecutor
 
-        # Switch to codex backend
-        tool_ctx_kitchen_open.backend = tool_ctx_kitchen_open.backend.__class__.from_name(
-            AGENT_BACKEND_CODEX
+        executor = InMemoryHeadlessExecutor()
+        tool_ctx_kitchen_open.executor = executor
+
+        fake_backend = MagicMock(spec=CodingAgentBackend)
+        fake_backend.name = "codex"
+        fake_backend.capabilities.anthropic_provider_capable = False
+        tool_ctx_kitchen_open.backend = fake_backend
+
+        session_dir = tmp_path / "session"
+        session_dir.mkdir()
+        skill_md = session_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+        skill_md.parent.mkdir(parents=True)
+        skill_md.write_text("name: investigate\n")
+
+        fake_validated = ValidatedAddDir(path=str(session_dir))
+        mock_ssm = MagicMock()
+        mock_ssm.init_session.return_value = fake_validated
+        tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+        mock_skill_info = MagicMock()
+        mock_skill_info.backend_requirements = frozenset({"claude-code"})
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.return_value = mock_skill_info
+        tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution.is_feature_enabled",
+            lambda *a, **kw: True,
         )
-        # Mock the executor so the test does not actually spawn a headless session
-        tool_ctx_kitchen_open.executor = AsyncMock()
-        tool_ctx_kitchen_open.executor.run = AsyncMock(
-            return_value=json.dumps(
+        monkeypatch.setattr(
+            "autoskillit.server._guards._resolve_provider_profile",
+            lambda *a, **kw: (
+                "minimax",
                 {
-                    "type": "result",
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": "done",
-                    "session_id": "s1",
-                }
-            )
+                    "ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1/anthropic",
+                    "ANTHROPIC_API_KEY": "minimax-key-placeholder",
+                },
+            ),
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution.resolve_target_skill",
+            lambda cmd, resolver: ("/autoskillit:investigate", "investigate"),
         )
 
-        provider_extras = {"ANTHROPIC_BASE_URL": "https://example.invalid"}
-        result = json.loads(
-            await run_skill("/autoskillit:investigate", "/tmp", provider_extras=provider_extras)
-        )
-        # Should NOT be crashed — provider override reroutes to claude-code
+        result = json.loads(await run_skill("/autoskillit:investigate", str(tmp_path)))
         assert (
             result.get("subtype") != "crashed"
             or "incompatible" not in result.get("error", "").lower()

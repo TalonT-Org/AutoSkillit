@@ -293,8 +293,8 @@ def test_backend_compat_precedes_dispatch() -> None:
         is_executor_run = (
             isinstance(func, ast.Attribute)
             and func.attr == "run"
-            and isinstance(func.value, ast.Name)
-            and func.value.id == "executor"
+            and isinstance(func.value, ast.Attribute)
+            and func.value.attr == "executor"
         )
         if is_compat and compat_lineno is None:
             compat_lineno = node.lineno

@@ -480,6 +480,7 @@ steps:
     on_failure: register_clone_failure
     retries: 0
     on_exhausted: register_clone_failure
+    on_context_limit: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
     note: 'Resolves git-level rebase conflicts between the ejected PR''s branch and
       the current base_branch HEAD. Uses the same resolve-merge-conflicts skill as
@@ -727,6 +728,7 @@ steps:
     on_failure: register_clone_failure
     retries: 0
     on_exhausted: get_current_pr_branch
+    on_context_limit: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
     note: 'Resolves git-level rebase conflicts between the next PR''s branch and the
       current base_branch HEAD. Similar to resolve_ejected_conflicts but operates
@@ -1395,6 +1397,7 @@ steps:
     - route: force_push_and_wait_mergeability
     retries: 0
     on_failure: register_clone_failure
+    on_context_limit: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
     note: 'Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003).
       Rebases context.batch_branch onto inputs.base_branch and resolves merge conflicts.
@@ -1560,6 +1563,7 @@ steps:
     on_failure: register_clone_failure
     retries: 0
     on_exhausted: register_clone_failure
+    on_context_limit: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
   re_push_review_integration:
     tool: push_to_remote

@@ -12,6 +12,7 @@ from autoskillit.config import (
     AutomationConfig,
     RunSkillConfig,
 )
+from autoskillit.core.claude_conventions import ClaudeDirectoryConventions
 from autoskillit.execution.commands import _inject_completion_directive
 from autoskillit.execution.headless import _session_log_dir
 from autoskillit.server.tools.tools_execution import run_skill
@@ -272,6 +273,10 @@ class TestRunSkillExecutionMarker:
         mock_locator.project_log_dir.return_value = controlled_path
         mock_backend = Mock()
         mock_backend.session_locator.return_value = mock_locator
+        mock_backend.name = "claude-code"
+        mock_backend.conventions.skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        mock_backend.capabilities.mcp_config_capable = False
+        mock_backend.capabilities.session_dir_persistent = False
         tool_ctx_kitchen_open.backend = mock_backend
 
         captured = {}

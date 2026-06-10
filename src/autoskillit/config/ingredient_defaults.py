@@ -199,6 +199,8 @@ def apply_config_authoritative_overrides(
         if key in resolved:
             result[key] = resolved[key]
         elif capability_overrides and key in capability_overrides:
+            # Fallback: only reached when resolve_ingredient_defaults() has no value for
+            # this key. Adding a key to resolve_ingredient_defaults shadows this branch.
             result[key] = capability_overrides[key]
         else:
             logger.warning(

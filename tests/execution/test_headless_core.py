@@ -163,11 +163,11 @@ class TestSessionLogDir:
         assert any(e.get("event") == "session_log_dir_precreating" for e in info_entries)
         assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
 
-    def test_headless_session_log_dir_uses_shared_util(self):
+    def test_headless_session_log_dir_uses_shared_util(self, tmp_path):
         from autoskillit.execution.headless import _session_log_dir
 
         cwd = "/home/user/project"
-        backend = _make_locator_backend(Path("/mock/log/dir"))
+        backend = _make_locator_backend(tmp_path / "mock" / "log" / "dir")
         _session_log_dir(cwd, backend)
         backend.session_locator.return_value.project_log_dir.assert_called_once_with(cwd)
 

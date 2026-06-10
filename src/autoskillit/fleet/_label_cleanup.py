@@ -39,6 +39,9 @@ _ADD_LABELS: list[str] = [IssueLabelState.FAIL.value]
 async def _cleanup_single_issue(
     github_client: GitHubFetcher,
     issue_url: str,
+    *,
+    remove_labels: list[str],
+    add_labels: list[str],
 ) -> bool:
     """Swap labels for a single issue URL. Returns True on success."""
     try:
@@ -48,7 +51,7 @@ async def _cleanup_single_issue(
         return False
     try:
         result = await github_client.swap_labels(
-            owner, repo, number, remove_labels=_REMOVE_LABELS, add_labels=_ADD_LABELS
+            owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
         )
         if not result.get("success"):
             return False
@@ -59,11 +62,33 @@ async def _cleanup_single_issue(
         return False
 
 
+async def _cleanup_issue_urls(
+    github_client: GitHubFetcher,
+    issue_url: str,
+    *,
+    remove_labels: list[str],
+    add_labels: list[str],
+) -> bool:
+    """Split a CSV issue_url string and call _cleanup_single_issue per URL."""
+    urls = [u.strip() for u in issue_url.split(",") if u.strip()]
+    if not urls:
+        return False
+    all_ok = True
+    for url in urls:
+        if not await _cleanup_single_issue(
+            github_client, url, remove_labels=remove_labels, add_labels=add_labels
+        ):
+            all_ok = False
+    return all_ok
+
+
 async def cleanup_orphaned_labels(
     sidecar_path: str | None,
     github_client: GitHubFetcher | None,
     *,
     issue_url: str = "",
+    remove_labels: list[str] | None = None,
+    add_labels: list[str] | None = None,
 ) -> bool:
     """Remove in-progress labels for all issues in a dispatch sidecar.
 
@@ -81,9 +106,14 @@ async def cleanup_orphaned_labels(
         )
         return True
 
+    rl = remove_labels if remove_labels is not None else _REMOVE_LABELS
+    al = add_labels if add_labels is not None else _ADD_LABELS
+
     if sidecar_path is None:
         if issue_url:
-            return await _cleanup_single_issue(github_client, issue_url)
+            return await _cleanup_issue_urls(
+                github_client, issue_url, remove_labels=rl, add_labels=al
+            )
         logger.debug(
             "infra_label_cleanup_skipped",
             reason="no_sidecar_or_no_issue_url",
@@ -99,7 +129,9 @@ async def cleanup_orphaned_labels(
             exc_info=True,
         )
         if issue_url:
-            return await _cleanup_single_issue(github_client, issue_url)
+            return await _cleanup_issue_urls(
+                github_client, issue_url, remove_labels=rl, add_labels=al
+            )
         return False
 
     if sidecar_result.source != SidecarReadStatus.FOUND:
@@ -109,7 +141,9 @@ async def cleanup_orphaned_labels(
             source=sidecar_result.source,
         )
         if issue_url:
-            return await _cleanup_single_issue(github_client, issue_url)
+            return await _cleanup_issue_urls(
+                github_client, issue_url, remove_labels=rl, add_labels=al
+            )
         return False
 
     if not sidecar_result.entries:
@@ -131,8 +165,8 @@ async def cleanup_orphaned_labels(
                 owner,
                 repo,
                 number,
-                remove_labels=_REMOVE_LABELS,
-                add_labels=_ADD_LABELS,
+                remove_labels=rl,
+                add_labels=al,
             )
             if not result.get("success"):
                 all_succeeded = False

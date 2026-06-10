@@ -309,6 +309,12 @@ forbidden_modules = [
     "autoskillit.cli",
     "autoskillit.report",
 ]
+# EXCEPTION: rules_inputs imports config to derive _KNOWN_CONFIG_AUTHORITY_KEYS
+# from the capability registries. migration → recipe → rules_inputs → config is
+# transitive only; migration/ itself does not use config types.
+ignore_imports = [
+    "autoskillit.recipe.rules.rules_inputs -> autoskillit.config",
+]
 
 # IL-008 | Lens: module-dependency | DS-001
 # Rationale: The six IL-1 peers (config, pipeline, execution, workspace, report,

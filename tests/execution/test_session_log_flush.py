@@ -761,6 +761,26 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     assert telemetry.loc_deletions == 0
 
 
+def test_flush_helper_forwards_session_locator():
+    """_flush() forwards session_locator= to flush_session_log when provided."""
+    import tempfile
+    import unittest.mock as mock
+
+    captured: dict = {}
+
+    def _capture(**kwargs):
+        captured.update(kwargs)
+
+    sentinel = object()
+    with mock.patch("autoskillit.execution.session_log.flush_session_log", side_effect=_capture):
+        with tempfile.TemporaryDirectory() as td:
+            _flush(Path(td), session_locator=sentinel)
+
+    assert captured.get("session_locator") is sentinel, (
+        "_flush() must forward session_locator= to flush_session_log"
+    )
+
+
 def test_flush_writes_token_usage_with_dispatch_label(tmp_path):
     """token_usage.json uses dispatch:{id} label when step_name is empty and dispatch_id set."""
     _flush(

@@ -56,6 +56,14 @@ class TestFlushSignatureGuard:
         param = sig.parameters["recipe_identity"]
         assert param.default is inspect.Parameter.empty
 
+    def test_session_locator_is_optional_parameter(self):
+        from autoskillit.execution.session_log import flush_session_log
+
+        sig = inspect.signature(flush_session_log)
+        assert "session_locator" in sig.parameters
+        param = sig.parameters["session_locator"]
+        assert param.default is None
+
 
 class TestFlushOutputCompleteness:
     """Every ProviderOutcome field must appear in flush output."""

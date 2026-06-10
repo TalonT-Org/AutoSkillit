@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +28,22 @@ from tests.execution.conftest import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+class _FakeLocator:
+    """SessionLocator fake — returns a fixed path for session_log_path."""
+
+    def __init__(self, path: Path | None) -> None:
+        self._path = path
+
+    def locate_session(self, session_id: str) -> Path | None:
+        return self._path
+
+    def project_log_dir(self, cwd: str) -> Path:
+        return Path(cwd)
+
+    def session_log_path(self, cwd: str, session_id: str) -> Path | None:
+        return self._path
 
 
 def test_flush_session_log_includes_write_path_warnings_in_summary(tmp_path):
@@ -222,7 +239,7 @@ def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
     assert not raw_file.exists()
 
 
-def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatch):
+def test_flush_session_log_summary_contains_per_turn_fields(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         json.dumps(
@@ -234,10 +251,6 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatc
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
-
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -253,6 +266,7 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatc
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["last_stop_reason"] == "end_turn"
@@ -260,7 +274,7 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path, monkeypatc
     assert summary["turn_timestamps"] == ["2026-04-15T07:00:00Z", "2026-04-15T07:00:05Z"]
 
 
-def test_flush_session_log_includes_no_request_id_turns(tmp_path, monkeypatch):
+def test_flush_session_log_includes_no_request_id_turns(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         _make_cc_jsonl_record(
@@ -275,9 +289,6 @@ def test_flush_session_log_includes_no_request_id_turns(tmp_path, monkeypatch):
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -292,6 +303,7 @@ def test_flush_session_log_includes_no_request_id_turns(tmp_path, monkeypatch):
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_timestamps"]) == 2
@@ -306,7 +318,7 @@ def test_flush_session_log_includes_no_request_id_turns(tmp_path, monkeypatch):
     )
 
 
-def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path, monkeypatch):
+def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         _make_cc_jsonl_record(
@@ -325,9 +337,6 @@ def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path, monkeypatch
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -342,6 +351,7 @@ def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path, monkeypatch
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_timestamps"]) == 3
@@ -355,7 +365,7 @@ def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path, monkeypatch
     assert all(rid.startswith("turn-") for rid in summary["request_ids"])
 
 
-def test_channel_b_turn_count_bounded_by_channel_a(tmp_path, monkeypatch):
+def test_channel_b_turn_count_bounded_by_channel_a(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         _make_cc_jsonl_record(
@@ -369,9 +379,6 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path, monkeypatch):
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     telemetry = SessionTelemetry(
         token_usage={"input_tokens": 0, "output_tokens": 0, "turn_count": 2},
         timing_seconds=None,
@@ -395,6 +402,7 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path, monkeypatch):
         telemetry=telemetry,
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     tu = json.loads((tmp_path / "sessions" / "s" / "token_usage.json").read_text())
@@ -403,7 +411,7 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path, monkeypatch):
     assert turn_count >= len(summary["turn_timestamps"])
 
 
-def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path, monkeypatch):
+def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         _make_cc_jsonl_record(
@@ -435,9 +443,6 @@ def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path, monkeypatch):
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -452,6 +457,7 @@ def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path, monkeypatch):
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert (
@@ -480,7 +486,7 @@ def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path, monkeypatch):
 # turn_tool_calls
 
 
-def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path, monkeypatch):
+def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         json.dumps(
@@ -497,10 +503,6 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path, monkeypatc
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
-
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -515,12 +517,13 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path, monkeypatc
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [["ToolA", "ToolB"]]
 
 
-def test_turn_tool_calls_capped_at_8_per_turn(tmp_path, monkeypatch):
+def test_turn_tool_calls_capped_at_8_per_turn(tmp_path):
     tools = [{"type": "tool_use", "name": f"Tool{i}"} for i in range(10)]
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
@@ -533,9 +536,6 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path, monkeypatch):
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -550,13 +550,14 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path, monkeypatch):
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_tool_calls"][0]) == 8
     assert summary["turn_tool_calls"][0] == [f"Tool{i}" for i in range(8)]
 
 
-def test_turn_tool_calls_empty_for_text_only_turn(tmp_path, monkeypatch):
+def test_turn_tool_calls_empty_for_text_only_turn(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         json.dumps(
@@ -568,9 +569,6 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path, monkeypatch):
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -585,12 +583,13 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path, monkeypatch):
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [[]]
 
 
-def test_turn_tool_calls_parallel_to_request_ids(tmp_path, monkeypatch):
+def test_turn_tool_calls_parallel_to_request_ids(tmp_path):
     records = [
         json.dumps(
             {
@@ -603,9 +602,6 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path, monkeypatch):
     ]
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text("\n".join(records) + "\n")
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -620,6 +616,7 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path, monkeypatch):
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert len(summary["turn_tool_calls"]) == len(summary["request_ids"]) == 3
@@ -630,30 +627,36 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_summary_includes_silent_gap_seconds(tmp_path, monkeypatch):
+def test_summary_includes_silent_gap_seconds(tmp_path):
     """silent_gap_seconds computed from cc_log mtime vs end_ts — approx 5.0s."""
-    import autoskillit.execution.session_log as sl_mod
-
     cb_log = tmp_path / "session.jsonl"
     cb_log.write_text("")
     end_ts = "2026-04-15T07:00:10+00:00"
     end_dt = datetime.fromisoformat(end_ts)
     os.utime(cb_log, (end_dt.timestamp() - 5.0,) * 2)
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
-    _flush(tmp_path, session_id="gap-test", end_ts=end_ts, proc_snapshots=None)
+    _flush(
+        tmp_path,
+        session_id="gap-test",
+        end_ts=end_ts,
+        proc_snapshots=None,
+        session_locator=_FakeLocator(cb_log),
+    )
     summary = json.loads((tmp_path / "sessions" / "gap-test" / "summary.json").read_text())
     assert "silent_gap_seconds" in summary
     assert summary["silent_gap_seconds"] == pytest.approx(5.0, abs=0.5)
 
 
-def test_summary_silent_gap_seconds_null_when_no_end_ts(tmp_path, monkeypatch):
+def test_summary_silent_gap_seconds_null_when_no_end_ts(tmp_path):
     """silent_gap_seconds is null when end_ts is not provided."""
-    import autoskillit.execution.session_log as sl_mod
-
     cb_log = tmp_path / "session.jsonl"
     cb_log.write_text("")
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
-    _flush(tmp_path, session_id="no-end-ts", end_ts="", proc_snapshots=None)
+    _flush(
+        tmp_path,
+        session_id="no-end-ts",
+        end_ts="",
+        proc_snapshots=None,
+        session_locator=_FakeLocator(cb_log),
+    )
     summary = json.loads((tmp_path / "sessions" / "no-end-ts" / "summary.json").read_text())
     assert summary["silent_gap_seconds"] is None
 
@@ -671,11 +674,8 @@ def test_summary_silent_gap_seconds_null_when_cc_log_missing(tmp_path):
     assert summary["silent_gap_seconds"] is None
 
 
-def test_flush_outcome_anomaly_included_in_anomaly_count(tmp_path, monkeypatch):
+def test_flush_outcome_anomaly_included_in_anomaly_count(tmp_path):
     """empty_result + output_tokens > 0 increments anomaly_count in summary and index."""
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: None)
     _flush(
         tmp_path,
         session_id="outcome-anomaly",
@@ -683,6 +683,7 @@ def test_flush_outcome_anomaly_included_in_anomaly_count(tmp_path, monkeypatch):
         success=False,
         token_usage={"output_tokens": 945, "input_tokens": 500},
         proc_snapshots=None,
+        session_locator=_FakeLocator(None),
     )
     summary = json.loads((tmp_path / "sessions" / "outcome-anomaly" / "summary.json").read_text())
     assert summary["anomaly_count"] >= 1
@@ -951,7 +952,7 @@ def test_flush_session_log_provider_used_defaults_empty_in_token_usage(tmp_path)
     assert tu["provider_used"] == ""
 
 
-def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path, monkeypatch):
+def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         _make_cc_jsonl_record(
@@ -966,9 +967,6 @@ def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path, monke
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -983,13 +981,14 @@ def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path, monke
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert summary["turn_tool_calls"] == [["Bash"]]
     assert summary["request_ids"] == ["req-001"]
 
 
-def test_parallel_lists_aligned_when_timestamp_missing(tmp_path, monkeypatch):
+def test_parallel_lists_aligned_when_timestamp_missing(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text(
         _make_cc_jsonl_record(
@@ -1004,9 +1003,6 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path, monkeypatch):
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -1021,6 +1017,7 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path, monkeypatch):
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
     assert (
@@ -1661,7 +1658,7 @@ class TestModelAliasDriftIntegration:
         assert len(rss) == 0
 
 
-def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path, monkeypatch):
+def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path):
     """MiniMax-shaped JSONL (message.id, no requestId) deduplicates into correct turn count."""
     mid = "0669d3ed14adce24ccf227c37a5884d4"
     cb_log = tmp_path / "s.jsonl"
@@ -1685,9 +1682,6 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path, monkeypatch):
         )
         + "\n"
     )
-    import autoskillit.execution.session_log as sl_mod
-
-    monkeypatch.setattr(sl_mod, "claude_code_log_path", lambda cwd, sid: cb_log)
     flush_session_log(
         log_dir=str(tmp_path),
         cwd="/tmp",
@@ -1702,6 +1696,7 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path, monkeypatch):
         telemetry=SessionTelemetry.empty(),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),
+        session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads(
         (tmp_path / "sessions" / "minimax-dedup-001" / "summary.json").read_text()

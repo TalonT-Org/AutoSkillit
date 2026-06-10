@@ -16,13 +16,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
+    from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionLocator, SessionTelemetry
 
 
 from autoskillit.core import (
     ModelIdentity,
     atomic_write,
-    claude_code_log_path,
     default_log_dir,
     get_logger,
     iter_merged_assistant_turns,
@@ -154,6 +153,7 @@ def flush_session_log(
     is_resume: bool = False,
     codex_log_path: Path | None = None,
     backend: Literal["claude-code", "codex"] = "claude-code",
+    session_locator: SessionLocator | None = None,
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -187,7 +187,13 @@ def flush_session_log(
         cc_log = None
         cc_log_str = None
     else:
-        cc_log = claude_code_log_path(cwd, session_id)
+        if session_locator is not None:
+            _locator = session_locator
+        else:
+            from autoskillit.execution.backends.claude import ClaudeSessionLocator
+
+            _locator = ClaudeSessionLocator()
+        cc_log = _locator.session_log_path(cwd, session_id)
         cc_log_str = str(cc_log) if cc_log else None
 
     if cc_log and not cc_log.exists():

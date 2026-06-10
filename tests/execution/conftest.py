@@ -12,7 +12,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import BackendCapabilities, CmdSpec
+from autoskillit.core import BackendCapabilities, CmdSpec, SessionLocator
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
@@ -311,7 +311,11 @@ def _subagent_assistant_ndjson(
 
 
 def _flush(
-    tmp_path: Path, *, backend: str = "claude-code", session_locator=None, **overrides
+    tmp_path: Path,
+    *,
+    backend: str = "claude-code",
+    session_locator: SessionLocator | None = None,
+    **overrides,
 ) -> None:
     from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
     from autoskillit.core.types._type_results_execution import (

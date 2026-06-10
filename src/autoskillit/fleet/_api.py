@@ -111,6 +111,17 @@ def resolve_dispatch_timeout(
     return float(default_timeout_sec)
 
 
+def _build_capability_overrides(backend: Any) -> dict[str, str]:
+    """Compute capability-derived ingredient overrides for a backend.
+
+    Mirrors ``_backend_capability_overrides`` in ``server.tools._auto_overrides``
+    but is inlined here because fleet/ (IL-2) cannot import from server/ (IL-3).
+    A structural test asserts every ``BACKEND_CAPABILITY_INGREDIENTS`` key is covered.
+    """
+    _backend_writable = backend is None or backend.capabilities.git_metadata_writable
+    return {"backend_supports_git_write": "true" if _backend_writable else "false"}
+
+
 def _write_pid(
     state_path: Path,
     dispatch_name: str,
@@ -407,8 +418,12 @@ async def _run_dispatch(
         apply_config_authoritative_overrides,
     )
 
+    _capability_overrides = _build_capability_overrides(tool_ctx.backend)
     effective_ingredients = apply_config_authoritative_overrides(
-        effective_ingredients, full_recipe.ingredients, tool_ctx.project_dir
+        effective_ingredients,
+        full_recipe.ingredients,
+        tool_ctx.project_dir,
+        capability_overrides=_capability_overrides,
     )
 
     effective_name = dispatch_name or recipe

@@ -503,8 +503,8 @@ def _check_ingredient_condition_value_domain(
 @semantic_rule(
     name="config-authority-requires-resolve-source",
     description=(
-        "Ingredients with authority='config' must use a key resolvable"
-        " by resolve_ingredient_defaults"
+        "Ingredients with authority='config' must use a key resolvable by "
+        "resolve_ingredient_defaults() or a registered backend-capability key"
     ),
     severity=Severity.ERROR,
 )
@@ -518,11 +518,13 @@ def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> l
                 make_finding(
                     rule_name="config-authority-requires-resolve-source",
                     step_name="(top-level)",
-                    message=f"Ingredient {name!r} declares authority='config' but is not a key "
-                    f"returned by resolve_ingredient_defaults(). "
-                    f"Known config-authoritative keys: "
-                    f"{sorted(CONFIG_AUTHORITY_KEYS)}. "
-                    "Remove the authority field or use a supported key.",
+                    message=(
+                        f"Ingredient {name!r} declares authority='config' but is not a recognized "
+                        f"config-authoritative key. Known keys come from "
+                        f"SERVER_AUTHORITATIVE_INGREDIENTS, BACKEND_CAPABILITY_INGREDIENTS, "
+                        f"or source_dir: {sorted(CONFIG_AUTHORITY_KEYS)}. "
+                        f"Add the key to the appropriate registry in ingredient_defaults.py."
+                    ),
                 )
             )
         elif getattr(ing, "required", False) and getattr(ing, "default", None) is None:

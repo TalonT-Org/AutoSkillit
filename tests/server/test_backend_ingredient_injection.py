@@ -318,3 +318,132 @@ class TestGetRecipeResourceInjection:
         call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
         overrides = call_kwargs["ingredient_overrides"]
         assert overrides.get("backend_supports_git_write") == "true"
+
+
+# ---------------------------------------------------------------------------
+# Merge-order: capability keys must win over caller-supplied overrides
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+class TestOpenKitchenMergeOrderCapabilityWins:
+    async def test_caller_override_clobbered_by_capability_detection(self, tmp_path) -> None:
+        """When overrides={'backend_supports_git_write': 'true'} is passed but the backend
+        is non-writable, the merged result must contain 'false' — the backend capability
+        wins over caller overrides."""
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        mock_ctx = MagicMock()
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.config.features = {}
+        mock_ctx.config.experimental_enabled = False
+        mock_ctx.backend = _make_backend_with_capability(False)
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+            "valid": True,
+            "suggestions": [],
+            "ingredients_table": None,
+        }
+        mock_ctx.recipes.find.return_value = None
+        mock_ctx.temp_dir = tmp_path
+
+        mock_mcp_ctx = AsyncMock()
+        mock_mcp_ctx.enable_components = AsyncMock()
+
+        with (
+            patch(
+                "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
+                return_value={},
+            ),
+            patch(
+                "autoskillit.server._misc._apply_triage_gate",
+                new_callable=AsyncMock,
+                side_effect=lambda r, *a, **kw: r,
+            ),
+            patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
+        ):
+            await open_kitchen(
+                name="demo",
+                overrides={"backend_supports_git_write": "true"},
+                ctx=mock_mcp_ctx,
+            )
+
+        call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+        overrides = call_kwargs["ingredient_overrides"]
+        assert overrides.get("backend_supports_git_write") == "false"
+
+
+@pytest.mark.anyio
+class TestLoadRecipeMergeOrderCapabilityWins:
+    async def test_caller_override_clobbered_by_capability_detection(self, tmp_path) -> None:
+        """load_recipe must also promote backend-capability keys to the winning layer."""
+        from autoskillit.server.tools.tools_recipe import load_recipe
+
+        mock_ctx = MagicMock()
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.config.workspace.temp_dir = ".autoskillit/temp"
+        mock_ctx.backend = _make_backend_with_capability(False)
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+            "valid": True,
+            "suggestions": [],
+        }
+        mock_ctx.recipes.find.return_value = None
+        mock_ctx.temp_dir = tmp_path
+
+        with (
+            patch(
+                "autoskillit.server.tools.tools_recipe._require_enabled",
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+                return_value=mock_ctx,
+            ),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
+                return_value={},
+            ),
+            patch(
+                "autoskillit.server._misc._apply_triage_gate",
+                new_callable=AsyncMock,
+                side_effect=lambda r, *a, **kw: r,
+            ),
+        ):
+            await load_recipe(name="demo", overrides={"backend_supports_git_write": "true"})
+
+        call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+        overrides = call_kwargs["ingredient_overrides"]
+        assert overrides.get("backend_supports_git_write") == "false"
+
+
+# ---------------------------------------------------------------------------
+# Capability registry coverage: helper output matches IL-1 registry
+# ---------------------------------------------------------------------------
+
+
+def test_backend_capability_overrides_matches_registry():
+    """The set of keys returned by _backend_capability_overrides must equal
+    BACKEND_CAPABILITY_INGREDIENTS. Drift between IL-3 helper and IL-1 registry
+    is a CI failure."""
+    from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS
+    from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
+
+    result = _backend_capability_overrides(backend=None)
+    assert set(result) == BACKEND_CAPABILITY_INGREDIENTS

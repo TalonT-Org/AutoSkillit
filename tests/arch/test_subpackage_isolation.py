@@ -962,11 +962,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "co-located with the execution engine that calls them",
     ),
     "tools_kitchen.py": (
-        1110,
+        1115,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
-        "backend capability override injection in get_recipe adds 3 lines",
+        "backend capability promotion delegated to _promote_capability_keys in _auto_overrides",
     ),
     "tools_execution.py": (
         1060,

@@ -452,3 +452,17 @@ def test_unreachable_steps_first_step_clean() -> None:
     findings = run_semantic_rules(wf)
     unreachable = [f for f in findings if f.rule == "unreachable-step"]
     assert unreachable == []
+
+
+def test_known_config_authority_keys_derived_from_registries():
+    """CONFIG_AUTHORITY_KEYS must equal the union of the registries
+    plus source_dir. Drift between registries is a CI failure."""
+    from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS, SERVER_AUTHORITATIVE_INGREDIENTS
+    from autoskillit.core import CONFIG_AUTHORITY_KEYS
+
+    expected = (
+        SERVER_AUTHORITATIVE_INGREDIENTS
+        | BACKEND_CAPABILITY_INGREDIENTS
+        | frozenset({"source_dir"})
+    )
+    assert CONFIG_AUTHORITY_KEYS == expected

@@ -56,7 +56,10 @@ from autoskillit.server._misc import (
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import track_response_size
-from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
+from autoskillit.server.tools._auto_overrides import (
+    _backend_capability_overrides,
+    _promote_capability_keys,
+)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)
@@ -536,6 +539,7 @@ async def open_kitchen(
             }
             _session_overrides.update(_backend_capability_overrides(tool_ctx.backend))
             _config_layer = build_config_authoritative_layer(_defaults)
+            _promote_capability_keys(_config_layer, _session_overrides)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":

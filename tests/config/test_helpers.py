@@ -215,3 +215,59 @@ def test_config_authority_keys_superset_of_server_authoritative() -> None:
         "source_dir",
         "backend_supports_git_write",
     }
+
+
+def test_apply_config_authoritative_overrides_capability_key_overrides_caller(tmp_path):
+    """Capability key registered in BACKEND_CAPABILITY_INGREDIENTS must be overridden by
+    capability_overrides, not the caller-supplied value."""
+    from types import SimpleNamespace
+
+    from autoskillit.config import apply_config_authoritative_overrides
+
+    recipe_ingredients = {
+        "backend_supports_git_write": SimpleNamespace(authority="config"),
+    }
+
+    with patch(
+        "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        return_value={},
+    ):
+        result = apply_config_authoritative_overrides(
+            {"backend_supports_git_write": "true"},
+            recipe_ingredients,
+            tmp_path,
+            capability_overrides={"backend_supports_git_write": "false"},
+        )
+
+    assert result["backend_supports_git_write"] == "false"
+
+
+def test_apply_config_authoritative_overrides_unknown_key_warns_and_retains(tmp_path):
+    """A config-authority key not in any registry (truly unknown) must trigger the
+    warning-and-retain path, not the capability override path."""
+    from types import SimpleNamespace
+
+    import structlog.testing
+
+    from autoskillit.config import apply_config_authoritative_overrides
+
+    recipe_ingredients = {
+        "totally_unknown_key": SimpleNamespace(authority="config"),
+    }
+
+    with (
+        patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={},
+        ),
+        structlog.testing.capture_logs() as cap_logs,
+    ):
+        result = apply_config_authoritative_overrides(
+            {"totally_unknown_key": "caller-value"},
+            recipe_ingredients,
+            tmp_path,
+            capability_overrides={"backend_supports_git_write": "false"},
+        )
+
+    assert result["totally_unknown_key"] == "caller-value"
+    assert any("config-authority key" in e.get("event", "") for e in cap_logs)

@@ -144,10 +144,15 @@ def order(
     if _resume and recipe is None:
         from autoskillit.cli._prompts import _OPEN_KITCHEN_GREETINGS
         from autoskillit.cli.session._session_picker import pick_session as _pick_session
+        from autoskillit.config import load_config as _load_config_resume
         from autoskillit.core import BareResume, NamedResume, NoResume
+        from autoskillit.execution import get_backend as _get_backend_resume
 
         if isinstance(resume_spec, BareResume):
-            _sel = _pick_session("order", Path.cwd())
+            _cfg_resume = _load_config_resume(Path.cwd())
+            _backend_resume = _get_backend_resume(_cfg_resume.agent_backend.backend)
+            _log_dir = _backend_resume.session_locator().project_log_dir(str(Path.cwd()))
+            _sel = _pick_session("order", Path.cwd(), _log_dir)
             resume_spec = NamedResume(session_id=_sel) if _sel else NoResume()
         _launch_cook_session(
             "",

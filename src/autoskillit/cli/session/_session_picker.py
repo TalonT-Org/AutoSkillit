@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from autoskillit.core import claude_code_project_dir
-
 _ORDER_GREETING_PREFIXES = (
     "Today's special:",
     "Order up! Today's special:",
@@ -18,12 +16,12 @@ _ORDER_GREETING_PREFIXES = (
 )
 
 
-def pick_session(session_type: str, project_dir: Path) -> str | None:
+def pick_session(session_type: str, project_dir: Path, project_log_dir: Path) -> str | None:
     """Show filtered picker. Returns selected Claude session UUID or None (fresh start)."""
     from autoskillit.core import read_registry
 
     registry = read_registry(project_dir)
-    sessions = _load_sessions_index(project_dir)
+    sessions = _load_sessions_index(project_log_dir)
     filtered = [s for s in sessions if _classify_session(s, registry) == session_type]
 
     if not filtered:
@@ -33,9 +31,9 @@ def pick_session(session_type: str, project_dir: Path) -> str | None:
     return _run_picker(filtered, session_type, registry)
 
 
-def _load_sessions_index(project_dir: Path) -> list[dict]:
+def _load_sessions_index(project_log_dir: Path) -> list[dict]:
     """Load sessions-index.json, filtering out sidechain entries."""
-    index_path = claude_code_project_dir(str(project_dir)) / "sessions-index.json"
+    index_path = project_log_dir / "sessions-index.json"
     try:
         entries: list[dict] = json.loads(index_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

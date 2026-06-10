@@ -207,7 +207,8 @@ def cook(
     if isinstance(resume_spec, BareResume):
         from autoskillit.cli.session._session_picker import pick_session
 
-        selected_id = pick_session(SESSION_TYPE_COOK, project_dir)
+        _log_dir = backend.session_locator().project_log_dir(str(project_dir))
+        selected_id = pick_session(SESSION_TYPE_COOK, project_dir, _log_dir)
         if selected_id is not None:
             resume_spec = NamedResume(session_id=selected_id)
         else:

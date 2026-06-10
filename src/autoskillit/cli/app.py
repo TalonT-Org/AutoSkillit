@@ -31,7 +31,6 @@ from autoskillit.cli.session._session_order import _recipes_dir_for, order
 from autoskillit.core import (
     RecipeSource,
     atomic_write,
-    claude_code_project_dir,
 )
 from autoskillit.execution import _has_active_execution_marker
 
@@ -152,11 +151,11 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
     try:
         backend_options = {"use_uvloop": sys.platform != "win32"}
 
-        _marker_dir: Path | None = None
-        try:
-            _marker_dir = claude_code_project_dir(str(ctx.project_dir))
-        except OSError:
-            pass
+        _marker_dir: Path | None = (
+            ctx.backend.session_locator().project_log_dir(str(ctx.project_dir))
+            if ctx.backend is not None
+            else None
+        )
 
         async def _guarded_serve() -> None:
             await serve_with_signal_guard(

@@ -1128,7 +1128,8 @@
       "on_exhausted": "route_claims_resolve",
       "on_context_limit": "route_claims_resolve",
       "on_success": "route_claims_resolve",
-      "on_failure": "route_claims_resolve"
+      "on_failure": "route_claims_resolve",
+      "skip_when_false": "inputs.backend_supports_git_write"
     },
     "route_claims_resolve": {
       "action": "route",

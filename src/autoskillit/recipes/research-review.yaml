@@ -408,6 +408,7 @@ steps:
     on_success: re_stage_bundle
     on_failure: re_push_research
     on_context_limit: re_push_research
+    skip_when_false: "inputs.backend_supports_git_write"
     note: >
       Re-generate the research report with updated benchmark results from the
       re-validation run. Passes context.experiment_results which was updated

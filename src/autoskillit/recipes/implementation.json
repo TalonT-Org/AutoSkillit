@@ -2349,7 +2349,6 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci structured output to avoid redundant CI failure re-investigation. Routes via on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses (sibling fix may have landed), flake_suspected retries via re_push (bounded by retries: 2 / on_exhausted: release_issue_failure), ci_only_failure escalates to human. Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.\n"
     },
     "pre_resolve_rebase": {
@@ -2399,8 +2398,7 @@
       "on_failure": "diagnose_ci",
       "on_context_limit": "diagnose_ci",
       "retries": 1,
-      "on_exhausted": "diagnose_ci",
-      "skip_when_false": "inputs.backend_supports_git_write"
+      "on_exhausted": "diagnose_ci"
     },
     "check_ci_rebase_loop": {
       "tool": "run_python",

@@ -444,6 +444,7 @@
       "on_success": "re_stage_bundle",
       "on_failure": "re_push_research",
       "on_context_limit": "re_push_research",
+      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Re-generate the research report with updated benchmark results from the re-validation run. Passes context.experiment_results which was updated by re_run_experiment to point to the new results file. Intentionally shadows the report_path ingredient (L52): after this step, context.report_path holds the regenerated path so downstream steps receive the updated report. Falls through to push on failure.\n"
     },
     "re_stage_bundle": {

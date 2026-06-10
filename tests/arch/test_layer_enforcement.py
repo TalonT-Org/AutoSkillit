@@ -265,9 +265,11 @@ def test_gated_tools_call_require_enabled_first() -> None:
 
 
 def test_backend_compat_precedes_dispatch() -> None:
-    """_check_backend_compat() (or _is_backend_incompatible()) must appear
-    before executor.run() inside run_skill(). Uses ast.walk + lineno comparison
-    because both calls are inside nested try/with/async-with blocks.
+    """_check_backend_compat() must appear before executor.run() inside run_skill().
+
+    Uses ast.walk + lineno comparison because both calls are inside nested
+    try/with/async-with blocks. Only _check_backend_compat is accepted —
+    the old _is_backend_incompatible helper is not fail-closed.
     """
     py_file = SRC_ROOT / "server" / "tools" / "tools_execution.py"
     src = py_file.read_text()
@@ -287,9 +289,7 @@ def test_backend_compat_precedes_dispatch() -> None:
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        is_compat = (isinstance(func, ast.Name) and func.id == "_check_backend_compat") or (
-            isinstance(func, ast.Name) and func.id == "_is_backend_incompatible"
-        )
+        is_compat = isinstance(func, ast.Name) and func.id == "_check_backend_compat"
         is_executor_run = (
             isinstance(func, ast.Attribute)
             and func.attr == "run"
@@ -301,9 +301,7 @@ def test_backend_compat_precedes_dispatch() -> None:
         elif is_executor_run and executor_run_lineno is None:
             executor_run_lineno = node.lineno
 
-    assert compat_lineno is not None, (
-        "_check_backend_compat (or _is_backend_incompatible) call not found in run_skill"
-    )
+    assert compat_lineno is not None, "_check_backend_compat call not found in run_skill"
     assert executor_run_lineno is not None, "executor.run() call not found in run_skill"
     assert compat_lineno < executor_run_lineno, (
         f"Backend compat check at line {compat_lineno} must precede "

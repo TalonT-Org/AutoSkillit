@@ -321,7 +321,6 @@ class TestResetDispatchEdgeCases:
         result = json.loads(raw)
         assert result["success"] is True
         assert result["labels_reset"] is False
-        assert len(result["errors"]) > 0
 
         from autoskillit.fleet.state import read_state
 

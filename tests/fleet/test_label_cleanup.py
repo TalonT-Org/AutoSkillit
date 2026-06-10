@@ -518,3 +518,54 @@ class TestCleanupOrphanedLabelsUnit:
 
         assert result is True
         github_client.swap_labels.assert_called_once()
+
+    @pytest.mark.anyio
+    async def test_csv_issue_url_fallback_cleans_all_issues(self, tmp_path: Path) -> None:
+        """CSV of issue URLs in the issue_url kwarg must clean each URL individually.
+
+        Regression guard for R1: previously, _parse_issue_ref on a CSV string would
+        silently match only the first URL via _FULL_URL_RE.match() (no $ anchor),
+        orphaning the remaining labels. After the fix, _cleanup_issue_urls splits
+        the CSV and calls _cleanup_single_issue per URL.
+        """
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        csv_url = "https://github.com/owner/repo/issues/1,https://github.com/owner/repo/issues/2"
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+
+        result = await cleanup_orphaned_labels(None, github_client, issue_url=csv_url)
+
+        assert result is True
+        assert github_client.swap_labels.call_count == 2
+        called_numbers = sorted(call.args[2] for call in github_client.swap_labels.call_args_list)
+        assert called_numbers == [1, 2]
+
+    @pytest.mark.anyio
+    async def test_parameterized_labels_reach_fallback_path(self, tmp_path: Path) -> None:
+        """Caller-supplied remove_labels/add_labels must reach the issue_url fallback.
+
+        Regression guard for Step 2.1: previously, the sidecar-unavailable fallback
+        path used the hard-coded _REMOVE_LABELS/_ADD_LABELS constants, so a QUEUED
+        reset with a missing sidecar would apply FAIL labels instead. After the
+        fix, caller-supplied labels are threaded through to swap_labels.
+        """
+        from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
+
+        missing = str(tmp_path / "absent.jsonl")
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+
+        result = await cleanup_orphaned_labels(
+            missing,
+            github_client,
+            issue_url="https://github.com/org/repo/issues/1",
+            remove_labels=["in-progress"],
+            add_labels=["queued"],
+        )
+
+        assert result is True
+        github_client.swap_labels.assert_called_once()
+        call = github_client.swap_labels.call_args
+        assert call.kwargs["remove_labels"] == ["in-progress"]
+        assert call.kwargs["add_labels"] == ["queued"]

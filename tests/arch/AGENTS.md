@@ -104,6 +104,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_notification_fallback_coverage.py` | AST guard: every ctx.enable_components call in server/tools/ must have a non-notification fallback or be in an exempt session-scoped unlock function |
 | `test_cmd_spec_resume_no_string_match.py` | AST guard: no `"--resume" in <expr>` patterns in production code — use CmdSpec.is_resume instead |
 | `test_subagent_filter_guard.py` | AST guard: all assistant-record NDJSON processing sites must use _is_parent_assistant_record or _is_parent_assistant predicate |
+| `test_swap_labels_guard.py` | AST guard: direct swap_labels calls in fleet/ must go through cleanup_orphaned_labels |
 | `test_enqueue_ready_type_enforcement.py` | AST guard: mutation methods (_enqueue_direct, _enable_auto_merge_direct) must accept EnqueueReady, not str |
 | `test_origin_isolation_contract.py` | AST + shell lint guard: no hardcoded "origin" in git remote operations outside allowlist; shell scripts must try upstream before origin |
 | `test_backend_annotation_context_awareness.py` | Context-aware pattern detection: distinguishes self-referential autoskillit: documentation from genuine cross-skill dependencies |

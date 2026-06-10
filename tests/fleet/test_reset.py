@@ -165,6 +165,117 @@ class TestResetDispatchArtifacts:
         assert report.labels_reset is False
         assert any("disk on fire" in e for e in report.errors)
 
+    @pytest.mark.anyio
+    async def test_missing_sidecar_with_issue_url_falls_back(self, tmp_path: Path) -> None:
+        """Issue #3983: MISSING sidecar + populated issue_url must fall back to issue_url.
+
+        The current bug: _handle_sidecar_label_swap returns False for MISSING without
+        attempting the issue_url fallback. After the fix, the delegated
+        cleanup_orphaned_labels fires swap_labels on the parsed issue URL.
+        """
+        sidecar = tmp_path / "gone.jsonl"
+        dispatch = DispatchRecord(
+            name="d-miss-url",
+            sidecar_path=str(sidecar),
+            issue_url="https://github.com/owner/repo/issues/42",
+            status=DispatchStatus.FAILURE,
+        )
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+        runner = AsyncMock(return_value=_make_subprocess_result())
+        report = await reset_dispatch_artifacts(
+            dispatch,
+            project_dir=tmp_path,
+            worktrees_dir=tmp_path / "wt",
+            runner=runner,
+            github_client=github_client,
+            target_state=IssueLabelState.QUEUED,
+        )
+        assert report.labels_reset is True
+        github_client.swap_labels.assert_called_once()
+        call = github_client.swap_labels.call_args
+        assert call.args[0] == "owner"
+        assert call.args[1] == "repo"
+        assert call.args[2] == 42
+        expected_remove, expected_add = compute_reset_labels(IssueLabelState.QUEUED)
+        assert call.kwargs["remove_labels"] == expected_remove
+        assert call.kwargs["add_labels"] == expected_add
+
+    @pytest.mark.anyio
+    async def test_error_sidecar_with_issue_url_falls_back(self, tmp_path: Path) -> None:
+        """ERROR sidecar + populated issue_url must fall back to issue_url cleanup."""
+        sidecar = tmp_path / "bad.jsonl"
+        sidecar.mkdir()  # directory triggers IsADirectoryError → SidecarReadStatus.ERROR
+        dispatch = DispatchRecord(
+            name="d-err-url",
+            sidecar_path=str(sidecar),
+            issue_url="https://github.com/owner/repo/issues/7",
+            status=DispatchStatus.FAILURE,
+        )
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+        runner = AsyncMock(return_value=_make_subprocess_result())
+        report = await reset_dispatch_artifacts(
+            dispatch,
+            project_dir=tmp_path,
+            worktrees_dir=tmp_path / "wt",
+            runner=runner,
+            github_client=github_client,
+            target_state=IssueLabelState.QUEUED,
+        )
+        assert report.labels_reset is True
+        github_client.swap_labels.assert_called_once()
+        call = github_client.swap_labels.call_args
+        assert call.args[0] == "owner"
+        assert call.args[1] == "repo"
+        assert call.args[2] == 7
+        expected_remove, expected_add = compute_reset_labels(IssueLabelState.QUEUED)
+        assert call.kwargs["remove_labels"] == expected_remove
+        assert call.kwargs["add_labels"] == expected_add
+
+    @pytest.mark.anyio
+    async def test_sidecar_read_exception_with_issue_url_falls_back(self, tmp_path: Path) -> None:
+        """read_sidecar_from_path OSError + populated issue_url must fall back.
+
+        Both imports must be patched because reset_dispatch_artifacts reads locally
+        for PR URL extraction AND the delegated cleanup_orphaned_labels reads again
+        for label cleanup.
+        """
+        sidecar = tmp_path / "explode.jsonl"
+        dispatch = DispatchRecord(
+            name="d-exc-url",
+            sidecar_path=str(sidecar),
+            issue_url="https://github.com/owner/repo/issues/99",
+            status=DispatchStatus.FAILURE,
+        )
+        github_client = AsyncMock()
+        github_client.swap_labels = AsyncMock(return_value={"success": True})
+        runner = AsyncMock(return_value=_make_subprocess_result())
+        with (
+            patch(
+                "autoskillit.fleet._reset.read_sidecar_from_path",
+                side_effect=OSError("disk on fire"),
+            ),
+            patch(
+                "autoskillit.fleet._label_cleanup.read_sidecar_from_path",
+                side_effect=OSError("disk on fire"),
+            ),
+        ):
+            report = await reset_dispatch_artifacts(
+                dispatch,
+                project_dir=tmp_path,
+                worktrees_dir=tmp_path / "wt",
+                runner=runner,
+                github_client=github_client,
+                target_state=IssueLabelState.QUEUED,
+            )
+        assert report.labels_reset is True
+        github_client.swap_labels.assert_called_once()
+        call = github_client.swap_labels.call_args
+        assert call.args[0] == "owner"
+        assert call.args[1] == "repo"
+        assert call.args[2] == 99
+
 
 class TestUpdateCampaignState:
     @pytest.mark.anyio

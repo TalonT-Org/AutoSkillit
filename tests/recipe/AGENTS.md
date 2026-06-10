@@ -10,6 +10,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `conftest.py` | Shared fixtures for tests/recipe/ |
 | `test_analysis_public_api.py` | Tests for the recipe analysis public API surface |
 | `test_anti_pattern_guards.py` | Guards for anti-patterns in recipe definitions |
+| `test_backend_reachability.py` | Backend-parametrized recipe reachability tests — pruned recipe satisfiability and codex pruning |
 | `test_api.py` | Tests for recipe/_api.py orchestration API |
 | `test_api_cache_isolation.py` | Cache isolation tests: copy-on-read contract for LoadCache — prevents aliasing bugs where callers mutate returned results and corrupt cached entries |
 | `test_api_split.py` | Structural guard for recipe API split |

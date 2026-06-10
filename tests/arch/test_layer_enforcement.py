@@ -1474,12 +1474,21 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/recipe/test_rules_skill_content.py": frozenset({"autoskillit.workspace"}),
     "tests/recipe/test_rules_backend_compat.py": frozenset({"autoskillit.workspace"}),
     "tests/recipe/test_rules_stamp_ownership.py": frozenset({"autoskillit.workspace"}),
+    # backend reachability tests cross into server (overrides), execution (backends),
+    # and workspace (resolver) to exercise the full pruning + validation pipeline
+    "tests/recipe/test_backend_reachability.py": frozenset(
+        {"autoskillit.server", "autoskillit.execution", "autoskillit.workspace"}
+    ),
     # review loop routing integration imports root-level smoke_utils
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),
     # migration tests — migration engine integrates with execution.session
     "tests/migration/test_engine.py": frozenset({"autoskillit.execution"}),
     # fleet e2e test exercises execution + cli layers end-to-end
     "tests/fleet/test_fleet_e2e.py": frozenset({"autoskillit.execution", "autoskillit.cli"}),
+    # codex fleet e2e exercises execution layer (backends, headless) end-to-end
+    "tests/fleet/test_fleet_e2e_codex.py": frozenset(
+        {"autoskillit.execution", "autoskillit.workspace"}
+    ),
     # session_log retention tests verify callback injection into
     # _enforce_retention — needs fleet.state
     "tests/execution/test_session_log_retention.py": frozenset({"autoskillit.fleet"}),

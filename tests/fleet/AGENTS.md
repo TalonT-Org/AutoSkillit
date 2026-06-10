@@ -37,6 +37,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_findings_rpc.py` | Tests for autoskillit.fleet._findings_rpc (T15–T21) |
 | `test_fleet.py` | Tests for fleet package |
 | `test_fleet_e2e.py` | Fleet Group O: end-to-end test suite for fleet dispatch loop |
+| `test_fleet_e2e_codex.py` | Fleet Group O-codex: end-to-end codex-backend dispatch via shim |
 | `test_fleet_rename_integrity.py` | Fleet rename integrity guard |
 | `test_fleet_semaphore.py` | Unit tests for FleetSemaphore (FleetLock semaphore implementation) |
 | `test_food_truck_prompt.py` | Tests for fleet/_prompts.py: _build_food_truck_prompt behavioral semantics |

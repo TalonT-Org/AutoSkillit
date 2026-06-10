@@ -162,7 +162,7 @@ def _make_completed_clean(success: bool, reason: str = ""):
     )
 
 
-_SENTINEL = object()
+_SENTINEL: Any = object()
 
 
 def _mock_backend_with_locator(
@@ -181,6 +181,8 @@ def _mock_backend_with_locator(
         mock_locator.session_log_path.side_effect = session_log_path_side_effect
     elif session_log_path is not _SENTINEL:
         mock_locator.session_log_path.return_value = session_log_path
+    else:
+        mock_locator.session_log_path.return_value = None
     mock_backend = Mock()
     mock_backend.session_locator.return_value = mock_locator
     return mock_backend

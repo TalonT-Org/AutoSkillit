@@ -509,9 +509,15 @@ class TestConfigAuthoritativeIngredientInjection:
             captured.update(kwargs)
             return "prompt"
 
+        from unittest.mock import Mock as _Mock
+
+        _mock_locator = _Mock()
+        _mock_locator.project_log_dir.return_value = None
+        _mock_locator.session_log_path.return_value = None
         tool_ctx.backend = SimpleNamespace(
             name="test-backend",
             capabilities=SimpleNamespace(git_metadata_writable=False),
+            session_locator=lambda: _mock_locator,
         )
 
         from autoskillit.fleet._api import execute_dispatch

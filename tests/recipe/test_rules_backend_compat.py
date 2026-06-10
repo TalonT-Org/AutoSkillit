@@ -266,15 +266,6 @@ class TestBundledRecipeBackendCompat:
             f"Expected findings for steps {missing} in {recipe_name} on codex backend, "
             f"got findings for: {step_names}"
         )
-        guarded_steps = {
-            name for name in step_names if recipe.steps[name].skip_when_false is not None
-        }
-        for f in compat_findings:
-            if f.step_name in guarded_steps:
-                assert f.severity == Severity.WARNING, (
-                    f"Step {f.step_name!r} has skip_when_false guard; expected WARNING, "
-                    f"got {f.severity}"
-                )
 
     def test_claude_code_backend_no_findings(self, recipe_name) -> None:
         from autoskillit.recipe._analysis import make_validation_context
@@ -327,7 +318,7 @@ def _make_guarded_recipe(skip_when_false: str | None = None, optional: bool = Fa
 
 
 class TestSeverityPromotion:
-    """Unguarded backend-incompatible steps fire ERROR; guarded ones fire WARNING."""
+    """All incompatible steps fire ERROR regardless of guards."""
 
     def test_unguarded_incompatible_step_fires_error(self) -> None:
         recipe = _make_guarded_recipe(skip_when_false=None, optional=False)
@@ -343,7 +334,7 @@ class TestSeverityPromotion:
         assert len(compat) == 1
         assert compat[0].severity == Severity.ERROR
 
-    def test_guarded_incompatible_step_fires_warning(self) -> None:
+    def test_guarded_incompatible_step_fires_error(self) -> None:
         recipe = _make_guarded_recipe(skip_when_false="inputs.some_guard", optional=False)
         resolver = _mock_resolver(_make_skill_info())
         ctx = make_validation_context(
@@ -355,9 +346,9 @@ class TestSeverityPromotion:
         findings = run_semantic_rules(ctx)
         compat = [f for f in findings if f.rule == "backend-incompatible-skill"]
         assert len(compat) == 1
-        assert compat[0].severity == Severity.WARNING
+        assert compat[0].severity == Severity.ERROR
 
-    def test_optional_incompatible_step_fires_warning(self) -> None:
+    def test_optional_incompatible_step_fires_error(self) -> None:
         recipe = _make_guarded_recipe(skip_when_false=None, optional=True)
         resolver = _mock_resolver(_make_skill_info())
         ctx = make_validation_context(
@@ -369,9 +360,9 @@ class TestSeverityPromotion:
         findings = run_semantic_rules(ctx)
         compat = [f for f in findings if f.rule == "backend-incompatible-skill"]
         assert len(compat) == 1
-        assert compat[0].severity == Severity.WARNING
+        assert compat[0].severity == Severity.ERROR
 
-    def test_skip_when_true_incompatible_step_fires_warning(self) -> None:
+    def test_skip_when_true_incompatible_step_fires_error(self) -> None:
         step = RecipeStep(
             tool="run_skill",
             with_args={"skill_command": "/investigate something", "cwd": "/tmp"},
@@ -392,7 +383,7 @@ class TestSeverityPromotion:
         findings = run_semantic_rules(ctx)
         compat = [f for f in findings if f.rule == "backend-incompatible-skill"]
         assert len(compat) == 1
-        assert compat[0].severity == Severity.WARNING
+        assert compat[0].severity == Severity.ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +396,15 @@ class TestBundledRecipeIngredientDeclaration:
 
     @pytest.fixture(
         scope="class",
-        params=["implementation", "implementation-groups", "remediation"],
+        params=[
+            "implementation",
+            "implementation-groups",
+            "remediation",
+            "merge-prs",
+            "research-implement",
+            "research",
+            "research-review",
+        ],
         ids=lambda x: x,
     )
     def recipe_name(self, request: pytest.FixtureRequest) -> str:
@@ -438,7 +437,15 @@ class TestBundledRecipeStepGuards:
 
     @pytest.fixture(
         scope="class",
-        params=["implementation", "implementation-groups", "remediation"],
+        params=[
+            "implementation",
+            "implementation-groups",
+            "remediation",
+            "merge-prs",
+            "research-implement",
+            "research",
+            "research-review",
+        ],
         ids=lambda x: x,
     )
     def recipe_name(self, request: pytest.FixtureRequest) -> str:

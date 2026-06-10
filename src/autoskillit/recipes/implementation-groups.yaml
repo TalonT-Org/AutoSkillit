@@ -1380,6 +1380,7 @@ steps:
       route: release_issue_failure
     - route: release_issue_failure
     on_failure: release_issue_failure
+    skip_when_false: "inputs.backend_supports_git_write"
     note: >
       Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci
       structured output to avoid redundant CI failure re-investigation. Routes via
@@ -1427,6 +1428,7 @@ steps:
     on_context_limit: diagnose_ci
     retries: 1
     on_exhausted: diagnose_ci
+    skip_when_false: "inputs.backend_supports_git_write"
   check_ci_rebase_loop:
     tool: run_python
     with:

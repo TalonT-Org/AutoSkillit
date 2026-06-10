@@ -264,6 +264,51 @@ def test_gated_tools_call_require_enabled_first() -> None:
     )
 
 
+def test_backend_compat_precedes_dispatch() -> None:
+    """_check_backend_compat() must appear before executor.run() inside run_skill().
+
+    Uses ast.walk + lineno comparison because both calls are inside nested
+    try/with/async-with blocks. Only _check_backend_compat is accepted —
+    the old _is_backend_incompatible helper is not fail-closed.
+    """
+    py_file = SRC_ROOT / "server" / "tools" / "tools_execution.py"
+    src = py_file.read_text()
+    tree = ast.parse(src)
+
+    run_skill_node: ast.AsyncFunctionDef | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_skill":
+            run_skill_node = node
+            break
+    assert run_skill_node is not None, "run_skill not found in tools_execution.py"
+
+    compat_lineno: int | None = None
+    executor_run_lineno: int | None = None
+
+    for node in ast.walk(run_skill_node):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        is_compat = isinstance(func, ast.Name) and func.id == "_check_backend_compat"
+        is_executor_run = (
+            isinstance(func, ast.Attribute)
+            and func.attr == "run"
+            and isinstance(func.value, ast.Attribute)
+            and func.value.attr == "executor"
+        )
+        if is_compat and compat_lineno is None:
+            compat_lineno = node.lineno
+        elif is_executor_run and executor_run_lineno is None:
+            executor_run_lineno = node.lineno
+
+    assert compat_lineno is not None, "_check_backend_compat call not found in run_skill"
+    assert executor_run_lineno is not None, "executor.run() call not found in run_skill"
+    assert compat_lineno < executor_run_lineno, (
+        f"Backend compat check at line {compat_lineno} must precede "
+        f"executor.run() at line {executor_run_lineno}"
+    )
+
+
 def test_fleet_tools_call_require_fleet() -> None:
     """Every tool in FLEET_TOOLS (except batch_cleanup_clones) must call
     _require_fleet() before any non-guard await/return in its function body."""

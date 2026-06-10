@@ -969,10 +969,11 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "backend capability promotion delegated to _promote_capability_keys in _auto_overrides",
     ),
     "tools_execution.py": (
-        1060,
+        1110,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
-        "three primary execution paths; fail-closed existence gate and empty-closure gate "
-        "for fabricated skill name rejection add defense-in-depth checks",
+        "three primary execution paths; fail-closed existence gate, empty-closure gate "
+        "for fabricated skill name rejection, and _check_backend_compat fail-closed gate "
+        "with resolver-absent fallback via extract_skill_name add defense-in-depth checks",
     ),
     "execution/backends/codex.py": (
         1045,

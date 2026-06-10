@@ -76,6 +76,11 @@ ingredients:
   visualization_plan_path:
     description: Path to the visualization plan
     required: true
+  backend_supports_git_write:
+    description: Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.
+    default: 'true'
+    hidden: true
+    authority: config
 
 kitchen_rules:
 - >
@@ -301,6 +306,7 @@ steps:
     on_context_limit: route_claims_resolve
     on_success: route_claims_resolve
     on_failure: route_claims_resolve
+    skip_when_false: "inputs.backend_supports_git_write"
 
   route_claims_resolve:
     action: route
@@ -332,6 +338,7 @@ steps:
     on_context_limit: merge_escalations
     on_success: merge_escalations
     on_failure: merge_escalations
+    skip_when_false: "inputs.backend_supports_git_write"
 
   merge_escalations:
     action: route
@@ -401,6 +408,7 @@ steps:
     on_success: re_stage_bundle
     on_failure: re_push_research
     on_context_limit: re_push_research
+    skip_when_false: "inputs.backend_supports_git_write"
     note: >
       Re-generate the research report with updated benchmark results from the
       re-validation run. Passes context.experiment_results which was updated

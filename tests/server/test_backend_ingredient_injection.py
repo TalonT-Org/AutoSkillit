@@ -8,6 +8,7 @@ resource handler.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -469,7 +470,7 @@ class TestRealCompositionPruning:
         "resolve_ci",
     }
 
-    def test_codex_overrides_remove_guarded_steps_from_content(self, tmp_path) -> None:
+    def test_codex_overrides_remove_guarded_steps_from_content(self, tmp_path: Path) -> None:
         from autoskillit.recipe._api import load_and_validate
         from autoskillit.workspace.skills import DefaultSkillResolver
 

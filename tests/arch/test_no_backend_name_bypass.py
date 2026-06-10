@@ -9,15 +9,18 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 # Exempt files where backend name comparison is structurally necessary.
 _EXEMPT_FILES: frozenset[str] = frozenset(
     {
-        "execution/backends/__init__.py",  # BACKEND_REGISTRY lookup
-        "server/_factory.py",  # Feature-gated backend swap (pre-capabilities)
-        "cli/_marketplace.py",  # Marketplace — Claude Code-only install guard
-        "execution/recording.py",  # Replay setup: fmt == "codex" Compare for player selection
-        "execution/headless/_headless_result.py",  # Claude-specific result parsing
-        "core/_version_snapshot.py",  # Version snapshot — routes codex_version by backend name
-        "execution/headless/_headless_helpers.py",  # assert_headless_cmd claude -p flag check
-        "cli/session/_session_launch.py",  # Feature-gate backend-alignment fallback
-        "recipe/rules/rules_backend_compat.py",  # Backend compatibility semantic rule
+        # Pre-instantiation config guard: backend object not yet constructed
+        "server/_factory.py",
+        # Cassette format from filenames; selects api_simulator player (no backend at replay time)
+        "execution/recording.py",
+        # Claude-specific JSONL stdout format; parse_session_result() is Claude-only
+        "execution/headless/_headless_result.py",
+        # IL-0 module: cannot import BackendCapabilities (IL-1); routes version data by name
+        "core/_version_snapshot.py",
+        # Binary name check on CmdSpec subprocess argv; no backend context in assert_headless_cmd()
+        "execution/headless/_headless_helpers.py",
+        # FeatureDef.requires_backend_alignment is config-layer; no capabilities at scan time
+        "cli/session/_session_launch.py",
     }
 )
 

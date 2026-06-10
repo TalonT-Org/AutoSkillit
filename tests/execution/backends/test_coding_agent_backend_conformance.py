@@ -146,6 +146,9 @@ class TestCodingAgentBackendConformance(BackendContractBase):
             with pytest.raises(FileNotFoundError):
                 self.backend.setup_session_dir(session_dir)
         else:
+            # Intentional sentinel: when a new backend is added to BACKEND_REGISTRY,
+            # add an elif branch above with explicit setup_session_dir coverage rather
+            # than removing this guard.
             pytest.fail(
                 f"test_setup_session_dir has no coverage for backend {self.backend.name!r}"
             )

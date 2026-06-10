@@ -34,6 +34,7 @@ from autoskillit.recipe.contracts import (  # noqa: E402
     validate_recipe_cards,
 )
 from autoskillit.recipe.diagrams import (  # noqa: E402
+    annotate_diagram_with_pruning,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     load_recipe_diagram,
@@ -313,6 +314,7 @@ __all__ = [
     "load_recipe_diagram",
     "check_diagram_staleness",
     "diagram_stale_to_suggestions",
+    "annotate_diagram_with_pruning",
     "builtin_sub_recipes_dir",
     "find_sub_recipe_by_name",
     "BUNDLED_EXPERIMENT_TYPES_DIR",

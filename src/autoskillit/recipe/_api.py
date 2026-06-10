@@ -71,6 +71,7 @@ from autoskillit.recipe.contracts import (
     validate_recipe_cards,
 )
 from autoskillit.recipe.diagrams import (
+    annotate_diagram_with_pruning,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     load_recipe_diagram,
@@ -492,6 +493,9 @@ def load_and_validate(
 
     # Load pre-generated diagram
     diagram: str | None = load_recipe_diagram(name, recipes_dir)
+
+    if diagram is not None and _skip_resolutions:
+        diagram = annotate_diagram_with_pruning(diagram, _skip_resolutions)
 
     # Build pre-formatted ingredients table from active_recipe (has merged/filtered ingredients)
     _serving_recipe = active_recipe if active_recipe is not None else recipe

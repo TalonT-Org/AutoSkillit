@@ -445,18 +445,23 @@ class TestBundledRecipeStepGuards:
         return request.param
 
     def test_git_metadata_write_steps_have_skip_guard(self, recipe_name) -> None:
+        from autoskillit.core.types._type_helpers import extract_skill_name
         from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
         from autoskillit.workspace.skills import DefaultSkillResolver
 
         recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
         resolver = DefaultSkillResolver()
+        checked_count = 0
         for step_name, step in recipe.steps.items():
             if step.tool != "run_skill":
                 continue
             skill_cmd = step.with_args.get("skill_command", "")
             if not skill_cmd or not skill_cmd.startswith("/"):
                 continue
-            skill_info = resolver.resolve(skill_cmd.split()[0].lstrip("/"))
+            bare_name = extract_skill_name(skill_cmd)
+            if bare_name is None:
+                continue
+            skill_info = resolver.resolve(bare_name)
             if skill_info is None:
                 continue
             if (
@@ -468,3 +473,35 @@ class TestBundledRecipeStepGuards:
                 f"Step {step_name!r} in {recipe_name!r} dispatches git_metadata_write skill "
                 f"'{skill_info.name}' but has no skip_when_false guard"
             )
+            checked_count += 1
+        assert checked_count > 0, (
+            f"No git_metadata_write steps found in {recipe_name!r} — "
+            "test is vacuous (skill resolution may be broken)"
+        )
+
+    def test_guard_test_exercises_at_least_one_step(self, recipe_name) -> None:
+        from autoskillit.core.types._type_helpers import extract_skill_name
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+        from autoskillit.workspace.skills import DefaultSkillResolver
+
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        resolver = DefaultSkillResolver()
+        count = 0
+        for step in recipe.steps.values():
+            if step.tool != "run_skill":
+                continue
+            skill_cmd = step.with_args.get("skill_command", "")
+            if not skill_cmd or not skill_cmd.startswith("/"):
+                continue
+            bare_name = extract_skill_name(skill_cmd)
+            if bare_name is None:
+                continue
+            skill_info = resolver.resolve(bare_name)
+            if skill_info is None:
+                continue
+            if "git_metadata_write" in (skill_info.uses_capabilities or []):
+                count += 1
+        assert count > 0, (
+            f"No git_metadata_write steps resolvable in {recipe_name!r} — "
+            "guard test would be vacuous (skill resolution may be broken)"
+        )

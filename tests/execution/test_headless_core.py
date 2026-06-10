@@ -81,6 +81,9 @@ class TestSessionLogDir:
         backend = _make_locator_backend(expected)
         result = _session_log_dir("/home/user/project", backend)
         assert result == expected
+        backend.session_locator.return_value.project_log_dir.assert_called_once_with(
+            "/home/user/project"
+        )
 
     def test_replaces_underscores(self):
         from autoskillit.execution.headless import _session_log_dir
@@ -89,6 +92,9 @@ class TestSessionLogDir:
         backend = _make_locator_backend(expected)
         result = _session_log_dir("/home/user/my_project", backend)
         assert result == expected
+        backend.session_locator.return_value.project_log_dir.assert_called_once_with(
+            "/home/user/my_project"
+        )
 
     def test_replaces_both_slashes_and_underscores(self):
         from autoskillit.execution.headless import _session_log_dir
@@ -97,6 +103,9 @@ class TestSessionLogDir:
         backend = _make_locator_backend(expected)
         result = _session_log_dir("/home/user_name/my_project/sub_dir", backend)
         assert result == expected
+        backend.session_locator.return_value.project_log_dir.assert_called_once_with(
+            "/home/user_name/my_project/sub_dir"
+        )
 
     # --- log behavior (from test_server_init_gate.py TestGateTransitionLogs) ---
 
@@ -167,8 +176,10 @@ class TestSessionLogDir:
         from autoskillit.execution.headless import _session_log_dir
 
         cwd = "/home/user/project"
-        backend = _make_locator_backend(tmp_path / "mock" / "log" / "dir")
-        _session_log_dir(cwd, backend)
+        expected = tmp_path / "mock" / "log" / "dir"
+        backend = _make_locator_backend(expected)
+        result = _session_log_dir(cwd, backend)
+        assert result == expected
         backend.session_locator.return_value.project_log_dir.assert_called_once_with(cwd)
 
     def test_session_log_dir_creates_missing_directory(self, tmp_path):

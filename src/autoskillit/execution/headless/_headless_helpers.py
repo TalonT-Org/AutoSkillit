@@ -14,7 +14,6 @@ from autoskillit.core import (
     CodingAgentBackend,
     ModelIdentity,
     SkillResult,
-    claude_code_project_dir,
     get_logger,
 )
 from autoskillit.execution.backends.codex import CodexFlags
@@ -51,8 +50,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _session_log_dir(cwd: str) -> Path:
-    log_dir = claude_code_project_dir(cwd)
+def _session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path:
+    log_dir = backend.session_locator().project_log_dir(cwd)
     logger.info("session_log_dir_computed", path=str(log_dir), cwd=cwd)
     if not log_dir.exists():
         logger.info("session_log_dir_precreating", path=str(log_dir), cwd=cwd)
@@ -111,7 +110,7 @@ def assert_interactive_ordering(
 def _resolve_session_log_dir(cwd: str, backend: CodingAgentBackend) -> Path | None:
     if not backend.capabilities.channel_b_capable:
         return None
-    return _session_log_dir(cwd)
+    return _session_log_dir(cwd, backend)
 
 
 def _resolve_model(

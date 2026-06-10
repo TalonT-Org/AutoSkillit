@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -63,6 +63,12 @@ def _context_exhausted_session_json() -> str:
     )
 
 
+def _make_locator_backend(project_log_dir_return: Path) -> Mock:
+    backend = Mock()
+    backend.session_locator.return_value.project_log_dir.return_value = project_log_dir_return
+    return backend
+
+
 class TestSessionLogDir:
     """Unit tests for _session_log_dir — path derivation and log emission."""
 
@@ -71,81 +77,85 @@ class TestSessionLogDir:
     def test_replaces_slashes(self):
         from autoskillit.execution.headless import _session_log_dir
 
-        result = _session_log_dir("/home/user/project")
-        assert result == Path.home() / ".claude" / "projects" / "-home-user-project"
+        expected = Path.home() / ".claude" / "projects" / "-home-user-project"
+        backend = _make_locator_backend(expected)
+        result = _session_log_dir("/home/user/project", backend)
+        assert result == expected
 
     def test_replaces_underscores(self):
         from autoskillit.execution.headless import _session_log_dir
 
-        result = _session_log_dir("/home/user/my_project")
-        assert result == Path.home() / ".claude" / "projects" / "-home-user-my-project"
+        expected = Path.home() / ".claude" / "projects" / "-home-user-my-project"
+        backend = _make_locator_backend(expected)
+        result = _session_log_dir("/home/user/my_project", backend)
+        assert result == expected
 
     def test_replaces_both_slashes_and_underscores(self):
         from autoskillit.execution.headless import _session_log_dir
 
-        result = _session_log_dir("/home/user_name/my_project/sub_dir")
-        assert (
-            result == Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
-        )
+        expected = Path.home() / ".claude" / "projects" / "-home-user-name-my-project-sub-dir"
+        backend = _make_locator_backend(expected)
+        result = _session_log_dir("/home/user_name/my_project/sub_dir", backend)
+        assert result == expected
 
     # --- log behavior (from test_server_init_gate.py TestGateTransitionLogs) ---
 
-    def test_warns_when_dir_missing(self, tmp_path, monkeypatch):
+    def test_warns_when_dir_missing(self, tmp_path):
         import structlog.testing
 
         from autoskillit.execution.headless import _session_log_dir
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        log_dir = tmp_path / "logs" / "project-dir"
+        backend = _make_locator_backend(log_dir)
         cwd = str(tmp_path / "my-project")
         with structlog.testing.capture_logs() as logs:
-            _session_log_dir(cwd)
+            _session_log_dir(cwd, backend)
         assert any(
             e.get("event") == "session_log_dir_precreating"
             for e in logs
             if e.get("log_level") == "info"
         )
 
-    def test_no_warning_when_dir_present(self, tmp_path, monkeypatch):
+    def test_no_warning_when_dir_present(self, tmp_path):
         import structlog.testing
 
         from autoskillit.execution.headless import _session_log_dir
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-        cwd = str(tmp_path)
-        project_hash = cwd.replace("/", "-").replace("_", "-")
-        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
+        log_dir = tmp_path / "logs" / "project-dir"
         log_dir.mkdir(parents=True, exist_ok=True)
+        backend = _make_locator_backend(log_dir)
+        cwd = str(tmp_path)
         with structlog.testing.capture_logs() as logs:
-            _session_log_dir(cwd)
+            _session_log_dir(cwd, backend)
         assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
 
-    def test_logs_path_when_dir_exists(self, tmp_path, monkeypatch):
+    def test_logs_path_when_dir_exists(self, tmp_path):
         import structlog.testing
 
         from autoskillit.execution.headless import _session_log_dir
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-        cwd = str(tmp_path)
-        project_hash = cwd.replace("/", "-").replace("_", "-")
-        log_dir = tmp_path / "home" / ".claude" / "projects" / project_hash
+        log_dir = tmp_path / "logs" / "project-dir"
         log_dir.mkdir(parents=True, exist_ok=True)
+        backend = _make_locator_backend(log_dir)
+        cwd = str(tmp_path)
         with structlog.testing.capture_logs() as logs:
-            result = _session_log_dir(cwd)
+            result = _session_log_dir(cwd, backend)
         info_entries = [e for e in logs if e.get("log_level") == "info"]
         assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
         computed = next(e for e in info_entries if e.get("event") == "session_log_dir_computed")
         assert computed.get("path") == str(result)
         assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
 
-    def test_logs_path_when_dir_missing(self, tmp_path, monkeypatch):
+    def test_logs_path_when_dir_missing(self, tmp_path):
         import structlog.testing
 
         from autoskillit.execution.headless import _session_log_dir
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        log_dir = tmp_path / "logs" / "project-dir"
+        backend = _make_locator_backend(log_dir)
         cwd = str(tmp_path / "my-project")
         with structlog.testing.capture_logs() as logs:
-            result = _session_log_dir(cwd)
+            result = _session_log_dir(cwd, backend)
         info_entries = [e for e in logs if e.get("log_level") == "info"]
         assert any(e.get("event") == "session_log_dir_computed" for e in info_entries)
         computed = next(e for e in info_entries if e.get("event") == "session_log_dir_computed")
@@ -154,37 +164,36 @@ class TestSessionLogDir:
         assert not any(e.get("event") == "session_log_dir_missing" for e in logs)
 
     def test_headless_session_log_dir_uses_shared_util(self):
-        from autoskillit.core.paths import claude_code_project_dir
         from autoskillit.execution.headless import _session_log_dir
 
         cwd = "/home/user/project"
-        assert _session_log_dir(cwd) == claude_code_project_dir(cwd)
+        backend = _make_locator_backend(Path("/mock/log/dir"))
+        _session_log_dir(cwd, backend)
+        backend.session_locator.return_value.project_log_dir.assert_called_once_with(cwd)
 
-    def test_session_log_dir_creates_missing_directory(self, tmp_path, monkeypatch):
+    def test_session_log_dir_creates_missing_directory(self, tmp_path):
         """_session_log_dir must create the directory if absent, so Channel B
         always has a directory to poll."""
         from autoskillit.execution.headless import _session_log_dir
 
-        fake_home = tmp_path / "home"
-        fake_home.mkdir()
-        monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
+        log_dir = tmp_path / "logs" / "fresh-clone-dir"
+        backend = _make_locator_backend(log_dir)
         cwd = "/some/fresh/clone/path"
-        result = _session_log_dir(cwd)
+        result = _session_log_dir(cwd, backend)
         assert result.exists()
         assert result.is_dir()
 
     def test_session_log_dir_mkdir_oserror_reraises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from unittest.mock import Mock
-
         from autoskillit.execution.headless import _session_log_dir
 
-        monkeypatch.setattr(Path, "home", lambda: tmp_path / "nonexistent_home")
+        log_dir = tmp_path / "logs" / "some-project"
+        backend = _make_locator_backend(log_dir)
         monkeypatch.setattr(Path, "mkdir", Mock(side_effect=OSError("disk full")))
 
         with pytest.raises(OSError, match="disk full"):
-            _session_log_dir(str(tmp_path / "some_project"))
+            _session_log_dir(str(tmp_path / "some_project"), backend)
 
 
 class TestRunHeadlessCoreFilesystemWrites:
@@ -800,7 +809,6 @@ class TestRunHeadlessCore:
     async def test_run_headless_core_dispatches_through_backend_when_present(
         self, minimal_ctx, monkeypatch, tmp_path
     ):
-        from unittest.mock import Mock
 
         from autoskillit.core import CmdSpec
         from autoskillit.execution.headless import run_headless_core

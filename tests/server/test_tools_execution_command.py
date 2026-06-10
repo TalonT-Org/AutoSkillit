@@ -12,9 +12,10 @@ from autoskillit.config import (
     AutomationConfig,
     RunSkillConfig,
 )
+from autoskillit.core import BackendCapabilities
 from autoskillit.core.claude_conventions import ClaudeDirectoryConventions
 from autoskillit.execution.commands import _inject_completion_directive
-from autoskillit.execution.headless import _session_log_dir
+from autoskillit.execution.headless import _resolve_session_log_dir
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
 from tests.server.conftest import _SUCCESS_JSON
@@ -170,7 +171,9 @@ class TestRunSkillPassesSessionLogDir:
     """run_skill passes session_log_dir derived from cwd."""
 
     @pytest.mark.anyio
-    async def test_run_skill_passes_session_log_dir(self, tool_ctx_kitchen_open, tmp_path):
+    async def test_run_skill_passes_session_log_dir(
+        self, tool_ctx_kitchen_open, tmp_path, monkeypatch
+    ):
         """runner receives session_log_dir derived from cwd."""
         cfg = AutomationConfig()
         cfg.safety.require_dry_walkthrough = False
@@ -178,6 +181,16 @@ class TestRunSkillPassesSessionLogDir:
 
         cwd = str(tmp_path / "some-project")
         (tmp_path / "some-project").mkdir()
+
+        log_dir = tmp_path / "logs" / "some-project"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        tool_ctx_kitchen_open.backend.capabilities = BackendCapabilities(
+            channel_b_capable=True, write_detection_strategy="tool_names"
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution.headless._headless_helpers._session_log_dir",
+            lambda cwd, backend: log_dir,
+        )
 
         tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard snapshot
         tool_ctx_kitchen_open.runner.push(
@@ -191,7 +204,7 @@ class TestRunSkillPassesSessionLogDir:
         await run_skill("/investigate foo", cwd)
 
         call_kwargs = tool_ctx_kitchen_open.runner.call_args_list[-1][3]
-        expected_dir = _session_log_dir(cwd)
+        expected_dir = _resolve_session_log_dir(cwd, tool_ctx_kitchen_open.backend)
         assert call_kwargs["session_log_dir"] == expected_dir
         assert "some-project" in str(expected_dir)
 

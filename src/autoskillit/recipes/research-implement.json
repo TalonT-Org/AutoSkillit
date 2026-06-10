@@ -65,6 +65,12 @@
     "audit_impl": {
       "description": "When 'true' (the default), run audit-impl after phase iteration to verify all decomposed phases have corresponding implementation commits. Catches silent group abandonment when context_limit fires mid-iteration.\n",
       "default": "true"
+    },
+    "backend_supports_git_write": {
+      "description": "Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.",
+      "default": "true",
+      "hidden": true,
+      "authority": "config"
     }
   },
   "kitchen_rules": [
@@ -205,6 +211,7 @@
       "on_failure": "troubleshoot_implement_failure",
       "on_exhausted": "audit_impl",
       "on_context_limit": "audit_impl",
+      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Implements the current phase plan in an isolated worktree via implement-experiment. Context exhaustion routes to audit_impl for implementation completeness verification before proceeding to run_experiment. Failures route to troubleshoot for classification before re-planning or escalation.\n"
     },
     "troubleshoot_implement_failure": {
@@ -590,6 +597,7 @@
       "on_success": "test",
       "on_failure": "escalate_stop",
       "on_context_limit": "test",
+      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Writes a conclusive research report to research/ in the worktree."
     },
     "generate_report_inconclusive": {
@@ -607,6 +615,7 @@
       "on_success": "test",
       "on_failure": "escalate_stop",
       "on_context_limit": "test",
+      "skip_when_false": "inputs.backend_supports_git_write",
       "note": "Writes an inconclusive research report. Experiments could not prove or disprove the hypothesis. This is a valid outcome.\n"
     },
     "test": {
@@ -654,7 +663,8 @@
         }
       ],
       "on_failure": "escalate_stop",
-      "on_context_limit": "escalate_stop"
+      "on_context_limit": "escalate_stop",
+      "skip_when_false": "inputs.backend_supports_git_write"
     },
     "retest": {
       "tool": "test_check",

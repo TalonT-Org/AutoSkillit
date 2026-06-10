@@ -86,6 +86,56 @@ def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool
     return bool(reqs and effective_backend not in reqs)
 
 
+def _check_backend_compat(
+    skill_command: str,
+    resolved_command: str,
+    effective_order_id: str,
+    target_name: str | None,
+    skill_info: object | None,
+    effective_backend_obj: CodingAgentBackend | None,
+    skill_resolver: object | None,
+) -> str | None:
+    """Fail-closed backend compatibility gate.
+
+    Returns crash JSON if the skill's backend_requirements exclude the effective
+    backend, or if the check cannot be conclusively performed (missing resolver
+    or backend). Returns None on pass.
+    """
+    if target_name is None:
+        return None
+    if skill_resolver is None:
+        return SkillResult.crashed(
+            exception=RuntimeError(
+                f"Cannot verify backend compatibility for skill {target_name!r}: "
+                "skill resolver is not available."
+            ),
+            skill_command=resolved_command,
+            order_id=effective_order_id,
+        ).to_json()
+    if effective_backend_obj is None:
+        return SkillResult.crashed(
+            exception=RuntimeError(
+                f"Cannot dispatch skill {target_name!r}: session backend is not configured."
+            ),
+            skill_command=resolved_command,
+            order_id=effective_order_id,
+        ).to_json()
+    if skill_info is None:
+        return None
+    effective_backend = effective_backend_obj.name
+    if _is_backend_incompatible(skill_info, effective_backend):
+        return SkillResult.crashed(
+            exception=RuntimeError(
+                f"Skill {target_name!r} requires backend "
+                f"{sorted(getattr(skill_info, 'backend_requirements', []))} but session "
+                f"backend is {effective_backend!r}."
+            ),
+            skill_command=resolved_command,
+            order_id=effective_order_id,
+        ).to_json()
+    return None
+
+
 def _check_ingredient_locks(step_name: str, order_id: str) -> str | None:
     """Check if step_name is locked out by ingredient locks. Returns deny JSON or None."""
     from autoskillit.server import _get_ctx  # circular-break
@@ -701,23 +751,17 @@ async def run_skill(
             # Build validated add_dirs via DefaultSessionSkillManager
             from uuid import uuid4
 
-            # Backend compatibility gate — fires before both replay and live session paths.
-            if _skill_info and tool_ctx.backend is not None:
-                _effective_backend = (
-                    _effective_backend_obj.name if _effective_backend_obj is not None else ""
-                )
-                if _is_backend_incompatible(_skill_info, _effective_backend):
-                    return SkillResult.crashed(
-                        exception=RuntimeError(
-                            f"Skill {target_name!r} requires backend "
-                            f"{sorted(_skill_info.backend_requirements)} but session "
-                            f"backend is {_effective_backend!r}."
-                        ),
-                        skill_command=resolved_command,
-                        order_id=effective_order_id,
-                    ).to_json()
-            elif target_name and not tool_ctx.skill_resolver:
-                logger.debug("backend_compat_check_skipped_no_resolver")
+            # Backend compatibility gate — fail-closed, fires before replay and live session paths.
+            if compat_error := _check_backend_compat(
+                skill_command=skill_command,
+                resolved_command=resolved_command,
+                effective_order_id=effective_order_id,
+                target_name=target_name,
+                skill_info=_skill_info,
+                effective_backend_obj=_effective_backend_obj,
+                skill_resolver=tool_ctx.skill_resolver,
+            ):
+                return compat_error
 
             # Server-side recipe step parameter resolution.
             # When a step_name is provided and the recipe's step definition is cached,

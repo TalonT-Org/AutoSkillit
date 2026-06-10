@@ -56,6 +56,11 @@ ingredients:
     description: Resolved diagnostics log directory path (auto-injected)
     default: ''
     hidden: true
+  backend_supports_git_write:
+    description: Whether the session backend supports .git/ metadata writes (git commit, rebase, worktree add). Resolved from backend capabilities at load time.
+    default: 'true'
+    hidden: true
+    authority: config
 kitchen_rules:
 - NEVER use native Claude Code tools (Read, Grep, Glob, Edit, Write, Bash, Agent,
   WebFetch, WebSearch, NotebookEdit) from the orchestrator. All work is delegated
@@ -475,6 +480,7 @@ steps:
     on_failure: register_clone_failure
     retries: 0
     on_exhausted: register_clone_failure
+    skip_when_false: inputs.backend_supports_git_write
     note: 'Resolves git-level rebase conflicts between the ejected PR''s branch and
       the current base_branch HEAD. Uses the same resolve-merge-conflicts skill as
       the classic path''s integration conflict resolution.
@@ -721,6 +727,7 @@ steps:
     on_failure: register_clone_failure
     retries: 0
     on_exhausted: get_current_pr_branch
+    skip_when_false: inputs.backend_supports_git_write
     note: 'Resolves git-level rebase conflicts between the next PR''s branch and the
       current base_branch HEAD. Similar to resolve_ejected_conflicts but operates
       proactively before queue submission. Unresolvable conflicts (escalation_required=true)
@@ -921,6 +928,7 @@ steps:
     retries: 0
     on_exhausted: retry_worktree
     on_context_limit: retry_worktree
+    skip_when_false: inputs.backend_supports_git_write
   retry_worktree:
     tool: run_skill
     model: ''
@@ -937,6 +945,7 @@ steps:
     on_success: test
     on_failure: register_clone_failure
     retries: 3
+    skip_when_false: inputs.backend_supports_git_write
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
   test:
@@ -1152,6 +1161,7 @@ steps:
     - when: ${{ result.verdict }} == 'no_test_infrastructure'
       route: register_clone_failure
     on_failure: register_clone_failure
+    skip_when_false: inputs.backend_supports_git_write
     retries: 3
     on_exhausted: register_clone_failure
     on_context_limit: register_clone_failure
@@ -1385,6 +1395,7 @@ steps:
     - route: force_push_and_wait_mergeability
     retries: 0
     on_failure: register_clone_failure
+    skip_when_false: inputs.backend_supports_git_write
     note: 'Automated conflict resolution when the integration PR is CONFLICTING (REQ-MERGE-003).
       Rebases context.batch_branch onto inputs.base_branch and resolves merge conflicts.
       Single attempt only — no retries — to prevent looping on unresolvable conflicts.
@@ -1510,6 +1521,7 @@ steps:
     - when: ${{ result.verdict }} == 'ci_only_failure'
       route: register_clone_failure
     on_failure: register_clone_failure
+    skip_when_false: inputs.backend_supports_git_write
     note: 'Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches
       inline and summary review comments from GitHub and applies fixes. Retries up
       to 2 times (3 total attempts) before escalating to register_clone_failure (REQ-REVIEW-005).
@@ -1548,6 +1560,7 @@ steps:
     on_failure: register_clone_failure
     retries: 0
     on_exhausted: register_clone_failure
+    skip_when_false: inputs.backend_supports_git_write
   re_push_review_integration:
     tool: push_to_remote
     with:

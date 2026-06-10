@@ -119,8 +119,10 @@ def test_on_result_has_catch_all(recipe_name: str) -> None:
         skill = resolve_skill_name(skill_cmd)
         if skill not in _CATCH_ALL_REQUIRED_SKILLS:
             continue
-        if step.on_result is None or not step.on_result.conditions:
-            continue
+        assert step.on_result is not None and step.on_result.conditions, (
+            f"{recipe_name}.{step_name}: step dispatches {skill!r} but has no "
+            f"on_result routing — unrecognized verdicts would be silently dropped"
+        )
         conditions = step.on_result.conditions
         last = conditions[-1]
         assert last.when is None, (

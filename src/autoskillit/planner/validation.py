@@ -388,10 +388,19 @@ def _check_gitignored_deliverables(
                     ["git", "check-ignore", "-q", str(resolved)],
                     cwd=str(repo_root),
                     capture_output=True,
+                    timeout=5,
                 )
-            except OSError:
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if result.returncode == 1:
                 continue
             if result.returncode != 0:
+                logger.warning(
+                    "git check-ignore failed (rc=%d) for %s: %s",
+                    result.returncode,
+                    d,
+                    result.stderr.decode(errors="replace").strip(),
+                )
                 continue
             findings.append(
                 {

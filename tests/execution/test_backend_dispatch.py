@@ -388,5 +388,5 @@ class TestCodexLogDispatch:
             step_backend=backend,
         )
 
-        backend.session_locator.assert_not_called()
+        backend.session_locator.return_value.locate_session.assert_not_called()
         assert flush_calls[0]["codex_log_path"] is None

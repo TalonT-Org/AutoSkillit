@@ -510,7 +510,8 @@ class TestConfigAuthoritativeIngredientInjection:
             return "prompt"
 
         tool_ctx.backend = SimpleNamespace(
-            capabilities=SimpleNamespace(git_metadata_writable=False)
+            name="test-backend",
+            capabilities=SimpleNamespace(git_metadata_writable=False),
         )
 
         from autoskillit.fleet._api import execute_dispatch

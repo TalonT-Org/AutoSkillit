@@ -220,13 +220,12 @@ def test_config_authority_keys_superset_of_server_authoritative() -> None:
 def test_apply_config_authoritative_overrides_capability_key_overrides_caller(tmp_path):
     """Capability key registered in BACKEND_CAPABILITY_INGREDIENTS must be overridden by
     capability_overrides, not the caller-supplied value."""
+    from types import SimpleNamespace
+
     from autoskillit.config import apply_config_authoritative_overrides
-    from autoskillit.recipe.schema import RecipeIngredient
 
     recipe_ingredients = {
-        "backend_supports_git_write": RecipeIngredient(
-            description="Capability flag", authority="config"
-        ),
+        "backend_supports_git_write": SimpleNamespace(authority="config"),
     }
 
     with patch(
@@ -246,13 +245,14 @@ def test_apply_config_authoritative_overrides_capability_key_overrides_caller(tm
 def test_apply_config_authoritative_overrides_unknown_key_warns_and_retains(tmp_path):
     """A config-authority key not in any registry (truly unknown) must trigger the
     warning-and-retain path, not the capability override path."""
+    from types import SimpleNamespace
+
     import structlog.testing
 
     from autoskillit.config import apply_config_authoritative_overrides
-    from autoskillit.recipe.schema import RecipeIngredient
 
     recipe_ingredients = {
-        "totally_unknown_key": RecipeIngredient(description="Unknown", authority="config"),
+        "totally_unknown_key": SimpleNamespace(authority="config"),
     }
 
     with (

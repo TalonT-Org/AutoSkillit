@@ -15,7 +15,7 @@ from autoskillit.fleet import (
     _write_pid,
     write_initial_state,
 )
-from tests.fleet._helpers import _setup_dispatch
+from tests.fleet._helpers import _mock_backend_with_locator, _setup_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -380,10 +380,7 @@ class TestDispatchMarkerLifecycle:
         _setup_dispatch(tool_ctx, monkeypatch)
         marker_dir = tmp_path / "markers"
         marker_dir.mkdir()
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_project_dir",
-            lambda cwd: marker_dir,
-        )
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
 
         await _run(tool_ctx)
 
@@ -396,12 +393,9 @@ class TestDispatchMarkerLifecycle:
     async def test_run_dispatch_continues_when_marker_dir_unavailable(
         self, tool_ctx, monkeypatch
     ) -> None:
-        """execute_dispatch succeeds even when claude_code_project_dir raises OSError."""
+        """execute_dispatch succeeds even when backend's session_locator is unavailable."""
         _setup_dispatch(tool_ctx, monkeypatch)
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_project_dir",
-            lambda cwd: (_ for _ in ()).throw(OSError("no project dir")),
-        )
+        tool_ctx.backend = None
 
         result = await _run(tool_ctx)
 
@@ -416,10 +410,7 @@ class TestDispatchMarkerLifecycle:
         _setup_dispatch(tool_ctx, monkeypatch)
         marker_dir = tmp_path / "markers"
         marker_dir.mkdir()
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_project_dir",
-            lambda cwd: marker_dir,
-        )
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
 
         await _run(tool_ctx)
 
@@ -436,10 +427,7 @@ class TestDispatchMarkerLifecycle:
         _setup_dispatch(tool_ctx, monkeypatch)
         marker_dir = tmp_path / "markers"
         marker_dir.mkdir()
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_project_dir",
-            lambda cwd: marker_dir,
-        )
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
 
         original_dispatch_food_truck = tool_ctx.executor.dispatch_food_truck
 
@@ -465,10 +453,7 @@ class TestDispatchMarkerLifecycle:
         _setup_dispatch(tool_ctx, monkeypatch)
         marker_dir = tmp_path / "markers"
         marker_dir.mkdir()
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_project_dir",
-            lambda cwd: marker_dir,
-        )
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
 
         marker_seen: list[bool] = []
         original_dispatch = tool_ctx.executor.dispatch_food_truck
@@ -493,10 +478,7 @@ class TestDispatchMarkerLifecycle:
         _setup_dispatch(tool_ctx, monkeypatch)
         marker_dir = tmp_path / "markers"
         marker_dir.mkdir()
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_project_dir",
-            lambda cwd: marker_dir,
-        )
+        tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
 
         captured_json: list[dict] = []
 

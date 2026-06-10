@@ -19,8 +19,6 @@ from autoskillit.core import (
     SessionCheckpoint,  # noqa: F401, TC001
     SkillResult,
     atomic_write,
-    claude_code_log_path,
-    claude_code_project_dir,
     get_logger,
     truncate_text,
 )
@@ -548,8 +546,14 @@ async def _run_dispatch(
     if quota_result.get("should_sleep"):
         await asyncio.sleep(quota_result.get("sleep_seconds", 0))
 
+    _locator = tool_ctx.backend.session_locator() if tool_ctx.backend is not None else None
+
     if resume_session_id:
-        _primary_jsonl = claude_code_log_path(str(tool_ctx.project_dir), resume_session_id)
+        _primary_jsonl = (
+            _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
+            if _locator is not None
+            else None
+        )
         if _primary_jsonl is None or not _primary_jsonl.exists():
             logger.warning(
                 "resume_jsonl_missing",
@@ -558,8 +562,10 @@ async def _run_dispatch(
             )
             _fallback_session_id = prior_session_chain[-1] if prior_session_chain else ""
             if _fallback_session_id:
-                _fallback_jsonl = claude_code_log_path(
-                    str(tool_ctx.project_dir), _fallback_session_id
+                _fallback_jsonl = (
+                    _locator.session_log_path(str(tool_ctx.project_dir), _fallback_session_id)
+                    if _locator is not None
+                    else None
                 )
                 if _fallback_jsonl is not None and _fallback_jsonl.exists():
                     logger.info(
@@ -581,7 +587,11 @@ async def _run_dispatch(
 
     resume_line_offset = 0
     if resume_session_id:
-        _resume_jsonl = claude_code_log_path(str(tool_ctx.project_dir), resume_session_id)
+        _resume_jsonl = (
+            _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
+            if _locator is not None
+            else None
+        )
         if _resume_jsonl is not None and _resume_jsonl.exists():
             resume_line_offset = len(_resume_jsonl.read_text(encoding="utf-8").splitlines())
 
@@ -666,10 +676,11 @@ async def _run_dispatch(
         )
 
     marker_dir: Path | None = None
-    try:
-        marker_dir = claude_code_project_dir(str(tool_ctx.project_dir))
-    except OSError:
-        pass
+    if _locator is not None:
+        try:
+            marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
+        except OSError:
+            pass
 
     from autoskillit.core import execution_marker  # noqa: PLC0415
 
@@ -781,11 +792,19 @@ async def _run_dispatch(
             extended_chain.append(prior_dispatched_session_id)
 
         for sid in extended_chain:
-            path = claude_code_log_path(str(tool_ctx.project_dir), sid)
+            path = (
+                _locator.session_log_path(str(tool_ctx.project_dir), sid)
+                if _locator is not None
+                else None
+            )
             if path is not None:
                 additional_jsonl_paths.append(path)
 
-        jsonl_path = claude_code_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+        jsonl_path = (
+            _locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+            if _locator is not None
+            else None
+        )
         if resume_line_offset and skill_result.session_id and resume_session_id:
             if skill_result.session_id != resume_session_id:
                 logger.warning(
@@ -848,11 +867,12 @@ async def _run_dispatch(
             dispatch_sidecar_path, tool_ctx.github_client, issue_url=_issue_urls_raw
         )
 
-    try:
-        project_log_dir = str(claude_code_project_dir(str(tool_ctx.project_dir)))
-    except OSError:
-        logger.warning("failed to resolve project log dir", exc_info=True)
-        project_log_dir = ""
+    project_log_dir = ""
+    if _locator is not None:
+        try:
+            project_log_dir = str(_locator.project_log_dir(str(tool_ctx.project_dir)))
+        except OSError:
+            logger.warning("project_log_dir_unavailable", exc_info=True)
 
     if (
         resume_session_id

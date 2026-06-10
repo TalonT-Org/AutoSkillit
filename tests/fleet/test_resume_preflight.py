@@ -9,6 +9,7 @@ import structlog.testing
 
 from tests.fleet._helpers import (
     _make_no_sentinel,
+    _mock_backend_with_locator,
     _no_sleep_quota_checker,
     _noop_quota_refresher,
     _setup_dispatch,
@@ -39,9 +40,8 @@ class TestResumeJSONLPreflight:
             [DispatchRecord(name="test-recipe")],
         )
 
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_log_path",
-            lambda *_: None,
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path, session_log_path=None
         )
 
         result = await execute_dispatch(
@@ -71,9 +71,8 @@ class TestResumeJSONLPreflight:
         jsonl_file.touch()
 
         _setup_dispatch(tool_ctx, monkeypatch)
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_log_path",
-            lambda *_: jsonl_file,
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path, session_log_path=jsonl_file
         )
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
@@ -131,14 +130,17 @@ class TestResumeJSONLPreflight:
         chain_jsonl = tmp_path / "chain.jsonl"
         chain_jsonl.touch()
 
-        def _mock_log_path(_cwd: str, session_id: str) -> Path | None:
+        def _mock_session_log_path(_cwd: str, session_id: str) -> Path | None:
             if session_id == "nonexistent-primary":
                 return tmp_path / "nonexistent.jsonl"
             if session_id == "chain-session-id":
                 return chain_jsonl
             return None
 
-        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", _mock_log_path)
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path,
+            session_log_path_side_effect=_mock_session_log_path,
+        )
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
@@ -184,9 +186,8 @@ class TestSessionChainContinuity:
             )
         )
 
-        monkeypatch.setattr(
-            "autoskillit.fleet._api.claude_code_log_path",
-            lambda *_: jsonl_file,
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path, session_log_path=jsonl_file
         )
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
@@ -280,7 +281,9 @@ class TestResumeSuccessGuard:
 
         jsonl_file = tmp_path / "session.jsonl"
         jsonl_file.touch()
-        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path, session_log_path=jsonl_file
+        )
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
@@ -332,7 +335,9 @@ class TestResumeSuccessGuard:
 
         jsonl_file = tmp_path / "session.jsonl"
         jsonl_file.touch()
-        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path, session_log_path=jsonl_file
+        )
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
@@ -375,7 +380,9 @@ class TestResumeSuccessGuard:
 
         jsonl_file = tmp_path / "session.jsonl"
         jsonl_file.touch()
-        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path, session_log_path=jsonl_file
+        )
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
             lambda **_: _make_no_sentinel(),

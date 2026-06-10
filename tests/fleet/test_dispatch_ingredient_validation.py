@@ -6,6 +6,7 @@ import pytest
 
 from tests.fleet._helpers import (
     _make_recipe_info,
+    _mock_backend_with_locator,
     _no_sleep_quota_checker,
     _noop_quota_refresher,
     _run,
@@ -509,10 +510,10 @@ class TestConfigAuthoritativeIngredientInjection:
             captured.update(kwargs)
             return "prompt"
 
-        tool_ctx.backend = SimpleNamespace(
-            name="test-backend",
-            capabilities=SimpleNamespace(git_metadata_writable=False),
-        )
+        _mock_backend = _mock_backend_with_locator(project_log_dir=None, session_log_path=None)
+        _mock_backend.name = "test-backend"
+        _mock_backend.capabilities = SimpleNamespace(git_metadata_writable=False)
+        tool_ctx.backend = _mock_backend
 
         from autoskillit.fleet._api import execute_dispatch
 

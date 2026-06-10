@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.fleet import FleetSemaphore
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+from tests.fleet._helpers import _mock_backend_with_locator
 from tests.server._helpers import (
     _make_recipe_info,
     _make_standard_recipe,
@@ -35,7 +36,10 @@ async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
     tool_ctx_kitchen_open.executor = executor
     jsonl_file = tmp_path / "sess-resume-123.jsonl"
     jsonl_file.touch()
-    monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+    tool_ctx_kitchen_open.backend = _mock_backend_with_locator(
+        project_log_dir=tmp_path,
+        session_log_path=jsonl_file,
+    )
 
     await dispatch_food_truck(
         recipe="test-recipe",
@@ -65,7 +69,10 @@ async def test_dispatch_food_truck_tool_passes_resume_message_to_executor(
     tool_ctx_kitchen_open.executor = executor
     jsonl_file = tmp_path / "sess-resume-123.jsonl"
     jsonl_file.touch()
-    monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+    tool_ctx_kitchen_open.backend = _mock_backend_with_locator(
+        project_log_dir=tmp_path,
+        session_log_path=jsonl_file,
+    )
 
     await dispatch_food_truck(
         recipe="test-recipe",

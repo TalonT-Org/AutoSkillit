@@ -23,7 +23,7 @@ def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
     return Recipe(name="test", description="test", steps=steps, kitchen_rules=["test"])
 
 
-def _plan_step_with_temp_output(name: str) -> RecipeStep:
+def _plan_step_with_temp_output() -> RecipeStep:
     """A make-plan-style step that writes to AUTOSKILLIT_TEMP."""
     return RecipeStep(
         tool="run_skill",
@@ -34,7 +34,7 @@ def _plan_step_with_temp_output(name: str) -> RecipeStep:
     )
 
 
-def _audit_impl_step(name: str = "audit") -> RecipeStep:
+def _audit_impl_step() -> RecipeStep:
     return RecipeStep(
         tool="run_skill",
         with_args={"skill_command": "/autoskillit:audit-impl ${{ context.plan_path }}"},
@@ -44,8 +44,8 @@ def _audit_impl_step(name: str = "audit") -> RecipeStep:
 def test_plan_step_with_temp_output_dir_fires() -> None:
     """Rule fires when a plan-writing step feeds into audit-impl downstream."""
     steps = {
-        "make_plan": _plan_step_with_temp_output("make_plan"),
-        "audit": _audit_impl_step("audit"),
+        "make_plan": _plan_step_with_temp_output(),
+        "audit": _audit_impl_step(),
     }
     steps["make_plan"].on_success = "audit"
     steps["audit"].action = "stop"
@@ -60,7 +60,7 @@ def test_plan_step_with_temp_output_dir_fires() -> None:
 def test_plan_step_without_audit_impl_downstream_does_not_fire() -> None:
     """Rule does NOT fire when no audit-impl step is downstream of the plan step."""
     steps = {
-        "make_plan": _plan_step_with_temp_output("make_plan"),
+        "make_plan": _plan_step_with_temp_output(),
         "done": RecipeStep(action="stop", message="done"),
     }
     steps["make_plan"].on_success = "done"
@@ -81,7 +81,7 @@ def test_non_temp_output_dir_does_not_fire() -> None:
     )
     steps = {
         "make_plan": plan_step,
-        "audit": _audit_impl_step("audit"),
+        "audit": _audit_impl_step(),
     }
     steps["make_plan"].on_success = "audit"
     steps["audit"].action = "stop"

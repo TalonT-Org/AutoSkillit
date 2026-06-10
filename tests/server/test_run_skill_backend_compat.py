@@ -181,3 +181,6 @@ class TestBackendCompatGateFailClosed:
             result.get("subtype") != "crashed"
             or "incompatible" not in result.get("error", "").lower()
         ), f"Provider override should have rerouted codex→claude-code; got: {result}"
+        assert mock_ssm.init_session.called, (
+            "Expected init_session to be called after provider override rerouted codex→claude-code"
+        )

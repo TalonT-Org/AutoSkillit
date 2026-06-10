@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from autoskillit.core.types._type_constants_registries import PACK_REGISTRY, TOOL_SUBSET_TAGS
@@ -53,7 +54,6 @@ async def _noop_quota_refresher(config, **kwargs) -> None:
 
 
 def _make_recipe_info(name: str = "test-recipe", path_prefix: str = "/fake/"):
-    from pathlib import Path
 
     from autoskillit.recipe.schema import RecipeInfo, RecipeSource
 
@@ -160,3 +160,27 @@ def _make_completed_clean(success: bool, reason: str = ""):
         parse_error=None,
         source="stdout",
     )
+
+
+_SENTINEL = object()
+
+
+def _mock_backend_with_locator(
+    *,
+    project_log_dir: Path | None = None,
+    session_log_path: Path | None = _SENTINEL,
+    session_log_path_side_effect=None,
+):
+    """Build a mock backend with configured session_locator for dispatch tests."""
+    from unittest.mock import Mock
+
+    mock_locator = Mock()
+    if project_log_dir is not None:
+        mock_locator.project_log_dir.return_value = project_log_dir
+    if session_log_path_side_effect is not None:
+        mock_locator.session_log_path.side_effect = session_log_path_side_effect
+    elif session_log_path is not _SENTINEL:
+        mock_locator.session_log_path.return_value = session_log_path
+    mock_backend = Mock()
+    mock_backend.session_locator.return_value = mock_locator
+    return mock_backend

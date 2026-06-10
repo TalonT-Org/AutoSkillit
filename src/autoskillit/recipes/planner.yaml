@@ -436,6 +436,7 @@ steps:
     with:
       callable: "autoskillit.planner.validate_plan"
       output_dir: "${{ context.planner_dir }}"
+      source_dir: "${{ inputs.source_dir }}"
     capture:
       verdict: "${{ result.verdict }}"
       warning_count: "${{ result.warning_count }}"

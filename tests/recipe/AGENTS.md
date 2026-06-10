@@ -147,6 +147,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_features.py` | Tests for features semantic validation rule |
 | `test_rules_flake_loop_deadlock.py` | Tests for flake-suspected-unwinnable-loop semantic validation rule |
 | `test_rules_food_truck.py` | Tests for food_truck semantic validation rule |
+| `test_rules_gitignored_deliverable.py` | Tests for gitignored-deliverable-in-plan semantic validation rule |
 | `test_rules_graph.py` | Tests for graph semantic validation rule |
 | `test_rules_graph_routes.py` | Tests for rules_graph_routes.py semantic rules (rate-limit-route-missing) |
 | `test_rules_ingredient_step_name.py` | Tests for ingredient-step-name-asymmetry semantic validation rule |

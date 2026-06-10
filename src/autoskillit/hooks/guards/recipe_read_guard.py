@@ -22,7 +22,7 @@ _CMD_PATH_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"src/autoskillit/agents/.*\.md"),
 ]
 
-_CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"^autoskillit\.recipe\b")
+_CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"^autoskillit\.recipe\.(?!_cmd_rpc)")
 
 
 def main() -> None:

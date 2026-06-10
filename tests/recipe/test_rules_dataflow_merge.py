@@ -298,6 +298,101 @@ class TestStaleRefAfterMerge:
 
 
 # ---------------------------------------------------------------------------
+# TestStaleCapturedPathAfterMerge
+# ---------------------------------------------------------------------------
+
+
+class TestStaleCapturedPathAfterMerge:
+    """stale-captured-path-after-merge: output paths captured from a worktree-cwd
+    step that are consumed after merge_worktree."""
+
+    def test_B7_captured_output_path_in_worktree_after_merge_fires(self) -> None:
+        """B7: Rule fires when deviation_manifest_path (captured from a worktree-cwd
+        step) is consumed as cwd by a step after merge_worktree."""
+        recipe = Recipe(
+            name="test-stale-captured-path",
+            description="test",
+            steps={
+                "resolve": RecipeStep(
+                    tool="run_python",
+                    with_args={"cwd": "${{ context.worktree_path }}"},
+                    capture={
+                        "deviation_manifest_path": "${{ result.manifest_path }}",
+                    },
+                    on_success="merge",
+                ),
+                "merge": RecipeStep(
+                    tool="merge_worktree",
+                    with_args={
+                        "worktree_path": "${{ context.worktree_path }}",
+                        "base_branch": "main",
+                    },
+                    capture={"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                    on_success="audit",
+                ),
+                "audit": RecipeStep(
+                    tool="run_python",
+                    with_args={
+                        "cwd": "${{ context.deviation_manifest_path }}",
+                        "cmd": "ls",
+                    },
+                    on_success="done",
+                ),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        stale = [f for f in findings if f.rule == "stale-captured-path-after-merge"]
+        assert stale, (
+            "Expected stale-captured-path-after-merge finding for "
+            "deviation_manifest_path consumed after merge"
+        )
+        assert any(f.step_name == "audit" for f in stale)
+
+    def test_B8_captured_output_path_in_main_repo_after_merge_does_not_fire(self) -> None:
+        """B8: Rule does NOT fire when the capturing step runs in the main repo
+        (not in a worktree)."""
+        recipe = Recipe(
+            name="test-main-repo-capture",
+            description="test",
+            steps={
+                "resolve": RecipeStep(
+                    tool="run_python",
+                    with_args={"cwd": "${{ context.work_dir }}"},
+                    capture={
+                        "deviation_manifest_path": "${{ result.manifest_path }}",
+                    },
+                    on_success="merge",
+                ),
+                "merge": RecipeStep(
+                    tool="merge_worktree",
+                    with_args={
+                        "worktree_path": "${{ context.worktree_path }}",
+                        "base_branch": "main",
+                    },
+                    capture={"cleanup_succeeded": "${{ result.cleanup_succeeded }}"},
+                    on_success="audit",
+                ),
+                "audit": RecipeStep(
+                    tool="run_python",
+                    with_args={
+                        "cwd": "${{ context.deviation_manifest_path }}",
+                        "cmd": "ls",
+                    },
+                    on_success="done",
+                ),
+                "done": RecipeStep(action="stop", message="done"),
+            },
+        )
+        findings = run_semantic_rules(recipe)
+        stale = [f for f in findings if f.rule == "stale-captured-path-after-merge"]
+        assert not stale, (
+            "Expected no stale-captured-path finding when path is captured from "
+            "main repo: " + str(stale)
+        )
+
+
+# ---------------------------------------------------------------------------
 # TestPushBeforeAuditRule
 # ---------------------------------------------------------------------------
 

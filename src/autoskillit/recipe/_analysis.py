@@ -23,6 +23,7 @@ from autoskillit.recipe._analysis_detectors import (
     _detect_dead_outputs,
     _detect_implicit_handoffs,
     _detect_ref_invalidations,
+    _detect_stale_captured_paths,
 )
 from autoskillit.recipe._analysis_graph import (
     RouteEdge,
@@ -107,6 +108,7 @@ def analyze_dataflow(
     warnings.extend(_detect_dead_outputs(recipe, graph))
     warnings.extend(_detect_implicit_handoffs(recipe))
     warnings.extend(_detect_ref_invalidations(recipe, graph))
+    warnings.extend(_detect_stale_captured_paths(recipe, graph))
 
     if warnings:
         summary = f"{len(warnings)} data-flow warning{'s' if len(warnings) != 1 else ''} found."

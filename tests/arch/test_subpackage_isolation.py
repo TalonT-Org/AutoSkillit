@@ -738,6 +738,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             files out of rules/, bringing the rules/ count to 35.
             rules_stamp_ownership.py adds the exclusive-stamp-ownership enforcement
             rule, bringing the rules/ count to 36.
+            rules_gitignored_deliverable.py adds the gitignored-deliverable-in-plan
+            rule flagging plan steps writing to gitignored paths that feed audit-impl,
+            bringing the rules/ count to 37.
             Exempt at 51 files.
           execution/ — REQ-CNST-003-E3: execution/ decomposes process lifecycle into
             focused single-concern modules (_process_io, _process_kill, _process_race,
@@ -872,7 +875,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 14,  # +recipe_confirmed_post_hook.py
         "pipeline": 12,
         "fleet": 22,  # REQ-CNST-003-E9: _dispatch_reaper.py; +_sidecar_synthesis.py; +_reset.py
-        "recipe/rules": 50,  # +commit_guard_regression_route +rules_model
+        "recipe/rules": 51,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable  # noqa: E501
         "server/tools": 26,  # _auto_overrides.py + _cancellation_shield.py + tools_fleet_reset.py
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
     }

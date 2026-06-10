@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (47 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis (48 flat rule files + 4 subdirectories).
 
 ## Subdirectories
 
@@ -33,6 +33,7 @@ See each subdirectory's AGENTS.md for details.
 | `rules_flake_loop.py` | Flake-suspected unwinnable loop detection for merge gate cycles |
 | `rules_food_truck.py` | Food-truck recipe validation: sentinel stop step requirement |
 | `rules_fixing.py` | Conditional-write skill must gate on declared verdict output |
+| `rules_gitignored_deliverable.py` | gitignored-deliverable-in-plan: flags plan deliverable paths that match .gitignore patterns in the source repository |
 | `rules_ingredient_step_name.py` | 1:1 gating ingredient ↔ step name asymmetry detection |
 | `rules_inline_script.py` | Detects inline shell scripts in `run_cmd` cmd fields |
 | `rules_inputs.py` | Input/ingredient validation; version compatibility checks |

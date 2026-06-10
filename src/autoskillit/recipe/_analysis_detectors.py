@@ -102,6 +102,85 @@ def _detect_ref_invalidations(recipe: Recipe, graph: dict[str, set[str]]) -> lis
     return warnings
 
 
+def _detect_stale_captured_paths(
+    recipe: Recipe, graph: dict[str, set[str]]
+) -> list[DataFlowWarning]:
+    """Detect output path tokens captured from worktree-cwd steps that are
+    consumed after ``merge_worktree`` deletes the worktree.
+
+    Complements ``_detect_ref_invalidations`` by catching transitive path
+    captures: where a variable is sourced from a result token emitted by a
+    step running inside the worktree, and that variable is later consumed
+    by a step after merge.
+    """
+    warnings: list[DataFlowWarning] = []
+
+    # Steps that run inside a worktree (cwd references worktree_path)
+    worktree_cwd_steps: dict[str, list[str]] = {}
+    for step_name, step in recipe.steps.items():
+        cwd = step.with_args.get("cwd", "") if step.with_args else ""
+        if "worktree_path" in cwd:
+            for cap_var in step.capture or {}:
+                worktree_cwd_steps.setdefault(cap_var, []).append(step_name)
+            for cap_var in step.capture_list or {}:
+                worktree_cwd_steps.setdefault(cap_var, []).append(step_name)
+
+    if not worktree_cwd_steps:
+        return warnings
+
+    # Map: var_name → set of step names that re-capture (refresh) it
+    var_recapture_steps: dict[str, set[str]] = {}
+    for step_name, step in recipe.steps.items():
+        for cap_var in step.capture or {}:
+            var_recapture_steps.setdefault(cap_var, set()).add(step_name)
+        for cap_var in step.capture_list or {}:
+            var_recapture_steps.setdefault(cap_var, set()).add(step_name)
+
+    for step_name, step in recipe.steps.items():
+        if step.tool not in _INVALIDATING_TOOLS:
+            continue
+
+        on_success_target = step.on_success
+        if not on_success_target or on_success_target not in recipe.steps:
+            continue
+
+        for var, origin_steps in worktree_cwd_steps.items():
+            barrier = var_recapture_steps.get(var, set())
+            stale_reachable = _bfs_capped(graph, {on_success_target}, barrier)
+            stale_reachable.discard(step_name)
+
+            for downstream_name in stale_reachable:
+                downstream = recipe.steps.get(downstream_name)
+                if downstream is None:
+                    continue
+
+                for arg_val in (downstream.with_args or {}).values():
+                    if not isinstance(arg_val, str):
+                        continue
+                    for ref_var in _CONTEXT_REF_RE.findall(arg_val):
+                        if ref_var == var:
+                            origin_step = origin_steps[0]
+                            warnings.append(
+                                DataFlowWarning(
+                                    code="CAPTURED_PATH_INVALIDATED",
+                                    step_name=downstream_name,
+                                    field=var,
+                                    message=(
+                                        f"Step '{downstream_name}' references "
+                                        f"context.{var} (captured from "
+                                        f"worktree-scoped step "
+                                        f"'{origin_step}') after step "
+                                        f"'{step_name}' ({step.tool}) has "
+                                        f"destroyed the worktree. Path tokens "
+                                        f"written to the worktree become "
+                                        f"unresolvable after merge."
+                                    ),
+                                )
+                            )
+
+    return warnings
+
+
 # Observability captures: variables captured for human-readable logs, hook
 # consumption, or note-driven orchestration rather than downstream recipe
 # threading.  Each entry is (cap_key, skill_command_fragment).  A capture is

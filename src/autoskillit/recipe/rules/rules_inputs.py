@@ -7,6 +7,7 @@ from packaging.version import Version
 
 from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
+    CONFIG_AUTHORITY_KEYS,
     SKILL_TOOLS,
     Severity,
     get_logger,
@@ -499,20 +500,6 @@ def _check_ingredient_condition_value_domain(
     return findings
 
 
-_KNOWN_CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
-    {
-        "source_dir",
-        "base_branch",
-        "local_review_rounds",
-        "adversarial_review_level",
-        "post_run_diagnostics",
-        "is_fleet_dispatch",
-        "dispatch_id",
-        "backend_supports_git_write",
-    }
-)
-
-
 @semantic_rule(
     name="config-authority-requires-resolve-source",
     description=(
@@ -526,7 +513,7 @@ def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> l
     for name, ing in ctx.recipe.ingredients.items():
         if getattr(ing, "authority", None) != "config":
             continue
-        if name not in _KNOWN_CONFIG_AUTHORITY_KEYS:
+        if name not in CONFIG_AUTHORITY_KEYS:
             findings.append(
                 make_finding(
                     rule_name="config-authority-requires-resolve-source",
@@ -534,7 +521,7 @@ def _check_config_authority_requires_resolve_source(ctx: ValidationContext) -> l
                     message=f"Ingredient {name!r} declares authority='config' but is not a key "
                     f"returned by resolve_ingredient_defaults(). "
                     f"Known config-authoritative keys: "
-                    f"{sorted(_KNOWN_CONFIG_AUTHORITY_KEYS)}. "
+                    f"{sorted(CONFIG_AUTHORITY_KEYS)}. "
                     "Remove the authority field or use a supported key.",
                 )
             )

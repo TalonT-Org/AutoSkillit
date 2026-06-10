@@ -29,6 +29,7 @@ __all__ = [
     "QUOTA_BUDGET_EXCEEDED_TRIGGER",
     "QUOTA_POST_WARNING_TRIGGER",
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
+    "CONFIG_AUTHORITY_KEYS",
     "RUN_PYTHON_SENTINEL_KEYS",
     "SCOPE_DIRECTION_SOURCE_TYPES",
     "WORKTREE_SKILLS",
@@ -249,6 +250,19 @@ SCOPE_DIRECTION_SOURCE_TYPES: frozenset[str] = frozenset(
         "wet_lab",
         "literature",
         "hybrid",
+    }
+)
+
+CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
+    {
+        "source_dir",
+        "base_branch",
+        "local_review_rounds",
+        "adversarial_review_level",
+        "post_run_diagnostics",
+        "is_fleet_dispatch",
+        "dispatch_id",
+        "backend_supports_git_write",
     }
 )
 

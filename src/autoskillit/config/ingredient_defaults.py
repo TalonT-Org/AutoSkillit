@@ -8,7 +8,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
-from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_MENU_TOOLS, get_logger, is_feature_enabled
+from autoskillit.core import (
+    CONFIG_AUTHORITY_KEYS,
+    DISPATCH_ID_ENV_VAR,
+    FLEET_MENU_TOOLS,
+    get_logger,
+    is_feature_enabled,
+)
 
 logger = get_logger(__name__)
 
@@ -112,16 +118,12 @@ _REMOTE_PRECEDENCE = ("upstream", "origin")
 # Keys from resolve_ingredient_defaults() that the server must inject as authoritative
 # overrides, preventing LLM-supplied values from winning. source_dir is excluded because
 # it is project-identity (the clone URL) and is legitimately caller-supplied in fleet dispatch.
-SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = frozenset(
-    {
-        "base_branch",
-        "local_review_rounds",
-        "adversarial_review_level",
-        "post_run_diagnostics",
-        "is_fleet_dispatch",
-        "dispatch_id",
-    }
-)
+# backend_supports_git_write is excluded because it is a backend capability flag, not a
+# config-derived override.
+SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = CONFIG_AUTHORITY_KEYS - {
+    "source_dir",
+    "backend_supports_git_write",
+}
 
 
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:

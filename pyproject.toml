@@ -292,6 +292,7 @@ forbidden_modules = [
 # so no cycle is introduced.
 ignore_imports = [
     "autoskillit.recipe.rules.rules_contracts -> autoskillit.planner",
+    "autoskillit.recipe.rules.rules_inputs -> autoskillit.config",
 ]
 
 # IL-007 | Lens: module-dependency | DS-001

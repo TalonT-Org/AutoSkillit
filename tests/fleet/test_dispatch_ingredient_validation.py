@@ -427,8 +427,9 @@ class TestConfigAuthoritativeIngredientInjection:
     async def test_config_authoritative_key_absent_from_defaults_retains_caller_value(
         self, tool_ctx
     ):
-        """When a config-authority key is absent from resolved defaults, the caller-supplied
-        value is retained and a warning is logged."""
+        """When a config-authority key is absent from resolved defaults AND not in
+        BACKEND_CAPABILITY_INGREDIENTS, the caller-supplied value is retained and a
+        warning is logged."""
         from unittest.mock import patch
 
         import structlog.testing
@@ -442,8 +443,8 @@ class TestConfigAuthoritativeIngredientInjection:
                 description="test",
                 kind=RecipeKind.STANDARD,
                 ingredients={
-                    "base_branch": RecipeIngredient(
-                        description="Merge target", default="", authority="config"
+                    "truly_unknown_key": RecipeIngredient(
+                        description="Truly absent", default="", authority="config"
                     )
                 },
             ),
@@ -459,13 +460,13 @@ class TestConfigAuthoritativeIngredientInjection:
         with structlog.testing.capture_logs() as cap_logs:
             with patch(
                 "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-                return_value={},  # base_branch absent — simulates resolver not returning the key
+                return_value={},  # key absent from all registries
             ):
                 await execute_dispatch(
                     tool_ctx=tool_ctx,
                     recipe="test-recipe",
                     task="t",
-                    ingredients={"base_branch": "caller-supplied"},
+                    ingredients={"truly_unknown_key": "caller-supplied"},
                     dispatch_name=None,
                     timeout_sec=None,
                     prompt_builder=_capture_prompt_builder,
@@ -473,8 +474,75 @@ class TestConfigAuthoritativeIngredientInjection:
                     quota_refresher=_noop_quota_refresher,
                 )
 
-        assert captured["ingredients"]["base_branch"] == "caller-supplied"
+        assert captured["ingredients"]["truly_unknown_key"] == "caller-supplied"
         assert any(
             e.get("log_level") == "warning" and "config-authority key" in e.get("event", "")
             for e in cap_logs
         )
+
+    @pytest.mark.anyio
+    async def test_non_writable_backend_forces_git_write_false_at_dispatch(self, tool_ctx):
+        """When tool_ctx.backend has git_metadata_writable=False, the dispatched
+        ingredients must contain backend_supports_git_write='false', regardless of
+        LLM-supplied ingredients."""
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "backend_supports_git_write": RecipeIngredient(
+                        description="Capability", default="true", authority="config"
+                    )
+                },
+            ),
+        )
+        captured: dict = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        tool_ctx.backend = SimpleNamespace(
+            capabilities=SimpleNamespace(git_metadata_writable=False)
+        )
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={"backend_supports_git_write": "true"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert captured["ingredients"]["backend_supports_git_write"] == "false"
+
+
+def test_capability_overrides_dict_covers_registry_keys():
+    """Structural test: every key in BACKEND_CAPABILITY_INGREDIENTS must appear in the
+    capability_overrides dict that fleet dispatch passes to apply_config_authoritative_overrides.
+    Adding a key to the registry without dispatch-site enforcement fails this test."""
+    from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS
+    from autoskillit.fleet._api import _build_capability_overrides
+
+    capability_overrides = _build_capability_overrides(backend=None)
+    missing = BACKEND_CAPABILITY_INGREDIENTS - set(capability_overrides)
+    assert not missing, (
+        f"Capability registry keys missing from dispatch capability_overrides: {missing}"
+    )

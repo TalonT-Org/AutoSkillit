@@ -125,6 +125,12 @@ SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = CONFIG_AUTHORITY_KEYS - {
     "backend_supports_git_write",
 }
 
+BACKEND_CAPABILITY_INGREDIENTS: frozenset[str] = frozenset(
+    {
+        "backend_supports_git_write",
+    }
+)
+
 
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     """Resolve auto-detect ingredient values from the project environment."""
@@ -175,6 +181,8 @@ def apply_config_authoritative_overrides(
     effective_ingredients: dict[str, str],
     recipe_ingredients: Mapping[str, _HasAuthority],
     project_dir: Path,
+    *,
+    capability_overrides: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Prevent LLM-supplied values from winning for config-authoritative keys at fleet dispatch."""
     config_keys = [
@@ -190,6 +198,8 @@ def apply_config_authoritative_overrides(
     for key in config_keys:
         if key in resolved:
             result[key] = resolved[key]
+        elif capability_overrides and key in capability_overrides:
+            result[key] = capability_overrides[key]
         else:
             logger.warning(
                 "config-authority key %r not found in resolved defaults — "

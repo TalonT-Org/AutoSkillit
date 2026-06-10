@@ -17,6 +17,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit import __version__
 from autoskillit.config import (
+    BACKEND_CAPABILITY_INGREDIENTS,
     SERVER_AUTHORITATIVE_INGREDIENTS,
     build_config_authoritative_layer,
     iter_display_categories,
@@ -536,6 +537,9 @@ async def open_kitchen(
             }
             _session_overrides.update(_backend_capability_overrides(tool_ctx.backend))
             _config_layer = build_config_authoritative_layer(_defaults)
+            for _cap_key in BACKEND_CAPABILITY_INGREDIENTS:
+                if _cap_key in _session_overrides:
+                    _config_layer[_cap_key] = _session_overrides[_cap_key]
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":

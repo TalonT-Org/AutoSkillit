@@ -9,7 +9,11 @@ import structlog
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
-from autoskillit.config import build_config_authoritative_layer, resolve_ingredient_defaults
+from autoskillit.config import (
+    BACKEND_CAPABILITY_INGREDIENTS,
+    build_config_authoritative_layer,
+    resolve_ingredient_defaults,
+)
 from autoskillit.core import get_logger, temp_dir_display_str
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
@@ -214,6 +218,9 @@ async def load_recipe(
             }
             _session_overrides.update(_backend_capability_overrides(tool_ctx.backend))
             _config_layer = build_config_authoritative_layer(_defaults)
+            for _cap_key in BACKEND_CAPABILITY_INGREDIENTS:
+                if _cap_key in _session_overrides:
+                    _config_layer[_cap_key] = _session_overrides[_cap_key]
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
             result = tool_ctx.recipes.load_and_validate(
                 name,

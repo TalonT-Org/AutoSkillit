@@ -86,9 +86,9 @@ class TestBackendCompatGateFailClosed:
             f"Expected crashed when skill_resolver is None and a skill is referenced, "
             f"got subtype={parsed.get('subtype')}"
         )
-        error = parsed.get("error", "").lower()
-        assert "resolver" in error or "skill resolver" in error, (
-            f"Expected error mentioning missing resolver, got: {parsed.get('error')}"
+        error_text = (parsed.get("error") or parsed.get("result") or "").lower()
+        assert "resolver" in error_text or "skill resolver" in error_text, (
+            f"Expected error mentioning missing resolver, got: {parsed}"
         )
 
     def test_compat_check_rejects_when_backend_is_none(self):
@@ -113,9 +113,8 @@ class TestBackendCompatGateFailClosed:
             f"Expected crashed when backend is None and a skill is referenced, "
             f"got subtype={parsed.get('subtype')}"
         )
-        assert "backend" in parsed.get("error", "").lower(), (
-            f"Expected error mentioning missing backend, got: {parsed.get('error')}"
-        )
+        error_text = (parsed.get("error") or parsed.get("result") or "").lower()
+        assert "backend" in error_text, f"Expected error mentioning missing backend, got: {parsed}"
 
     @pytest.mark.anyio
     async def test_provider_override_allows_skill_requiring_claude_code(

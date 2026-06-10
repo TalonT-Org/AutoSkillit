@@ -13,7 +13,12 @@ from autoskillit.core import SkillResult
 from autoskillit.core._execution_marker import _touch_marker
 from autoskillit.core.types._type_enums import RetryReason
 from autoskillit.fleet._api import _run_dispatch
-from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher, _setup_dispatch
+from tests.fleet._helpers import (
+    _mock_backend_with_locator,
+    _no_sleep_quota_checker,
+    _noop_quota_refresher,
+    _setup_dispatch,
+)
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
@@ -23,10 +28,7 @@ async def test_marker_created_before_dispatch(tool_ctx, monkeypatch, tmp_path: P
     _setup_dispatch(tool_ctx, monkeypatch)
     marker_dir = tmp_path / "marker_dir"
     marker_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(
-        "autoskillit.fleet._api.claude_code_project_dir",
-        lambda _cwd: marker_dir,
-    )
+    tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
 
     async def _asserting_dispatch(**_kw):
         found = list(marker_dir.glob("*-in-progress-*.marker"))
@@ -54,10 +56,7 @@ async def test_marker_deleted_after_success(tool_ctx, monkeypatch, tmp_path: Pat
     _setup_dispatch(tool_ctx, monkeypatch)
     marker_dir = tmp_path / "claude"
     marker_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(
-        "autoskillit.fleet._api.claude_code_project_dir",
-        lambda _cwd: marker_dir,
-    )
+    tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
 
     await _run_dispatch(
         tool_ctx=tool_ctx,
@@ -80,10 +79,7 @@ async def test_marker_deleted_after_exception(tool_ctx, monkeypatch, tmp_path: P
     _setup_dispatch(tool_ctx, monkeypatch)
     marker_dir = tmp_path / "claude"
     marker_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(
-        "autoskillit.fleet._api.claude_code_project_dir",
-        lambda _cwd: marker_dir,
-    )
+    tool_ctx.backend = _mock_backend_with_locator(project_log_dir=marker_dir)
 
     async def _raise_runtime_error(**_kw):
         raise RuntimeError("boom")
@@ -134,13 +130,7 @@ async def test_marker_not_written_when_cwd_unavailable(
 ) -> None:
     _setup_dispatch(tool_ctx, monkeypatch)
 
-    def _raise_oserror(_cwd: str) -> Path:
-        raise OSError("simulated failure")
-
-    monkeypatch.setattr(
-        "autoskillit.fleet._api.claude_code_project_dir",
-        _raise_oserror,
-    )
+    tool_ctx.backend = None
 
     await _run_dispatch(
         tool_ctx=tool_ctx,

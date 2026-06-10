@@ -66,3 +66,10 @@ def test_make_completed_clean_exported_from_fleet_helpers():
     result = _make_completed_clean(success=True)
     assert result.outcome == "completed_clean"
     assert result.payload == {"success": True}
+
+
+def test_mock_backend_with_locator_exported_from_fleet_helpers():
+    from tests.fleet._helpers import _mock_backend_with_locator
+
+    backend = _mock_backend_with_locator(project_log_dir=None)
+    assert backend.session_locator() is not None

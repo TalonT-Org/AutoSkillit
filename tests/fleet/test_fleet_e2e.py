@@ -1032,7 +1032,12 @@ async def test_end_to_end_resumable_dispatch_uses_resume_flag(
     rt.configure_shim("success")
     jsonl_file = tmp_path / "test-session-id.jsonl"
     jsonl_file.touch()
-    monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+    from unittest.mock import Mock as _Mock
+
+    _mock_locator = _Mock()
+    _mock_locator.session_log_path.return_value = jsonl_file
+    _mock_locator.project_log_dir.return_value = tmp_path
+    spy_backend.session_locator.return_value = _mock_locator
 
     await execute_dispatch(
         tool_ctx=rt.tool_ctx,

@@ -63,6 +63,7 @@ class TestResumeWithoutPriorDispatchId:
         from autoskillit.core.types import CaptureEntrySpec
         from autoskillit.fleet.result_parser import L3ParseResult
         from tests.fleet._helpers import (
+            _mock_backend_with_locator,
             _no_sleep_quota_checker,
             _noop_quota_refresher,
             _setup_dispatch,
@@ -71,7 +72,9 @@ class TestResumeWithoutPriorDispatchId:
         _setup_dispatch(tool_ctx, monkeypatch)
         jsonl_file = tmp_path / "sess-123.jsonl"
         jsonl_file.touch()
-        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path, session_log_path=jsonl_file
+        )
 
         mock_parsed = L3ParseResult(
             outcome="completed_clean",
@@ -276,6 +279,7 @@ class TestSessionChainAccumulatesAcrossResume:
         from autoskillit.fleet._api import _run_dispatch
         from autoskillit.fleet.state import read_state
         from tests.fleet._helpers import (
+            _mock_backend_with_locator,
             _no_sleep_quota_checker,
             _noop_quota_refresher,
             _setup_dispatch,
@@ -284,7 +288,9 @@ class TestSessionChainAccumulatesAcrossResume:
         _setup_dispatch(tool_ctx, monkeypatch)
         jsonl_file = tmp_path / "sess-resume-1.jsonl"
         jsonl_file.touch()
-        monkeypatch.setattr("autoskillit.fleet._api.claude_code_log_path", lambda *_: jsonl_file)
+        tool_ctx.backend = _mock_backend_with_locator(
+            project_log_dir=tmp_path, session_log_path=jsonl_file
+        )
 
         dispatches_dir = tool_ctx.temp_dir / "dispatches"
         campaign_id = tool_ctx.kitchen_id

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -10,6 +12,7 @@ from autoskillit.config import (
     AutomationConfig,
     RunSkillConfig,
 )
+from autoskillit.core.claude_conventions import ClaudeDirectoryConventions
 from autoskillit.execution.commands import _inject_completion_directive
 from autoskillit.execution.headless import _session_log_dir
 from autoskillit.server.tools.tools_execution import run_skill
@@ -256,3 +259,63 @@ class TestRunSkillPerInvocationMarker:
         assert marker1 != marker2
         assert "%%ORDER_UP::" in marker1
         assert "%%ORDER_UP::" in marker2
+
+
+class TestRunSkillExecutionMarker:
+    """Execution marker directory routes through backend session locator."""
+
+    @pytest.mark.anyio
+    async def test_marker_dir_routes_through_session_locator(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        mock_locator = Mock()
+        controlled_path = Path("/controlled/marker/dir")
+        mock_locator.project_log_dir.return_value = controlled_path
+        mock_backend = Mock()
+        mock_backend.session_locator.return_value = mock_locator
+        mock_backend.name = "claude-code"
+        mock_backend.conventions.skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        mock_backend.capabilities.mcp_config_capable = False
+        mock_backend.capabilities.session_dir_persistent = False
+        mock_backend.validate_session_layout.return_value = []
+        tool_ctx_kitchen_open.backend = mock_backend
+
+        captured = {}
+
+        @contextlib.asynccontextmanager
+        async def _capture_marker(marker_dir, *args, **kwargs):
+            captured["marker_dir"] = marker_dir
+            yield
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution.execution_marker",
+            _capture_marker,
+        )
+
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+        await run_skill("/investigate test", "/tmp")
+
+        assert captured["marker_dir"] == controlled_path
+
+    @pytest.mark.anyio
+    async def test_marker_dir_none_when_backend_is_none(self, tool_ctx_kitchen_open, monkeypatch):
+        tool_ctx_kitchen_open.backend = None
+
+        captured = {}
+
+        @contextlib.asynccontextmanager
+        async def _capture_marker(marker_dir, *args, **kwargs):
+            captured["marker_dir"] = marker_dir
+            yield
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_execution.execution_marker",
+            _capture_marker,
+        )
+
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))
+        tool_ctx_kitchen_open.runner.push(_make_result(0, _SUCCESS_JSON, ""))
+        await run_skill("/investigate test", "/tmp")
+
+        assert captured["marker_dir"] is None

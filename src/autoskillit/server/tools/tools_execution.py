@@ -26,7 +26,6 @@ from autoskillit.core import (
     SkillResult,
     ValidatedAddDir,
     WriteBehaviorSpec,
-    claude_code_project_dir,
     execution_marker,
     extract_skill_name,
     find_caller_session_id,
@@ -914,11 +913,11 @@ async def run_skill(
             _sn_token = _current_step_name.set(_canonical_step_name(step_name))
             _oid_token = _current_order_id.set(effective_order_id)
 
-            _marker_dir: Path | None = None
-            try:
-                _marker_dir = claude_code_project_dir(str(tool_ctx.project_dir))
-            except OSError:
-                pass
+            _marker_dir: Path | None = (
+                tool_ctx.backend.session_locator().project_log_dir(str(tool_ctx.project_dir))
+                if tool_ctx.backend is not None
+                else None
+            )
             _orchestrator_sid = find_caller_session_id(project_dir=tool_ctx.project_dir)
 
             _start = time.monotonic()

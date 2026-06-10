@@ -45,7 +45,10 @@ def test_serve_activity_check_uses_backend_derived_marker_dir(
 ) -> None:
     """serve() must derive _marker_dir via backend.session_locator().project_log_dir()."""
     import asyncio
+    import importlib
     from unittest.mock import MagicMock
+
+    app_module = importlib.import_module("autoskillit.cli.app")
 
     monkeypatch.chdir(tmp_path)
 
@@ -74,7 +77,7 @@ def test_serve_activity_check_uses_backend_derived_marker_dir(
     async def fake_serve_guard(mcp_instance, *, activity_check=None, **kw):
         captured_activity_check.append(activity_check)
 
-    monkeypatch.setattr("autoskillit.cli.app.serve_with_signal_guard", fake_serve_guard)
+    monkeypatch.setattr(app_module, "serve_with_signal_guard", fake_serve_guard)
     monkeypatch.setattr("anyio.run", lambda fn, **kw: asyncio.run(fn()))
 
     from autoskillit.cli.app import serve
@@ -89,7 +92,8 @@ def test_serve_activity_check_uses_backend_derived_marker_dir(
 
     seen_marker_dirs: list = []
     monkeypatch.setattr(
-        "autoskillit.cli.app.is_server_active",
+        app_module,
+        "is_server_active",
         lambda md, fl: (seen_marker_dirs.append(md), False)[-1],
     )
 

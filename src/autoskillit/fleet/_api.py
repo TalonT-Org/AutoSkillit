@@ -116,7 +116,7 @@ def _build_capability_overrides(backend: Any) -> dict[str, str]:
 
     Mirrors ``_backend_capability_overrides`` in ``server.tools._auto_overrides``
     but is inlined here because fleet/ (IL-2) cannot import from server/ (IL-3).
-    A structural test asserts the key set matches ``BACKEND_CAPABILITY_INGREDIENTS``.
+    A structural test asserts every ``BACKEND_CAPABILITY_INGREDIENTS`` key is covered.
     """
     _backend_writable = backend is None or backend.capabilities.git_metadata_writable
     return {"backend_supports_git_write": "true" if _backend_writable else "false"}

@@ -442,7 +442,7 @@ def test_diagram_reflects_pruning_annotations() -> None:
     )
 
     assert "resolve_ci" in diagram, (
-        "Pruning footer should list resolve_ci (it should be skipped under codex backend)"
+        "Pruning footer should list resolve_ci (skipped when backend_supports_git_write is false)"
     )
     assert "resolve_pre_resolve_conflicts" in diagram, (
         "Pruning footer should list resolve_pre_resolve_conflicts"

@@ -1090,6 +1090,7 @@ steps:
     on_context_limit: merge_escalations
     on_success: merge_escalations
     on_failure: merge_escalations
+    skip_when_false: "inputs.backend_supports_git_write"
 
   merge_escalations:
     action: route

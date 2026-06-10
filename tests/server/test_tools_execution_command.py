@@ -277,6 +277,7 @@ class TestRunSkillExecutionMarker:
         mock_backend.conventions.skills_subdir = ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
         mock_backend.capabilities.mcp_config_capable = False
         mock_backend.capabilities.session_dir_persistent = False
+        mock_backend.validate_session_layout.return_value = []
         tool_ctx_kitchen_open.backend = mock_backend
 
         captured = {}

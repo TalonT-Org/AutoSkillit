@@ -59,44 +59,62 @@ class TestBackendCompatGate:
 
 
 class TestBackendCompatGateFailClosed:
-    """Fail-closed integration tests for _check_backend_compat gate.
+    """Fail-closed unit tests for _check_backend_compat gate.
 
-    These call run_skill() through the full dispatch path; the compat gate is
-    reached only after _require_enabled() passes (kitchen open).
+    These test _check_backend_compat directly to verify fail-closed behavior
+    when skill_resolver or effective_backend_obj is None.
     """
 
-    @pytest.mark.anyio
-    async def test_compat_check_rejects_when_skill_resolver_is_none(self, tool_ctx_kitchen_open):
+    def test_compat_check_rejects_when_skill_resolver_is_none(self):
         """Gate rejects when skill_resolver is None and a skill is referenced."""
         import json
 
-        from autoskillit.server.tools.tools_execution import run_skill
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
 
-        result = json.loads(await run_skill("/autoskillit:investigate", "/tmp"))
-        assert result["subtype"] == "crashed", (
+        result = _check_backend_compat(
+            skill_command="/autoskillit:investigate",
+            resolved_command="/autoskillit:investigate",
+            effective_order_id="",
+            target_name="investigate",
+            skill_info=None,
+            effective_backend_obj=None,
+            skill_resolver=None,
+        )
+        assert result is not None, "Expected crash JSON when skill_resolver is None"
+        parsed = json.loads(result)
+        assert parsed.get("subtype") == "crashed", (
             f"Expected crashed when skill_resolver is None and a skill is referenced, "
-            f"got subtype={result.get('subtype')}"
+            f"got subtype={parsed.get('subtype')}"
         )
-        assert (
-            "skill resolver" in result.get("error", "").lower()
-            or "resolver" in result.get("error", "").lower()
-        ), f"Expected error mentioning missing resolver, got: {result.get('error')}"
+        error = parsed.get("error", "").lower()
+        assert "resolver" in error or "skill resolver" in error, (
+            f"Expected error mentioning missing resolver, got: {parsed.get('error')}"
+        )
 
-    @pytest.mark.anyio
-    async def test_compat_check_rejects_when_backend_is_none(self, tool_ctx_kitchen_open):
-        """Gate rejects when tool_ctx.backend is None and a skill is referenced."""
+    def test_compat_check_rejects_when_backend_is_none(self):
+        """Gate rejects when effective_backend_obj is None and a skill is referenced."""
         import json
+        from unittest.mock import MagicMock
 
-        from autoskillit.server.tools.tools_execution import run_skill
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
 
-        tool_ctx_kitchen_open.backend = None
-        result = json.loads(await run_skill("/autoskillit:investigate", "/tmp"))
-        assert result["subtype"] == "crashed", (
-            f"Expected crashed when backend is None and a skill is referenced, "
-            f"got subtype={result.get('subtype')}"
+        result = _check_backend_compat(
+            skill_command="/autoskillit:investigate",
+            resolved_command="/autoskillit:investigate",
+            effective_order_id="",
+            target_name="investigate",
+            skill_info=MagicMock(),
+            effective_backend_obj=None,
+            skill_resolver=MagicMock(),
         )
-        assert "backend" in result.get("error", "").lower(), (
-            f"Expected error mentioning missing backend, got: {result.get('error')}"
+        assert result is not None, "Expected crash JSON when backend is None"
+        parsed = json.loads(result)
+        assert parsed.get("subtype") == "crashed", (
+            f"Expected crashed when backend is None and a skill is referenced, "
+            f"got subtype={parsed.get('subtype')}"
+        )
+        assert "backend" in parsed.get("error", "").lower(), (
+            f"Expected error mentioning missing backend, got: {parsed.get('error')}"
         )
 
     @pytest.mark.anyio

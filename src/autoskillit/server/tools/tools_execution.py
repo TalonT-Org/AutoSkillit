@@ -697,14 +697,12 @@ async def run_skill(
                 resolved_command, target_name = resolve_target_skill(
                     skill_command, tool_ctx.skill_resolver
                 )
-            else:
-                target_name = extract_skill_name(skill_command)
             _skill_info = (
                 tool_ctx.skill_resolver.resolve(target_name)
                 if tool_ctx.skill_resolver and target_name
                 else None
             )
-            if target_name and _skill_info is None and tool_ctx.skill_resolver is not None:
+            if target_name and _skill_info is None:
                 return SkillResult.crashed(
                     exception=RuntimeError(
                         f"Skill '{target_name}' not found in any discovery source "

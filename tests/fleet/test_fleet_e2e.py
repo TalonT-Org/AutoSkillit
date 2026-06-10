@@ -1032,12 +1032,11 @@ async def test_end_to_end_resumable_dispatch_uses_resume_flag(
     rt.configure_shim("success")
     jsonl_file = tmp_path / "test-session-id.jsonl"
     jsonl_file.touch()
-    from unittest.mock import Mock as _Mock
+    from tests.fleet._helpers import _mock_backend_with_locator as _mlh
 
-    _mock_locator = _Mock()
-    _mock_locator.session_log_path.return_value = jsonl_file
-    _mock_locator.project_log_dir.return_value = tmp_path
-    spy_backend.session_locator.return_value = _mock_locator
+    spy_backend.session_locator.return_value = _mlh(
+        project_log_dir=tmp_path, session_log_path=jsonl_file
+    ).session_locator.return_value
 
     await execute_dispatch(
         tool_ctx=rt.tool_ctx,

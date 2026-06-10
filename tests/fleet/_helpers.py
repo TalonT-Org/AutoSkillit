@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -169,7 +170,7 @@ def _mock_backend_with_locator(
     *,
     project_log_dir: Path | None = None,
     session_log_path: Path | None = _SENTINEL,
-    session_log_path_side_effect=None,
+    session_log_path_side_effect: Callable[..., Path | None] | None = None,
 ):
     """Build a mock backend with configured session_locator for dispatch tests."""
     from unittest.mock import Mock

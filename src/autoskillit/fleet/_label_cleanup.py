@@ -40,12 +40,10 @@ async def _cleanup_single_issue(
     github_client: GitHubFetcher,
     issue_url: str,
     *,
-    remove_labels: list[str] | None = None,
-    add_labels: list[str] | None = None,
+    remove_labels: list[str],
+    add_labels: list[str],
 ) -> bool:
     """Swap labels for a single issue URL. Returns True on success."""
-    rl = remove_labels if remove_labels is not None else _REMOVE_LABELS
-    al = add_labels if add_labels is not None else _ADD_LABELS
     try:
         owner, repo, number = _parse_issue_ref(issue_url)
     except ValueError:
@@ -53,7 +51,7 @@ async def _cleanup_single_issue(
         return False
     try:
         result = await github_client.swap_labels(
-            owner, repo, number, remove_labels=rl, add_labels=al
+            owner, repo, number, remove_labels=remove_labels, add_labels=add_labels
         )
         if not result.get("success"):
             return False
@@ -71,12 +69,7 @@ async def _cleanup_issue_urls(
     remove_labels: list[str],
     add_labels: list[str],
 ) -> bool:
-    """Split a CSV issue_url string and call _cleanup_single_issue per URL.
-
-    R1 fix: previously _parse_issue_ref was called on the raw CSV string,
-    silently matching only the first URL via _FULL_URL_RE.match() and orphaning
-    the rest. This helper splits the CSV and processes each URL independently.
-    """
+    """Split a CSV issue_url string and call _cleanup_single_issue per URL."""
     urls = [u.strip() for u in issue_url.split(",") if u.strip()]
     if not urls:
         return False

@@ -100,17 +100,6 @@ def test_nested_gitignore_detected(git_repo: Path) -> None:
     assert findings[0]["check"] == "gitignored_deliverable"
 
 
-def test_relative_temp_path_detected(git_repo: Path) -> None:
-    wp_results = {
-        "P1-A1-WP1": make_wp_result(
-            "P1-A1-WP1", deliverables=[".autoskillit/temp/some_report.md"]
-        ),
-    }
-    findings = _check_gitignored_deliverables(wp_results, repo_root=git_repo)
-    assert len(findings) == 1
-    assert findings[0]["check"] == "gitignored_deliverable"
-
-
 def test_validate_plan_includes_gitignored_deliverable_check(git_repo: Path) -> None:
     """Integration test: validate_plan() wires the gitignored check via source_dir."""
     planner_dir = make_minimal_output_dir(

@@ -115,6 +115,23 @@ def export_local_bundle(
 # ─── batch_create_issues helpers ────────────────────────────────────────────
 
 
+def _validate_mutation_variables(mutation: str, variables: dict[str, object]) -> None:
+    r"""Assert that mutation variable declarations match the variables dict.
+
+    Guards against: (1) variable-name drift between the mutation template and
+    the variables dict, and (2) the ruff W605 raw-string auto-fix trap — if
+    ruff converts f"$i{k}" to rf"\$i{k}", the runtime string contains literal
+    backslash-dollar and this check fails because "$i0:" is absent.
+    """
+    for key in variables:
+        decl = f"${key}:"
+        ref = f"${key})"
+        if decl not in mutation:
+            raise ValueError(f"Variable ${key} in variables dict but not declared in mutation")
+        if ref not in mutation:
+            raise ValueError(f"Variable ${key} declared but not referenced in mutation body")
+
+
 def _extract_title(raw: str) -> str:
     """Return the text following '# ' from the first H1 line, or a fallback."""
     m = re.search(r"^#\s+(.+)$", raw, re.MULTILINE)
@@ -305,6 +322,7 @@ def batch_create_issues(
             + " ".join(mutation_parts)
             + "}"
         )
+        _validate_mutation_variables(mutation, variables)
         payload = json.dumps({"query": mutation, "variables": variables})
         result = run_gh(["api", "graphql", "--input", "-"], cwd=workspace, input_data=payload)
         if result.returncode != 0:

@@ -9,6 +9,7 @@ from autoskillit.core import LoadResult, SkillLister, YAMLError, get_logger, loa
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe._recipe_ingredients import RecipeListItem
+from autoskillit.recipe._rule_helpers import filter_pruning_false_positives
 from autoskillit.recipe.contracts import load_recipe_card, validate_recipe_cards
 from autoskillit.recipe.io import (
     RecipeInfo,
@@ -146,14 +147,7 @@ def validate_from_path(
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
     if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
-        _pre_prune_finding_keys: frozenset[tuple[str, str, str]] = frozenset(
-            (f.rule, f.step_name, f.message) for f in _pre_prune_findings
-        )
-        semantic_findings = [
-            f
-            for f in semantic_findings
-            if (f.rule, f.step_name, f.message) in _pre_prune_finding_keys
-        ]
+        semantic_findings = filter_pruning_false_positives(semantic_findings, _pre_prune_findings)
 
     quality = build_quality_dict(report)
     semantic = findings_to_dicts(semantic_findings)

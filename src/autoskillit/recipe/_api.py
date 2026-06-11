@@ -63,6 +63,7 @@ from autoskillit.recipe._recipe_ingredients import (
 from autoskillit.recipe._rule_helpers import (
     _is_failure_sentinel_value,
     extract_sentinel_json_blocks,
+    filter_pruning_false_positives,
 )
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
@@ -430,14 +431,9 @@ def load_and_validate(
             t0 = _t("semantic_rules", t0, name)
 
             if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
-                _pre_prune_finding_keys: frozenset[tuple[str, str, str]] = frozenset(
-                    (f.rule, f.step_name, f.message) for f in _pre_prune_findings
+                semantic_findings = filter_pruning_false_positives(
+                    semantic_findings, _pre_prune_findings
                 )
-                semantic_findings = [
-                    f
-                    for f in semantic_findings
-                    if (f.rule, f.step_name, f.message) in _pre_prune_finding_keys
-                ]
                 semantic_suggestions = findings_to_dicts(semantic_findings)
 
             _suppressed = suppressed or []

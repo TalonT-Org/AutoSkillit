@@ -15,6 +15,7 @@ from autoskillit.recipe._analysis import ValidationContext
 
 if TYPE_CHECKING:
     from autoskillit.recipe._contracts_types import SkillContract
+    from autoskillit.recipe.registry import RuleFinding
     from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeStep
 
 logger = get_logger(__name__)
@@ -268,3 +269,19 @@ def _identify_optional_output_fields(contract: SkillContract) -> set[str]:
         if m and m.group(1) in output_names:
             optional.add(m.group(1))
     return optional
+
+
+def filter_pruning_false_positives(
+    post_prune_findings: list[RuleFinding],
+    pre_prune_findings: list[RuleFinding],
+) -> list[RuleFinding]:
+    """Keep only post-prune findings that also appeared pre-prune.
+
+    Graph-aware rules (dead-output, capture-inversion) produce false positives
+    when pruning changes step-graph reachability. Intersecting with the
+    pre-prune baseline suppresses findings introduced by pruning.
+    """
+    pre_prune_keys: frozenset[tuple[str, str, str]] = frozenset(
+        (f.rule, f.step_name, f.message) for f in pre_prune_findings
+    )
+    return [f for f in post_prune_findings if (f.rule, f.step_name, f.message) in pre_prune_keys]

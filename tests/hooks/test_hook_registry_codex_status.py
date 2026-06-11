@@ -50,3 +50,34 @@ class TestHookDefCodexStatus:
                     f"not-applicable hook with matcher={entry.get('matcher')!r} "
                     "must not appear in Codex config"
                 )
+
+    def test_hookdef_has_mechanism_field(self):
+        field_names = {f.name for f in dataclasses.fields(HookDef)}
+        assert "mechanism" in field_names
+
+    def test_all_registry_entries_have_valid_mechanism(self):
+        for hook_def in HOOK_REGISTRY:
+            assert hook_def.mechanism in (
+                "deny",
+                "additionalContext",
+                "output-rewrite",
+            ), f"Hook {hook_def.scripts} has invalid mechanism: {hook_def.mechanism!r}"
+
+    def test_pretooluse_deny_mechanism_is_set(self):
+        for hook_def in HOOK_REGISTRY:
+            if hook_def.event_type == "PreToolUse" and hook_def.codex_status != "not-applicable":
+                assert hook_def.mechanism == "deny", (
+                    f"Hook {hook_def.scripts} has mechanism={hook_def.mechanism!r}, "
+                    "expected 'deny' for PreToolUse hooks"
+                )
+
+    def test_posttooluse_pretty_output_is_output_rewrite(self):
+        for hook_def in HOOK_REGISTRY:
+            if (
+                hook_def.event_type == "PostToolUse"
+                and "formatters/pretty_output_hook.py" in hook_def.scripts
+            ):
+                assert hook_def.mechanism == "output-rewrite", (
+                    f"Hook {hook_def.scripts} has mechanism={hook_def.mechanism!r}, "
+                    "expected 'output-rewrite' for pretty_output_hook"
+                )

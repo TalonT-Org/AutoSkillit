@@ -239,19 +239,23 @@ def _load_sessions(
         _model = data.get("model_identifier", "")
         if _model and not entry["model"]:
             entry["model"] = _model
-        entry["input_tokens"] += data.get("input_tokens", 0)
-        entry["output_tokens"] += data.get("output_tokens", 0)
-        entry["cache_write_tokens"] += data.get(
-            "cache_write_tokens", data.get(_V1_CACHE_WRITE_KEY, 0)
+        entry["input_tokens"] += data.get("input_tokens") or 0
+        entry["output_tokens"] += data.get("output_tokens") or 0
+        _cw = data.get("cache_write_tokens")
+        entry["cache_write_tokens"] += (
+            _cw if _cw is not None else (data.get(_V1_CACHE_WRITE_KEY) or 0)
         )
-        entry["cache_read_tokens"] += data.get(
-            "cache_read_tokens", data.get(_V1_CACHE_READ_KEY, 0)
+        _cr = data.get("cache_read_tokens")
+        entry["cache_read_tokens"] += (
+            _cr if _cr is not None else (data.get(_V1_CACHE_READ_KEY) or 0)
         )
         _raw_timing = data.get("timing_seconds")
         entry["elapsed_seconds"] += float(_raw_timing) if _raw_timing is not None else 0.0
         entry["invocation_count"] += 1
-        entry["loc_insertions"] = entry.get("loc_insertions", 0) + data.get("loc_insertions", 0)
-        entry["loc_deletions"] = entry.get("loc_deletions", 0) + data.get("loc_deletions", 0)
+        entry["loc_insertions"] = entry.get("loc_insertions", 0) + (
+            data.get("loc_insertions") or 0
+        )
+        entry["loc_deletions"] = entry.get("loc_deletions", 0) + (data.get("loc_deletions") or 0)
         _raw_peak = data.get("peak_context", 0)
         if isinstance(_raw_peak, int) and _raw_peak > entry["peak_context"]:
             entry["peak_context"] = _raw_peak
@@ -389,10 +393,10 @@ def _format_model_table(aggregated: dict[str, dict[str, Any]]) -> str:
             }
         md = model_data[model]
         md["_steps"].add(entry.get("step_name", ""))
-        md["input_tokens"] += entry.get("input_tokens", 0)
-        md["output_tokens"] += entry.get("output_tokens", 0)
-        md["cache_write_tokens"] += entry.get("cache_write_tokens", 0)
-        md["cache_read_tokens"] += entry.get("cache_read_tokens", 0)
+        md["input_tokens"] += entry.get("input_tokens") or 0
+        md["output_tokens"] += entry.get("output_tokens") or 0
+        md["cache_write_tokens"] += entry.get("cache_write_tokens") or 0
+        md["cache_read_tokens"] += entry.get("cache_read_tokens") or 0
         md["elapsed_seconds"] += entry.get("elapsed_seconds", 0.0)
 
     if not model_data:

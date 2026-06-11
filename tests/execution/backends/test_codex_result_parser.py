@@ -404,7 +404,7 @@ class TestCodexResultParserCumulativeTokens:
         result = CodexResultParser().parse_stdout(ndjson)
         canonical = result.raw["canonical_token_usage"]
         assert canonical["cache_read_tokens"] == 30
-        assert canonical["cache_write_tokens"] is None
+        assert canonical["cache_write_tokens"] == 0
 
     def test_no_turn_completed_yields_none_canonical(self) -> None:
         """Scenario 4: no turn.completed event — canonical_token_usage is None."""

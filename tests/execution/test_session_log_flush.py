@@ -641,6 +641,26 @@ def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):
     assert tu["turn_count"] == 14
 
 
+def test_token_usage_json_coerces_none_cache_fields_to_zero(tmp_path):
+    """Codex-originated None for cache_write_tokens must persist as 0 on disk."""
+    _flush(
+        tmp_path,
+        step_name="implement",
+        token_usage={
+            "input_tokens": 200,
+            "output_tokens": 80,
+            "cache_write_tokens": None,
+            "cache_read_tokens": 50,
+        },
+        timing_seconds=0.0,
+        proc_snapshots=None,
+        success=True,
+    )
+    tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
+    assert tu["cache_write_tokens"] == 0
+    assert tu["cache_read_tokens"] == 50
+
+
 def test_step_timing_json_schema(tmp_path):
     """step_timing.json contains step_name and total_seconds."""
     _flush(tmp_path, step_name="plan", timing_seconds=20.0, proc_snapshots=None, success=False)

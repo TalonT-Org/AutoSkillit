@@ -45,8 +45,12 @@ class CanonicalTokenUsage:
         return {
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
-            "cache_read_tokens": self.cache_read_tokens,
-            "cache_write_tokens": self.cache_write_tokens,
+            "cache_read_tokens": self.cache_read_tokens
+            if self.cache_read_tokens is not None
+            else 0,
+            "cache_write_tokens": self.cache_write_tokens
+            if self.cache_write_tokens is not None
+            else 0,
             "provider": self.provider,
         }
 

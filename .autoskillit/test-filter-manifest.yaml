@@ -255,6 +255,8 @@ src/**/CLAUDE.md: []
   - contracts/
   - arch/
 
+.autoskillit/temp/*.md: []
+
 .autoskillit/temp/skill-eval/**/*.json:
   - infra/
 

@@ -506,6 +506,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | MCP env forward coverage | `test_mcp_env_forward_coverage.py` | `mcp_env_forward_vars` values missing from `CmdSpec.env` in any cmd-builder (skill, food-truck, headless, resume, interactive) |
 | Rule severity consistency | `test_rule_severity_consistency.py` | Direct `RuleFinding()` construction in `@semantic_rule`/`@block_rule` bodies — must use `make_finding()`/`make_block_finding()` |
 | No direct swap_labels in fleet | `test_swap_labels_guard.py` | Direct `swap_labels` calls in `fleet/` outside `_label_cleanup.py` — must route through `cleanup_orphaned_labels` |
+| Pipeline ordering | `test_pipeline_ordering.py` | Moving `run_semantic_rules` before `_prune_skipped_steps` in `load_and_validate` — semantic rules must run on post-prune recipe |
 
 When a reviewer suggestion would cause a change matching any row above, classify
 the finding as `REJECT` with `category: "arch_violation"` and `evidence` referencing

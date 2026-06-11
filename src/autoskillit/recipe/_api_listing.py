@@ -16,6 +16,7 @@ from autoskillit.recipe.io import (
     list_recipes,
     substitute_temp_placeholder,
 )
+from autoskillit.recipe.registry import RuleFinding
 from autoskillit.recipe.validator import (
     build_quality_dict,
     compute_recipe_validity,
@@ -122,11 +123,19 @@ def validate_from_path(
 
     recipe = _parse_recipe(data)
     errors = validate_recipe_structure(recipe)
+    _skip_resolutions: dict[str, bool | None] = {}
+    _pre_prune_findings: list[RuleFinding] = []
     if ingredient_overrides:
-        _pruned_recipe, _ = _prune_skipped_steps(
+        pre_prune_ctx = make_validation_context(
+            recipe,
+            available_skills=frozenset(s.name for s in lister.list_all()),
+            skill_resolver=_skill_resolver,
+            backend_name=backend_name,
+        )
+        _pre_prune_findings = run_semantic_rules(pre_prune_ctx)
+        recipe, _skip_resolutions = _prune_skipped_steps(
             recipe, ingredient_overrides, defer_unresolved=False
         )
-        recipe = _pruned_recipe
     known_skills = frozenset(s.name for s in lister.list_all())
     ctx = make_validation_context(
         recipe,
@@ -136,6 +145,15 @@ def validate_from_path(
     )
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
+    if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
+        _pre_prune_finding_keys: frozenset[tuple[str, str, str]] = frozenset(
+            (f.rule, f.step_name, f.message) for f in _pre_prune_findings
+        )
+        semantic_findings = [
+            f
+            for f in semantic_findings
+            if (f.rule, f.step_name, f.message) in _pre_prune_finding_keys
+        ]
 
     quality = build_quality_dict(report)
     semantic = findings_to_dicts(semantic_findings)

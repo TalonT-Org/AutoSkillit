@@ -3,7 +3,7 @@
 The pipeline must run semantic rules AFTER _prune_skipped_steps so that pruned
 steps are never seen by semantic rules. This prevents pre-prune semantic
 findings from poisoning the validity computation (the root cause of the
-codex open_kitchen "unknown structural error" bug — see investigation_from_issue.md).
+codex open_kitchen "unknown structural error" bug — see PR #4059).
 """
 
 from __future__ import annotations

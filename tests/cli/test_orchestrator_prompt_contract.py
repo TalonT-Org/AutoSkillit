@@ -51,6 +51,47 @@ class TestOpenKitchenFailurePredicate:
         assert "ingredients_table" in section
 
 
+class TestDegradedToolResponsePredicate:
+    """Guards for the FAILURE PREDICATE — DEGRADED TOOL RESPONSE block."""
+
+    def _get_section(self) -> str:
+        prompt = _get_prompt()
+        start = prompt.index("FAILURE PREDICATE — DEGRADED TOOL RESPONSE")
+        end = prompt.index("CONTEXT LIMIT ROUTING", start)
+        return prompt[start:end]
+
+    def test_prompt_contains_degraded_tool_response_section(self):
+        prompt = _get_prompt()
+        ok_idx = prompt.index("FAILURE PREDICATE — open_kitchen")
+        deg_idx = prompt.index("FAILURE PREDICATE — DEGRADED TOOL RESPONSE")
+        ctx_idx = prompt.index("CONTEXT LIMIT ROUTING")
+        assert ok_idx < deg_idx < ctx_idx, (
+            "Degraded predicate must appear after open_kitchen and before CONTEXT LIMIT ROUTING"
+        )
+
+    def test_degraded_predicate_covers_success_false_empty_content(self):
+        section = self._get_section()
+        assert "success" in section
+        assert "false" in section
+        assert any(word in section for word in ("absent", "null", "empty")), (
+            "Section must reference absent, null, or empty content"
+        )
+
+    def test_degraded_predicate_prohibits_improvisation(self):
+        section = self._get_section()
+        lower = section.lower()
+        assert any(
+            phrase in lower
+            for phrase in (
+                "do not improvise",
+                "do not retry",
+                "do not attempt",
+                "never",
+                "halt",
+            )
+        ), "Section must prohibit improvisation or retry"
+
+
 class TestStep0ToolPredicateCoverage:
     """Every tool referenced in STEP 0 must have a failure predicate or shared rule."""
 

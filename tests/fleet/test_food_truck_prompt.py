@@ -174,3 +174,57 @@ def test_food_truck_open_kitchen_predicate_uses_json_field_not_substring():
     section = prompt[idx : idx + 500]
     assert "--- INGREDIENTS TABLE ---" not in section
     assert "ingredients_table" in section
+
+
+def test_food_truck_prompt_has_degraded_response_halt_rule():
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    assert "FAILURE PREDICATE — DEGRADED RESPONSE" in prompt
+    assert 'reason="degraded_tool_response"' in prompt
+
+
+def test_food_truck_prompt_degraded_rule_triggers_sentinel_on_empty_content():
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    start = prompt.index("FAILURE PREDICATE — DEGRADED RESPONSE")
+    end = prompt.index("TWO FAILURE TIERS", start)
+    section = prompt[start:end]
+    assert "success" in section
+    assert "false" in section
+    assert any(word in section for word in ("absent", "null", "empty")), (
+        "Rule must reference absent, null, or empty content"
+    )
+
+
+def test_food_truck_prompt_degraded_reason_in_reason_enum():
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    fields_idx = prompt.index("Fields:")
+    reason_region = prompt[fields_idx : fields_idx + 300]
+    assert "degraded_tool_response" in reason_region, (
+        "degraded_tool_response must appear in Section 8 reason enum"
+    )
+    ok_idx = prompt.index("FAILURE PREDICATE — open_kitchen")
+    deg_idx = prompt.index("FAILURE PREDICATE — DEGRADED RESPONSE")
+    assert ok_idx != deg_idx, "Degraded and open_kitchen predicates must be distinct blocks"

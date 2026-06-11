@@ -32,7 +32,7 @@ as your final output. No other text after the sentinel.
 Fields:
 - success: true if all mandatory steps completed without unresolved failures
 - reason: "completed", "failed", "fleet_quota_exhausted", "timeout",
-  "open_kitchen_failed", "missing_on_failure"
+  "open_kitchen_failed", "missing_on_failure", "degraded_tool_response"
 - summary: One-line description of what happened
 
 The sentinel markers ---l3-result::{dispatch_id}--- and ---end-l3-result::{dispatch_id}---

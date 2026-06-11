@@ -599,7 +599,7 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
             mutation_call = json.loads(kwargs["input_data"])
             query = mutation_call["query"]
             variables = mutation_call["variables"]
-            assert query.startswith("mutation(") or query.startswith("{")
+            assert query.startswith("mutation(")
             assert "issue0: createIssue" in query
             assert "issue1: createIssue" in query
             for var_name in variables:

@@ -111,6 +111,7 @@ async def _execute_claude_headless(
     model_identity: ModelIdentity = ModelIdentity.unknown(),
     inspector_eligible: bool = False,
     inspector_model: str = "",
+    on_session_id_resolved: Callable[[str], None] | None = None,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -262,6 +263,7 @@ async def _execute_claude_headless(
                 max_extension_seconds=max_extension_seconds,
                 marker_dir=marker_dir,
                 session_id=session_id,
+                on_session_id_resolved=on_session_id_resolved,
                 stream_parser=_stream_parser,
                 completion_record_types=_step_backend.capabilities.completion_record_types,
                 session_record_types=_step_backend.capabilities.session_record_types,

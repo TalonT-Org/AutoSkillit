@@ -132,6 +132,7 @@ class DispatchFoodTruckCall:
     marker_dir: Path | None = None
     session_id: str | None = None
     resume_message: str | None = None
+    on_session_id_resolved: Callable[[str], None] | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -282,6 +283,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         marker_dir: Path | None = None,
         session_id: str | None = None,
         resume_message: str | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
@@ -312,6 +314,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 marker_dir=marker_dir,
                 session_id=session_id,
                 resume_message=resume_message,
+                on_session_id_resolved=on_session_id_resolved,
             )
         )
         if self._queue:

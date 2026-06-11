@@ -380,6 +380,7 @@ class DefaultHeadlessExecutor:
         session_id: str | None = None,
         resume_message: str | None = None,
         backend_override: str | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
     ) -> SkillResult:
         if self._ctx.backend is not None and not self._ctx.backend.capabilities.food_truck_capable:
             raise RuntimeError(
@@ -483,4 +484,5 @@ class DefaultHeadlessExecutor:
             marker_dir=effective_marker_dir,
             session_id=session_id,
             model_identity=model_identity,
+            on_session_id_resolved=on_session_id_resolved,
         )

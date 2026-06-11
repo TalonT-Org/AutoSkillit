@@ -87,6 +87,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_session_log_monitor.py` | Unit tests for _session_log_monitor — core detection + session ID + wiring |
 | `test_process_session_log_monitor_dispatch_marker.py` | Dispatch marker suppression gate tests for _session_log_monitor |
 | `test_process_session_log_monitor_stale_suppression.py` | TCP/CPU stale suppression gate and bounded suppression tests |
+| `test_process_session_id_callback.py` | Tests for the on_session_id_resolved callback fired from inside the task group |
 | `test_process_submodules.py` | Tests verifying process.py decomposition into focused sub-modules (P8-2) |
 | `test_provider_outcome_container.py` | Tests for ProviderOutcome typed container construction — required fields and TypeError on omission |
 | `test_push_trigger_applies.py` | Unit tests for _push_trigger_applies_to_branch and _has_merge_group_trigger |

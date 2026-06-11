@@ -645,4 +645,98 @@ class TestCancelledErrorRecordsInterruptedState:
         d = state["dispatches"][0]
         assert d["status"] == "interrupted"
         assert d["reason"] == "signal_induced_cancellation"
+        assert (
+            d["dispatched_session_id"] == ""
+        )  # No session_id available when CancelledError fires before dispatch completes
         assert tool_ctx.fleet_lock.active_count == 0
+
+
+class TestSessionIdEagerPersistence:
+    """Tests for the on_session_id_resolved callback fired during live execution.
+
+    These tests verify that the session identity is eagerly persisted to state
+    when discovered during the subprocess execution task group, so that it
+    survives a CancelledError that arrives before normal completion.
+    """
+
+    @pytest.mark.anyio
+    async def test_post_completion_cancel_persists_session_id(self, tool_ctx, monkeypatch) -> None:
+        """CancelledError after session completes must persist dispatched_session_id."""
+        from tests.fleet._helpers import _setup_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        async def _resolve_session_then_cancel(**kwargs):
+            on_spawn = kwargs.get("on_spawn")
+            if on_spawn:
+                on_spawn(99999, 0)
+            on_session_id_resolved = kwargs.get("on_session_id_resolved")
+            if on_session_id_resolved:
+                on_session_id_resolved("test-session-abc")
+            raise asyncio.CancelledError
+
+        tool_ctx.executor.dispatch_food_truck = _resolve_session_then_cancel
+
+        with pytest.raises(asyncio.CancelledError):
+            from autoskillit.fleet import execute_dispatch
+
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="test-dispatch",
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
+        assert len(state_files) == 1
+        state = json.loads(state_files[0].read_text())
+        d = state["dispatches"][0]
+        assert d["dispatched_session_id"] == "test-session-abc"
+        assert d["status"] == "interrupted"
+
+    @pytest.mark.anyio
+    async def test_mid_session_cancel_persists_session_id_via_callback(
+        self, tool_ctx, monkeypatch
+    ) -> None:
+        """CancelledError during execution must still persist session_id via eager callback."""
+        from tests.fleet._helpers import _setup_dispatch
+
+        _setup_dispatch(tool_ctx, monkeypatch)
+
+        async def _spawn_resolve_session_then_cancel(**kwargs):
+            on_spawn = kwargs.get("on_spawn")
+            if on_spawn:
+                on_spawn(99999, 0)
+            on_session_id_resolved = kwargs.get("on_session_id_resolved")
+            if on_session_id_resolved:
+                on_session_id_resolved("early-session-xyz")
+            raise asyncio.CancelledError
+
+        tool_ctx.executor.dispatch_food_truck = _spawn_resolve_session_then_cancel
+
+        with pytest.raises(asyncio.CancelledError):
+            from autoskillit.fleet import execute_dispatch
+
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="do something",
+                ingredients=None,
+                dispatch_name="test-dispatch",
+                timeout_sec=None,
+                prompt_builder=lambda **kw: "prompt",
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        state_files = list((tool_ctx.temp_dir / "dispatches").glob("*.json"))
+        assert len(state_files) == 1
+        state = json.loads(state_files[0].read_text())
+        d = state["dispatches"][0]
+        assert d["dispatched_session_id"] == "early-session-xyz"
+        assert d["status"] == "interrupted"

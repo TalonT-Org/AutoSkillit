@@ -109,6 +109,7 @@ class HeadlessExecutor(Protocol):
         session_id: str | None = None,
         resume_message: str | None = None,
         backend_override: str | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
     ) -> SkillResult: ...
 
 

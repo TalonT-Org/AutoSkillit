@@ -220,6 +220,7 @@ async def run_managed_async(
     stream_parser: StreamParser | None = None,
     inspector_callback: InspectorCallback | None = None,
     workload_basenames: frozenset[str] | None = None,
+    on_session_id_resolved: Callable[[str], None] | None = None,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -352,6 +353,7 @@ async def run_managed_async(
                         functools.partial(
                             _extract_stdout_session_id,
                             stream_parser=stream_parser,
+                            on_session_id_resolved=on_session_id_resolved,
                         ),
                         stdout_path,
                         acc,
@@ -632,6 +634,7 @@ class DefaultSubprocessRunner:
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,
@@ -657,4 +660,5 @@ class DefaultSubprocessRunner:
             session_record_types=session_record_types,
             inspector_callback=inspector_callback,
             workload_basenames=workload_basenames,
+            on_session_id_resolved=on_session_id_resolved,
         )

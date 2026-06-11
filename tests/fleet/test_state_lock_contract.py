@@ -24,6 +24,7 @@ from autoskillit.fleet import (
     mark_dispatch_interrupted,
     mark_dispatch_resumable,
     mark_dispatch_running,
+    mark_dispatch_session_identity,
     read_state,
     reset_blocking_dispatch,
     update_orchestrator_session_id,
@@ -50,6 +51,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
 _MUTATION_FUNCTIONS: dict[str, object] = {
     "mark_dispatch_running": mark_dispatch_running,
     "mark_dispatch_interrupted": mark_dispatch_interrupted,
+    "mark_dispatch_session_identity": mark_dispatch_session_identity,
     "mark_dispatch_resumable": mark_dispatch_resumable,
     "append_dispatch_record": append_dispatch_record,
     "write_captured_values": write_captured_values,
@@ -176,6 +178,8 @@ class TestAllMutationsAcquireLock:
                 fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
             elif fn_name == "mark_dispatch_interrupted":
                 fn(sp, "d1", reason="test")  # type: ignore[operator]
+            elif fn_name == "mark_dispatch_session_identity":
+                fn(sp, "d1", dispatched_session_id="sess-test")  # type: ignore[operator]
             elif fn_name == "mark_dispatch_resumable":
                 fn(sp, "d1", sidecar_path="/tmp/sidecar")  # type: ignore[operator]
             elif fn_name == "append_dispatch_record":
@@ -322,6 +326,8 @@ class TestFlockTargetPathVerification:
                 fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
             elif fn_name == "mark_dispatch_interrupted":
                 fn(sp, "d1", reason="test")  # type: ignore[operator]
+            elif fn_name == "mark_dispatch_session_identity":
+                fn(sp, "d1", dispatched_session_id="sess-test")  # type: ignore[operator]
             elif fn_name == "mark_dispatch_resumable":
                 fn(sp, "d1", sidecar_path="/tmp/sidecar")  # type: ignore[operator]
             elif fn_name == "append_dispatch_record":

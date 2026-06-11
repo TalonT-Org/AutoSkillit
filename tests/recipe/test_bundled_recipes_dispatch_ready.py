@@ -105,6 +105,50 @@ def test_bundled_recipe_dispatch_ready(recipe_name: str) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Per-backend dispatch readiness — must hold for codex (prunes guarded steps)
+# and for the other backends (no pruning needed).
+# ---------------------------------------------------------------------------
+
+
+_BACKEND_OVERRIDES: dict[str, dict[str, str]] = {
+    "claude_code": {},
+    "codex": {"backend_supports_git_write": "false"},
+}
+
+
+@pytest.mark.parametrize("recipe_name", _DISPATCH_GATE_STEMS)
+@pytest.mark.parametrize(
+    "backend_name,ingredient_overrides",
+    sorted(_BACKEND_OVERRIDES.items()),
+    ids=lambda v: v if isinstance(v, str) else sorted(v.keys())[0],
+)
+def test_bundled_recipe_dispatch_ready_per_backend(
+    recipe_name: str, backend_name: str, ingredient_overrides: dict[str, str]
+) -> None:
+    """All bundled dispatch-gate recipes must be valid for every backend.
+
+    For codex, guarded steps with backend_supports_git_write=false are pruned —
+    semantic rules must run post-prune so pruned steps don't produce false
+    backend-incompatible-skill errors.
+    """
+    result = load_and_validate(
+        recipe_name,
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides=ingredient_overrides,
+        backend_name=backend_name,
+    )
+    assert "error" not in result, f"Recipe '{recipe_name}' failed to load: {result.get('error')}"
+    assert result.get("valid") is True, (
+        f"Recipe '{recipe_name}' on backend '{backend_name}' not dispatch-ready: "
+        + "; ".join(
+            f"[{s.get('rule')}] {s.get('message', '')[:80]}"
+            for s in result.get("suggestions", [])
+            if s.get("severity") == Severity.ERROR
+        )
+    )
+
+
 @pytest.mark.parametrize("contract_name", _CONTRACT_STEMS)
 def test_contract_card_fresh(contract_name: str) -> None:
     contract_path = _CONTRACTS_DIR / f"{contract_name}.yaml"

@@ -488,3 +488,74 @@ class TestRealCompositionPruning:
             assert f"  {step_name}:" not in content, (
                 f"Guarded step {step_name!r} still present as YAML key in pruned content"
             )
+        assert result.get("valid") is True, (
+            f"Codex-pruned recipe must be valid=True; got valid={result.get('valid')}"
+        )
+
+    @pytest.mark.anyio
+    async def test_codex_open_kitchen_returns_success(self, tmp_path: Path) -> None:
+        """End-to-end integration: open_kitchen with codex backend on the bundled
+        implementation recipe must return success=True and kitchen=open.
+
+        Pre-fix: pre-prune semantic findings poisoned valid=False, causing
+        open_kitchen to return the "unknown structural error" envelope.
+        Post-fix: post-prune semantic findings keep valid=True, open_kitchen succeeds.
+        """
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        mock_ctx = MagicMock()
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.config.features = {}
+        mock_ctx.config.experimental_enabled = False
+        mock_ctx.backend = _make_backend_with_capability(False)
+        mock_ctx.recipes = MagicMock()
+        # Use the REAL load_and_validate via the mock's return_value pattern
+        # by wiring through to the real _api.load_and_validate function
+        from autoskillit.recipe._api import load_and_validate as _real_load
+
+        def _real_load_wrapper(name, **kwargs):
+            return _real_load(name, project_dir=tmp_path, **kwargs)
+
+        mock_ctx.recipes.load_and_validate.side_effect = _real_load_wrapper
+        mock_ctx.recipes.find.return_value = None
+        mock_ctx.temp_dir = tmp_path
+
+        mock_mcp_ctx = AsyncMock()
+        mock_mcp_ctx.enable_components = AsyncMock()
+
+        with (
+            patch(
+                "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+                return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("autoskillit.server._get_ctx", return_value=mock_ctx),
+            patch(
+                "autoskillit.config.resolve_ingredient_defaults",
+                return_value={},
+            ),
+            patch(
+                "autoskillit.server._misc._apply_triage_gate",
+                new_callable=AsyncMock,
+                side_effect=lambda r, *a, **kw: r,
+            ),
+            patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
+        ):
+            result_str = await open_kitchen(name="implementation", ctx=mock_mcp_ctx)
+            import json
+
+            result = json.loads(result_str)
+
+        assert result.get("success") is True, (
+            f"open_kitchen must succeed with codex backend; "
+            f"got: {result.get('user_visible_message', result)}"
+        )
+        assert result.get("kitchen") == "open", (
+            f"open_kitchen must report kitchen=open; got: {result.get('kitchen')}"
+        )

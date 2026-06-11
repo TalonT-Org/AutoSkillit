@@ -418,6 +418,15 @@ def get_recipe(name: str) -> str:
     except Exception:
         logger.warning("get_recipe_failure", recipe=name, stage="load_and_validate", exc_info=True)
         return json.dumps({"error": f"Recipe '{name}' composition failed."})
+    if not result.get("valid", False):
+        logger.warning("get_recipe_invalid", recipe=name, errors=result.get("errors", []))
+        return json.dumps(
+            {
+                "error": f"Recipe '{name}' failed validation.",
+                "errors": result.get("errors", []),
+                "suggestions": result.get("suggestions", []),
+            }
+        )
     return result.get("content", json.dumps({"error": "Recipe composition failed."}))
 
 

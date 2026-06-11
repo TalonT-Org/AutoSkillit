@@ -47,7 +47,7 @@ steps:
 def _setup_project_recipe(tmp_path: Path, name: str, content: str) -> Path:
     """Write a recipe YAML to tmp_path/.autoskillit/recipes/<name>.yaml."""
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    recipes_dir.mkdir(parents=True)
+    recipes_dir.mkdir(parents=True, exist_ok=True)
     recipe_path = recipes_dir / f"{name}.yaml"
     recipe_path.write_text(content)
     return recipe_path
@@ -1261,4 +1261,243 @@ def test_validate_from_path_codex_backend_valid_after_pruning(tmp_path: Path) ->
             for s in result.get("findings", [])
             if s.get("severity") == Severity.ERROR
         )
+    )
+
+
+# ---------------------------------------------------------------------------
+# load_and_validate fail-closed tests (regression for steps-less YAML bug)
+# ---------------------------------------------------------------------------
+
+
+_RECIPE_NO_STEPS = """\
+name: test-no-steps
+description: A test recipe with no steps key
+autoskillit_version: "0.3.0"
+kitchen_rules:
+  - "Test rule"
+"""
+
+_RECIPE_EMPTY_STEPS = """\
+name: test-empty-steps
+description: A test recipe with empty steps
+autoskillit_version: "0.3.0"
+kitchen_rules:
+  - "Test rule"
+steps: {}
+"""
+
+_RECIPE_NON_DICT_STEPS = """\
+name: test-list-steps
+description: A test recipe with steps as a list
+autoskillit_version: "0.3.0"
+kitchen_rules:
+  - "Test rule"
+steps:
+  - foo
+  - bar
+"""
+
+_RECIPE_NON_DICT_ROOT = """\
+- item1
+- item2
+"""
+
+_RECIPE_CAMPAIGN_NO_STEPS = """\
+name: test-campaign-no-steps
+description: A campaign recipe with dispatches and no steps
+autoskillit_version: "0.3.0"
+kind: campaign
+kitchen_rules:
+  - "Campaign rule"
+dispatches:
+  - name: dispatch1
+    recipe: some-recipe
+"""
+
+
+# 1a: steps-less YAML returns valid=False
+def test_load_and_validate_steps_less_yaml_returns_invalid(tmp_path: Path) -> None:
+    """A YAML recipe without a 'steps' key must produce valid=False."""
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache_mod._LOAD_CACHE.clear()
+    _setup_project_recipe(tmp_path, "test-no-steps", _RECIPE_NO_STEPS)
+
+    from autoskillit.recipe._api import load_and_validate
+
+    result = load_and_validate("test-no-steps", project_dir=tmp_path)
+
+    assert result["valid"] is False, (
+        f"Steps-less YAML must return valid=False; got valid={result.get('valid')}. "
+        f"Errors: {result.get('errors', [])}"
+    )
+    assert len(result["errors"]) > 0, "Expected at least one error for steps-less YAML"
+    assert any("step" in e.lower() for e in result["errors"]), (
+        f"Expected an error mentioning steps; got: {result['errors']}"
+    )
+    assert any(s.get("severity") == Severity.ERROR for s in result.get("suggestions", [])), (
+        "Expected at least one ERROR severity suggestion"
+    )
+
+
+# 1b: cached result also returns valid=False
+def test_load_and_validate_steps_less_yaml_not_cached_as_valid(tmp_path: Path) -> None:
+    """After calling load_and_validate with steps-less YAML, the cache must not serve valid=True."""  # noqa: E501
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache_mod._LOAD_CACHE.clear()
+    _setup_project_recipe(tmp_path, "test-no-steps", _RECIPE_NO_STEPS)
+
+    from autoskillit.recipe._api import load_and_validate
+
+    result1 = load_and_validate("test-no-steps", project_dir=tmp_path)
+    result2 = load_and_validate("test-no-steps", project_dir=tmp_path)
+
+    assert result1["valid"] is False
+    assert result2["valid"] is False, (
+        f"Cached result must also be valid=False; got valid={result2.get('valid')}"
+    )
+
+
+# 1c: compute_recipe_validity is always the source of valid
+def test_load_and_validate_always_invokes_compute_recipe_validity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Monkey-patch compute_recipe_validity with a sentinel and verify it flows through
+    for BOTH with-steps and without-steps recipes. This structurally guarantees that
+    no code path through load_and_validate can return a valid value that didn't come
+    from compute_recipe_validity.
+    """
+    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache_mod._LOAD_CACHE.clear()
+
+    _setup_project_recipe(tmp_path, "test-no-steps", _RECIPE_NO_STEPS)
+    _setup_project_recipe(tmp_path, "test-recipe-with-rules", _RECIPE_WITH_RULES)
+
+    sentinel_valid = object()
+    monkeypatch.setattr(api_mod, "compute_recipe_validity", lambda *a, **kw: sentinel_valid)
+
+    from autoskillit.recipe._api import load_and_validate
+
+    result_no_steps = load_and_validate("test-no-steps", project_dir=tmp_path)
+    assert result_no_steps["valid"] is sentinel_valid, (
+        f"Steps-less recipe must get valid from compute_recipe_validity sentinel; "
+        f"got valid={result_no_steps.get('valid')!r}"
+    )
+
+    cache_mod._LOAD_CACHE.clear()
+    result_with_steps = load_and_validate("test-recipe-with-rules", project_dir=tmp_path)
+    assert result_with_steps["valid"] is sentinel_valid, (
+        f"With-steps recipe must get valid from compute_recipe_validity sentinel; "
+        f"got valid={result_with_steps.get('valid')!r}"
+    )
+
+
+# 1d: empty-steps recipe returns valid=False
+def test_load_and_validate_empty_steps_returns_invalid(tmp_path: Path) -> None:
+    """A YAML with steps: {} (present but empty) must produce valid=False."""
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache_mod._LOAD_CACHE.clear()
+    _setup_project_recipe(tmp_path, "test-empty-steps", _RECIPE_EMPTY_STEPS)
+
+    from autoskillit.recipe._api import load_and_validate
+
+    result = load_and_validate("test-empty-steps", project_dir=tmp_path)
+
+    assert result["valid"] is False, (
+        f"Empty-steps YAML must return valid=False; got valid={result.get('valid')}. "
+        f"Errors: {result.get('errors', [])}"
+    )
+    assert any("step" in e.lower() for e in result["errors"]), (
+        f"Expected error about steps; got: {result['errors']}"
+    )
+
+
+# 1e: non-dict YAML returns valid=False
+def test_load_and_validate_non_dict_root_returns_invalid(tmp_path: Path) -> None:
+    """A YAML that parses to a list (non-dict root) must produce valid=False.
+
+    Non-dict root YAML cannot be discovered by list_recipes (which catches the
+    ValueError and skips the file), so we construct a RecipeInfo directly.
+    """
+    import autoskillit.recipe._api_cache as cache_mod
+    from autoskillit.core.types import RecipeSource
+    from autoskillit.recipe._api import load_and_validate
+    from autoskillit.recipe.schema import RecipeInfo
+
+    cache_mod._LOAD_CACHE.clear()
+    recipe_path = _setup_project_recipe(tmp_path, "test-list-root", _RECIPE_NON_DICT_ROOT)
+
+    info = RecipeInfo(
+        name="test-list-root",
+        description="",
+        source=RecipeSource.PROJECT,
+        path=recipe_path,
+        content=_RECIPE_NON_DICT_ROOT,
+    )
+
+    result = load_and_validate("test-list-root", project_dir=tmp_path, recipe_info=info)
+
+    assert result["valid"] is False, (
+        f"Non-dict root YAML must return valid=False; got valid={result.get('valid')}"
+    )
+
+
+# 1f: non-dict steps value returns valid=False
+def test_load_and_validate_non_dict_steps_value_returns_invalid(tmp_path: Path) -> None:
+    """A YAML with steps: [foo, bar] (list instead of mapping) must produce valid=False
+    with a clear error, not an uncaught AttributeError.
+
+    Non-dict steps YAML cannot be discovered by list_recipes (the new ValueError
+    guard in _parse_recipe causes _collect_recipes to skip it), so we construct
+    a RecipeInfo directly.
+    """
+    import autoskillit.recipe._api_cache as cache_mod
+    from autoskillit.core.types import RecipeSource
+    from autoskillit.recipe._api import load_and_validate
+    from autoskillit.recipe.schema import RecipeInfo
+
+    cache_mod._LOAD_CACHE.clear()
+    recipe_path = _setup_project_recipe(tmp_path, "test-list-steps", _RECIPE_NON_DICT_STEPS)
+
+    info = RecipeInfo(
+        name="test-list-steps",
+        description="A test recipe with steps as a list",
+        source=RecipeSource.PROJECT,
+        path=recipe_path,
+        content=_RECIPE_NON_DICT_STEPS,
+    )
+
+    result = load_and_validate("test-list-steps", project_dir=tmp_path, recipe_info=info)
+
+    assert result["valid"] is False, (
+        f"Non-dict steps value must return valid=False; got valid={result.get('valid')}. "
+        f"Suggestions: {result.get('suggestions', [])}"
+    )
+
+
+# 1g: campaign recipe with no steps does not get "must have at least one step" error
+def test_load_and_validate_campaign_no_steps_returns_valid(tmp_path: Path) -> None:
+    """A campaign recipe (kind=campaign) with dispatches and no steps must NOT
+    receive the structural "must have at least one step" error.
+
+    Campaign recipes take the CAMPAIGN early-return path in validate_recipe_structure
+    and are validated via their dispatches, not steps. This guards against the
+    removal of the ``"steps" in data`` guard breaking campaign recipes.
+    """
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache_mod._LOAD_CACHE.clear()
+    _setup_project_recipe(tmp_path, "test-campaign-no-steps", _RECIPE_CAMPAIGN_NO_STEPS)
+
+    from autoskillit.recipe._api import load_and_validate
+
+    result = load_and_validate("test-campaign-no-steps", project_dir=tmp_path)
+
+    step_errors = [e for e in result.get("errors", []) if "step" in e.lower()]
+    assert not step_errors, (
+        f"Campaign recipe should not get step-related structural errors; got: {step_errors}"
     )

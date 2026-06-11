@@ -193,4 +193,5 @@ async def test_deferred_recall_fails_closed_when_valid_missing():
     assert parsed["success"] is False
     assert parsed["kitchen"] == "failed"
     assert parsed["stage"] == "recipe_validation"
+    assert parsed["errors"] == []
     assert "user_visible_message" in parsed

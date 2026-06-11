@@ -112,7 +112,7 @@ def test_bundled_recipe_dispatch_ready(recipe_name: str) -> None:
 
 
 _BACKEND_OVERRIDES: dict[str, dict[str, str]] = {
-    "claude_code": {},
+    "claude-code": {},
     "codex": {"backend_supports_git_write": "false"},
 }
 

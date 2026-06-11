@@ -27,14 +27,20 @@ def _find_function_node(tree: ast.Module, func_name: str) -> ast.FunctionDef:
     raise AssertionError(f"Function {func_name!r} not found in source")
 
 
-def _find_call_line(func_body: list[ast.stmt], func_name: str) -> int:
-    """Find the line number of the first call to a top-level function with the given name."""
+def _find_call_line(func_body: list[ast.stmt], func_name: str, *, last: bool = False) -> int:
+    """Find the line number of a call to a function with the given name.
+
+    When *last* is True, return the last occurrence instead of the first.
+    """
+    found = -1
     for node in ast.walk(ast.Module(body=func_body, type_ignores=[])):
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Name) and func.id == func_name:
-                return node.lineno
-    return -1
+                if not last:
+                    return node.lineno
+                found = node.lineno
+    return found
 
 
 def test_semantic_rules_run_after_pruning() -> None:
@@ -50,8 +56,8 @@ def test_semantic_rules_run_after_pruning() -> None:
     func = _find_function_node(tree, "load_and_validate")
 
     prune_line = _find_call_line(func.body, "_prune_skipped_steps")
-    semantic_line = _find_call_line(func.body, "run_semantic_rules")
-    ctx_line = _find_call_line(func.body, "make_validation_context")
+    semantic_line = _find_call_line(func.body, "run_semantic_rules", last=True)
+    ctx_line = _find_call_line(func.body, "make_validation_context", last=True)
 
     assert prune_line > 0, (
         f"_prune_skipped_steps call not found in load_and_validate() in {_API_PATH}"

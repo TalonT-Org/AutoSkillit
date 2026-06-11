@@ -276,6 +276,49 @@ class TestHookFixRequiredDispatchGate:
         )
         assert result is None
 
+    def test_refuses_codex_dispatch_when_fix_required_hook_has_empty_scripts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
+        from autoskillit.hook_registry import HookDef
+        from autoskillit.server.tools import tools_execution
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        # scripts=[] means the hook has no guard scripts to check coverage against;
+        # the `not h.scripts` guard treats it as always-unenforced and blocks dispatch.
+        registry = [
+            HookDef(
+                matcher=r"Read|Write",
+                scripts=[],
+                codex_status="fix-required",
+            ),
+        ]
+        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+
+        backend = MagicMock(spec=CodingAgentBackend)
+        backend.name = AGENT_BACKEND_CODEX
+        backend.capabilities.applicable_guards = frozenset({"any_guard"})
+
+        skill_info = MagicMock()
+        skill_info.backend_requirements = frozenset({AGENT_BACKEND_CODEX})
+
+        result = _check_backend_compat(
+            skill_command="/autoskillit:test",
+            resolved_command="/autoskillit:test",
+            effective_order_id="ord-empty",
+            target_name="test",
+            skill_info=skill_info,
+            effective_backend_obj=backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["subtype"] == "crashed"
+        assert "Read|Write" in parsed["result"]
+
     def test_allows_codex_dispatch_when_no_fix_required_hooks(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

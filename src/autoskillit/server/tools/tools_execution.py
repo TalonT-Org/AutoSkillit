@@ -37,6 +37,7 @@ from autoskillit.core import (
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
+from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
@@ -86,6 +87,19 @@ def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool
     return bool(reqs and effective_backend not in reqs)
 
 
+def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[str]:
+    """Return matchers of fix-required hooks not enforced by the given guard set."""
+    return [
+        h.matcher
+        for h in HOOK_REGISTRY
+        if h.codex_status == "fix-required"
+        and (
+            not h.scripts
+            or not frozenset(Path(s).stem for s in h.scripts).issubset(applicable_guards)
+        )
+    ]
+
+
 def _check_backend_compat(
     skill_command: str,
     resolved_command: str,
@@ -129,6 +143,20 @@ def _check_backend_compat(
                 f"Skill {target_name!r} requires backend "
                 f"{sorted(getattr(skill_info, 'backend_requirements', []))} but session "
                 f"backend is {effective_backend!r}."
+            ),
+            skill_command=resolved_command,
+            order_id=effective_order_id,
+        ).to_json()
+    fix_required_matchers = _get_fix_required_hook_matchers(
+        effective_backend_obj.capabilities.applicable_guards,
+    )
+    if fix_required_matchers:
+        return SkillResult.crashed(
+            exception=RuntimeError(
+                f"Cannot dispatch skill {target_name!r} on backend "
+                f"{effective_backend!r}: HOOK_REGISTRY contains fix-required "
+                f"entries [{', '.join(fix_required_matchers)}] that cannot be "
+                f"enforced by this backend."
             ),
             skill_command=resolved_command,
             order_id=effective_order_id,

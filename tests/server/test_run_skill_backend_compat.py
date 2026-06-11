@@ -192,3 +192,209 @@ class TestBackendCompatGateFailClosed:
         assert mock_ssm.init_session.called, (
             "Expected init_session to be called after provider override rerouted codex→claude-code"
         )
+
+
+class TestHookFixRequiredDispatchGate:
+    """Dispatch-time gate for fix-required hook entries in HOOK_REGISTRY."""
+
+    def test_refuses_codex_dispatch_when_fix_required_hook_exists(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
+        from autoskillit.hook_registry import HookDef
+        from autoskillit.server.tools import tools_execution
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        registry = [
+            HookDef(
+                matcher=r"Read|Write",
+                scripts=["guards/test_guard.py"],
+                codex_status="fix-required",
+            ),
+        ]
+        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+
+        backend = MagicMock(spec=CodingAgentBackend)
+        backend.name = AGENT_BACKEND_CODEX
+        backend.capabilities.applicable_guards = frozenset({"write_guard"})
+
+        skill_info = MagicMock()
+        skill_info.backend_requirements = frozenset({AGENT_BACKEND_CODEX})
+
+        result = _check_backend_compat(
+            skill_command="/autoskillit:test",
+            resolved_command="/autoskillit:test",
+            effective_order_id="ord-1",
+            target_name="test",
+            skill_info=skill_info,
+            effective_backend_obj=backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["subtype"] == "crashed"
+        error_text = parsed["result"]
+        assert "Read|Write" in error_text
+
+    def test_allows_claude_code_dispatch_even_with_fix_required_hook(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, CodingAgentBackend
+        from autoskillit.hook_registry import HookDef
+        from autoskillit.server.tools import tools_execution
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        registry = [
+            HookDef(
+                matcher=r"Read|Write",
+                scripts=["guards/test_guard.py"],
+                codex_status="fix-required",
+            ),
+        ]
+        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+
+        backend = MagicMock(spec=CodingAgentBackend)
+        backend.name = AGENT_BACKEND_CLAUDE_CODE
+        backend.capabilities.applicable_guards = frozenset({"test_guard"})
+
+        skill_info = MagicMock()
+        skill_info.backend_requirements = frozenset({AGENT_BACKEND_CLAUDE_CODE})
+
+        result = _check_backend_compat(
+            skill_command="/autoskillit:test",
+            resolved_command="/autoskillit:test",
+            effective_order_id="",
+            target_name="test",
+            skill_info=skill_info,
+            effective_backend_obj=backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is None
+
+    def test_refuses_codex_dispatch_when_fix_required_hook_has_empty_scripts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
+        from autoskillit.hook_registry import HookDef
+        from autoskillit.server.tools import tools_execution
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        # scripts=[] means the hook has no guard scripts to check coverage against;
+        # the `not h.scripts` guard treats it as always-unenforced and blocks dispatch.
+        registry = [
+            HookDef(
+                matcher=r"Read|Write",
+                scripts=[],
+                codex_status="fix-required",
+            ),
+        ]
+        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+
+        backend = MagicMock(spec=CodingAgentBackend)
+        backend.name = AGENT_BACKEND_CODEX
+        backend.capabilities.applicable_guards = frozenset({"any_guard"})
+
+        skill_info = MagicMock()
+        skill_info.backend_requirements = frozenset({AGENT_BACKEND_CODEX})
+
+        result = _check_backend_compat(
+            skill_command="/autoskillit:test",
+            resolved_command="/autoskillit:test",
+            effective_order_id="ord-empty",
+            target_name="test",
+            skill_info=skill_info,
+            effective_backend_obj=backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["subtype"] == "crashed"
+        assert "Read|Write" in parsed["result"]
+
+    def test_allows_codex_dispatch_when_no_fix_required_hooks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
+        from autoskillit.hook_registry import HookDef
+        from autoskillit.server.tools import tools_execution
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        registry = [
+            HookDef(matcher=r"Read|Write", codex_status="works-as-is"),
+            HookDef(matcher=r"Bash", codex_status="not-applicable"),
+        ]
+        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+
+        backend = MagicMock(spec=CodingAgentBackend)
+        backend.name = AGENT_BACKEND_CODEX
+        backend.capabilities.applicable_guards = frozenset({"write_guard"})
+
+        skill_info = MagicMock()
+        skill_info.backend_requirements = frozenset({AGENT_BACKEND_CODEX})
+
+        result = _check_backend_compat(
+            skill_command="/autoskillit:test",
+            resolved_command="/autoskillit:test",
+            effective_order_id="",
+            target_name="test",
+            skill_info=skill_info,
+            effective_backend_obj=backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is None
+
+    def test_crash_message_lists_affected_matchers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json
+        from unittest.mock import MagicMock
+
+        from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
+        from autoskillit.hook_registry import HookDef
+        from autoskillit.server.tools import tools_execution
+        from autoskillit.server.tools.tools_execution import _check_backend_compat
+
+        registry = [
+            HookDef(
+                matcher=r"Read|Write",
+                scripts=["guards/guard_a.py"],
+                codex_status="fix-required",
+            ),
+            HookDef(
+                matcher=r"Bash|Grep",
+                scripts=["guards/guard_b.py"],
+                codex_status="fix-required",
+            ),
+        ]
+        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+
+        backend = MagicMock(spec=CodingAgentBackend)
+        backend.name = AGENT_BACKEND_CODEX
+        backend.capabilities.applicable_guards = frozenset({"write_guard"})
+
+        skill_info = MagicMock()
+        skill_info.backend_requirements = frozenset({AGENT_BACKEND_CODEX})
+
+        result = _check_backend_compat(
+            skill_command="/autoskillit:test",
+            resolved_command="/autoskillit:test",
+            effective_order_id="ord-2",
+            target_name="test",
+            skill_info=skill_info,
+            effective_backend_obj=backend,
+            skill_resolver=MagicMock(),
+        )
+        assert result is not None
+        parsed = json.loads(result)
+        assert parsed["subtype"] == "crashed"
+        error_text = parsed["result"]
+        assert "Read|Write" in error_text
+        assert "Bash|Grep" in error_text

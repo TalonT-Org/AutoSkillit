@@ -97,6 +97,24 @@ def _kitchen_failure_envelope(
     )
 
 
+def _recipe_validation_error_response(name: str, result: dict) -> str:  # type: ignore[type-arg]
+    _errs: list[str] = result.get("errors", [])
+    _error_detail = "; ".join(_errs[:3]) if _errs else "unknown structural error"
+    return json.dumps(
+        {
+            "success": False,
+            "kitchen": "failed",
+            "user_visible_message": (
+                f"Recipe '{name}' failed structural validation: {_error_detail}"
+            ),
+            "error": f"Recipe '{name}' failed validation: {_error_detail}",
+            "stage": "recipe_validation",
+            "errors": _errs,
+            "suggestions": result.get("suggestions", []),
+        }
+    )
+
+
 class QuotaGuardHookPayload(TypedDict):
     cache_max_age: int
     cache_path: str
@@ -604,21 +622,7 @@ async def open_kitchen(
                         tool_ctx.active_recipe_ingredients = None
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
-                    _errs = result.get("errors", [])
-                    _error_detail = "; ".join(_errs[:3]) if _errs else "unknown structural error"
-                    return json.dumps(
-                        {
-                            "success": False,
-                            "kitchen": "failed",
-                            "user_visible_message": (
-                                f"Recipe '{name}' failed structural validation: {_error_detail}"
-                            ),
-                            "error": f"Recipe '{name}' failed validation: {_error_detail}",
-                            "stage": "recipe_validation",
-                            "errors": _errs,
-                            "suggestions": result.get("suggestions", []),
-                        }
-                    )
+                    return _recipe_validation_error_response(name, result)
                 result["success"] = True
                 result["kitchen"] = "open"
                 result["version"] = __version__
@@ -705,21 +709,7 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
 
             if not result.get("valid", False) or not result.get("content", ""):
-                _errs = result.get("errors", [])
-                _error_detail = "; ".join(_errs[:3]) if _errs else "unknown structural error"
-                return json.dumps(
-                    {
-                        "success": False,
-                        "kitchen": "failed",
-                        "user_visible_message": (
-                            f"Recipe '{name}' failed structural validation: {_error_detail}"
-                        ),
-                        "error": f"Recipe '{name}' failed validation: {_error_detail}",
-                        "stage": "recipe_validation",
-                        "errors": _errs,
-                        "suggestions": result.get("suggestions", []),
-                    }
-                )
+                return _recipe_validation_error_response(name, result)
 
             result["success"] = True
             result["kitchen"] = "open"

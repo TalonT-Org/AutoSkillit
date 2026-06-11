@@ -312,6 +312,7 @@ def load_and_validate(
     raw = substitute_scripts_placeholder(raw)
     suggestions: list[dict[str, Any]] = []
     valid = True
+    errors: list[str] = []
     recipe = None
     active_recipe = None
     _skip_resolutions: dict[str, bool | None] = {}
@@ -517,6 +518,7 @@ def load_and_validate(
     _assert_no_raw_placeholders(raw, context=name, hidden_ingredient_names=_hidden_names)
     result: LoadRecipeResult = {
         "content": raw,
+        "errors": errors,
         "diagram": diagram,
         "suggestions": suggestions,
         "valid": valid,

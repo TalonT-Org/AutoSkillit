@@ -33,6 +33,7 @@ _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
 _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
     {
         "greeting",  # delivered via positional CLI arg, not MCP response
+        "errors",  # structural validation errors; internal to load_and_validate
         "diagram",  # user sees it in terminal preview; agent doesn't need it
         "kitchen_rules",  # already in the YAML content
         "requires_packs",  # internal field; used for skill gating, not display
@@ -170,6 +171,7 @@ _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
     {
         "success",  # metadata — model infers success from formatted output
         "kitchen",  # metadata — model knows kitchen state from context
+        "errors",  # structural validation errors; internal to load_and_validate
         "greeting",  # delivered via CLI preview, not MCP response
         "diagram",  # rendered in terminal preview, not needed by agent
         "kitchen_rules",  # already embedded in YAML content

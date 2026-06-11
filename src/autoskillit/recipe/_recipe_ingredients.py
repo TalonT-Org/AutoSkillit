@@ -111,6 +111,7 @@ class LoadRecipeResult(TypedDict, total=False):
     """Typed schema for the load_recipe handler → formatter boundary."""
 
     content: str
+    errors: list[str]
     diagram: str | None
     suggestions: list[dict[str, Any]]
     valid: bool
@@ -133,8 +134,9 @@ class OpenKitchenResult(TypedDict, total=False):
     Extends LoadRecipeResult with three post-return keys injected by the handler.
     """
 
-    # Inherited from LoadRecipeResult (14 keys)
+    # Inherited from LoadRecipeResult (15 keys)
     content: str
+    errors: list[str]
     diagram: str | None
     suggestions: list[dict[str, Any]]
     valid: bool

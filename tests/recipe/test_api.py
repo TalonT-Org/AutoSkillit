@@ -1177,3 +1177,31 @@ steps:
     assert undeclared2 == [], (
         f"Expected no undeclared-capture-key after YAML-only update: {undeclared2}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T-ERR-1: LoadRecipeResult must surface errors when valid=False
+# ---------------------------------------------------------------------------
+
+
+def test_load_and_validate_surfaces_errors_on_dangling_routes(tmp_path: Path) -> None:
+    """LoadRecipeResult must contain an 'errors' field with structural error strings
+    when post-prune validation detects dangling routes."""
+    from autoskillit.recipe._api import load_and_validate
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    resolver = DefaultSkillResolver()
+    result = load_and_validate(
+        "implementation",
+        project_dir=tmp_path,
+        ingredient_overrides={"backend_supports_git_write": "false"},
+        backend_name="codex",
+        lister=resolver,
+    )
+    assert result["valid"] is False
+    assert "errors" in result, "LoadRecipeResult must include 'errors' field"
+    assert isinstance(result["errors"], list), "errors must be a list"
+    assert len(result["errors"]) > 0, "errors list must be non-empty when valid=False"
+    assert any("dangling" in e.lower() for e in result["errors"]), (
+        "At least one error should mention dangling routes"
+    )

@@ -1199,7 +1199,10 @@ def test_load_and_validate_produces_valid_content_after_step_pruning(tmp_path: P
     result = load_and_validate(
         "implementation",
         project_dir=tmp_path,
-        ingredient_overrides={"backend_supports_git_write": "false"},
+        ingredient_overrides={
+            "backend_supports_git_write": "false",
+            "open_pr": "false",
+        },
         backend_name="codex",
     )
     schema_errors = result.get("errors", [])
@@ -1240,7 +1243,10 @@ def test_codex_backend_pruned_recipe_is_valid(tmp_path: Path) -> None:
     result = load_and_validate(
         "implementation",
         project_dir=tmp_path,
-        ingredient_overrides={"backend_supports_git_write": "false"},
+        ingredient_overrides={
+            "backend_supports_git_write": "false",
+            "open_pr": "false",
+        },
         backend_name="codex",
     )
     assert result.get("valid") is True, (

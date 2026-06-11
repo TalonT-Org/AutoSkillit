@@ -476,7 +476,10 @@ class TestRealCompositionPruning:
         result = load_and_validate(
             "implementation",
             project_dir=tmp_path,
-            ingredient_overrides={"backend_supports_git_write": "false"},
+            ingredient_overrides={
+                "backend_supports_git_write": "false",
+                "open_pr": "false",
+            },
             backend_name="codex",
         )
         content = result["content"]
@@ -546,6 +549,10 @@ class TestRealCompositionPruning:
                 side_effect=lambda r, *a, **kw: r,
             ),
             patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._backend_capability_overrides",
+                return_value={"backend_supports_git_write": "false", "open_pr": "false"},
+            ),
         ):
             result_str = await open_kitchen(name="implementation", ctx=mock_mcp_ctx)
             import json

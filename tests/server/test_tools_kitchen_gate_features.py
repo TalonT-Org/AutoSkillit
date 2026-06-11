@@ -341,7 +341,7 @@ def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
         "steps": {
             "stop": {
                 "action": "stop",
-                "message": "done",
+                "message": "Task complete — emit the L3 sentinel block and terminate.",
             },
         },
     }

@@ -651,6 +651,7 @@ async def test_validate_recipe_codex_backend_injects_overrides(tool_ctx_kitchen_
     requires backend_supports_git_write=false, which drives pruning of
     codex-incompatible steps.
     """
+    from types import SimpleNamespace
     from unittest.mock import MagicMock, patch
 
     script = tmp_path / "codex_recipe.yaml"
@@ -660,7 +661,13 @@ async def test_validate_recipe_codex_backend_injects_overrides(tool_ctx_kitchen_
     tool_ctx_kitchen_open.recipes.validate_from_path.return_value = {"valid": True}
 
     if tool_ctx_kitchen_open.backend is None:
-        pytest.skip("tool_ctx has no backend configured")
+        backend = MagicMock()
+        backend.name = "codex"
+        backend.capabilities = SimpleNamespace(
+            git_metadata_writable=False,
+            supports_tool_list_changed=True,
+        )
+        tool_ctx_kitchen_open.backend = backend
 
     with patch(
         "autoskillit.server.tools.tools_recipe._get_ctx_or_none",

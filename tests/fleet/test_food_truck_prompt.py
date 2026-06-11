@@ -157,3 +157,20 @@ def test_food_truck_prompt_no_caller_instructions_section_when_empty():
         caller_instructions="",
     )
     assert "CALLER INSTRUCTIONS" not in prompt
+
+
+def test_food_truck_open_kitchen_predicate_uses_json_field_not_substring():
+    """Food truck predicate must use JSON-field check, not substring marker."""
+    prompt = _build_food_truck_prompt(
+        recipe="test-recipe",
+        task="Test task",
+        ingredients={},
+        mcp_prefix=DIRECT_PREFIX,
+        dispatch_id="test-dispatch",
+        campaign_id="test-campaign",
+        l3_timeout_sec=300,
+    )
+    idx = prompt.index("FAILURE PREDICATE — open_kitchen")
+    section = prompt[idx : idx + 500]
+    assert "--- INGREDIENTS TABLE ---" not in section
+    assert "ingredients_table" in section

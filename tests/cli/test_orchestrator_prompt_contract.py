@@ -42,13 +42,13 @@ class TestOpenKitchenFailurePredicate:
         section = prompt[idx : idx + 500]
         assert "DO NOT call AskUserQuestion" in section
 
-    def test_open_kitchen_predicate_uses_substring_not_json_field_dispatch(self):
-        """Negative: the predicate block must NOT use JSON-field dispatch phrasing."""
+    def test_open_kitchen_predicate_uses_json_field_not_substring(self):
+        """The predicate block must use JSON-field check, not substring marker."""
         prompt = _get_prompt()
         idx = prompt.index("FAILURE PREDICATE — open_kitchen")
         section = prompt[idx : idx + 500]
-        assert "json.loads" not in section.lower()
-        assert "parsed[" not in section
+        assert "--- INGREDIENTS TABLE ---" not in section
+        assert "ingredients_table" in section
 
 
 class TestStep0ToolPredicateCoverage:

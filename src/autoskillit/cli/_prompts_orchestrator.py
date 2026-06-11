@@ -155,8 +155,8 @@ FAILURE PREDICATES — when to follow on_failure:
 - classify_fix: "error:" line present in output
 
 FAILURE PREDICATE — open_kitchen:
-  If the open_kitchen response contains `"success": false` OR does not
-  contain the substring `--- INGREDIENTS TABLE ---`:
+  If the open_kitchen response contains `"success": false` OR `"ingredients_table"`: null
+  (field absent or null in the JSON response):
     1. Extract and print the value of "user_visible_message" from the
        JSON response verbatim (fall back to the raw response text if
        parsing fails).

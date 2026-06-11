@@ -201,8 +201,8 @@ FAILURE PREDICATES — when to follow on_failure:
 - classify_fix: "error:" line present in output
 
 FAILURE PREDICATE — open_kitchen:
-  If the open_kitchen response contains `"success": false` OR does not
-  contain the substring `--- INGREDIENTS TABLE ---`:
+  If the open_kitchen response contains `"success": false` OR `"ingredients_table"`: null
+  (field absent or null in the JSON response):
     1. Emit the sentinel block with success=false and reason="open_kitchen_failed".
     2. End the session.
 

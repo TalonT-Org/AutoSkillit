@@ -236,7 +236,7 @@ class TestHookFixRequiredDispatchGate:
         assert result is not None
         parsed = json.loads(result)
         assert parsed["subtype"] == "crashed"
-        error_text = parsed.get("result") or ""
+        error_text = parsed["result"]
         assert "Read|Write" in error_text
 
     def test_allows_claude_code_dispatch_even_with_fix_required_hook(
@@ -352,6 +352,6 @@ class TestHookFixRequiredDispatchGate:
         assert result is not None
         parsed = json.loads(result)
         assert parsed["subtype"] == "crashed"
-        error_text = parsed.get("result") or ""
+        error_text = parsed["result"]
         assert "Read|Write" in error_text
         assert "Bash|Grep" in error_text

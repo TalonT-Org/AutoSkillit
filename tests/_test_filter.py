@@ -649,7 +649,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_result_write_reconciliation.py",
             "execution/test_planner_write_isolation.py",
             "execution/test_session_log_flush.py",
-            # execution/ — fixture-mediated pipeline dependents (15 files):
+            # execution/ — fixture-mediated pipeline dependents (16 files):
             # These use minimal_ctx or tool_ctx fixtures which import
             # autoskillit.pipeline at call time. Validated by REQ-GUARD-007.
             "execution/test_backend_dispatch.py",
@@ -662,6 +662,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_dispatch.py",
             "execution/test_headless_env_injection.py",
             "execution/test_headless_env_scrub.py",
+            "execution/test_headless_execute.py",
             "execution/test_headless_provider_fallback.py",
             "execution/test_headless_synthesis.py",
             "execution/test_idle_output_env.py",

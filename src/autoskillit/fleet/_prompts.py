@@ -206,6 +206,13 @@ FAILURE PREDICATE — open_kitchen:
     1. Emit the sentinel block with success=false and reason="open_kitchen_failed".
     2. End the session.
 
+FAILURE PREDICATE — DEGRADED RESPONSE:
+  If ANY tool response contains success=false AND the content field is
+  absent, null, or an empty string — this is a degraded state.
+    1. Emit the sentinel block with success=false and reason="degraded_tool_response".
+    2. Stop. Do not improvise a recovery path, do not route to on_failure,
+       and do not retry the tool.
+
 TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
 - Tool-level failure (run_skill returns "success: False"): Follow on_failure. This fires
   BEFORE any result object exists. on_result conditions are NOT evaluated.
@@ -340,7 +347,7 @@ as your final output. No other text after the sentinel.
 Fields:
 - success: true if all mandatory steps completed without unresolved failures
 - reason: "completed", "failed", "quota_exhausted", "timeout",
-  "open_kitchen_failed", "missing_on_failure"
+  "open_kitchen_failed", "missing_on_failure", "degraded_tool_response"
 - summary: One-line description of what happened{extra_fields_docs}
 
 The sentinel markers ---l3-result::{dispatch_id}--- and ---end-l3-result::{dispatch_id}---

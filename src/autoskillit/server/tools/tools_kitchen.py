@@ -7,7 +7,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import QuotaGuardConfig
@@ -93,6 +93,24 @@ def _kitchen_failure_envelope(
             "user_visible_message": msg,
             "error": f"{type(exc).__name__}: {exc}",
             "stage": stage,
+        }
+    )
+
+
+def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
+    _errs: list[str] = result.get("errors", [])
+    _error_detail = "; ".join(_errs[:3]) if _errs else "unknown structural error"
+    return json.dumps(
+        {
+            "success": False,
+            "kitchen": "failed",
+            "user_visible_message": (
+                f"Recipe '{name}' failed structural validation: {_error_detail}"
+            ),
+            "error": f"Recipe '{name}' failed validation: {_error_detail}",
+            "stage": "recipe_validation",
+            "errors": _errs,
+            "suggestions": result.get("suggestions", []),
         }
     )
 
@@ -602,6 +620,9 @@ async def open_kitchen(
                     else:
                         tool_ctx.active_recipe_steps = None
                         tool_ctx.active_recipe_ingredients = None
+                # Default to False for missing 'valid' so a absent key is treated as invalid
+                if not result.get("valid", False) or not result.get("content", ""):
+                    return _recipe_validation_error_response(name, result)
                 result["success"] = True
                 result["kitchen"] = "open"
                 result["version"] = __version__
@@ -686,6 +707,9 @@ async def open_kitchen(
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
+
+            if not result.get("valid", False) or not result.get("content", ""):
+                return _recipe_validation_error_response(name, result)
 
             result["success"] = True
             result["kitchen"] = "open"

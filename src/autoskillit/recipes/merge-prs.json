@@ -1196,6 +1196,9 @@
         {
           "when": "${{ result.verdict }} == 'no_test_infrastructure'",
           "route": "register_clone_failure"
+        },
+        {
+          "route": "register_clone_failure"
         }
       ],
       "on_failure": "register_clone_failure",
@@ -1558,6 +1561,9 @@
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
+          "route": "register_clone_failure"
+        },
+        {
           "route": "register_clone_failure"
         }
       ],

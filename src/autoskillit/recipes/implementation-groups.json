@@ -1065,7 +1065,6 @@
           "route": "check_review_loop"
         },
         {
-          "when": "true",
           "route": "check_review_loop"
         }
       ],
@@ -1109,6 +1108,9 @@
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
+          "route": "release_issue_failure"
+        },
+        {
           "route": "release_issue_failure"
         }
       ],

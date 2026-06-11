@@ -51,6 +51,10 @@ def test_truthy_resolved_step_has_no_optional_signal_in_content(
     error_findings = [s for s in result.get("suggestions", []) if s.get("severity") == "error"]
     assert not error_findings, f"load_and_validate failed: {error_findings}"
     content = result["content"]
+    assert content, (
+        f"Recipe '{recipe_name}' ingredient '{ing_name}': content is empty after "
+        f"truthy resolution — vacuous assertions would hide bugs"
+    )
     residual_optional = []
     residual_skip = []
     for step_name in guarded_steps:

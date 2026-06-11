@@ -64,6 +64,7 @@ def test_bundled_recipe_content_has_no_residual_skip_signals(recipe_name: str) -
 
     result = load_and_validate(recipe_name)
     recipe_content = result["content"]
+    assert recipe_content, f"Content must be non-empty for recipe '{recipe_name}'"
     # Parse the raw recipe to find hidden ingredients referenced by skip_when_false
     recipe_obj = load_recipe(pkg_root() / "recipes" / f"{recipe_name}.yaml")
     hidden_ing_names = {name for name, ing in recipe_obj.ingredients.items() if ing.hidden}
@@ -95,6 +96,9 @@ def test_bundled_recipe_content_has_no_residual_skip_signals(recipe_name: str) -
             ingredient_overrides={ing_name: "true"},
         )
         truthy_content = truthy_result["content"]
+        assert truthy_content, (
+            f"Truthy content must be non-empty for recipe '{recipe_name}' ingredient '{ing_name}'"
+        )
         residual_optional = []
         residual_skip = []
         for step_name in guarded_steps:

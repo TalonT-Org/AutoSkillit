@@ -933,6 +933,7 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
             "recipe/test_staleness_cache.py",
             "recipe/test_sub_recipe_loading.py",
             "recipe/test_sub_recipe_validation.py",
+            "server/test_backend_ingredient_injection.py",
         }
     ),
     "planner": frozenset(

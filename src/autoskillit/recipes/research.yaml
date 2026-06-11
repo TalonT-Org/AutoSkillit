@@ -875,6 +875,7 @@ steps:
       route: escalate_stop
     - when: "${{ result.verdict }} == 'no_test_infrastructure'"
       route: escalate_stop
+    - route: escalate_stop
     on_failure: escalate_stop
     on_context_limit: escalate_stop
     skip_when_false: "inputs.backend_supports_git_write"

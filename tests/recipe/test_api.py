@@ -1177,3 +1177,34 @@ steps:
     assert undeclared2 == [], (
         f"Expected no undeclared-capture-key after YAML-only update: {undeclared2}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T-ERR-1: LoadRecipeResult must surface errors when valid=False
+# ---------------------------------------------------------------------------
+
+
+def test_load_and_validate_produces_valid_content_after_step_pruning(tmp_path: Path) -> None:
+    """After structural repair (when=None catch-alls on resolve_review), pruning
+    skip_when_false steps must produce a recipe with non-empty content and no
+    structural errors from dangling routes.
+
+    This is the post-fix state: dangling routes that the pre-fix YAML produced
+    are now repaired by the computable redirect catch-alls.
+    """
+    from autoskillit.recipe._api import load_and_validate
+
+    result = load_and_validate(
+        "implementation",
+        project_dir=tmp_path,
+        ingredient_overrides={"backend_supports_git_write": "false"},
+        backend_name="codex",
+    )
+    schema_errors = result.get("errors", [])
+    assert not any("dangling" in e.lower() for e in schema_errors), (
+        f"Post-fix pruning should not produce dangling route errors, got: {schema_errors}"
+    )
+    assert result["content"], (
+        "Content must be non-empty after pruning — empty content indicates "
+        "unrepaired dangling routes after step pruning"
+    )

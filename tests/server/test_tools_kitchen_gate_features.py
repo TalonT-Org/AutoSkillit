@@ -246,12 +246,15 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
         "name: test-project-dir-recipe\n"
         "description: Test recipe for project_dir propagation\n"
         "autoskillit_version: '0.2.0'\n"
+        "kind: interactive\n"
         "kitchen_rules:\n"
         "  - Never use native tools\n"
+        "  - Never use Read, Grep, Glob, Edit, Write, Bash, Agent,"
+        " WebFetch, WebSearch, NotebookEdit\n"
         "steps:\n"
         "  stop:\n"
         "    action: stop\n"
-        "    message: done\n"
+        "    message: Pipeline complete. Emit sentinel to signal success.\n"
     )
     recipes_dir = different_dir / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)

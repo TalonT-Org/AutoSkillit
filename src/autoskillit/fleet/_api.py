@@ -372,14 +372,17 @@ async def _run_dispatch(
         )
 
     if not validation_result.get("valid", False):
+        structural_errors = validation_result.get("errors", [])
         error_findings = [
             s for s in validation_result.get("suggestions", []) if s.get("severity") == "error"
+        ]
+        error_parts = structural_errors[:3] + [
+            f"[{f['rule']}] {f['message']}" for f in error_findings[:3]
         ]
         return DispatchResult(
             DispatchRejected(
                 error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
-                message=f"Recipe '{recipe}' has validation errors: "
-                + "; ".join(f"[{f['rule']}] {f['message']}" for f in error_findings[:3]),
+                message=f"Recipe '{recipe}' has validation errors: " + "; ".join(error_parts),
             ),
             per_dispatch_state_path=None,
         )

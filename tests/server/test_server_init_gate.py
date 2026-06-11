@@ -19,6 +19,19 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 class TestKitchenVisibility:
     """FastMCP v3 tag-based visibility: kitchen tools hidden at startup."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_visibility(self):
+        from autoskillit.core import ALL_VISIBILITY_TAGS
+        from autoskillit.server import mcp
+
+        mcp._transforms.clear()
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
+        yield
+        mcp._transforms.clear()
+        for tag in sorted(ALL_VISIBILITY_TAGS):
+            mcp.disable(tags={tag})
+
     @pytest.mark.anyio
     async def test_kitchen_tools_hidden_at_startup(self):
         """No kitchen tool (gated or headless-tagged) appears in tools/list for a fresh session."""

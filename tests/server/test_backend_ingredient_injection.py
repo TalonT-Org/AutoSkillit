@@ -472,17 +472,18 @@ class TestRealCompositionPruning:
 
     def test_codex_overrides_remove_guarded_steps_from_content(self, tmp_path: Path) -> None:
         from autoskillit.recipe._api import load_and_validate
-        from autoskillit.workspace.skills import DefaultSkillResolver
 
-        resolver = DefaultSkillResolver()
         result = load_and_validate(
             "implementation",
             project_dir=tmp_path,
             ingredient_overrides={"backend_supports_git_write": "false"},
             backend_name="codex",
-            lister=resolver,
         )
         content = result["content"]
+        assert content, (
+            "Content must be non-empty after codex pruning — "
+            "empty content indicates unrepairable dangling routes after step pruning"
+        )
         for step_name in self._GIT_WRITE_STEPS:
             assert f"  {step_name}:" not in content, (
                 f"Guarded step {step_name!r} still present as YAML key in pruned content"

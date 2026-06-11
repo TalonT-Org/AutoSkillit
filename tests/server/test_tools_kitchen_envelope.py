@@ -687,6 +687,68 @@ async def test_open_kitchen_load_and_validate_raises_returns_failure_envelope(
 
 
 @pytest.mark.anyio
+async def test_open_kitchen_fails_on_empty_content(tmp_path, monkeypatch):
+    """open_kitchen must return success=false when load_and_validate produces
+    content='' and valid=False (dangling route wipe)."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "",
+        "valid": False,
+        "errors": ["[post-prune] dangling route: Step 'x' routes to unknown step 'y'"],
+        "suggestions": [],
+    }
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="demo", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False, (
+        "open_kitchen must not return success=true when content is empty"
+    )
+    assert parsed["kitchen"] == "failed"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_fails_on_invalid_recipe(tmp_path, monkeypatch):
+    """open_kitchen must return success=false when load_and_validate sets valid=False."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": False,
+        "errors": ["some structural error"],
+        "suggestions": [{"severity": "error", "rule": "test", "message": "bad"}],
+    }
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="demo", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+
+
+@pytest.mark.anyio
 async def test_open_kitchen_apply_triage_gate_raises_returns_failure_envelope(
     tmp_path, monkeypatch
 ):

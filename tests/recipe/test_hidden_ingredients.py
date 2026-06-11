@@ -928,6 +928,16 @@ steps:
     assert result["content"] == ""
 
 
+def _has_computable_redirect(step: object) -> bool:
+    """Return True if the step has a safe redirect that can be computed."""
+    if getattr(step, "on_success", None) is not None:
+        return True
+    on_result = getattr(step, "on_result", None)
+    if on_result is not None and on_result.conditions:
+        return any(c.when is None for c in on_result.conditions)
+    return False
+
+
 def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
     """Regression: pruning skip_when_false steps with computable redirects
     produces no dangling routes in each bundled recipe.
@@ -937,15 +947,6 @@ def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
         _validate_no_dangling_routes,
     )
     from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-
-    def _has_computable_redirect(step: object) -> bool:
-        """Return True if the step has a safe redirect that can be computed."""
-        if getattr(step, "on_success", None) is not None:
-            return True
-        on_result = getattr(step, "on_result", None)
-        if on_result is not None and on_result.conditions:
-            return any(c.when is None for c in on_result.conditions)
-        return False
 
     recipe_dir = builtin_recipes_dir()
     yaml_files = sorted(recipe_dir.glob("*.yaml"))
@@ -963,20 +964,34 @@ def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
             pruned, resolutions = _prune_skipped_steps(
                 recipe, ingredient_overrides={ingredient_name: "false"}
             )
-            # Only assert no dangling routes when all pruned steps have computable
-            # redirects. When any pruned step lacks a redirect, dangling routes are
-            # expected and detected by _validate_no_dangling_routes as designed.
-            all_pruned_have_redirect = all(
-                _has_computable_redirect(recipe.steps[name])
-                for name, kept in resolutions.items()
-                if not kept and name in recipe.steps
-            )
-            if not all_pruned_have_redirect:
-                continue
             errors = _validate_no_dangling_routes(pruned)
             assert not errors, (
                 f"Bundled recipe {yaml_file.name!r}: pruning step {step_name!r} "
-                f"produced dangling routes: {errors}"
+                f"(ingredient={ingredient_name!r}) produced dangling routes: {errors}. "
+                f"Fix: add a when=None catch-all condition to the pruned step's on_result, "
+                f"or add on_success to provide a computable redirect."
+            )
+
+
+def test_all_skip_guarded_steps_have_computable_redirect() -> None:
+    """Every bundled recipe step with skip_when_false must have a computable redirect.
+
+    This is the structural invariant: if a step can be pruned, the pruning engine
+    must be able to repair all routes that pointed to it. Steps that lack both
+    on_success and a when=None catch-all in on_result are structurally defective.
+    """
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    recipe_dir = builtin_recipes_dir()
+    for yaml_file in sorted(recipe_dir.glob("*.yaml")):
+        recipe = load_recipe(yaml_file)
+        for step_name, step in recipe.steps.items():
+            if step.skip_when_false is None:
+                continue
+            assert _has_computable_redirect(step), (
+                f"Bundled recipe {yaml_file.name!r}: step {step_name!r} has "
+                f"skip_when_false={step.skip_when_false!r} but no computable redirect. "
+                f"Add on_success or a when=None catch-all to on_result."
             )
 
 

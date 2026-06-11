@@ -110,6 +110,11 @@ markers = [
     "large: full integration — everything allowed (default for unannotated tests)",
     "feature(name): marks tests requiring a specific feature gate to be enabled",
 ]
+filterwarnings = [
+    "error::SyntaxWarning",
+    "error::DeprecationWarning:autoskillit",
+    "default:AUTOSKILLIT_HEADLESS=1 without:DeprecationWarning",
+]
 
 [tool.coverage.run]
 parallel = true
@@ -120,7 +125,7 @@ target-version = "py311"
 line-length = 99
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "TID251"]
+select = ["E", "F", "I", "UP", "TID251", "W"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/execution/test_session_classification_e2e.py" = ["E402"]

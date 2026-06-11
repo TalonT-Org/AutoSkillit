@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -442,6 +443,8 @@ def test_refetch_issues_builds_query():
     call_args = mock_run_gh.call_args[0][0]
     assert "graphql" in call_args
     query_arg = next(a for a in call_args if a.startswith("query="))
+    assert query_arg.startswith("query={")
+    assert "repository(owner:" in query_arg
     assert "org" in query_arg
     assert "repo" in query_arg
     assert "issue(number: 1)" in query_arg
@@ -597,8 +600,12 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
             mutation_call = json.loads(kwargs["input_data"])
             query = mutation_call["query"]
             variables = mutation_call["variables"]
+            assert query.startswith("mutation(")
             assert "issue0: createIssue" in query
             assert "issue1: createIssue" in query
+            for var_name in variables:
+                assert f"${var_name}:" in query, f"Variable ${var_name} not declared in mutation"
+                assert f"${var_name})" in query, f"Variable ${var_name} not referenced in mutation"
             assert variables["i0"]["repositoryId"] == "R_123"
             assert variables["i1"]["repositoryId"] == "R_123"
             assert variables["i0"]["labelIds"] == ["L_1", "L_2"]
@@ -606,6 +613,19 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
             found = True
             break
     assert found, "no createIssue mutation call found in mock_run_gh calls"
+
+
+def test_validate_mutation_variables_catches_mismatch():
+    from autoskillit.recipe._cmd_rpc_issues import _validate_mutation_variables
+
+    with pytest.raises(ValueError, match="not declared"):
+        _validate_mutation_variables("mutation() { ... }", {"i0": {}})
+    with pytest.raises(ValueError, match="not referenced"):
+        _validate_mutation_variables("mutation($i0: CreateIssueInput!) { }", {"i0": {}})
+    _validate_mutation_variables(
+        "mutation($i0: CreateIssueInput!) { issue0: createIssue(input: $i0) { ... } }",
+        {"i0": {}},
+    )
 
 
 def test_batch_create_issues_chunks_large_batches(tmp_path):
@@ -693,12 +713,19 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
 
         mock_run_gh.side_effect = side_effect_factory()
         result = batch_create_issues(workspace=str(tmp_path), chunk_size="10")
-    mutation_calls = sum(
-        1
-        for call in mock_run_gh.call_args_list
-        if call[1].get("input_data") and "createIssue" in call[1]["input_data"]
-    )
-    assert mutation_calls == 3
+    mutation_calls = []
+    for call in mock_run_gh.call_args_list:
+        kwargs = call[1]
+        if kwargs.get("input_data") and "createIssue" in kwargs["input_data"]:
+            mutation_call = json.loads(kwargs["input_data"])
+            query = mutation_call["query"]
+            variables = mutation_call["variables"]
+            assert query.startswith("mutation(")
+            for var_name in variables:
+                assert f"${var_name}:" in query, f"Variable ${var_name} not declared in mutation"
+                assert f"${var_name})" in query, f"Variable ${var_name} not referenced in mutation"
+            mutation_calls.append(mutation_call)
+    assert len(mutation_calls) == 3
     assert result["issue_count"] == "25"
 
 
@@ -1326,3 +1353,37 @@ def test_check_regression_unit_with_mocked_git(tmp_path: Path) -> None:
         ):
             result = _check_regression(str(tmp_path), files_small, "main", file_status_small)
     assert result is None, f"Expected None (aggregate > 10 but per-file all < 5) but got: {result}"
+
+
+def test_cmd_rpc_issues_no_invalid_escape_sequences():
+    """Source-level guard: invalid escapes must not appear in GraphQL builders."""
+    ruff = Path(sys.executable).resolve().parent / "ruff"
+    if not ruff.is_file():
+        pytest.skip("ruff not found in venv bin directory")
+    target = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipe"
+        / "_cmd_rpc_issues.py"
+    )
+    assert target.is_file(), f"Target file not found: {target}"
+    result = subprocess.run(
+        [
+            str(ruff),
+            "check",
+            "--select",
+            "W605",
+            "--output-format",
+            "json",
+            str(target),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode in (0, 1), f"ruff failed (exit {result.returncode}): {result.stderr}"
+    findings = json.loads(result.stdout) if result.stdout.strip() else []
+    assert findings == [], f"Invalid escape sequences found: {findings}"
+    assert result.returncode == 0, (
+        f"ruff exited {result.returncode} but produced no JSON findings: {result.stderr}"
+    )

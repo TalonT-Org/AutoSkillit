@@ -169,8 +169,8 @@ FAILURE PREDICATE — DEGRADED TOOL RESPONSE:
     1. Extract and print the value of "user_visible_message" from the
        response (fall back to the raw response text if the field is missing).
     2. DO NOT call AskUserQuestion.
-    3. Do not improvise a recovery path. Do not retry the tool without
-       explicit instructions from the recipe step.
+    3. Do not improvise a recovery path. Do not route to on_failure.
+       Do not retry the tool without explicit instructions from the recipe step.
     4. End the session with a final text response.
 
 CONTEXT LIMIT ROUTING — run_skill only (check BEFORE on_failure):

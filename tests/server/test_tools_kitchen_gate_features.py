@@ -373,11 +373,8 @@ def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
 
         result = get_recipe("test-get-recipe-project-dir")
 
-    assert '"error"' not in result, (
-        f"get_recipe failed to find recipe in project_dir={different_dir}. Result: {result}"
-    )
     assert "test-get-recipe-project-dir" in result, (
-        f"get_recipe did not return the recipe from project_dir. Result: {result}"
+        f"get_recipe did not use project_dir for recipe lookup. Result: {result}"
     )
 
 

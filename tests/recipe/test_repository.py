@@ -171,7 +171,10 @@ def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:
 
     assert result == expected
     mock_api.assert_called_once_with(
-        script_path, temp_dir_relpath=".autoskillit/temp", backend_name=None
+        script_path,
+        temp_dir_relpath=".autoskillit/temp",
+        backend_name=None,
+        ingredient_overrides=None,
     )
 
 

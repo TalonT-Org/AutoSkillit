@@ -7,7 +7,9 @@ from typing import Any
 
 from autoskillit.core import LoadResult, SkillLister, YAMLError, get_logger, load_yaml
 from autoskillit.recipe._analysis import make_validation_context
+from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe._recipe_ingredients import RecipeListItem
+from autoskillit.recipe._rule_helpers import filter_pruning_false_positives
 from autoskillit.recipe.contracts import load_recipe_card, validate_recipe_cards
 from autoskillit.recipe.io import (
     RecipeInfo,
@@ -15,6 +17,7 @@ from autoskillit.recipe.io import (
     list_recipes,
     substitute_temp_placeholder,
 )
+from autoskillit.recipe.registry import RuleFinding
 from autoskillit.recipe.validator import (
     build_quality_dict,
     compute_recipe_validity,
@@ -74,6 +77,7 @@ def validate_from_path(
     *,
     lister: SkillLister | None = None,
     backend_name: str | None = None,
+    ingredient_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
 
@@ -120,6 +124,19 @@ def validate_from_path(
 
     recipe = _parse_recipe(data)
     errors = validate_recipe_structure(recipe)
+    _skip_resolutions: dict[str, bool | None] = {}
+    _pre_prune_findings: list[RuleFinding] = []
+    if ingredient_overrides:
+        pre_prune_ctx = make_validation_context(
+            recipe,
+            available_skills=frozenset(s.name for s in lister.list_all()),
+            skill_resolver=_skill_resolver,
+            backend_name=backend_name,
+        )
+        _pre_prune_findings = run_semantic_rules(pre_prune_ctx)
+        recipe, _skip_resolutions = _prune_skipped_steps(
+            recipe, ingredient_overrides, defer_unresolved=False
+        )
     known_skills = frozenset(s.name for s in lister.list_all())
     ctx = make_validation_context(
         recipe,
@@ -129,6 +146,8 @@ def validate_from_path(
     )
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
+    if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
+        semantic_findings = filter_pruning_false_positives(semantic_findings, _pre_prune_findings)
 
     quality = build_quality_dict(report)
     semantic = findings_to_dicts(semantic_findings)

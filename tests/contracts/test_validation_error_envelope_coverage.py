@@ -14,8 +14,10 @@ import pytest
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
-def test_envelope_surfaces_both_structural_and_semantic_channels():
-    """Envelope must reference at least one item from errors AND from suggestions."""
+def test_envelope_prefers_structural_over_semantic_errors():
+    """When both structural errors and semantic findings exist, structural errors
+    take priority in user_visible_message — semantic findings are available in
+    the suggestions field but do not pollute the primary error detail."""
     from autoskillit.server.tools.tools_kitchen import _recipe_validation_error_response
 
     result = {
@@ -32,4 +34,5 @@ def test_envelope_surfaces_both_structural_and_semantic_channels():
     }
     response = json.loads(_recipe_validation_error_response("demo", result))
     assert "structural problem" in response["user_visible_message"]
-    assert "semantic-rule" in response["user_visible_message"]
+    assert "semantic-rule" not in response["user_visible_message"]
+    assert response["suggestions"][0]["rule"] == "semantic-rule"

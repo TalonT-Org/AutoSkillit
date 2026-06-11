@@ -347,7 +347,7 @@ def _prune_skipped_steps(
 
         if is_truthy:
             new_steps = dict(working.steps)
-            new_steps[step_name] = dataclasses.replace(step, skip_when_false=None)
+            new_steps[step_name] = dataclasses.replace(step, skip_when_false=None, optional=False)
             working = dataclasses.replace(working, steps=new_steps)
         else:
             # Redirect all routes pointing to the pruned step; guard against None redirect.

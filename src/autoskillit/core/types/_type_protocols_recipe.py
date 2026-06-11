@@ -51,6 +51,7 @@ class RecipeRepository(Protocol):
         temp_dir_relpath: str = ".autoskillit/temp",
         *,
         backend_name: str | None = None,
+        ingredient_overrides: dict[str, str] | None = None,
     ) -> dict[str, Any]: ...
 
     def list_all(

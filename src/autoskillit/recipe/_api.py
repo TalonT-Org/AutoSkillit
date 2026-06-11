@@ -63,6 +63,7 @@ from autoskillit.recipe._recipe_ingredients import (
 from autoskillit.recipe._rule_helpers import (
     _is_failure_sentinel_value,
     extract_sentinel_json_blocks,
+    filter_pruning_false_positives,
 )
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
@@ -361,7 +362,38 @@ def load_and_validate(
                 errors.extend(f"[combined] {e}" for e in combined_errors)
             t0 = _t("validate_recipe_structure", t0, name)
 
-            # Stage: semantic rules (builds ValidationContext once — shared computation)
+            # Stage: skip_when_false pruning (Python-side evaluation)
+            # MUST run before semantic rules so pruned steps are never seen by
+            # rules like backend-incompatible-skill. See test_semantic_rules_run_after_pruning.
+            # Snapshot pre-prune semantic findings: graph-aware rules (dead-output,
+            # capture-inversion) produce false positives when pruning changes step
+            # graph reachability. Only findings that ALSO appear pre-prune are kept.
+            _pre_prune_val_ctx = make_validation_context(active_recipe, backend_name=backend_name)
+            _pre_prune_findings = run_semantic_rules(_pre_prune_val_ctx)
+            _pre_prune_steps = dict(active_recipe.steps)
+            active_recipe, _skip_resolutions = _prune_skipped_steps(
+                active_recipe, ingredient_overrides, defer_unresolved
+            )
+            if _skip_resolutions:
+                raw = _resolve_skip_guards_in_content(raw, _skip_resolutions, _pre_prune_steps)
+                _assert_content_integrity(raw, _skip_resolutions, _pre_prune_steps)
+            # Post-prune: validate that no surviving step routes to a removed step.
+            # Must run inside try so active_recipe and errors are both in scope.
+            _dangling_errors = _validate_no_dangling_routes(active_recipe)
+            if _dangling_errors:
+                errors.extend(f"[post-prune] dangling route: {e}" for e in _dangling_errors)
+                raw = ""
+            # Cross-check: raw YAML route refs must match the Python model exactly.
+            # Catches any refs that the model repaired but the YAML repair pass missed.
+            _route_consistency_errors = _validate_route_consistency(raw, active_recipe)
+            if _route_consistency_errors:
+                errors.extend(
+                    f"[post-prune] route consistency: {e}" for e in _route_consistency_errors
+                )
+                raw = ""
+            t0 = _t("prune_skipped_steps", t0, name)
+
+            # Stage: semantic rules (builds ValidationContext from post-prune recipe)
             if lister is None:
                 from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
 
@@ -398,34 +430,16 @@ def load_and_validate(
             semantic_suggestions = findings_to_dicts(semantic_findings)
             t0 = _t("semantic_rules", t0, name)
 
+            if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
+                semantic_findings = filter_pruning_false_positives(
+                    semantic_findings, _pre_prune_findings
+                )
+                semantic_suggestions = findings_to_dicts(semantic_findings)
+
             _suppressed = suppressed or []
             if name in _suppressed:
                 semantic_suggestions = filter_version_rule(semantic_suggestions)
             suggestions.extend(semantic_suggestions)
-
-            # Stage: skip_when_false pruning (Python-side evaluation)
-            _pre_prune_steps = dict(active_recipe.steps)
-            active_recipe, _skip_resolutions = _prune_skipped_steps(
-                active_recipe, ingredient_overrides, defer_unresolved
-            )
-            if _skip_resolutions:
-                raw = _resolve_skip_guards_in_content(raw, _skip_resolutions, _pre_prune_steps)
-                _assert_content_integrity(raw, _skip_resolutions, _pre_prune_steps)
-            # Post-prune: validate that no surviving step routes to a removed step.
-            # Must run inside try so active_recipe and errors are both in scope.
-            _dangling_errors = _validate_no_dangling_routes(active_recipe)
-            if _dangling_errors:
-                errors.extend(f"[post-prune] dangling route: {e}" for e in _dangling_errors)
-                raw = ""
-            # Cross-check: raw YAML route refs must match the Python model exactly.
-            # Catches any refs that the model repaired but the YAML repair pass missed.
-            _route_consistency_errors = _validate_route_consistency(raw, active_recipe)
-            if _route_consistency_errors:
-                errors.extend(
-                    f"[post-prune] route consistency: {e}" for e in _route_consistency_errors
-                )
-                raw = ""
-            t0 = _t("prune_skipped_steps", t0, name)
 
             # Stage: hidden ingredient interpolation
             raw = _resolve_hidden_inputs_in_content(raw, active_recipe, ingredient_overrides)

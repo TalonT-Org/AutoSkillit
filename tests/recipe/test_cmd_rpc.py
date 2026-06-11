@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1356,6 +1357,9 @@ def test_check_regression_unit_with_mocked_git(tmp_path: Path) -> None:
 
 def test_cmd_rpc_issues_no_invalid_escape_sequences():
     """Source-level guard: invalid escapes must not appear in GraphQL builders."""
+    ruff = Path(sys.executable).resolve().parent / "ruff"
+    if not ruff.is_file():
+        pytest.skip("ruff not found in venv bin directory")
     target = (
         Path(__file__).resolve().parent.parent.parent
         / "src"
@@ -1366,7 +1370,7 @@ def test_cmd_rpc_issues_no_invalid_escape_sequences():
     assert target.is_file(), f"Target file not found: {target}"
     result = subprocess.run(
         [
-            "ruff",
+            str(ruff),
             "check",
             "--select",
             "W605",

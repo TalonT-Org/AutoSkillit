@@ -443,6 +443,7 @@ def test_refetch_issues_builds_query():
     assert "graphql" in call_args
     query_arg = next(a for a in call_args if a.startswith("query="))
     assert query_arg.startswith("query={")
+    assert "repository(owner:" in query_arg
     assert "org" in query_arg
     assert "repo" in query_arg
     assert "issue(number: 1)" in query_arg

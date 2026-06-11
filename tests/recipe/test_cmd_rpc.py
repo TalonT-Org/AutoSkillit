@@ -1356,6 +1356,14 @@ def test_check_regression_unit_with_mocked_git(tmp_path: Path) -> None:
 
 def test_cmd_rpc_issues_no_invalid_escape_sequences():
     """Source-level guard: invalid escapes must not appear in GraphQL builders."""
+    target = (
+        Path(__file__).resolve().parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "recipe"
+        / "_cmd_rpc_issues.py"
+    )
+    assert target.is_file(), f"Target file not found: {target}"
     result = subprocess.run(
         [
             "ruff",
@@ -1364,10 +1372,11 @@ def test_cmd_rpc_issues_no_invalid_escape_sequences():
             "W605",
             "--output-format",
             "json",
-            "src/autoskillit/recipe/_cmd_rpc_issues.py",
+            str(target),
         ],
         capture_output=True,
         text=True,
     )
+    assert result.returncode in (0, 1), f"ruff failed (exit {result.returncode}): {result.stderr}"
     findings = json.loads(result.stdout) if result.stdout.strip() else []
     assert findings == [], f"Invalid escape sequences found: {findings}"

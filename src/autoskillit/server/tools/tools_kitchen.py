@@ -7,7 +7,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
     from autoskillit.config.settings import QuotaGuardConfig
@@ -97,7 +97,7 @@ def _kitchen_failure_envelope(
     )
 
 
-def _recipe_validation_error_response(name: str, result: dict) -> str:  # type: ignore[type-arg]
+def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
     _errs: list[str] = result.get("errors", [])
     _error_detail = "; ".join(_errs[:3]) if _errs else "unknown structural error"
     return json.dumps(

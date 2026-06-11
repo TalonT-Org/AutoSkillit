@@ -308,6 +308,18 @@ def test_recipe_repository_validate_from_path_records_call():
     assert call["method"] == "validate_from_path"
     assert call["script_path"] == script_path
     assert call["temp_dir_relpath"] == ".autoskillit/temp"
+    assert call["ingredient_overrides"] is None
+
+
+def test_recipe_repository_validate_from_path_records_call_with_overrides():
+    repo = InMemoryRecipeRepository()
+    script_path = Path("/proj/recipe.yaml")
+    overrides = {"backend_supports_git_write": "false"}
+    repo.validate_from_path(script_path, ".autoskillit/temp", ingredient_overrides=overrides)
+    assert len(repo.calls) == 1
+    call = repo.calls[0]
+    assert call["method"] == "validate_from_path"
+    assert call["ingredient_overrides"] == overrides
 
 
 def test_recipe_repository_validate_from_path_records_call_default_relpath():
@@ -319,6 +331,7 @@ def test_recipe_repository_validate_from_path_records_call_default_relpath():
     assert call["method"] == "validate_from_path"
     assert call["script_path"] == script_path
     assert call["temp_dir_relpath"] == ".autoskillit/temp"
+    assert call["ingredient_overrides"] is None
 
 
 # ---------------------------------------------------------------------------

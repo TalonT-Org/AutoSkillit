@@ -280,6 +280,7 @@ async def validate_recipe(script_path: str) -> str:
                 Path(script_path),
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
+                ingredient_overrides=_backend_capability_overrides(tool_ctx.backend),
             )
             return json.dumps(result)
     except Exception as exc:

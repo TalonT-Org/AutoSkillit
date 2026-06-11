@@ -123,9 +123,13 @@ class DefaultRecipeRepository:
         temp_dir_relpath: str = ".autoskillit/temp",
         *,
         backend_name: str | None = None,
+        ingredient_overrides: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return _api.validate_from_path(
-            script_path, temp_dir_relpath=temp_dir_relpath, backend_name=backend_name
+            script_path,
+            temp_dir_relpath=temp_dir_relpath,
+            backend_name=backend_name,
+            ingredient_overrides=ingredient_overrides,
         )
 
     def list_all(

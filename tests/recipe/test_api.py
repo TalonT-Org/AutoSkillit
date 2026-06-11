@@ -1258,3 +1258,43 @@ def test_codex_backend_pruned_recipe_is_valid(tmp_path: Path) -> None:
             if s.get("severity") == Severity.ERROR
         )
     )
+
+
+# ---------------------------------------------------------------------------
+# Pre-prune validity guard: validate_from_path with codex backend
+# ---------------------------------------------------------------------------
+
+
+def test_validate_from_path_codex_backend_valid_after_pruning(tmp_path: Path) -> None:
+    """validate_from_path must prune steps when ingredient_overrides are provided.
+
+    Pre-fix: validate_from_path ran semantic rules on the raw unpruned recipe → ERROR
+    findings for codex-incompatible steps → valid=False.
+    Post-fix: validate_from_path prunes first, then runs semantic rules → valid=True.
+    """
+    from autoskillit.core import pkg_root
+    from autoskillit.recipe._api_listing import validate_from_path
+    from autoskillit.recipe.io import find_recipe_by_name
+
+    recipe_info = find_recipe_by_name("implementation", pkg_root() / "recipes")
+    assert recipe_info is not None, "Implementation recipe must exist for this test"
+
+    result = validate_from_path(
+        recipe_info.path,
+        temp_dir_relpath=".autoskillit/temp",
+        backend_name="codex",
+        ingredient_overrides={
+            "backend_supports_git_write": "false",
+            "open_pr": "false",
+        },
+    )
+    assert result.get("valid") is True, (
+        f"Codex backend validate_from_path must be valid=True after pruning; "
+        f"got valid={result.get('valid')}. "
+        f"Error findings: "
+        + "; ".join(
+            f"[{s.get('rule')}] {s.get('message', '')[:80]}"
+            for s in result.get("findings", [])
+            if s.get("severity") == Severity.ERROR
+        )
+    )

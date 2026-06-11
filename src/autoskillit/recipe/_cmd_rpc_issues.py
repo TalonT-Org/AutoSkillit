@@ -290,7 +290,7 @@ def batch_create_issues(
         for idx, (title, body, _) in enumerate(chunk):
             alias = f"issue{idx}"
             mutation_parts.append(
-                f"{alias}: createIssue(input: \$i{idx}) {{ issue {{ number url }} }}"
+                f"{alias}: createIssue(input: $i{idx}) {{ issue {{ number url }} }}"
             )
             variables[f"i{idx}"] = {
                 "repositoryId": repo_id,
@@ -300,7 +300,7 @@ def batch_create_issues(
             }
         mutation = (
             "mutation("
-            + ",".join(f"\$i{k}: CreateIssueInput!" for k in range(len(chunk)))
+            + ",".join(f"$i{k}: CreateIssueInput!" for k in range(len(chunk)))
             + ") {"
             + " ".join(mutation_parts)
             + "}"

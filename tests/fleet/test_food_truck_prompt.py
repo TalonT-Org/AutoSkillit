@@ -220,7 +220,7 @@ def test_food_truck_prompt_degraded_reason_in_reason_enum():
         campaign_id="test-campaign",
         l3_timeout_sec=300,
     )
-    fields_idx = prompt.index("Fields:")
+    fields_idx = prompt.index("Fields:", prompt.index("--- SECTION 8:"))
     reason_region = prompt[fields_idx : fields_idx + 300]
     assert "degraded_tool_response" in reason_region, (
         "degraded_tool_response must appear in Section 8 reason enum"

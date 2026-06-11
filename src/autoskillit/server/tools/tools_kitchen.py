@@ -99,14 +99,23 @@ def _kitchen_failure_envelope(
 
 def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
     _errs: list[str] = result.get("errors", [])
-    _error_detail = "; ".join(_errs[:3]) if _errs else "unknown structural error"
+    _error_findings = [
+        s
+        for s in result.get("suggestions", [])
+        if isinstance(s, dict) and s.get("severity") == "error"
+    ]
+    _finding_strs = [f"[{f.get('rule', '')}] {f.get('message', '')}" for f in _error_findings]
+    if _errs and _finding_strs:
+        _error_parts = _errs[:2] + _finding_strs[:1]
+    else:
+        _error_parts = (_errs + _finding_strs)[:3]
+    _error_detail = "; ".join(_error_parts) if _error_parts else "unknown structural error"
+    _label = "structural validation" if (_errs and not _error_findings) else "validation"
     return json.dumps(
         {
             "success": False,
             "kitchen": "failed",
-            "user_visible_message": (
-                f"Recipe '{name}' failed structural validation: {_error_detail}"
-            ),
+            "user_visible_message": (f"Recipe '{name}' failed {_label}: {_error_detail}"),
             "error": f"Recipe '{name}' failed validation: {_error_detail}",
             "stage": "recipe_validation",
             "errors": _errs,

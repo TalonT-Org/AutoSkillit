@@ -883,3 +883,134 @@ def test_every_return_path_parses_as_json_and_has_boolean_success(stage):
 
     envelope = json.loads(_kitchen_failure_envelope(RuntimeError("test"), stage=stage))
     assert isinstance(envelope["success"], bool)
+
+
+def test_recipe_validation_error_response_surfaces_semantic_errors():
+    """_recipe_validation_error_response must merge error-severity suggestions
+    into the user-visible message when errors is empty."""
+    from autoskillit.server.tools.tools_kitchen import _recipe_validation_error_response
+
+    result = {
+        "valid": False,
+        "errors": [],
+        "suggestions": [
+            {
+                "severity": "error",
+                "rule": "backend-incompatible-skill",
+                "message": "Step 'deploy' uses skill 'merge_worktree'",
+                "step": "deploy",
+            },
+        ],
+    }
+    response = json.loads(_recipe_validation_error_response("demo", result))
+    assert response["success"] is False
+    assert response["kitchen"] == "failed"
+    assert response["stage"] == "recipe_validation"
+    assert "unknown structural error" not in response["user_visible_message"]
+    assert "backend-incompatible-skill" in response["user_visible_message"]
+    assert "merge_worktree" in response["error"]
+
+
+@pytest.mark.parametrize(
+    "result,expected_substring",
+    [
+        (
+            {"valid": False, "errors": ["schema violation"], "suggestions": []},
+            "schema violation",
+        ),
+        (
+            {
+                "valid": False,
+                "errors": [],
+                "suggestions": [
+                    {
+                        "severity": "error",
+                        "rule": "rule-x",
+                        "message": "bad step",
+                        "step": "s",
+                    }
+                ],
+            },
+            "rule-x",
+        ),
+        (
+            {
+                "valid": False,
+                "errors": [],
+                "suggestions": [
+                    {
+                        "severity": "error",
+                        "rule": "contract-y",
+                        "message": "stale",
+                        "step": "c",
+                    }
+                ],
+            },
+            "contract-y",
+        ),
+    ],
+)
+def test_validation_error_envelope_always_names_cause(result, expected_substring):
+    """Envelope must always name a cause when valid=False, never 'unknown structural error'."""
+    from autoskillit.server.tools.tools_kitchen import _recipe_validation_error_response
+
+    response = json.loads(_recipe_validation_error_response("demo", result))
+    assert response["success"] is False
+    assert response["kitchen"] == "failed"
+    assert response["stage"] == "recipe_validation"
+    assert "unknown structural error" not in response["user_visible_message"]
+    assert expected_substring in response["user_visible_message"]
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_fails_on_semantic_errors_only(tmp_path, monkeypatch):
+    """open_kitchen must surface semantic error findings when errors=[]."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": False,
+        "errors": [],
+        "suggestions": [
+            {
+                "severity": "error",
+                "rule": "backend-incompatible-skill",
+                "message": "Step 'deploy' uses skill 'merge_worktree'",
+                "step": "deploy",
+            },
+        ],
+    }
+    mock_ctx.config.migration.suppressed = []
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                    result_str = await open_kitchen(name="demo", ctx=mock_ctx)
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert "unknown structural error" not in parsed["user_visible_message"]
+    assert "backend-incompatible-skill" in parsed["user_visible_message"]
+
+
+def test_recipe_validation_error_response_handles_malformed_suggestions():
+    """_recipe_validation_error_response must not crash on suggestions missing rule/message."""
+    from autoskillit.server.tools.tools_kitchen import _recipe_validation_error_response
+
+    result = {
+        "valid": False,
+        "errors": [],
+        "suggestions": [
+            {"severity": "error", "step": "some-step"},
+        ],
+    }
+    response = json.loads(_recipe_validation_error_response("demo", result))
+    assert "unknown structural error" not in response["user_visible_message"]
+    assert response["success"] is False

@@ -1380,3 +1380,6 @@ def test_cmd_rpc_issues_no_invalid_escape_sequences():
     assert result.returncode in (0, 1), f"ruff failed (exit {result.returncode}): {result.stderr}"
     findings = json.loads(result.stdout) if result.stdout.strip() else []
     assert findings == [], f"Invalid escape sequences found: {findings}"
+    assert result.returncode == 0, (
+        f"ruff exited {result.returncode} but produced no JSON findings: {result.stderr}"
+    )

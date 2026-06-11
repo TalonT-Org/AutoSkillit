@@ -28,11 +28,15 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
     mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
+        "valid": True,
+        "errors": [],
         "requires_packs": [],
         "requires_features": [],
         "content_hash": "abc123",
         "composite_hash": "def456",
         "recipe_version": "1.0",
+        "suggestions": [],
     }
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")
@@ -60,11 +64,15 @@ async def test_deferred_recall_sets_active_recipe_steps_none_when_find_raises():
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
     mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
+        "valid": True,
+        "errors": [],
         "requires_packs": [],
         "requires_features": [],
         "content_hash": "abc",
         "composite_hash": "def",
         "recipe_version": "1.0",
+        "suggestions": [],
     }
     mock_ctx.recipes.find.side_effect = RuntimeError("disk error")
 
@@ -83,11 +91,15 @@ async def test_deferred_recall_sets_active_recipe_steps_none_when_find_returns_n
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
     mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test-recipe\nsteps:\n  build:\n    cmd: task build\n",
+        "valid": True,
+        "errors": [],
         "requires_packs": [],
         "requires_features": [],
         "content_hash": "abc",
         "composite_hash": "def",
         "recipe_version": "1.0",
+        "suggestions": [],
     }
     mock_ctx.recipes.find.return_value = None
 

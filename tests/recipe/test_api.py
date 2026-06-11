@@ -1188,15 +1188,12 @@ def test_load_and_validate_surfaces_errors_on_dangling_routes(tmp_path: Path) ->
     """LoadRecipeResult must contain an 'errors' field with structural error strings
     when post-prune validation detects dangling routes."""
     from autoskillit.recipe._api import load_and_validate
-    from autoskillit.workspace.skills import DefaultSkillResolver
 
-    resolver = DefaultSkillResolver()
     result = load_and_validate(
         "implementation",
         project_dir=tmp_path,
         ingredient_overrides={"backend_supports_git_write": "false"},
         backend_name="codex",
-        lister=resolver,
     )
     assert result["valid"] is False
     assert "errors" in result, "LoadRecipeResult must include 'errors' field"

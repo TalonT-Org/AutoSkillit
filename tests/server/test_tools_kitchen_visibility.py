@@ -228,13 +228,16 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
 
 @pytest.mark.anyio
 async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
-    """open_kitchen(name='nonexistent') returns error with kitchen still open."""
+    """open_kitchen(name='nonexistent') fails closed when recipe is not found."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
     mock_ctx.recipes.load_and_validate.return_value = {
-        "error": "No recipe named 'nonexistent' found",
+        "content": "",
+        "valid": False,
+        "errors": ["No recipe named 'nonexistent' found"],
+        "suggestions": [],
     }
     mock_ctx.recipes.find.return_value = None
     mock_ctx.config.migration.suppressed = []
@@ -250,11 +253,9 @@ async def test_open_kitchen_with_recipe_not_found(tmp_path, monkeypatch):
                     result_str = await open_kitchen(name="nonexistent", ctx=mock_ctx)
 
     result = json.loads(result_str)
-    assert "error" in result
+    assert result["success"] is False
     assert "nonexistent" in result["error"]
-    assert result["kitchen"] == "open"
-    # Kitchen should still be opened even if recipe fails
-    mock_ctx.gate.enable.assert_called_once()
+    assert result["kitchen"] == "failed"
 
 
 @pytest.mark.anyio

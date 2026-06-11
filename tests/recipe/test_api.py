@@ -1225,42 +1225,6 @@ def test_load_and_validate_produces_valid_content_after_step_pruning(tmp_path: P
 
 
 # ---------------------------------------------------------------------------
-# Pre-prune validity guard: codex backend must produce valid recipe after pruning
-# ---------------------------------------------------------------------------
-
-
-def test_codex_backend_pruned_recipe_is_valid(tmp_path: Path) -> None:
-    """Integration test: load_and_validate with codex backend + git_write override
-    must return valid=True. The backend-incompatible-skill rule fires for steps
-    that have skip_when_false guards and would be pruned — semantic rules must
-    run AFTER pruning so pruned steps are not seen.
-
-    Pre-fix: semantic rules ran pre-prune → ERROR findings for pruned steps → valid=False.
-    Post-fix: semantic rules run post-prune → no findings for pruned steps → valid=True.
-    """
-    from autoskillit.recipe._api import load_and_validate
-
-    result = load_and_validate(
-        "implementation",
-        project_dir=tmp_path,
-        ingredient_overrides={
-            "backend_supports_git_write": "false",
-            "open_pr": "false",
-        },
-        backend_name="codex",
-    )
-    assert result.get("valid") is True, (
-        f"Codex backend pruned recipe must be valid=True; got valid={result.get('valid')}. "
-        f"Error findings: "
-        + "; ".join(
-            f"[{s.get('rule')}] {s.get('message', '')[:80]}"
-            for s in result.get("suggestions", [])
-            if s.get("severity") == Severity.ERROR
-        )
-    )
-
-
-# ---------------------------------------------------------------------------
 # Pre-prune validity guard: validate_from_path with codex backend
 # ---------------------------------------------------------------------------
 

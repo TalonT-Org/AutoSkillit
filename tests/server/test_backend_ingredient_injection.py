@@ -515,8 +515,8 @@ class TestRealCompositionPruning:
         # by wiring through to the real _api.load_and_validate function
         from autoskillit.recipe._api import load_and_validate as _real_load
 
-        def _real_load_wrapper(name, **kwargs):
-            return _real_load(name, project_dir=tmp_path, **kwargs)
+        def _real_load_wrapper(name, project_dir=None, **kwargs):
+            return _real_load(name, project_dir=project_dir or tmp_path, **kwargs)
 
         mock_ctx.recipes.load_and_validate.side_effect = _real_load_wrapper
         mock_ctx.recipes.find.return_value = None

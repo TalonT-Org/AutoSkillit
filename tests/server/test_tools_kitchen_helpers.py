@@ -35,7 +35,7 @@ def test_recipe_validation_error_response_surfaces_semantic_errors() -> None:
     response = json.loads(response_str)
 
     assert "unknown structural error" not in response["user_visible_message"], (
-        f"user_visible_message should surface semantic error, got: {response['user_visible_message']}"
+        f"should surface semantic error, got: {response['user_visible_message']}"
     )
     assert "backend-incompatible-skill" in response["user_visible_message"], (
         f"user_visible_message should include rule name, got: {response['user_visible_message']}"

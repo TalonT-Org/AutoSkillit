@@ -9,7 +9,6 @@ codex open_kitchen "unknown structural error" bug — see investigation_from_iss
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
 import pytest
 
@@ -18,7 +17,7 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-_API_PATH = SRC_ROOT / "autoskillit" / "recipe" / "_api.py"
+_API_PATH = SRC_ROOT / "recipe" / "_api.py"
 
 
 def _find_function_node(tree: ast.Module, func_name: str) -> ast.FunctionDef:

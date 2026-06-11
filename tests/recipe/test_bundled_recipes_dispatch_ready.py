@@ -121,7 +121,7 @@ _BACKEND_OVERRIDES: dict[str, dict[str, str]] = {
 @pytest.mark.parametrize(
     "backend_name,ingredient_overrides",
     sorted(_BACKEND_OVERRIDES.items()),
-    ids=lambda v: v if isinstance(v, str) else sorted(v.keys())[0],
+    ids=lambda v: v if isinstance(v, str) else (sorted(v.keys())[0] if v else "no-overrides"),
 )
 def test_bundled_recipe_dispatch_ready_per_backend(
     recipe_name: str, backend_name: str, ingredient_overrides: dict[str, str]

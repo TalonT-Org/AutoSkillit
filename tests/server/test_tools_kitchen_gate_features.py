@@ -417,3 +417,41 @@ def test_recipe_resource_returns_composed_content():
     assert result == ("name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n")
     assert "optional: true" not in result
     assert "skip_when_false:" not in result
+
+
+# 1h: get_recipe resource returns error for invalid recipe
+def test_recipe_resource_returns_error_for_invalid_recipe():
+    """When load_and_validate returns valid=False, get_recipe must return an error
+    JSON instead of raw content.
+    """
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.recipes = MagicMock()
+    mock_ctx.recipes.find.return_value = MagicMock()
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: bad-recipe\ndescription: missing steps\n",
+        "valid": False,
+        "errors": ["Recipe must have at least one step."],
+        "suggestions": [],
+    }
+    mock_ctx.backend = None
+
+    with (
+        patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx),
+        patch(
+            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+            return_value={},
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen.build_config_authoritative_layer",
+            return_value={},
+        ),
+    ):
+        from autoskillit.server.tools.tools_kitchen import get_recipe
+
+        result = get_recipe("bad-recipe")
+
+    parsed = json.loads(result)
+    assert "error" in parsed, f"Expected error JSON for invalid recipe; got: {result}"
+    assert "validation" in parsed["error"].lower() or "invalid" in parsed["error"].lower(), (
+        f"Error should mention validation/invalid; got: {parsed['error']}"
+    )

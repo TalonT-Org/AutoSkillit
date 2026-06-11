@@ -312,7 +312,7 @@ def load_and_validate(
     raw = substitute_temp_placeholder(raw, _temp_relpath)
     raw = substitute_scripts_placeholder(raw)
     suggestions: list[dict[str, Any]] = []
-    valid = True
+    valid = False
     errors: list[str] = []
     recipe = None
     active_recipe = None
@@ -330,7 +330,7 @@ def load_and_validate(
         data = _load_recipe_dict(match.path, raw_text=raw, temp_dir_relpath=_temp_relpath)
         t0 = _t("yaml_parse", t0, name)
 
-        if isinstance(data, dict) and "steps" in data:
+        if isinstance(data, dict):
             recipe = _parse_recipe(data)
 
             from autoskillit.recipe.identity import compute_composite_hash  # noqa: PLC0415
@@ -469,8 +469,6 @@ def load_and_validate(
             t0 = _t("diagram", t0, name)
 
             valid = compute_recipe_validity(errors, semantic_findings, contract_findings)
-        else:
-            t0 = _t("yaml_parse", t0, name)
 
     except YAMLError as exc:
         logger.warning("Recipe YAML parse error", name=name, exc_info=True)

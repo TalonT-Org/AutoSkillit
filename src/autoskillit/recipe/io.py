@@ -502,7 +502,10 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
             )
 
     steps: dict[str, RecipeStep] = {}
-    for step_name, step_data in (data.get("steps") or {}).items():
+    _steps_raw = data.get("steps")
+    if _steps_raw is not None and not isinstance(_steps_raw, dict):
+        raise ValueError(f"'steps' must be a mapping, got {type(_steps_raw).__name__!r}")
+    for step_name, step_data in (_steps_raw or {}).items():
         if isinstance(step_data, dict):
             step = _parse_step(step_data)
             step.name = step_name

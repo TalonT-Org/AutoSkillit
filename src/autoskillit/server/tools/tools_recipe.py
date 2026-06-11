@@ -234,6 +234,8 @@ async def load_recipe(
             )
             recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
+            if not result.get("valid", False):
+                result["validation_failed"] = True
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
             return json.dumps(result)

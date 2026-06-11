@@ -543,3 +543,40 @@ class TestLoadRecipeIngredientsOnly:
         assert "orchestration_rules" not in result
         assert "stop_step_semantics" not in result
         assert "suggestions" in result
+
+
+# 1i: load_recipe tool surfaces validation failure
+class TestLoadRecipeSurfacesValidationFailure:
+    """When load_and_validate returns valid=False, the load_recipe tool must include
+    a field indicating the recipe failed validation.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        """Ensure server context is initialized with gate open."""
+
+    @pytest.mark.anyio
+    async def test_load_recipe_surfaces_validation_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When load_and_validate returns valid=False, the response must include
+        a validation_failed indicator so callers know the recipe is invalid.
+        """
+        from autoskillit.recipe._api_cache import _LOAD_CACHE
+
+        monkeypatch.chdir(tmp_path)
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "no-steps.yaml").write_text(
+            "name: no-steps\ndescription: Missing steps\nkitchen_rules:\n  - 'rule'\n"
+        )
+
+        _LOAD_CACHE.clear()
+
+        result = json.loads(await load_recipe(name="no-steps"))
+        assert result.get("valid") is False
+        assert result.get("validation_failed") is True, (
+            f"Expected validation_failed=True in response; got keys: {list(result.keys())}"
+        )
+        assert "errors" in result
+        assert len(result["errors"]) > 0

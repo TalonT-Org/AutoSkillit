@@ -30,6 +30,7 @@ class HookDef:
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"] = (
         "works-as-is"
     )
+    mechanism: Literal["deny", "additionalContext", "output-rewrite"] = "deny"
 
     def __post_init__(self) -> None:
         if self.event_type != "SessionStart" and not self.matcher:
@@ -94,15 +95,18 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/ingredient_lock_guard.py",
             "guards/pipeline_step_guard.py",
         ],
+        mechanism="deny",
     ),
     HookDef(
         matcher="mcp__.*autoskillit.*__remove_clone",
         scripts=["guards/remove_clone_guard.py"],
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
         scripts=["guards/open_kitchen_guard.py"],
         timeout_seconds=5,
+        mechanism="deny",
     ),
     HookDef(
         matcher="AskUserQuestion",
@@ -110,18 +114,22 @@ HOOK_REGISTRY: list[HookDef] = [
         timeout_seconds=5,
         session_scope="headless_only",
         codex_status="not-applicable",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__merge_worktree",
         scripts=["guards/branch_protection_guard.py"],
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__push_to_remote",
         scripts=["guards/branch_protection_guard.py"],
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/unsafe_install_guard.py"],
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -140,20 +148,24 @@ HOOK_REGISTRY: list[HookDef] = [
         # Must stay in sync with _EXEMPT_SESSION_TYPES in guards/pr_create_guard.py —
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/compose_pr_body_guard.py"],
         session_scope="headless_only",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/planner_gh_discovery_guard.py"],
         session_scope="headless_only",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/artifact_download_guard.py"],
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -162,6 +174,7 @@ HOOK_REGISTRY: list[HookDef] = [
         # Must stay in sync with _EXEMPT_SESSION_TYPES in guards/git_ops_guard.py —
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -170,30 +183,36 @@ HOOK_REGISTRY: list[HookDef] = [
         # Must stay in sync with _EXEMPT_SKILLS in guards/test_runner_guard.py —
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_skills=frozenset({"implement-experiment"}),
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/generated_file_write_guard.py"],
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/write_guard.py"],
         session_scope="headless_only",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/planner_result_naming_guard.py"],
         session_scope="headless_only",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/recipe_write_advisor.py"],
         session_scope="interactive_only",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Grep",
         scripts=["guards/grep_pattern_lint_guard.py"],
         codex_status="not-applicable",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|Write|Edit|Read|Glob|Grep",
@@ -201,21 +220,25 @@ HOOK_REGISTRY: list[HookDef] = [
         timeout_seconds=5,
         session_scope="interactive_only",
         codex_status="degraded",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
         scripts=["guards/skill_orchestration_guard.py"],
         session_scope="headless_only",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__(run_cmd|run_python)",
         scripts=["guards/recipe_read_guard.py"],
         session_scope="headless_only",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"Bash|Agent",
         scripts=["guards/background_exec_guard.py"],
         session_scope="headless_only",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
@@ -225,11 +248,13 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/ingredient_lock_guard.py",
             "guards/fleet_claim_guard.py",
         ],
+        mechanism="deny",
     ),
     HookDef(
         event_type="PostToolUse",
         matcher="mcp__.*autoskillit.*",
         scripts=["formatters/pretty_output_hook.py"],
+        mechanism="output-rewrite",
     ),
     HookDef(
         event_type="PostToolUse",
@@ -240,16 +265,19 @@ HOOK_REGISTRY: list[HookDef] = [
             "pipeline_step_post_hook.py",
             "recipe_confirmed_post_hook.py",
         ],
+        mechanism="output-rewrite",
     ),
     HookDef(
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_python).*",
         scripts=["review_gate_post_hook.py"],
+        mechanism="output-rewrite",
     ),
     HookDef(
         event_type="PostToolUse",
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
         scripts=["resume_gate_post_hook.py"],
+        mechanism="output-rewrite",
     ),
     HookDef(
         event_type="PostToolUse",
@@ -257,31 +285,37 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["lint_after_edit_hook.py"],
         session_scope="headless_only",
         codex_status="degraded",
+        mechanism="output-rewrite",
     ),
     HookDef(
         event_type="PostToolUse",
         matcher="Skill",
         scripts=["skill_load_post_hook.py"],
         codex_status="not-applicable",
+        mechanism="additionalContext",
     ),
     HookDef(
         matcher=r"Read|Write|Edit|Bash|Grep|Glob",
         scripts=["guards/skill_load_guard.py"],
         session_scope="headless_only",
         codex_status="fix-required",
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
         scripts=["guards/review_loop_gate.py"],
+        mechanism="deny",
     ),
     HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?reset_dispatch",
         scripts=["guards/reset_resume_gate.py"],
+        mechanism="deny",
     ),
     HookDef(
         event_type="SessionStart",
         scripts=["session_start_hook.py"],
         session_scope="interactive_only",
+        mechanism="additionalContext",
     ),
 ]
 
@@ -388,6 +422,7 @@ def _canonical_registry_payload(
                 "exempt_session_types": sorted(h.exempt_session_types),
                 "exempt_skills": sorted(h.exempt_skills),
                 "matcher": h.matcher,
+                "mechanism": h.mechanism,
                 "scripts": list(h.scripts),
                 "session_scope": h.session_scope,
                 "timeout_seconds": h.timeout_seconds,

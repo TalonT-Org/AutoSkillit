@@ -113,6 +113,7 @@ markers = [
 filterwarnings = [
     "error::SyntaxWarning",
     "error::DeprecationWarning:autoskillit",
+    "default:AUTOSKILLIT_HEADLESS=1 without:DeprecationWarning",
 ]
 
 [tool.coverage.run]

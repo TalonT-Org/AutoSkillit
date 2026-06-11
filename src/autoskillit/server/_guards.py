@@ -48,7 +48,7 @@ def _require_orchestrator_or_higher(tool_name: str = "") -> str | None:
 
     try:
         st = session_type()
-    except ValueError as e:
+    except (ValueError, DeprecationWarning) as e:
         return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
     if st in (SessionType.ORCHESTRATOR, SessionType.FLEET):
         return None
@@ -74,7 +74,7 @@ def _require_orchestrator_exact(tool_name: str = "") -> str | None:
 
     try:
         st = session_type()
-    except ValueError as e:
+    except (ValueError, DeprecationWarning) as e:
         return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
     if st is SessionType.ORCHESTRATOR:
         return None
@@ -105,7 +105,7 @@ def _require_fleet(tool_name: str = "") -> str | None:
     """
     try:
         st = session_type()
-    except ValueError as e:
+    except (ValueError, DeprecationWarning) as e:
         return headless_error_result(f"{tool_name}: {e}" if tool_name else str(e))
     if st is SessionType.FLEET:
         return None

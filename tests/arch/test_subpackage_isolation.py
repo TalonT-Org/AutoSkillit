@@ -971,11 +971,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "error propagation from LoadRecipeResult",
     ),
     "tools_execution.py": (
-        1110,
+        1130,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
-        "for fabricated skill name rejection, and _check_backend_compat fail-closed gate "
-        "with resolver-absent fallback via extract_skill_name add defense-in-depth checks",
+        "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
+        "with resolver-absent fallback via extract_skill_name, and fix-required hook "
+        "dispatch gate add defense-in-depth checks",
     ),
     "execution/backends/codex.py": (
         1045,

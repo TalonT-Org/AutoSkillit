@@ -93,9 +93,7 @@ def test_bundled_workflows_pass_semantic_rules() -> None:
     yaml_files = list(wf_dir.glob("*.yaml"))
     assert yaml_files
 
-    _KNOWN_NON_CONFORMING: dict[str, set[str]] = {
-        "research.yaml": {"audit-impl-remediation-route"},
-    }
+    _KNOWN_NON_CONFORMING: dict[str, set[str]] = {}
     for path in yaml_files:
         wf = load_recipe(path)
         findings = run_semantic_rules(wf)

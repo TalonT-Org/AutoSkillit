@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:1d5fac42c5bb63012f0407cb60737d61eca2eb680d3e461a56f588852875fabb -->
+<!-- autoskillit-recipe-hash: sha256:1d61758ec0da78599ff3979d01bad2cedffd1eb616aee634e84d90374f37e12b -->
 <!-- autoskillit-diagram-format: v7 -->
 
 ## research
@@ -49,6 +49,16 @@ decompose_phases
 |
 +----+
 
+audit_impl
+|    x fail [-> remediate]
+|
+remediate (route)
+|
+check_audit_retry_loop (max 2)
+|    x exceeded [-> escalate_stop]
+|
+pre_remediation_cleanup
+|
 run_experiment <-> [adjust_experiment] (optional)
 |    x fail [-> troubleshoot_run_failure]
 |    x exhausted [-> ensure_results]

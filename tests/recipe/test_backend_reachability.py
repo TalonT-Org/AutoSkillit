@@ -21,7 +21,7 @@ from autoskillit.workspace.skills import DefaultSkillResolver
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-_RECIPE_NAMES = ["implementation", "implementation-groups", "remediation"]
+_RECIPE_NAMES = ["implementation", "implementation-groups", "remediation", "research"]
 _BACKEND_NAMES = sorted(BACKEND_REGISTRY.keys())
 
 # Steps guarded by inputs.open_pr rather than backend_supports_git_write.

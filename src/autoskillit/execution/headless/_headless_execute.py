@@ -140,6 +140,10 @@ async def _execute_claude_headless(
         else:
             _raw_idle = float(cfg.idle_output_timeout)
     effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
+    if spec.process_idle_timeout_ms > 0:
+        _spec_idle = spec.process_idle_timeout_ms / 1000.0
+        if effective_idle is None or _spec_idle < effective_idle:
+            effective_idle = _spec_idle
 
     current_provider_name: str = provider_name
     fallback_activated: bool = False

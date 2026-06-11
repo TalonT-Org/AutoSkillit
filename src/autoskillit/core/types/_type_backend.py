@@ -263,6 +263,7 @@ class CmdSpec:
     cwd: str = ""
     origin: CmdOrigin | None = None
     is_resume: bool = False
+    process_idle_timeout_ms: int = 0
 
 
 @dataclass(frozen=True, slots=True)

@@ -626,6 +626,13 @@ class TestCodexBuildSkillSessionCmd:
         assert "--plugin-dir" not in cmd_str
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
         assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
+        assert spec.process_idle_timeout_ms == 3000
+
+    def test_stream_idle_timeout_routed_to_cmdspec(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            **{**self.BASE, "stream_idle_timeout_ms": 30000}
+        )
+        assert spec.process_idle_timeout_ms == 30000
 
     def test_cwd_set(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
@@ -1078,6 +1085,12 @@ class TestCodexBuildFoodTruckCmd:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "--dangerously-bypass-hook-trust" in spec.cmd
 
+    def test_stream_idle_timeout_routed_to_cmdspec(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **{**self.BASE, "stream_idle_timeout_ms": 60000}
+        )
+        assert spec.process_idle_timeout_ms == 60000
+
 
 class TestCodexEnsurePreLaunchConfigValidation:
     @pytest.fixture(autouse=True)
@@ -1514,6 +1527,73 @@ class TestCodexBackendConventions:
 
     def test_conventions_skills_subdir(self) -> None:
         assert CodexBackend().conventions.skills_subdir == Path("skills")
+
+
+class TestClaudeCodeBackendProcessIdleDefault:
+    def test_claude_code_backend_process_idle_default_zero(self) -> None:
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+        spec = ClaudeCodeBackend().build_skill_session_cmd(
+            "/test-skill",
+            cwd="/work",
+            completion_marker="%%DONE%%",
+        )
+        assert spec.process_idle_timeout_ms == 0
+
+
+class TestCodexDiscardDispositions:
+    """Document the complete noqa:F841 discard disposition picture in codex.py.
+
+    stream_idle_timeout_ms -> routed to CmdSpec.process_idle_timeout_ms (P1-A6-WP1).
+    plugin_source, output_format, exit_after_stop_delay_ms -> intentional
+    no-op discards (P2-A2 scope).
+    """
+
+    def test_stream_idle_timeout_routed_in_skill_builder(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            skill_command="/test",
+            cwd="/work",
+            completion_marker="%%DONE%%",
+            stream_idle_timeout_ms=10000,
+        )
+        assert spec.process_idle_timeout_ms == 10000
+
+    def test_stream_idle_timeout_routed_in_food_truck_builder(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="go",
+            plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
+            cwd="/work",
+            completion_marker="%%DONE%%",
+            stream_idle_timeout_ms=20000,
+        )
+        assert spec.process_idle_timeout_ms == 20000
+
+    def test_exit_after_stop_delay_still_discarded(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            skill_command="/test",
+            cwd="/work",
+            completion_marker="%%DONE%%",
+            exit_after_stop_delay_ms=5000,
+        )
+        assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
+
+    def test_plugin_source_still_discarded(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            skill_command="/test",
+            cwd="/work",
+            completion_marker="%%DONE%%",
+            plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
+        )
+        assert "--plugin-dir" not in " ".join(spec.cmd)
+
+    def test_output_format_still_discarded(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            skill_command="/test",
+            cwd="/work",
+            completion_marker="%%DONE%%",
+            output_format=OutputFormat.STREAM_JSON,
+        )
+        assert "--json" in spec.cmd
 
 
 class TestCodexBackendSetupSessionDir:

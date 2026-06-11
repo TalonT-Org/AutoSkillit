@@ -680,6 +680,7 @@ _FIXTURE_MEDIATED_ENTRIES: dict[str, frozenset[str]] = {
             "execution/test_headless_dispatch.py",
             "execution/test_headless_env_injection.py",
             "execution/test_headless_env_scrub.py",
+            "execution/test_headless_execute.py",
             "execution/test_headless_provider_fallback.py",
             "execution/test_headless_synthesis.py",
             "execution/test_idle_output_env.py",

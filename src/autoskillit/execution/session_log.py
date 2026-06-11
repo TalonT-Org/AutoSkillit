@@ -449,16 +449,20 @@ def flush_session_log(
     # Write per-session telemetry files; gate on data presence, not session identity
     label = _resolve_session_label(step_name, dispatch_id)
     if token_usage is not None:
-        _cache_write = token_usage.get(
-            "cache_write_tokens", token_usage.get("cache_creation_input_tokens", 0)
+        _cw_raw = token_usage.get("cache_write_tokens")
+        _cache_write = (
+            _cw_raw
+            if _cw_raw is not None
+            else (token_usage.get("cache_creation_input_tokens") or 0)
         )
-        _cache_read = token_usage.get(
-            "cache_read_tokens", token_usage.get("cache_read_input_tokens", 0)
+        _cr_raw = token_usage.get("cache_read_tokens")
+        _cache_read = (
+            _cr_raw if _cr_raw is not None else (token_usage.get("cache_read_input_tokens") or 0)
         )
         tu_data = {
             "session_label": label,
-            "input_tokens": token_usage.get("input_tokens", 0),
-            "output_tokens": token_usage.get("output_tokens", 0),
+            "input_tokens": token_usage.get("input_tokens") or 0,
+            "output_tokens": token_usage.get("output_tokens") or 0,
             "cache_write_tokens": _cache_write,
             "cache_read_tokens": _cache_read,
             "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
@@ -513,10 +517,10 @@ def flush_session_log(
         "peak_rss_kb": peak_rss_kb,
         "peak_oom_score": peak_oom_score,
         "step_name": step_name,
-        "input_tokens": token_usage.get("input_tokens", 0) if token_usage else 0,
-        "output_tokens": token_usage.get("output_tokens", 0) if token_usage else 0,
-        "cache_write_tokens": token_usage.get("cache_write_tokens", 0) if token_usage else 0,
-        "cache_read_tokens": token_usage.get("cache_read_tokens", 0) if token_usage else 0,
+        "input_tokens": (token_usage.get("input_tokens") or 0) if token_usage else 0,
+        "output_tokens": (token_usage.get("output_tokens") or 0) if token_usage else 0,
+        "cache_write_tokens": (token_usage.get("cache_write_tokens") or 0) if token_usage else 0,
+        "cache_read_tokens": (token_usage.get("cache_read_tokens") or 0) if token_usage else 0,
         "write_call_count": write_call_count,
         "fs_writes_detected": fs_writes_detected,
         "git_writes_detected": git_writes_detected,

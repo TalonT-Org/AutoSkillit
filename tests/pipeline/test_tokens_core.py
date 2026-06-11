@@ -438,6 +438,79 @@ class TestDefaultTokenLogLoadFromLogDir:
         report = log.get_report()
         assert report[0]["elapsed_seconds"] == 0.0
 
+    def test_load_null_cache_fields(self, tmp_path):
+        """TokenLog must handle null cache fields without TypeError."""
+        _write_session(
+            tmp_path,
+            "s001",
+            {
+                "session_label": "implement",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_write_tokens": None,
+                "cache_read_tokens": None,
+                "timing_seconds": 0.0,
+                "schema_version": 2,
+            },
+        )
+        log = DefaultTokenLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+        report = log.get_report()
+        assert report[0]["cache_write_tokens"] == 0
+        assert report[0]["cache_read_tokens"] == 0
+
+    @pytest.mark.parametrize(
+        "null_field",
+        [
+            "input_tokens",
+            "output_tokens",
+            "cache_write_tokens",
+            "cache_read_tokens",
+            "loc_insertions",
+            "loc_deletions",
+        ],
+    )
+    def test_load_null_int_field(self, tmp_path, null_field):
+        """Each int field can be null on disk; load_from_log_dir must handle it."""
+        payload = {
+            "session_label": "implement",
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_write_tokens": 0,
+            "cache_read_tokens": 0,
+            "loc_insertions": 5,
+            "loc_deletions": 3,
+            "timing_seconds": 0.0,
+            "schema_version": 2,
+        }
+        payload[null_field] = None
+        _write_session(tmp_path, "s001", payload)
+        log = DefaultTokenLog()
+        n = log.load_from_log_dir(tmp_path)
+        assert n == 1
+
+    def test_load_preserves_zero_cache_write_with_v1_fallback(self, tmp_path):
+        """cache_write_tokens: 0 must not consult v1 fallback key (cache_creation_input_tokens)."""
+        _write_session(
+            tmp_path,
+            "s001",
+            {
+                "session_label": "implement",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_write_tokens": 0,
+                "cache_creation_input_tokens": 500,
+                "cache_read_tokens": 0,
+                "timing_seconds": 0.0,
+                "schema_version": 2,
+            },
+        )
+        log = DefaultTokenLog()
+        log.load_from_log_dir(tmp_path)
+        report = log.get_report()
+        assert report[0]["cache_write_tokens"] == 0
+
 
 class TestLoadFromLogDirSchemaVersionCompat:
     """Backward compatibility: load_from_log_dir reads both v1 and v2 token_usage.json."""

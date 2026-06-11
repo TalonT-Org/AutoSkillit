@@ -184,6 +184,28 @@ class TestMergeProviderGuard:
             CanonicalTokenUsage.merge(a, b)
 
 
+class TestToDictNoneCoercion:
+    def test_to_dict_coerces_none_to_zero_for_int_fields(self):
+        ctu = CanonicalTokenUsage(
+            input_tokens=100,
+            output_tokens=50,
+            cache_read_tokens=None,
+            cache_write_tokens=None,
+            provider="codex",
+        )
+        d = ctu.to_dict()
+        for key in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"):
+            assert isinstance(d[key], int), f"{key} should be int, got {type(d[key])}"
+
+    def test_codex_to_dict_coerces_none_cache_fields(self):
+        raw = {"input_tokens": 200, "output_tokens": 80, "cached_input_tokens": 50}
+        ctu = CanonicalTokenUsage.from_codex_dict(raw)
+        assert ctu.cache_write_tokens is None
+        d = ctu.to_dict()
+        assert d["cache_write_tokens"] == 0
+        assert d["cache_read_tokens"] == 50
+
+
 class TestFrozen:
     def test_cannot_mutate_fields(self):
         usage = CanonicalTokenUsage(

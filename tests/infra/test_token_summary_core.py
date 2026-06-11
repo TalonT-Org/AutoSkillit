@@ -1206,3 +1206,43 @@ def test_reader_agreement_contract(
     if scenario == "non-anthropic":
         assert not disk_model.startswith("claude-")
         assert disk_model not in ("sonnet", "opus", "haiku")
+
+
+def test_load_sessions_handles_null_cache_write(tmp_path: Path) -> None:
+    """_load_sessions must handle null cache_write_tokens in token_usage.json without crash."""
+    from autoskillit.hooks.token_summary_hook import _load_sessions
+
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    pipeline_id = "test-null-cache"
+
+    _write_sessions(
+        log_root,
+        [
+            {
+                "dir_name": "s1",
+                "cwd": "/some/worktree",
+                "kitchen_id": pipeline_id,
+                "step_name": "plan",
+            },
+        ],
+    )
+    sess_dir = log_root / "sessions" / "s1"
+    sess_dir.mkdir(parents=True, exist_ok=True)
+    (sess_dir / "token_usage.json").write_text(
+        json.dumps(
+            {
+                "session_label": "plan",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_write_tokens": None,
+                "cache_read_tokens": None,
+                "timing_seconds": 0.0,
+            }
+        )
+    )
+
+    result = _load_sessions(log_root, pipeline_id)
+    assert "plan" in result
+    assert result["plan"]["cache_write_tokens"] == 0
+    assert result["plan"]["cache_read_tokens"] == 0

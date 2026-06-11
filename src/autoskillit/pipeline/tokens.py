@@ -140,10 +140,10 @@ class DefaultTokenLog:
         _model = model or _primary_model(token_usage)
         if _model and not e.model:
             e.model = _model
-        e.input_tokens += token_usage.get("input_tokens", 0)
-        e.output_tokens += token_usage.get("output_tokens", 0)
-        e.cache_write_tokens += token_usage.get("cache_write_tokens", 0)
-        e.cache_read_tokens += token_usage.get("cache_read_tokens", 0)
+        e.input_tokens += token_usage.get("input_tokens") or 0
+        e.output_tokens += token_usage.get("output_tokens") or 0
+        e.cache_write_tokens += token_usage.get("cache_write_tokens") or 0
+        e.cache_read_tokens += token_usage.get("cache_read_tokens") or 0
         e.invocation_count += 1
         e.loc_insertions += loc_insertions
         e.loc_deletions += loc_deletions
@@ -335,20 +335,22 @@ class DefaultTokenLog:
                 _model = data.get("configured_model") or data.get("model_identifier", "")
             if _model and not e.model:
                 e.model = _model
-            e.input_tokens += data.get("input_tokens", 0)
-            e.output_tokens += data.get("output_tokens", 0)
-            e.cache_write_tokens += data.get(
-                "cache_write_tokens", data.get("cache_creation_input_tokens", 0)
+            e.input_tokens += data.get("input_tokens") or 0
+            e.output_tokens += data.get("output_tokens") or 0
+            _cw = data.get("cache_write_tokens")
+            e.cache_write_tokens += (
+                _cw if _cw is not None else (data.get("cache_creation_input_tokens") or 0)
             )
-            e.cache_read_tokens += data.get(
-                "cache_read_tokens", data.get("cache_read_input_tokens", 0)
+            _cr = data.get("cache_read_tokens")
+            e.cache_read_tokens += (
+                _cr if _cr is not None else (data.get("cache_read_input_tokens") or 0)
             )
             # timing_seconds is the on-disk key name written by session_log.py;
             # elapsed_seconds is the in-memory field name on TokenEntry.
             _raw_timing = data.get("timing_seconds")
             e.elapsed_seconds += float(_raw_timing) if _raw_timing is not None else 0.0
-            e.loc_insertions += data.get("loc_insertions", 0)
-            e.loc_deletions += data.get("loc_deletions", 0)
+            e.loc_insertions += data.get("loc_insertions") or 0
+            e.loc_deletions += data.get("loc_deletions") or 0
             _raw_peak = data.get("peak_context", 0)
             if isinstance(_raw_peak, int) and _raw_peak > e.peak_context:
                 e.peak_context = _raw_peak

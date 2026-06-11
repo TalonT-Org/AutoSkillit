@@ -719,7 +719,7 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
             mutation_call = json.loads(kwargs["input_data"])
             query = mutation_call["query"]
             variables = mutation_call["variables"]
-            assert query.startswith("mutation(") or query.startswith("{")
+            assert query.startswith("mutation(")
             for var_name in variables:
                 assert f"${var_name}:" in query, f"Variable ${var_name} not declared in mutation"
                 assert f"${var_name})" in query, f"Variable ${var_name} not referenced in mutation"

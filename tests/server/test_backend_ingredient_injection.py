@@ -523,6 +523,7 @@ class TestRealCompositionPruning:
 
         mock_ctx.recipes.load_and_validate.side_effect = _real_load_wrapper
         mock_ctx.recipes.find.return_value = None
+        mock_ctx.project_dir = tmp_path
         mock_ctx.temp_dir = tmp_path
 
         mock_mcp_ctx = AsyncMock()
@@ -541,7 +542,7 @@ class TestRealCompositionPruning:
             patch("autoskillit.server._get_ctx", return_value=mock_ctx),
             patch(
                 "autoskillit.config.resolve_ingredient_defaults",
-                return_value={},
+                return_value={"open_pr": "false"},
             ),
             patch(
                 "autoskillit.server._misc._apply_triage_gate",
@@ -549,10 +550,6 @@ class TestRealCompositionPruning:
                 side_effect=lambda r, *a, **kw: r,
             ),
             patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
-            patch(
-                "autoskillit.server.tools.tools_kitchen._backend_capability_overrides",
-                return_value={"backend_supports_git_write": "false", "open_pr": "false"},
-            ),
         ):
             result_str = await open_kitchen(name="implementation", ctx=mock_mcp_ctx)
             import json

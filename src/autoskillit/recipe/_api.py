@@ -23,11 +23,7 @@ from autoskillit.core import (
     resolve_temp_dir,
 )
 from autoskillit.recipe import _api_cache
-from autoskillit.recipe._analysis import (
-    _build_step_graph,
-    analyze_dataflow,
-    make_validation_context,
-)
+from autoskillit.recipe._analysis import make_validation_context
 
 # Re-export for backward compatibility
 from autoskillit.recipe._api_cache import (  # noqa: F401
@@ -69,7 +65,6 @@ from autoskillit.recipe._rule_helpers import (
     extract_sentinel_json_blocks,
 )
 from autoskillit.recipe.contracts import (
-    _CONTEXT_REF_RE,
     check_contract_staleness,
     load_recipe_card,
     stale_to_suggestions,
@@ -369,15 +364,11 @@ def load_and_validate(
             # Stage: skip_when_false pruning (Python-side evaluation)
             # MUST run before semantic rules so pruned steps are never seen by
             # rules like backend-incompatible-skill. See test_semantic_rules_run_after_pruning.
-            # Snapshot pre-prune dead outputs so we can filter pruning-induced
-            # false positives from the post-prune dead-output rule.
-            _pre_prune_graph = _build_step_graph(active_recipe)
-            _pre_prune_dataflow = analyze_dataflow(active_recipe, step_graph=_pre_prune_graph)
-            _pre_prune_dead_keys: frozenset[tuple[str, str]] = frozenset(
-                (w.step_name, w.field)
-                for w in _pre_prune_dataflow.warnings
-                if w.code == "DEAD_OUTPUT"
-            )
+            # Snapshot pre-prune semantic findings: graph-aware rules (dead-output,
+            # capture-inversion) produce false positives when pruning changes step
+            # graph reachability. Only findings that ALSO appear pre-prune are kept.
+            _pre_prune_val_ctx = make_validation_context(active_recipe, backend_name=backend_name)
+            _pre_prune_findings = run_semantic_rules(_pre_prune_val_ctx)
             _pre_prune_steps = dict(active_recipe.steps)
             active_recipe, _skip_resolutions = _prune_skipped_steps(
                 active_recipe, ingredient_overrides, defer_unresolved
@@ -439,30 +430,15 @@ def load_and_validate(
             t0 = _t("semantic_rules", t0, name)
 
             if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
-
-                def _is_pruning_dead_output(f: Any) -> bool:
-                    rule = getattr(f, "rule", None) or (
-                        f.get("rule") if isinstance(f, dict) else None
-                    )
-                    if rule != "dead-output":
-                        return False
-                    step = getattr(f, "step_name", None) or (
-                        f.get("step") if isinstance(f, dict) else None
-                    )
-                    msg = getattr(f, "message", None) or (
-                        f.get("message", "") if isinstance(f, dict) else ""
-                    )
-                    refs = _CONTEXT_REF_RE.findall(msg)
-                    if step and refs:
-                        return all((step, ref) not in _pre_prune_dead_keys for ref in refs)
-                    return False
-
-                semantic_suggestions = [
-                    s for s in semantic_suggestions if not _is_pruning_dead_output(s)
-                ]
+                _pre_prune_finding_keys: frozenset[tuple[str, str, str]] = frozenset(
+                    (f.rule, f.step_name, f.message) for f in _pre_prune_findings
+                )
                 semantic_findings = [
-                    f for f in semantic_findings if not _is_pruning_dead_output(f)
+                    f
+                    for f in semantic_findings
+                    if (f.rule, f.step_name, f.message) in _pre_prune_finding_keys
                 ]
+                semantic_suggestions = findings_to_dicts(semantic_findings)
 
             _suppressed = suppressed or []
             if name in _suppressed:

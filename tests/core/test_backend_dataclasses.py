@@ -23,7 +23,7 @@ def test_cmd_spec_fields():
     from autoskillit.core import CmdSpec
 
     fields = {f.name for f in dataclasses.fields(CmdSpec)}
-    assert fields == {"cmd", "env", "cwd", "origin", "is_resume"}
+    assert fields == {"cmd", "env", "cwd", "origin", "is_resume", "process_idle_timeout_ms"}
 
 
 def test_cmd_spec_is_resume_default():
@@ -31,6 +31,13 @@ def test_cmd_spec_is_resume_default():
 
     spec = CmdSpec(cmd=(), env={})
     assert spec.is_resume is False
+
+
+def test_cmd_spec_process_idle_timeout_default():
+    from autoskillit.core import CmdSpec
+
+    spec = CmdSpec(cmd=(), env={})
+    assert spec.process_idle_timeout_ms == 0
 
 
 def test_cmd_spec_env_accepts_mapping():

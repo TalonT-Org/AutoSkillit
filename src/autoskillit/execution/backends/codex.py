@@ -626,7 +626,7 @@ class CodexBackend:
             output_format = config.output_format  # noqa: F841  # no-op: --json is unconditional for Codex
             add_dirs = config.add_dirs
             exit_after_stop_delay_ms = config.exit_after_stop_delay_ms  # noqa: F841  # no-op: Claude-only
-            stream_idle_timeout_ms = config.stream_idle_timeout_ms  # noqa: F841  # no-op: Claude-only
+            stream_idle_timeout_ms = config.stream_idle_timeout_ms
             scenario_step_name = config.scenario_step_name
             temp_dir_relpath = config.temp_dir_relpath
             allowed_write_prefix = config.allowed_write_prefix
@@ -724,7 +724,13 @@ class CodexBackend:
             cmd.append(resume_session_id)
         cmd.append(prompt)
 
-        return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd, is_resume=bool(resume_session_id))
+        return CmdSpec(
+            cmd=tuple(cmd),
+            env=env,
+            cwd=cwd,
+            is_resume=bool(resume_session_id),
+            process_idle_timeout_ms=stream_idle_timeout_ms,
+        )
 
     def build_food_truck_cmd(
         self,
@@ -750,7 +756,6 @@ class CodexBackend:
         _plugin_source = plugin_source  # noqa: F841  # no-op: Codex has no --plugin-dir
         _output_format = output_format  # noqa: F841  # no-op: --json is unconditional
         _exit_ms = exit_after_stop_delay_ms  # noqa: F841  # no-op: Claude-only
-        _stream_ms = stream_idle_timeout_ms  # noqa: F841  # no-op: Claude-only
 
         if resume_session_id:
             effective_prompt = _compose_resume_prompt(
@@ -823,7 +828,13 @@ class CodexBackend:
             cmd.append(resume_session_id)
         cmd.append(prompt)
 
-        return CmdSpec(cmd=tuple(cmd), env=env, cwd=cwd, is_resume=bool(resume_session_id))
+        return CmdSpec(
+            cmd=tuple(cmd),
+            env=env,
+            cwd=cwd,
+            is_resume=bool(resume_session_id),
+            process_idle_timeout_ms=stream_idle_timeout_ms,
+        )
 
     def build_interactive_cmd(
         self,

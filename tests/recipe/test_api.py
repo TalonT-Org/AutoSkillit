@@ -1184,9 +1184,14 @@ steps:
 # ---------------------------------------------------------------------------
 
 
-def test_load_and_validate_surfaces_errors_on_dangling_routes(tmp_path: Path) -> None:
-    """LoadRecipeResult must contain an 'errors' field with structural error strings
-    when post-prune validation detects dangling routes."""
+def test_load_and_validate_produces_valid_content_after_step_pruning(tmp_path: Path) -> None:
+    """After structural repair (when=None catch-alls on resolve_review), pruning
+    skip_when_false steps must produce a recipe with non-empty content and no
+    structural errors from dangling routes.
+
+    This is the post-fix state: dangling routes that the pre-fix YAML produced
+    are now repaired by the computable redirect catch-alls.
+    """
     from autoskillit.recipe._api import load_and_validate
 
     result = load_and_validate(
@@ -1195,10 +1200,11 @@ def test_load_and_validate_surfaces_errors_on_dangling_routes(tmp_path: Path) ->
         ingredient_overrides={"backend_supports_git_write": "false"},
         backend_name="codex",
     )
-    assert result["valid"] is False
-    assert "errors" in result, "LoadRecipeResult must include 'errors' field"
-    assert isinstance(result["errors"], list), "errors must be a list"
-    assert len(result["errors"]) > 0, "errors list must be non-empty when valid=False"
-    assert any("dangling" in e.lower() for e in result["errors"]), (
-        "At least one error should mention dangling routes"
+    schema_errors = result.get("errors", [])
+    assert not any("dangling" in e.lower() for e in schema_errors), (
+        f"Post-fix pruning should not produce dangling route errors, got: {schema_errors}"
+    )
+    assert result["content"], (
+        "Content must be non-empty after pruning — empty content indicates "
+        "unrepaired dangling routes after step pruning"
     )

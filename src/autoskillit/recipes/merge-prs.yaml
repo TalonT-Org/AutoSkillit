@@ -1162,6 +1162,7 @@ steps:
       route: register_clone_failure
     - when: ${{ result.verdict }} == 'no_test_infrastructure'
       route: register_clone_failure
+    - route: register_clone_failure
     on_failure: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
     retries: 3
@@ -1523,6 +1524,7 @@ steps:
       route: register_clone_failure
     - when: ${{ result.verdict }} == 'ci_only_failure'
       route: register_clone_failure
+    - route: register_clone_failure
     on_failure: register_clone_failure
     skip_when_false: inputs.backend_supports_git_write
     note: 'Resolves review findings on the integration PR (REQ-REVIEW-002). Fetches

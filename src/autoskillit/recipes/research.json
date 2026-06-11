@@ -935,6 +935,9 @@
         {
           "when": "${{ result.verdict }} == 'no_test_infrastructure'",
           "route": "escalate_stop"
+        },
+        {
+          "route": "escalate_stop"
         }
       ],
       "on_failure": "escalate_stop",

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import ast
+import re as _re
 from pathlib import Path
 
 import pytest
@@ -156,7 +157,7 @@ _DISPATCH_READY_TEST = (
     Path(__file__).resolve().parents[1] / "recipe" / "test_bundled_recipes_dispatch_ready.py"
 )
 
-_ALLOWLIST_CAP = 5
+_ALLOWLIST_CAP = 4
 
 
 def _collect_allowlist_rule_names() -> set[str]:
@@ -202,6 +203,39 @@ def test_dispatch_readiness_allowlist_size_cap() -> None:
         f"Dispatch-readiness allowlist has {len(rule_names)} entries "
         f"(cap: {_ALLOWLIST_CAP}): {sorted(rule_names)}. "
         "Fix the recipe or revert the severity promotion instead of adding exemptions."
+    )
+
+
+def test_known_non_conforming_entries_have_tracking_comments() -> None:
+    """Every _KNOWN_NON_CONFORMING_RULES entry must reference a tracking issue."""
+    source = _DISPATCH_READY_TEST.read_text()
+    lines = source.splitlines()
+    tree = ast.parse(source)
+
+    missing: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign):
+            target = node.target
+            value = node.value
+        elif isinstance(node, ast.Assign):
+            target = node.targets[0] if node.targets else None
+            value = node.value
+        else:
+            continue
+        if not isinstance(target, ast.Name) or target.id != "_KNOWN_NON_CONFORMING_RULES":
+            continue
+        if not isinstance(value, ast.Dict):
+            continue
+        for key in value.keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                line = lines[key.lineno - 1]
+                if not _re.search(r"#\s*tracking:\s*#\d+", line):
+                    missing.append(f"{key.value!r} (line {key.lineno})")
+
+    assert not missing, (
+        "Entries in _KNOWN_NON_CONFORMING_RULES missing tracking comments: "
+        + ", ".join(missing)
+        + ". Add '# tracking: #NNNN' with the relevant GitHub issue number."
     )
 
 

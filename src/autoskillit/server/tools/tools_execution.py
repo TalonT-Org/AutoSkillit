@@ -37,7 +37,6 @@ from autoskillit.core import (
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.hook_registry import HOOK_REGISTRY
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
@@ -65,6 +64,7 @@ from autoskillit.server.tools._execution_helpers import (
     resolve_relative_path_args,
     validate_path_arg_anchoring,
 )
+from autoskillit.server.tools._preflight import _get_fix_required_hook_matchers
 
 logger = get_logger(__name__)
 
@@ -85,19 +85,6 @@ def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool
     """Return True if skill's backend_requirements exclude effective_backend."""
     reqs = getattr(skill_info, "backend_requirements", None)
     return bool(reqs and effective_backend not in reqs)
-
-
-def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[str]:
-    """Return matchers of fix-required hooks not enforced by the given guard set."""
-    return [
-        h.matcher
-        for h in HOOK_REGISTRY
-        if h.codex_status == "fix-required"
-        and (
-            not h.scripts
-            or not frozenset(Path(s).stem for s in h.scripts).issubset(applicable_guards)
-        )
-    ]
 
 
 def _check_backend_compat(

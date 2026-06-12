@@ -383,9 +383,13 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
             ):
                 with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen._check_dispatch_feasibility",
+                        return_value=None,
+                    ):
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                    result_str = await open_kitchen(name="smoke-test", ctx=mock_ctx)
+                        result_str = await open_kitchen(name="smoke-test", ctx=mock_ctx)
 
     parsed = json.loads(result_str)
     assert parsed["success"] is True
@@ -484,13 +488,17 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
             ):
                 with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    from autoskillit.server.tools.tools_kitchen import open_kitchen
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen._check_dispatch_feasibility",
+                        return_value=None,
+                    ):
+                        from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                    result_str = await open_kitchen(
-                        name="smoke-test",
-                        overrides={"base_branch": "main"},
-                        ctx=mock_ctx,
-                    )
+                        result_str = await open_kitchen(
+                            name="smoke-test",
+                            overrides={"base_branch": "main"},
+                            ctx=mock_ctx,
+                        )
 
     parsed = json.loads(result_str)
     assert parsed["success"] is True

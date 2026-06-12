@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -124,6 +125,53 @@ def test_load_recipe_result_requires_packs_absent_for_standard_recipe(tmp_path):
     _setup_project_recipe(tmp_path, "test-recipe-no-rules", _RECIPE_NO_RULES)
     result = load_and_validate(name="test-recipe-no-rules", project_dir=tmp_path)
     assert "requires_packs" not in result
+
+
+# ---------------------------------------------------------------------------
+# T-POSTPRUNE-1: post_prune_step_names field in LoadRecipeResult
+# ---------------------------------------------------------------------------
+
+
+_RECIPE_WITH_SKIP_STEPS: Any = """\
+name: test-recipe-skip
+description: Recipe with skip_when_false steps for pruning
+autoskillit_version: "0.3.0"
+ingredients:
+  enable_step_a:
+    description: Toggle for step A
+    default: "true"
+  enable_step_b:
+    description: Toggle for step B
+    default: "false"
+steps:
+  step_a:
+    action: confirm
+    message: A
+    skip_when_false: inputs.enable_step_a
+  step_b:
+    action: confirm
+    message: B
+    skip_when_false: inputs.enable_step_b
+  step_c:
+    action: stop
+    message: C
+"""
+
+
+def test_load_recipe_result_has_post_prune_step_names(tmp_path):
+    """LoadRecipeResult includes post_prune_step_names reflecting surviving steps.
+
+    step_b is pruned (enable_step_b defaults to "false"); step_a and step_c survive.
+    """
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(tmp_path, "test-recipe-skip", _RECIPE_WITH_SKIP_STEPS)
+    result = load_and_validate(name="test-recipe-skip", project_dir=tmp_path)
+    assert "post_prune_step_names" in result, "post_prune_step_names must be in LoadRecipeResult"
+    post_prune = set(result["post_prune_step_names"])
+    assert "step_a" in post_prune
+    assert "step_c" in post_prune
+    assert "step_b" not in post_prune, "step_b should be pruned (enable_step_b=false)"
 
 
 # ---------------------------------------------------------------------------

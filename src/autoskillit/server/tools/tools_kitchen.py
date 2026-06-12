@@ -61,6 +61,10 @@ from autoskillit.server.tools._auto_overrides import (
     _promote_capability_keys,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._preflight import (
+    _check_dispatch_feasibility,
+    filter_steps_by_post_prune,
+)
 
 logger = get_logger(__name__)
 
@@ -625,7 +629,9 @@ async def open_kitchen(
                         try:
                             recipe_obj = tool_ctx.recipes.load(recipe_info.path)
                             _deferred_recipe_obj = recipe_obj
-                            tool_ctx.active_recipe_steps = dict(recipe_obj.steps)
+                            tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
+                                recipe_obj.steps, result.get("post_prune_step_names", [])
+                            )
                             tool_ctx.active_recipe_ingredients = frozenset(
                                 recipe_obj.ingredients.keys()
                             )
@@ -638,7 +644,22 @@ async def open_kitchen(
                         tool_ctx.active_recipe_ingredients = None
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
+                    tool_ctx.gate.disable()
                     return _recipe_validation_error_response(name, result)
+                # Dispatch-feasibility preflight: verify the backend can enforce
+                # all fix-required hooks for the recipe's run_skill steps.
+                if tool_ctx.active_recipe_steps is not None:
+                    _preflight_err = _check_dispatch_feasibility(
+                        post_prune_step_names=result.get("post_prune_step_names", []),
+                        active_recipe_steps=tool_ctx.active_recipe_steps,
+                        backend=tool_ctx.backend,
+                        config_providers=tool_ctx.config.providers,
+                        recipe_name=name,
+                    )
+                    if _preflight_err is not None:
+                        tool_ctx.gate.disable()
+                        await ctx.disable_components(tags={"kitchen"})
+                        return _preflight_err
                 result["success"] = True
                 result["kitchen"] = "open"
                 result["version"] = __version__
@@ -708,7 +729,9 @@ async def open_kitchen(
                 try:
                     recipe_obj = tool_ctx.recipes.load(recipe_info.path)
                     _normal_recipe_obj = recipe_obj
-                    tool_ctx.active_recipe_steps = dict(recipe_obj.steps)
+                    tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
+                        recipe_obj.steps, result.get("post_prune_step_names", [])
+                    )
                     tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
                 except Exception:
                     logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
@@ -725,7 +748,23 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
 
             if not result.get("valid", False) or not result.get("content", ""):
+                tool_ctx.gate.disable()
                 return _recipe_validation_error_response(name, result)
+
+            # Dispatch-feasibility preflight: verify the backend can enforce
+            # all fix-required hooks for the recipe's run_skill steps.
+            if tool_ctx.active_recipe_steps is not None:
+                _preflight_err = _check_dispatch_feasibility(
+                    post_prune_step_names=result.get("post_prune_step_names", []),
+                    active_recipe_steps=tool_ctx.active_recipe_steps,
+                    backend=tool_ctx.backend,
+                    config_providers=tool_ctx.config.providers,
+                    recipe_name=name,
+                )
+                if _preflight_err is not None:
+                    tool_ctx.gate.disable()
+                    await ctx.disable_components(tags={"kitchen"})
+                    return _preflight_err
 
             result["success"] = True
             result["kitchen"] = "open"

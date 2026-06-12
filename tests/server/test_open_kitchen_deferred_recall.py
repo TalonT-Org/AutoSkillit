@@ -37,6 +37,7 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
         "composite_hash": "def456",
         "recipe_version": "1.0",
         "suggestions": [],
+        "post_prune_step_names": ["build", "test"],
     }
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")

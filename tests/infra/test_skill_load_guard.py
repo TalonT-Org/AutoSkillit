@@ -24,6 +24,7 @@ def _run_guard(
     headless: bool = False,
     session_type: str | None = None,
     applicable_guards: str | None = None,
+    agent_backend: str | None = None,
 ) -> str:
     """Run skill_load_guard.main(), return stdout."""
     from autoskillit.hooks.guards.skill_load_guard import main
@@ -52,6 +53,11 @@ def _run_guard(
         env_updates["AUTOSKILLIT_APPLICABLE_GUARDS"] = applicable_guards
     else:
         env_removals.append("AUTOSKILLIT_APPLICABLE_GUARDS")
+
+    if agent_backend is not None:
+        env_updates["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
+    else:
+        env_removals.append("AUTOSKILLIT_AGENT_BACKEND")
 
     base_env = {k: v for k, v in os.environ.items() if k not in env_removals}
     base_env.update(env_updates)
@@ -411,6 +417,56 @@ def test_applicable_guards_comma_delimited_multi_guard(tmp_path):
         headless=True,
         session_type="skill",
         applicable_guards="other_guard,skill_load_guard",
+    )
+    response = json.loads(out)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_codex_agent_backend_early_exit_before_applicable_guards(tmp_path):
+    """Codex backend exits 0 before the applicable_guards gate fires."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+        applicable_guards="skill_load_guard",
+        agent_backend="codex",
+    )
+    assert not out.strip()
+
+
+@pytest.mark.parametrize(
+    "applicable_guards",
+    ["skill_load_guard", "", "other_guard", None],
+    ids=["listed", "empty", "other", "absent"],
+)
+def test_codex_agent_backend_early_exit_ignores_applicable_guards_content(
+    tmp_path, applicable_guards
+):
+    """Codex early-exit fires regardless of AUTOSKILLIT_APPLICABLE_GUARDS content."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+        applicable_guards=applicable_guards,
+        agent_backend="codex",
+    )
+    assert not out.strip()
+
+
+def test_non_codex_agent_backend_does_not_early_exit(tmp_path):
+    """Non-codex backend (e.g., claude-code) must proceed past the early-exit gate."""
+    out = _run_guard(
+        _make_event("Read"),
+        tmp_dir=tmp_path,
+        provider_profile="minimax",
+        headless=True,
+        session_type="skill",
+        applicable_guards="skill_load_guard",
+        agent_backend="claude-code",
     )
     response = json.loads(out)
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"

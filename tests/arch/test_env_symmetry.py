@@ -158,3 +158,70 @@ def test_dynaconf_and_flat_backend_values_match() -> None:
             food_truck_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
             == food_truck_spec.env["AUTOSKILLIT_AGENT_BACKEND"]
         ), f"{name}: nested and flat AGENT_BACKEND values differ in build_food_truck_cmd"
+
+
+_ALL_GUARD_BUILDERS: list[str] = [
+    "build_skill_session_cmd",
+    "build_food_truck_cmd",
+    "build_interactive_cmd",
+    "build_resume_cmd",
+]
+
+
+def _call_builder(backend: object, builder_name: str) -> object:
+    from autoskillit.core.types._type_plugin_source import DirectInstall
+
+    if builder_name == "build_skill_session_cmd":
+        return backend.build_skill_session_cmd(
+            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+        )
+    if builder_name == "build_food_truck_cmd":
+        return backend.build_food_truck_cmd(
+            orchestrator_prompt="test prompt",
+            plugin_source=DirectInstall(plugin_dir=Path("/plugins")),
+            cwd="/repo",
+            completion_marker="DONE",
+        )
+    if builder_name == "build_interactive_cmd":
+        return backend.build_interactive_cmd()
+    if builder_name == "build_resume_cmd":
+        return backend.build_resume_cmd(resume_session_id="test-session", prompt="continue")
+    msg = f"Unknown builder: {builder_name}"
+    raise ValueError(msg)
+
+
+@pytest.mark.parametrize("builder_name", _ALL_GUARD_BUILDERS)
+def test_agent_backend_flat_env_var_in_all_guard_launch_builders(builder_name: str) -> None:
+    """AUTOSKILLIT_AGENT_BACKEND must appear in every builder's CmdSpec.env for every backend."""
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
+    for name, cls in BACKEND_REGISTRY.items():
+        backend = cls()
+        if builder_name == "build_resume_cmd" and not backend.capabilities.session_resume_capable:
+            continue
+        spec = _call_builder(backend, builder_name)
+        assert "AUTOSKILLIT_AGENT_BACKEND" in spec.env, (
+            f"{name}: AUTOSKILLIT_AGENT_BACKEND missing from {builder_name} env"
+        )
+
+
+def test_agent_backend_flat_and_dynaconf_values_match_in_interactive_and_resume() -> None:
+    """Nested and flat AGENT_BACKEND env vars must carry the same value in interactive and resume builders."""  # noqa: E501
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+
+    assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
+    for name, cls in BACKEND_REGISTRY.items():
+        backend = cls()
+        interactive_spec = backend.build_interactive_cmd()
+        assert (
+            interactive_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
+            == interactive_spec.env["AUTOSKILLIT_AGENT_BACKEND"]
+        ), f"{name}: nested and flat AGENT_BACKEND values differ in build_interactive_cmd"
+        if not backend.capabilities.session_resume_capable:
+            continue
+        resume_spec = backend.build_resume_cmd(resume_session_id="test-session", prompt="continue")
+        assert (
+            resume_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
+            == resume_spec.env["AUTOSKILLIT_AGENT_BACKEND"]
+        ), f"{name}: nested and flat AGENT_BACKEND values differ in build_resume_cmd"

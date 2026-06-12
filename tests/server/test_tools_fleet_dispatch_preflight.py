@@ -27,7 +27,7 @@ class TestFleetDispatchPreflightWiring:
         """dispatch_food_truck source must call _check_dispatch_feasibility."""
         from autoskillit.server.tools import tools_fleet_dispatch
 
-        source = inspect.getsource(tools_fleet_dispatch)
+        source = inspect.getsource(tools_fleet_dispatch.dispatch_food_truck)
         assert "_check_dispatch_feasibility" in source, (
             "dispatch_food_truck must call _check_dispatch_feasibility"
         )
@@ -37,7 +37,7 @@ class TestFleetDispatchPreflightWiring:
         the execute_dispatch call."""
         from autoskillit.server.tools import tools_fleet_dispatch
 
-        source = inspect.getsource(tools_fleet_dispatch)
+        source = inspect.getsource(tools_fleet_dispatch.dispatch_food_truck)
         preflight_pos = source.find("_check_dispatch_feasibility")
         execute_pos = source.find("execute_dispatch(")
         assert preflight_pos > 0

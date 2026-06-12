@@ -8,6 +8,7 @@ import os
 import shutil
 import time
 from pathlib import Path
+from typing import Any
 
 import anyio
 import regex as re
@@ -98,6 +99,105 @@ def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[s
             or not frozenset(Path(s).stem for s in h.scripts).issubset(applicable_guards)
         )
     ]
+
+
+def _check_dispatch_feasibility(
+    post_prune_step_names: list[str],
+    active_recipe_steps: dict[str, Any],
+    backend: CodingAgentBackend | None,
+    config_providers: Any,
+) -> str | None:
+    """Fail-closed dispatch-feasibility preflight.
+
+    Evaluated at open_kitchen time (and dispatch_food_truck time) to detect
+    recipe/backend combinations where HOOK_REGISTRY has fix-required entries
+    that the current backend cannot enforce. Returns a JSON error envelope
+    string on failure, None on pass.
+
+    Args:
+        post_prune_step_names: Step names surviving skip_when_false pruning.
+            Empty list (all pruned) trivially passes.
+        active_recipe_steps: Step objects keyed by name. Used to inspect
+            step.tool for each run_skill step.
+        backend: Session backend. When None, the check is skipped.
+        config_providers: ProvidersConfig used by _resolve_provider_profile
+            to determine per-step backend overrides (ANTHROPIC_BASE_URL reroute).
+
+    Returns:
+        JSON error envelope string on failure (structured for the agent to
+        surface to the user), None on pass.
+    """
+    if backend is None:
+        return None
+    if not post_prune_step_names:
+        return None
+
+    run_skill_step_names: list[str] = []
+    for step_name in post_prune_step_names:
+        step = active_recipe_steps.get(step_name)
+        if step is not None and getattr(step, "tool", None) == "run_skill":
+            run_skill_step_names.append(step_name)
+
+    if not run_skill_step_names:
+        return None
+
+    # Filter out steps whose provider profile reroutes to claude-code via
+    # ANTHROPIC_BASE_URL. Such steps dispatch to the claude-code backend,
+    # which has the full applicable_guards set and passes the check.
+    from autoskillit.server._guards import _resolve_provider_profile
+
+    recipe_name = ""
+    feasible_step_names: list[str] = []
+    for step_name in run_skill_step_names:
+        step = active_recipe_steps.get(step_name)
+        step_provider = getattr(step, "provider", "") or ""
+        _profile_name, provider_extras = _resolve_provider_profile(
+            step_name,
+            recipe_name,
+            config_providers,
+            step_provider=step_provider,
+        )
+        if (
+            provider_extras
+            and "ANTHROPIC_BASE_URL" in provider_extras
+            and not backend.capabilities.anthropic_provider_capable
+        ):
+            continue
+        feasible_step_names.append(step_name)
+
+    if not feasible_step_names:
+        return None
+
+    fix_required_matchers = _get_fix_required_hook_matchers(
+        backend.capabilities.applicable_guards,
+    )
+    if not fix_required_matchers:
+        return None
+
+    return json.dumps(
+        {
+            "success": False,
+            "kitchen": "preflight_failed",
+            "user_visible_message": (
+                f"Cannot dispatch recipe: backend {backend.name!r} cannot enforce "
+                f"HOOK_REGISTRY fix-required entries "
+                f"[{', '.join(fix_required_matchers)}]. "
+                f"Add a per-step provider override that sets ANTHROPIC_BASE_URL "
+                f"to reroute dispatch to claude-code, which has full hook enforcement."
+            ),
+            "error": (
+                f"Dispatch infeasible on backend {backend.name!r}: "
+                f"fix-required hooks {fix_required_matchers} are not enforceable."
+            ),
+            "stage": "dispatch_feasibility_preflight",
+            "unfixable_matchers": fix_required_matchers,
+            "backend": backend.name,
+            "escape_hatch": (
+                "Per-step provider: override with ANTHROPIC_BASE_URL set to "
+                "reroute dispatch to claude-code (which has applicable_guards)."
+            ),
+        }
+    )
 
 
 def _check_backend_compat(

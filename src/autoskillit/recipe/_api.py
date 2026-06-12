@@ -580,6 +580,8 @@ def load_and_validate(
                 )
     if _deferred_guard_list:
         result["deferred_guards"] = _deferred_guard_list
+    if active_recipe is not None:
+        result["post_prune_step_names"] = list(active_recipe.steps.keys())
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:

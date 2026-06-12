@@ -91,6 +91,8 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_issue_lifecycle.py` | Tests for server/tools/tools_issue_headless.py and server/tools/tools_issue_labels.py |
 | `test_tools_kitchen_cache_poison.py` | Cross-tool cache-poison regression: open_kitchen(ingredients_only=True) must not corrupt subsequent load_recipe calls for the same recipe |
 | `test_tools_kitchen_envelope.py` | Tests for tools_kitchen.py: hook drift warnings and failure envelopes |
+| `test_tools_kitchen_preflight.py` | Tests for dispatch-feasibility preflight in open_kitchen and shared _check_dispatch_feasibility function |
+| `test_tools_fleet_dispatch_preflight.py` | Tests for dispatch_food_truck preflight wiring — preflight before execute_dispatch |
 | `test_tools_kitchen_helpers.py` | Tests for tools_kitchen.py helper functions: _recipe_validation_error_response semantic-finding surfacing |
 | `test_tools_kitchen_gate.py` | Tests for tools_kitchen.py: gate toggle, review gate cleanup, kitchen_id, misc |
 | `test_tools_kitchen_gate_features.py` | Tests for tools_kitchen.py: recipe packs, quota refresh, ingredients_only, project_dir |

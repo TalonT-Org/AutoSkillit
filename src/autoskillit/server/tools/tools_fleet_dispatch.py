@@ -48,6 +48,7 @@ from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools.tools_execution import _check_dispatch_feasibility
 
 logger = get_logger(__name__)
 
@@ -311,6 +312,33 @@ async def dispatch_food_truck(
                     FleetErrorCode.FLEET_DISPATCH_SKIPPED,
                     "Dispatch skipped: skip_when condition evaluated to true",
                 )
+
+        # Dispatch-feasibility preflight: verify the backend can enforce
+        # all fix-required hooks for the recipe's run_skill steps before
+        # spawning a subprocess.
+        _fleet_load_result: dict[str, Any] = {}
+        if tool_ctx.recipes is not None:
+            try:
+                _fleet_load_result = tool_ctx.recipes.load_and_validate(
+                    recipe,
+                    tool_ctx.project_dir,
+                    suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
+                    ingredient_overrides=ingredients,
+                    temp_dir=tool_ctx.temp_dir,
+                    backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
+                )
+            except Exception:
+                logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
+
+        if tool_ctx.backend is not None:
+            _preflight_err = _check_dispatch_feasibility(
+                post_prune_step_names=_fleet_load_result.get("post_prune_step_names", []),
+                active_recipe_steps={},
+                backend=tool_ctx.backend,
+                config_providers=tool_ctx.config.providers,
+            )
+            if _preflight_err is not None:
+                return _preflight_err
 
         result = await execute_dispatch(
             tool_ctx=tool_ctx,

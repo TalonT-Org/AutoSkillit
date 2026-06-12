@@ -29,6 +29,7 @@ __all__ = [
     "CodexEventData",
     "SessionEvent",
     "AgentSessionResult",
+    "model_class",
     "strip_context_window_suffix",
 ]
 
@@ -169,9 +170,9 @@ CLAUDE_MODEL_ALIASES: dict[str, str] = {
 }
 
 CODEX_MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "gpt-5.5",
+    "sonnet": "gpt-5.4",
     "opus": "gpt-5.5",
-    "haiku": "gpt-5.5",
+    "haiku": "gpt-5.4-mini",
 }
 
 CODEX_EFFORT_MAPPING: dict[str, str] = {
@@ -179,6 +180,14 @@ CODEX_EFFORT_MAPPING: dict[str, str] = {
     "opus": "xhigh",
     "haiku": "medium",
 }
+
+_CODEX_MODEL_REVERSE: dict[str, str] = {v: k for k, v in CODEX_MODEL_ALIASES.items()}
+_codex_alias_values = list(CODEX_MODEL_ALIASES.values())
+assert len(_CODEX_MODEL_REVERSE) == len(CODEX_MODEL_ALIASES), (
+    "CODEX_MODEL_ALIASES values must be unique — duplicate makes an alias unreachable "
+    f"via model_class(). Duplicates: "
+    f"{[v for v in _codex_alias_values if _codex_alias_values.count(v) > 1]}"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,6 +205,13 @@ class ModelTranslation:
 
 def strip_context_window_suffix(model: str) -> str:
     return _CONTEXT_WINDOW_SUFFIX_RE.sub("", model)
+
+
+def model_class(model: str) -> str:
+    base = strip_context_window_suffix(model)
+    if base in CLAUDE_MODEL_ALIASES:
+        return base
+    return _CODEX_MODEL_REVERSE.get(base, base)
 
 
 CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(

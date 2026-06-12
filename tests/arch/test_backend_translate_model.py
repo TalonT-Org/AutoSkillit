@@ -66,3 +66,19 @@ def test_translate_model_called_at_terminal_model_sites() -> None:
                 f"{backend_name}.{method_name} appends --model but does not call "
                 f"self.translate_model"
             )
+
+
+def test_translate_model_distinct_per_alias_class() -> None:
+    from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
+
+    alias_keys = list(CLAUDE_MODEL_ALIASES.keys())
+    for backend_name, cls in BACKEND_REGISTRY.items():
+        try:
+            backend = cls()
+        except TypeError:
+            pytest.skip(f"{backend_name}: requires constructor args — cannot validate")
+        translated = [backend.translate_model(k) for k in alias_keys]
+        assert len(translated) == len(set(translated)), (
+            f"{backend_name}: translate_model produced duplicate outputs for alias keys "
+            f"{alias_keys}: {translated}"
+        )

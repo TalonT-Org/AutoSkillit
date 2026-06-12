@@ -9,7 +9,19 @@ Two gate mechanisms operate together:
    unconditionally routed into the Bash command analysis path regardless of
    AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES. This ensures Codex's run_cmd tool is
    always subject to command-level write checks. The env var cannot suppress
-   or extend this bypass."""
+   or extend this bypass.
+
+Bypass conditions:
+- AUTOSKILLIT_HEADLESS not set: non-headless session, exit 0.
+- AUTOSKILLIT_AGENT_BACKEND == 'codex': codex enforces writes via
+  workspace-write sandbox + post-hoc file_changes detection (hard
+  enforcement), making PreToolUse deny (soft) redundant. Exit 0.
+- No allowed-write prefixes configured: exit 0.
+
+Enforcement strength by backend:
+  claude_code  — PreToolUse deny (soft, best-effort)
+  codex        — workspace-write sandbox + post-hoc file_changes (hard)
+"""
 
 from __future__ import annotations
 
@@ -234,6 +246,9 @@ def _deny(reason: str) -> None:
 
 def main() -> None:
     if not os.environ.get("AUTOSKILLIT_HEADLESS"):
+        sys.exit(0)
+
+    if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
         sys.exit(0)
 
     prefixes_str = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")

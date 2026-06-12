@@ -810,6 +810,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             # file-level: cross-layer test that imports fleet prompt builder
             "execution/backends/test_failure_predicate_spanning.py",
+            # file-level: execution test that imports fleet.build_protected_campaign_ids
+            "execution/test_session_log_retention.py",
         }
     ),
     # L3

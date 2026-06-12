@@ -980,7 +980,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "dispatch gate add defense-in-depth checks",
     ),
     "execution/backends/codex.py": (
-        1065,
+        1060,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -992,10 +992,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; project_log_dir method added to CodexSessionLocator (+3 net lines)"
         "; session_log_path method added to CodexSessionLocator (+5 net lines)"
         "; process_idle_timeout_ms field wired through build_skill_session_cmd and "
-        "build_food_truck_cmd CmdSpec constructors (+8 net lines)"
-        "; T5-P4-A1-WP1 BackendCmdBuilderBase inheritance adds 4 extension-point methods "
-        "(~20 lines) net +8 lines after env-assembly consolidation in build_skill_session_cmd "
-        "and build_food_truck_cmd",
+        "build_food_truck_cmd CmdSpec constructors (+8 net lines)",
     ),
 }
 

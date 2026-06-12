@@ -554,6 +554,7 @@ async def open_kitchen(
                     logger.warning(
                         "open_kitchen_failure", stage="enable_components", exc_info=True
                     )
+                    _get_ctx().gate_infrastructure_ready = False
                     return _kitchen_failure_envelope(exc, stage="enable_components")
 
             try:
@@ -566,6 +567,7 @@ async def open_kitchen(
                 )
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
+                _get_ctx().gate_infrastructure_ready = False
                 return _kitchen_failure_envelope(exc, stage="redisable_subsets")
 
         _is_deferred_recall = (

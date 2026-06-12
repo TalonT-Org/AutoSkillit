@@ -98,6 +98,12 @@ def _render_food_truck() -> str:
     )
 
 
+_RENDER_HELPER_MAP = {
+    _build_orchestrator_prompt: _render_orchestrator,
+    _build_food_truck_prompt: _render_food_truck,
+}
+
+
 # ── Test classes ──────────────────────────────────────────────────
 
 
@@ -111,8 +117,8 @@ class TestToolPredicateFieldsMatchSchema:
     )
     @pytest.mark.parametrize("tool_name", list(_TOOL_TYPEDDICT_MAP.keys()))
     def test_predicate_field_in_typeddict(self, tool_name: str, builder_fn: object) -> None:
-        source = inspect.getsource(builder_fn)
-        block = _extract_predicate_block(source)
+        rendered = _RENDER_HELPER_MAP[builder_fn]()  # type: ignore[index]
+        block = _extract_predicate_block(rendered)
         parsed = _parse_predicate_lines(block)
 
         assert tool_name in parsed, f"{tool_name} not found in predicate block"
@@ -137,8 +143,8 @@ class TestToolPredicateFieldsMatchSchema:
         ids=["orchestrator", "food_truck"],
     )
     def test_classify_fix_contains_error_colon(self, builder_fn: object) -> None:
-        source = inspect.getsource(builder_fn)
-        block = _extract_predicate_block(source)
+        rendered = _RENDER_HELPER_MAP[builder_fn]()  # type: ignore[index]
+        block = _extract_predicate_block(rendered)
         parsed = _parse_predicate_lines(block)
 
         assert "classify_fix" in parsed, "classify_fix not found in predicate block"
@@ -152,8 +158,8 @@ class TestToolPredicateFieldsMatchSchema:
         ids=["orchestrator", "food_truck"],
     )
     def test_predicate_block_contains_all_tools(self, builder_fn: object) -> None:
-        source = inspect.getsource(builder_fn)
-        block = _extract_predicate_block(source)
+        rendered = _RENDER_HELPER_MAP[builder_fn]()  # type: ignore[index]
+        block = _extract_predicate_block(rendered)
         for tool_name in _ALL_TOOL_NAMES:
             assert tool_name in block, f"Tool '{tool_name}' missing from FAILURE PREDICATES block"
 

@@ -78,8 +78,14 @@ def test_test_matrix_covers_all_registered_backends() -> None:
 
     Prevents silent matrix shrinkage if a backend is removed from parametrization.
     """
-    test_backends = set(BACKEND_REGISTRY.keys())
-    assert test_backends == set(BACKEND_REGISTRY.keys()), (
-        f"Test matrix drift: backends in matrix {sorted(test_backends)} != "
-        f"BACKEND_REGISTRY keys {sorted(BACKEND_REGISTRY.keys())}"
+    expected = {"claude-code", "codex"}
+    actual = set(BACKEND_REGISTRY.keys())
+    assert len(actual) >= 2, (
+        f"BACKEND_REGISTRY has only {len(actual)} backend(s) — "
+        f"expected at least 2 (claude-code + codex). If a backend was removed, "
+        f"update this lower bound."
+    )
+    assert actual == expected, (
+        f"BACKEND_REGISTRY keys {sorted(actual)} != expected {sorted(expected)}. "
+        f"Update the expected set in this meta-test when backends are added or removed."
     )

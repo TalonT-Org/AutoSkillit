@@ -33,6 +33,8 @@ __all__ = [
     "RUN_PYTHON_SENTINEL_KEYS",
     "SCOPE_DIRECTION_SOURCE_TYPES",
     "WORKTREE_SKILLS",
+    "BACKEND_CAPABILITY_INGREDIENTS",
+    "CAPABILITY_GATE_CALLABLES",
     "SkillFamilyDef",
     "GITHUB_API_SKILL_FAMILIES",
     "CODEX_SESSIONS_SUBDIR",
@@ -80,6 +82,30 @@ WORKTREE_SKILLS: frozenset[str] = frozenset(
         "implement-worktree-no-merge",
         "implement-experiment",
         "retry-worktree",
+    }
+)
+
+# Ingredient keys that are derived from a live runtime backend's capabilities
+# (not from LLM-supplied values). Used to gate recipe admission control — a
+# recipe is refused at load time when an ingredient in this set resolves to a
+# falsy value while a surviving step depends on it. Moved to IL-0 so it is
+# importable by the recipe layer (IL-2) without violating the IL-006 contract
+# that forbids recipe → config imports.
+BACKEND_CAPABILITY_INGREDIENTS: frozenset[str] = frozenset(
+    {
+        "backend_supports_git_write",
+    }
+)
+
+# Bare (un-dotted) callable names whose run_python steps are capability gates.
+# Each entry corresponds to a callable in smoke_utils that reads a
+# BACKEND_CAPABILITY_INGREDIENTS key and returns a verdict dict. When a
+# surviving step's with_args["callable"] final component matches an entry here
+# and the corresponding capability ingredient resolves falsy, the recipe is
+# marked dispatch-infeasible at load time.
+CAPABILITY_GATE_CALLABLES: frozenset[str] = frozenset(
+    {
+        "gate_backend_write",
     }
 )
 

@@ -19,6 +19,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_canonical_constant_consumption.py` | Architectural invariant: every *_ENV_FORWARD_VARS constant must have a production consumer |
 | `test_backend_name_sync.py` | Architectural invariant: KNOWN_BACKEND_NAMES (IL-0) must match BACKEND_REGISTRY keys (IL-1) |
 | `test_capability_consistency.py` | Behavioral arch tests: BackendCapabilities filesystem consistency — applicable guards exist on disk, required session files are created, session_dir_symlinks entries are symlinks |
+| `test_cross_registry_dispatch_sufficiency.py` | Cross-registry dispatch sufficiency: real HOOK_REGISTRY × real BackendCapabilities — detects fix-required hooks that would brick backends with insufficient applicable_guards |
 | `test_capability_consumption.py` | Architectural invariant: every BackendCapabilities field must be consumed in production |
 | `test_capability_docstrings.py` | Architectural invariant: BackendCapabilities must have class and field documentation |
 | `test_no_backend_name_bypass.py` | Architectural invariant: backend-specific behavior must use capability fields, not name comparisons |

@@ -364,11 +364,18 @@ class TestPreflightGateClosure:
         }
         tool_ctx.recipes.find.return_value = MagicMock(path=Path("/fake/recipe.yaml"))
 
+        async def _triage_passthrough(result, *_a, **_kw):
+            return result
+
         with (
             patch("autoskillit.server._state._ctx", tool_ctx),
             patch(
                 "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
                 return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+                side_effect=_triage_passthrough,
             ),
         ):
             from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -410,6 +417,9 @@ class TestPreflightGateClosure:
         recipe_obj.ingredients = {}
         tool_ctx.recipes.load.return_value = recipe_obj
 
+        async def _triage_passthrough(result, *_a, **_kw):
+            return result
+
         synthetic = _make_fix_required_hook()
         with (
             patch("autoskillit.server._state._ctx", tool_ctx),
@@ -417,6 +427,10 @@ class TestPreflightGateClosure:
             patch(
                 "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
                 return_value=None,
+            ),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+                side_effect=_triage_passthrough,
             ),
         ):
             from autoskillit.server.tools.tools_kitchen import open_kitchen

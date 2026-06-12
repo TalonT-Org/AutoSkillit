@@ -364,7 +364,13 @@ class TestPreflightGateClosure:
         }
         tool_ctx.recipes.find.return_value = MagicMock(path=Path("/fake/recipe.yaml"))
 
-        with patch("autoskillit.server._state._ctx", tool_ctx):
+        with (
+            patch("autoskillit.server._state._ctx", tool_ctx),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+                return_value=None,
+            ),
+        ):
             from autoskillit.server.tools.tools_kitchen import open_kitchen
 
             ctx_mock = AsyncMock()
@@ -408,6 +414,10 @@ class TestPreflightGateClosure:
         with (
             patch("autoskillit.server._state._ctx", tool_ctx),
             patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]),
+            patch(
+                "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+                return_value=None,
+            ),
         ):
             from autoskillit.server.tools.tools_kitchen import open_kitchen
 

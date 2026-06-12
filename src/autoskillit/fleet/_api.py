@@ -629,6 +629,7 @@ async def _run_dispatch(
     _dispatched_ticks: list[int] = []
     _dispatched_create_time: list[float] = []
     _dispatched_boot_id: list[str] = []
+    _dispatched_session_id: list[str] = []
 
     # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
     prior_ids: list[str] = []
@@ -678,6 +679,14 @@ async def _run_dispatch(
             issue_url=_issue_urls_raw,
         )
 
+    def _on_session_id(session_id: str) -> None:
+        from autoskillit.fleet.state import mark_dispatch_session_identity
+
+        _dispatched_session_id.append(session_id)
+        mark_dispatch_session_identity(
+            state_path, effective_name, dispatched_session_id=session_id
+        )
+
     marker_dir: Path | None = None
     if _locator is not None:
         try:
@@ -710,6 +719,7 @@ async def _run_dispatch(
                     project_dir=str(tool_ctx.project_dir),
                     marker_dir=marker_dir,
                     session_id=caller_session_id,
+                    on_session_id_resolved=_on_session_id,
                     timeout=resolved_timeout,
                     idle_output_timeout=float(idle_output_timeout)
                     if idle_output_timeout is not None
@@ -733,11 +743,21 @@ async def _run_dispatch(
             try:
                 from autoskillit.fleet.state import mark_dispatch_interrupted  # noqa: PLC0415
 
+                captured_session_id = _dispatched_session_id[0] if _dispatched_session_id else ""
+                if not captured_session_id:
+                    sr = locals().get("skill_result")
+                    if sr is not None:
+                        captured_session_id = getattr(sr, "session_id", "") or ""
+
                 with anyio.CancelScope(shield=True):
                     mark_dispatch_interrupted(
                         state_path,
                         effective_name,
                         reason="signal_induced_cancellation",
+                        dispatched_session_id=captured_session_id,
+                        dispatched_session_log_dir=str(marker_dir)
+                        if marker_dir is not None
+                        else "",
                     )
             except Exception:
                 logger.warning(
@@ -894,7 +914,9 @@ async def _run_dispatch(
         dispatch_id=dispatch_id,
         campaign_id=campaign_id,
         caller_session_id=caller_session_id,
-        dispatched_session_id=skill_result.session_id,
+        dispatched_session_id=_dispatched_session_id[0]
+        if _dispatched_session_id
+        else skill_result.session_id,
         session_chain=extended_chain,
         dispatched_session_log_dir=project_log_dir,
         dispatched_pid=_dispatched_pid[0] if _dispatched_pid else 0,

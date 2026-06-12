@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
@@ -366,6 +367,8 @@ async def _extract_stdout_session_id(
     stream_parser: StreamParser | None = None,
     _poll_interval: float = 0.3,
     _timeout: float = 10.0,
+    *,
+    on_session_id_resolved: Callable[[str], None] | None = None,
 ) -> None:
     """Extract session ID from stdout type=system record and deposit on accumulator.
 
@@ -413,6 +416,8 @@ async def _extract_stdout_session_id(
             if sid:
                 acc.stdout_session_id = sid
                 logger.debug("stdout_session_id_extracted", session_id=sid)
+                if on_session_id_resolved is not None:
+                    on_session_id_resolved(sid)
                 ready.set()
                 return
     logger.debug("stdout_session_id_extraction_timeout", timeout=_timeout)

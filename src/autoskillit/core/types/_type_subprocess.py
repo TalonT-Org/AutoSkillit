@@ -175,4 +175,5 @@ class SubprocessRunner(Protocol):
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
+        on_session_id_resolved: Callable[[str], None] | None = None,
     ) -> Awaitable[SubprocessResult]: ...

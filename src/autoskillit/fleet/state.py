@@ -82,6 +82,7 @@ __all__ = [
     "read_state",
     "mark_dispatch_running",
     "mark_dispatch_interrupted",
+    "mark_dispatch_session_identity",
     "mark_dispatch_resumable",
     "reset_blocking_dispatch",
     "append_dispatch_record",
@@ -395,8 +396,17 @@ def mark_dispatch_interrupted(
     dispatch_name: str,
     *,
     reason: str,
+    dispatched_session_id: str = "",
+    session_chain: list[str] | None = None,
+    dispatched_session_log_dir: str = "",
 ) -> None:
-    """Atomically mark a dispatch as interrupted with a reason."""
+    """Atomically mark a dispatch as interrupted with a reason.
+
+    Identity fields (dispatched_session_id, session_chain, dispatched_session_log_dir)
+    are additive — they are only written if the corresponding field on the record is
+    still empty, preventing the cancellation handler from overwriting values already
+    eagerly persisted by the on_session_id_resolved callback.
+    """
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
@@ -406,7 +416,38 @@ def mark_dispatch_interrupted(
                 d.status = DispatchStatus.INTERRUPTED
                 d.reason = reason
                 d.ended_at = time.time()
+                if dispatched_session_id and not d.dispatched_session_id:
+                    d.dispatched_session_id = dispatched_session_id
+                if session_chain is not None and not d.session_chain:
+                    d.session_chain = session_chain
+                if dispatched_session_log_dir and not d.dispatched_session_log_dir:
+                    d.dispatched_session_log_dir = dispatched_session_log_dir
                 m.mark_dirty()
+                return
+        else:
+            raise ValueError(f"Dispatch '{dispatch_name}' not found in state")
+
+
+def mark_dispatch_session_identity(
+    state_path: Path,
+    dispatch_name: str,
+    *,
+    dispatched_session_id: str,
+) -> None:
+    """Eagerly persist the dispatched_session_id once it is discovered during execution.
+
+    Idempotent and status-guarded: only writes when the dispatch is RUNNING and
+    dispatched_session_id is still empty. If the dispatch has already transitioned
+    to INTERRUPTED (race condition), this is a no-op.
+    """
+    with CampaignStateMutator(state_path) as m:
+        if m.state is None:
+            raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
+        for d in m.state.dispatches:
+            if d.name == dispatch_name:
+                if d.status == DispatchStatus.RUNNING and not d.dispatched_session_id:
+                    d.dispatched_session_id = dispatched_session_id
+                    m.mark_dirty()
                 return
         else:
             raise ValueError(f"Dispatch '{dispatch_name}' not found in state")

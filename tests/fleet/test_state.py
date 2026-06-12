@@ -19,8 +19,10 @@ from autoskillit.fleet import (
     build_protected_campaign_ids,
     classify_stale_dispatch,
     has_failed_dispatch,
+    mark_dispatch_interrupted,
     mark_dispatch_resumable,
     mark_dispatch_running,
+    mark_dispatch_session_identity,
     read_all_campaign_captures,
     read_state,
     resume_campaign_from_state,
@@ -1761,3 +1763,43 @@ class TestUpsertFailureToFailureSnapshotsPrior:
         assert len(disp.attempt_history) == 2
         assert disp.attempt_history[0]["reason"] == "first_failure"
         assert disp.attempt_history[1]["dispatch_id"] == "prior-attempt"
+
+
+class TestInterruptedPayloadCompleteness:
+    """Regression guard: mark_dispatch_interrupted must preserve identity fields."""
+
+    def test_interrupted_does_not_clear_already_persisted_session_id(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        mark_dispatch_running(sp, "d1", dispatch_id="d-1", dispatched_pid=42)
+        mark_dispatch_session_identity(sp, "d1", dispatched_session_id="sess-123")
+
+        mark_dispatch_interrupted(sp, "d1", reason="signal_induced_cancellation")
+
+        state = read_state(sp)
+        assert state is not None
+        disp = next(d for d in state.dispatches if d.name == "d1")
+        assert disp.dispatched_session_id == "sess-123"
+        assert disp.status == DispatchStatus.INTERRUPTED
+
+
+class TestMarkDispatchInterruptedAcceptsIdentity:
+    """mark_dispatch_interrupted should accept identity fields for late capture."""
+
+    def test_interrupted_accepts_dispatched_session_id(self, tmp_path: Path) -> None:
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        mark_dispatch_running(sp, "d1", dispatch_id="d-1", dispatched_pid=42)
+
+        mark_dispatch_interrupted(
+            sp,
+            "d1",
+            reason="signal_induced_cancellation",
+            dispatched_session_id="late-capture-id",
+        )
+
+        state = read_state(sp)
+        assert state is not None
+        disp = next(d for d in state.dispatches if d.name == "d1")
+        assert disp.dispatched_session_id == "late-capture-id"
+        assert disp.status == DispatchStatus.INTERRUPTED

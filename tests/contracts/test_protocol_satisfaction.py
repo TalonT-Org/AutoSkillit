@@ -410,6 +410,7 @@ class TestGroupDApiContractPreservation:
             "stream_parser",
             "inspector_callback",
             "workload_basenames",
+            "on_session_id_resolved",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -481,6 +482,7 @@ class TestGroupDApiContractPreservation:
             "session_record_types",
             "inspector_callback",
             "workload_basenames",
+            "on_session_id_resolved",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"

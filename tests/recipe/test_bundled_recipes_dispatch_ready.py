@@ -293,9 +293,9 @@ def test_claude_implementation_dispatch_feasible() -> None:
     assert result.get("dispatch_feasible") is True
 
 
-def test_dispatch_feasible_defaults_true_for_recipes_without_capability_gates() -> None:
-    """Recipes that do not use capability-gated run_python steps should
-    default to dispatch_feasible=True regardless of backend overrides."""
+def test_dispatch_feasible_true_when_capability_overrides_are_truthy() -> None:
+    """Capability-gated recipes report dispatch_feasible=True when all
+    capability ingredient overrides evaluate as truthy."""
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,

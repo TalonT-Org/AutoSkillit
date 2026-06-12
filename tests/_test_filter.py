@@ -682,6 +682,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # recipe direct-import entries (import autoskillit.workspace at AST level):
             "recipe/test_contracts.py",
             "recipe/test_backend_reachability.py",
+            "recipe/test_recipe_backend_composition_matrix.py",
             "recipe/test_rules_backend_compat.py",
             "recipe/test_rules_skill_content.py",
             "recipe/test_rules_stamp_ownership.py",

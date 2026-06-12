@@ -83,6 +83,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_planner_recipe.py` | Tests for the planner recipe structure |
 | `test_promote_to_main_wrapper.py` | Tests for the promote-to-main wrapper recipe |
 | `test_pseudocode_sync_rule.py` | Tests for the pseudocode-callable-divergence semantic rule |
+| `test_recipe_backend_composition_matrix.py` | Recipe x backend composition matrix: parametrized CI gate validating every (recipe, backend) combination with declared-unsupported and known-broken governance |
 | `test_recipe_ci_applicable_routing.py` | Structural tests for ci_applicable routing guards across all wait_for_ci chains |
 | `test_recipe_ci_contracts.py` | Cross-recipe ci_event/branch coherence and remote_url structural tests |
 | `test_recipe_ci_watch_event.py` | Tests for CI watch event in recipe steps |

@@ -44,6 +44,8 @@ _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
         "stop_step_semantics",  # delivered via open_kitchen response Channel B; not redisplayed
         "deferred_guards",  # internal deferral metadata; not displayed to agent
         "post_prune_step_names",  # internal preflight field; not displayed to agent
+        "dispatch_feasible",  # internal admission control signal; surfaced via refusal envelopes
+        "infeasible_steps",  # internal admission control detail; surfaced via refusal envelopes
     }
 )
 
@@ -185,6 +187,8 @@ _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(
         "hook_warning",  # edge-case diagnostic; not rendered in standard path
         "deferred_guards",  # internal deferral metadata; not displayed to agent
         "post_prune_step_names",  # internal preflight field; not displayed to agent
+        "dispatch_feasible",  # internal admission control signal; surfaced via refusal envelopes
+        "infeasible_steps",  # internal admission control detail; surfaced via refusal envelopes
     }
 )
 

@@ -127,6 +127,8 @@ class LoadRecipeResult(TypedDict, total=False):
     recipe_version: str | None
     deferred_guards: list[DeferredGuard]
     post_prune_step_names: list[str]
+    dispatch_feasible: bool
+    infeasible_steps: list[str]
 
 
 class OpenKitchenResult(TypedDict, total=False):
@@ -135,7 +137,7 @@ class OpenKitchenResult(TypedDict, total=False):
     Extends LoadRecipeResult with three post-return keys injected by the handler.
     """
 
-    # Inherited from LoadRecipeResult (17 keys)
+    # Inherited from LoadRecipeResult (19 keys)
     content: str
     errors: list[str]
     diagram: str | None
@@ -153,6 +155,8 @@ class OpenKitchenResult(TypedDict, total=False):
     recipe_version: str | None
     deferred_guards: list[DeferredGuard]
     post_prune_step_names: list[str]
+    dispatch_feasible: bool
+    infeasible_steps: list[str]
     # Post-return keys injected by open_kitchen handler (4 keys)
     success: bool
     kitchen: str

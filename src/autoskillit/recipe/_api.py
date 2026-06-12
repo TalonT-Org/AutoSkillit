@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from autoskillit.core import (
+    BACKEND_CAPABILITY_INGREDIENTS,
+    CAPABILITY_GATE_CALLABLES,
     ProcessStaleError,
     RecipeNotFoundError,
     RecipeSource,
@@ -45,6 +47,7 @@ from autoskillit.recipe._api_listing import (  # noqa: F401
 from autoskillit.recipe._recipe_composition import (
     _assert_content_integrity,
     _build_active_recipe,
+    _compute_capability_feasibility,
     _prune_skipped_steps,
     _resolve_hidden_inputs_in_content,
     _resolve_skip_guards_in_content,
@@ -318,6 +321,8 @@ def load_and_validate(
     active_recipe = None
     _skip_resolutions: dict[str, bool | None] = {}
     _pre_prune_steps: dict[str, Any] = {}
+    _dispatch_feasible = True
+    _infeasible_steps: list[str] = []
 
     # Determine recipes_dir from source
     if match.source == RecipeSource.BUILTIN:
@@ -392,6 +397,18 @@ def load_and_validate(
                 )
                 raw = ""
             t0 = _t("prune_skipped_steps", t0, name)
+
+            # Stage: capability feasibility — detect DOA pipelines where a
+            # surviving capability-gated run_python step has no recovery route
+            # for a falsy capability ingredient. This refuses the pipeline
+            # before any side-effect step is executed.
+            _dispatch_feasible, _infeasible_steps = _compute_capability_feasibility(
+                active_recipe,
+                ingredient_overrides or {},
+                capability_ingredient_keys=BACKEND_CAPABILITY_INGREDIENTS,
+                capability_gate_callables=CAPABILITY_GATE_CALLABLES,
+            )
+            t0 = _t("capability_feasibility", t0, name)
 
             # Stage: semantic rules (builds ValidationContext from post-prune recipe)
             if lister is None:
@@ -582,6 +599,9 @@ def load_and_validate(
         result["deferred_guards"] = _deferred_guard_list
     if active_recipe is not None:
         result["post_prune_step_names"] = list(active_recipe.steps.keys())
+        result["dispatch_feasible"] = _dispatch_feasible
+        if _infeasible_steps:
+            result["infeasible_steps"] = _infeasible_steps
 
     # Write to cache (only when recipe was found and fully processed)
     if match is not None:

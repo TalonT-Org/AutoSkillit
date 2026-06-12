@@ -106,6 +106,60 @@ def _is_ingredient_truthy(value: str) -> bool:
     return bool(value) and value.lower() not in FALSY_STRINGS
 
 
+def _compute_capability_feasibility(
+    post_prune_recipe: Any,
+    ingredient_overrides: dict[str, str],
+    *,
+    capability_ingredient_keys: frozenset[str],
+    capability_gate_callables: frozenset[str],
+) -> tuple[bool, list[str]]:
+    """Detect dead-on-arrival pipelines caused by capability-gated run_python steps.
+
+    A pipeline is DOA when a surviving post-prune step:
+    1. Has tool="run_python" with step.with_args["callable"] whose final dotted
+       component matches an entry in capability_gate_callables.
+    2. The step reads an ingredient (via with_args keys that overlap
+       capability_ingredient_keys) that resolves to a falsy value under the
+       current ingredient_overrides.
+    3. The step's on_result / on_failure routes the falsy case to a terminal
+       failure target ("escalate") rather than recovery.
+
+    Returns (is_feasible, infeasible_step_names).
+    """
+    if not post_prune_recipe or not getattr(post_prune_recipe, "steps", None):
+        return True, []
+
+    infeasible: list[str] = []
+    steps = post_prune_recipe.steps
+    for step_name, step in steps.items():
+        if step is None:
+            continue
+        if getattr(step, "tool", None) != "run_python":
+            continue
+        with_args = getattr(step, "with_args", None) or {}
+        callable_dotted = with_args.get("callable", "")
+        if not callable_dotted or "." not in callable_dotted:
+            continue
+        bare_name = callable_dotted.rsplit(".", 1)[-1]
+        if bare_name not in capability_gate_callables:
+            continue
+        gate_input_keys = {k for k in with_args.keys() if k in capability_ingredient_keys}
+        if not gate_input_keys:
+            continue
+        all_falsy = all(
+            not _is_ingredient_truthy(str(ingredient_overrides.get(k, "")))
+            for k in gate_input_keys
+        )
+        if not all_falsy:
+            continue
+        on_failure = getattr(step, "on_failure", None) or "escalate"
+        on_exhausted = getattr(step, "on_exhausted", None) or "escalate"
+        if on_failure == "escalate" or on_exhausted == "escalate":
+            infeasible.append(step_name)
+
+    return (not infeasible), infeasible
+
+
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:
     """Return a new Recipe with the named sub_recipe placeholder step removed."""
     new_steps = {k: v for k, v in recipe.steps.items() if k != step_name}

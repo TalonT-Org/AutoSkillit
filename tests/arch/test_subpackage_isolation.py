@@ -971,7 +971,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "error propagation from LoadRecipeResult; get_recipe validity guard adds 9 lines; "
         "dispatch-feasibility preflight wiring on both paths with gate-close on failure; "
         "gate_infrastructure_ready guard restructuring adds 22 lines for handler-skip path, "
-        "quota_refresh_loop deferred start, and all four gate.disable() rollback resets",
+        "quota_refresh_loop deferred start, and all four gate.disable() rollback resets; "
+        "_dispatch_infeasible_response helper for DOA pipeline refusal",
     ),
     "tools_execution.py": (
         1130,

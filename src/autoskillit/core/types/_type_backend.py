@@ -182,6 +182,12 @@ CODEX_EFFORT_MAPPING: dict[str, str] = {
 }
 
 _CODEX_MODEL_REVERSE: dict[str, str] = {v: k for k, v in CODEX_MODEL_ALIASES.items()}
+_codex_alias_values = list(CODEX_MODEL_ALIASES.values())
+assert len(_CODEX_MODEL_REVERSE) == len(CODEX_MODEL_ALIASES), (
+    "CODEX_MODEL_ALIASES values must be unique — duplicate makes an alias unreachable "
+    f"via model_class(). Duplicates: "
+    f"{[v for v in _codex_alias_values if _codex_alias_values.count(v) > 1]}"
+)
 
 
 @dataclass(frozen=True, slots=True)

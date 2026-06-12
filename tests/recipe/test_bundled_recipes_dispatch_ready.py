@@ -258,3 +258,48 @@ def test_card_and_semantic_rules_agree_on_errors(recipe_name: str, tmp_path: Pat
         f"Card-only: {contract_error_steps - semantic_error_steps}, "
         f"Semantic-only: {semantic_error_steps - contract_error_steps}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Capability-admission-control feasibility signal
+# ---------------------------------------------------------------------------
+
+
+def test_codex_implementation_dispatch_infeasible() -> None:
+    """Codex backend + implementation recipe must report dispatch_feasible=False.
+
+    gate_backend_write routes to terminal failure when backend_capable=false.
+    """
+    result = load_and_validate(
+        "implementation",
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={"backend_supports_git_write": "false"},
+        backend_name="codex",
+    )
+    assert result["valid"] is True  # recipe is structurally valid
+    assert result.get("dispatch_feasible") is False  # but pipeline is DOA
+    assert "gate_backend_write" in result.get("infeasible_steps", [])
+
+
+def test_claude_implementation_dispatch_feasible() -> None:
+    """Claude Code backend + implementation recipe must report dispatch_feasible=True."""
+    result = load_and_validate(
+        "implementation",
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={"backend_supports_git_write": "true"},
+        backend_name="claude-code",
+    )
+    assert result["valid"] is True
+    assert result.get("dispatch_feasible") is True
+
+
+def test_dispatch_feasible_defaults_true_for_recipes_without_capability_gates() -> None:
+    """Recipes that do not use capability-gated run_python steps should
+    default to dispatch_feasible=True regardless of backend overrides."""
+    result = load_and_validate(
+        "implementation",
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={"backend_supports_git_write": "true"},
+    )
+    assert result.get("dispatch_feasible") is True
+    assert "infeasible_steps" not in result

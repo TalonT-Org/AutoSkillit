@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 

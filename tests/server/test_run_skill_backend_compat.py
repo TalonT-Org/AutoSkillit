@@ -205,7 +205,6 @@ class TestHookFixRequiredDispatchGate:
 
         from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
         from autoskillit.hook_registry import HookDef
-        from autoskillit.server.tools import tools_execution
         from autoskillit.server.tools.tools_execution import _check_backend_compat
 
         registry = [
@@ -215,7 +214,9 @@ class TestHookFixRequiredDispatchGate:
                 codex_status="fix-required",
             ),
         ]
-        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+        from autoskillit.server.tools import _preflight as _preflight_mod
+
+        monkeypatch.setattr(_preflight_mod, "HOOK_REGISTRY", registry)
 
         backend = MagicMock(spec=CodingAgentBackend)
         backend.name = AGENT_BACKEND_CODEX
@@ -246,7 +247,6 @@ class TestHookFixRequiredDispatchGate:
 
         from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, CodingAgentBackend
         from autoskillit.hook_registry import HookDef
-        from autoskillit.server.tools import tools_execution
         from autoskillit.server.tools.tools_execution import _check_backend_compat
 
         registry = [
@@ -256,7 +256,9 @@ class TestHookFixRequiredDispatchGate:
                 codex_status="fix-required",
             ),
         ]
-        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+        from autoskillit.server.tools import _preflight as _preflight_mod
+
+        monkeypatch.setattr(_preflight_mod, "HOOK_REGISTRY", registry)
 
         backend = MagicMock(spec=CodingAgentBackend)
         backend.name = AGENT_BACKEND_CLAUDE_CODE
@@ -284,7 +286,6 @@ class TestHookFixRequiredDispatchGate:
 
         from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
         from autoskillit.hook_registry import HookDef
-        from autoskillit.server.tools import tools_execution
         from autoskillit.server.tools.tools_execution import _check_backend_compat
 
         # scripts=[] means the hook has no guard scripts to check coverage against;
@@ -296,7 +297,9 @@ class TestHookFixRequiredDispatchGate:
                 codex_status="fix-required",
             ),
         ]
-        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+        from autoskillit.server.tools import _preflight as _preflight_mod
+
+        monkeypatch.setattr(_preflight_mod, "HOOK_REGISTRY", registry)
 
         backend = MagicMock(spec=CodingAgentBackend)
         backend.name = AGENT_BACKEND_CODEX
@@ -326,14 +329,15 @@ class TestHookFixRequiredDispatchGate:
 
         from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
         from autoskillit.hook_registry import HookDef
-        from autoskillit.server.tools import tools_execution
         from autoskillit.server.tools.tools_execution import _check_backend_compat
 
         registry = [
             HookDef(matcher=r"Read|Write", codex_status="works-as-is"),
             HookDef(matcher=r"Bash", codex_status="not-applicable"),
         ]
-        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+        from autoskillit.server.tools import _preflight as _preflight_mod
+
+        monkeypatch.setattr(_preflight_mod, "HOOK_REGISTRY", registry)
 
         backend = MagicMock(spec=CodingAgentBackend)
         backend.name = AGENT_BACKEND_CODEX
@@ -359,7 +363,6 @@ class TestHookFixRequiredDispatchGate:
 
         from autoskillit.core import AGENT_BACKEND_CODEX, CodingAgentBackend
         from autoskillit.hook_registry import HookDef
-        from autoskillit.server.tools import tools_execution
         from autoskillit.server.tools.tools_execution import _check_backend_compat
 
         registry = [
@@ -374,7 +377,9 @@ class TestHookFixRequiredDispatchGate:
                 codex_status="fix-required",
             ),
         ]
-        monkeypatch.setattr(tools_execution, "HOOK_REGISTRY", registry)
+        from autoskillit.server.tools import _preflight as _preflight_mod
+
+        monkeypatch.setattr(_preflight_mod, "HOOK_REGISTRY", registry)
 
         backend = MagicMock(spec=CodingAgentBackend)
         backend.name = AGENT_BACKEND_CODEX

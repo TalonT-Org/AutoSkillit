@@ -61,7 +61,10 @@ from autoskillit.server.tools._auto_overrides import (
     _promote_capability_keys,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools.tools_execution import _check_dispatch_feasibility
+from autoskillit.server.tools._preflight import (
+    _check_dispatch_feasibility,
+    filter_steps_by_post_prune,
+)
 
 logger = get_logger(__name__)
 
@@ -626,10 +629,9 @@ async def open_kitchen(
                         try:
                             recipe_obj = tool_ctx.recipes.load(recipe_info.path)
                             _deferred_recipe_obj = recipe_obj
-                            _post_prune_names = set(result.get("post_prune_step_names", []))
-                            tool_ctx.active_recipe_steps = {
-                                k: v for k, v in recipe_obj.steps.items() if k in _post_prune_names
-                            }
+                            tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
+                                recipe_obj.steps, result.get("post_prune_step_names", [])
+                            )
                             tool_ctx.active_recipe_ingredients = frozenset(
                                 recipe_obj.ingredients.keys()
                             )
@@ -726,10 +728,9 @@ async def open_kitchen(
                 try:
                     recipe_obj = tool_ctx.recipes.load(recipe_info.path)
                     _normal_recipe_obj = recipe_obj
-                    _post_prune_names = set(result.get("post_prune_step_names", []))
-                    tool_ctx.active_recipe_steps = {
-                        k: v for k, v in recipe_obj.steps.items() if k in _post_prune_names
-                    }
+                    tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
+                        recipe_obj.steps, result.get("post_prune_step_names", [])
+                    )
                     tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
                 except Exception:
                     logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)

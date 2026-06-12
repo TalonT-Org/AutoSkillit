@@ -48,7 +48,7 @@ from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools.tools_execution import _check_dispatch_feasibility
+from autoskillit.server.tools._preflight import _check_dispatch_feasibility
 
 logger = get_logger(__name__)
 

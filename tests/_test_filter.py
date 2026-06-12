@@ -858,8 +858,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "hooks",
             "cli",
             "execution",
-            # server/ narrowed to 3 files
+            # server/ narrowed to 4 files
             "server/test_tools_kitchen_envelope.py",
+            "server/test_tools_kitchen_preflight.py",
             "server/test_lifespan.py",
             "server/test_run_skill_backend_compat.py",
             # infra/ narrowed to 7 files

@@ -238,7 +238,7 @@ async def test_pre_reveal_then_open_does_not_re_execute_handler():
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),
         patch.object(
-            tools_kitchen, "_open_kitchen_handler", new_callable=MagicMock
+            tools_kitchen, "_open_kitchen_handler", new_callable=AsyncMock
         ) as mock_handler,
     ):
         result = await tools_kitchen.open_kitchen(name="test-recipe", ctx=mock_ctx)
@@ -300,7 +300,7 @@ async def test_double_open_kitchen_no_name_does_not_re_execute_handler():
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),
         patch.object(
-            tools_kitchen, "_open_kitchen_handler", new_callable=MagicMock
+            tools_kitchen, "_open_kitchen_handler", new_callable=AsyncMock
         ) as mock_handler,
     ):
         result = await tools_kitchen.open_kitchen(ctx=mock_ctx)

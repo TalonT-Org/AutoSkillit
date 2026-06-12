@@ -303,3 +303,41 @@ def test_dispatch_feasible_defaults_true_for_recipes_without_capability_gates() 
     )
     assert result.get("dispatch_feasible") is True
     assert "infeasible_steps" not in result
+
+
+def _discover_capability_gate_recipes() -> list[str]:
+    """Return recipe names that contain a gate_backend_write step."""
+    gate_recipes = []
+    for name in _RECIPE_STEMS:
+        recipe_path = _RECIPES_DIR / f"{name}.yaml"
+        if not recipe_path.exists():
+            continue
+        recipe = load_recipe(recipe_path)
+        for step in recipe.steps.values():
+            if step.tool == "run_python" and step.with_args.get("callable", "").endswith(
+                "gate_backend_write"
+            ):
+                gate_recipes.append(name)
+                break
+    return gate_recipes
+
+
+_CAPABILITY_GATE_RECIPES = _discover_capability_gate_recipes()
+
+
+@pytest.mark.parametrize("recipe_name", _CAPABILITY_GATE_RECIPES)
+def test_codex_capability_gate_recipes(recipe_name: str) -> None:
+    """Every recipe with a gate_backend_write step must report
+    dispatch_feasible=False when loaded with codex overrides."""
+    result = load_and_validate(
+        recipe_name,
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={"backend_supports_git_write": "false"},
+        backend_name="codex",
+    )
+    assert result.get("valid") is True
+    assert result.get("dispatch_feasible") is False, (
+        f"Recipe '{recipe_name}' with gate_backend_write step did not report "
+        f"dispatch_feasible=False under codex overrides"
+    )
+    assert "gate_backend_write" in result.get("infeasible_steps", [])

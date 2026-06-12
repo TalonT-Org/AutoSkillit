@@ -45,6 +45,7 @@ from autoskillit.core import (
     session_type as _resolve_session_type,
 )
 from autoskillit.execution import (
+    BACKEND_REGISTRY,
     RecordingSubprocessRunner,
     ensure_codex_mcp_registered,
 )
@@ -54,6 +55,7 @@ from autoskillit.fleet import (
     sweep_stale_dispatch_labels,
 )
 from autoskillit.hook_registry import (
+    HOOK_REGISTRY,
     HOOK_REGISTRY_HASH,
     find_broken_hook_scripts,
     generate_hooks_json,
@@ -139,9 +141,6 @@ def run_startup_fix_required_coverage_check() -> None:
     by the union of all registered backends' applicable_guards. A fix-required
     hook that IS covered by at least one backend is valid and does not raise.
     """
-    from autoskillit.execution.backends import BACKEND_REGISTRY
-    from autoskillit.hook_registry import HOOK_REGISTRY
-
     all_guards: set[str] = set()
     for cls in BACKEND_REGISTRY.values():
         all_guards.update(cls().capabilities.applicable_guards)

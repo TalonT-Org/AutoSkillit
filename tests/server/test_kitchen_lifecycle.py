@@ -110,15 +110,19 @@ async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, t
         result1 = await _open_kitchen_handler()
         assert result1 is None
         assert ctx.gate_infrastructure_ready is True
+        first_task = ctx.quota_refresh_task
 
         _close_kitchen_handler()
         assert ctx.gate_infrastructure_ready is False
+        await asyncio.sleep(0)
+        assert first_task.cancelled() or first_task.done()
 
         result2 = await _open_kitchen_handler()
         assert result2 is None
         assert ctx.gate_infrastructure_ready is True
+        second_task = ctx.quota_refresh_task
+        assert second_task is not first_task
 
-        task = ctx.quota_refresh_task
+        _close_kitchen_handler()
         await asyncio.sleep(0)
-        if task is not None:
-            assert task.cancelled() or task.done()
+        assert second_task.cancelled() or second_task.done()

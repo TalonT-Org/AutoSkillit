@@ -962,14 +962,16 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "co-located with the execution engine that calls them",
     ),
     "tools_kitchen.py": (
-        1200,
+        1250,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
         "backend capability promotion delegated to _promote_capability_keys in _auto_overrides; "
         "fail-closed validity gate on both deferred-recall and normal paths adds structural "
         "error propagation from LoadRecipeResult; get_recipe validity guard adds 9 lines; "
-        "dispatch-feasibility preflight wiring on both paths with gate-close on failure",
+        "dispatch-feasibility preflight wiring on both paths with gate-close on failure; "
+        "gate_infrastructure_ready guard restructuring adds 22 lines for handler-skip path, "
+        "quota_refresh_loop deferred start, and all four gate.disable() rollback resets",
     ),
     "tools_execution.py": (
         1130,

@@ -1480,6 +1480,10 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/recipe/test_backend_reachability.py": frozenset(
         {"autoskillit.server", "autoskillit.execution", "autoskillit.workspace"}
     ),
+    # composition matrix crosses the same packages as reachability — full pipeline
+    "tests/recipe/test_recipe_backend_composition_matrix.py": frozenset(
+        {"autoskillit.server", "autoskillit.execution", "autoskillit.workspace"}
+    ),
     # review loop routing integration imports root-level smoke_utils
     "tests/recipe/test_review_loop_routing_integration.py": frozenset({"autoskillit.smoke_utils"}),
     # migration tests — migration engine integrates with execution.session

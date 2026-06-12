@@ -69,6 +69,7 @@ def test_infra_shard_all():
         "QuotaRefreshTask",
         "TokenFactory",
         "CampaignProtector",
+        "QuotaPolicy",
     }
 
 

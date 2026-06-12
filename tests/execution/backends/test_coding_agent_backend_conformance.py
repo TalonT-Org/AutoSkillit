@@ -378,3 +378,9 @@ def test_every_capability_field_has_classification() -> None:
         k: v for k, v in CAPABILITY_CLASSIFICATION.items() if v not in ("REQUIRED", "OPTIONAL")
     }
     assert not invalid, f"Invalid classification values: {invalid}"
+    not_yet_live_required = {
+        f for f in NOT_YET_LIVE if CAPABILITY_CLASSIFICATION.get(f) == "REQUIRED"
+    }
+    assert not not_yet_live_required, (
+        f"NOT_YET_LIVE fields must be OPTIONAL — found REQUIRED: {sorted(not_yet_live_required)}"
+    )

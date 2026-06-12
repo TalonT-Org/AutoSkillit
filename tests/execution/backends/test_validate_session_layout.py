@@ -175,7 +175,7 @@ class TestCodexLayoutValidation:
         session_dir = tmp_path / "session"
         (session_dir / "skills").mkdir(parents=True)
 
-        monkeypatch.setenv("HOME", str(fake_home))
+        monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
         count = _materialize_profile_skills(session_dir)
 
         assert count == 1
@@ -190,7 +190,7 @@ class TestCodexLayoutValidation:
         session_dir = tmp_path / "session"
         (session_dir / "skills").mkdir(parents=True)
 
-        monkeypatch.setenv("HOME", str(fake_home))
+        monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
         count = _materialize_profile_skills(session_dir)
 
         assert count == 0

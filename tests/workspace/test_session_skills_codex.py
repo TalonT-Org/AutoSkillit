@@ -112,7 +112,7 @@ def test_profile_skills_symlinked_into_session_dir(tmp_path, monkeypatch) -> Non
     session_dir = tmp_path / "session"
     (session_dir / "skills").mkdir(parents=True)
 
-    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
     count = _materialize_profile_skills(session_dir)
 
     target = session_dir / "skills" / "my-skill"
@@ -131,7 +131,7 @@ def test_missing_profile_skills_dir_does_not_raise(tmp_path, monkeypatch) -> Non
     session_dir = tmp_path / "session"
     (session_dir / "skills").mkdir(parents=True)
 
-    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
     count = _materialize_profile_skills(session_dir)
 
     assert count == 0

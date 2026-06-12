@@ -11,6 +11,8 @@ the Skill tool first.
 
 Bypass conditions (early-exit before the gate):
 - ``agent_id`` present in hook payload — subagent exemption
+- ``AUTOSKILLIT_AGENT_BACKEND == 'codex'``: codex backend does not fire PreToolUse
+  for apply_patch or MCP calls, making this guard structurally inert. Exit 0.
 - ``AUTOSKILLIT_APPLICABLE_GUARDS`` does not contain the guard's filename stem —
   the guard is not applicable to this backend
 
@@ -97,6 +99,9 @@ def main() -> None:
         sys.exit(0)
 
     if data.get("agent_id"):
+        sys.exit(0)
+
+    if os.environ.get("AUTOSKILLIT_AGENT_BACKEND") == "codex":
         sys.exit(0)
 
     guard_name = Path(__file__).stem

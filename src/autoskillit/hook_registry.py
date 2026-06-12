@@ -79,7 +79,7 @@ class HookDef:
 # recipe_confirmed_post_hook             | works-as-is
 # lint_after_edit_hook                   | degraded
 # skill_load_post_hook                   | not-applicable
-# skill_load_guard                       | fix-required
+# skill_load_guard                       | works-as-is
 # review_loop_gate                       | works-as-is
 # reset_resume_gate                      | works-as-is
 # session_start_hook                     | works-as-is
@@ -298,7 +298,7 @@ HOOK_REGISTRY: list[HookDef] = [
         matcher=r"Read|Write|Edit|Bash|Grep|Glob",
         scripts=["guards/skill_load_guard.py"],
         session_scope="headless_only",
-        codex_status="fix-required",
+        codex_status="works-as-is",
         mechanism="deny",
     ),
     HookDef(

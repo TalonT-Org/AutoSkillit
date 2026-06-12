@@ -47,6 +47,50 @@ class TestWriteGuardNoHeadless:
         assert result == ""
 
 
+class TestWriteGuardCodexBackendEarlyExit:
+    """Codex backend bypasses prefix enforcement — workspace-write sandbox handles
+    enforcement directly, so the soft PreToolUse deny is redundant."""
+
+    PREFIX = "/some/write/prefix"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless_codex(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "codex")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+
+    def test_codex_backend_write_tool_exits_zero(self, monkeypatch: pytest.MonkeyPatch):
+        result = _run_hook(_build_event("Write", "/outside/foo.py"))
+        assert result == ""
+
+    def test_codex_backend_apply_patch_exits_zero(self, monkeypatch: pytest.MonkeyPatch):
+        patch = "*** Begin Patch\n*** Update File: /outside/foo.py\n@@ ...\n+x\n*** End Patch"
+        result = _run_hook(_build_apply_patch_event(patch))
+        assert result == ""
+
+    def test_codex_backend_bash_write_exits_zero(self, monkeypatch: pytest.MonkeyPatch):
+        event = _build_bash_event("sed -i 's/x/y/' /outside/foo.py")
+        result = _run_hook(event)
+        assert result == ""
+
+    def test_non_codex_backend_enforces_normally(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_AGENT_BACKEND", "claude-code")
+        result = _run_hook(_build_event("Write", "/outside/foo.py"))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_codex_no_headless_still_exits_zero(self, monkeypatch: pytest.MonkeyPatch):
+        """Non-headless exit fires before the codex exit — both paths return empty."""
+        monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+        result = _run_hook(_build_event("Write", "/outside/foo.py"))
+        assert result == ""
+
+    def test_codex_malformed_json_exits_zero(self, monkeypatch: pytest.MonkeyPatch):
+        """Codex exit fires before stdin parse — malformed JSON does not trigger deny."""
+        result = _run_hook("not valid json")
+        assert result == ""
+
+
 class TestWriteGuardNoEnv:
     def test_no_env_var_allows_all_writes(self, monkeypatch: pytest.MonkeyPatch):
         _set_headless(monkeypatch, headless=True)

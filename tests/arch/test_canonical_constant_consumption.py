@@ -118,7 +118,7 @@ def test_registry_constants_have_production_consumer() -> None:
         for name in _find_registry_constants(cf):
             all_constants.append((name, cf))
 
-    assert all_constants, "No registry constants found — test premise broken"
+    assert all_constants, f"No registry constants found in {constants_files} — test premise broken"
 
     unconsumed = []
     for name, def_file in all_constants:

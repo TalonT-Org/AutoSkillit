@@ -183,3 +183,31 @@ class TestCodexEffortInjectionInCmds:
     def test_no_effort_for_native_model_in_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="gpt-5.5")
         assert "model_reasoning_effort" not in " ".join(spec.cmd)
+
+
+class TestModelClass:
+    def test_canonical_keys(self) -> None:
+        from autoskillit.core import model_class
+
+        assert model_class("opus") == "opus"
+        assert model_class("sonnet") == "sonnet"
+        assert model_class("haiku") == "haiku"
+
+    def test_suffix_stripping(self) -> None:
+        from autoskillit.core import model_class
+
+        assert model_class("opus[1m]") == "opus"
+        assert model_class("sonnet[1m]") == "sonnet"
+        assert model_class("haiku[1m]") == "haiku"
+
+    def test_codex_reverse_map(self) -> None:
+        from autoskillit.core import model_class
+
+        assert model_class(CODEX_MODEL_ALIASES["opus"]) == "opus"
+        assert model_class(CODEX_MODEL_ALIASES["sonnet"]) == "sonnet"
+        assert model_class(CODEX_MODEL_ALIASES["haiku"]) == "haiku"
+
+    def test_unknown_passthrough(self) -> None:
+        from autoskillit.core import model_class
+
+        assert model_class("custom-model-xyz") == "custom-model-xyz"

@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5"})
+VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.4", "gpt-5.4-mini", "gpt-5.5"})
 
 VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"sonnet", "opus", "haiku"})
 

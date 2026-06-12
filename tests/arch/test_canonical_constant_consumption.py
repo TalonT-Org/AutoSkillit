@@ -69,3 +69,93 @@ def test_env_forward_constants_have_production_consumer() -> None:
         f"consumers: {unconsumed}. Each env-var-set constant must be imported and consumed "
         f"by production code to prevent dead-canonical-constant drift."
     )
+
+
+_REGISTRY_CANONICAL_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*(?:_REGISTRY|_TOOLS|_TAGS|_NAMES)$")
+
+_REGISTRY_EXEMPTIONS: dict[str, str] = {
+    "FREE_RANGE_TOOLS": (
+        "alias-derived: backing constant for UNGATED_TOOLS which is imported "
+        "in pipeline/gate.py and server/tools/tools_recipe.py; "
+        "direct import would be redundant"
+    ),
+    "FLEET_TOOLS": (
+        "test-consumed: architectural enforcement constant imported by "
+        "test_layer_enforcement.py, test_transforms_hygiene.py, and "
+        "test_lifespan_fleet_boot.py for fleet tool-tag parity guards; "
+        "no runtime production consumer needed"
+    ),
+}
+
+
+def _find_registry_constants(constants_file: Path) -> list[str]:
+    """Find all module-level names matching registry/tools/tags/names patterns."""
+    tree = ast.parse(constants_file.read_text())
+    names: list[str] = []
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if _REGISTRY_CANONICAL_PATTERN.match(node.target.id):
+                names.append(node.target.id)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and _REGISTRY_CANONICAL_PATTERN.match(target.id):
+                    names.append(target.id)
+    return names
+
+
+def test_registry_constants_have_production_consumer() -> None:
+    """Every registry/tools/tags/names constant must be imported by production code or exempted."""
+    from autoskillit.core import paths
+
+    src_root = paths.pkg_root()
+    constants_files = [
+        src_root / "core" / "types" / "_type_constants_registries.py",
+        src_root / "core" / "types" / "_type_constants.py",
+    ]
+
+    all_constants: list[tuple[str, Path]] = []
+    for cf in constants_files:
+        for name in _find_registry_constants(cf):
+            all_constants.append((name, cf))
+
+    assert all_constants, "No registry constants found — test premise broken"
+
+    unconsumed = []
+    for name, def_file in all_constants:
+        if name in _REGISTRY_EXEMPTIONS:
+            continue
+        if not _has_production_import(src_root, name, def_file):
+            unconsumed.append(name)
+
+    assert not unconsumed, (
+        f"Registry constants (*_REGISTRY / *_TOOLS / *_TAGS / *_NAMES) with zero "
+        f"production consumers and no exemption: {unconsumed}. Each constant must be "
+        f"imported by production src/ code or documented in _REGISTRY_EXEMPTIONS "
+        f"with a rationale."
+    )
+
+
+def test_exemption_rationales_are_nonempty() -> None:
+    """Every exemption must have a non-empty rationale string."""
+    empty = [k for k, v in _REGISTRY_EXEMPTIONS.items() if not v.strip()]
+    assert not empty, f"Exemptions with empty rationales: {empty}"
+
+
+def test_exemptions_reference_real_constants() -> None:
+    """Every exempted name must exist as a constant in the scanned files."""
+    from autoskillit.core import paths
+
+    src_root = paths.pkg_root()
+    constants_files = [
+        src_root / "core" / "types" / "_type_constants_registries.py",
+        src_root / "core" / "types" / "_type_constants.py",
+    ]
+    all_names: set[str] = set()
+    for cf in constants_files:
+        all_names.update(_find_registry_constants(cf))
+
+    stale = set(_REGISTRY_EXEMPTIONS.keys()) - all_names
+    assert not stale, (
+        f"Exemption dict contains names not found in constants files: {sorted(stale)}. "
+        f"Remove stale entries."
+    )

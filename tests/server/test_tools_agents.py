@@ -122,6 +122,22 @@ async def test_unlock_agent_pack_unknown_name():
     assert "nonexistent" in data["error"]
 
 
+# T7b: unlock_agent_pack with retired name returns error
+@pytest.mark.anyio
+async def test_unlock_agent_pack_rejects_retired_names():
+    """Retired agent names must be rejected with a structured error."""
+    from autoskillit.core import RETIRED_AGENT_NAMES
+    from autoskillit.server.tools.tools_agents import unlock_agent_pack
+
+    assert RETIRED_AGENT_NAMES, "RETIRED_AGENT_NAMES must not be empty — test premise broken"
+    name = next(iter(sorted(RETIRED_AGENT_NAMES)))
+    mock_ctx = _make_mock_ctx()
+    result = json.loads(await unlock_agent_pack(name, ctx=mock_ctx))
+    assert result["success"] is False
+    assert "retired" in result["error"].lower()
+    assert name in result["error"]
+
+
 # T8: unlock_agent_pack enables agent resources in same session
 @pytest.mark.anyio
 async def test_unlock_agent_pack_enables_resources():

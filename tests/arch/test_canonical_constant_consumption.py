@@ -159,3 +159,14 @@ def test_exemptions_reference_real_constants() -> None:
         f"Exemption dict contains names not found in constants files: {sorted(stale)}. "
         f"Remove stale entries."
     )
+
+
+def test_fleet_dispatch_tools_subset_of_gated_tools() -> None:
+    """FLEET_DISPATCH_TOOLS must be a subset of GATED_TOOLS."""
+    from autoskillit.core import FLEET_DISPATCH_TOOLS
+    from autoskillit.pipeline import GATED_TOOLS
+
+    extra = FLEET_DISPATCH_TOOLS - GATED_TOOLS
+    assert not extra, (
+        f"FLEET_DISPATCH_TOOLS must be a subset of GATED_TOOLS — extra: {sorted(extra)}"
+    )

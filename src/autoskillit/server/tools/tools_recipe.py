@@ -13,7 +13,7 @@ from autoskillit.config import (
     build_config_authoritative_layer,
     resolve_ingredient_defaults,
 )
-from autoskillit.core import FLEET_DISPATCH_TOOLS, get_logger, temp_dir_display_str
+from autoskillit.core import FLEET_DISPATCH_TOOLS, get_logger, temp_dir_display_str  # noqa: F401
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -29,11 +29,6 @@ from autoskillit.server.tools._auto_overrides import (
     _promote_capability_keys,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-
-assert FLEET_DISPATCH_TOOLS <= GATED_TOOLS, (
-    "FLEET_DISPATCH_TOOLS must be a subset of GATED_TOOLS — "
-    f"extra: {sorted(FLEET_DISPATCH_TOOLS - GATED_TOOLS)}"
-)
 
 logger = get_logger(__name__)
 

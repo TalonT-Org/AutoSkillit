@@ -143,7 +143,13 @@ def run_startup_fix_required_coverage_check() -> None:
     """
     all_guards: set[str] = set()
     for cls in BACKEND_REGISTRY.values():
-        all_guards.update(cls().capabilities.applicable_guards)
+        try:
+            all_guards.update(cls().capabilities.applicable_guards)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Backend {cls.__name__!r} constructor raised during startup "
+                f"fix-required coverage check: {exc}"
+            ) from exc
     for h in HOOK_REGISTRY:
         if h.codex_status != "fix-required":
             continue

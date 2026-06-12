@@ -353,6 +353,9 @@ class TestSkillAutoGateBoot:
         assert ctx.kitchen_id is not None, "kitchen_id should be set by pre-reveal path"
         assert ctx.active_recipe_packs == frozenset()
         assert ctx.active_recipe_steps == {}
+        assert ctx.gate_infrastructure_ready is True, (
+            "gate_infrastructure_ready should be True after pre-reveal"
+        )
 
     @pytest.mark.anyio
     async def test_codex_non_headless_pre_reveal_suppresses_disabled_subset(

@@ -168,6 +168,7 @@ class ToolContext:
     recipe_content_hash: str = field(default="")
     recipe_composite_hash: str = field(default="")
     recipe_version: str = field(default="")
+    gate_infrastructure_ready: bool = field(default=False)
     kitchen_id: str = field(default="")
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     active_recipe_features: frozenset[str] | None = field(default_factory=lambda: None)

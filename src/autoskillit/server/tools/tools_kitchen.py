@@ -276,6 +276,7 @@ async def _open_kitchen_handler() -> str | None:
     except Exception:
         logger.warning("open_kitchen_registry_failed", exc_info=True)
 
+    ctx.gate_infrastructure_ready = True
     return None
 
 
@@ -331,6 +332,7 @@ def _close_kitchen_handler() -> None:
     ctx.recipe_content_hash = ""
     ctx.recipe_composite_hash = ""
     ctx.recipe_version = ""
+    ctx.gate_infrastructure_ready = False
     logger.info("close_kitchen", gate_state="closed")
     if (log := ctx.github_api_log) is not None:
         orphan_usage = log.drain(ctx.kitchen_id)
@@ -515,15 +517,30 @@ async def open_kitchen(
         disabled_subsets = _get_ctx().config.subsets.disabled
 
         _ctx_pre = _get_ctx()
-        _is_deferred_recall = (
-            name is not None and _ctx_pre.gate.enabled and _ctx_pre.recipe_name == name
-        )
+        _skip_handler = _ctx_pre.gate_infrastructure_ready
+        tool_ctx = _get_ctx()
 
-        if not _is_deferred_recall:
+        if not _skip_handler:
             handler_err = await _open_kitchen_handler()
             if handler_err is not None:
                 return handler_err
+        else:
+            _ctx_post = _get_ctx()
+            if _ctx_post.quota_refresh_task is None:
+                try:
+                    _ctx_post.quota_refresh_task = create_background_task(
+                        _quota_refresh_loop(
+                            _ctx_post.config.quota_guard,
+                            provider=resolve_provider(_ctx_post.config.providers.default_provider),
+                        ),
+                        label="quota_refresh_loop",
+                    )
+                except Exception:
+                    logger.warning(
+                        "open_kitchen_quota_refresh_deferred_start_failed", exc_info=True
+                    )
 
+        if not _skip_handler:
             _kctx_pre = _get_ctx()
             _skip_notify = (
                 _kctx_pre.backend is not None
@@ -538,6 +555,7 @@ async def open_kitchen(
                     logger.warning(
                         "open_kitchen_failure", stage="enable_components", exc_info=True
                     )
+                    tool_ctx.gate_infrastructure_ready = False
                     return _kitchen_failure_envelope(exc, stage="enable_components")
 
             try:
@@ -550,7 +568,15 @@ async def open_kitchen(
                 )
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
+                tool_ctx.gate_infrastructure_ready = False
                 return _kitchen_failure_envelope(exc, stage="redisable_subsets")
+
+        _is_deferred_recall = (
+            name is not None
+            and _ctx_pre.gate.enabled
+            and _ctx_pre.recipe_name == name
+            and _ctx_pre.recipe_name != ""
+        )
 
         _forbidden_list = ", ".join(PIPELINE_FORBIDDEN_TOOLS)
         _ctx = _get_ctx()
@@ -645,6 +671,7 @@ async def open_kitchen(
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
                     tool_ctx.gate.disable()
+                    tool_ctx.gate_infrastructure_ready = False
                     return _recipe_validation_error_response(name, result)
                 # Dispatch-feasibility preflight: verify the backend can enforce
                 # all fix-required hooks for the recipe's run_skill steps.
@@ -658,6 +685,7 @@ async def open_kitchen(
                     )
                     if _preflight_err is not None:
                         tool_ctx.gate.disable()
+                        tool_ctx.gate_infrastructure_ready = False
                         await ctx.disable_components(tags={"kitchen"})
                         return _preflight_err
                 result["success"] = True
@@ -680,6 +708,8 @@ async def open_kitchen(
                     )
                     if _override_warnings:
                         result["warnings"] = _override_warnings
+                if ingredients_only:
+                    result = strip_ingredients_only_keys(result)
                 return json.dumps(result)
             try:
                 result = tool_ctx.recipes.load_and_validate(
@@ -749,6 +779,7 @@ async def open_kitchen(
 
             if not result.get("valid", False) or not result.get("content", ""):
                 tool_ctx.gate.disable()
+                tool_ctx.gate_infrastructure_ready = False
                 return _recipe_validation_error_response(name, result)
 
             # Dispatch-feasibility preflight: verify the backend can enforce
@@ -763,6 +794,7 @@ async def open_kitchen(
                 )
                 if _preflight_err is not None:
                     tool_ctx.gate.disable()
+                    tool_ctx.gate_infrastructure_ready = False
                     await ctx.disable_components(tags={"kitchen"})
                     return _preflight_err
 

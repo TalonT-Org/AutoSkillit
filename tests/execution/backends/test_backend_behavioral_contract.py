@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import DirectInstall
+from autoskillit.core import CapabilityNotSupportedError, DirectInstall
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.execution.backends.codex import CodexBackend
 
@@ -21,6 +21,10 @@ CAPABILITY_METHOD_MAP: dict[str, tuple[str, dict]] = {
             "cwd": "/tmp",
             "completion_marker": "%%X%%",
         },
+    ),
+    "inspector_capable": (
+        "build_inspector_cmd",
+        {"prompt": "test prompt"},
     ),
     "session_resume_capable": (
         "build_resume_cmd",
@@ -44,9 +48,14 @@ class TestCapabilityMethodConsistency:
             except (RuntimeError, NotImplementedError) as exc:
                 pytest.fail(f"{backend_name}.{method_name}() raised {type(exc).__name__}: {exc}")
 
-    def test_inspector_capable_is_false(self, backend_name: str) -> None:
+    def test_incapable_backends_raise_capability_not_supported(self, backend_name: str) -> None:
         backend = BACKEND_REGISTRY[backend_name]()
-        assert backend.capabilities.inspector_capable is False
+        if backend.capabilities.inspector_capable:
+            pytest.skip("backend is inspector_capable")
+        with pytest.raises(CapabilityNotSupportedError) as exc_info:
+            backend.build_inspector_cmd("test prompt")
+        assert exc_info.value.capability == "inspector_capable"
+        assert exc_info.value.backend_name == backend_name
 
 
 class TestWriteDetectionStrategyRouting:

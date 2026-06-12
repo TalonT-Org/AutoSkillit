@@ -27,6 +27,7 @@ from autoskillit.core import (
     BackendConventions,
     BackendEventKind,
     BareResume,
+    CapabilityNotSupportedError,
     ClaudeDirectoryConventions,
     ClaudeEventData,
     ClaudeFlags,
@@ -865,4 +866,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         return []
 
     def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
-        raise RuntimeError("build_inspector_cmd not yet implemented — lands in #3534")
+        if not self.capabilities.inspector_capable:
+            raise CapabilityNotSupportedError("inspector_capable", self.name)
+        msg = "inspector_capable is True but build_inspector_cmd has no implementation"
+        raise AssertionError(msg)

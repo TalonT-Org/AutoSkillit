@@ -108,7 +108,7 @@ def _check_dispatch_feasibility(
             "backend": backend.name,
             "escape_hatch": (
                 "Per-step provider: override with ANTHROPIC_BASE_URL set to "
-                "reroute dispatch to claude-code (which has applicable_guards)."
+                "reroute dispatch to claude-code (which enforces all fix-required hooks)."
             ),
         }
     )

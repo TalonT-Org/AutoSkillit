@@ -68,20 +68,40 @@ def test_get_recipe_gates_on_dispatch_feasible() -> None:
     """get_recipe resource must check dispatch_feasible."""
     kitchen_path = SRC_ROOT / "server" / "tools" / "tools_kitchen.py"
     src = kitchen_path.read_text(encoding="utf-8")
-    assert "dispatch_feasible" in src, (
-        "get_recipe resource must reference 'dispatch_feasible' to gate "
-        "capability-DOA recipe serving."
-    )
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "get_recipe":
+            found = False
+            for child in ast.walk(node):
+                if isinstance(child, ast.Constant) and child.value == "dispatch_feasible":
+                    found = True
+                    break
+            assert found, (
+                "get_recipe resource must reference 'dispatch_feasible' to gate "
+                "capability-DOA recipe serving."
+            )
+            return
+    pytest.fail("get_recipe function not found in tools_kitchen.py")
 
 
 def test_load_recipe_gates_on_dispatch_feasible() -> None:
     """load_recipe tool must check dispatch_feasible."""
     recipe_path = SRC_ROOT / "server" / "tools" / "tools_recipe.py"
     src = recipe_path.read_text(encoding="utf-8")
-    assert "dispatch_feasible" in src, (
-        "load_recipe tool must reference 'dispatch_feasible' to surface "
-        "capability-DOA signal to calling orchestrators."
-    )
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "load_recipe":
+            found = False
+            for child in ast.walk(node):
+                if isinstance(child, ast.Constant) and child.value == "dispatch_feasible":
+                    found = True
+                    break
+            assert found, (
+                "load_recipe tool must reference 'dispatch_feasible' to surface "
+                "capability-DOA signal to calling orchestrators."
+            )
+            return
+    pytest.fail("load_recipe function not found in tools_recipe.py")
 
 
 def test_capability_gate_callables_have_matching_ingredient() -> None:

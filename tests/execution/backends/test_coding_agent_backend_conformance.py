@@ -11,6 +11,7 @@ import pytest
 from autoskillit.core import (
     BackendCapabilities,
     BackendConventions,
+    CapabilityNotSupportedError,
     CmdSpec,
     CodingAgentBackend,
     DirectInstall,
@@ -28,7 +29,6 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 NOT_YET_LIVE: frozenset[str] = frozenset(
     {
-        "inspector_capable",
         "min_version",
         "patch_format",
         "required_session_files",
@@ -276,9 +276,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """BackendCapabilities.inspector_capable — raises when not capable."""
         if self.backend.capabilities.inspector_capable:
             pytest.skip("backend is inspector_capable — not testing the not-capable path")
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(CapabilityNotSupportedError) as exc_info:
             self.backend.build_inspector_cmd("test prompt")
-        assert "not yet implemented" in str(exc_info.value)
+        assert exc_info.value.capability == "inspector_capable"
+        assert exc_info.value.backend_name == self.backend.name
 
     # --- Group 6: Behavioral Contracts ---
 

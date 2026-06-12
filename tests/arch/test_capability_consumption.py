@@ -44,11 +44,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         rationale="MCP env forwarding — enforcement arch test exists, awaiting src/ consumer",
         added_date=date(2026, 5, 31),
     ),
-    "inspector_capable": ForwardDeclaredField(
-        issue=3533,
-        rationale="Health Inspector capability gating — production consumer in #3574",
-        added_date=date(2026, 6, 1),
-    ),
     "required_session_files": ForwardDeclaredField(
         issue=3134,
         rationale=(

@@ -52,12 +52,12 @@ class TestFlagVocabulary:
             resume_flag="--resume",
             config_override_flag="-c",
         )
-        assert isinstance(fv.variadic_flags, frozenset)
-        assert isinstance(fv.non_variadic_flags, frozenset)
-        assert isinstance(fv.model_flag, str)
-        assert isinstance(fv.add_dir_flag, str)
-        assert isinstance(fv.resume_flag, str)
-        assert isinstance(fv.config_override_flag, str)
+        assert fv.variadic_flags == frozenset({"--add-dir"})
+        assert fv.non_variadic_flags == frozenset({"--json"})
+        assert fv.model_flag == "--model"
+        assert fv.add_dir_flag == "--add-dir"
+        assert fv.resume_flag == "--resume"
+        assert fv.config_override_flag == "-c"
 
     def test_is_namedtuple(self) -> None:
         assert issubclass(FlagVocabulary, tuple)
@@ -78,6 +78,7 @@ class TestAssembleSharedEnvExtras:
             cwd="/work",
             scenario_step_name="step1",
         )
+        assert len(result) == 8
         assert result["MAX_MCP_OUTPUT_TOKENS"] == "50000"
         assert result["MCP_CONNECTION_NONBLOCKING"] == "0"
         assert result[CAMPAIGN_ID_ENV_VAR] == "camp-123"

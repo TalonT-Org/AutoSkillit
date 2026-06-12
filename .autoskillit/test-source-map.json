@@ -142,7 +142,8 @@
     "tests/contracts/test_exogenous_string_coupling.py",
     "tests/contracts/test_instruction_surface.py",
     "tests/contracts/test_sous_chef_routing.py",
-    "tests/contracts/test_sous_chef_scheduling.py"
+    "tests/contracts/test_sous_chef_scheduling.py",
+    "tests/execution/backends/test_failure_predicate_spanning.py"
   ],
   "src/autoskillit/cli/_restart.py": [
     "tests/cli/test_restart.py"
@@ -4573,6 +4574,7 @@
     "tests/cli/test_orchestrator_prompt_contract.py",
     "tests/contracts/test_exogenous_string_coupling.py",
     "tests/contracts/test_instruction_surface.py",
+    "tests/execution/backends/test_failure_predicate_spanning.py",
     "tests/fleet/test_campaign_capture.py",
     "tests/fleet/test_capture_roundtrip.py",
     "tests/fleet/test_food_truck_prompt.py",
@@ -14570,6 +14572,11 @@
     "tests/server/test_tools_run_cmd.py",
     "tests/server/test_tools_run_python.py",
     "tests/server/test_tools_run_python_cwd.py"
+  ],
+  "src/autoskillit/server/tools/_types.py": [
+    "tests/execution/backends/test_failure_predicate_spanning.py",
+    "tests/infra/test_pretty_output_hook_infra.py",
+    "tests/server/test_tools_types_module.py"
   ],
   "src/autoskillit/server/tools/tools_agents.py": [
     "tests/server/test_tools_agents.py"

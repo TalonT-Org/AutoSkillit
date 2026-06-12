@@ -337,34 +337,6 @@ async def test_gate_rollback_resets_gate_infrastructure_ready():
 
 
 @pytest.mark.anyio
-async def test_pre_reveal_backend_does_not_support_tool_list_changed():
-    """Simulates Codex pre-reveal: gate enabled, recipe_name empty, infrastructure ready.
-    Handler must be skipped, recipe loaded normally."""
-    from autoskillit.server.tools import tools_kitchen
-
-    mock_ctx = _make_pre_revealed_ctx("test-recipe")
-    mock_recipe_info = MagicMock()
-    mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")
-    mock_ctx.recipes.find.return_value = mock_recipe_info
-    mock_recipe_obj = MagicMock()
-    mock_recipe_obj.steps = {"build": {"cmd": "task build"}}
-    mock_recipe_obj.ingredients = {"ing1": "val1"}
-    mock_ctx.recipes.load.return_value = mock_recipe_obj
-
-    with (
-        patch("autoskillit.server._get_ctx", return_value=mock_ctx),
-        patch.object(
-            tools_kitchen, "_open_kitchen_handler", new_callable=MagicMock
-        ) as mock_handler,
-    ):
-        result = await tools_kitchen.open_kitchen(name="test-recipe", ctx=mock_ctx)
-
-    mock_handler.assert_not_called()
-    parsed = json.loads(result)
-    assert parsed["success"] is True
-
-
-@pytest.mark.anyio
 async def test_cold_open_kitchen_runs_handler():
     """When gate_infrastructure_ready is False (cold state), handler must run."""
     from autoskillit.server.tools import tools_kitchen

@@ -6,7 +6,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 from fastmcp.exceptions import ResourceError
 
-from autoskillit.core import AGENT_PACK_REGISTRY, get_logger, pkg_root
+from autoskillit.core import AGENT_PACK_REGISTRY, RETIRED_AGENT_NAMES, get_logger, pkg_root
 from autoskillit.server import mcp
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
@@ -53,6 +53,10 @@ async def unlock_agent_pack(pack_name: str, ctx: Context = CurrentContext()) -> 
     Never raises.
     """
     try:
+        if pack_name in RETIRED_AGENT_NAMES:
+            return json.dumps(
+                {"success": False, "error": f"Agent pack {pack_name!r} has been retired."}
+            )
         if pack_name not in AGENT_PACK_TAGS:
             return json.dumps({"success": False, "error": f"Unknown agent pack: {pack_name}"})
         tags = AGENT_PACK_TAGS[pack_name]

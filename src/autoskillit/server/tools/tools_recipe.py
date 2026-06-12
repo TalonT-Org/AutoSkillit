@@ -13,7 +13,7 @@ from autoskillit.config import (
     build_config_authoritative_layer,
     resolve_ingredient_defaults,
 )
-from autoskillit.core import get_logger, temp_dir_display_str
+from autoskillit.core import FLEET_DISPATCH_TOOLS, get_logger, temp_dir_display_str  # noqa: F401
 from autoskillit.pipeline import GATED_TOOLS, UNGATED_TOOLS  # noqa: F401
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled

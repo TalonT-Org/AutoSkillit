@@ -333,7 +333,7 @@ async def dispatch_food_truck(
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
 
-        _active_recipe_steps: dict[str, Any] = {}
+        _active_recipe_steps: dict[str, Any] | None = None
         if _fleet_load_result and tool_ctx.recipes is not None:
             try:
                 _recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
@@ -346,7 +346,7 @@ async def dispatch_food_truck(
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_recipe_load_failed", exc_info=True)
 
-        if tool_ctx.backend is not None:
+        if tool_ctx.backend is not None and _active_recipe_steps is not None:
             _preflight_err = _check_dispatch_feasibility(
                 post_prune_step_names=_fleet_load_result.get("post_prune_step_names", []),
                 active_recipe_steps=_active_recipe_steps,

@@ -18,7 +18,6 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     CLAUDE_CODE_CAPABILITIES,
     CONTEXT_EXHAUSTION_MARKER,
-    KITCHEN_SESSION_ID_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
@@ -53,13 +52,16 @@ from autoskillit.core import (
     load_yaml,
     pkg_root,
 )
+from autoskillit.execution.backends._backend_cmd_builder_base import (
+    SHARED_BASELINE_ENV,
+    BackendCmdBuilderBase,
+    FlagVocabulary,
+)
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_ENV_HARDENING,
     _HEADLESS_EXCLUSIVE_VARS,
     _INTERACTIVE_ENV_EXCLUSIONS,
-    _MAX_MCP_OUTPUT_TOKENS_VALUE,
     _PROVIDER_EXTRAS_BASE_DENYLIST,
-    _SESSION_BASELINE_ENV,
     _SKILL_SESSION_EXTRAS_DENYLIST,
     PromptBuildContext,
     _apply_output_format,
@@ -270,7 +272,35 @@ class ClaudeResultParser:
 
 
 @dataclass(frozen=True, slots=True)
-class ClaudeCodeBackend:
+class ClaudeCodeBackend(BackendCmdBuilderBase):
+    def _binary(self) -> str:
+        return "claude"
+
+    def _sandbox_default(self) -> str:
+        return "workspace-write"
+
+    def _env_policy(self) -> ClaudeEnvPolicy:
+        return ClaudeEnvPolicy()
+
+    def _flag_vocabulary(self) -> FlagVocabulary:
+        return FlagVocabulary(
+            variadic_flags=frozenset(
+                {ClaudeFlags.ADD_DIR, ClaudeFlags.PLUGIN_DIR, ClaudeFlags.TOOLS}
+            ),
+            non_variadic_flags=frozenset(
+                {
+                    ClaudeFlags.PRINT,
+                    ClaudeFlags.MODEL,
+                    ClaudeFlags.RESUME,
+                    ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS,
+                }
+            ),
+            model_flag=ClaudeFlags.MODEL,
+            add_dir_flag=ClaudeFlags.ADD_DIR,
+            resume_flag=ClaudeFlags.RESUME,
+            config_override_flag="",
+        )
+
     @property
     def name(self) -> str:
         return AGENT_BACKEND_CLAUDE_CODE
@@ -429,7 +459,7 @@ class ClaudeCodeBackend:
             builder.variadic_pair(ClaudeFlags.ADD_DIR, str(d))
         for t in tools:
             builder.variadic_pair(ClaudeFlags.TOOLS, t)
-        merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
         if env_extras:
             merged.update(env_extras)
         interactive_base = {
@@ -468,7 +498,7 @@ class ClaudeCodeBackend:
                 pass
             case None:
                 pass
-        merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
         if env_extras:
             merged.update(env_extras)
         env = dict(build_agent_env(base={}, extras=merged))
@@ -600,8 +630,6 @@ class ClaudeCodeBackend:
         extras: dict[str, str] = {
             "AUTOSKILLIT_HEADLESS": "1",
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
-            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-            "MCP_CONNECTION_NONBLOCKING": "0",
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
@@ -613,20 +641,14 @@ class ClaudeCodeBackend:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
         if stream_idle_timeout_ms > 0:
             extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
-        if scenario_step_name:
-            extras["SCENARIO_STEP_NAME"] = scenario_step_name
-        campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
-        if campaign_id:
-            extras[CAMPAIGN_ID_ENV_VAR] = campaign_id
-        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
-        if kitchen_session_id:
-            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
-        if allowed_write_prefix:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
-        if allowed_write_prefixes:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(allowed_write_prefixes)
-        if cwd:
-            extras["AUTOSKILLIT_CWD"] = cwd
+        extras.update(
+            self._assemble_shared_env_extras(
+                write_prefix=allowed_write_prefix,
+                write_prefixes=allowed_write_prefixes,
+                cwd=cwd,
+                scenario_step_name=scenario_step_name,
+            )
+        )
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
@@ -705,8 +727,6 @@ class ClaudeCodeBackend:
         extras: dict[str, str] = {
             "AUTOSKILLIT_HEADLESS": "1",
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
-            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-            "MCP_CONNECTION_NONBLOCKING": "0",
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
@@ -718,17 +738,15 @@ class ClaudeCodeBackend:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
         if stream_idle_timeout_ms > 0:
             extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
-        if scenario_step_name:
-            extras["SCENARIO_STEP_NAME"] = scenario_step_name
-        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
-        if kitchen_session_id:
-            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
-        if allowed_write_prefix:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
-        if allowed_write_prefixes:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(allowed_write_prefixes)
-        if cwd:
-            extras["AUTOSKILLIT_CWD"] = cwd
+        extras.update(
+            self._assemble_shared_env_extras(
+                write_prefix=allowed_write_prefix,
+                write_prefixes=allowed_write_prefixes,
+                cwd=cwd,
+                scenario_step_name=scenario_step_name,
+            )
+        )
+        extras.pop(CAMPAIGN_ID_ENV_VAR, None)  # food truck does not propagate campaign ID
         if env_extras:
             for k, v in env_extras.items():
                 if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:

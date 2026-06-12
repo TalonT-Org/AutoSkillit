@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import Any, NamedTuple
 
 from autoskillit.core import (
@@ -24,23 +22,6 @@ def _extract_write_artifacts(tool_uses: list[dict[str, Any]]) -> list[str]:
         if t.get("name") in {"Write", "Edit"} and t.get("file_path")
     ]
 
-
-# Injected into every AutoSkillit-launched headless and cook session.
-# Raises the Claude Code client-side MCP tool result size gate from the
-# default 25,000 tokens to 50,000, preventing open_kitchen() responses
-# from being persisted to a file instead of returned inline.
-_MAX_MCP_OUTPUT_TOKENS_VALUE: str = "50000"
-
-# Baseline env vars injected into EVERY AutoSkillit-launched Claude session
-# (both interactive and headless). Callers can override via env_extras.
-# Analogous to IDE_ENV_ALWAYS_EXTRAS in _claude_env.py but scoped to
-# session-level concerns rather than IDE scrubbing.
-_SESSION_BASELINE_ENV: Mapping[str, str] = MappingProxyType(
-    {
-        "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-        "MCP_CONNECTION_NONBLOCKING": "0",
-    }
-)
 
 # Non-negotiable env overrides applied to every headless subprocess launch.
 # Injected after build_agent_env() so callers cannot clobber these values via

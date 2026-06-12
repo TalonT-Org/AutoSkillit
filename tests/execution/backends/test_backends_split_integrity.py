@@ -21,10 +21,10 @@ class TestClaudePromptModuleExists:
 
         assert callable(_inject_completion_directive)
 
-    def test__MAX_MCP_OUTPUT_TOKENS_VALUE_importable(self):
-        from autoskillit.execution.backends._claude_prompt import _MAX_MCP_OUTPUT_TOKENS_VALUE
+    def test_SHARED_BASELINE_ENV_importable_from_claude_prompt_base(self):
+        from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 
-        assert _MAX_MCP_OUTPUT_TOKENS_VALUE == "50000"
+        assert SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"] == "50000"
 
 
 class TestCodexConfigModuleExists:
@@ -74,6 +74,25 @@ class TestCodexScenarioPlayerModuleExists:
         )
 
         assert callable(make_codex_scenario_player)
+
+
+class TestBackendCmdBuilderBaseModuleExists:
+    """Symbols in _backend_cmd_builder_base are importable from there."""
+
+    def test_BackendCmdBuilderBase_importable(self):
+        from autoskillit.execution.backends._backend_cmd_builder_base import BackendCmdBuilderBase
+
+        assert BackendCmdBuilderBase is not None
+
+    def test_FlagVocabulary_importable(self):
+        from autoskillit.execution.backends._backend_cmd_builder_base import FlagVocabulary
+
+        assert FlagVocabulary is not None
+
+    def test_SHARED_BASELINE_ENV_importable(self):
+        from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
+
+        assert "MAX_MCP_OUTPUT_TOKENS" in SHARED_BASELINE_ENV
 
 
 class TestBackendsPublicAPISurfacePreserved:

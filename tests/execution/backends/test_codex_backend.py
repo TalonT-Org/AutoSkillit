@@ -467,14 +467,12 @@ class TestCodexResumeCmd:
 
     def test_resume_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
-        from autoskillit.execution.commands import (
-            _HEADLESS_EXCLUSIVE_VARS,
-            _SESSION_BASELINE_ENV,
-        )
+        from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
+        from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        reinjected = frozenset(_SESSION_BASELINE_ENV.keys()) | CODEX_MCP_ENV_FORWARD_VARS
+        reinjected = frozenset(SHARED_BASELINE_ENV.keys()) | CODEX_MCP_ENV_FORWARD_VARS
         leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume env: {leaking}"
 

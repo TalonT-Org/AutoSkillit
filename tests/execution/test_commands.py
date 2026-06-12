@@ -5,17 +5,14 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import CmdSpec
-from autoskillit.execution.commands import (
-    _MAX_MCP_OUTPUT_TOKENS_VALUE,
-    _SESSION_BASELINE_ENV,
-)
+from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 def test_session_baseline_env_contains_mcp_connection_nonblocking() -> None:
-    assert "MCP_CONNECTION_NONBLOCKING" in _SESSION_BASELINE_ENV
-    assert _SESSION_BASELINE_ENV["MCP_CONNECTION_NONBLOCKING"] == "0"
+    assert "MCP_CONNECTION_NONBLOCKING" in SHARED_BASELINE_ENV
+    assert SHARED_BASELINE_ENV["MCP_CONNECTION_NONBLOCKING"] == "0"
 
 
 def test_cmdspec_importable_from_execution() -> None:
@@ -33,6 +30,6 @@ def test_cmdspec_in_execution_all() -> None:
 
 
 def test_max_mcp_output_tokens_value_is_string() -> None:
-    """_MAX_MCP_OUTPUT_TOKENS_VALUE must be a non-empty string."""
-    assert isinstance(_MAX_MCP_OUTPUT_TOKENS_VALUE, str)
-    assert _MAX_MCP_OUTPUT_TOKENS_VALUE
+    """MAX_MCP_OUTPUT_TOKENS in SHARED_BASELINE_ENV must be a non-empty string."""
+    assert isinstance(SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"], str)
+    assert SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"]

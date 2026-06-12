@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autoskillit.execution import _MAX_MCP_OUTPUT_TOKENS_VALUE
+from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -89,7 +89,7 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
         _launch_cook_session("system prompt", initial_message="hello")
 
     env = mock_run.call_args.kwargs["env"]
-    assert env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
+    assert env["MAX_MCP_OUTPUT_TOKENS"] == SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"]
 
 
 def test_launch_cook_session_env_has_mcp_connection_nonblocking(
@@ -173,4 +173,4 @@ def test_cook_command_env_has_max_mcp_output_tokens(
         cook()
 
     env = mock_run.call_args.kwargs["env"]
-    assert env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
+    assert env["MAX_MCP_OUTPUT_TOKENS"] == SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"]

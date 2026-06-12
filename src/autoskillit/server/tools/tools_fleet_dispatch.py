@@ -48,7 +48,10 @@ from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+from autoskillit.server.tools._preflight import (
+    _check_dispatch_feasibility,
+    filter_steps_by_post_prune,
+)
 
 logger = get_logger(__name__)
 
@@ -330,10 +333,23 @@ async def dispatch_food_truck(
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
 
+        _active_recipe_steps: dict[str, Any] = {}
+        if _fleet_load_result and tool_ctx.recipes is not None:
+            try:
+                _recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
+                if _recipe_info is not None:
+                    _recipe_obj = tool_ctx.recipes.load(_recipe_info.path)
+                    _active_recipe_steps = filter_steps_by_post_prune(
+                        _recipe_obj.steps,
+                        _fleet_load_result.get("post_prune_step_names", []),
+                    )
+            except Exception:
+                logger.warning("dispatch_food_truck_preflight_recipe_load_failed", exc_info=True)
+
         if tool_ctx.backend is not None:
             _preflight_err = _check_dispatch_feasibility(
                 post_prune_step_names=_fleet_load_result.get("post_prune_step_names", []),
-                active_recipe_steps={},
+                active_recipe_steps=_active_recipe_steps,
                 backend=tool_ctx.backend,
                 config_providers=tool_ctx.config.providers,
             )

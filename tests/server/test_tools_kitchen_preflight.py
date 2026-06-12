@@ -6,7 +6,7 @@ preventing irreversible side effects from side-effect tools between
 open_kitchen and the first run_skill.
 
 The preflight is implemented as `_check_dispatch_feasibility()` in
-server/tools/tools_execution.py. These tests cover both the function
+server/tools/_preflight.py. These tests cover both the function
 itself and its integration into open_kitchen and dispatch_food_truck.
 """
 
@@ -271,6 +271,35 @@ class TestCheckDispatchFeasibilityUnit:
         parsed = json.loads(result)
         assert "escape_hatch" in parsed or "ANTHROPIC_BASE_URL" in str(parsed)
 
+    def test_real_hook_registry_codex_backend(self) -> None:
+        """Exercise _check_dispatch_feasibility with the real production HOOK_REGISTRY."""
+        from autoskillit.server.tools._preflight import (
+            _check_dispatch_feasibility,
+            _get_fix_required_hook_matchers,
+        )
+
+        backend = _make_codex_backend()
+        active_steps: dict[str, Any] = {
+            "step1": _make_recipe_step("step1", tool="run_skill"),
+        }
+
+        result = _check_dispatch_feasibility(
+            post_prune_step_names=["step1"],
+            active_recipe_steps=active_steps,
+            backend=backend,
+            config_providers=_DEFAULT_PROVIDERS,
+        )
+
+        has_unenforced = bool(
+            _get_fix_required_hook_matchers(backend.capabilities.applicable_guards)
+        )
+        if has_unenforced:
+            assert result is not None
+            parsed = json.loads(result)
+            assert parsed.get("stage") == "dispatch_feasibility_preflight"
+        else:
+            assert result is None
+
 
 # ---------------------------------------------------------------------------
 # Wiring tests: confirm preflight is called from open_kitchen and dispatch_food_truck
@@ -308,3 +337,84 @@ class TestPreflightWiring:
         assert "_check_dispatch_feasibility" in source, (
             "tools_fleet_dispatch.py must reference _check_dispatch_feasibility"
         )
+
+
+# ---------------------------------------------------------------------------
+# Gate-closure tests: open_kitchen disables gate on preflight/validation failure
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightGateClosure:
+    """Tests verifying gate closure on preflight and validation failure paths."""
+
+    @pytest.mark.anyio
+    async def test_gate_closed_after_validation_failure(self, build_ctx_open: Any) -> None:
+        """open_kitchen disables the gate when load_and_validate returns valid=False."""
+        from pathlib import Path
+        from unittest.mock import AsyncMock
+
+        tool_ctx = build_ctx_open()
+        assert tool_ctx.gate.enabled is True
+
+        tool_ctx.recipes = MagicMock()
+        tool_ctx.recipes.load_and_validate.return_value = {
+            "valid": False,
+            "errors": ["synthetic failure"],
+            "content": "",
+        }
+        tool_ctx.recipes.find.return_value = MagicMock(path=Path("/fake/recipe.yaml"))
+
+        with patch("autoskillit.server._state._ctx", tool_ctx):
+            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+            ctx_mock = AsyncMock()
+            result = await open_kitchen(name="test-recipe", ctx=ctx_mock)
+
+        assert tool_ctx.gate.enabled is False
+        parsed = json.loads(result)
+        assert parsed.get("stage") == "recipe_validation"
+
+    @pytest.mark.anyio
+    async def test_open_kitchen_preflight_blocks_and_closes_gate(
+        self, build_ctx_open: Any
+    ) -> None:
+        """open_kitchen returns preflight error and closes gate for incompatible backend."""
+        from pathlib import Path
+        from unittest.mock import AsyncMock
+
+        tool_ctx = build_ctx_open()
+        assert tool_ctx.gate.enabled is True
+
+        tool_ctx.backend = _make_codex_backend()
+        tool_ctx.recipes = MagicMock()
+        tool_ctx.recipes.load_and_validate.return_value = {
+            "valid": True,
+            "content": "steps:\n  s1:\n    tool: run_skill",
+            "post_prune_step_names": ["s1"],
+        }
+        recipe_info = MagicMock()
+        recipe_info.path = Path("/fake/recipe.yaml")
+        tool_ctx.recipes.find.return_value = recipe_info
+
+        recipe_obj = MagicMock()
+        step_mock = MagicMock()
+        step_mock.tool = "run_skill"
+        step_mock.provider = ""
+        recipe_obj.steps = {"s1": step_mock}
+        recipe_obj.ingredients = {}
+        tool_ctx.recipes.load.return_value = recipe_obj
+
+        synthetic = _make_fix_required_hook()
+        with (
+            patch("autoskillit.server._state._ctx", tool_ctx),
+            patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]),
+        ):
+            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+            ctx_mock = AsyncMock()
+            result = await open_kitchen(name="test-recipe", ctx=ctx_mock)
+
+        assert tool_ctx.gate.enabled is False
+        parsed = json.loads(result)
+        assert parsed.get("stage") == "dispatch_feasibility_preflight"
+        assert parsed.get("success") is False

@@ -5,8 +5,6 @@ from __future__ import annotations
 from autoskillit.core import CmdSpec
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,  # noqa: F401 — re-export for downstream consumers
-    _MAX_MCP_OUTPUT_TOKENS_VALUE,  # noqa: F401 — re-export for downstream consumers
-    _SESSION_BASELINE_ENV,  # noqa: F401 — re-export for downstream consumers
     PromptBuildContext,  # noqa: F401 — re-export for downstream consumers
     _apply_output_format,  # noqa: F401 — re-export for downstream consumers
     _build_resume_context,  # noqa: F401 — re-export for downstream consumers

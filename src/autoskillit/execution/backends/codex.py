@@ -62,7 +62,6 @@ from autoskillit.execution.backends._backend_cmd_builder_base import (
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
     _PROVIDER_EXTRAS_BASE_DENYLIST,
-    _SESSION_BASELINE_ENV,
     _SKILL_SESSION_EXTRAS_DENYLIST,
     PromptBuildContext,
     _compose_resume_prompt,
@@ -882,7 +881,7 @@ class CodexBackend(BackendCmdBuilderBase):
         for d in add_dirs:
             builder.variadic_pair(CodexFlags.ADD_DIR, str(d))
         base_env = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        merged_extras: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        merged_extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
         merged_extras.update(
             {
                 "AUTOSKILLIT_HEADLESS": "",

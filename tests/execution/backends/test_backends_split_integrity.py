@@ -21,10 +21,10 @@ class TestClaudePromptModuleExists:
 
         assert callable(_inject_completion_directive)
 
-    def test__MAX_MCP_OUTPUT_TOKENS_VALUE_importable(self):
-        from autoskillit.execution.backends._claude_prompt import _MAX_MCP_OUTPUT_TOKENS_VALUE
+    def test_SHARED_BASELINE_ENV_importable_from_claude_prompt_base(self):
+        from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 
-        assert _MAX_MCP_OUTPUT_TOKENS_VALUE == "50000"
+        assert SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"] == "50000"
 
 
 class TestCodexConfigModuleExists:

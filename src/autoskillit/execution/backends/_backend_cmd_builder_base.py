@@ -33,15 +33,11 @@ if TYPE_CHECKING:
 # Raises the Claude Code client-side MCP tool result size gate from the
 # default 25,000 tokens to 50,000, preventing open_kitchen() responses
 # from being persisted to a file instead of returned inline.
-# Canonical definition lives here; ``_claude_prompt.py`` re-exports it as a
-# legacy alias for downstream consumers.
 _MAX_MCP_OUTPUT_TOKENS_VALUE: str = "50000"
 
 
 # Baseline env vars injected into EVERY AutoSkillit-launched session. Callers
-# can override via env_extras. This is the canonical source for the two
-# always-on shared keys; ``_SESSION_BASELINE_ENV`` in ``_claude_prompt.py`` is
-# re-exported as a legacy alias. The shim ``_codex_exec_extras`` (in
+# can override via env_extras. The shim ``_codex_exec_extras`` (in
 # ``codex.py``) imports this directly for the ``include_session_baseline=True``
 # path so resume sessions do NOT inadvertently pick up ambient campaign/kitchen
 # IDs from ``os.environ`` (which ``_assemble_shared_env_extras`` would).

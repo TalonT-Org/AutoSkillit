@@ -7,12 +7,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import ClaudeFlags, DirectInstall, OutputFormat
+from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
-from autoskillit.execution.commands import (
-    _HEADLESS_EXCLUSIVE_VARS,
-    _MAX_MCP_OUTPUT_TOKENS_VALUE,
-)
+from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -66,7 +64,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
     """Every session command builder must produce env with MAX_MCP_OUTPUT_TOKENS."""
     spec = builder_call()
     assert "MAX_MCP_OUTPUT_TOKENS" in spec.env
-    assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == _MAX_MCP_OUTPUT_TOKENS_VALUE
+    assert spec.env["MAX_MCP_OUTPUT_TOKENS"] == SHARED_BASELINE_ENV["MAX_MCP_OUTPUT_TOKENS"]
 
 
 @pytest.mark.parametrize(

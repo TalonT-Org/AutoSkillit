@@ -37,10 +37,7 @@ from autoskillit.execution.backends import (
     sync_hooks_to_codex_config,
 )
 from autoskillit.execution.ci import DefaultCIWatcher
-from autoskillit.execution.commands import (
-    _MAX_MCP_OUTPUT_TOKENS_VALUE,  # noqa: F401
-    ClaudeHeadlessCmd,
-)
+from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.db import (
     DefaultDatabaseReader,
 )

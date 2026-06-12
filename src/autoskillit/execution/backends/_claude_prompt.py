@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -14,19 +13,6 @@ from autoskillit.core import (
     extract_skill_name,
     temp_dir_display_str,
 )
-from autoskillit.execution.backends._backend_cmd_builder_base import (
-    _MAX_MCP_OUTPUT_TOKENS_VALUE,
-    SHARED_BASELINE_ENV,
-)
-
-# Legacy aliases preserved for downstream consumers (claude.py, codex.py, commands.py)
-# that import these names from _claude_prompt. Canonical definitions live in
-# _backend_cmd_builder_base.py.
-_SESSION_BASELINE_ENV: Mapping[str, str] = SHARED_BASELINE_ENV
-__all__ = [
-    "_MAX_MCP_OUTPUT_TOKENS_VALUE",
-    "_SESSION_BASELINE_ENV",
-]
 
 
 def _extract_write_artifacts(tool_uses: list[dict[str, Any]]) -> list[str]:

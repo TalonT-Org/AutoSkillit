@@ -53,6 +53,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import (
+    SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
     FlagVocabulary,
 )
@@ -61,7 +62,6 @@ from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
     _INTERACTIVE_ENV_EXCLUSIONS,
     _PROVIDER_EXTRAS_BASE_DENYLIST,
-    _SESSION_BASELINE_ENV,
     _SKILL_SESSION_EXTRAS_DENYLIST,
     PromptBuildContext,
     _apply_output_format,
@@ -459,7 +459,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             builder.variadic_pair(ClaudeFlags.ADD_DIR, str(d))
         for t in tools:
             builder.variadic_pair(ClaudeFlags.TOOLS, t)
-        merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
         if env_extras:
             merged.update(env_extras)
         interactive_base = {
@@ -498,7 +498,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                 pass
             case None:
                 pass
-        merged: dict[str, str] = dict(_SESSION_BASELINE_ENV)
+        merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
         if env_extras:
             merged.update(env_extras)
         env = dict(build_agent_env(base={}, extras=merged))

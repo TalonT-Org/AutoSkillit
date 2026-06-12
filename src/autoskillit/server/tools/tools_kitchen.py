@@ -654,6 +654,7 @@ async def open_kitchen(
                         active_recipe_steps=tool_ctx.active_recipe_steps,
                         backend=tool_ctx.backend,
                         config_providers=tool_ctx.config.providers,
+                        recipe_name=name,
                     )
                     if _preflight_err is not None:
                         tool_ctx.gate.disable()
@@ -758,6 +759,7 @@ async def open_kitchen(
                     active_recipe_steps=tool_ctx.active_recipe_steps,
                     backend=tool_ctx.backend,
                     config_providers=tool_ctx.config.providers,
+                    recipe_name=name,
                 )
                 if _preflight_err is not None:
                     tool_ctx.gate.disable()

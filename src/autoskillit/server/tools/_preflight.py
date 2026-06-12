@@ -36,6 +36,7 @@ def _check_dispatch_feasibility(
     active_recipe_steps: dict[str, Any],
     backend: Any | None,
     config_providers: Any,
+    recipe_name: str = "",
 ) -> str | None:
     """Fail-closed dispatch-feasibility preflight.
 
@@ -60,7 +61,6 @@ def _check_dispatch_feasibility(
 
     from autoskillit.server._guards import _resolve_provider_profile  # circular-break
 
-    recipe_name = ""
     feasible_step_names: list[str] = []
     for step_name in run_skill_step_names:
         step = active_recipe_steps.get(step_name)

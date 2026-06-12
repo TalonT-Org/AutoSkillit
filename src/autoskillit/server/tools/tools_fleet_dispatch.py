@@ -352,6 +352,7 @@ async def dispatch_food_truck(
                 active_recipe_steps=_active_recipe_steps,
                 backend=tool_ctx.backend,
                 config_providers=tool_ctx.config.providers,
+                recipe_name=recipe,
             )
             if _preflight_err is not None:
                 return _preflight_err

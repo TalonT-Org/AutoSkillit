@@ -236,6 +236,12 @@ async def load_recipe(
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             if not result.get("valid", False):
                 result["validation_failed"] = True
+            if not result.get("dispatch_feasible", True):
+                result["dispatch_infeasible"] = True
+                result["user_visible_message"] = (
+                    f"Recipe is infeasible on current backend: "
+                    f"steps {result.get('infeasible_steps', [])} route to terminal failure."
+                )
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
             return json.dumps(result)

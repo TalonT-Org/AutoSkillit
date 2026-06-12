@@ -98,3 +98,40 @@ def test_codex_init_session_raises_when_pre_launch_fails(
     mgr = make_session_skill_manager()
     with pytest.raises(RuntimeError, match="Pre-launch check failed"):
         mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
+
+
+def test_profile_skills_symlinked_into_session_dir(tmp_path, monkeypatch) -> None:
+    """_materialize_profile_skills symlinks ~/.codex/skills/<name> into session_dir/skills/<name>."""  # noqa: E501
+    from autoskillit.execution.backends.codex import _materialize_profile_skills
+
+    fake_home = tmp_path / "fake_home"
+    profile_skill = fake_home / ".codex" / "skills" / "my-skill"
+    profile_skill.mkdir(parents=True)
+    (profile_skill / "SKILL.md").write_text("# MY SKILL")
+
+    session_dir = tmp_path / "session"
+    (session_dir / "skills").mkdir(parents=True)
+
+    monkeypatch.setenv("HOME", str(fake_home))
+    count = _materialize_profile_skills(session_dir)
+
+    target = session_dir / "skills" / "my-skill"
+    assert target.is_symlink() or target.is_dir()
+    assert (target / "SKILL.md").read_text() == "# MY SKILL"
+    assert count == 1
+
+
+def test_missing_profile_skills_dir_does_not_raise(tmp_path, monkeypatch) -> None:
+    """_materialize_profile_skills returns 0 when ~/.codex/skills is absent."""
+    from autoskillit.execution.backends.codex import _materialize_profile_skills
+
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
+
+    session_dir = tmp_path / "session"
+    (session_dir / "skills").mkdir(parents=True)
+
+    monkeypatch.setenv("HOME", str(fake_home))
+    count = _materialize_profile_skills(session_dir)
+
+    assert count == 0

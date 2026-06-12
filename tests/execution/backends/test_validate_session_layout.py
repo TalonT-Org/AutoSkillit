@@ -161,3 +161,36 @@ class TestCodexLayoutValidation:
         backend = CodexBackend()
         errors = backend.validate_session_layout(tmp_path)
         assert not any("sessions" in e and "symlink" in e for e in errors)
+
+    def test_codex_profile_skills_appear_in_session_dir(self, tmp_path, monkeypatch):
+        from autoskillit.execution.backends.codex import _materialize_profile_skills
+
+        fake_home = tmp_path / "fake_home"
+        profile_skill = fake_home / ".codex" / "skills" / "my-profile-skill"
+        profile_skill.mkdir(parents=True)
+        (profile_skill / "SKILL.md").write_text("# MY PROFILE SKILL")
+        # Subdir without SKILL.md should be skipped
+        (fake_home / ".codex" / "skills" / "no-skill-dir").mkdir()
+
+        session_dir = tmp_path / "session"
+        (session_dir / "skills").mkdir(parents=True)
+
+        monkeypatch.setenv("HOME", str(fake_home))
+        count = _materialize_profile_skills(session_dir)
+
+        assert count == 1
+        assert (session_dir / "skills" / "my-profile-skill" / "SKILL.md").exists()
+        assert not (session_dir / "skills" / "no-skill-dir").exists()
+
+    def test_codex_profile_skills_missing_codex_skills_dir_no_raise(self, tmp_path, monkeypatch):
+        from autoskillit.execution.backends.codex import _materialize_profile_skills
+
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir()
+        session_dir = tmp_path / "session"
+        (session_dir / "skills").mkdir(parents=True)
+
+        monkeypatch.setenv("HOME", str(fake_home))
+        count = _materialize_profile_skills(session_dir)
+
+        assert count == 0

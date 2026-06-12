@@ -499,6 +499,11 @@ def _materialize_profile_skills(session_dir: Path) -> int:
         try:
             target.symlink_to(entry.resolve())
         except OSError:
+            logger.debug(
+                "codex_profile_skill_symlink_failed_using_copytree",
+                skill=entry.name,
+                exc_info=True,
+            )
             try:
                 shutil.copytree(entry, target)
             except OSError:

@@ -205,7 +205,7 @@ class TestCheckDispatchFeasibilityUnit:
         parsed = json.loads(result)
         assert parsed.get("success") is False
         assert parsed.get("stage") == "dispatch_feasibility_preflight"
-        assert "dormancy_test_hook" in str(parsed)
+        assert parsed.get("unfixable_matchers") == [r"Read|Write|Edit|Bash"]
 
     def test_provider_override_excludes_step(self) -> None:
         """A run_skill step with a provider profile that sets ANTHROPIC_BASE_URL

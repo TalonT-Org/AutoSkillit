@@ -158,6 +158,7 @@ CODEX_MCP_ENV_FORWARD_VARS: frozenset[str] = frozenset(
 CODEX_INTERACTIVE_REQUIRED_ENV: frozenset[str] = frozenset(
     {
         MCP_CLIENT_BACKEND_ENV_VAR,
+        AGENT_BACKEND_ENV_VAR,
     }
 )
 

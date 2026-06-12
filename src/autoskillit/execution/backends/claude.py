@@ -461,6 +461,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         for t in tools:
             builder.variadic_pair(ClaudeFlags.TOOLS, t)
         merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
+        merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
             merged.update(env_extras)
         interactive_base = {
@@ -500,6 +502,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             case None:
                 pass
         merged: dict[str, str] = dict(SHARED_BASELINE_ENV)
+        merged[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        merged[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if env_extras:
             merged.update(env_extras)
         env = dict(build_agent_env(base={}, extras=merged))

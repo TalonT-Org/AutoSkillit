@@ -25,13 +25,16 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _ALL_RECIPE_NAMES = sorted(all_validated_recipe_names(_PROJECT_ROOT))
 _BACKEND_NAMES = sorted(BACKEND_REGISTRY.keys())
-_MATRIX_IDS: list[tuple[str, str]] = [(r, b) for r in _ALL_RECIPE_NAMES for b in _BACKEND_NAMES]
 
 
 # -- By-design unsupported combos (skip) ------------------------------------
 DECLARED_UNSUPPORTED: frozenset[tuple[str, str]] = frozenset()
 
 UNSUPPORTED_REASONS: dict[tuple[str, str], dict[str, str]] = {}
+
+_MATRIX_IDS: list[tuple[str, str]] = [
+    (r, b) for r in _ALL_RECIPE_NAMES for b in _BACKEND_NAMES if (r, b) not in DECLARED_UNSUPPORTED
+]
 
 
 # -- Known-broken combos (xfail strict) -------------------------------------

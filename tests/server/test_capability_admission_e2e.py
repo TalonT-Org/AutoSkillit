@@ -6,6 +6,8 @@ load_and_validate to the dispatch_feasible signal.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import BACKEND_CAPABILITY_INGREDIENTS, CAPABILITY_GATE_CALLABLES
@@ -14,7 +16,7 @@ from autoskillit.recipe._api import load_and_validate
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
-_PROJECT_ROOT = pytest.importorskip("pathlib").Path(__file__).resolve().parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def test_capability_ingredient_keys_match_registry() -> None:
@@ -120,4 +122,5 @@ async def test_open_kitchen_refuses_doa_codex_pipeline() -> None:
     assert parsed["kitchen"] == "dispatch_infeasible"
     assert "gate_backend_write" in parsed["infeasible_steps"]
     tool_ctx.gate.disable.assert_called_once()
+    tool_ctx.gate.enable.assert_not_called()
     fastmcp_ctx.disable_components.assert_called_once_with(tags={"kitchen"})

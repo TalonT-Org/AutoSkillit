@@ -193,6 +193,7 @@ def _call_builder(backend: object, builder_name: str) -> object:
 @pytest.mark.parametrize("builder_name", _ALL_GUARD_BUILDERS)
 def test_agent_backend_flat_env_var_in_all_guard_launch_builders(builder_name: str) -> None:
     """AUTOSKILLIT_AGENT_BACKEND must appear in every builder's CmdSpec.env for every backend."""
+    from autoskillit.core.types._type_backend import CmdSpec
     from autoskillit.execution.backends import BACKEND_REGISTRY
 
     assert BACKEND_REGISTRY, "BACKEND_REGISTRY is empty — test provides no coverage"
@@ -201,6 +202,7 @@ def test_agent_backend_flat_env_var_in_all_guard_launch_builders(builder_name: s
         if builder_name == "build_resume_cmd" and not backend.capabilities.session_resume_capable:
             continue
         spec = _call_builder(backend, builder_name)
+        assert isinstance(spec, CmdSpec), f"{name}: {builder_name} did not return CmdSpec"
         assert "AUTOSKILLIT_AGENT_BACKEND" in spec.env, (
             f"{name}: AUTOSKILLIT_AGENT_BACKEND missing from {builder_name} env"
         )

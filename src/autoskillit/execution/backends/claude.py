@@ -15,14 +15,14 @@ from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
-    CAMPAIGN_ID_ENV_VAR,
     CLAUDE_CODE_CAPABILITIES,
     CONTEXT_EXHAUSTION_MARKER,
-    KITCHEN_SESSION_ID_ENV_VAR,
+    NON_VARIADIC_CLAUDE_FLAGS,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
+    VARIADIC_CLAUDE_FLAGS,
     AgentSessionResult,
     BackendCapabilities,
     BackendConventions,
@@ -33,6 +33,7 @@ from autoskillit.core import (
     ClaudeFlags,
     CmdSpec,
     DirectInstall,
+    EnvPolicy,
     MarketplaceInstall,
     NamedResume,
     NoResume,
@@ -53,11 +54,14 @@ from autoskillit.core import (
     load_yaml,
     pkg_root,
 )
+from autoskillit.execution.backends._backend_cmd_builder_base import (
+    BackendCmdBuilderBase,
+    FlagVocabulary,
+)
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_ENV_HARDENING,
     _HEADLESS_EXCLUSIVE_VARS,
     _INTERACTIVE_ENV_EXCLUSIONS,
-    _MAX_MCP_OUTPUT_TOKENS_VALUE,
     _PROVIDER_EXTRAS_BASE_DENYLIST,
     _SESSION_BASELINE_ENV,
     _SKILL_SESSION_EXTRAS_DENYLIST,
@@ -81,6 +85,16 @@ __all__ = [
     "ClaudeSessionLocator",
     "ClaudeStreamParser",
 ]
+
+
+CLAUDE_FLAG_VOCABULARY = FlagVocabulary(
+    variadic_flags=VARIADIC_CLAUDE_FLAGS,
+    non_variadic_flags=NON_VARIADIC_CLAUDE_FLAGS,
+    model_flag=ClaudeFlags.MODEL,
+    add_dir_flag=ClaudeFlags.ADD_DIR,
+    resume_flag=ClaudeFlags.RESUME,
+    config_override_flag="",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,7 +284,23 @@ class ClaudeResultParser:
 
 
 @dataclass(frozen=True, slots=True)
-class ClaudeCodeBackend:
+class ClaudeCodeBackend(BackendCmdBuilderBase):
+    @property
+    def _binary(self) -> str:
+        return "claude"
+
+    @property
+    def _sandbox_default(self) -> str:
+        return ""
+
+    @property
+    def _env_policy(self) -> EnvPolicy:
+        return ClaudeEnvPolicy()
+
+    @property
+    def _flag_vocabulary(self) -> FlagVocabulary:
+        return CLAUDE_FLAG_VOCABULARY
+
     @property
     def name(self) -> str:
         return AGENT_BACKEND_CLAUDE_CODE
@@ -600,8 +630,6 @@ class ClaudeCodeBackend:
         extras: dict[str, str] = {
             "AUTOSKILLIT_HEADLESS": "1",
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
-            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-            "MCP_CONNECTION_NONBLOCKING": "0",
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
@@ -613,20 +641,14 @@ class ClaudeCodeBackend:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
         if stream_idle_timeout_ms > 0:
             extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
-        if scenario_step_name:
-            extras["SCENARIO_STEP_NAME"] = scenario_step_name
-        campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
-        if campaign_id:
-            extras[CAMPAIGN_ID_ENV_VAR] = campaign_id
-        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
-        if kitchen_session_id:
-            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
-        if allowed_write_prefix:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
-        if allowed_write_prefixes:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(allowed_write_prefixes)
-        if cwd:
-            extras["AUTOSKILLIT_CWD"] = cwd
+        extras.update(
+            self._assemble_shared_env_extras(
+                scenario_step_name=scenario_step_name,
+                allowed_write_prefix=allowed_write_prefix,
+                allowed_write_prefixes=allowed_write_prefixes,
+                cwd=cwd,
+            )
+        )
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
@@ -705,8 +727,6 @@ class ClaudeCodeBackend:
         extras: dict[str, str] = {
             "AUTOSKILLIT_HEADLESS": "1",
             "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
-            "MAX_MCP_OUTPUT_TOKENS": _MAX_MCP_OUTPUT_TOKENS_VALUE,
-            "MCP_CONNECTION_NONBLOCKING": "0",
             AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
             AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
@@ -718,17 +738,14 @@ class ClaudeCodeBackend:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
         if stream_idle_timeout_ms > 0:
             extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
-        if scenario_step_name:
-            extras["SCENARIO_STEP_NAME"] = scenario_step_name
-        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
-        if kitchen_session_id:
-            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
-        if allowed_write_prefix:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
-        if allowed_write_prefixes:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(allowed_write_prefixes)
-        if cwd:
-            extras["AUTOSKILLIT_CWD"] = cwd
+        extras.update(
+            self._assemble_shared_env_extras(
+                scenario_step_name=scenario_step_name,
+                allowed_write_prefix=allowed_write_prefix,
+                allowed_write_prefixes=allowed_write_prefixes,
+                cwd=cwd,
+            )
+        )
         if env_extras:
             for k, v in env_extras.items():
                 if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:

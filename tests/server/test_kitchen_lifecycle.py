@@ -87,3 +87,38 @@ async def test_close_kitchen_removes_tracker_dir(monkeypatch, tmp_path):
         _close_kitchen_handler()
 
     assert not tracker_dir.exists()
+
+
+async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, tmp_path):
+    """After close, gate_infrastructure_ready must be False so a re-open runs the handler."""
+    monkeypatch.chdir(tmp_path)
+
+    ctx = make_context(
+        AutomationConfig(),
+        runner=None,
+        plugin_source=DirectInstall(plugin_dir=tmp_path),
+        project_dir=tmp_path,
+    )
+    monkeypatch.setattr(_state, "_ctx", ctx)
+    monkeypatch.setattr(_state, "_startup_ready", None)
+
+    with (
+        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
+        patch("autoskillit.core.register_active_kitchen"),
+        patch("autoskillit.core.unregister_active_kitchen"),
+    ):
+        result1 = await _open_kitchen_handler()
+        assert result1 is None
+        assert ctx.gate_infrastructure_ready is True
+
+        _close_kitchen_handler()
+        assert ctx.gate_infrastructure_ready is False
+
+        result2 = await _open_kitchen_handler()
+        assert result2 is None
+        assert ctx.gate_infrastructure_ready is True
+
+        task = ctx.quota_refresh_task
+        await asyncio.sleep(0)
+        if task is not None:
+            assert task.cancelled() or task.done()

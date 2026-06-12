@@ -342,6 +342,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
     register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     _write_hook_config()
     await _prime_quota_cache()
+    ctx.gate_infrastructure_ready = True
 
 
 async def _food_truck_auto_gate_boot(ctx: Any) -> None:

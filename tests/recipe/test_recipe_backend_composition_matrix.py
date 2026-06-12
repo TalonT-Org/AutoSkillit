@@ -69,9 +69,6 @@ def _apply_marks(matrix_ids: list[tuple[str, str]]) -> list[Any]:
 
 @pytest.mark.parametrize("recipe_name,backend_name", _apply_marks(_MATRIX_IDS))
 def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str) -> None:
-    if (recipe_name, backend_name) in DECLARED_UNSUPPORTED:
-        pytest.skip(reason=UNSUPPORTED_REASONS[(recipe_name, backend_name)]["reason"])
-
     backend = get_backend(backend_name)
     result = load_and_validate(
         recipe_name,

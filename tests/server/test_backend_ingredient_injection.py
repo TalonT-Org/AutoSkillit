@@ -498,11 +498,11 @@ class TestRealCompositionPruning:
     @pytest.mark.anyio
     async def test_codex_open_kitchen_returns_success(self, tmp_path: Path) -> None:
         """End-to-end integration: open_kitchen with codex backend on the bundled
-        implementation recipe must return success=True and kitchen=open.
+        implementation recipe must return success=False and kitchen=dispatch_infeasible.
 
-        Pre-fix: pre-prune semantic findings poisoned valid=False, causing
-        open_kitchen to return the "unknown structural error" envelope.
-        Post-fix: post-prune semantic findings keep valid=True, open_kitchen succeeds.
+        Capability admission control detects that codex lacks git_metadata_writable,
+        causing gate_backend_write steps to be infeasible. open_kitchen returns the
+        dispatch_infeasible envelope instead of opening the kitchen.
         """
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
@@ -556,10 +556,9 @@ class TestRealCompositionPruning:
 
             result = json.loads(result_str)
 
-        assert result.get("success") is True, (
-            f"open_kitchen must succeed with codex backend; "
-            f"got: {result.get('user_visible_message', result)}"
+        assert result.get("success") is False, (
+            f"open_kitchen must refuse codex backend (dispatch_feasible=False); got: {result}"
         )
-        assert result.get("kitchen") == "open", (
-            f"open_kitchen must report kitchen=open; got: {result.get('kitchen')}"
+        assert result.get("kitchen") == "dispatch_infeasible", (
+            f"open_kitchen must report kitchen=dispatch_infeasible; got: {result.get('kitchen')}"
         )

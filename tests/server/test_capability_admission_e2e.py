@@ -93,6 +93,7 @@ async def test_open_kitchen_refuses_doa_codex_pipeline() -> None:
 
     tool_ctx = _make_mock_ctx()
     tool_ctx.gate.enabled = True
+    tool_ctx.gate_infrastructure_ready = True
     tool_ctx.recipe_name = "implementation"
     tool_ctx.kitchen_id = "test-kitchen"
     tool_ctx.backend.name = "codex"

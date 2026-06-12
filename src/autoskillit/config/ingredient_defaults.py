@@ -125,12 +125,6 @@ SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = CONFIG_AUTHORITY_KEYS - {
     "backend_supports_git_write",
 }
 
-BACKEND_CAPABILITY_INGREDIENTS: frozenset[str] = frozenset(
-    {
-        "backend_supports_git_write",
-    }
-)
-
 
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     """Resolve auto-detect ingredient values from the project environment."""

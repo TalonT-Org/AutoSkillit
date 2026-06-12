@@ -258,3 +258,86 @@ def test_card_and_semantic_rules_agree_on_errors(recipe_name: str, tmp_path: Pat
         f"Card-only: {contract_error_steps - semantic_error_steps}, "
         f"Semantic-only: {semantic_error_steps - contract_error_steps}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Capability-admission-control feasibility signal
+# ---------------------------------------------------------------------------
+
+
+def test_codex_implementation_dispatch_infeasible() -> None:
+    """Codex backend + implementation recipe must report dispatch_feasible=False.
+
+    gate_backend_write routes to terminal failure when backend_capable=false.
+    """
+    result = load_and_validate(
+        "implementation",
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={"backend_supports_git_write": "false"},
+        backend_name="codex",
+    )
+    assert result["valid"] is True  # recipe is structurally valid
+    assert result.get("dispatch_feasible") is False  # but pipeline is DOA
+    assert "gate_backend_write" in result.get("infeasible_steps", [])
+
+
+def test_claude_implementation_dispatch_feasible() -> None:
+    """Claude Code backend + implementation recipe must report dispatch_feasible=True."""
+    result = load_and_validate(
+        "implementation",
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={"backend_supports_git_write": "true"},
+        backend_name="claude-code",
+    )
+    assert result["valid"] is True
+    assert result.get("dispatch_feasible") is True
+
+
+def test_dispatch_feasible_true_when_capability_overrides_are_truthy() -> None:
+    """Capability-gated recipes report dispatch_feasible=True when all
+    capability ingredient overrides evaluate as truthy."""
+    result = load_and_validate(
+        "implementation",
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={"backend_supports_git_write": "true"},
+    )
+    assert result.get("dispatch_feasible") is True
+    assert "infeasible_steps" not in result
+
+
+def _discover_capability_gate_recipes() -> list[str]:
+    """Return recipe names that contain a gate_backend_write step."""
+    gate_recipes = []
+    for name in _RECIPE_STEMS:
+        recipe_path = _RECIPES_DIR / f"{name}.yaml"
+        if not recipe_path.exists():
+            continue
+        recipe = load_recipe(recipe_path)
+        for step in recipe.steps.values():
+            if step.tool == "run_python" and step.with_args.get("callable", "").endswith(
+                "gate_backend_write"
+            ):
+                gate_recipes.append(name)
+                break
+    return gate_recipes
+
+
+_CAPABILITY_GATE_RECIPES = _discover_capability_gate_recipes()
+
+
+@pytest.mark.parametrize("recipe_name", _CAPABILITY_GATE_RECIPES)
+def test_codex_capability_gate_recipes(recipe_name: str) -> None:
+    """Every recipe with a gate_backend_write step must report
+    dispatch_feasible=False when loaded with codex overrides."""
+    result = load_and_validate(
+        recipe_name,
+        project_dir=_PROJECT_ROOT,
+        ingredient_overrides={"backend_supports_git_write": "false"},
+        backend_name="codex",
+    )
+    assert result.get("valid") is True
+    assert result.get("dispatch_feasible") is False, (
+        f"Recipe '{recipe_name}' with gate_backend_write step did not report "
+        f"dispatch_feasible=False under codex overrides"
+    )
+    assert "gate_backend_write" in result.get("infeasible_steps", [])

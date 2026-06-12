@@ -9,7 +9,6 @@ from autoskillit.config._config_dataclasses import (
     _MAX_CONCURRENT_DISPATCHES as _MAX_CONCURRENT_DISPATCHES,
 )
 from autoskillit.config.ingredient_defaults import (
-    BACKEND_CAPABILITY_INGREDIENTS,
     SERVER_AUTHORITATIVE_INGREDIENTS,
     apply_config_authoritative_overrides,
     build_config_authoritative_layer,
@@ -57,6 +56,7 @@ from autoskillit.config.settings import (
     validate_layer_keys,
     write_config_layer,
 )
+from autoskillit.core import BACKEND_CAPABILITY_INGREDIENTS
 
 __all__ = [
     "AgentBackendConfig",

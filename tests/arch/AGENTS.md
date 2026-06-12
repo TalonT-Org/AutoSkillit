@@ -17,6 +17,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_backend_flag_isolation.py` | AST guard: ClaudeFlags must not appear in _session_launch.py — backend-specific flags belong inside each backend's build_interactive_cmd() |
 | `test_backend_coherence.py` | Architectural tests for backend coherence enforcement |
 | `test_canonical_constant_consumption.py` | Architectural invariant: every *_ENV_FORWARD_VARS constant must have a production consumer |
+| `test_capability_admission_control.py` | Architectural structural tests for capability admission control: dispatch_feasible gating on all four content-serving surfaces, _compute_capability_feasibility call in load_and_validate, CAPABILITY_GATE_CALLABLES/BACKEND_CAPABILITY_INGREDIENTS registry sync |
 | `test_backend_name_sync.py` | Architectural invariant: KNOWN_BACKEND_NAMES (IL-0) must match BACKEND_REGISTRY keys (IL-1) |
 | `test_capability_consistency.py` | Behavioral arch tests: BackendCapabilities filesystem consistency — applicable guards exist on disk, required session files are created, session_dir_symlinks entries are symlinks |
 | `test_cross_registry_dispatch_sufficiency.py` | Cross-registry dispatch sufficiency: real HOOK_REGISTRY × real BackendCapabilities — detects fix-required hooks that would brick backends with insufficient applicable_guards |

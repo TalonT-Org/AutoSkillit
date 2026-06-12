@@ -10,6 +10,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `_helpers.py` | Shared test builder utilities for tests/server/ |
 | `_type_coercion_fixtures.py` | Test fixtures for _import_and_call annotation-aware type coercion |
 | `conftest.py` | Shared fixtures for tests/server/ |
+| `test_capability_admission_e2e.py` | End-to-end chain tests for capability admission control: backend → load_and_validate → dispatch_feasible signal |
 | `test_editable_guard.py` | Unit tests for server/_editable_guard.py — scan_editable_installs_for_worktree |
 | `test_factory.py` | Tests for server/_factory.py make_context() composition root |
 | `test_factory_recording.py` | Tests for make_context recording/replay runner wiring |

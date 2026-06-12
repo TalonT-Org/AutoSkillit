@@ -63,6 +63,7 @@ class LoadCache:
             "requires_packs",
             "requires_features",
             "deferred_guards",
+            "infeasible_steps",
         ):
             if list_key in r:
                 r[list_key] = list(r[list_key])

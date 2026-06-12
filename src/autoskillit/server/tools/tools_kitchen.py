@@ -126,6 +126,36 @@ def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
     )
 
 
+async def _dispatch_infeasible_response(
+    result: dict[str, Any],
+    backend: Any,
+    gate: Any,
+    ctx: Context,
+) -> str:
+    """Refuse a dead-on-arrival pipeline before the gate is enabled.
+
+    Used by the open_kitchen (both normal and deferred-recall) paths when
+    load_and_validate reports dispatch_feasible=False.
+    """
+    gate.disable()
+    await ctx.disable_components(tags={"kitchen"})
+    _infeasible = result.get("infeasible_steps", [])
+    _backend_name = backend.name if backend is not None else "unknown"
+    return json.dumps(
+        {
+            "success": False,
+            "kitchen": "dispatch_infeasible",
+            "infeasible_steps": _infeasible,
+            "ingredients_table": result.get("ingredients_table"),
+            "user_visible_message": (
+                f"Cannot dispatch recipe: backend {_backend_name!r} "
+                f"causes steps {_infeasible} to route to terminal failure. "
+                f"Use a backend with git_metadata_writable=True (e.g. claude-code)."
+            ),
+        }
+    )
+
+
 class QuotaGuardHookPayload(TypedDict):
     cache_max_age: int
     cache_path: str
@@ -433,6 +463,14 @@ def get_recipe(name: str) -> str:
                 "suggestions": result.get("suggestions", []),
             }
         )
+    if not result.get("dispatch_feasible", True):
+        return json.dumps(
+            {
+                "error": "Recipe is infeasible on current backend",
+                "dispatch_feasible": False,
+                "infeasible_steps": result.get("infeasible_steps", []),
+            }
+        )
     return result.get("content", json.dumps({"error": "Recipe composition failed."}))
 
 
@@ -673,6 +711,10 @@ async def open_kitchen(
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     return _recipe_validation_error_response(name, result)
+                if not result.get("dispatch_feasible", True):
+                    return await _dispatch_infeasible_response(
+                        result, tool_ctx.backend, tool_ctx.gate, ctx
+                    )
                 # Dispatch-feasibility preflight: verify the backend can enforce
                 # all fix-required hooks for the recipe's run_skill steps.
                 if tool_ctx.active_recipe_steps is not None:
@@ -781,6 +823,11 @@ async def open_kitchen(
                 tool_ctx.gate.disable()
                 tool_ctx.gate_infrastructure_ready = False
                 return _recipe_validation_error_response(name, result)
+
+            if not result.get("dispatch_feasible", True):
+                return await _dispatch_infeasible_response(
+                    result, tool_ctx.backend, tool_ctx.gate, ctx
+                )
 
             # Dispatch-feasibility preflight: verify the backend can enforce
             # all fix-required hooks for the recipe's run_skill steps.

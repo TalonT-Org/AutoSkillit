@@ -98,6 +98,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
+        "claude",  # execution/backends/claude.py: CLAUDE_FLAG_VOCABULARY = FlagVocabulary(...)
+        "codex",  # execution/backends/codex.py: CODEX_FLAG_VOCABULARY = FlagVocabulary(...)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -979,7 +981,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "dispatch gate add defense-in-depth checks",
     ),
     "execution/backends/codex.py": (
-        1060,
+        1070,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -991,7 +993,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; project_log_dir method added to CodexSessionLocator (+3 net lines)"
         "; session_log_path method added to CodexSessionLocator (+5 net lines)"
         "; process_idle_timeout_ms field wired through build_skill_session_cmd and "
-        "build_food_truck_cmd CmdSpec constructors (+8 net lines)",
+        "build_food_truck_cmd CmdSpec constructors (+8 net lines)"
+        "; BackendCmdBuilderBase inheritance adds four abstract property implementations "
+        "(_binary, _sandbox_default, _env_policy, _flag_vocabulary) to CodexBackend "
+        "(+5 net lines)",
     ),
 }
 

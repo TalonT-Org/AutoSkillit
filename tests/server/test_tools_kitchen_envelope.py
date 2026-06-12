@@ -184,7 +184,7 @@ async def test_prime_quota_cache_catches_typeerror(monkeypatch):
     with patch("autoskillit.server._state._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server._misc.logger") as mock_logger:
             # Must not raise — fails open
-            await _prime_quota_cache()
+            await _prime_quota_cache(supports_quota_check=True)
             mock_logger.warning.assert_called_once_with("quota_prime_failed", exc_info=True)
 
 

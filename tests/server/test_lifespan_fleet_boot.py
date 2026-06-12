@@ -43,7 +43,7 @@ class TestFleetAutoGateBoot:
         assert tool_ctx.kitchen_id is not None
         assert tool_ctx.active_recipe_packs == frozenset()
         mock_write_hook_config.assert_called_once_with()
-        mock_prime_quota_cache.assert_awaited_once_with()
+        mock_prime_quota_cache.assert_awaited_once_with(supports_quota_check=True)
         mock_create_bg_task.assert_called_once()
         mock_register_kitchen.assert_called_once_with(
             tool_ctx.kitchen_id, os.getpid(), str(tool_ctx.project_dir)

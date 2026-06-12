@@ -304,6 +304,7 @@ from .types import ProcessStaleError as ProcessStaleError
 from .types import PromptContractError as PromptContractError
 from .types import ProviderOutcome as ProviderOutcome
 from .types import PRState as PRState
+from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
 from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver

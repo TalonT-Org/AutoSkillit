@@ -85,16 +85,21 @@ def _dir_mtime(path: Path) -> float:
         return 0.0
 
 
-def detect_project_local_overrides(project_dir: Path) -> frozenset[ProjectLocalOverride]:
+def detect_project_local_overrides(
+    project_dir: Path,
+    search_dirs: tuple[str, ...] | None = None,
+) -> frozenset[ProjectLocalOverride]:
     """Return project-local skill overrides with path provenance.
 
-    Scans all directories in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS under
-    project_dir. First-match-wins: if a skill name appears under multiple
-    search dirs, only the first (by tuple order) is returned.
+    Scans all directories in `search_dirs` (or `_OVERRIDE_SEARCH_DIRS` when
+    `search_dirs is None`) under `project_dir`. First-match-wins: if a skill
+    name appears under multiple search dirs, only the first (by tuple order)
+    is returned.
     """
     overrides: set[ProjectLocalOverride] = set()
     seen: set[str] = set()
-    for subdir in _OVERRIDE_SEARCH_DIRS:
+    active = search_dirs if search_dirs is not None else _OVERRIDE_SEARCH_DIRS
+    for subdir in active:
         search_root = project_dir / subdir
         if not search_root.is_dir():
             continue

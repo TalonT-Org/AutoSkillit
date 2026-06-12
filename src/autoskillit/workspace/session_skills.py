@@ -604,8 +604,13 @@ class DefaultSessionSkillManager:
 
         # Compute project-local overrides (REQ-OVR-001..004)
         _plsc = backend is None or backend.capabilities.project_local_skills_capable
+        _search_dirs: tuple[str, ...] | None = (
+            backend.conventions.project_local_skill_search_dirs or None
+            if backend is not None
+            else None
+        )
         overrides: frozenset[ProjectLocalOverride] = (
-            detect_project_local_overrides(project_dir)
+            detect_project_local_overrides(project_dir, search_dirs=_search_dirs)
             if project_dir is not None and _plsc
             else frozenset()
         )

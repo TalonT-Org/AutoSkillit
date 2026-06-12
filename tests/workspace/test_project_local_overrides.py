@@ -123,6 +123,65 @@ def test_detect_project_local_overrides_union_four_paths(tmp_path):
     )
 
 
+def test_detect_project_local_overrides_explicit_search_dirs(tmp_path):
+    """T-OVR-022: search_dirs limits detection to the supplied dirs only."""
+    from autoskillit.workspace.skills import detect_project_local_overrides
+
+    for subdir, name in [
+        (".claude/skills/claude-only", "claude-only"),
+        (".autoskillit/skills/as-only", "as-only"),
+        (".codex/skills/codex-only", "codex-only"),
+        (".agents/skills/agents-only", "agents-only"),
+    ]:
+        d = tmp_path / subdir
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(f"# {name}")
+    result = detect_project_local_overrides(
+        tmp_path, search_dirs=(".codex/skills", ".agents/skills")
+    )
+    assert override_names(result) == frozenset({"codex-only", "agents-only"})
+
+
+def test_detect_project_local_overrides_codex_backend_scoping(tmp_path):
+    """T-OVR-023: CodexBackend's convention search dirs scope detection."""
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace.skills import detect_project_local_overrides
+
+    for subdir, name in [
+        (".claude/skills/claude-excluded", "claude-excluded"),
+        (".codex/skills/codex-included", "codex-included"),
+    ]:
+        d = tmp_path / subdir
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(f"# {name}")
+    result = detect_project_local_overrides(
+        tmp_path, search_dirs=CodexBackend().conventions.project_local_skill_search_dirs
+    )
+    assert override_names(result) == frozenset({"codex-included"})
+
+
+def test_detect_project_local_overrides_claude_code_backend_scoping(tmp_path):
+    """T-OVR-024: ClaudeCodeBackend's convention search dirs scope detection."""
+    from autoskillit.execution.backends.claude import ClaudeCodeBackend
+    from autoskillit.workspace.skills import detect_project_local_overrides
+
+    for subdir, name in [
+        (".claude/skills/claude-included", "claude-included"),
+        (".autoskillit/skills/as-included", "as-included"),
+        (".codex/skills/codex-excluded", "codex-excluded"),
+        (".agents/skills/agents-included", "agents-included"),
+    ]:
+        d = tmp_path / subdir
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(f"# {name}")
+    result = detect_project_local_overrides(
+        tmp_path, search_dirs=ClaudeCodeBackend().conventions.project_local_skill_search_dirs
+    )
+    assert override_names(result) == frozenset(
+        {"claude-included", "as-included", "agents-included"}
+    )
+
+
 # ---------------------------------------------------------------------------
 # T-OVR-007..011: init_session() — project_dir override filtering
 # ---------------------------------------------------------------------------

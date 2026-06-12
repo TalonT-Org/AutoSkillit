@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -376,7 +376,7 @@ async def test_cold_open_kitchen_runs_handler():
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),
         patch.object(
-            tools_kitchen, "_open_kitchen_handler", new_callable=MagicMock
+            tools_kitchen, "_open_kitchen_handler", new_callable=AsyncMock
         ) as mock_handler,
     ):
         mock_handler.return_value = None

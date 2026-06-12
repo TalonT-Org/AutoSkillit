@@ -126,6 +126,39 @@ def run_startup_hook_health_check() -> list[str]:
         return []
 
 
+def run_startup_fix_required_coverage_check() -> None:
+    """Validate that fix-required hook script stems are covered by at least one backend.
+
+    The dispatch gate in tools_execution._check_backend_compat refuses all skill
+    dispatches on a backend if HOOK_REGISTRY contains fix-required hooks whose
+    script stems are not in that backend's applicable_guards. This check provides
+    defense-in-depth: if the cross-registry invariant is violated, the server
+    fails to start rather than accepting requests it will later crash on.
+
+    Raises RuntimeError if any fix-required hook's script stems are not covered
+    by the union of all registered backends' applicable_guards. A fix-required
+    hook that IS covered by at least one backend is valid and does not raise.
+    """
+    from autoskillit.execution.backends import BACKEND_REGISTRY
+    from autoskillit.hook_registry import HOOK_REGISTRY
+
+    all_guards: set[str] = set()
+    for cls in BACKEND_REGISTRY.values():
+        all_guards.update(cls().capabilities.applicable_guards)
+    for h in HOOK_REGISTRY:
+        if h.codex_status != "fix-required":
+            continue
+        stems = frozenset(Path(s).stem for s in h.scripts) if h.scripts else frozenset()
+        if stems and not stems.issubset(all_guards):
+            missing = sorted(stems - all_guards)
+            raise RuntimeError(
+                f"HOOK_REGISTRY fix-required entry (matcher={h.matcher!r}) has "
+                f"guard scripts {missing} not covered by any backend's "
+                f"applicable_guards. This will brick dispatch for backends "
+                f"missing these guards."
+            )
+
+
 def _finalize_recorder() -> None:
     """Finalize the recording subprocess runner if one is active."""
     ctx = _get_ctx_or_none()
@@ -528,6 +561,8 @@ async def _autoskillit_lifespan(server: Any) -> Any:
     bg_tasks: list[_asyncio.Task[None]] = []
     try:
         from autoskillit.server import _state  # circular-break
+
+        run_startup_fix_required_coverage_check()
 
         event = _asyncio.Event()
         _state._startup_ready = event

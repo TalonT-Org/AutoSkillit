@@ -21,13 +21,11 @@ from autoskillit.core import (
     AUTOSKILLIT_APPLICABLE_GUARDS,
     AUTOSKILLIT_PRIVATE_ENV_VARS,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
-    CAMPAIGN_ID_ENV_VAR,
     CODEX_EFFORT_MAPPING,
     CODEX_INTERACTIVE_REQUIRED_ENV,
     CODEX_MCP_ENV_FORWARD_VARS,
     CODEX_MODEL_ALIASES,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
-    KITCHEN_SESSION_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     RESUME_SESSION_BASELINE_KEYS,
@@ -56,9 +54,13 @@ from autoskillit.core import (
     load_yaml,
     pkg_root,
 )
+from autoskillit.execution.backends._backend_cmd_builder_base import (
+    SHARED_BASELINE_ENV,
+    BackendCmdBuilderBase,
+    FlagVocabulary,
+)
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
-    _MAX_MCP_OUTPUT_TOKENS_VALUE,
     _PROVIDER_EXTRAS_BASE_DENYLIST,
     _SESSION_BASELINE_ENV,
     _SKILL_SESSION_EXTRAS_DENYLIST,
@@ -182,7 +184,7 @@ def _codex_exec_extras(
 ) -> dict[str, str]:
     extras: dict[str, str] = {}
     if include_session_baseline:
-        extras.update(_SESSION_BASELINE_ENV)
+        extras.update(SHARED_BASELINE_ENV)
     extras.update(
         {
             "AUTOSKILLIT_HEADLESS": "1",
@@ -471,7 +473,26 @@ def _generate_agent_tomls(session_dir: Path) -> int:
 
 
 @dataclass(frozen=True, slots=True)
-class CodexBackend:
+class CodexBackend(BackendCmdBuilderBase):
+    def _binary(self) -> str:
+        return "codex"
+
+    def _sandbox_default(self) -> str:
+        return "workspace-write"
+
+    def _env_policy(self) -> CodexEnvPolicy:
+        return CodexEnvPolicy()
+
+    def _flag_vocabulary(self) -> FlagVocabulary:
+        return FlagVocabulary(
+            variadic_flags=VARIADIC_CODEX_FLAGS,
+            non_variadic_flags=NON_VARIADIC_CODEX_FLAGS,
+            model_flag=CodexFlags.MODEL,
+            add_dir_flag=CodexFlags.ADD_DIR,
+            resume_flag=CodexFlags.RESUME_SUBCOMMAND,
+            config_override_flag=CodexFlags.CONFIG_OVERRIDE,
+        )
+
     @property
     def name(self) -> str:
         return AGENT_BACKEND_CODEX
@@ -677,22 +698,14 @@ class CodexBackend:
             applicable_guards=self.capabilities.applicable_guards,
             write_guard_tool_names=self.capabilities.write_guard_tool_names,
         )
-        extras["MAX_MCP_OUTPUT_TOKENS"] = _MAX_MCP_OUTPUT_TOKENS_VALUE
-        extras["MCP_CONNECTION_NONBLOCKING"] = "0"
-        if scenario_step_name:
-            extras["SCENARIO_STEP_NAME"] = scenario_step_name
-        campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
-        if campaign_id:
-            extras[CAMPAIGN_ID_ENV_VAR] = campaign_id
-        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
-        if kitchen_session_id:
-            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
-        if allowed_write_prefix:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
-        if allowed_write_prefixes:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(allowed_write_prefixes)
-        if cwd:
-            extras["AUTOSKILLIT_CWD"] = cwd
+        extras.update(
+            self._assemble_shared_env_extras(
+                write_prefix=allowed_write_prefix,
+                write_prefixes=allowed_write_prefixes,
+                cwd=cwd,
+                scenario_step_name=scenario_step_name,
+            )
+        )
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
@@ -784,24 +797,16 @@ class CodexBackend:
             applicable_guards=self.capabilities.applicable_guards,
             write_guard_tool_names=self.capabilities.write_guard_tool_names,
         )
-        extras["MAX_MCP_OUTPUT_TOKENS"] = _MAX_MCP_OUTPUT_TOKENS_VALUE
-        extras["MCP_CONNECTION_NONBLOCKING"] = "0"
-        if scenario_step_name:
-            extras["SCENARIO_STEP_NAME"] = scenario_step_name
-        campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)
-        if campaign_id:
-            extras[CAMPAIGN_ID_ENV_VAR] = campaign_id
-        kitchen_session_id = os.environ.get(KITCHEN_SESSION_ID_ENV_VAR)
-        if kitchen_session_id:
-            extras[KITCHEN_SESSION_ID_ENV_VAR] = kitchen_session_id
+        extras.update(
+            self._assemble_shared_env_extras(
+                write_prefix=allowed_write_prefix,
+                write_prefixes=allowed_write_prefixes,
+                cwd=cwd,
+                scenario_step_name=scenario_step_name,
+            )
+        )
         if completion_marker:
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
-        if allowed_write_prefix:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] = allowed_write_prefix
-        if allowed_write_prefixes:
-            extras["AUTOSKILLIT_ALLOWED_WRITE_PREFIXES"] = ":".join(allowed_write_prefixes)
-        if cwd:
-            extras["AUTOSKILLIT_CWD"] = cwd
         if env_extras:
             for k, v in env_extras.items():
                 if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:

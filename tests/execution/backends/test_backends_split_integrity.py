@@ -76,6 +76,25 @@ class TestCodexScenarioPlayerModuleExists:
         assert callable(make_codex_scenario_player)
 
 
+class TestBackendCmdBuilderBaseModuleExists:
+    """Symbols in _backend_cmd_builder_base are importable from there."""
+
+    def test_BackendCmdBuilderBase_importable(self):
+        from autoskillit.execution.backends._backend_cmd_builder_base import BackendCmdBuilderBase
+
+        assert BackendCmdBuilderBase is not None
+
+    def test_FlagVocabulary_importable(self):
+        from autoskillit.execution.backends._backend_cmd_builder_base import FlagVocabulary
+
+        assert FlagVocabulary is not None
+
+    def test_SHARED_BASELINE_ENV_importable(self):
+        from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
+
+        assert "MAX_MCP_OUTPUT_TOKENS" in SHARED_BASELINE_ENV
+
+
 class TestBackendsPublicAPISurfacePreserved:
     """All __all__ symbols from backends/__init__ are importable."""
 

@@ -808,6 +808,10 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet",
             "server",
             "cli",
+            # file-level: cross-layer test that imports fleet prompt builder
+            "execution/backends/test_failure_predicate_spanning.py",
+            # file-level: execution test that imports fleet.build_protected_campaign_ids
+            "execution/test_session_log_retention.py",
         }
     ),
     # L3
@@ -823,12 +827,16 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_gate_state_persistence.py",
             "fleet/test_dispatch_identity_continuity.py",
             "fleet/test_dispatch_envelope_fields.py",
+            # file-level: cross-layer test that imports server TypedDict schemas
+            "execution/backends/test_failure_predicate_spanning.py",
         }
     ),
     "cli": frozenset(
         {
             "cli",
             "__main__",
+            # file-level: cross-layer test that imports cli prompt builder
+            "execution/backends/test_failure_predicate_spanning.py",
         }
     ),
     # Infra (non-layered)

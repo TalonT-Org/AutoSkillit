@@ -518,6 +518,7 @@ async def open_kitchen(
 
         _ctx_pre = _get_ctx()
         _skip_handler = _ctx_pre.gate_infrastructure_ready
+        tool_ctx = _get_ctx()
 
         if not _skip_handler:
             handler_err = await _open_kitchen_handler()
@@ -554,7 +555,7 @@ async def open_kitchen(
                     logger.warning(
                         "open_kitchen_failure", stage="enable_components", exc_info=True
                     )
-                    _get_ctx().gate_infrastructure_ready = False
+                    tool_ctx.gate_infrastructure_ready = False
                     return _kitchen_failure_envelope(exc, stage="enable_components")
 
             try:
@@ -567,7 +568,7 @@ async def open_kitchen(
                 )
             except Exception as exc:
                 logger.warning("open_kitchen_failure", stage="redisable_subsets", exc_info=True)
-                _get_ctx().gate_infrastructure_ready = False
+                tool_ctx.gate_infrastructure_ready = False
                 return _kitchen_failure_envelope(exc, stage="redisable_subsets")
 
         _is_deferred_recall = (

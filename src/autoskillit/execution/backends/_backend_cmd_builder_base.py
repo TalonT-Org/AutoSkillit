@@ -121,12 +121,15 @@ class BackendCmdBuilderBase(ABC):
         return extras
 
     def _apply_config(self, config: SkillSessionConfig) -> dict[str, Any]:
-        """Unpack all :class:`SkillSessionConfig` fields into a plain dict.
+        """Unpack :class:`SkillSessionConfig` command-building fields into a plain dict.
 
         Separates shared fields (consumed by ``_assemble_shared_env_extras``)
         from backend-specific fields. The returned dict is the single source
         of truth that backend-specific builders can read from instead of
         accepting each field as a separate parameter.
+
+        ``backend_override`` is intentionally excluded — it is consumed upstream
+        at the headless layer before command builders are invoked.
         """
         return {
             "completion_marker": config.completion_marker,

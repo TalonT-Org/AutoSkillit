@@ -888,6 +888,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 "AUTOSKILLIT_HEADLESS": "",
                 "AUTOSKILLIT_HEADLESS_AUTO_GATE": "",
                 "AUTOSKILLIT_SESSION_TYPE": "",
+                AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
                 AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CODEX,
                 MCP_CLIENT_BACKEND_ENV_VAR: AGENT_BACKEND_CODEX,
                 FOOD_TRUCK_TOOL_TAGS_ENV_VAR: "",
@@ -926,7 +927,9 @@ class CodexBackend(BackendCmdBuilderBase):
         cmd.append(resume_session_id)
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        resume_extras = _codex_exec_extras(session_type="", include_session_baseline=True)
+        resume_extras = _codex_exec_extras(
+            session_type="", include_session_baseline=True, include_agent_backend_flat=True
+        )
         if env_extras:
             resume_extras.update(env_extras)
         env = self.env_policy().build_env(

@@ -74,3 +74,10 @@ def test_xfail_diagram_count_is_shrinking() -> None:
         "A new recipe was added without a diagram — either create the diagram "
         "or raise CURRENT_XFAIL_CAP (with justification)."
     )
+
+
+def test_check_diagram_staleness_missing_is_stale(tmp_path: Path) -> None:
+    (tmp_path / "diagrams").mkdir()
+    recipe_yaml = tmp_path / "fake_recipe.yaml"
+    recipe_yaml.write_text("steps: []\n")
+    assert check_diagram_staleness("fake_recipe", tmp_path, recipe_yaml)

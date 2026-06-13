@@ -42,7 +42,7 @@ from autoskillit.core import (
 from autoskillit.fleet import FleetSemaphore
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_orchestrator_exact
+from autoskillit.server._guards import _backend_supports_quota, _require_orchestrator_exact
 from autoskillit.server._misc import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
@@ -270,9 +270,7 @@ async def _open_kitchen_handler() -> str | None:
     ctx.active_recipe_steps = {}
     ctx.active_recipe_ingredients = frozenset()
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
-    _supports_quota = (
-        ctx.backend is not None and ctx.backend.capabilities.anthropic_provider_capable
-    )
+    _supports_quota = _backend_supports_quota(ctx)
 
     try:
         _write_hook_config()
@@ -567,10 +565,7 @@ async def open_kitchen(
         else:
             _ctx_post = _get_ctx()
             if _ctx_post.quota_refresh_task is None:
-                _supports_quota_post = (
-                    _ctx_post.backend is not None
-                    and _ctx_post.backend.capabilities.anthropic_provider_capable
-                )
+                _supports_quota_post = _backend_supports_quota(_ctx_post)
                 try:
                     _ctx_post.quota_refresh_task = create_background_task(
                         _quota_refresh_loop(

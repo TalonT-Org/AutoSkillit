@@ -64,6 +64,7 @@ from autoskillit.hook_registry import (
     validate_plugin_cache_hooks,
 )
 from autoskillit.pipeline import create_background_task
+from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._state import _get_ctx_or_none, deferred_initialize
 
 logger = get_logger(__name__)
@@ -268,9 +269,7 @@ async def _fleet_auto_gate_boot(ctx: Any) -> None:
     except Exception:
         logger.warning("fleet_auto_gate_boot_write_hook_config_failed", exc_info=True)
 
-    _supports_quota = (
-        ctx.backend is not None and ctx.backend.capabilities.anthropic_provider_capable
-    )
+    _supports_quota = _backend_supports_quota(ctx)
 
     try:
         await _prime_quota_cache(supports_quota_check=_supports_quota)
@@ -344,9 +343,7 @@ async def _pre_reveal_kitchen(ctx: Any) -> None:
         _mcp.disable(tags={tag})
     register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     _write_hook_config()
-    _supports_quota = (
-        ctx.backend is not None and ctx.backend.capabilities.anthropic_provider_capable
-    )
+    _supports_quota = _backend_supports_quota(ctx)
     await _prime_quota_cache(supports_quota_check=_supports_quota)
     ctx.gate_infrastructure_ready = True
 
@@ -406,9 +403,7 @@ async def _food_truck_auto_gate_boot(ctx: Any) -> None:
     except Exception:
         logger.warning("food_truck_auto_gate_boot_hook_config_failed", exc_info=True)
 
-    _supports_quota = (
-        ctx.backend is not None and ctx.backend.capabilities.anthropic_provider_capable
-    )
+    _supports_quota = _backend_supports_quota(ctx)
 
     try:
         await _prime_quota_cache(supports_quota_check=_supports_quota)
@@ -523,9 +518,7 @@ async def _skill_auto_gate_boot(ctx: Any) -> None:
     try:
         from autoskillit.server._misc import _prime_quota_cache  # circular-break
 
-        _supports_quota = (
-            ctx.backend is not None and ctx.backend.capabilities.anthropic_provider_capable
-        )
+        _supports_quota = _backend_supports_quota(ctx)
         await _prime_quota_cache(supports_quota_check=_supports_quota)
     except Exception:
         logger.warning("skill_auto_gate_boot_quota_cache_failed", exc_info=True)

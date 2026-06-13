@@ -20,7 +20,14 @@ _CONTRACT_STEMS = (
     sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml")) if _CONTRACTS_DIR.is_dir() else []
 )
 
-MINIMUM_CONTRACT_COUNT = 15
+MINIMUM_CONTRACT_COUNT = 15  # floor below current count (17 at creation); catches silent deletion
+
+
+def test_contracts_dir_exists() -> None:
+    assert _CONTRACTS_DIR.is_dir(), (
+        f"Contracts directory not found: {_CONTRACTS_DIR}. "
+        "Is builtin_recipes_dir() resolving correctly?"
+    )
 
 
 @pytest.mark.parametrize("stem", _CONTRACT_STEMS, ids=_CONTRACT_STEMS)

@@ -42,6 +42,8 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_dry_walkthrough,
     _check_input_contracts,
+    _check_recipe_read_prohibition,
+    _check_write_target_boundary,
     _require_enabled,
     _require_orchestrator_or_higher,
     _validate_skill_command,
@@ -283,6 +285,22 @@ def _has_active_locks(order_id: str) -> bool:
     return any(v is False for steps in locked_steps.values() for v in steps.values())
 
 
+def _derive_run_cmd_write_prefixes() -> tuple[str, ...]:
+    """Read allowed write prefixes from environment.
+
+    Mirrors the env-var resolution logic in hooks/guards/write_guard.py:
+    AUTOSKILLIT_ALLOWED_WRITE_PREFIXES (colon-separated) takes precedence over
+    AUTOSKILLIT_ALLOWED_WRITE_PREFIX (single value).
+    """
+    multi = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIXES", "")
+    if multi:
+        return tuple(p for p in multi.split(":") if p)
+    single = os.environ.get("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", "")
+    if single:
+        return (single,)
+    return ()
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield(result_type="run_cmd")
 @track_response_size("run_cmd")
@@ -307,8 +325,18 @@ async def run_cmd(
         return tier_gate
     if (gate := _require_enabled()) is not None:
         return gate
+    if (gate := _check_recipe_read_prohibition(cmd=cmd)) is not None:
+        return gate
+    if (
+        gate := _check_write_target_boundary(cmd, cwd, _derive_run_cmd_write_prefixes())
+    ) is not None:
+        return gate
     try:
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
+            if not _derive_run_cmd_write_prefixes():
+                logger.debug(
+                    "run_cmd: no write prefixes configured — write boundary guard inactive"
+                )
             logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
             await _notify(
                 ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd}
@@ -397,6 +425,8 @@ async def run_python(
     if (tier_gate := _require_orchestrator_or_higher("run_python")) is not None:
         return tier_gate
     if (gate := _require_enabled()) is not None:
+        return gate
+    if (gate := _check_recipe_read_prohibition(callable_name=callable)) is not None:
         return gate
     try:
         with structlog.contextvars.bound_contextvars(tool="run_python"):

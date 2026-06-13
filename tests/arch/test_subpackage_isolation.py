@@ -982,12 +982,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; supports_quota_check bool at call sites replaces resolve_provider (+3 net lines)",
     ),
     "tools_execution.py": (
-        1130,
+        1150,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
         "with resolver-absent fallback via extract_skill_name, and fix-required hook "
-        "dispatch gate add defense-in-depth checks",
+        "dispatch gate add defense-in-depth checks; server-side recipe-read prohibition "
+        "and write-target boundary guards add defense-in-depth gate checks",
     ),
     "execution/backends/codex.py": (
         1114,

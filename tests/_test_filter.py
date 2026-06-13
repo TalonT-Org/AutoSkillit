@@ -254,7 +254,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_tradition_manifest": frozenset({"core"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
-    "bash_write_targets": frozenset({"core", "execution"}),
+    "bash_write_targets": frozenset({"core", "execution", "server"}),
 }
 
 # Narrow per-module cascade for execution/. Modules not listed here fall through

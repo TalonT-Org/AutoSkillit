@@ -95,7 +95,7 @@ def classify_infra_exit(
     session: ClaudeSessionResult,
     result: SubprocessResult,
     *,
-    capabilities: BackendCapabilities | None = None,
+    capabilities: BackendCapabilities,
 ) -> InfraExitCategory:
     """Classify why a headless session exited at the infrastructure level.
 
@@ -105,17 +105,12 @@ def classify_infra_exit(
     distinguished from structural failures and routed to on_rate_limit instead of
     on_context_limit.
 
-    When ``capabilities`` is provided, context-exhaustion detection is gated on
-    ``supports_context_exhaustion_detection``; backends that do not support
-    context-exhaustion telemetry (e.g., Claude's local session JSONL marker is
-    already authoritative) skip those checks. ``capabilities=None`` is permissive
-    and preserves the prior behavior for callers that have not yet threaded a
-    capability object through.
+    Context-exhaustion detection is gated by ``capabilities.supports_context_exhaustion_detection``
+    so backends that do not implement it fall through to downstream classification.
     """
-    if capabilities is None or capabilities.supports_context_exhaustion_detection:
+    if capabilities.supports_context_exhaustion_detection:
         if session._is_context_exhausted():
             return InfraExitCategory.CONTEXT_EXHAUSTED
-        # Codex turn.failed arrives on stdout (NDJSON); this stderr branch is non-Codex fallback.
         if _CODEX_CONTEXT_EXHAUSTION_PATTERN.search(result.stderr):
             return InfraExitCategory.CONTEXT_EXHAUSTED
     # Rate limit detection — must precede all API_ERROR checks (including

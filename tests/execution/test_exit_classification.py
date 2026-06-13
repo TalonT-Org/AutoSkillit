@@ -7,6 +7,7 @@ import json
 import pytest
 
 from autoskillit.core.types import (
+    CODEX_CONTEXT_EXHAUSTION_MARKER,
     BackendCapabilities,
     ChannelConfirmation,
     InfraExitCategory,
@@ -335,6 +336,36 @@ class TestContextExhaustionCapabilityGate:
             jsonl_context_exhausted=True,
         )
         result = _sr(returncode=1)
+        assert (
+            classify_infra_exit(session, result, capabilities=caps)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
+
+    def test_capability_false_suppresses_context_exhausted_via_stderr(self):
+        """capability=False + Codex stderr pattern → NOT CONTEXT_EXHAUSTED."""
+        caps = BackendCapabilities(supports_context_exhaustion_detection=False)
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=True,
+            result="",
+            session_id="s1",
+        )
+        result = _sr(returncode=1, stderr=CODEX_CONTEXT_EXHAUSTION_MARKER)
+        assert (
+            classify_infra_exit(session, result, capabilities=caps)
+            != InfraExitCategory.CONTEXT_EXHAUSTED
+        )
+
+    def test_capability_true_detects_context_exhausted_via_stderr(self):
+        """capability=True + Codex stderr pattern → CONTEXT_EXHAUSTED."""
+        caps = BackendCapabilities(supports_context_exhaustion_detection=True)
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=True,
+            result="",
+            session_id="s1",
+        )
+        result = _sr(returncode=1, stderr=CODEX_CONTEXT_EXHAUSTION_MARKER)
         assert (
             classify_infra_exit(session, result, capabilities=caps)
             == InfraExitCategory.CONTEXT_EXHAUSTED

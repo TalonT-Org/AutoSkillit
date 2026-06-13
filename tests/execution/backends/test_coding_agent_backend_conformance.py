@@ -33,7 +33,6 @@ NOT_YET_LIVE: frozenset[str] = frozenset(
         "patch_format",
         "required_session_files",
         "session_dir_symlinks",
-        "supports_context_exhaustion_detection",
         "supports_thinking_blocks",
     }
 )

@@ -7,6 +7,7 @@ import json
 import pytest
 
 from autoskillit.core.types import (
+    BackendCapabilities,
     ChannelConfirmation,
     InfraExitCategory,
     SubprocessResult,
@@ -302,6 +303,42 @@ class TestCodexContextExhaustion:
         )
         result = _sr(returncode=1, stderr="")
         assert classify_infra_exit(session, result) == InfraExitCategory.RATE_LIMITED
+
+
+class TestContextExhaustionCapabilityGate:
+    """Capability gate: supports_context_exhaustion_detection controls detection."""
+
+    def test_capability_false_suppresses_context_exhausted(self):
+        """capability=False + context exhaustion signals → NOT CONTEXT_EXHAUSTED."""
+        caps = BackendCapabilities(supports_context_exhaustion_detection=False)
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=True,
+            result="prompt is too long",
+            session_id="s1",
+            jsonl_context_exhausted=True,
+        )
+        result = _sr(returncode=1)
+        assert (
+            classify_infra_exit(session, result, capabilities=caps)
+            != InfraExitCategory.CONTEXT_EXHAUSTED
+        )
+
+    def test_capability_true_produces_context_exhausted(self):
+        """capability=True + context exhaustion signals → CONTEXT_EXHAUSTED."""
+        caps = BackendCapabilities(supports_context_exhaustion_detection=True)
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=True,
+            result="prompt is too long",
+            session_id="s1",
+            jsonl_context_exhausted=True,
+        )
+        result = _sr(returncode=1)
+        assert (
+            classify_infra_exit(session, result, capabilities=caps)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
 
 @pytest.mark.parametrize("category", list(InfraExitCategory))

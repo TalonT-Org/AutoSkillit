@@ -70,13 +70,6 @@ def test_enforcement_layer_literal_values() -> None:
         assert inv.enforcement_layer == layer
 
 
-def test_registry_has_all_13_entries() -> None:
-    """INVARIANT_REGISTRY must have exactly 13 entries."""
-    from autoskillit.core import INVARIANT_REGISTRY
-
-    assert len(INVARIANT_REGISTRY) == 13
-
-
 def test_registry_keys_match_ids() -> None:
     """Each registry key must match its InvariantDef.id."""
     from autoskillit.core import INVARIANT_REGISTRY

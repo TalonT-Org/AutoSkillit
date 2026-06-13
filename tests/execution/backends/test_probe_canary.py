@@ -170,7 +170,9 @@ class TestCanaryIssueUpdater:
         def mock_run_gh(args, **kwargs):
             if args[0:2] == ["issue", "list"]:
                 return CompletedProcess(args=args, returncode=0, stdout="[]", stderr="")
-            return CompletedProcess(args=args, returncode=1, stdout="", stderr="auth error")
+            if args[0:2] == ["issue", "create"]:
+                return CompletedProcess(args=args, returncode=1, stdout="", stderr="auth error")
+            raise AssertionError(f"Unexpected gh call: {args}")
 
         monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
         updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
@@ -188,8 +190,9 @@ class TestCanaryIssueUpdater:
                     stderr="",
                 )
             if args[0:2] == ["issue", "edit"]:
+                assert "--body-file" in args
                 return CompletedProcess(args=args, returncode=1, stdout="", stderr="locked")
-            return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+            raise AssertionError(f"Unexpected gh call: {args}")
 
         monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
         updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")

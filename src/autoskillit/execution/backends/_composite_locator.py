@@ -4,8 +4,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from autoskillit.core import get_logger
+
 if TYPE_CHECKING:
     from autoskillit.core import SessionLocator
+
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,8 +20,12 @@ class CompositeSessionLocator:
             return None
         from autoskillit.execution.backends import BACKEND_REGISTRY
 
-        for cls in BACKEND_REGISTRY.values():
-            result = cls().session_locator().locate_session(session_id)
+        for backend_name, cls in BACKEND_REGISTRY.items():
+            try:
+                result = cls().session_locator().locate_session(session_id)
+            except Exception:
+                logger.debug("session_locate_failed", backend=backend_name, exc_info=True)
+                continue
             if result is not None:
                 return result
         return None

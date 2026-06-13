@@ -551,7 +551,7 @@ def _build_skill_result(
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
 
-    infra_category = classify_infra_exit(session, result)
+    infra_category = classify_infra_exit(session, result, capabilities=backend.capabilities)
     api_retry = _build_api_retry_outcome(session)
 
     # API error override: when the session failed due to an API infrastructure error

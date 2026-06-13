@@ -33,7 +33,6 @@ NOT_YET_LIVE: frozenset[str] = frozenset(
         "patch_format",
         "required_session_files",
         "session_dir_symlinks",
-        "supports_context_exhaustion_detection",
         "supports_thinking_blocks",
     }
 )
@@ -351,6 +350,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
                 f"test_setup_session_dir_and_locator_round_trip has no coverage"
                 f" for backend {self.backend.name!r}"
             )
+
+    def test_supports_context_exhaustion_detection_is_bool(self) -> None:
+        """BackendCapabilities.supports_context_exhaustion_detection — capability is bool-typed."""
+        assert isinstance(self.backend.capabilities.supports_context_exhaustion_detection, bool)
 
 
 def test_every_capability_field_exercised_or_not_yet_live() -> None:

@@ -9,7 +9,7 @@ import regex as re
 from autoskillit.core import CODEX_CONTEXT_EXHAUSTION_MARKER, InfraExitCategory, get_logger
 
 if TYPE_CHECKING:
-    from autoskillit.core import SubprocessResult
+    from autoskillit.core import BackendCapabilities, SubprocessResult
     from autoskillit.execution.session._session_model import ClaudeSessionResult
 
 logger = get_logger(__name__)
@@ -94,6 +94,8 @@ def is_signal_death_code(returncode: int) -> bool:
 def classify_infra_exit(
     session: ClaudeSessionResult,
     result: SubprocessResult,
+    *,
+    capabilities: BackendCapabilities | None = None,
 ) -> InfraExitCategory:
     """Classify why a headless session exited at the infrastructure level.
 
@@ -102,11 +104,19 @@ def classify_infra_exit(
     (HTTP 429) is checked before other API errors so transient rate limits are
     distinguished from structural failures and routed to on_rate_limit instead of
     on_context_limit.
+
+    When ``capabilities`` is provided, context-exhaustion detection is gated on
+    ``supports_context_exhaustion_detection``; backends that do not support
+    context-exhaustion telemetry (e.g., Claude's local session JSONL marker is
+    already authoritative) skip those checks. ``capabilities=None`` is permissive
+    and preserves the prior behavior for callers that have not yet threaded a
+    capability object through.
     """
-    if session._is_context_exhausted():
-        return InfraExitCategory.CONTEXT_EXHAUSTED
-    if _CODEX_CONTEXT_EXHAUSTION_PATTERN.search(result.stderr):
-        return InfraExitCategory.CONTEXT_EXHAUSTED
+    if capabilities is None or capabilities.supports_context_exhaustion_detection:
+        if session._is_context_exhausted():
+            return InfraExitCategory.CONTEXT_EXHAUSTED
+        if _CODEX_CONTEXT_EXHAUSTION_PATTERN.search(result.stderr):
+            return InfraExitCategory.CONTEXT_EXHAUSTED
     # Rate limit detection — must precede all API_ERROR checks (including
     # api_retry_exhausted) so 429s are classified as RATE_LIMITED even
     # when retries are exhausted.

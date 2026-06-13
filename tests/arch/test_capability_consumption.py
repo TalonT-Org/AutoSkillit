@@ -29,11 +29,6 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         rationale="thinking-block rendering gating",
         added_date=date(2026, 5, 31),
     ),
-    "supports_context_exhaustion_detection": ForwardDeclaredField(
-        issue=3384,
-        rationale="context exhaustion and recovery paths",
-        added_date=date(2026, 5, 31),
-    ),
     "min_version": ForwardDeclaredField(
         issue=3122,
         rationale="version validation via BackendCapabilities fields",

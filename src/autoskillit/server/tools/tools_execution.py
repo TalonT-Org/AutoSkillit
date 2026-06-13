@@ -333,6 +333,10 @@ async def run_cmd(
         return gate
     try:
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
+            if not _derive_run_cmd_write_prefixes():
+                logger.debug(
+                    "run_cmd: no write prefixes configured — write boundary guard inactive"
+                )
             logger.info("run_cmd", cmd=cmd[:80], cwd=cwd)
             await _notify(
                 ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd}

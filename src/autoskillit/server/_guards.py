@@ -182,7 +182,6 @@ def _check_write_target_boundary(
     Returns gate_error_result JSON when a write target falls outside all prefixes.
     """
     if not allowed_prefixes:
-        logger.debug("write_target_boundary: no allowed_prefixes configured — fail-open")
         return None
     targets = extract_bash_write_targets(cmd, cwd)
     if not targets:

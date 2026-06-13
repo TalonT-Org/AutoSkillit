@@ -1,6 +1,6 @@
 """Reusable canary state machine and GitHub issue updater for live probes.
 
-IL-0 module: imports only stdlib and `autoskillit.core`. Provides the
+IL-1 module: imports only stdlib and `autoskillit.core`. Provides the
 persistence + flake-guard primitives that live probe classes build on.
 """
 
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 from dataclasses import asdict, dataclass
 from enum import StrEnum, unique
@@ -65,6 +66,16 @@ class CanaryState:
         return self.network_streak >= flake_guard or self.schema_streak >= flake_guard
 
 
+def _run_gh_with_body_file(args: list[str], body: str) -> subprocess.CompletedProcess[str]:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write(body)
+        body_path = f.name
+    try:
+        return run_gh([*args, "--body-file", body_path])
+    finally:
+        os.unlink(body_path)
+
+
 class CanaryIssueUpdater:
     def __init__(self, *, owner: str, repo: str) -> None:
         self._owner = owner
@@ -73,23 +84,16 @@ class CanaryIssueUpdater:
     def ensure_issue(self, state: CanaryState, title: str, body: str) -> int:
         existing = self._find_existing(title)
         if existing is not None:
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-                f.write(body)
-                body_path = f.name
-            try:
-                result = run_gh(
-                    [
-                        "issue",
-                        "edit",
-                        str(existing),
-                        "--repo",
-                        f"{self._owner}/{self._repo}",
-                        "--body-file",
-                        body_path,
-                    ],
-                )
-            finally:
-                os.unlink(body_path)
+            result = _run_gh_with_body_file(
+                [
+                    "issue",
+                    "edit",
+                    str(existing),
+                    "--repo",
+                    f"{self._owner}/{self._repo}",
+                ],
+                body,
+            )
             if result.returncode != 0:
                 logger.warning(
                     "canary_issue_edit_failed",
@@ -98,26 +102,19 @@ class CanaryIssueUpdater:
                 )
             state.last_issue_number = existing
             return existing
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
-            f.write(body)
-            body_path = f.name
-        try:
-            result = run_gh(
-                [
-                    "issue",
-                    "create",
-                    "--repo",
-                    f"{self._owner}/{self._repo}",
-                    "--title",
-                    title,
-                    "--body-file",
-                    body_path,
-                    "--json",
-                    "number",
-                ],
-            )
-        finally:
-            os.unlink(body_path)
+        result = _run_gh_with_body_file(
+            [
+                "issue",
+                "create",
+                "--repo",
+                f"{self._owner}/{self._repo}",
+                "--title",
+                title,
+                "--json",
+                "number",
+            ],
+            body,
+        )
         if result.returncode != 0:
             msg = f"gh issue create failed: {result.stderr}"
             raise RuntimeError(msg)

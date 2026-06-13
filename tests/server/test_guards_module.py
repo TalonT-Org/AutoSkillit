@@ -30,3 +30,19 @@ def test_require_fleet_doc_mentions_l3():
     assert "L3" in doc
     assert "L1" in doc
     assert "L2" in doc
+
+
+def test_check_recipe_read_prohibition_importable():
+    from autoskillit.server._guards import _check_recipe_read_prohibition
+
+    doc = _check_recipe_read_prohibition.__doc__ or ""
+    assert "recipe" in doc.lower()
+    assert "headless" in doc.lower()
+
+
+def test_check_write_target_boundary_importable():
+    from autoskillit.server._guards import _check_write_target_boundary
+
+    doc = _check_write_target_boundary.__doc__ or ""
+    assert "write" in doc.lower()
+    assert "prefix" in doc.lower()

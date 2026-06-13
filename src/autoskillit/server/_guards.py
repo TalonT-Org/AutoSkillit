@@ -6,9 +6,12 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import regex as re
+
 from autoskillit.core import (
     InputContractResolver,
     SessionType,
+    extract_bash_write_targets,
     extract_path_arg,
     extract_positional_args,
     extract_skill_name,
@@ -22,6 +25,17 @@ if TYPE_CHECKING:
     from autoskillit.config._config_dataclasses import ProviderProfileDef, ProvidersConfig
 
 logger = get_logger(__name__)
+
+
+RECIPE_READ_DENY_TRIGGER: str = "must not read recipe/skill/agent files directly"
+
+_RECIPE_READ_CMD_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"(?:\.autoskillit|src/autoskillit)/recipes/.*\.ya?ml"),
+    re.compile(r"src/autoskillit/skills(?:_extended)?/.*/SKILL\.md"),
+    re.compile(r"src/autoskillit/agents/.*\.md"),
+]
+
+_RECIPE_READ_CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"^autoskillit\.recipe\.(?!_cmd_rpc)")
 
 
 def _get_ctx():  # type: ignore[return]
@@ -129,6 +143,57 @@ def _require_enabled() -> str | None:
     """
     if not _get_ctx().gate.enabled:
         return gate_error_result()
+    return None
+
+
+def _check_recipe_read_prohibition(
+    *, cmd: str | None = None, callable_name: str | None = None
+) -> str | None:
+    """Deny recipe/skill/agent file reads and recipe module callables.
+
+    Headless-only: interactive sessions bypass this guard.
+    Returns gate_error_result JSON on match, None on pass.
+    """
+    if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
+        return None
+    if cmd is not None:
+        for pattern in _RECIPE_READ_CMD_PATTERNS:
+            if pattern.search(cmd):
+                return gate_error_result(
+                    f"run_cmd {RECIPE_READ_DENY_TRIGGER}. "
+                    "Use load_recipe to recall step definitions or the Skill tool "
+                    "for skill instructions."
+                )
+    if callable_name is not None:
+        if _RECIPE_READ_CALLABLE_PATTERN.search(callable_name):
+            return gate_error_result(
+                f"run_python {RECIPE_READ_DENY_TRIGGER}. "
+                "Use load_recipe to recall step definitions."
+            )
+    return None
+
+
+def _check_write_target_boundary(
+    cmd: str, cwd: str, allowed_prefixes: tuple[str, ...]
+) -> str | None:
+    """Deny run_cmd writes outside allowed prefix directories.
+
+    Fail-open: returns None when allowed_prefixes is empty (no write scope configured).
+    Returns gate_error_result JSON when a write target falls outside all prefixes.
+    """
+    if not allowed_prefixes:
+        return None
+    targets = extract_bash_write_targets(cmd, cwd)
+    if not targets:
+        return None
+    normalized = tuple(os.path.realpath(p).rstrip("/") + "/" for p in allowed_prefixes)
+    for target in targets:
+        resolved = os.path.realpath(target)
+        if not any(resolved.startswith(pfx) for pfx in normalized):
+            return gate_error_result(
+                f"run_cmd write target {target!r} is outside allowed write prefixes: "
+                f"{', '.join(allowed_prefixes)}"
+            )
     return None
 
 

@@ -166,6 +166,7 @@ from .types import GITHUB_API_SKILL_FAMILIES as GITHUB_API_SKILL_FAMILIES
 from .types import HEADLESS_AUTO_GATE_ENV_VAR as HEADLESS_AUTO_GATE_ENV_VAR
 from .types import HEADLESS_ENV_VAR as HEADLESS_ENV_VAR
 from .types import HEADLESS_TOOLS as HEADLESS_TOOLS
+from .types import INVARIANT_REGISTRY as INVARIANT_REGISTRY
 from .types import INVESTIGATION_COMPLETE_MARKER as INVESTIGATION_COMPLETE_MARKER
 from .types import KITCHEN_SESSION_ID_ENV_VAR as KITCHEN_SESSION_ID_ENV_VAR
 from .types import KNOWN_BACKEND_NAMES as KNOWN_BACKEND_NAMES
@@ -277,6 +278,7 @@ from .types import InputSpec as InputSpec
 from .types import InspectorCallback as InspectorCallback
 from .types import InspectorEvidence as InspectorEvidence
 from .types import InspectorVerdict as InspectorVerdict
+from .types import InvariantDef as InvariantDef
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef

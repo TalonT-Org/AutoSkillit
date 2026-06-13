@@ -103,6 +103,7 @@ class TestModuleCascadeCore:
             "_type_session_env",
             "_type_capture",
             "_type_inspector",
+            "_type_invariant_registry",
             "_type_phoropter",
             "_type_token",
             "_type_tradition_manifest",

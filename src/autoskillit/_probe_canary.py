@@ -73,7 +73,10 @@ def _run_gh_with_body_file(args: list[str], body: str) -> subprocess.CompletedPr
     try:
         return run_gh([*args, "--body-file", body_path])
     finally:
-        os.unlink(body_path)
+        try:
+            os.unlink(body_path)
+        except OSError:
+            logger.debug("canary_body_file_unlink_failed", path=body_path)
 
 
 class CanaryIssueUpdater:
@@ -144,14 +147,21 @@ class CanaryIssueUpdater:
             ],
         )
         if result.returncode != 0:
+            logger.warning(
+                "canary_find_existing_failed",
+                returncode=result.returncode,
+                stderr=result.stderr,
+            )
             return None
         try:
             issues = json.loads(result.stdout)
-        except (json.JSONDecodeError, KeyError):
+        except json.JSONDecodeError:
             return None
         if not isinstance(issues, list):
             return None
         for issue in issues:
             if issue.get("title") == title:
-                return issue["number"]
+                number = issue.get("number")
+                if isinstance(number, int):
+                    return number
         return None

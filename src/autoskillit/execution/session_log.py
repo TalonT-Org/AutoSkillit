@@ -151,9 +151,9 @@ def flush_session_log(
     model_identity: ModelIdentity = ModelIdentity.unknown(),
     max_sessions: int | None = None,
     is_resume: bool = False,
-    codex_log_path: Path | None = None,
     session_locator: SessionLocator | None = None,
     backend: Literal["claude-code", "codex"] = "claude-code",
+    channel_b_capable: bool = True,
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -183,17 +183,28 @@ def flush_session_log(
     else:
         dir_name = f"no_session_{start_ts.replace(':', '-')}"
 
-    if codex_log_path is not None:
-        cc_log = None
-        cc_log_str = None
-    else:
-        from autoskillit.execution.backends.claude import (
-            ClaudeSessionLocator,
-        )  # deferred: avoids circular import via backends/claude.py
+    from autoskillit.execution.backends import CompositeSessionLocator
 
-        _locator = session_locator or ClaudeSessionLocator()
+    _codex_log_str: str | None = None
+
+    if session_locator is not None:
+        _locator = session_locator
+    else:
+        _composite = CompositeSessionLocator()
+        _locator = _composite.locator_for(backend)
+
+    if channel_b_capable:
         cc_log = _locator.session_log_path(cwd, session_id)
         cc_log_str = str(cc_log) if cc_log else None
+    else:
+        cc_log = None
+        cc_log_str = None
+        if session_id and not session_id.startswith(("no_session_", "crashed_")):
+            try:
+                _codex_found = _locator.locate_session(session_id)
+                _codex_log_str = str(_codex_found) if _codex_found else None
+            except Exception:
+                logger.debug("session_locate_failed", backend=backend, exc_info=True)
 
     if cc_log and not cc_log.exists():
         logger.warning("claude_code_log_not_found", path=cc_log_str, session_id=session_id)
@@ -506,7 +517,7 @@ def flush_session_log(
         "campaign_id": campaign_id,
         "dispatch_id": dispatch_id,
         "claude_code_log": cc_log_str,
-        "codex_log": str(codex_log_path) if codex_log_path else None,
+        "codex_log": _codex_log_str,
         "skill_command": skill_command,
         "success": success,
         "subtype": subtype,

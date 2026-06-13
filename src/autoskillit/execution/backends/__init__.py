@@ -20,6 +20,7 @@ from ._codex_hooks import (
     sync_hooks_to_codex_config,
 )
 from ._codex_parse import CodexResultParser, CodexStreamParser
+from ._composite_locator import CompositeSessionLocator
 from .claude import (
     ClaudeCodeBackend,
     ClaudeEnvPolicy,
@@ -62,6 +63,7 @@ __all__ = [
     "BACKEND_REGISTRY",
     "CODEX_EXEC_FLAGS",
     "CODEX_TOP_LEVEL_ONLY_FLAGS",
+    "CompositeSessionLocator",
     "_is_autoskillit_hook_entry",
     "generate_codex_hooks_config",
     "sync_hooks_to_codex_config",

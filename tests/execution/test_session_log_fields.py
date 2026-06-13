@@ -1178,7 +1178,9 @@ class TestCodexLogFields:
         codex_log.write_text(event_line)
         flush_session_log(
             log_dir=str(tmp_path),
-            codex_log_path=codex_log,
+            backend="codex",
+            channel_b_capable=False,
+            session_locator=_FakeLocator(codex_log),
             cwd="/some/worktree",
             session_id="codex-session-001",
             pid=12345,
@@ -1200,6 +1202,7 @@ class TestCodexLogFields:
     def test_flush_codex_log_null_when_not_provided(self, tmp_path):
         flush_session_log(
             log_dir=str(tmp_path),
+            session_locator=_FakeLocator(None),
             cwd="/some/worktree",
             session_id="cc-session-001",
             pid=12345,
@@ -1231,7 +1234,9 @@ class TestCodexLogFields:
         codex_log.write_text(event_line)
         flush_session_log(
             log_dir=str(tmp_path),
-            codex_log_path=codex_log,
+            backend="codex",
+            channel_b_capable=False,
+            session_locator=_FakeLocator(codex_log),
             cwd="/some/worktree",
             session_id="codex-session-002",
             pid=12345,
@@ -1246,6 +1251,32 @@ class TestCodexLogFields:
             recipe_identity=RecipeIdentity.empty(),
         )
         assert "claude_code_log_not_found" not in caplog.text
+
+    def test_backend_codex_skips_channel_b_parsing(self, tmp_path):
+        flush_session_log(
+            log_dir=str(tmp_path),
+            cwd="/some/worktree",
+            session_id="codex-session-003",
+            pid=12345,
+            skill_command="/autoskillit:implement",
+            success=True,
+            subtype="completed",
+            exit_code=0,
+            start_ts="2026-05-26T08:00:00",
+            proc_snapshots=None,
+            backend="codex",
+            channel_b_capable=False,
+            session_locator=_FakeLocator(None),
+            telemetry=SessionTelemetry.empty(),
+            provider_outcome=ProviderOutcome.none_used(),
+            recipe_identity=RecipeIdentity.empty(),
+        )
+        summary = json.loads(
+            (tmp_path / "sessions" / "codex-session-003" / "summary.json").read_text()
+        )
+        assert summary["request_ids"] == []
+        assert summary["turn_timestamps"] == []
+        assert summary["turn_tool_calls"] == []
 
 
 def test_primary_model_identifier_parent_wins_on_output_tokens():

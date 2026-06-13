@@ -8,6 +8,7 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 |------|---------|
 | `__init__.py` | `BACKEND_REGISTRY`, `get_backend()` factory, re-exports |
 | `_backend_cmd_builder_base.py` | `BackendCmdBuilderBase` ABC (frozen dataclass), `FlagVocabulary` NamedTuple, `SHARED_BASELINE_ENV` — canonical location for shared env-assembly keys |
+| `_composite_locator.py` | `CompositeSessionLocator` — single dispatch point iterating BACKEND_REGISTRY for session location |
 | `claude.py` | `ClaudeCodeBackend` (incl. `validate_session_layout`), `ClaudeEnvPolicy`, `ClaudeSessionLocator`, `ClaudeStreamParser`, `ClaudeResultParser` (prompt utilities moved to `_claude_prompt.py`) |
 | `_claude_prompt.py` | Prompt injection utilities, session constants (`_ensure_skill_prefix`, `_inject_completion_directive`, `_compose_resume_prompt`, etc.), shared by claude + codex + commands |
 | `codex.py` | `CodexFlags`, `CodexBackend` (incl. `validate_session_layout`, `setup_session_dir` agent TOML generation via `_generate_agent_tomls`), `CodexEnvPolicy`, `CodexSessionLocator` (parse/config moved to `_codex_parse.py` / `_codex_config.py`) |

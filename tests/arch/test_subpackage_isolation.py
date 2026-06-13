@@ -878,6 +878,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe/rules": 51,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable  # noqa: E501
         "server/tools": 27,  # +_preflight.py (dispatch-feasibility preflight)
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
+        "execution/backends": 11,  # +_composite_locator.py (CompositeSessionLocator)
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

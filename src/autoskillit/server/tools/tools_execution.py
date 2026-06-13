@@ -327,8 +327,9 @@ async def run_cmd(
         return gate
     if (gate := _check_recipe_read_prohibition(cmd=cmd)) is not None:
         return gate
-    _write_pfx = _derive_run_cmd_write_prefixes()
-    if (gate := _check_write_target_boundary(cmd, cwd, _write_pfx)) is not None:
+    if (
+        gate := _check_write_target_boundary(cmd, cwd, _derive_run_cmd_write_prefixes())
+    ) is not None:
         return gate
     try:
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):

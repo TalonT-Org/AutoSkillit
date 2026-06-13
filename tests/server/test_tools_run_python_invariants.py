@@ -19,6 +19,7 @@ class TestRecipeReadProhibitionCallable:
     @pytest.fixture(autouse=True)
     def _headless(self, monkeypatch):
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
 
     @pytest.mark.anyio
     async def test_denies_recipe_callable(self, tool_ctx_kitchen_open):

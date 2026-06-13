@@ -19,6 +19,7 @@ class TestRecipeReadProhibitionCmd:
     @pytest.fixture(autouse=True)
     def _headless(self, monkeypatch):
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
 
     @pytest.mark.anyio
     async def test_denies_recipe_yaml_path(self, tool_ctx_kitchen_open):
@@ -82,6 +83,7 @@ class TestWriteTargetBoundaryCmd:
     @pytest.fixture(autouse=True)
     def _headless(self, monkeypatch):
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
 
     @pytest.mark.anyio
     async def test_denies_write_outside_allowed_prefix(self, tool_ctx_kitchen_open, monkeypatch):

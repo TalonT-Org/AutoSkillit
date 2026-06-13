@@ -42,7 +42,7 @@ from autoskillit.core import (
 from autoskillit.fleet import FleetSemaphore
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_orchestrator_exact
+from autoskillit.server._guards import _backend_supports_quota, _require_orchestrator_exact
 from autoskillit.server._misc import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
@@ -52,7 +52,6 @@ from autoskillit.server._misc import (
     _prime_quota_cache,
     _quota_refresh_loop,
     resolve_log_dir,
-    resolve_provider,
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import track_response_size
@@ -271,6 +270,7 @@ async def _open_kitchen_handler() -> str | None:
     ctx.active_recipe_steps = {}
     ctx.active_recipe_ingredients = frozenset()
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
+    _supports_quota = _backend_supports_quota(ctx)
 
     try:
         _write_hook_config()
@@ -280,7 +280,7 @@ async def _open_kitchen_handler() -> str | None:
         return _kitchen_failure_envelope(exc, stage="write_hook_config")
 
     try:
-        await _prime_quota_cache()
+        await _prime_quota_cache(supports_quota_check=_supports_quota)
     except Exception as exc:
         ctx.gate.disable()
         logger.warning("open_kitchen_failure", stage="prime_quota_cache", exc_info=True)
@@ -292,7 +292,7 @@ async def _open_kitchen_handler() -> str | None:
         ctx.quota_refresh_task = create_background_task(
             _quota_refresh_loop(
                 ctx.config.quota_guard,
-                provider=resolve_provider(ctx.config.providers.default_provider),
+                supports_quota_check=_supports_quota,
             ),
             label="quota_refresh_loop",
         )
@@ -565,11 +565,12 @@ async def open_kitchen(
         else:
             _ctx_post = _get_ctx()
             if _ctx_post.quota_refresh_task is None:
+                _supports_quota_post = _backend_supports_quota(_ctx_post)
                 try:
                     _ctx_post.quota_refresh_task = create_background_task(
                         _quota_refresh_loop(
                             _ctx_post.config.quota_guard,
-                            provider=resolve_provider(_ctx_post.config.providers.default_provider),
+                            supports_quota_check=_supports_quota_post,
                         ),
                         label="quota_refresh_loop",
                     )

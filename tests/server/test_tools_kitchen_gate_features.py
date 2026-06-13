@@ -56,7 +56,7 @@ async def test_open_kitchen_starts_quota_refresh_task(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
 
-    async def instant_loop(config, *, provider="anthropic"):
+    async def instant_loop(config, *, supports_quota_check=True):
         await asyncio.sleep(0)
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):

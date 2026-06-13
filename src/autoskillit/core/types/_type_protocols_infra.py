@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -9,6 +10,7 @@ __all__ = [
     "GateState",
     "BackgroundSupervisor",
     "FleetLock",
+    "QuotaPolicy",
     "QuotaRefreshTask",
     "TokenFactory",
     "CampaignProtector",
@@ -104,3 +106,15 @@ class CampaignProtector(Protocol):
     """
 
     def __call__(self, project_dir: Path) -> frozenset[str]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class QuotaPolicy:
+    """Typed quota capability derived from backend capabilities.
+
+    supports_quota_check is True when the active backend is
+    Anthropic-provider-capable; False when ctx.backend is None or
+    non-Anthropic.
+    """
+
+    supports_quota_check: bool = False

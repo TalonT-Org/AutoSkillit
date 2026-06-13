@@ -236,30 +236,27 @@ async def resolve_repo_from_remote(cwd: str, hint: str | None = None) -> str:
     return await resolve_remote_repo(cwd, hint=hint) or ""
 
 
-def resolve_provider(default_provider: str | None) -> str:
-    """Return the effective provider name, falling back to ``"anthropic"``."""
-    return default_provider if default_provider else "anthropic"
-
-
-async def _prime_quota_cache() -> None:
+async def _prime_quota_cache(*, supports_quota_check: bool) -> None:
     """Fetch quota from the Anthropic API and write the local cache.
 
     Called at open_kitchen so the cache is primed before any run_skill hook fires.
     Fails open: a quota fetch failure must not abort kitchen open.
     """
+    if not supports_quota_check:
+        return
     from autoskillit.server._state import _get_ctx as _ctx_fn  # circular-break
 
     try:
         _ctx = _ctx_fn()
         await check_and_sleep_if_needed(
             _ctx.config.quota_guard,
-            provider=resolve_provider(_ctx.config.providers.default_provider),
+            provider="anthropic",
         )
     except Exception:
         logger.warning("quota_prime_failed", exc_info=True)
 
 
-async def _quota_refresh_loop(config: QuotaGuardConfig, *, provider: str = "anthropic") -> None:
+async def _quota_refresh_loop(config: QuotaGuardConfig, *, supports_quota_check: bool) -> None:
     """Long-running coroutine: refreshes the quota cache every cache_refresh_interval seconds.
 
     Designed to run as a background asyncio.Task for the duration of a kitchen session.
@@ -273,9 +270,10 @@ async def _quota_refresh_loop(config: QuotaGuardConfig, *, provider: str = "anth
 
     Args:
         config: QuotaGuardConfig instance.
-        provider: Provider name. Non-anthropic providers skip the refresh loop entirely.
+        supports_quota_check: When False, exits immediately — the active backend
+            does not support Anthropic quota checks.
     """
-    if provider.casefold() != "anthropic":
+    if not supports_quota_check:
         return
 
     while True:

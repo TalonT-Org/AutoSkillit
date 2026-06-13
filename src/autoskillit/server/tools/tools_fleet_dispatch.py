@@ -271,7 +271,6 @@ async def dispatch_food_truck(
             _refresh_quota_cache,
             check_and_sleep_if_needed,
             invalidate_cache,
-            resolve_provider,
         )
 
         parsed_checkpoint = (
@@ -357,6 +356,10 @@ async def dispatch_food_truck(
             if _preflight_err is not None:
                 return _preflight_err
 
+        _supports_quota = (
+            tool_ctx.backend is not None
+            and tool_ctx.backend.capabilities.anthropic_provider_capable
+        )
         result = await execute_dispatch(
             tool_ctx=tool_ctx,
             recipe=recipe,
@@ -373,7 +376,7 @@ async def dispatch_food_truck(
             ),
             quota_checker=lambda cfg: check_and_sleep_if_needed(
                 cfg,
-                provider=resolve_provider(tool_ctx.config.providers.default_provider),
+                provider="anthropic" if _supports_quota else "",
             ),
             quota_refresher=_refresh_quota_cache,
             cache_invalidator=invalidate_cache,

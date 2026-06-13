@@ -1,8 +1,8 @@
 """AST guard: quota modules must not reference BackendCapabilities fields.
 
-Quota provider gates must use config-string comparison (resolve_provider),
-never backend capability fields. This prevents accidental coupling between
-the quota system and the backend capabilities system.
+Quota provider gates use a supports_quota_check bool passed by callers,
+never backend capability fields directly. This prevents accidental coupling
+between the quota system and the backend capabilities system.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ class _CapabilityRefVisitor(ast.NodeVisitor):
 
 
 def test_quota_modules_do_not_reference_backend_capabilities() -> None:
-    """Quota code paths must gate on provider string, never BackendCapabilities fields."""
+    """Quota code paths must gate on supports_quota_check bool, never BackendCapabilities fields."""  # noqa: E501
     from autoskillit.core import paths
 
     src_root = paths.pkg_root()
@@ -81,6 +81,6 @@ def test_quota_modules_do_not_reference_backend_capabilities() -> None:
 
     assert not violations, (
         "Quota modules must not reference BackendCapabilities or its fields "
-        "(use resolve_provider config string instead):\n"
+        "(quota capability is passed as supports_quota_check bool by callers):\n"
         + "\n".join(f"  {v}" for v in sorted(violations))
     )

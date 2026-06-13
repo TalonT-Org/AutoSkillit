@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     InputContractResolver,
@@ -237,6 +237,11 @@ def _check_input_contracts(
                 )
 
     return None
+
+
+def _backend_supports_quota(ctx: Any) -> bool:
+    """Return True when the active backend is Anthropic-provider-capable."""
+    return ctx.backend is not None and ctx.backend.capabilities.anthropic_provider_capable
 
 
 def _provider_result(

@@ -44,6 +44,8 @@ class TestCanaryStateLoad:
         p.write_text("NOT JSON{{{")
         state = CanaryState.load(p)
         assert state.network_streak == 0
+        assert state.schema_streak == 0
+        assert state.last_issue_number is None
 
 
 class TestCanaryStateSave:

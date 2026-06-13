@@ -127,9 +127,9 @@ class TestWriteProbeCache:
         (tmp_path / "readonly-dir").chmod(0o444)
         try:
             write_probe_cache(p, _make_result())
-            assert not p.exists()
         finally:
             (tmp_path / "readonly-dir").chmod(0o755)
+        assert not p.exists()
 
     def test_overwrites_same_version(self, tmp_path: Path) -> None:
         p = tmp_path / "cache.json"

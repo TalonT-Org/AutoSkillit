@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,8 +15,21 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class CompositeSessionLocator:
+    _locators: tuple[SessionLocator, ...] = field(default=(), repr=False)
+
     def locate_session(self, session_id: str) -> Path | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
+            return None
+        if self._locators:
+            locators: tuple[SessionLocator, ...] = self._locators
+            for locator in locators:
+                try:
+                    result = locator.locate_session(session_id)
+                except Exception:
+                    logger.debug("session_locate_failed", exc_info=True)
+                    continue
+                if result is not None:
+                    return result
             return None
         from autoskillit.execution.backends import BACKEND_REGISTRY
 

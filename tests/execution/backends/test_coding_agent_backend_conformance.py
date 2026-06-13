@@ -351,6 +351,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
                 f" for backend {self.backend.name!r}"
             )
 
+    def test_supports_context_exhaustion_detection_is_bool(self) -> None:
+        """BackendCapabilities.supports_context_exhaustion_detection — capability is bool-typed."""
+        assert isinstance(self.backend.capabilities.supports_context_exhaustion_detection, bool)
+
 
 def test_every_capability_field_exercised_or_not_yet_live() -> None:
     fields = {f.name for f in dataclasses.fields(BackendCapabilities)}

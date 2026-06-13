@@ -47,6 +47,7 @@ class TestBackendRegistry:
             "CODEX_MCP_TOOL_TIMEOUT_FLOOR",
             "CODEX_TOOL_OUTPUT_TOKEN_LIMIT",
             "CODEX_TOP_LEVEL_ONLY_FLAGS",
+            "CompositeSessionLocator",
             "ClaudeCodeBackend",
             "ClaudeEnvPolicy",
             "ClaudeResultParser",

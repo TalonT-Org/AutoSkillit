@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -339,8 +338,6 @@ class TestCodexLogDispatch:
         )
         backend = _mock_backend(channel_b_capable=False, process_name="codex")
         backend.name = "codex"
-        sentinel = Path("/sentinel/codex.jsonl")
-        backend.session_locator().locate_session.return_value = sentinel
 
         fake_runner, flush_calls = _patch_for_flush(monkeypatch, tmp_path, result)
         minimal_ctx.runner = fake_runner  # type: ignore[assignment]
@@ -355,8 +352,8 @@ class TestCodexLogDispatch:
             step_backend=backend,
         )
 
-        backend.session_locator().locate_session.assert_called_once_with("sid-1")
-        assert flush_calls[0]["codex_log_path"] == sentinel
+        assert "codex_log_path" not in flush_calls[0]
+        assert flush_calls[0]["backend"] == "codex"
 
     @pytest.mark.anyio
     async def test_channel_b_true_skips_session_locator(self, minimal_ctx, tmp_path, monkeypatch):
@@ -388,5 +385,5 @@ class TestCodexLogDispatch:
             step_backend=backend,
         )
 
-        backend.session_locator.return_value.locate_session.assert_not_called()
-        assert flush_calls[0]["codex_log_path"] is None
+        assert "codex_log_path" not in flush_calls[0]
+        assert flush_calls[0]["backend"] == "claude-code"

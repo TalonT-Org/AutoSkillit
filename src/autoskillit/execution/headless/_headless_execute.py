@@ -496,15 +496,6 @@ async def _execute_claude_headless(
     ):
         from autoskillit.execution.session_log import flush_session_log
 
-        _codex_log: Path | None = None
-        if not _step_backend.capabilities.channel_b_capable and skill_result.session_id:
-            try:
-                _codex_log = _step_backend.session_locator().locate_session(
-                    skill_result.session_id
-                )
-            except Exception:
-                logger.debug("codex_session_locate_failed", exc_info=True)
-
         try:
             flush_session_log(
                 log_dir=ctx.config.linux_tracing.log_dir,
@@ -574,7 +565,6 @@ async def _execute_claude_headless(
                 max_sessions=ctx.config.linux_tracing.max_sessions,
                 model_identity=model_identity,
                 is_resume=spec.is_resume,
-                codex_log_path=_codex_log,
                 backend=cast(Literal["claude-code", "codex"], _step_backend.name),
             )
         except Exception:

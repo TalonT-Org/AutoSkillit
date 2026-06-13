@@ -145,12 +145,6 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
     ),
 }
 
-# --- Import-time guards (named-scratch-variable pattern) ---
-
-# Key shape: lowercase first segment (letters/digits), dash-separated segments
-# of letters/digits (L1 exception allows "L1" suffix in subsequent segments,
-# matching the test_registry_keys_are_lowercase_kebab regex).
-
 _BAD_KEY_SHAPE = [
     k for k in INVARIANT_REGISTRY if not _re.match(r"^[a-z][a-z0-9]*(-[a-zA-Z0-9]+)*$", k)
 ]

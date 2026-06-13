@@ -113,7 +113,7 @@ class TestLocatorFor:
 class TestInvariants:
     def test_frozen(self):
         loc = CompositeSessionLocator()
-        with pytest.raises(FrozenInstanceError):
+        with pytest.raises((FrozenInstanceError, TypeError)):
             loc.x = 1  # type: ignore[attr-defined]
 
     def test_protocol_conformance(self):

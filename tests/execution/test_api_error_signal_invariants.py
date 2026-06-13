@@ -15,6 +15,7 @@ import pytest
 from autoskillit.core.types import (
     CLAUDE_CODE_CAPABILITIES,
     ChannelConfirmation,
+    CliSubtype,
     InfraExitCategory,
     RetryReason,
     SubprocessResult,
@@ -119,7 +120,7 @@ class TestApiErrorChannelInvariant:
     def test_api_error_in_result_field(self, signal: str) -> None:
         """Signal in session.result (via parsed stdout) → correct category."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result=f"Error: {signal}",
             session_id="s1",
@@ -133,7 +134,7 @@ class TestApiErrorChannelInvariant:
     def test_api_error_in_errors_field(self, signal: str) -> None:
         """Signal in session.errors (via parsed stdout) → correct category."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
@@ -148,7 +149,7 @@ class TestApiErrorChannelInvariant:
     def test_api_error_in_stderr_fallback(self, signal: str) -> None:
         """Stderr fallback: signal in result.stderr → correct category via classify_infra_exit."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
@@ -294,7 +295,7 @@ class TestContextExhaustedCodexInvariant:
 
     def test_context_exhausted_in_result_field(self) -> None:
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="Error: context_length_exceeded",
             session_id="s1",
@@ -307,7 +308,7 @@ class TestContextExhaustedCodexInvariant:
 
     def test_context_exhausted_in_errors_field(self) -> None:
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
@@ -321,7 +322,7 @@ class TestContextExhaustedCodexInvariant:
 
     def test_context_exhausted_in_stderr(self) -> None:
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",

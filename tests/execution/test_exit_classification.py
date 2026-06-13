@@ -12,6 +12,7 @@ from autoskillit.core.types import (
     CODEX_CONTEXT_EXHAUSTION_MARKER,
     BackendCapabilities,
     ChannelConfirmation,
+    CliSubtype,
     InfraExitCategory,
     SubprocessResult,
     TerminationReason,
@@ -71,7 +72,7 @@ class TestClassifyInfraExit:
     def test_context_exhausted_from_jsonl_flag(self):
         """jsonl_context_exhausted=True → CONTEXT_EXHAUSTED."""
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=True,
             result="prompt is too long",
             session_id="s1",
@@ -86,7 +87,7 @@ class TestClassifyInfraExit:
     def test_api_error_overloaded_in_assistant_messages(self):
         """API error in assistant_messages → API_ERROR (PTY-safe path)."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -103,7 +104,7 @@ class TestClassifyInfraExit:
     def test_api_error_529_in_assistant_messages(self):
         """HTTP 529 in assistant_messages → API_ERROR."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -117,7 +118,7 @@ class TestClassifyInfraExit:
     def test_api_error_econnreset_in_assistant_messages(self):
         """ECONNRESET in assistant_messages → API_ERROR."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -131,7 +132,7 @@ class TestClassifyInfraExit:
     def test_api_error_socket_connection_closed_in_assistant_messages(self):
         """Bun socket-closed error in assistant_messages → API_ERROR."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -148,7 +149,7 @@ class TestClassifyInfraExit:
     def test_process_killed_sigkill(self):
         """returncode=-9 (SIGKILL) → PROCESS_KILLED."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -162,7 +163,7 @@ class TestClassifyInfraExit:
     def test_process_killed_sigterm(self):
         """returncode=-15 (SIGTERM, NOT from autoskillit kill) → PROCESS_KILLED."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -176,7 +177,7 @@ class TestClassifyInfraExit:
     def test_completed_success(self):
         """Normal success → COMPLETED."""
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=False,
             result="Done.",
             session_id="s1",
@@ -189,7 +190,7 @@ class TestClassifyInfraExit:
     def test_api_retry_exhausted_returns_api_error(self):
         """api_retry_exhausted=True → API_ERROR."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -203,7 +204,7 @@ class TestClassifyInfraExit:
     def test_api_retry_not_exhausted_does_not_promote(self):
         """api_retry_exhausted=False with retries present → no promotion."""
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=False,
             result="Done.",
             session_id="s1",
@@ -218,7 +219,7 @@ class TestClassifyInfraExit:
     def test_completed_logical_failure(self):
         """Agent failure (success=false, explicit error) → COMPLETED (not infra)."""
         session = ClaudeSessionResult(
-            subtype="error",
+            subtype=CliSubtype.ERROR_DURING_EXECUTION,
             is_error=True,
             result="Could not find file",
             session_id="s1",
@@ -231,7 +232,7 @@ class TestClassifyInfraExit:
     def test_context_exhaustion_takes_precedence_over_api_error(self):
         """Both signals present → CONTEXT_EXHAUSTED wins (more specific)."""
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=True,
             result="prompt is too long",
             session_id="s1",
@@ -250,7 +251,7 @@ class TestClassifyInfraExit:
     def test_context_exhausted_from_codex_context_length_exceeded(self):
         """context_length_exceeded in errors → CONTEXT_EXHAUSTED (not API_ERROR)."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
@@ -266,7 +267,7 @@ class TestClassifyInfraExit:
     def test_api_error_openai_patterns_in_stderr(self, signal: str) -> None:
         """Non-rate-limit OpenAI/Codex error pattern in stderr → API_ERROR."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -280,7 +281,7 @@ class TestClassifyInfraExit:
     def test_api_error_openai_patterns_in_assistant_messages(self, signal: str) -> None:
         """Non-rate-limit OpenAI/Codex error pattern in assistant_messages → API_ERROR."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -297,7 +298,7 @@ class TestClassifyInfraExit:
     def test_rate_limit_codex_patterns_in_stderr(self, signal: str) -> None:
         """Rate-limit Codex error pattern in stderr → RATE_LIMITED."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -312,7 +313,7 @@ class TestClassifyInfraExit:
     def test_rate_limit_codex_patterns_in_assistant_messages(self, signal: str) -> None:
         """Rate-limit Codex error pattern in assistant_messages → RATE_LIMITED."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="",
@@ -333,7 +334,7 @@ class TestCodexContextExhaustion:
 
     def test_context_length_exceeded_in_errors_produces_context_exhausted(self):
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
@@ -347,7 +348,7 @@ class TestCodexContextExhaustion:
 
     def test_rate_limit_exceeded_is_rate_limited_not_context_exhausted(self):
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
@@ -367,7 +368,7 @@ class TestContextExhaustionCapabilityGate:
         """capability=False + context exhaustion signals → NOT CONTEXT_EXHAUSTED."""
         caps = BackendCapabilities(supports_context_exhaustion_detection=False)
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=True,
             result="prompt is too long",
             session_id="s1",
@@ -383,7 +384,7 @@ class TestContextExhaustionCapabilityGate:
         """capability=True + context exhaustion signals → CONTEXT_EXHAUSTED."""
         caps = BackendCapabilities(supports_context_exhaustion_detection=True)
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=True,
             result="prompt is too long",
             session_id="s1",
@@ -399,7 +400,7 @@ class TestContextExhaustionCapabilityGate:
         """capability=False + Codex stderr pattern → NOT CONTEXT_EXHAUSTED."""
         caps = BackendCapabilities(supports_context_exhaustion_detection=False)
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=True,
             result="",
             session_id="s1",
@@ -414,7 +415,7 @@ class TestContextExhaustionCapabilityGate:
         """capability=True + Codex stderr pattern → CONTEXT_EXHAUSTED."""
         caps = BackendCapabilities(supports_context_exhaustion_detection=True)
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=True,
             result="",
             session_id="s1",
@@ -504,7 +505,7 @@ class TestCodexContextExhaustionFromTurnFailed:
 
     def test_stderr_non_exhaustion_not_context_exhausted(self) -> None:
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=False,
             result="",
             session_id="s1",
@@ -520,7 +521,7 @@ class TestContextExhaustionCapabilityGate:
         """capability=False: session that would be CONTEXT_EXHAUSTED falls through."""
         caps = replace(CLAUDE_CODE_CAPABILITIES, supports_context_exhaustion_detection=False)
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=True,
             result="prompt is too long",
             session_id="s1",
@@ -536,7 +537,7 @@ class TestContextExhaustionCapabilityGate:
         """capability=True: same session correctly classifies as CONTEXT_EXHAUSTED."""
         caps = replace(CLAUDE_CODE_CAPABILITIES, supports_context_exhaustion_detection=True)
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=True,
             result="prompt is too long",
             session_id="s1",
@@ -553,7 +554,7 @@ class TestRateLimitClassification:
     def test_rate_limited_text_classified_as_rate_limited(self) -> None:
         """Session text containing 'rate limited' → RATE_LIMITED (not API_ERROR)."""
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=False,
             result=(
                 "API Error: Server is temporarily limiting requests"
@@ -571,7 +572,7 @@ class TestRateLimitClassification:
     def test_api_error_status_429_classified_as_rate_limited(self) -> None:
         """api_error_status=429 → RATE_LIMITED (not API_ERROR)."""
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=False,
             result="done",
             session_id="s1",
@@ -586,7 +587,7 @@ class TestRateLimitClassification:
     def test_api_error_status_400_classified_as_api_error(self) -> None:
         """api_error_status=400 (bad request) → API_ERROR (not RATE_LIMITED)."""
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=False,
             result="done",
             session_id="s1",
@@ -600,7 +601,7 @@ class TestRateLimitClassification:
     def test_api_error_status_below_400_does_not_trigger(self) -> None:
         """api_error_status=200 → COMPLETED (no infra failure)."""
         session = ClaudeSessionResult(
-            subtype="success",
+            subtype=CliSubtype.SUCCESS,
             is_error=False,
             result="done",
             session_id="s1",
@@ -618,7 +619,7 @@ class TestRateLimitClassification:
         rate-limit do not downgrade to API_ERROR.
         """
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
@@ -634,7 +635,7 @@ class TestRateLimitClassification:
     def test_rate_limited_text_in_result_no_status_code(self) -> None:
         """'rate limited' text in result (no numeric status) → RATE_LIMITED."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="Error: You are being rate limited. Please wait.",
             session_id="s1",
@@ -654,7 +655,7 @@ class TestRateLimitClassification:
 def test_positive_signal_death_codes_classified_as_process_killed(returncode: int) -> None:
     """Shell-convention signal codes (128+N) must classify as PROCESS_KILLED (Test 1A)."""
     session = ClaudeSessionResult(
-        subtype="empty_output",
+        subtype=CliSubtype.EMPTY_OUTPUT,
         is_error=True,
         result="",
         session_id="s1",

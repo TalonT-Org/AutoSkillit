@@ -1,6 +1,6 @@
 """Versioned probe result cache with 24-hour TTL.
 
-IL-0 module: imports only stdlib and `autoskillit.core`. Stores a per-cli-version
+IL-1 module: imports only stdlib and `autoskillit.core`. Stores a per-cli-version
 `ProbeResult` keyed by `cli_version`, surviving across runs while staying
 under `PROBE_CACHE_TTL`.
 """
@@ -60,4 +60,4 @@ def write_probe_cache(cache_path: Path, result: ProbeResult) -> None:
         }
         write_versioned_json(cache_path, {"entries": entries}, _SCHEMA_VERSION)
     except OSError:
-        pass
+        logger.debug("probe_cache_write_failed", path=str(cache_path), exc_info=True)

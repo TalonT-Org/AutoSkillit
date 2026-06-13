@@ -59,6 +59,28 @@ class TestLocateSession:
     def test_guards_invalid_ids(self, sid):
         assert CompositeSessionLocator().locate_session(sid) is None
 
+    def test_skips_failing_backend(self, monkeypatch):
+        class _FailLocator:
+            def locate_session(self, session_id):
+                raise RuntimeError("backend unavailable")
+
+            def project_log_dir(self, cwd):
+                return Path("/stub")
+
+            def session_log_path(self, cwd, session_id):
+                return None
+
+        hit = Path("/found/session.jsonl")
+        registry = {
+            "broken": _fake_backend(_FailLocator()),
+            "good": _fake_backend(_StubLocator(hit)),
+        }
+        import autoskillit.execution.backends as backends_mod
+
+        monkeypatch.setattr(backends_mod, "BACKEND_REGISTRY", registry)
+
+        assert CompositeSessionLocator().locate_session("sid-1") == hit
+
 
 class TestProjectLogDirFor:
     def test_dispatches_by_name(self, monkeypatch):

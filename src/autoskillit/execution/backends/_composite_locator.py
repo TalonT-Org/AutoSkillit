@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from autoskillit.core import SessionLocator
+if TYPE_CHECKING:
+    from autoskillit.core import SessionLocator
 
 
 @dataclass(frozen=True, slots=True)
-class CompositeSessionLocator(SessionLocator):
+class CompositeSessionLocator:
     def locate_session(self, session_id: str) -> Path | None:
         if not session_id or session_id.startswith(("no_session_", "crashed_")):
             return None

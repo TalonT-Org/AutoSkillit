@@ -311,6 +311,7 @@ async def _execute_claude_headless(
                     max_sessions=ctx.config.linux_tracing.max_sessions,
                     model_identity=model_identity,
                     backend=cast(Literal["claude-code", "codex"], _step_backend.name),
+                    channel_b_capable=_step_backend.capabilities.channel_b_capable,
                     comm_aliases=_step_backend.capabilities.process_name_aliases,
                     telemetry=_build_error_path_telemetry(
                         ctx.github_api_log,
@@ -374,6 +375,7 @@ async def _execute_claude_headless(
                         max_sessions=ctx.config.linux_tracing.max_sessions,
                         model_identity=model_identity,
                         backend=cast(Literal["claude-code", "codex"], _step_backend.name),
+                        channel_b_capable=_step_backend.capabilities.channel_b_capable,
                         comm_aliases=_step_backend.capabilities.process_name_aliases,
                         telemetry=_build_error_path_telemetry(
                             ctx.github_api_log,
@@ -566,6 +568,7 @@ async def _execute_claude_headless(
                 model_identity=model_identity,
                 is_resume=spec.is_resume,
                 backend=cast(Literal["claude-code", "codex"], _step_backend.name),
+                channel_b_capable=_step_backend.capabilities.channel_b_capable,
             )
         except Exception:
             logger.debug("session_log_flush_failed", exc_info=True)

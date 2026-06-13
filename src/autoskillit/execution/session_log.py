@@ -153,6 +153,7 @@ def flush_session_log(
     is_resume: bool = False,
     session_locator: SessionLocator | None = None,
     backend: Literal["claude-code", "codex"] = "claude-code",
+    channel_b_capable: bool = True,
     telemetry: SessionTelemetry,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -194,7 +195,7 @@ def flush_session_log(
         _composite = CompositeSessionLocator()
         _locator = _composite.locator_for(backend)
 
-    if backend == "claude-code":
+    if channel_b_capable:
         cc_log = _locator.session_log_path(cwd, session_id)
         cc_log_str = str(cc_log) if cc_log else None
     else:

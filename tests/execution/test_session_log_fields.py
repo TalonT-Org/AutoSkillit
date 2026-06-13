@@ -1179,6 +1179,7 @@ class TestCodexLogFields:
         flush_session_log(
             log_dir=str(tmp_path),
             backend="codex",
+            channel_b_capable=False,
             session_locator=_FakeLocator(codex_log),
             cwd="/some/worktree",
             session_id="codex-session-001",
@@ -1234,6 +1235,7 @@ class TestCodexLogFields:
         flush_session_log(
             log_dir=str(tmp_path),
             backend="codex",
+            channel_b_capable=False,
             session_locator=_FakeLocator(codex_log),
             cwd="/some/worktree",
             session_id="codex-session-002",
@@ -1263,6 +1265,7 @@ class TestCodexLogFields:
             start_ts="2026-05-26T08:00:00",
             proc_snapshots=None,
             backend="codex",
+            channel_b_capable=False,
             session_locator=_FakeLocator(None),
             telemetry=SessionTelemetry.empty(),
             provider_outcome=ProviderOutcome.none_used(),

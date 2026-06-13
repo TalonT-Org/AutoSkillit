@@ -176,7 +176,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _cmd_rpc_issues.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
     ("src/autoskillit/recipe/_cmd_rpc_issues.py", 77),
     # _probe_canary.py — CanaryState save() 3-field state file (intentionally unversioned)
-    ("src/autoskillit/_probe_canary.py", 48),
+    ("src/autoskillit/_probe_canary.py", 50),
 }
 
 

@@ -35,7 +35,7 @@ _RECIPE_READ_CMD_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"src/autoskillit/agents/.*\.md"),
 ]
 
-_RECIPE_READ_CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"^autoskillit\.recipe\.(?!_cmd_rpc)")
+_RECIPE_READ_CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"autoskillit\.recipe\.(?!_cmd_rpc)")
 
 
 def _get_ctx():  # type: ignore[return]
@@ -165,7 +165,7 @@ def _check_recipe_read_prohibition(
                     "for skill instructions."
                 )
     if callable_name is not None:
-        if _RECIPE_READ_CALLABLE_PATTERN.search(callable_name):
+        if _RECIPE_READ_CALLABLE_PATTERN.match(callable_name):
             return gate_error_result(
                 f"run_python {RECIPE_READ_DENY_TRIGGER}. "
                 "Use load_recipe to recall step definitions."

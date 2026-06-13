@@ -92,7 +92,7 @@ class TestToolFailureEnvelope:
         from autoskillit.server.tools._types import ToolFailureEnvelope
 
         hints = typing.get_type_hints(ToolFailureEnvelope)
-        assert hints["success"] is typing.Literal[False]
+        assert typing.get_args(hints["success"]) == (False,)
 
     def test_server_failure_envelope_factory(self):
         from autoskillit.server.tools._types import server_failure_envelope

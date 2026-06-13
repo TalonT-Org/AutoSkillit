@@ -11,7 +11,7 @@ Package root — entry points, hook registry, and cross-cutting utilities.
 | `_llm_triage.py` | Contract staleness triage (Haiku subprocess) |
 | `smoke_utils/` | Callables for smoke-test pipeline `run_python` steps (package) |
 | `hook_registry.py` | `HookDef`, `HOOK_REGISTRY`, `generate_hooks_json` |
-| `_probe_canary.py` | Canary state machine and GitHub issue updater for live probes (IL-0) |
+| `_probe_canary.py` | Canary state machine and GitHub issue updater for live probes (IL-1) |
 | `_test_filter.py` | Test filter manifest: glob-to-test-directory mapping |
 | `version.py` | Version health utilities (IL-0) |
 

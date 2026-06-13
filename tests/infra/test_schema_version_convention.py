@@ -117,13 +117,13 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
     # _lifespan.py — hooks.json self-heal on startup drift (co-owned with Claude plugin system)
-    ("src/autoskillit/server/_lifespan.py", 89),
+    ("src/autoskillit/server/_lifespan.py", 90),
     # tools_kitchen.py — hook config, quota guard, git_ops_policy, ingredient locks overlay
     ("src/autoskillit/server/tools/tools_kitchen.py", 200),
     ("src/autoskillit/server/tools/tools_kitchen.py", 219),
     ("src/autoskillit/server/tools/tools_kitchen.py", 253),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 1003),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 1063),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 998),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 1058),
     # tools_pipeline_tracker.py — tracker_data dict
     ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 166),
     # tools_status.py — mcp_data dict

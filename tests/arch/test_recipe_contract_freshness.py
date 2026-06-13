@@ -6,11 +6,10 @@ not silently shrink.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
-import yaml
 
+from autoskillit.core.io import load_yaml
 from autoskillit.recipe.io import builtin_recipes_dir
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -39,7 +38,7 @@ def test_json_card_content_parity(stem: str) -> None:
     json_path = _CONTRACTS_DIR / f"{stem}.json"
     if not json_path.is_file():
         pytest.skip(f"JSON card missing for '{stem}' (covered by test_json_card_exists)")
-    yaml_data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    yaml_data = load_yaml(yaml_path)
     json_data = json.loads(json_path.read_text(encoding="utf-8"))
     assert yaml_data == json_data, (
         f"Content mismatch between '{stem}.yaml' and '{stem}.json'. "

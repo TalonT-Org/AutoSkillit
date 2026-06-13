@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re as _re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Final, Literal
 
 from ._type_constants_env import (
     AGENT_BACKEND_CLAUDE_CODE,
@@ -36,7 +36,7 @@ class InvariantDef:
 _BOTH = frozenset({AGENT_BACKEND_CLAUDE_CODE, AGENT_BACKEND_CODEX})
 _CLAUDE_ONLY = frozenset({AGENT_BACKEND_CLAUDE_CODE})
 
-INVARIANT_REGISTRY: dict[str, InvariantDef] = {
+INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
     "run-in-background": InvariantDef(
         id="run-in-background",
         prohibition="run_in_background=true is prohibited in skill sessions",

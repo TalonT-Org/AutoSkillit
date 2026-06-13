@@ -183,9 +183,7 @@ def flush_session_log(
     else:
         dir_name = f"no_session_{start_ts.replace(':', '-')}"
 
-    from autoskillit.execution.backends._composite_locator import (
-        CompositeSessionLocator,
-    )
+    from autoskillit.execution.backends import CompositeSessionLocator
 
     _codex_log_str: str | None = None
 

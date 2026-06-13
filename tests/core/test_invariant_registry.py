@@ -132,7 +132,7 @@ def test_registry_keys_are_lowercase_kebab() -> None:
 
     from autoskillit.core import INVARIANT_REGISTRY
 
-    pattern = re.compile(r"^[a-z][a-z0-9]*(-[a-zA-Z0-9]+)*$")
+    pattern = re.compile(r"^[a-z][a-z0-9]*(-([a-z0-9]+|L[0-9]+))*$")
     for key in INVARIANT_REGISTRY:
         assert pattern.match(key), f"Key {key!r} does not match kebab-case pattern"
 

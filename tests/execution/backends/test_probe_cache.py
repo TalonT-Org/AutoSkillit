@@ -97,7 +97,7 @@ class TestReadProbeCache:
                 "1.0.0": {
                     "passed": True,
                     "failure_detail": None,
-                    "probe_timestamp": "2026-06-13T10:00:00",
+                    "probe_timestamp": "2000-01-01T00:00:00",
                 },
             },
         )
@@ -125,9 +125,11 @@ class TestWriteProbeCache:
         p = tmp_path / "readonly-dir" / "cache.json"
         (tmp_path / "readonly-dir").mkdir()
         (tmp_path / "readonly-dir").chmod(0o444)
-        write_probe_cache(p, _make_result())
-        (tmp_path / "readonly-dir").chmod(0o755)
-        assert not p.exists()
+        try:
+            write_probe_cache(p, _make_result())
+            assert not p.exists()
+        finally:
+            (tmp_path / "readonly-dir").chmod(0o755)
 
     def test_overwrites_same_version(self, tmp_path: Path) -> None:
         p = tmp_path / "cache.json"

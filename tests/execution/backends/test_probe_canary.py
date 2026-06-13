@@ -5,6 +5,7 @@ from pathlib import Path
 from subprocess import CompletedProcess
 
 import pytest
+import structlog.testing
 
 from autoskillit._probe_canary import (
     N_CONSECUTIVE_FLAKE_GUARD,
@@ -128,6 +129,7 @@ class TestCanaryIssueUpdater:
             if args[0:2] == ["issue", "list"]:
                 return CompletedProcess(args=args, returncode=0, stdout="[]", stderr="")
             if args[0:2] == ["issue", "create"]:
+                assert "--body-file" in args
                 return CompletedProcess(
                     args=args,
                     returncode=0,
@@ -153,6 +155,7 @@ class TestCanaryIssueUpdater:
                     stderr="",
                 )
             if args[0:2] == ["issue", "edit"]:
+                assert "--body-file" in args
                 return CompletedProcess(args=args, returncode=0, stdout="", stderr="")
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
@@ -191,6 +194,8 @@ class TestCanaryIssueUpdater:
         monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
         updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
-        num = updater.ensure_issue(state, "Probe failure", "Updated body")
+        with structlog.testing.capture_logs() as cap_logs:
+            num = updater.ensure_issue(state, "Probe failure", "Updated body")
         assert num == 42
         assert state.last_issue_number == 42
+        assert any(e.get("event") == "canary_issue_edit_failed" for e in cap_logs)

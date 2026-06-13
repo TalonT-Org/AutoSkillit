@@ -7,7 +7,7 @@ and server internals — not cross-layer protocols.
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 from autoskillit.core import ModelTotalEntry, RetryReason
 
@@ -20,6 +20,9 @@ __all__ = [
     "TimingSummaryResult",
     "KitchenStatusResult",
     "DispatchEnvelopeResult",
+    "ToolFailureEnvelope",
+    "server_failure_envelope",
+    "input_failure_envelope",
 ]
 
 
@@ -190,3 +193,53 @@ class DispatchEnvelopeResult(TypedDict, total=False):
     error: str
     user_visible_message: str
     details: dict[str, Any] | None
+
+
+class _ToolFailureEnvelopeRequired(TypedDict):
+    """Required fields for the structured failure envelope."""
+
+    success: Literal[False]
+    error: str
+    stage: str
+    retriable: bool
+
+
+class ToolFailureEnvelope(_ToolFailureEnvelopeRequired, total=False):
+    """Typed failure envelope with retriable discriminator for orchestrator routing.
+
+    Distinct from ``_kitchen_failure_envelope`` in tools_kitchen.py which returns
+    a raw JSON string with a ``kitchen`` field. This TypedDict provides a typed
+    dict contract with a ``retriable`` discriminator for P5-A4 orchestrator routing.
+    """
+
+    user_visible_message: str
+
+
+def server_failure_envelope(
+    exc: BaseException,
+    stage: str,
+) -> ToolFailureEnvelope:
+    """Build a failure envelope for server/infrastructure errors (retriable=True)."""
+    return ToolFailureEnvelope(
+        success=False,
+        error=f"{type(exc).__name__}: {exc}",
+        stage=stage,
+        retriable=True,
+        user_visible_message=(
+            f"Server error during {stage}: {type(exc).__name__}. "
+            "This may be transient — the orchestrator may retry."
+        ),
+    )
+
+
+def input_failure_envelope(
+    message: str,
+    stage: str,
+) -> ToolFailureEnvelope:
+    """Build a failure envelope for input/validation errors (retriable=False)."""
+    return ToolFailureEnvelope(
+        success=False,
+        error=message,
+        stage=stage,
+        retriable=False,
+    )

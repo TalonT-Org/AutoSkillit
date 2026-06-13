@@ -15071,5 +15071,11 @@
     "tests/server/test_tools_git.py",
     "tests/server/test_tools_git_merge_cleanup.py",
     "tests/workspace/test_worktree.py"
+  ],
+  "src/autoskillit/_probe_canary.py": [
+    "tests/execution/backends/test_probe_canary.py"
+  ],
+  "src/autoskillit/execution/backends/_probe_cache.py": [
+    "tests/execution/backends/test_probe_cache.py"
   ]
 }

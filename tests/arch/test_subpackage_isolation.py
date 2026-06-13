@@ -77,6 +77,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
         "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
+        "_probe_cache",  # execution/backends/_probe_cache.py: PROBE_CACHE_TTL = timedelta(...)
         # _STABLE_DISMISS_WINDOW = timedelta(days=7), _DEV_DISMISS_WINDOW = timedelta(hours=12)
         "_install_info",  # cli/_install_info.py: window constants (see comment above)
         # KITCHEN_GUARDED_COMMANDS: frozenset[str]
@@ -881,7 +882,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe/rules": 51,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable  # noqa: E501
         "server/tools": 27,  # +_preflight.py (dispatch-feasibility preflight)
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
-        "execution/backends": 11,  # +_composite_locator.py (CompositeSessionLocator)
+        "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

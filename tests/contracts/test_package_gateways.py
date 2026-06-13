@@ -397,6 +397,7 @@ def test_root_module_allowlist() -> None:
             "__init__.py",
             "__main__.py",
             "_llm_triage.py",
+            "_probe_canary.py",
             "_test_filter.py",
             "hook_registry.py",
             "version.py",

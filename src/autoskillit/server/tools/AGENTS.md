@@ -9,7 +9,7 @@ MCP `@mcp.tool()` handlers registered on import (20 tool modules).
 | `__init__.py` | Docstring-only — tools register via `@mcp.tool()` on import |
 | `_auto_overrides.py` | Shared `_build_auto_overrides()` factory for server-authoritative ingredient injection |
 | `_cancellation_shield.py` | `_cancellation_shield` decorator — catches `asyncio.CancelledError` at MCP tool boundary, returns structured JSON |
-| `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, etc.) |
+| `_types.py` | TypedDict definitions for server tool JSON responses (RunSkillResult, RunCmdResult, ToolFailureEnvelope, etc.) and failure envelope factory helpers |
 | `tools_kitchen.py` | `open_kitchen`, `close_kitchen` (gate lifecycle), `recipe://` MCP resource |
 | `tools_config.py` | `configure_fleet`, `configure_order` (session config overlay) |
 | `tools_agents.py` | `unlock_agent_pack` tool + `agent://` resource templates |

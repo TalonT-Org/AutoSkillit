@@ -65,3 +65,76 @@ class TestServerToolTypesNotInCore:
         from autoskillit.core.types._type_results import ModelTotalEntry
 
         assert "model" in ModelTotalEntry.__required_keys__
+
+
+class TestToolFailureEnvelope:
+    """Verify ToolFailureEnvelope TypedDict and factory helpers."""
+
+    def test_tool_failure_envelope_importable(self):
+        from autoskillit.server.tools._types import ToolFailureEnvelope
+
+        assert "success" in ToolFailureEnvelope.__required_keys__
+
+    def test_tool_failure_envelope_required_keys(self):
+        from autoskillit.server.tools._types import ToolFailureEnvelope
+
+        expected = {"success", "error", "stage", "retriable"}
+        assert expected <= ToolFailureEnvelope.__required_keys__
+
+    def test_tool_failure_envelope_optional_keys(self):
+        from autoskillit.server.tools._types import ToolFailureEnvelope
+
+        assert "user_visible_message" in ToolFailureEnvelope.__optional_keys__
+
+    def test_tool_failure_envelope_success_type(self):
+        import typing
+
+        from autoskillit.server.tools._types import ToolFailureEnvelope
+
+        hints = typing.get_type_hints(ToolFailureEnvelope)
+        assert typing.get_args(hints["success"]) == (False,)
+
+    def test_server_failure_envelope_factory(self):
+        from autoskillit.server.tools._types import server_failure_envelope
+
+        result = server_failure_envelope(ValueError("boom"), "init")
+        assert result["success"] is False
+        assert result["retriable"] is True
+        assert result["stage"] == "init"
+        assert "ValueError" in result["error"]
+        assert "boom" in result["error"]
+
+    def test_input_failure_envelope_factory(self):
+        from autoskillit.server.tools._types import input_failure_envelope
+
+        result = input_failure_envelope("bad input", "validate")
+        assert result["success"] is False
+        assert result["retriable"] is False
+        assert result["stage"] == "validate"
+        assert result["error"] == "bad input"
+
+    def test_server_failure_envelope_user_visible_message(self):
+        from autoskillit.server.tools._types import server_failure_envelope
+
+        result = server_failure_envelope(RuntimeError("oops"), "startup")
+        assert "user_visible_message" in result
+        assert len(result["user_visible_message"]) > 0
+
+    def test_tool_failure_envelope_in_all(self):
+        from autoskillit.server.tools._types import __all__ as types_all
+
+        assert "ToolFailureEnvelope" in types_all
+        assert "server_failure_envelope" in types_all
+        assert "input_failure_envelope" in types_all
+
+    def test_tool_failure_envelope_distinct_from_kitchen_envelope(self):
+        from autoskillit.server.tools._types import ToolFailureEnvelope
+        from autoskillit.server.tools.tools_kitchen import (
+            _kitchen_failure_envelope,
+        )
+
+        assert "retriable" in ToolFailureEnvelope.__required_keys__
+        all_keys = ToolFailureEnvelope.__required_keys__ | ToolFailureEnvelope.__optional_keys__
+        assert "kitchen" not in all_keys
+        result = _kitchen_failure_envelope(ValueError("x"), "test")
+        assert isinstance(result, str)

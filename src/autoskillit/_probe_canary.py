@@ -7,6 +7,8 @@ persistence + flake-guard primitives that live probe classes build on.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass
 from enum import StrEnum, unique
 from pathlib import Path
@@ -71,17 +73,23 @@ class CanaryIssueUpdater:
     def ensure_issue(self, state: CanaryState, title: str, body: str) -> int:
         existing = self._find_existing(title)
         if existing is not None:
-            result = run_gh(
-                [
-                    "issue",
-                    "edit",
-                    str(existing),
-                    "--repo",
-                    f"{self._owner}/{self._repo}",
-                    "--body",
-                    body,
-                ],
-            )
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+                f.write(body)
+                body_path = f.name
+            try:
+                result = run_gh(
+                    [
+                        "issue",
+                        "edit",
+                        str(existing),
+                        "--repo",
+                        f"{self._owner}/{self._repo}",
+                        "--body-file",
+                        body_path,
+                    ],
+                )
+            finally:
+                os.unlink(body_path)
             if result.returncode != 0:
                 logger.warning(
                     "canary_issue_edit_failed",
@@ -90,24 +98,34 @@ class CanaryIssueUpdater:
                 )
             state.last_issue_number = existing
             return existing
-        result = run_gh(
-            [
-                "issue",
-                "create",
-                "--repo",
-                f"{self._owner}/{self._repo}",
-                "--title",
-                title,
-                "--body",
-                body,
-                "--json",
-                "number",
-            ],
-        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+            f.write(body)
+            body_path = f.name
+        try:
+            result = run_gh(
+                [
+                    "issue",
+                    "create",
+                    "--repo",
+                    f"{self._owner}/{self._repo}",
+                    "--title",
+                    title,
+                    "--body-file",
+                    body_path,
+                    "--json",
+                    "number",
+                ],
+            )
+        finally:
+            os.unlink(body_path)
         if result.returncode != 0:
             msg = f"gh issue create failed: {result.stderr}"
             raise RuntimeError(msg)
-        issue_number = json.loads(result.stdout)["number"]
+        try:
+            issue_number = json.loads(result.stdout)["number"]
+        except (json.JSONDecodeError, KeyError) as exc:
+            msg = f"gh issue create returned unexpected output: {result.stdout!r}"
+            raise RuntimeError(msg) from exc
         state.last_issue_number = issue_number
         return issue_number
 

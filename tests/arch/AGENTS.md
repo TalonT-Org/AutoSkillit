@@ -77,6 +77,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_pyright_suppression_allowlist.py` | REQ-PYRIGHT-001: pyright/type-ignore suppression allowlist + count budget |
 | `test_python_no_hardcoded_temp.py` | Architectural invariant: no literal `.autoskillit/temp` outside the whitelist |
 | `test_quota_capability_isolation.py` | AST guard: quota modules must not reference BackendCapabilities fields |
+| `test_recipe_diagram_freshness.py` | Parametrized diagram freshness enforcement: bundled recipes must have non-stale diagrams; missing diagrams are xfail(strict=True) with shrink-enforcement meta-test |
 | `test_recipe_rule_registration.py` | REQ-RECIPE-001: every recipe/rules_*.py file must be imported by recipe/__init__.py |
 | `test_rule_severity_consistency.py` | AST guards: rule functions must use make_finding()/make_block_finding(); RuleFinding severity must match @semantic_rule decorator severity; _KNOWN_NON_CONFORMING_RULES entries must carry tracking comments |
 | `test_regex_guards.py` | Arch guard: keyword regexes in cmd-scanning rules must use path-safe lookbehind guards |

@@ -415,16 +415,20 @@ def test_shape_field_obligations_per_kind():
     }
     out_c, _ = _run_hook(event=event_c)
     text_c = json.loads(out_c)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    completed_expected = {
+        "dispatch_status": "dispatch_status: success",
+        "dispatch_id": "dispatch_id: d-shape-c",
+        "dispatched_session_id": "dispatched_session_id: s-shape-c",
+        "reason": "reason: ok",
+    }
     for field in completed_required:
-        key = field
-        if key == "dispatch_status":
-            assert "dispatch_status: success" in text_c
-        elif key == "dispatch_id":
-            assert "dispatch_id: d-shape-c" in text_c
-        elif key == "dispatched_session_id":
-            assert "dispatched_session_id: s-shape-c" in text_c
-        elif key == "reason":
-            assert "reason: ok" in text_c
+        assert field in completed_expected, (
+            f"Field {field!r} from _FMT_DISPATCH_COMPLETED_REQUIRED has no expected value — "
+            f"add it to completed_expected and completed_payload"
+        )
+        assert completed_expected[field] in text_c, (
+            f"Completed shape missing {field!r}: expected {completed_expected[field]!r} in output"
+        )
 
     rejected_payload = {
         "kind": "rejected",
@@ -439,11 +443,18 @@ def test_shape_field_obligations_per_kind():
     }
     out_r, _ = _run_hook(event=event_r)
     text_r = json.loads(out_r)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    rejected_expected = {
+        "error": "fleet_quota_exhausted",
+        "user_visible_message": "quota hit",
+    }
     for field in rejected_required:
-        if field == "error":
-            assert "fleet_quota_exhausted" in text_r
-        elif field == "user_visible_message":
-            assert "quota hit" in text_r
+        assert field in rejected_expected, (
+            f"Field {field!r} from _FMT_DISPATCH_REJECTED_REQUIRED has no expected value — "
+            f"add it to rejected_expected and rejected_payload"
+        )
+        assert rejected_expected[field] in text_r, (
+            f"Rejected shape missing {field!r}: expected {rejected_expected[field]!r} in output"
+        )
 
 
 def test_json_producer_includes_completed_failure():

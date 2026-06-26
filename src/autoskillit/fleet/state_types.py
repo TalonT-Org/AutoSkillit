@@ -25,6 +25,7 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "attempt_history",
         "session_chain",
         "resume_count",
+        "issue_url",
     }
 )
 

@@ -273,7 +273,7 @@ def test_pending_dispatch_too_fresh_skipped(tmp_path):
         issue_url=_ISSUE_URL,
         labels_cleaned=False,
         dispatched_session_id="",
-        attempt_history=[{"ended_at": time.time() - 10, "status": "failure"}],
+        attempt_history=[{"ended_at": time.time() - 5, "status": "failure"}],
     )
     _write_state(sp, [d])
 

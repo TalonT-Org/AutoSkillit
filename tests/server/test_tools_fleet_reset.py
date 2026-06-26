@@ -103,7 +103,9 @@ class TestResetDispatchHappyPath:
 
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 
-        raw = await reset_dispatch(dispatch_id="d-abc123", reset_to="queued")
+        raw = await reset_dispatch(
+            dispatch_id="d-abc123", reset_to="queued", destroy_artifacts=True
+        )
         result = json.loads(raw)
 
         assert result["success"] is True
@@ -366,7 +368,7 @@ class TestResetDispatchEdgeCases:
 
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 
-        raw = await reset_dispatch(dispatch_id="d-abc123")
+        raw = await reset_dispatch(dispatch_id="d-abc123", destroy_artifacts=True)
         result = json.loads(raw)
         assert result["success"] is True
         assert "https://github.com/owner/repo/pull/99" in result["prs_closed"]
@@ -443,7 +445,9 @@ class TestResetDispatchProtection:
 
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 
-        raw = await reset_dispatch(dispatch_id="d-abc123", reset_to="queued")
+        raw = await reset_dispatch(
+            dispatch_id="d-abc123", reset_to="queued", destroy_artifacts=True
+        )
         result = json.loads(raw)
 
         assert result["success"] is True

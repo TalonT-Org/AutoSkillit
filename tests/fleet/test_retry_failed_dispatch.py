@@ -476,3 +476,23 @@ class TestSnapshotCompleteness:
                 assert snapshot[key] == expected_val, (
                     f"Snapshot[{key!r}] = {snapshot[key]!r}, expected {expected_val!r}"
                 )
+
+
+# --- identity-field coverage: issue_url ---
+
+
+def test_issue_url_in_retry_identity_fields():
+    """issue_url is an identity field — it survives retry resets."""
+    assert "issue_url" in _RETRY_IDENTITY_FIELDS
+
+
+def test_issue_url_preserved_on_clear_dispatch_for_retry():
+    """issue_url retains its value after _clear_dispatch_for_retry."""
+    d = DispatchRecord(
+        name="d1",
+        status=DispatchStatus.FAILURE,
+        issue_url="https://github.com/org/repo/issues/1",
+    )
+    _clear_dispatch_for_retry(d)
+    assert d.status == DispatchStatus.PENDING
+    assert d.issue_url == "https://github.com/org/repo/issues/1"

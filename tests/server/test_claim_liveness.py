@@ -342,3 +342,36 @@ class TestClaimHelperTerminalDispatchRecovery:
         assert decision.stale_label_cleaned is True
         cleanup_mock.assert_called_once()
         assert cleanup_mock.call_args.kwargs["issue_url"] == _ISSUE_URL
+
+
+class TestClaimHelperPendingDispatch:
+    @pytest.mark.anyio
+    async def test_pending_dispatch_blocks_claim(self):
+        """PENDING dispatch (from a retry reset) blocks claim to prevent double-dispatch."""
+        from autoskillit.server.tools._claim_helpers import _try_claim_with_liveness
+
+        pending = DispatchRecord(
+            name="d-pending",
+            status=DispatchStatus.PENDING,
+            issue_url=_ISSUE_URL,
+            attempt_history=[{"ended_at": 0.0, "status": "failure"}],
+        )
+        cleanup_mock = AsyncMock()
+
+        with (
+            patch(f"{_CLAIM_MODULE}.find_dispatch_for_issue", return_value=pending),
+            patch(f"{_CLAIM_MODULE}.cleanup_orphaned_labels", cleanup_mock),
+        ):
+            decision = await _try_claim_with_liveness(
+                issue_url=_ISSUE_URL,
+                issue_number=42,
+                effective_label="in-progress",
+                current_labels=["in-progress"],
+                allow_reentry=False,
+                github_client=AsyncMock(),
+                campaign_state_paths=[],
+            )
+
+        assert decision.claimed is False
+        assert "pending retry" in decision.reason
+        cleanup_mock.assert_not_called()

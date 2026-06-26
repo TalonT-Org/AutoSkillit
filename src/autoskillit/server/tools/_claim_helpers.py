@@ -10,6 +10,7 @@ from autoskillit.core import get_logger
 from autoskillit.fleet import (
     TERMINAL_UNCLEANED_STATUSES,
     CampaignStateMutator,
+    DispatchStatus,
     cleanup_orphaned_labels,
     discover_campaign_state_files,
     find_dispatch_for_issue,
@@ -95,6 +96,14 @@ async def _try_claim_with_liveness(
         if cleaned:
             _mark_dispatch_labels_cleaned(dispatch.name, campaign_state_paths)
         return ClaimDecision(claimed=True, stale_label_cleaned=cleaned)
+    if dispatch.status == DispatchStatus.PENDING:
+        return ClaimDecision(
+            claimed=False,
+            reason=(
+                f"Issue #{issue_number} already has '{effective_label}' label"
+                " — a reset dispatch is pending retry"
+            ),
+        )
     if is_dispatch_session_alive(dispatch):
         return ClaimDecision(
             claimed=False,

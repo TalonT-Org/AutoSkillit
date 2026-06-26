@@ -26,6 +26,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_config_field_coverage.py` | REQ-CONFIG-001: every sub-config dataclass field must be referenced in from_dynaconf |
 | `test_core_public_api_surface.py` | Validates that every symbol in autoskillit.core.__all__ is importable via the public gateway |
 | `test_diagnose_ci_steps.py` | Contract tests for diagnose-ci SKILL.md step numbering and cross-reference integrity |
+| `test_discipline_delivery_matrix.py` | Contract: session-type × backend delivery channel matrix — primary channel populated and SESSION_TYPE env set for all 8 cases |
 | `test_docstring_skill_prefix.py` | Contract: source files must not use /autoskillit: prefix for skills_extended skills |
 | `test_environment_setup_design_contracts.py` | Contract tests verifying the environment-setup skill design doc completeness |
 | `test_ephemeral_skill_namespace.py` | Contract: ephemeral SKILL.md bodies use the correct namespace for the session delivery channel |

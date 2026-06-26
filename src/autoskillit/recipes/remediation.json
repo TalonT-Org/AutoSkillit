@@ -2435,8 +2435,7 @@
         "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-ci"
       },
       "capture": {
-        "diagnosis_path": "${{ result.diagnosis_path }}",
-        "is_fixable": "${{ result.is_fixable }}"
+        "diagnosis_path": "${{ result.diagnosis_path }}"
       },
       "on_success": "resolve_ci",
       "on_failure": "resolve_ci",

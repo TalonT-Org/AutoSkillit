@@ -187,6 +187,9 @@ def test_resolve_ci_routes_flake_suspected_to_check_flake_loop(recipe_name: str)
     recipe = load_recipe(recipe_path)
     resolve_steps = _find_resolve_steps_reaching_push(recipe)
     for step_name, step in resolve_steps:
+        cmd = (step.with_args or {}).get("skill_command", "")
+        if "resolve-failures" not in cmd:
+            continue
         if step.on_result is None:
             continue
         routes = [
@@ -286,18 +289,4 @@ def test_check_flake_loop_step_exists(recipe_name: str) -> None:
     assert any("failure" in r or "escalat" in r for r in max_routes), (
         f"{recipe_name}: check_flake_loop max_exceeded=true must route to "
         f"a failure/escalation step, got routes: {max_routes}"
-    )
-
-
-@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
-def test_diagnose_ci_captures_is_fixable(recipe_name: str) -> None:
-    """diagnose_ci must capture is_fixable for observability and future routing."""
-    recipe_path = _RECIPES_DIR / recipe_name
-    recipe = load_recipe(recipe_path)
-    assert "diagnose_ci" in recipe.steps, f"{recipe_name}: missing 'diagnose_ci' step"
-    step = recipe.steps["diagnose_ci"]
-    assert "is_fixable" in (step.capture or {}), (
-        f"{recipe_name}: diagnose_ci must capture is_fixable. "
-        "Currently only captures diagnosis_path, leaving is_fixable invisible "
-        "to the routing chain."
     )

@@ -17,6 +17,7 @@ IL-2 fleet campaign layer — parallel issue dispatch, semaphore, sidecar, liven
 | `sidecar.py` | Per-issue JSONL sidecar — `IssueSidecarEntry`, append/read/`compute_remaining` helpers |
 | `_dispatch_reaper.py` | Stale dispatch process reaping — `reap_stale_dispatches()`, `reap_stale_dispatches_async()` |
 | `_label_cleanup.py` | Infrastructure-level label cleanup — `cleanup_orphaned_labels`, `sweep_stale_dispatch_labels`, `discover_campaign_state_files` |
+| `_issue_url_helpers.py` | Canonical issue-URL extraction — `extract_issue_urls()` dual-key accessor (plural `issue_urls` wins, singular `issue_url` fallback) |
 | `_liveness.py` | `is_dispatch_session_alive()` — boot_id + starttime_ticks liveness gate |
 | `_semaphore.py` | `FleetSemaphore` — configurable `asyncio.BoundedSemaphore` implementing `FleetLock` |
 | `_sidecar_rpc.py` | `run_python`-callable entry points: `write_sidecar_entry`, `get_remaining_issues` |

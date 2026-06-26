@@ -24,6 +24,7 @@ from autoskillit.core import (
 )
 from autoskillit.fleet._capture import _extract_captures, _normalize_capture_spec
 from autoskillit.fleet._expressions import _CAMPAIGN_REF_RE, _interpolate_campaign_refs
+from autoskillit.fleet._issue_url_helpers import extract_issue_urls
 from autoskillit.fleet._outcome import _checkpoint_to_dict, classify_dispatch_outcome
 from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
@@ -653,7 +654,7 @@ async def _run_dispatch(
         [f"%%L3_DONE::{pid[:8]}%%" for pid in prior_ids] if prior_ids else None
     )
 
-    _issue_urls_raw = effective_ingredients.get("issue_urls", "") if effective_ingredients else ""
+    _issue_urls_raw = extract_issue_urls(effective_ingredients)
 
     def _on_spawn(pid: int, ticks: int) -> None:
         from autoskillit.core import read_boot_id

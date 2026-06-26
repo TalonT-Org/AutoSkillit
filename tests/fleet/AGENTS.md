@@ -23,6 +23,7 @@ Fleet campaign dispatch, state persistence, and sidecar tests.
 | `test_dispatch_recipe_kind_gate.py` | Recipe kind dispatch gate — FOOD_TRUCK accepted, CAMPAIGN rejected |
 | `test_dispatch_crash_diagnostics.py` | Crash path diagnostic persistence and structured logging |
 | `test_dispatch_labels_cleaned.py` | Labels_cleaned field persistence on failure/success outcomes |
+| `test_issue_url_extraction.py` | Unit tests for `extract_issue_urls()` dual-key canonical accessor (singular/plural ingredient key resolution) |
 | `test_dispatch_identity_continuity.py` | Tests for dispatch_id identity continuity on resume — prior_dispatch_id threading through API layer |
 | `test_dispatch_state_handle.py` | Tests for DispatchStateHandle factory and dispatch state invariants — resume path state file creation and capture persistence (Group J) |
 | `test_dispatch_lifespan.py` | Group G (fleet part): lifespan_started surface + envelope propagation |

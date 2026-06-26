@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -239,3 +240,151 @@ def test_running_dispatch_takes_priority_over_failure(tmp_path):
 
     assert result is not None
     assert result.name == "task-run"
+
+
+# --- PENDING dispatch search (Pass 3) ---
+
+
+def test_pending_dispatch_stale_match(tmp_path):
+    """PENDING dispatch with stale attempt_history is returned."""
+    sp = tmp_path / "campaign.json"
+    d = DispatchRecord(
+        name="d1",
+        status=DispatchStatus.PENDING,
+        issue_url=_ISSUE_URL,
+        labels_cleaned=False,
+        dispatched_session_id="",
+        attempt_history=[{"ended_at": time.time() - 120, "status": "failure"}],
+    )
+    _write_state(sp, [d])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [sp])
+
+    assert result is not None
+    assert result.name == "d1"
+
+
+def test_pending_dispatch_too_fresh_skipped(tmp_path):
+    """PENDING dispatch within quiet period is skipped."""
+    sp = tmp_path / "campaign.json"
+    d = DispatchRecord(
+        name="d1",
+        status=DispatchStatus.PENDING,
+        issue_url=_ISSUE_URL,
+        labels_cleaned=False,
+        dispatched_session_id="",
+        attempt_history=[{"ended_at": time.time() - 10, "status": "failure"}],
+    )
+    _write_state(sp, [d])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [sp])
+
+    assert result is None
+
+
+def test_pending_dispatch_no_history_skipped(tmp_path):
+    """PENDING dispatch with empty attempt_history is skipped (never dispatched)."""
+    sp = tmp_path / "campaign.json"
+    d = DispatchRecord(
+        name="d1",
+        status=DispatchStatus.PENDING,
+        issue_url=_ISSUE_URL,
+        labels_cleaned=False,
+        dispatched_session_id="",
+        attempt_history=[],
+    )
+    _write_state(sp, [d])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [sp])
+
+    assert result is None
+
+
+def test_pending_dispatch_with_session_id_skipped(tmp_path):
+    """PENDING dispatch with active dispatched_session_id is skipped."""
+    sp = tmp_path / "campaign.json"
+    d = DispatchRecord(
+        name="d1",
+        status=DispatchStatus.PENDING,
+        issue_url=_ISSUE_URL,
+        labels_cleaned=False,
+        dispatched_session_id="abc",
+        attempt_history=[{"ended_at": time.time() - 120, "status": "failure"}],
+    )
+    _write_state(sp, [d])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [sp])
+
+    assert result is None
+
+
+def test_running_beats_pending(tmp_path):
+    """RUNNING dispatch wins over stale PENDING dispatch."""
+    sidecar = tmp_path / "sidecar.jsonl"
+    _write_sidecar(sidecar, [IssueSidecarEntry(issue_url=_ISSUE_URL, status="completed", ts=_TS)])
+    running = DispatchRecord(
+        name="task-run",
+        status=DispatchStatus.RUNNING,
+        sidecar_path=str(sidecar),
+    )
+    pending = DispatchRecord(
+        name="task-pending",
+        status=DispatchStatus.PENDING,
+        issue_url=_ISSUE_URL,
+        labels_cleaned=False,
+        dispatched_session_id="",
+        attempt_history=[{"ended_at": time.time() - 120, "status": "failure"}],
+    )
+    sp = tmp_path / "campaign.json"
+    _write_state(sp, [pending, running])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [sp])
+
+    assert result is not None
+    assert result.name == "task-run"
+
+
+def test_terminal_beats_pending(tmp_path):
+    """Terminal FAILURE wins over stale PENDING dispatch."""
+    sidecar = tmp_path / "sidecar.jsonl"
+    _write_sidecar(sidecar, [IssueSidecarEntry(issue_url=_ISSUE_URL, status="failed", ts=_TS)])
+    failure = DispatchRecord(
+        name="task-fail",
+        status=DispatchStatus.FAILURE,
+        sidecar_path=str(sidecar),
+        labels_cleaned=False,
+    )
+    pending = DispatchRecord(
+        name="task-pending",
+        status=DispatchStatus.PENDING,
+        issue_url=_ISSUE_URL,
+        labels_cleaned=False,
+        dispatched_session_id="",
+        attempt_history=[{"ended_at": time.time() - 120, "status": "failure"}],
+    )
+    sp = tmp_path / "campaign.json"
+    _write_state(sp, [pending, failure])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [sp])
+
+    assert result is not None
+    assert result.name == "task-fail"
+
+
+def test_pending_dispatch_ended_at_zero_treated_as_stale(tmp_path):
+    """PENDING dispatch with ended_at=0.0 (process crashed unrecorded) is treated as stale."""
+    sp = tmp_path / "campaign.json"
+    d = DispatchRecord(
+        name="d1",
+        status=DispatchStatus.PENDING,
+        issue_url=_ISSUE_URL,
+        labels_cleaned=False,
+        dispatched_session_id="",
+        attempt_history=[{"ended_at": 0.0, "status": "interrupted"}],
+    )
+    _write_state(sp, [d])
+
+    result = find_dispatch_for_issue(_ISSUE_URL, [sp])
+
+    assert result is not None
+    assert result.name == "d1"

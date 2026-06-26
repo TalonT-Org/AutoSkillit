@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -449,3 +449,136 @@ class TestResetDispatchProtection:
         assert result["success"] is True
         assert result["has_protected_artifacts"] is True
         assert "https://github.com/owner/repo/pull/1" in result["protected_prs"]
+
+
+class TestResetDispatchStateOnly:
+    @pytest.mark.anyio
+    async def test_state_only_default(self, build_ctx_open, tmp_path, monkeypatch) -> None:
+        """Default reset_dispatch swaps labels but preserves worktree/branch/PRs."""
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url="https://github.com/owner/repo/pull/1")
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        with (
+            patch(
+                "autoskillit.server.tools.tools_fleet_reset.reset_dispatch_artifacts"
+            ) as mock_rda,
+            patch(
+                "autoskillit.server.tools.tools_fleet_reset.cleanup_orphaned_labels",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_col,
+        ):
+            raw = await reset_dispatch(dispatch_id="d-abc123", reset_to="queued")
+            result = json.loads(raw)
+
+        assert result["success"] is True
+        assert result["destroy_artifacts"] is False
+        assert result["worktree_removed"] is False
+        assert result["local_branch_deleted"] is False
+        assert result["remote_branch_deleted"] is False
+        assert result["prs_closed"] == []
+        mock_rda.assert_not_called()
+        mock_col.assert_called_once()
+
+    @pytest.mark.anyio
+    async def test_destroy_artifacts_true(self, build_ctx_open, tmp_path, monkeypatch) -> None:
+        """destroy_artifacts=True preserves the existing full-destruction behavior."""
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url="https://github.com/owner/repo/pull/1")
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(
+            dispatch_id="d-abc123", reset_to="queued", destroy_artifacts=True
+        )
+        result = json.loads(raw)
+
+        assert result["success"] is True
+        assert result["destroy_artifacts"] is True
+        assert result["worktree_removed"] is True
+        assert result["sidecar_removed"] is True
+        assert result["local_branch_deleted"] is True
+        assert result["remote_branch_deleted"] is True
+        assert "https://github.com/owner/repo/pull/1" in result["prs_closed"]
+
+    @pytest.mark.anyio
+    async def test_state_only_still_cleans_labels(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        """State-only reset swaps labels using dispatch.issue_url."""
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url=None)
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        # Inject issue_url onto the dispatch
+        from autoskillit.fleet.state import read_state
+
+        state = read_state(state_path)
+        assert state is not None
+        state.dispatches[0].issue_url = "https://github.com/owner/repo/issues/5"
+        from autoskillit.fleet.state import CampaignStateMutator
+
+        with CampaignStateMutator(state_path) as m:
+            assert m.state is not None
+            m.state.dispatches[0].issue_url = "https://github.com/owner/repo/issues/5"
+            m.mark_dirty()
+
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        with (
+            patch("autoskillit.server.tools.tools_fleet_reset.reset_dispatch_artifacts"),
+            patch(
+                "autoskillit.server.tools.tools_fleet_reset.cleanup_orphaned_labels",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_col,
+        ):
+            raw = await reset_dispatch(dispatch_id="d-abc123", reset_to="queued")
+            result = json.loads(raw)
+
+        assert result["success"] is True
+        assert result["labels_reset"] is True
+        mock_col.assert_called_once()
+        call_kwargs = mock_col.call_args.kwargs
+        assert call_kwargs["issue_url"] == "https://github.com/owner/repo/issues/5"
+        assert "queued" in call_kwargs["add_labels"]
+
+    @pytest.mark.anyio
+    async def test_force_without_destroy(self, build_ctx_open, tmp_path, monkeypatch) -> None:
+        """force=True bypasses resume gate without destroying artifacts."""
+        sidecar = tmp_path / "sidecar.jsonl"
+        _write_sidecar(sidecar, pr_url="https://github.com/owner/repo/pull/1")
+        state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        with (
+            patch(
+                "autoskillit.server.tools.tools_fleet_reset.reset_dispatch_artifacts"
+            ) as mock_rda,
+            patch(
+                "autoskillit.server.tools.tools_fleet_reset.cleanup_orphaned_labels",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
+            raw = await reset_dispatch(dispatch_id="d-abc123", force=True)
+            result = json.loads(raw)
+
+        assert result["success"] is True
+        assert result["destroy_artifacts"] is False
+        assert result["worktree_removed"] is False
+        assert result["prs_closed"] == []
+        mock_rda.assert_not_called()

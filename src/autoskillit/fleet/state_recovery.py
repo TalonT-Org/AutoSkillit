@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,8 @@ _RESUMABLE_RETRY_REASONS: frozenset[str] = frozenset(
         FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK,
     }
 )
+
+_PENDING_QUIET_PERIOD_SECONDS: float = 60.0
 
 
 def _count_consecutive_resumable_timeouts(history: list[dict[str, Any]]) -> int:
@@ -332,6 +335,7 @@ def find_dispatch_for_issue(
 
     Pass 1: RUNNING dispatches (live session may own the label).
     Pass 2: terminal dispatches (FAILURE, INTERRUPTED) with labels_cleaned=False.
+    Pass 3: PENDING dispatches with a stale attempt_history entry and no active session.
 
     RUNNING takes priority — a live session should not be preempted by an old dead dispatch.
     Returns the first matching DispatchRecord, else None. Reads are filesystem-only.
@@ -375,7 +379,34 @@ def find_dispatch_for_issue(
                 entries = read_sidecar_from_path(Path(d.sidecar_path)).entries
                 if any(e.issue_url == issue_url for e in entries):
                     terminal_match = d
-    return terminal_match
+
+    if terminal_match is not None:
+        return terminal_match
+
+    for state_path in campaign_state_paths:
+        try:
+            state = read_state(state_path)
+        except Exception:
+            logger.warning("Failed to read campaign state from %s", state_path, exc_info=True)
+            continue
+        if state is None:
+            continue
+        for d in state.dispatches:
+            if d.status != DispatchStatus.PENDING:
+                continue
+            if not d.issue_url or d.issue_url != issue_url:
+                continue
+            if d.labels_cleaned:
+                continue
+            if d.dispatched_session_id:
+                continue
+            if not d.attempt_history:
+                continue
+            last_attempt = d.attempt_history[-1]
+            ended_at = last_attempt.get("ended_at", 0.0)
+            if not ended_at or (time.time() - ended_at) > _PENDING_QUIET_PERIOD_SECONDS:
+                return d
+    return None
 
 
 def derive_orchestrator_resume_spec(state: CampaignState) -> NamedResume | NoResume:

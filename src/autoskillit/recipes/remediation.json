@@ -2435,7 +2435,8 @@
         "output_dir": "{{AUTOSKILLIT_TEMP}}/diagnose-ci"
       },
       "capture": {
-        "diagnosis_path": "${{ result.diagnosis_path }}"
+        "diagnosis_path": "${{ result.diagnosis_path }}",
+        "is_fixable": "${{ result.is_fixable }}"
       },
       "on_success": "resolve_ci",
       "on_failure": "resolve_ci",
@@ -2472,7 +2473,7 @@
         },
         {
           "when": "${{ result.verdict }} == 'flake_suspected'",
-          "route": "re_push"
+          "route": "check_flake_loop"
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
@@ -2487,7 +2488,7 @@
         }
       ],
       "on_failure": "release_issue_failure",
-      "note": "Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci structured output to avoid redundant CI failure re-investigation. Routes via on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses (sibling fix may have landed), flake_suspected retries via re_push (bounded by retries: 2 / on_exhausted: release_issue_failure), ci_only_failure escalates to human. Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.\n"
+      "note": "Runs when ci_watch reports a CI failure. Receives ci_failed_jobs from wait_for_ci structured output to avoid redundant CI failure re-investigation. Routes via on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses (sibling fix may have landed), flake_suspected routes to check_flake_loop (bounded by ci_flake_count <= 3, shared across all diagnose_ci callers; escalates to release_issue_failure when exceeded), ci_only_failure escalates to human. Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.\n"
     },
     "pre_resolve_rebase": {
       "tool": "run_python",
@@ -2562,6 +2563,31 @@
         "ci_rebase_count"
       ],
       "note": "Guards the resolve_ci(already_green) → pre_resolve_rebase → diagnose_ci cycle. Caps at 3 rebase-rediagnose iterations. If CI keeps reporting already_green after 3 rebases, a structural issue requires human intervention.\n"
+    },
+    "check_flake_loop": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_loop_iteration",
+        "current_iteration": "${{ context.ci_flake_count }}",
+        "max_iterations": "3"
+      },
+      "capture": {
+        "ci_flake_count": "${{ result.next_iteration }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.max_exceeded }} == true",
+          "route": "release_issue_failure"
+        },
+        {
+          "route": "re_push"
+        }
+      ],
+      "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "ci_flake_count"
+      ],
+      "note": "Guards ALL resolve_ci(flake_suspected) → re_push cycles. The ci_flake_count counter is shared across all entry points into diagnose_ci, including CI watch retries, merge queue ejections, dropped-CI-group paths, and conflict resolution escalations. Caps at 3 total flake_suspected verdicts per pipeline run. If CI keeps failing with the same flake_suspected verdict after 3 iterations from any combination of callers, the failure requires human intervention.\n"
     },
     "re_push": {
       "tool": "push_to_remote",

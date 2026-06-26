@@ -181,8 +181,8 @@ def test_resolve_ci_on_result_routes_escalation_verdicts_to_failure(
 
 
 @pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
-def test_resolve_ci_routes_flake_suspected_to_re_push(recipe_name: str) -> None:
-    """flake_suspected in resolve_ci must route to re_push, not release_issue_failure."""
+def test_resolve_ci_routes_flake_suspected_to_check_flake_loop(recipe_name: str) -> None:
+    """flake_suspected in resolve_ci must route to check_flake_loop, not directly to re_push."""
     recipe_path = _RECIPES_DIR / recipe_name
     recipe = load_recipe(recipe_path)
     resolve_steps = _find_resolve_steps_reaching_push(recipe)
@@ -196,9 +196,9 @@ def test_resolve_ci_routes_flake_suspected_to_re_push(recipe_name: str) -> None:
         ]
         if not routes:
             continue
-        assert any("re_push" in r or "pre_review_rebase" in r for r in routes), (
+        assert any("check_flake" in r for r in routes), (
             f"{recipe_name}/{step_name}: verdict=flake_suspected must route to "
-            f"a re_push step or pre_review_rebase (retry path), got routes: {routes}"
+            f"check_flake_loop (bounded retry path), got routes: {routes}"
         )
 
 
@@ -256,4 +256,48 @@ def test_pre_resolve_rebase_step_exists(recipe_name: str) -> None:
     ]
     assert "resolve_pre_resolve_conflicts" in conflict_routes, (
         f"{recipe_name}: pre_resolve_rebase must route conflicts to resolve_pre_resolve_conflicts"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
+def test_check_flake_loop_step_exists(recipe_name: str) -> None:
+    """check_flake_loop must use run_python, check_loop_iteration, and route max_exceeded."""
+    recipe_path = _RECIPES_DIR / recipe_name
+    recipe = load_recipe(recipe_path)
+    assert "check_flake_loop" in recipe.steps, (
+        f"{recipe_name}: missing 'check_flake_loop' step. "
+        "This step is required to bound the flake_suspected → re_push retry loop."
+    )
+    step = recipe.steps["check_flake_loop"]
+    assert step.tool == "run_python", (
+        f"{recipe_name}: check_flake_loop must use run_python, got {step.tool!r}"
+    )
+    assert step.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration", (
+        f"{recipe_name}: check_flake_loop must use check_loop_iteration callable"
+    )
+    assert step.on_result is not None, (
+        f"{recipe_name}: check_flake_loop must have on_result routing"
+    )
+    max_routes = [
+        c.route
+        for c in step.on_result.conditions
+        if c.when and "max_exceeded" in c.when and "true" in c.when
+    ]
+    assert any("failure" in r or "escalat" in r for r in max_routes), (
+        f"{recipe_name}: check_flake_loop max_exceeded=true must route to "
+        f"a failure/escalation step, got routes: {max_routes}"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
+def test_diagnose_ci_captures_is_fixable(recipe_name: str) -> None:
+    """diagnose_ci must capture is_fixable for observability and future routing."""
+    recipe_path = _RECIPES_DIR / recipe_name
+    recipe = load_recipe(recipe_path)
+    assert "diagnose_ci" in recipe.steps, f"{recipe_name}: missing 'diagnose_ci' step"
+    step = recipe.steps["diagnose_ci"]
+    assert "is_fixable" in (step.capture or {}), (
+        f"{recipe_name}: diagnose_ci must capture is_fixable. "
+        "Currently only captures diagnosis_path, leaving is_fixable invisible "
+        "to the routing chain."
     )

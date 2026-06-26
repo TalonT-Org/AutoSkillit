@@ -189,7 +189,7 @@ def test_flake_suspected_to_merge_with_context_is_clean() -> None:
 
 
 def test_flake_suspected_not_in_merge_cycle_is_clean() -> None:
-    """resolve_ci routes flake_suspected → re_push (no merge step in cycle) → no finding."""
+    """flake_suspected → check_flake_loop → re_push (no merge step in cycle) → no finding."""
     recipe = _make_recipe(
         {
             "resolve_ci": RecipeStep(
@@ -209,12 +209,35 @@ def test_flake_suspected_not_in_merge_cycle_is_clean() -> None:
                 on_result=StepResultRoute(
                     conditions=[
                         StepResultCondition(
-                            when="${{ result.verdict }} == 'flake_suspected'", route="re_push"
+                            when="${{ result.verdict }} == 'flake_suspected'",
+                            route="check_flake_loop",
                         ),
                         StepResultCondition(when=None, route="escalate"),
                     ]
                 ),
                 on_failure="escalate",
+            ),
+            "check_flake_loop": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                    "current_iteration": "${{ context.ci_flake_count }}",
+                    "max_iterations": "3",
+                },
+                capture={
+                    "ci_flake_count": "${{ result.next_iteration }}",
+                },
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="${{ result.max_exceeded }} == true",
+                            route="release_issue_failure",
+                        ),
+                        StepResultCondition(when=None, route="re_push"),
+                    ]
+                ),
+                on_failure="release_issue_failure",
+                optional_context_refs=["ci_flake_count"],
             ),
             "re_push": RecipeStep(
                 tool="push_to_remote",
@@ -224,6 +247,9 @@ def test_flake_suspected_not_in_merge_cycle_is_clean() -> None:
             ),
             "done": RecipeStep(action="stop", with_args={}, message="done"),
             "escalate": RecipeStep(action="stop", with_args={}, message="escalate"),
+            "release_issue_failure": RecipeStep(
+                action="stop", with_args={}, message="release_issue_failure"
+            ),
         }
     )
     findings = run_semantic_rules(recipe)

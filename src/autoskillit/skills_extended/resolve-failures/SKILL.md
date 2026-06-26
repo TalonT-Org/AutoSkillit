@@ -138,10 +138,13 @@ If `diagnosis_path` was provided and the file exists:
 1. Open `diagnosis_path` and read its content
 2. Find the "Structured Output" section or scan for the line matching `failure_subtype = {value}`
 3. Extract the `failure_subtype` value (e.g., `flaky`, `deterministic`, `timing_race`, etc.)
-4. Store as `{failure_subtype}` for use in the Verdict Decision Tree
+4. Find the line matching `Is Fixable:` header or `is_fixable = {value}` in the Structured Output section
+5. Extract the `is_fixable` value (`true` or `false`)
+6. Store as `{failure_subtype}` and `{is_fixable}` for use in the Verdict Decision Tree
 
 If `diagnosis_path` is absent or the file does not exist:
 - Set `{failure_subtype} = unknown`
+- Set `{is_fixable} = true` (default to fixable — preserves existing behavior for legacy diagnosis files)
 
 ### Step 2b: Reproduce CI Pre-Test Steps
 
@@ -181,15 +184,16 @@ and the table is never consulted.
 **Applies ONLY when no fix was applied (fixes_applied == 0).** If the fix loop was entered
 and a commit was made, skip this table — verdict is already `real_fix` per Step 2c.
 
-Using `{local_result}` from Step 2 and `{failure_subtype}` from Step 2a, determine `{verdict}`:
+Using `{local_result}` from Step 2, `{failure_subtype}` and `{is_fixable}` from Step 2a, determine `{verdict}`:
 
-| Local result | `failure_subtype` | Verdict |
-|---|---|---|
-| PASS | `flaky` or `timing_race` | `flake_suspected` |
-| PASS | `deterministic` | `ci_only_failure` |
-| PASS | `fixture` or `import` | `flake_suspected` |
-| PASS | `env` or `unknown` | `flake_suspected` |
-| PASS | `no_failure` | `ci_only_failure` |
+| Local result | `failure_subtype` | `is_fixable` | Verdict |
+|---|---|---|---|
+| PASS | `flaky` or `timing_race` | any | `flake_suspected` |
+| PASS | `deterministic` | any | `ci_only_failure` |
+| PASS | `fixture` or `import` | any | `flake_suspected` |
+| PASS | `env` or `unknown` | `false` | `ci_only_failure` |
+| PASS | `env` or `unknown` | `true` (or unset) | `flake_suspected` |
+| PASS | `no_failure` | any | `ci_only_failure` |
 
 **Note on `already_green`:** This verdict is reserved for the `pre_resolve_rebase`
 re-entry path — when a sibling pipeline's fix has already landed on integration and
@@ -322,7 +326,7 @@ Where:
 Return control to the orchestrator. The recipe's `on_result:` routing dispatches
 on `verdict`:
 - `real_fix` → `re_push` (fix landed, push to remote)
-- `flake_suspected` → `re_push` (retry via CI, bounded by retries: 2 / on_exhausted: release_issue_failure)
+- `flake_suspected` → `check_flake_loop` (loop guard with ci_flake_count counter shared across all diagnose_ci callers; escalates to release_issue_failure when max_iterations=3 exceeded, otherwise retries via re_push)
 - `ci_only_failure` → `release_issue_failure` (human escalation)
 - `no_test_infrastructure` → `release_issue_failure` / `escalate_stop` / `register_clone_failure` (depending on recipe)
 

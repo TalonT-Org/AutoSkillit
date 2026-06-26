@@ -148,23 +148,30 @@ def _find_table_row_verdict(skill_text: str, subtype: str) -> str | None:
 
     Scans the markdown table in the Verdict Decision Tree section for a row
     containing the subtype, and extracts the verdict value from that row.
+    Returns the FIRST matching row's verdict.
     """
     in_table = False
+    subtype_col = -1
+    verdict_col = -1
     for line in skill_text.splitlines():
         if "Local result" in line and "failure_subtype" in line and "Verdict" in line:
             in_table = True
+            header_cells = [c.strip() for c in line.split("|")]
+            for i, cell in enumerate(header_cells):
+                if "failure_subtype" in cell:
+                    subtype_col = i
+                if "Verdict" in cell:
+                    verdict_col = i
             continue
         if in_table and line.strip().startswith("|---"):
             continue
         if in_table and "|" in line:
             cells = [c.strip() for c in line.split("|")]
-            # cells[0] is empty (before first |), cells[-1] is empty (after last |)
-            if len(cells) < 4:
+            if len(cells) <= max(subtype_col, verdict_col):
                 continue
-            subtype_cell = cells[2]  # failure_subtype column
-            verdict_cell = cells[3]  # Verdict column
+            subtype_cell = cells[subtype_col]
+            verdict_cell = cells[verdict_col]
             if subtype in subtype_cell:
-                # Extract verdict token (backtick-wrapped)
                 match = re.search(r"`(\w+)`", verdict_cell)
                 if match:
                     return match.group(1)
@@ -173,27 +180,72 @@ def _find_table_row_verdict(skill_text: str, subtype: str) -> str | None:
     return None
 
 
+def _find_all_table_row_verdicts(skill_text: str, subtype: str) -> list[str]:
+    """Find ALL verdicts for rows matching a given failure_subtype."""
+    verdicts: list[str] = []
+    in_table = False
+    subtype_col = -1
+    verdict_col = -1
+    for line in skill_text.splitlines():
+        if "Local result" in line and "failure_subtype" in line and "Verdict" in line:
+            in_table = True
+            header_cells = [c.strip() for c in line.split("|")]
+            for i, cell in enumerate(header_cells):
+                if "failure_subtype" in cell:
+                    subtype_col = i
+                if "Verdict" in cell:
+                    verdict_col = i
+            continue
+        if in_table and line.strip().startswith("|---"):
+            continue
+        if in_table and "|" in line:
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) <= max(subtype_col, verdict_col):
+                continue
+            subtype_cell = cells[subtype_col]
+            verdict_cell = cells[verdict_col]
+            if subtype in subtype_cell:
+                match = re.search(r"`(\w+)`", verdict_cell)
+                if match:
+                    verdicts.append(match.group(1))
+        elif in_table and line.strip() == "":
+            break
+    return verdicts
+
+
 def test_unknown_subtype_maps_to_flake_suspected_not_ci_only(skill_text: str) -> None:
-    """The 'unknown' failure_subtype must map to flake_suspected, not ci_only_failure."""
-    verdict = _find_table_row_verdict(skill_text, "unknown")
-    assert verdict is not None, (
-        "resolve-failures SKILL.md verdict decision table must contain a row for 'unknown'"
+    """The 'unknown' failure_subtype must map to flake_suspected when is_fixable=true,
+    and ci_only_failure when is_fixable=false."""
+    verdicts = _find_all_table_row_verdicts(skill_text, "unknown")
+    assert len(verdicts) >= 2, (
+        f"resolve-failures SKILL.md verdict decision table must contain at least 2 rows "
+        f"for 'unknown' (split by is_fixable), got {len(verdicts)} row(s)"
     )
-    assert verdict == "flake_suspected", (
-        f"'unknown' subtype must map to 'flake_suspected', got '{verdict}'. "
-        "Ambiguous subtypes should not be routed to abort."
+    assert "flake_suspected" in verdicts, (
+        f"'unknown' subtype must have a 'flake_suspected' row (for is_fixable=true), "
+        f"got verdicts: {verdicts}"
+    )
+    assert "ci_only_failure" in verdicts, (
+        f"'unknown' subtype must have a 'ci_only_failure' row (for is_fixable=false), "
+        f"got verdicts: {verdicts}"
     )
 
 
 def test_env_subtype_maps_to_flake_suspected_not_ci_only(skill_text: str) -> None:
-    """The 'env' failure_subtype must map to flake_suspected, not ci_only_failure."""
-    verdict = _find_table_row_verdict(skill_text, "env")
-    assert verdict is not None, (
-        "resolve-failures SKILL.md verdict decision table must contain a row for 'env'"
+    """The 'env' failure_subtype must map to flake_suspected when is_fixable=true,
+    and ci_only_failure when is_fixable=false."""
+    verdicts = _find_all_table_row_verdicts(skill_text, "env")
+    assert len(verdicts) >= 2, (
+        f"resolve-failures SKILL.md verdict decision table must contain at least 2 rows "
+        f"for 'env' (split by is_fixable), got {len(verdicts)} row(s)"
     )
-    assert verdict == "flake_suspected", (
-        f"'env' subtype must map to 'flake_suspected', got '{verdict}'. "
-        "Ambiguous subtypes should not be routed to abort."
+    assert "flake_suspected" in verdicts, (
+        f"'env' subtype must have a 'flake_suspected' row (for is_fixable=true), "
+        f"got verdicts: {verdicts}"
+    )
+    assert "ci_only_failure" in verdicts, (
+        f"'env' subtype must have a 'ci_only_failure' row (for is_fixable=false), "
+        f"got verdicts: {verdicts}"
     )
 
 

@@ -769,7 +769,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # Execution file-level entries:
             "execution/test_headless_path_validation.py",
             "execution/test_zero_write_detection.py",
-            # Fleet file-level entries (8 of N import autoskillit.recipe):
+            # Fleet file-level entries (9 of N import autoskillit.recipe):
             "fleet/test_fleet_e2e.py",
             "fleet/test_fleet_e2e_codex.py",
             "fleet/test_campaign_capture.py",
@@ -780,6 +780,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_dispatch_state_handle.py",
             "fleet/test_research_campaign_dispatch.py",
             "fleet/test_dispatch_failure_semantics.py",
+            "fleet/test_dispatch_labels_cleaned.py",
             "fleet/test_gate_state_persistence.py",
             # Other file-level entries:
             "infra/test_pretty_output_recipe.py",

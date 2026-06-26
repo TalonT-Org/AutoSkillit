@@ -175,3 +175,98 @@ class TestLabelsCleanedFieldPersistence:
         record = _read_dispatch_record(tool_ctx)
         assert record["status"] == "failure"
         assert record["labels_cleaned"] is True
+
+    @pytest.mark.anyio
+    async def test_singular_key_ingredient_triggers_fallback_cleanup(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Singular ``issue_url`` ingredient triggers cleanup via the ``issue_url`` fallback.
+
+        Without sidecar entries, ``cleanup_orphaned_labels`` falls back to the
+        ``issue_url`` kwarg. This test exercises that path with the singular
+        ``issue_url`` recipe ingredient (used by implementation/remediation).
+        Regression guard for issue #4112.
+        """
+        import dataclasses
+
+        from autoskillit.recipe.schema import RecipeIngredient
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        issue_url = "https://github.com/owner/repo/issues/42"
+        _setup_dispatch(
+            tool_ctx,
+            monkeypatch,
+            ingredients={"issue_url": RecipeIngredient(description="Issue URL")},
+        )
+        swap_labels_mock = AsyncMock(return_value={"success": True})
+        github_client = AsyncMock()
+        github_client.swap_labels = swap_labels_mock
+        tool_ctx.github_client = github_client
+
+        failure_result = dataclasses.replace(
+            _DEFAULT_SKILL_RESULT,
+            success=False,
+            result='{"success": false, "reason": "context_exhaustion"}',
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+        )
+        # No sidecar is written — exercises the issue_url fallback path.
+        tool_ctx.executor = InMemoryHeadlessExecutor(default_result=failure_result)
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_no_sentinel(),
+        )
+
+        await _run(tool_ctx, ingredients={"issue_url": issue_url})
+
+        # swap_labels should have been called via the issue_url fallback path.
+        swap_labels_mock.assert_awaited_once()
+        call_list = swap_labels_mock.call_args_list
+        assert len(call_list) == 1
+        owner_arg, repo_arg, number_arg = call_list[0].args
+        assert owner_arg == "owner"
+        assert repo_arg == "repo"
+        assert number_arg == 42
+
+    @pytest.mark.anyio
+    async def test_singular_key_ingredient_populates_dispatch_record_issue_url(
+        self, tool_ctx, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """DispatchRecord.issue_url is populated from the singular ``issue_url`` ingredient.
+
+        Regression guard for issue #4112: the field was previously stored as
+        ``""`` for single-issue recipes because ``_api.py`` only read the
+        plural ``issue_urls`` key.
+        """
+        import dataclasses
+
+        from autoskillit.recipe.schema import RecipeIngredient
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+
+        issue_url = "https://github.com/owner/repo/issues/42"
+        _setup_dispatch(
+            tool_ctx,
+            monkeypatch,
+            ingredients={"issue_url": RecipeIngredient(description="Issue URL")},
+        )
+        tool_ctx.github_client = None  # skip label cleanup
+        tool_ctx.executor = InMemoryHeadlessExecutor(
+            default_result=dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                result='{"success": true}',
+                subtype="success",
+                is_error=False,
+                exit_code=0,
+            )
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet._api.parse_l3_result_block",
+            lambda **_: _make_completed_clean(True),
+        )
+
+        await _run(tool_ctx, ingredients={"issue_url": issue_url})
+
+        record = _read_dispatch_record(tool_ctx)
+        assert record["issue_url"] == issue_url

@@ -506,6 +506,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | MCP env forward coverage | `test_mcp_env_forward_coverage.py` | `mcp_env_forward_vars` values missing from `CmdSpec.env` in any cmd-builder (skill, food-truck, headless, resume, interactive) |
 | Rule severity consistency | `test_rule_severity_consistency.py` | Direct `RuleFinding()` construction in `@semantic_rule`/`@block_rule` bodies — must use `make_finding()`/`make_block_finding()`; `_KNOWN_NON_CONFORMING_RULES` entries without `# tracking: #NNNN` comments |
 | No direct swap_labels in fleet | `test_swap_labels_guard.py` | Direct `swap_labels` calls in `fleet/` outside `_label_cleanup.py` — must route through `cleanup_orphaned_labels` |
+| Issue URL extraction guard | `test_issue_url_extraction_guard.py` | Raw `.get("issue_url")` / `.get("issue_urls")` in `fleet/` outside `_issue_url_helpers.py` and `state_types.py` — must use `extract_issue_urls()`; `fleet_claim_guard.py` must retain both key variants |
 | Pipeline ordering | `test_pipeline_ordering.py` | Moving `run_semantic_rules` before `_prune_skipped_steps` in `load_and_validate` — semantic rules must run on post-prune recipe |
 
 When a reviewer suggestion would cause a change matching any row above, classify

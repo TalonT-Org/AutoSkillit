@@ -374,6 +374,7 @@ class DispatchRejected:
 
     def to_envelope(self) -> str:
         d: dict[str, Any] = {
+            "kind": "rejected",
             "success": False,
             "error": self.error_code,
             "user_visible_message": self.message,
@@ -406,6 +407,7 @@ class DispatchCompleted:
 
     def to_envelope(self) -> str:
         d: dict[str, Any] = {
+            "kind": "completed",
             "success": self.success,
             "dispatch_status": self.dispatch_status.value,
             "dispatch_id": self.dispatch_id,

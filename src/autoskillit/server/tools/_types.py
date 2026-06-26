@@ -176,6 +176,7 @@ class DispatchEnvelopeResult(TypedDict, total=False):
     """
 
     success: bool
+    kind: str
     dispatch_status: str
     dispatch_id: str
     dispatched_session_id: str

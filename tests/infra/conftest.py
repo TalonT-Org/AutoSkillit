@@ -59,6 +59,13 @@ def _dispatch_food_truck_json_producer() -> dict:
         resume_checkpoint={"step": 1, "completed_items": ["a"]},
         health_report={"status": "healthy", "findings": []},
     )
+    completed_failure = DispatchCompleted(
+        success=False,
+        dispatch_status=DispatchStatus.FAILURE,
+        dispatch_id="d3",
+        dispatched_session_id="s3",
+        reason="fleet_l3_no_result_block",
+    )
     rejected = DispatchRejected(
         error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
         message="quota limit hit",
@@ -70,6 +77,7 @@ def _dispatch_food_truck_json_producer() -> dict:
     for envelope_str in (
         base.to_envelope(),
         with_optionals.to_envelope(),
+        completed_failure.to_envelope(),
         rejected.to_envelope(),
         error_str,
     ):

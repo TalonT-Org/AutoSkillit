@@ -136,6 +136,70 @@ class TestDispatchStatusEnvelopeField:
         assert result["dispatch_status"] == "resumable"
 
 
+class TestKindDiscriminatorEnvelopeField:
+    def test_kind_discriminator_present_in_both_envelopes(self):
+        """Both DispatchCompleted and DispatchRejected must carry a 'kind' discriminator
+        in their envelope. This explicit discriminator is what allows the formatter to
+        distinguish them when both have success=False.
+        """
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import DispatchCompleted, DispatchRejected, DispatchStatus
+
+        completed = DispatchCompleted(
+            success=True,
+            dispatch_status=DispatchStatus.SUCCESS,
+            dispatch_id="d-c",
+            dispatched_session_id="s-c",
+            reason="ok",
+        )
+        completed_env = json.loads(completed.to_envelope())
+        assert completed_env.get("kind") == "completed", (
+            f"DispatchCompleted.to_envelope() must emit 'kind': 'completed': {completed_env}"
+        )
+
+        rejected = DispatchRejected(
+            error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
+            message="quota hit",
+            dispatch_id="d-r",
+        )
+        rejected_env = json.loads(rejected.to_envelope())
+        assert rejected_env.get("kind") == "rejected", (
+            f"DispatchRejected.to_envelope() must emit 'kind': 'rejected': {rejected_env}"
+        )
+
+    def test_rejected_envelope_never_emits_completed_exclusive_fields(self):
+        """DispatchRejected.to_envelope() must never emit DispatchCompleted-exclusive
+        fields. This is a structural exclusion guard that protects the discriminator
+        invariant: if a future change adds dispatch_status to DispatchRejected, this
+        test fails immediately.
+        """
+        from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import DispatchRejected
+
+        rejected = DispatchRejected(
+            error_code=FleetErrorCode.FLEET_QUOTA_EXHAUSTED,
+            message="quota hit",
+            dispatch_id="d-r",
+        )
+        env = json.loads(rejected.to_envelope())
+        excluded_keys = {
+            "dispatch_status",
+            "dispatched_session_id",
+            "reason",
+            "token_usage",
+            "l3_payload",
+            "l3_parse_source",
+            "lifespan_started",
+            "stderr",
+            "elapsed_seconds",
+        }
+        leaked = excluded_keys & set(env.keys())
+        assert not leaked, (
+            f"DispatchRejected.to_envelope() leaked DispatchCompleted-exclusive fields: "
+            f"{sorted(leaked)}. The 'kind' discriminator invariant is broken."
+        )
+
+
 class TestHealthReportEnvelopeField:
     def test_envelope_includes_health_report_when_present(self):
         from autoskillit.fleet import DispatchCompleted, DispatchStatus

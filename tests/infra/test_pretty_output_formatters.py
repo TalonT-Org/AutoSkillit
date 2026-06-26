@@ -866,6 +866,7 @@ def test_dispatch_food_truck_six_group_plan_preserved():
     from tests.infra._pretty_output_helpers import _wrap_for_claude_code
 
     payload = {
+        "kind": "completed",
         "success": True,
         "dispatch_status": "completed_clean",
         "dispatch_id": "d-test-001",
@@ -912,6 +913,7 @@ def test_dispatch_food_truck_error_envelope_preserves_diagnostics():
     from tests.infra._pretty_output_helpers import _wrap_for_claude_code
 
     payload = {
+        "kind": "rejected",
         "success": False,
         "error": "fleet_quota_exhausted",
         "user_visible_message": "quota limit hit for this session",
@@ -927,3 +929,82 @@ def test_dispatch_food_truck_error_envelope_preserves_diagnostics():
     assert "fleet_quota_exhausted" in text
     assert "quota limit hit" in text
     assert "dispatch_id: d-rejected-001" in text
+
+
+# PHK-FMT-DISPATCH-COMPLETED-FAIL: DispatchCompleted(success=False) must not be conflated
+def test_completed_failure_through_formatter_preserves_all_fields():
+    """A DispatchCompleted(success=False) envelope carries critical fields that
+    distinguish it from DispatchRejected: dispatched_session_id, dispatch_status,
+    reason, token_usage, elapsed_seconds, lifespan_started. These fields must ALL
+    survive formatting — they prove the subprocess actually ran. The bug: the
+    formatter's `if not success:` branch strips these fields because it conflates
+    DispatchCompleted(success=False) with DispatchRejected.
+    """
+    from tests.infra._pretty_output_helpers import _wrap_for_claude_code
+
+    payload = {
+        "kind": "completed",
+        "success": False,
+        "dispatch_status": "failure",
+        "dispatch_id": "d-completed-fail-001",
+        "dispatched_session_id": "sess-xyz",
+        "reason": "fleet_l3_no_result_block",
+        "token_usage": {"input": 1250, "output": 82381},
+        "lifespan_started": True,
+        "elapsed_seconds": 9774.74,
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+
+    assert "FAIL" in text, f"Header must show FAIL on failure: {text!r}"
+    assert "dispatch_status: failure" in text, (
+        f"dispatch_status must appear in formatted output: {text!r}"
+    )
+    assert "dispatched_session_id: sess-xyz" in text, (
+        f"dispatched_session_id must appear in formatted output: {text!r}"
+    )
+    assert "reason: fleet_l3_no_result_block" in text, (
+        f"reason must appear in formatted output: {text!r}"
+    )
+    assert "token_usage:" in text, f"token_usage section must appear in formatted output: {text!r}"
+    assert "elapsed_seconds: 9774.74" in text, (
+        f"elapsed_seconds must appear in formatted output: {text!r}"
+    )
+    assert "lifespan_started: True" in text, (
+        f"lifespan_started must appear in formatted output: {text!r}"
+    )
+    assert "dispatch_id: d-completed-fail-001" in text, (
+        f"dispatch_id must appear in formatted output: {text!r}"
+    )
+
+
+# PHK-FMT-DISPATCH-FLEET-ERROR: fleet_error() envelope has no kind field — fallback path required
+def test_fleet_error_through_formatter_renders_error_fields():
+    """fleet_error() produces envelopes without a kind field. The formatter must
+    handle these via a fallback path (kind is None + not success → rejection rendering).
+    This protects backward compatibility for the legacy error envelope shape.
+    """
+    from tests.infra._pretty_output_helpers import _wrap_for_claude_code
+
+    payload = {
+        "success": False,
+        "error": "fleet_quota_exhausted",
+        "user_visible_message": "quota limit hit",
+        "details": None,
+    }
+    event = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck",
+        "tool_response": _wrap_for_claude_code(payload),
+    }
+    out, _ = _run_hook(event=event)
+    text = json.loads(out)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    assert "fleet_quota_exhausted" in text, (
+        f"fleet_error() error code must appear in output: {text!r}"
+    )
+    assert "quota limit hit" in text, (
+        f"fleet_error() user_visible_message must appear in output: {text!r}"
+    )

@@ -23,7 +23,7 @@ def _fmt_dispatch_food_truck(data: dict, _pipeline: bool) -> str:
     """Format dispatch_food_truck result as Markdown-KV.
 
     Renders both success (DispatchCompleted) and error (DispatchRejected /
-    fleet_error) response shapes — discriminates on ``data.get("success")``.
+    fleet_error) response shapes — discriminates on ``data.get("kind")``.
     Nested structured fields (l3_payload, health_report, token_usage,
     resume_checkpoint) are rendered in full without size-based truncation
     to preserve dispatch_plan visibility for downstream orchestrators.
@@ -31,10 +31,11 @@ def _fmt_dispatch_food_truck(data: dict, _pipeline: bool) -> str:
     success = data.get("success", False)
     mark = _CHECK_MARK if success else _CROSS_MARK
     status = "OK" if success else "FAIL"
+    kind = data.get("kind")
 
     lines = [f"## dispatch_food_truck {mark} {status}", ""]
 
-    if not success:
+    if kind == "rejected" or (not success and kind is None):
         # Error path — DispatchRejected / fleet_error shape
         error = data.get("error", "unknown")
         lines.append(f"error: {error}")
@@ -154,4 +155,19 @@ _FMT_DISPATCH_FOOD_TRUCK_RENDERED: frozenset[str] = frozenset(
         "details",
     }
 )
-_FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED: frozenset[str] = frozenset()
+_FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED: frozenset[str] = frozenset({"kind"})
+
+_FMT_DISPATCH_COMPLETED_REQUIRED: frozenset[str] = frozenset(
+    {
+        "dispatch_status",
+        "dispatch_id",
+        "dispatched_session_id",
+        "reason",
+    }
+)
+_FMT_DISPATCH_REJECTED_REQUIRED: frozenset[str] = frozenset(
+    {
+        "error",
+        "user_visible_message",
+    }
+)

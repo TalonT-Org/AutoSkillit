@@ -368,3 +368,92 @@ def test_conftest_import_does_not_load_server():
     assert result.returncode == 0, (
         f"Importing tests.infra.conftest triggered autoskillit.server import:\n{result.stderr}"
     )
+
+
+# ---------------------------------------------------------------------------
+# PHK-FMT-DISPATCH-SHAPE: Per-shape field obligation tests
+# ---------------------------------------------------------------------------
+
+
+def test_shape_field_obligations_per_kind():
+    """Per-shape required-field sets must be enforced for dispatch_food_truck.
+
+    The _FMT_DISPATCH_FOOD_TRUCK_RENDERED frozenset is a flat union of all 18 fields
+    and cannot express per-shape obligations. This test defines required-field sets
+    per shape ('completed' vs 'rejected') and asserts the formatter renders them
+    when given an envelope with the matching 'kind' discriminator.
+
+    This is the shape-aware coverage contract that protects against future
+    regressions where a formatter silently drops fields for a specific shape.
+    """
+    from autoskillit.hooks.formatters._fmt_dispatch import (
+        _FMT_DISPATCH_COMPLETED_REQUIRED,
+        _FMT_DISPATCH_REJECTED_REQUIRED,
+    )
+    from tests.infra._pretty_output_helpers import _wrap_for_claude_code
+
+    completed_required = _FMT_DISPATCH_COMPLETED_REQUIRED
+    rejected_required = _FMT_DISPATCH_REJECTED_REQUIRED
+
+    completed_payload = {
+        "kind": "completed",
+        "success": True,
+        "dispatch_status": "success",
+        "dispatch_id": "d-shape-c",
+        "dispatched_session_id": "s-shape-c",
+        "reason": "ok",
+        "token_usage": {},
+        "l3_payload": None,
+        "l3_parse_source": "",
+        "lifespan_started": False,
+        "stderr": "",
+        "elapsed_seconds": 1.0,
+    }
+    event_c = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck",
+        "tool_response": _wrap_for_claude_code(completed_payload),
+    }
+    out_c, _ = _run_hook(event=event_c)
+    text_c = json.loads(out_c)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    for field in completed_required:
+        key = field
+        if key == "dispatch_status":
+            assert "dispatch_status: success" in text_c
+        elif key == "dispatch_id":
+            assert "dispatch_id: d-shape-c" in text_c
+        elif key == "dispatched_session_id":
+            assert "dispatched_session_id: s-shape-c" in text_c
+        elif key == "reason":
+            assert "reason: ok" in text_c
+
+    rejected_payload = {
+        "kind": "rejected",
+        "success": False,
+        "error": "fleet_quota_exhausted",
+        "user_visible_message": "quota hit",
+        "details": None,
+    }
+    event_r = {
+        "tool_name": "mcp__plugin_autoskillit_autoskillit__dispatch_food_truck",
+        "tool_response": _wrap_for_claude_code(rejected_payload),
+    }
+    out_r, _ = _run_hook(event=event_r)
+    text_r = json.loads(out_r)["hookSpecificOutput"]["updatedMCPToolOutput"]
+    for field in rejected_required:
+        if field == "error":
+            assert "fleet_quota_exhausted" in text_r
+        elif field == "user_visible_message":
+            assert "quota hit" in text_r
+
+
+def test_json_producer_includes_completed_failure():
+    """_dispatch_food_truck_json_producer must include a DispatchCompleted(success=False)
+    shape so the coverage contract exercises both success states and the union of keys
+    includes 'kind'.
+    """
+    from tests.infra.conftest import _dispatch_food_truck_json_producer
+
+    keys = _dispatch_food_truck_json_producer().keys()
+    assert "kind" in keys, (
+        f"_dispatch_food_truck_json_producer must emit 'kind' field: {sorted(keys)}"
+    )

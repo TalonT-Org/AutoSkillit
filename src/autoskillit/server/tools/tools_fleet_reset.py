@@ -14,6 +14,9 @@ from autoskillit.core import FleetErrorCode, IssueLabelState, fleet_error, get_l
 from autoskillit.fleet import (
     _RESETTABLE_STATUSES,
     DispatchStatus,
+    ResetReport,
+    cleanup_orphaned_labels,
+    compute_reset_labels,
     discover_campaign_state_files,
     find_dispatch_in_campaigns,
     format_resettable_statuses,
@@ -74,17 +77,20 @@ async def reset_dispatch(
     dispatch_id: str,
     reset_to: str = "queued",
     force: bool = False,
+    destroy_artifacts: bool = False,
     ctx: Context = CurrentContext(),
 ) -> str:
-    """Reset a failed L2 dispatch, cleaning up all git/PR artifacts.
+    """Reset a failed L2 dispatch for retry or abandonment.
 
-    Removes the local worktree, local and remote branches, closes any open PRs,
-    and resets issue labels. Use after a resume attempt fails or is declined.
+    By default, resets internal state only (status → PENDING) while preserving
+    git artifacts (worktree, branches, PRs). Issue labels are always swapped.
 
     Args:
         dispatch_id: The dispatch ID (UUID) or dispatch name to reset.
         reset_to: Target state — "queued" (fresh retry) or "fail" (abandon).
         force: Bypass the resume-attempt gate when resume is known to be impossible.
+        destroy_artifacts: When True, also remove the git worktree, delete local/remote
+            branches, and close open PRs. Default False for safe error recovery.
 
     Never raises.
     """
@@ -134,21 +140,36 @@ async def reset_dispatch(
         worktrees_dir = resolve_worktrees_dir(project_dir, cfg.workspace.worktree_root)
         target_state = _VALID_RESET_TARGETS[reset_to]
 
-        if tool_ctx.runner is None:
-            return fleet_error(
-                FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-                "No subprocess runner available in this session.",
-            )
+        if destroy_artifacts:
+            if tool_ctx.runner is None:
+                return fleet_error(
+                    FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                    "No subprocess runner available in this session.",
+                )
 
-        report = await reset_dispatch_artifacts(
-            dispatch,
-            project_dir=project_dir,
-            worktrees_dir=worktrees_dir,
-            runner=tool_ctx.runner,
-            github_client=tool_ctx.github_client,
-            target_state=target_state,
-            force=force,
-        )
+            report = await reset_dispatch_artifacts(
+                dispatch,
+                project_dir=project_dir,
+                worktrees_dir=worktrees_dir,
+                runner=tool_ctx.runner,
+                github_client=tool_ctx.github_client,
+                target_state=target_state,
+                force=force,
+            )
+        else:
+            report = ResetReport(
+                dispatch_name=dispatch.name,
+                branch_name=dispatch.branch_name or dispatch.name,
+            )
+            remove_labels, add_labels = compute_reset_labels(target_state)
+            labels_ok = await cleanup_orphaned_labels(
+                dispatch.sidecar_path,
+                tool_ctx.github_client,
+                issue_url=dispatch.issue_url,
+                remove_labels=remove_labels,
+                add_labels=add_labels,
+            )
+            report.labels_reset = labels_ok
 
         state_updated = await update_campaign_state(
             dispatch.name,
@@ -178,6 +199,7 @@ async def reset_dispatch(
                 "has_protected_artifacts": report.has_protected_artifacts,
                 "protected_prs": report.protected_prs,
                 "reset_to": reset_to,
+                "destroy_artifacts": destroy_artifacts,
             }
         )
     except Exception:

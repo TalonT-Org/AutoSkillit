@@ -22,7 +22,7 @@ from autoskillit.core import (
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
 )
-from autoskillit.core.types import DirectInstall
+from autoskillit.core.types import CmdSpec, DirectInstall
 from autoskillit.execution.backends import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401 — triggers registration
 
@@ -53,9 +53,9 @@ def _backend_for(name: str) -> ClaudeCodeBackend | CodexBackend:
     return ClaudeCodeBackend() if name == "claude-code" else CodexBackend()
 
 
-def _assert_interactive_channel(spec: object, backend_name: str, content: str) -> None:
+def _assert_interactive_channel(spec: CmdSpec, backend_name: str, content: str) -> None:
     """Assert the primary interactive delivery channel is populated."""
-    cmd = spec.cmd  # type: ignore[attr-defined]
+    cmd = spec.cmd
     if backend_name == "claude-code":
         assert "--append-system-prompt" in cmd
         idx = cmd.index("--append-system-prompt")

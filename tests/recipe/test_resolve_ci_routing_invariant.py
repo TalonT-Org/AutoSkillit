@@ -275,6 +275,9 @@ def test_check_flake_loop_step_exists(recipe_name: str) -> None:
     assert step.tool == "run_python", (
         f"{recipe_name}: check_flake_loop must use run_python, got {step.tool!r}"
     )
+    assert step.with_args is not None, (
+        f"{recipe_name}: check_flake_loop run_python step has no with_args block"
+    )
     assert step.with_args["callable"] == "autoskillit.smoke_utils.check_loop_iteration", (
         f"{recipe_name}: check_flake_loop must use check_loop_iteration callable"
     )

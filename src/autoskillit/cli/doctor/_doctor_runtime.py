@@ -9,7 +9,6 @@ from pathlib import Path
 import regex as re
 
 from autoskillit.core import (
-    AGENT_BACKEND_CODEX,
     CodingAgentBackend,
     Severity,
     default_log_dir,
@@ -210,6 +209,7 @@ def _check_codex_graduation(
     if backend is None or not backend.capabilities.version_check_command:
         return DoctorResult(Severity.OK, check_name, "Skipped (no codex backend)")
 
+    backend_name = backend.name
     log_root = log_dir or default_log_dir()
 
     # Criterion 1: version check
@@ -249,7 +249,7 @@ def _check_codex_graduation(
                 entry = json.loads(line)
             except (json.JSONDecodeError, ValueError):
                 continue
-            if entry.get("backend") == AGENT_BACKEND_CODEX:
+            if entry.get("backend") == backend_name:
                 smoke_status = "pass" if entry.get("success") else "fail"
                 break
     except OSError:

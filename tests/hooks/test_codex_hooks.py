@@ -192,6 +192,17 @@ class TestSyncHooksToCodexConfig:
         assert "[[hooks.PreToolUse]]" in content
         assert "[[hooks]]\n" not in content
 
+    def test_sync_preserves_unknown_top_level_scalars(self, tmp_path):
+        """Unknown top-level scalar keys (model/theme) must survive a hook sync
+        round-trip through the read → mutate → write pipeline."""
+        p = tmp_path / "config.toml"
+        p.write_text('model = "o3"\ntheme = "dark"\n', encoding="utf-8")
+        sync_hooks_to_codex_config(config_path=p)
+        result = _read_codex_config(p)
+        assert result.data["model"] == "o3"
+        assert result.data["theme"] == "dark"
+        assert "hooks" in result.data
+
 
 class TestHookSyncCorruptFilePreservation:
     def test_sync_hooks_preserves_corrupt_file_content(self, tmp_path):

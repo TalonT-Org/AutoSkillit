@@ -198,3 +198,21 @@ def test_capability_gate_callables_have_matching_ingredient() -> None:
     assert len(CAPABILITY_GATE_CALLABLES) > 0, (
         "CAPABILITY_GATE_CALLABLES must declare at least one capability gate callable."
     )
+
+
+def test_capability_ingredient_to_skip_guard_keys_subset() -> None:
+    """CAPABILITY_INGREDIENT_TO_SKIP_GUARD keys must be BACKEND_CAPABILITY_INGREDIENTS subset."""
+    from autoskillit.core import (
+        BACKEND_CAPABILITY_INGREDIENTS,
+        CAPABILITY_INGREDIENT_TO_SKIP_GUARD,
+    )
+
+    orphaned = set(CAPABILITY_INGREDIENT_TO_SKIP_GUARD) - set(BACKEND_CAPABILITY_INGREDIENTS)
+    assert not orphaned, (
+        f"CAPABILITY_INGREDIENT_TO_SKIP_GUARD keys {orphaned} are not in "
+        f"BACKEND_CAPABILITY_INGREDIENTS — vacuous-gate detection will silently "
+        f"malfunction for these keys."
+    )
+    assert len(CAPABILITY_INGREDIENT_TO_SKIP_GUARD) > 0, (
+        "CAPABILITY_INGREDIENT_TO_SKIP_GUARD must declare at least one mapping."
+    )

@@ -1767,3 +1767,12 @@ class TestCodexBackendSetupSessionDir:
         CodexBackend().setup_session_dir(self.session_dir)
         data = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
         assert data["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
+
+    def test_session_config_lacks_key_when_source_lacks_it(self) -> None:
+        import tomllib
+
+        (self.codex_home / "config.toml").write_text("[mcp_servers.autoskillit]\n")
+        (self.codex_home / "auth.json").write_text("{}")
+        CodexBackend().setup_session_dir(self.session_dir)
+        data = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
+        assert "model_auto_compact_token_limit" not in data

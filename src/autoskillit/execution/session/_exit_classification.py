@@ -115,6 +115,7 @@ def classify_infra_exit(
     if capabilities is None or capabilities.supports_context_exhaustion_detection:
         if session._is_context_exhausted():
             return InfraExitCategory.CONTEXT_EXHAUSTED
+        # Codex turn.failed arrives on stdout (NDJSON); this stderr branch is non-Codex fallback.
         if _CODEX_CONTEXT_EXHAUSTION_PATTERN.search(result.stderr):
             return InfraExitCategory.CONTEXT_EXHAUSTED
     # Rate limit detection — must precede all API_ERROR checks (including

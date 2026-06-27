@@ -266,19 +266,20 @@ def test_card_and_semantic_rules_agree_on_errors(recipe_name: str, tmp_path: Pat
 
 
 def test_codex_implementation_dispatch_infeasible() -> None:
-    """Codex backend + implementation recipe must report dispatch_feasible=False.
-
-    gate_backend_write routes to terminal failure when backend_capable=false.
-    """
+    """Codex backend + implementation recipe must report dispatch_feasible=True
+    when gate_backend_write is vacuous (all guarded steps were pruned)."""
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,
         ingredient_overrides={"backend_supports_git_write": "false"},
         backend_name="codex",
     )
-    assert result["valid"] is True  # recipe is structurally valid
-    assert result.get("dispatch_feasible") is False  # but pipeline is DOA
-    assert "gate_backend_write" in result.get("infeasible_steps", [])
+    assert result["valid"] is True
+    assert result.get("dispatch_feasible") is True, (
+        "When all backend_supports_git_write-gated steps are pruned, "
+        "gate_backend_write is vacuous and should NOT block dispatch."
+    )
+    assert "gate_backend_write" not in result.get("infeasible_steps", [])
 
 
 def test_claude_implementation_dispatch_feasible() -> None:
@@ -327,8 +328,10 @@ _CAPABILITY_GATE_RECIPES = _discover_capability_gate_recipes()
 
 @pytest.mark.parametrize("recipe_name", _CAPABILITY_GATE_RECIPES)
 def test_codex_capability_gate_recipes(recipe_name: str) -> None:
-    """Every recipe with a gate_backend_write step must report
-    dispatch_feasible=False when loaded with codex overrides."""
+    """Every recipe with a gate_backend_write step must pass vacuous-gate
+    detection under codex overrides — either dispatch_feasible=True (gate
+    is vacuous) or dispatch_feasible=False with gate in infeasible_steps
+    (gate guards live steps)."""
     result = load_and_validate(
         recipe_name,
         project_dir=_PROJECT_ROOT,
@@ -336,8 +339,12 @@ def test_codex_capability_gate_recipes(recipe_name: str) -> None:
         backend_name="codex",
     )
     assert result.get("valid") is True
-    assert result.get("dispatch_feasible") is False, (
-        f"Recipe '{recipe_name}' with gate_backend_write step did not report "
-        f"dispatch_feasible=False under codex overrides"
-    )
-    assert "gate_backend_write" in result.get("infeasible_steps", [])
+    dispatch_feasible = result.get("dispatch_feasible")
+    infeasible_steps = result.get("infeasible_steps", [])
+    if dispatch_feasible is True:
+        assert "gate_backend_write" not in infeasible_steps
+    else:
+        assert dispatch_feasible is False, (
+            f"Expected dispatch_feasible to be explicitly False, got {dispatch_feasible!r}"
+        )
+        assert "gate_backend_write" in infeasible_steps

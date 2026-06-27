@@ -347,10 +347,13 @@ async def _run_dispatch(
         )
 
     try:
+        _capability_overrides = _build_capability_overrides(tool_ctx.backend)
+        _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
         validation_result = tool_ctx.recipes.load_and_validate(
             recipe,
             tool_ctx.project_dir,
             suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
+            ingredient_overrides=_merged_ingredients,
             temp_dir=tool_ctx.temp_dir,
             backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
         )
@@ -384,6 +387,19 @@ async def _run_dispatch(
             DispatchRejected(
                 error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
                 message=f"Recipe '{recipe}' has validation errors: " + "; ".join(error_parts),
+            ),
+            per_dispatch_state_path=None,
+        )
+
+    if not validation_result.get("dispatch_feasible", True):
+        infeasible_steps = validation_result.get("infeasible_steps", [])
+        return DispatchResult(
+            DispatchRejected(
+                error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
+                message=(
+                    f"Recipe '{recipe}' is dispatch-infeasible: "
+                    f"infeasible_steps={infeasible_steps}"
+                ),
             ),
             per_dispatch_state_path=None,
         )

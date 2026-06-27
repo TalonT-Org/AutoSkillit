@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from tests.fleet._helpers import (
@@ -547,4 +549,47 @@ def test_capability_overrides_dict_covers_registry_keys():
     missing = BACKEND_CAPABILITY_INGREDIENTS - set(capability_overrides)
     assert not missing, (
         f"Capability registry keys missing from dispatch capability_overrides: {missing}"
+    )
+
+
+@pytest.mark.anyio
+async def test_run_dispatch_rejects_dispatch_infeasible(tool_ctx):
+    """When _run_dispatch's inner load_and_validate returns dispatch_feasible=False,
+    it must return DispatchRejected without proceeding to subprocess launch."""
+    from unittest.mock import patch
+
+    tool_ctx.recipes = MagicMock()
+    tool_ctx.recipes.load_and_validate.return_value = {
+        "valid": True,
+        "dispatch_feasible": False,
+        "infeasible_steps": ["gate_backend_write"],
+    }
+    tool_ctx.recipes.find.return_value = MagicMock()
+    tool_ctx.recipes.load.return_value = MagicMock()
+
+    with patch(
+        "autoskillit.fleet._api.execute_dispatch",
+        new_callable=AsyncMock,
+    ) as mock_exec:
+        from autoskillit.fleet._api import _run_dispatch
+
+        result = await _run_dispatch(
+            tool_ctx=tool_ctx,
+            recipe="test-recipe",
+            task="test task",
+            ingredients={},
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=lambda **kw: "prompt",
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+
+    mock_exec.assert_not_called()
+    from autoskillit.fleet.state_types import DispatchRejected
+
+    assert isinstance(result.outcome, DispatchRejected)
+    assert (
+        "gate_backend_write" in result.outcome.message
+        or "dispatch" in result.outcome.message.lower()
     )

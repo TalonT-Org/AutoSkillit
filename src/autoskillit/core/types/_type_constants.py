@@ -34,6 +34,7 @@ __all__ = [
     "SCOPE_DIRECTION_SOURCE_TYPES",
     "WORKTREE_SKILLS",
     "BACKEND_CAPABILITY_INGREDIENTS",
+    "CAPABILITY_INGREDIENT_TO_SKIP_GUARD",
     "CAPABILITY_GATE_CALLABLES",
     "SkillFamilyDef",
     "GITHUB_API_SKILL_FAMILIES",
@@ -96,6 +97,13 @@ BACKEND_CAPABILITY_INGREDIENTS: frozenset[str] = frozenset(
         "backend_supports_git_write",
     }
 )
+
+# Maps each BACKEND_CAPABILITY_INGREDIENTS key to its corresponding
+# skip_when_false ingredient reference string. Used by capability-feasibility
+# to detect vacuous gates — a gate whose guarded steps were all pruned.
+CAPABILITY_INGREDIENT_TO_SKIP_GUARD: dict[str, str] = {
+    "backend_supports_git_write": "inputs.backend_supports_git_write",
+}
 
 # Bare (un-dotted) callable names whose run_python steps are capability gates.
 # Each entry corresponds to a callable in smoke_utils that reads a

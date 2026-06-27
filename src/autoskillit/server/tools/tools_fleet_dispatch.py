@@ -32,6 +32,7 @@ from autoskillit.fleet import (
     DispatchRejected,
     DispatchResult,
     DispatchStatus,
+    _build_capability_overrides,
     _build_food_truck_prompt,
     evaluate_skip_when,
     execute_dispatch,
@@ -321,16 +322,31 @@ async def dispatch_food_truck(
         _fleet_load_result: dict[str, Any] = {}
         if tool_ctx.recipes is not None:
             try:
+                _capability_overrides = _build_capability_overrides(tool_ctx.backend)
+                _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
                 _fleet_load_result = tool_ctx.recipes.load_and_validate(
                     recipe,
                     tool_ctx.project_dir,
                     suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
-                    ingredient_overrides=ingredients,
+                    ingredient_overrides=_merged_ingredients,
                     temp_dir=tool_ctx.temp_dir,
                     backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                 )
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
+
+        if not _fleet_load_result.get("dispatch_feasible", True):
+            _infeasible_steps = _fleet_load_result.get("infeasible_steps", [])
+            _infeasible_msg = (
+                f"Recipe '{recipe}' is dispatch-infeasible: capability gate(s) "
+                f"blocked at preflight. Infeasible steps: {_infeasible_steps}"
+            )
+            logger.warning(
+                "dispatch_food_truck_capability_infeasible",
+                recipe=recipe,
+                infeasible_steps=_infeasible_steps,
+            )
+            return fleet_error(FleetErrorCode.FLEET_RECIPE_INVALID, _infeasible_msg)
 
         _active_recipe_steps: dict[str, Any] | None = None
         if _fleet_load_result and tool_ctx.recipes is not None:

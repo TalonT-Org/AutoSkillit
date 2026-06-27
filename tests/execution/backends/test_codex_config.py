@@ -602,6 +602,46 @@ class TestDestructiveOverwritePrevention:
         content = p.read_text(encoding="utf-8")
         assert f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}" in content
 
+    def test_preserves_unknown_top_level_scalars(self, tmp_path):
+        """Unknown top-level scalar keys (model/theme/disable_telemetry) must survive
+        a fresh MCP registration round-trip through the read → mutate → write pipeline."""
+        p = tmp_path / "config.toml"
+        p.write_text(
+            'model = "o3"\ntheme = "dark"\ndisable_telemetry = true\n',
+            encoding="utf-8",
+        )
+        ensure_codex_mcp_registered(config_path=p)
+        result = _read_codex_config(p)
+        assert result.data["model"] == "o3"
+        assert result.data["theme"] == "dark"
+        assert result.data["disable_telemetry"] is True
+        assert "autoskillit" in result.data.get("mcp_servers", {})
+
+    def test_preserves_unknown_top_level_scalars_on_re_registration(self, tmp_path):
+        """Unknown top-level scalars must survive even when a stale tool_timeout_sec
+        forces a re-registration rewrite via the valid-TOML branch."""
+        p = tmp_path / "config.toml"
+        seed = (
+            'model = "o3"\n'
+            'theme = "dark"\n'
+            "\n"
+            "[mcp_servers.autoskillit]\n"
+            'command = "autoskillit"\n'
+            "tool_timeout_sec = 1\n"
+            f"startup_timeout_sec = {CODEX_MCP_STARTUP_TIMEOUT_SEC}\n"
+            "env_vars = []\n"
+        )
+        p.write_text(seed, encoding="utf-8")
+        changed = ensure_codex_mcp_registered(config_path=p)
+        assert changed is True
+        result = _read_codex_config(p)
+        assert result.data["model"] == "o3"
+        assert result.data["theme"] == "dark"
+        assert (
+            result.data["mcp_servers"]["autoskillit"]["tool_timeout_sec"]
+            == CODEX_MCP_TOOL_TIMEOUT_FLOOR
+        )
+
 
 class TestRequiredKeysCoverage:
     """The CODEX_MCP_REQUIRED_KEYS spec must match the keys actually written by

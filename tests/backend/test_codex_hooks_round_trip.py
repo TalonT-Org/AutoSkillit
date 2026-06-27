@@ -150,3 +150,16 @@ class TestSyncHooksToCodexConfig:
         assert not codex_dir.exists()
         sync_hooks_to_codex_config()
         assert codex_dir.exists()
+
+    def test_preserves_unknown_top_level_scalars(self, fake_home: Path):
+        """Unknown top-level scalar keys (model/theme) must survive a hook sync
+        round-trip via the default ~/.codex/config.toml path resolution."""
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir(parents=True)
+        config_path = codex_dir / "config.toml"
+        config_path.write_text('model = "o3"\ntheme = "dark"\n')
+        sync_hooks_to_codex_config()
+        parsed = tomllib.loads(config_path.read_text())
+        assert parsed["model"] == "o3"
+        assert parsed["theme"] == "dark"
+        assert "hooks" in parsed

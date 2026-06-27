@@ -10,6 +10,7 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import YAMLError, load_yaml
+from autoskillit.core.types import CAPABILITY_INGREDIENT_TO_SKIP_GUARD
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
@@ -112,6 +113,8 @@ def _compute_capability_feasibility(
     *,
     capability_ingredient_keys: frozenset[str],
     capability_gate_callables: frozenset[str],
+    skip_resolutions: dict[str, bool | None] | None = None,
+    pre_prune_steps: dict[str, Any] | None = None,
 ) -> tuple[bool, list[str]]:
     """Detect dead-on-arrival pipelines caused by capability-gated run_python steps.
 
@@ -123,6 +126,10 @@ def _compute_capability_feasibility(
        current ingredient_overrides.
     3. The step's on_result / on_failure routes the falsy case to a terminal
        failure target ("escalate") rather than recovery.
+
+    A gate is vacuous (and removed from infeasible) when all steps gated by
+    the same capability ingredient were pruned by skip_when_false and no
+    surviving step references that capability.
 
     Returns (is_feasible, infeasible_step_names).
     """
@@ -154,10 +161,55 @@ def _compute_capability_feasibility(
             continue
         on_failure = getattr(step, "on_failure", None) or "escalate"
         on_exhausted = getattr(step, "on_exhausted", None) or "escalate"
-        if on_failure == "escalate" or on_exhausted == "escalate":
-            infeasible.append(step_name)
+        if on_failure != "escalate" and on_exhausted != "escalate":
+            continue
+        if _is_vacuous_gate(
+            gate_input_keys,
+            skip_resolutions=skip_resolutions,
+            pre_prune_steps=pre_prune_steps,
+            post_prune_steps=steps,
+        ):
+            continue
+        infeasible.append(step_name)
 
     return (not infeasible), infeasible
+
+
+def _is_vacuous_gate(
+    gate_input_keys: set[str],
+    *,
+    skip_resolutions: dict[str, bool | None] | None,
+    pre_prune_steps: dict[str, Any] | None,
+    post_prune_steps: dict[str, Any],
+) -> bool:
+    """Return True if the gate is vacuous — its guarded operations were all pruned."""
+    if skip_resolutions is None or pre_prune_steps is None:
+        return False
+    for cap_key in gate_input_keys:
+        guard_ref = CAPABILITY_INGREDIENT_TO_SKIP_GUARD.get(cap_key)
+        if guard_ref is None:
+            return False
+        pruned_for_capability = False
+        for pre_step_name, pre_step in pre_prune_steps.items():
+            skip_guard = getattr(pre_step, "skip_when_false", None)
+            if skip_guard != guard_ref:
+                continue
+            if skip_resolutions.get(pre_step_name) is False:
+                pruned_for_capability = True
+                break
+        if not pruned_for_capability:
+            return False
+        live_uses_capability = False
+        for s in post_prune_steps.values():
+            if s is None:
+                continue
+            with_args = getattr(s, "with_args", None) or {}
+            if cap_key in with_args:
+                live_uses_capability = True
+                break
+        if live_uses_capability:
+            return False
+    return True
 
 
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:

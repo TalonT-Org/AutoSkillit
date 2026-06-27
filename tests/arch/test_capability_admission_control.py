@@ -1,10 +1,12 @@
 """Architectural structural tests for capability admission control.
 
 Verifies that:
-- _compute_capability_feasibility is called inside load_and_validate
+- _compute_capability_feasibility is called inside load_and_validate with skip_resolutions
 - All four content-serving surfaces gate on dispatch_feasible
+  (open_kitchen, get_recipe, load_recipe, dispatch_food_truck)
 - CAPABILITY_GATE_CALLABLES entries have a corresponding BACKEND_CAPABILITY_INGREDIENTS input
 - Every run_python step using a CAPABILITY_GATE_CALLABLES callable reads a capability ingredient
+- dispatch_food_truck injects _build_capability_overrides for backend capability signals
 """
 
 from __future__ import annotations
@@ -102,6 +104,73 @@ def test_load_recipe_gates_on_dispatch_feasible() -> None:
             )
             return
     pytest.fail("load_recipe function not found in tools_recipe.py")
+
+
+def test_dispatch_food_truck_gates_on_dispatch_feasible() -> None:
+    """dispatch_food_truck must check dispatch_feasible before executing."""
+    fleet_path = SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch.py"
+    src = fleet_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "dispatch_food_truck":
+            found = False
+            for child in ast.walk(node):
+                if isinstance(child, ast.Constant) and child.value == "dispatch_feasible":
+                    found = True
+                    break
+            assert found, (
+                "dispatch_food_truck must reference 'dispatch_feasible' to gate "
+                "capability-DOA fleet dispatches before subprocess launch."
+            )
+            return
+    pytest.fail("dispatch_food_truck function not found in tools_fleet_dispatch.py")
+
+
+def test_compute_capability_feasibility_receives_skip_resolutions() -> None:
+    """load_and_validate must pass skip_resolutions to _compute_capability_feasibility
+    so the vacuous-gate detection has access to pruning context."""
+    api_path = SRC_ROOT / "recipe" / "_api.py"
+    tree = ast.parse(api_path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "load_and_validate"
+        ):
+            for child in ast.walk(node):
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Name)
+                    and child.func.id == "_compute_capability_feasibility"
+                ):
+                    kw_names = {kw.arg for kw in child.keywords if kw.arg is not None}
+                    assert "skip_resolutions" in kw_names, (
+                        "load_and_validate must pass skip_resolutions kwarg "
+                        "to _compute_capability_feasibility for vacuous-gate detection."
+                    )
+                    return
+            pytest.fail("_compute_capability_feasibility call not found in load_and_validate")
+    pytest.fail("load_and_validate function not found in _api.py")
+
+
+def test_dispatch_food_truck_injects_capability_overrides() -> None:
+    """dispatch_food_truck must reference _build_capability_overrides to inject
+    backend capability signals into the load_and_validate call."""
+    fleet_path = SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch.py"
+    src = fleet_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "dispatch_food_truck":
+            found = False
+            for child in ast.walk(node):
+                if isinstance(child, ast.Name) and child.id == "_build_capability_overrides":
+                    found = True
+                    break
+            assert found, (
+                "dispatch_food_truck must reference _build_capability_overrides "
+                "to inject backend capability signals into load_and_validate."
+            )
+            return
+    pytest.fail("dispatch_food_truck function not found in tools_fleet_dispatch.py")
 
 
 def test_capability_gate_callables_have_matching_ingredient() -> None:

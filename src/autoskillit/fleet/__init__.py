@@ -4,6 +4,7 @@ Gateway exports per REQ-IMP-001 — consumers import from
 ``autoskillit.fleet``, not from sub-modules.
 """
 
+from ._api import _build_capability_overrides as _build_capability_overrides
 from ._api import _write_pid as _write_pid
 from ._api import execute_dispatch
 from ._capture import CaptureCompletenessError
@@ -101,6 +102,7 @@ from .summary import (
 )
 
 __all__ = [
+    "_build_capability_overrides",
     "_write_pid",
     "cleanup_orphaned_labels",
     "discover_campaign_state_files",

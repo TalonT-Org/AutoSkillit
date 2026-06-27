@@ -249,6 +249,42 @@ async def test_pre_reveal_then_open_does_not_re_execute_handler():
 
 
 @pytest.mark.anyio
+async def test_deferred_recall_returns_infeasible_when_dispatch_feasible_false():
+    """When deferred-recall loads a recipe with dispatch_feasible=False,
+    open_kitchen must return the infeasible response, not proceed."""
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+    mock_ctx = _make_deferred_recall_ctx("test-recipe")
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test-recipe\nsteps:\n  gate:\n    cmd: echo\n",
+        "valid": True,
+        "errors": [],
+        "requires_packs": [],
+        "requires_features": [],
+        "content_hash": "abc",
+        "composite_hash": "def",
+        "recipe_version": "1.0",
+        "suggestions": [],
+        "dispatch_feasible": False,
+        "infeasible_steps": ["gate_backend_write"],
+        "post_prune_step_names": ["gate_backend_write"],
+    }
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")
+    mock_ctx.recipes.find.return_value = mock_recipe_info
+    mock_recipe_obj = MagicMock()
+    mock_recipe_obj.steps = {"gate_backend_write": MagicMock()}
+    mock_ctx.recipes.load.return_value = mock_recipe_obj
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        result = await open_kitchen(name="test-recipe", ctx=mock_ctx)
+
+    parsed = json.loads(result)
+    assert parsed["success"] is False
+    assert "dispatch_infeasible" in str(parsed).lower() or "gate_backend_write" in str(parsed)
+
+
+@pytest.mark.anyio
 async def test_deferred_recall_strips_content_when_ingredients_only_true():
     """Deferred-recall path must respect ingredients_only flag."""
     from autoskillit.server.tools import tools_kitchen

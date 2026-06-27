@@ -407,6 +407,8 @@ def load_and_validate(
                 ingredient_overrides or {},
                 capability_ingredient_keys=BACKEND_CAPABILITY_INGREDIENTS,
                 capability_gate_callables=CAPABILITY_GATE_CALLABLES,
+                skip_resolutions=_skip_resolutions,
+                pre_prune_steps=_pre_prune_steps,
             )
             t0 = _t("capability_feasibility", t0, name)
 

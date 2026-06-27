@@ -31,6 +31,7 @@ async def test_stale_session_path_returns_crashed(tool_ctx_kitchen_open, tmp_pat
     mock_mgr = MagicMock()
     mock_mgr.init_session.return_value = ValidatedAddDir(path=str(stale_path))
     mock_mgr.compute_skill_closure.return_value = frozenset()
+    mock_mgr.validate_session_exists.return_value = False
     tool_ctx_kitchen_open.session_skill_manager = mock_mgr
 
     result = await run_skill("/autoskillit:investigate foo", str(tmp_path))

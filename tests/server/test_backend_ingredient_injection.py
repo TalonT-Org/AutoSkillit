@@ -498,11 +498,9 @@ class TestRealCompositionPruning:
     @pytest.mark.anyio
     async def test_codex_open_kitchen_returns_success(self, tmp_path: Path) -> None:
         """End-to-end integration: open_kitchen with codex backend on the bundled
-        implementation recipe must return success=False and kitchen=dispatch_infeasible.
-
-        Capability admission control detects that codex lacks git_metadata_writable,
-        causing gate_backend_write steps to be infeasible. open_kitchen returns the
-        dispatch_infeasible envelope instead of opening the kitchen.
+        implementation recipe must return success=True because vacuous-gate
+        detection recognises that all backend_supports_git_write-guarded steps
+        were pruned, making gate_backend_write vacuous.
         """
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
@@ -556,9 +554,11 @@ class TestRealCompositionPruning:
 
             result = json.loads(result_str)
 
-        assert result.get("success") is False, (
-            f"open_kitchen must refuse codex backend (dispatch_feasible=False); got: {result}"
+        assert result.get("success") is True, (
+            f"open_kitchen must accept codex backend (vacuous gate); got: {result}"
         )
-        assert result.get("kitchen") == "dispatch_infeasible", (
-            f"open_kitchen must report kitchen=dispatch_infeasible; got: {result.get('kitchen')}"
+        assert result.get("dispatch_feasible") is True, (
+            "dispatch_feasible must be True when "
+            f"gate_backend_write is vacuous; got: "
+            f"{result.get('dispatch_feasible')}"
         )

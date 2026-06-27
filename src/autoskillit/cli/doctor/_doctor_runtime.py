@@ -8,7 +8,12 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import CodingAgentBackend, Severity, get_logger
+from autoskillit.core import (
+    CodingAgentBackend,
+    Severity,
+    default_log_dir,
+    get_logger,
+)
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
 from ._doctor_types import DoctorResult
@@ -192,3 +197,76 @@ def _check_script_binary() -> DoctorResult:
             "script(1) present but -qefc flags unsupported — PTY wrapping may not work correctly",
         )
     return DoctorResult(Severity.OK, check_name, "script(1) available with -qefc support")
+
+
+def _check_codex_graduation(
+    *,
+    backend: CodingAgentBackend | None = None,
+    log_dir: Path | None = None,
+) -> DoctorResult:
+    check_name = "codex_graduation"
+
+    if backend is None or not backend.capabilities.version_check_command:
+        return DoctorResult(Severity.OK, check_name, "Skipped (no codex backend)")
+
+    backend_name = backend.name
+    log_root = log_dir or default_log_dir()
+
+    # Criterion 1: version check
+    version_result = _check_codex_version(backend=backend)
+    version_status = "pass" if version_result.severity == Severity.OK else "fail"
+
+    # Criterion 2: probe-harness cache
+    probe_path = log_root / "codex-probe-cache.json"
+    probe_status = "not-yet-run"
+    try:
+        raw = json.loads(probe_path.read_text())
+        entries = raw.get("entries", {}) if isinstance(raw, dict) else {}
+        if entries:
+            probe_status = (
+                "pass"
+                if any(isinstance(e, dict) and e.get("passed") for e in entries.values())
+                else "fail"
+            )
+    except (OSError, json.JSONDecodeError, ValueError):
+        pass
+
+    # Criterion 3: matrix last-run result
+    matrix_path = log_root / "codex-matrix-result.json"
+    matrix_status = "not-yet-run"
+    try:
+        matrix_raw = json.loads(matrix_path.read_text())
+        if isinstance(matrix_raw, dict) and "passed" in matrix_raw:
+            matrix_status = "pass" if matrix_raw["passed"] else "fail"
+    except (OSError, json.JSONDecodeError, ValueError):
+        pass
+
+    # Criterion 4: sessions.jsonl smoke
+    sessions_path = log_root / "sessions.jsonl"
+    smoke_status = "not-found"
+    try:
+        for line in reversed(sessions_path.read_text().splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if entry.get("backend") == backend_name:
+                smoke_status = "pass" if entry.get("success") else "fail"
+                break
+    except OSError:
+        pass
+
+    statuses = [version_status, probe_status, matrix_status, smoke_status]
+    summary = (
+        f"version={version_status} | probe={probe_status}"
+        f" | matrix={matrix_status} | smoke={smoke_status}"
+    )
+
+    if not all(s == "pass" for s in statuses):
+        pending = sum(1 for s in statuses if s != "pass")
+        summary += f" — EXPERIMENTAL hold: {pending} of 4 criteria pending"
+
+    return DoctorResult(Severity.INFO, check_name, summary)

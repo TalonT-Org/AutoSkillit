@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -579,3 +580,114 @@ class TestCheckCodexVersion:
         result = _check_codex_version(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert "0.131.0" in result.message
+
+
+class TestCheckCodexGraduation:
+    """Tests for _check_codex_graduation doctor check (Check 33)."""
+
+    def _codex_result(self, stdout: str, returncode: int = 0, stderr: str = ""):
+        return type(
+            "CompletedProcess",
+            (),
+            {"returncode": returncode, "stdout": stdout, "stderr": stderr},
+        )()
+
+    def test_skip_for_none_backend(self) -> None:
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_graduation
+        from autoskillit.core import Severity
+
+        result = _check_codex_graduation(backend=None)
+        assert result.severity == Severity.OK
+        assert result.check == "codex_graduation"
+        assert "skipped" in result.message.lower()
+
+    def test_skip_for_non_codex_backend(self) -> None:
+        from types import SimpleNamespace
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_graduation
+        from autoskillit.core import Severity
+
+        stub = SimpleNamespace(capabilities=SimpleNamespace(version_check_command=""))
+        result = _check_codex_graduation(backend=stub)
+        assert result.severity == Severity.OK
+        assert "skipped" in result.message.lower()
+
+    def test_all_green_omits_hold_note(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+        from datetime import UTC, datetime
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_graduation
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._codex_result("Codex 0.130.0\n"),
+        )
+        ts = datetime.now(UTC).isoformat()
+        (tmp_path / "codex-probe-cache.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "entries": {"0.130.0": {"passed": True, "probe_timestamp": ts}},
+                }
+            )
+        )
+        (tmp_path / "codex-matrix-result.json").write_text(json.dumps({"passed": True}))
+        (tmp_path / "sessions.jsonl").write_text(
+            json.dumps({"backend": "codex", "success": True}) + "\n"
+        )
+
+        result = _check_codex_graduation(backend=CodexBackend(), log_dir=tmp_path)
+        assert result.severity == Severity.INFO
+        assert "version=pass" in result.message
+        assert "probe=pass" in result.message
+        assert "matrix=pass" in result.message
+        assert "smoke=pass" in result.message
+        assert "EXPERIMENTAL" not in result.message
+
+    def test_non_green_includes_hold_note(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_graduation
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._codex_result("Codex 0.130.0\n"),
+        )
+        (tmp_path / "sessions.jsonl").write_text(
+            json.dumps({"backend": "codex", "success": True}) + "\n"
+        )
+
+        result = _check_codex_graduation(backend=CodexBackend(), log_dir=tmp_path)
+        assert result.severity == Severity.INFO
+        assert "not-yet-run" in result.message
+        assert "EXPERIMENTAL" in result.message
+
+    def test_absent_files_yield_not_yet_run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_graduation
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **kw: self._codex_result("Codex 0.130.0\n"),
+        )
+        result = _check_codex_graduation(backend=CodexBackend(), log_dir=tmp_path)
+        assert result.severity == Severity.INFO
+        assert "probe=not-yet-run" in result.message
+        assert "matrix=not-yet-run" in result.message
+        assert "smoke=not-found" in result.message

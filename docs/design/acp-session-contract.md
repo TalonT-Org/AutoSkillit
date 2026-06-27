@@ -50,7 +50,7 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `build_resume_cmd` | `session/resume` | Uses `--resume <session_id>` flag | Uses positional `resume <session_id>` subcommand (`CodexFlags.RESUME_SUBCOMMAND = "resume"`, lines 978–979); validates non-empty `resume_session_id` (raises `ValueError`) | Positional subcommand vs. flag; input validation. |
 | `build_interactive_cmd` | `session/new` or `session/resume` (via `ResumeSpec`: `NoResume | BareResume | NamedResume`) | System prompt as `--append-system-prompt <value>` (only applied on `NoResume`) | System prompt as `-c developer_instructions=<value>` (line 931; same `NoResume` restriction); **`tools` arg silently discarded with `logger.warning("codex_tools_ignored")`** at lines 909–913 | `CodexFlags.CONFIG_OVERRIDE = "-c"`; `tools` arg discarded with warning rather than error. |
 | `build_food_truck_cmd` | `session/new` (orchestrator-level session, L2) | Builds `CmdSpec` for food-truck orchestrator | Builds `CmdSpec`; **discards `plugin_source`, `output_format`, `exit_after_stop_delay_ms`** (lines 821–823, `# noqa: F841`); sandbox is `read-only` (not `workspace-write`); no `--tools AskUserQuestion` | Same three discard reasons as `build_skill_session_cmd`; sandbox policy differs; no AskUserQuestion tool. |
-| `build_inspector_cmd` | No ACP analogue (lightweight probe, not a session) | Method body hits an unreachable `AssertionError` stub (`inspector_capable=True` in `CLAUDE_CODE_CAPABILITIES` but no implementation exists) | Raises `CapabilityNotSupportedError` when `inspector_capable=False` | Claude Code: stub; Codex: explicit capability gate. |
+| `build_inspector_cmd` | No ACP analogue (lightweight probe, not a session) | Raises `CapabilityNotSupportedError` (`inspector_capable=False` in `CLAUDE_CODE_CAPABILITIES`; unreachable `AssertionError` stub at line 875 is dead code) | Raises `CapabilityNotSupportedError` when `inspector_capable=False` | — (both backends gate via `inspector_capable=False`) |
 | `setup_session_dir` | ACP pre-session initialization | No-op | Substantial setup: copies `config.toml`, symlinks `auth.json` + `.env` + `sessions/`, generates agent TOMLs, materializes profile skills (lines 1021–1072) | Codex: rich setup with multiple failure-logged steps. |
 | `validate_session_layout` | ACP session validation (post-setup) | Validates session directory layout | Validates session directory layout (includes `required_session_files={"config.toml"}`) | — |
 | `validate_skill_content` | ACP skill-content validation | YAML frontmatter validation (`required_skill_fields={"name", "description"}`) | Returns `[]` unconditionally (no frontmatter requirement) | Codex: structural discard — entire validation is a no-op. |
@@ -81,9 +81,10 @@ The protocol methods partition into five behavioral clusters:
    that the orchestrator consumes before invoking ACP methods.
 
 `build_inspector_cmd` is a non-session probe (Health Inspector per issue #3533)
-and has no ACP analogue. It either raises `CapabilityNotSupportedError` (Codex,
-`inspector_capable=False`) or hits an unreachable stub (`ClaudeCodeBackend`,
-`inspector_capable=True` but no implementation).
+and has no ACP analogue. Both backends raise `CapabilityNotSupportedError`
+(`inspector_capable=False` in both `CLAUDE_CODE_CAPABILITIES` and
+`CodexBackend.capabilities`); an unreachable `AssertionError` stub remains in
+`ClaudeCodeBackend.build_inspector_cmd` (line 875) as a defensive guard.
 
 ---
 
@@ -325,12 +326,12 @@ signal-handling interacts with the watchdog (IDLE_STALL detection).
 
 | Backend | `inspector_capable` | `build_inspector_cmd` behavior |
 |---|---|---|
-| Claude Code | `True` in `CLAUDE_CODE_CAPABILITIES` | Method body hits an unreachable `AssertionError` stub — no implementation exists |
+| Claude Code | `False` in `CLAUDE_CODE_CAPABILITIES` | Raises `CapabilityNotSupportedError`; unreachable `AssertionError` stub at line 875 is dead code |
 | Codex | `False` | Raises `CapabilityNotSupportedError` when `inspector_capable=False` |
 
-Claude Code's inspector is a documented but unimplemented stub; Codex
-explicitly gates the capability. Both backends currently fail Health
-Inspector probes (`build_inspector_cmd` is a no-go for production).
+Both backends gate via `inspector_capable=False` and raise `CapabilityNotSupportedError`;
+no implementation exists in either. An unreachable `AssertionError` at line 875 of
+`claude.py` is dead code preserved as a defensive guard for future implementation.
 
 ### 4.7 noqa Discard Sites
 

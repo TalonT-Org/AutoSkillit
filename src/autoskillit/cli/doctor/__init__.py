@@ -61,6 +61,7 @@ from ._doctor_mcp import (
 )
 from ._doctor_runtime import (
     _check_claude_process_state_breakdown,
+    _check_codex_graduation,
     _check_codex_version,
     _check_quota_cache_schema,
     _check_script_binary,
@@ -212,6 +213,9 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(
         _check_codex_mcp_timeouts(backend=_backend, run_skill=cfg.run_skill, fleet=cfg.fleet)
     )
+
+    # Check 33: Codex graduation criteria
+    results.append(_check_codex_graduation(backend=_backend))
 
     # Output
     if output_json:

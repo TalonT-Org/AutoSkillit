@@ -1748,3 +1748,8 @@ class TestCodexBackendSetupSessionDir:
         assert "# wp-elaborator" in body
         assert "## Tool Constraints" in body
         assert "```json" in body
+
+    def test_no_git_subdir_created(self) -> None:
+        self._write_all_source_files()
+        CodexBackend().setup_session_dir(self.session_dir)
+        assert not (self.session_dir / ".git").exists()

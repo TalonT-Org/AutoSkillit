@@ -416,7 +416,9 @@ class TestCodexContextExhaustionFromTurnFailed:
         assert adapted.jsonl_context_exhausted is False
 
     def test_turn_failed_error_code_only_classify_returns_context_exhausted(self) -> None:
-        ndjson = _turn_failed_ndjson("", error_code="context_length_exceeded")
+        ndjson = _turn_failed_ndjson(
+            "Agent terminated unexpectedly", error_code="context_length_exceeded"
+        )
         agent_result = CodexResultParser().parse_stdout(ndjson)
         adapted = _adapt_agent_result(agent_result)
         result = _sr(returncode=1)
@@ -444,7 +446,7 @@ class TestCodexContextExhaustionFromTurnFailed:
         agent_result = CodexResultParser().parse_stdout(ndjson)
         adapted = _adapt_agent_result(agent_result)
         result = _sr(returncode=1)
-        assert classify_infra_exit(adapted, result) != InfraExitCategory.CONTEXT_EXHAUSTED
+        assert classify_infra_exit(adapted, result) == InfraExitCategory.API_ERROR
 
     def test_stderr_non_exhaustion_not_context_exhausted(self) -> None:
         session = ClaudeSessionResult(
@@ -454,7 +456,7 @@ class TestCodexContextExhaustionFromTurnFailed:
             session_id="s1",
         )
         result = _sr(returncode=1, stderr="some transient error")
-        assert classify_infra_exit(session, result) != InfraExitCategory.CONTEXT_EXHAUSTED
+        assert classify_infra_exit(session, result) == InfraExitCategory.COMPLETED
 
 
 class TestRateLimitClassification:

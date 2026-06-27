@@ -213,14 +213,6 @@ class CodexStreamParser:
         if self.completion_marker and _marker_is_standalone(text, self.completion_marker):
             self._saw_marker = True
 
-    @property
-    def unknown_event_count(self) -> int:
-        return self.ndjson_unknown_event_count
-
-    @property
-    def unknown_item_count(self) -> int:
-        return self.ndjson_unknown_item_count
-
     def parse_line(self, line: str) -> SessionEvent | None:
         line = line.strip()
         if not line:

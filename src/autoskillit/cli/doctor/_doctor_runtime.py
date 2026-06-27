@@ -223,7 +223,11 @@ def _check_codex_graduation(
         raw = json.loads(probe_path.read_text())
         entries = raw.get("entries", {}) if isinstance(raw, dict) else {}
         if entries:
-            probe_status = "pass" if any(e.get("passed") for e in entries.values()) else "fail"
+            probe_status = (
+                "pass"
+                if any(isinstance(e, dict) and e.get("passed") for e in entries.values())
+                else "fail"
+            )
     except (OSError, json.JSONDecodeError, ValueError):
         pass
 

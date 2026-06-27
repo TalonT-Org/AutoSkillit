@@ -935,7 +935,7 @@ async def run_skill(
                     allow_only=allow_only,
                     backend=_effective_backend_obj,
                 )
-                if not Path(session_root.path).is_dir():
+                if not tool_ctx.session_skill_manager.validate_session_exists(session_id):
                     logger.warning(
                         "stale_session_path",
                         session_id=session_id,

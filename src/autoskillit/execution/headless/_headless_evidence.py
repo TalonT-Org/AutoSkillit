@@ -125,6 +125,9 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
 
     assistant_messages: list[str] = raw.get("agent_messages", [])
 
+    seen_ndjson_unknown_event_count: int = raw.get("ndjson_unknown_event_count", 0)
+    seen_ndjson_unknown_item_count: int = raw.get("ndjson_unknown_item_count", 0)
+
     return ClaudeSessionResult(
         subtype=subtype,
         is_error=is_error,
@@ -139,6 +142,8 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         has_thinking_only_turn=False,
         seen_block_types=frozenset(),
         api_error_status=api_error_status,
+        seen_ndjson_unknown_event_count=seen_ndjson_unknown_event_count,
+        seen_ndjson_unknown_item_count=seen_ndjson_unknown_item_count,
     )
 
 

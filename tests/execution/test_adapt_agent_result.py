@@ -58,6 +58,8 @@ def test_hardcoded_thinking_defaults() -> None:
     result = _adapt_agent_result(_make_agent_result())
     assert result.has_thinking_only_turn is False
     assert result.seen_block_types == frozenset()
+    assert result.seen_ndjson_unknown_event_count == 0
+    assert result.seen_ndjson_unknown_item_count == 0
 
 
 def test_unknown_subtype_maps_to_unknown() -> None:
@@ -259,6 +261,8 @@ def test_unused_agent_fields_do_not_affect_output() -> None:
     assert base.stop_reasons == varied.stop_reasons
     assert base.has_thinking_only_turn == varied.has_thinking_only_turn
     assert base.seen_block_types == varied.seen_block_types
+    assert base.seen_ndjson_unknown_event_count == varied.seen_ndjson_unknown_event_count
+    assert base.seen_ndjson_unknown_item_count == varied.seen_ndjson_unknown_item_count
 
     assert not hasattr(base, "exit_code")
     assert not hasattr(base, "backend_name")
@@ -296,6 +300,8 @@ def test_full_round_trip_all_fields() -> None:
             "mcp_tool_calls": [{"name": "read", "path": "/tmp"}],
             "file_changes": ["main.py"],
             "agent_messages": ["I updated the file."],
+            "ndjson_unknown_event_count": 5,
+            "ndjson_unknown_item_count": 2,
         },
     )
     result = _adapt_agent_result(agent)
@@ -317,6 +323,8 @@ def test_full_round_trip_all_fields() -> None:
     assert result.has_thinking_only_turn is False
     assert result.seen_block_types == frozenset()
     assert result.api_error_status is None
+    assert result.seen_ndjson_unknown_event_count == 5
+    assert result.seen_ndjson_unknown_item_count == 2
 
 
 def test_context_exhaustion_from_code_field() -> None:
@@ -394,6 +402,30 @@ def test_classify_infra_exit_rate_limited_via_adapted_error_code() -> None:
     )
     exit_category = classify_infra_exit(adapted, subprocess_result)
     assert exit_category == InfraExitCategory.RATE_LIMITED
+
+
+def test_ndjson_unknown_counters_default_zero() -> None:
+    result = _adapt_agent_result(_make_agent_result())
+    assert result.seen_ndjson_unknown_event_count == 0
+    assert result.seen_ndjson_unknown_item_count == 0
+
+
+def test_ndjson_unknown_event_count_round_trip() -> None:
+    result = _adapt_agent_result(_make_agent_result(raw={"ndjson_unknown_event_count": 3}))
+    assert result.seen_ndjson_unknown_event_count == 3
+
+
+def test_ndjson_unknown_item_count_round_trip() -> None:
+    result = _adapt_agent_result(_make_agent_result(raw={"ndjson_unknown_item_count": 7}))
+    assert result.seen_ndjson_unknown_item_count == 7
+
+
+def test_ndjson_unknown_both_counters_present() -> None:
+    result = _adapt_agent_result(
+        _make_agent_result(raw={"ndjson_unknown_event_count": 3, "ndjson_unknown_item_count": 7})
+    )
+    assert result.seen_ndjson_unknown_event_count == 3
+    assert result.seen_ndjson_unknown_item_count == 7
 
 
 class TestAdaptAgentResultFilePathKey:

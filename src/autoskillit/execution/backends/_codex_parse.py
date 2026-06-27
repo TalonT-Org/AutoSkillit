@@ -37,6 +37,8 @@ class _CodexParseAccumulator:
     success: bool = False
     error_message: str = ""
     error_code: str = ""
+    ndjson_unknown_event_count: int = 0
+    ndjson_unknown_item_count: int = 0
 
 
 def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
@@ -56,6 +58,7 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
         event_type = CodexEventType.from_ndjson(obj.get("type", ""))
         if event_type == CodexEventType.UNKNOWN:
             logger.warning("codex_ndjson_unknown_event_type", type=obj.get("type", ""))
+            acc.ndjson_unknown_event_count += 1
             continue
         if event_type == CodexEventType.THREAD_STARTED:
             acc.session_id = obj.get("thread_id", "")
@@ -103,6 +106,7 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
                 continue
             elif item_type == CodexItemType.UNKNOWN:
                 logger.warning("codex_ndjson_unknown_item_type", item_type=item.get("type", ""))
+                acc.ndjson_unknown_item_count += 1
                 continue
         elif event_type == CodexEventType.TURN_COMPLETED:
             usage = obj.get("usage")
@@ -186,6 +190,8 @@ class CodexResultParser:
                 "mcp_tool_calls": acc.mcp_tool_calls,
                 "file_changes": acc.file_changes,
                 "error_code": acc.error_code,
+                "ndjson_unknown_event_count": acc.ndjson_unknown_event_count,
+                "ndjson_unknown_item_count": acc.ndjson_unknown_item_count,
             },
         )
 
@@ -200,10 +206,20 @@ class CodexStreamParser:
 
     completion_marker: str = ""
     _saw_marker: bool = field(default=False, init=False, repr=False)
+    ndjson_unknown_event_count: int = field(default=0, init=False, repr=False)
+    ndjson_unknown_item_count: int = field(default=0, init=False, repr=False)
 
     def _check_marker_text(self, text: str) -> None:
         if self.completion_marker and _marker_is_standalone(text, self.completion_marker):
             self._saw_marker = True
+
+    @property
+    def unknown_event_count(self) -> int:
+        return self.ndjson_unknown_event_count
+
+    @property
+    def unknown_item_count(self) -> int:
+        return self.ndjson_unknown_item_count
 
     def parse_line(self, line: str) -> SessionEvent | None:
         line = line.strip()
@@ -308,6 +324,7 @@ class CodexStreamParser:
                     has_marker=False,
                 )
 
+            self.ndjson_unknown_item_count += 1
             logger.warning("codex_ndjson_unknown_item_type", item_type=item.get("type", ""))
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
@@ -362,6 +379,7 @@ class CodexStreamParser:
                 has_marker=False,
             )
 
+        self.ndjson_unknown_event_count += 1
         logger.warning("codex_ndjson_unknown_event_type", type=obj.get("type", ""))
         return SessionEvent(
             kind=BackendEventKind.IGNORED,

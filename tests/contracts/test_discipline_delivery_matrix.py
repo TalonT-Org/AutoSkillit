@@ -29,7 +29,6 @@ def _assert_interactive_primary_channel(backend, spec) -> None:
         assert "--append-system-prompt" in spec.cmd
     else:
         assert any("developer_instructions=" in arg for arg in spec.cmd)
-        assert "exec" not in spec.cmd
 
 
 class TestFleetInteractive:

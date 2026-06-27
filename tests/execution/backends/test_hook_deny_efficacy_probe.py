@@ -285,7 +285,9 @@ class TestHookDenyEfficacyProbe:
         hook_output = result.get("hookSpecificOutput", {})
         decision = hook_output.get("permissionDecision")
 
-        if decision == "deny":
+        if not result:
+            strength = "none"
+        elif decision == "deny":
             strength = "hard"
         else:
             strength = "soft"

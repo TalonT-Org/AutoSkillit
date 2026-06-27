@@ -279,19 +279,6 @@ def test_codex_implementation_dispatch_infeasible() -> None:
         "When all backend_supports_git_write-gated steps are pruned, "
         "gate_backend_write is vacuous and should NOT block dispatch."
     )
-
-
-def test_vacuous_gate_does_not_block_dispatch() -> None:
-    """When gate_backend_write's downstream operations are all pruned,
-    the gate is vacuous and dispatch_feasible must be True."""
-    result = load_and_validate(
-        "implementation",
-        project_dir=_PROJECT_ROOT,
-        ingredient_overrides={"backend_supports_git_write": "false"},
-        backend_name="codex",
-    )
-    assert result["valid"] is True
-    assert result.get("dispatch_feasible") is True
     assert "gate_backend_write" not in result.get("infeasible_steps", [])
 
 
@@ -357,4 +344,7 @@ def test_codex_capability_gate_recipes(recipe_name: str) -> None:
     if dispatch_feasible is True:
         assert "gate_backend_write" not in infeasible_steps
     else:
+        assert dispatch_feasible is False, (
+            f"Expected dispatch_feasible to be explicitly False, got {dispatch_feasible!r}"
+        )
         assert "gate_backend_write" in infeasible_steps

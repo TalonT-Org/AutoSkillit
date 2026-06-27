@@ -336,28 +336,30 @@ no implementation exists in either. An unreachable `AssertionError` at line 875 
 ### 4.7 noqa Discard Sites
 
 All discard sites in `codex.py` where a protocol parameter is silently
-dropped. Sites 1–6 use `# noqa: F841` to suppress unused-variable warnings
-on local reassignments that document the no-op contract. Site 7 uses a
-runtime warning. Site 8 is a structural discard (entire method body
+dropped. Lines 698–701 (`build_skill_session_cmd`) and 821–823
+(`build_food_truck_cmd`) use `# noqa: F841` to suppress unused-variable
+warnings on local reassignments that document the no-op contract. Line 911
+(`build_interactive_cmd`) uses a runtime warning. Lines 1074–1075
+(`validate_skill_content`) are a structural discard (entire method body
 unconditional).
 
-| # | Line | Method | Discarded Param | noqa Rule | Reason |
-|---|------|--------|-----------------|-----------|--------|
-| 1 | 698 | `build_skill_session_cmd` | `plugin_source` | F841 | Codex has no `--plugin-dir` equivalent |
-| 2 | 699 | `build_skill_session_cmd` | `output_format` | F841 | `--json` is unconditional for Codex |
-| 3 | 701 | `build_skill_session_cmd` | `exit_after_stop_delay_ms` | F841 | Claude-only feature |
-| 4 | 821 | `build_food_truck_cmd` | `plugin_source` | F841 | Codex has no `--plugin-dir` |
-| 5 | 822 | `build_food_truck_cmd` | `output_format` | F841 | `--json` is unconditional |
-| 6 | 823 | `build_food_truck_cmd` | `exit_after_stop_delay_ms` | F841 | Claude-only feature |
-| 7 | 911 | `build_interactive_cmd` | `tools` | (warning) | `logger.warning("codex_tools_ignored")` — `tools` arg silently dropped with structured-log warning |
-| 8 | 1074–1075 | `validate_skill_content` | (entire validation) | (structural) | Returns `[]` unconditionally; no frontmatter requirement |
+| Line | Method | Discarded Param | noqa Rule | Reason |
+|------|--------|-----------------|-----------|--------|
+| 698 | `build_skill_session_cmd` | `plugin_source` | F841 | Codex has no `--plugin-dir` equivalent |
+| 699 | `build_skill_session_cmd` | `output_format` | F841 | `--json` is unconditional for Codex |
+| 701 | `build_skill_session_cmd` | `exit_after_stop_delay_ms` | F841 | Claude-only feature |
+| 821 | `build_food_truck_cmd` | `plugin_source` | F841 | Codex has no `--plugin-dir` |
+| 822 | `build_food_truck_cmd` | `output_format` | F841 | `--json` is unconditional |
+| 823 | `build_food_truck_cmd` | `exit_after_stop_delay_ms` | F841 | Claude-only feature |
+| 911 | `build_interactive_cmd` | `tools` | (warning) | `logger.warning("codex_tools_ignored")` — `tools` arg silently dropped with structured-log warning |
+| 1074–1075 | `validate_skill_content` | (entire validation) | (structural) | Returns `[]` unconditionally; no frontmatter requirement |
 
 The F841 sites are deliberately documented as no-ops so the protocol
 contract is preserved across both backends: callers can pass
 `plugin_source` / `output_format` / `exit_after_stop_delay_ms` and the
 Codex backend silently absorbs them. The `tools` arg in
-`build_interactive_cmd` is the only site that emits a runtime warning
-(the others are static no-ops with no observable behavior).
+`build_interactive_cmd` (line 911) is the only site that emits a runtime
+warning (the others are static no-ops with no observable behavior).
 
 ---
 

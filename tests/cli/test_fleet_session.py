@@ -809,7 +809,7 @@ class TestFleetSessionPromptPriorDispatchId:
 
 
 class TestLaunchFleetSessionMaxIssuesPerFoodTruck:
-    """Contract: _launch_fleet_session threads max_issues_per_food_truck to prompt builders."""
+    """Contract: max_issues_per_food_truck flows to campaign builder only, not dispatch builder."""
 
     def test_campaign_dispatch_forwards_max_issues_per_food_truck(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -853,3 +853,10 @@ class TestLaunchFleetSessionMaxIssuesPerFoodTruck:
             fleet_mode="campaign",
         )
         assert captured.get("max_issues_per_food_truck") == 7
+
+    def test_dispatch_prompt_does_not_accept_max_issues_per_food_truck(self) -> None:
+        """_build_fleet_dispatch_prompt must not expose max_issues_per_food_truck parameter."""
+        from autoskillit.cli._prompts_kitchen import _build_fleet_dispatch_prompt
+
+        sig = inspect.signature(_build_fleet_dispatch_prompt)
+        assert "max_issues_per_food_truck" not in sig.parameters

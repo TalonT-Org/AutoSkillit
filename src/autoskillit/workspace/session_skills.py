@@ -858,6 +858,19 @@ class DefaultSessionSkillManager:
                 return True
         return False
 
+    def validate_session_exists(self, session_id: str) -> bool:
+        """Return True if session directory exists and is non-empty."""
+        for root in (self._root, self._codex_root):
+            if root is None:
+                continue
+            candidate = root / session_id
+            if candidate.is_dir():
+                try:
+                    return any(candidate.iterdir())
+                except OSError:
+                    return False
+        return False
+
     def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
         """Remove session dirs not accessed within max_age_seconds.
 
@@ -873,6 +886,11 @@ class DefaultSessionSkillManager:
                     continue
                 last_access = entry.stat().st_atime
                 if now - last_access > max_age_seconds:
+                    logger.warning(
+                        "cleanup_stale_removed",
+                        path=str(entry),
+                        age_seconds=round(now - last_access),
+                    )
                     shutil.rmtree(entry, ignore_errors=True)
                     removed += 1
         return removed

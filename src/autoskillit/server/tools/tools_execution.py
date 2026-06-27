@@ -884,6 +884,21 @@ async def run_skill(
                     step_name, _ephemeral_root, session_id
                 )
                 if _restored is not None:
+                    if not Path(_restored.path).is_dir():
+                        logger.warning(
+                            "stale_snapshot_path",
+                            session_id=session_id,
+                            path=_restored.path,
+                        )
+                        return SkillResult.crashed(
+                            exception=RuntimeError(
+                                f"Snapshot path {_restored.path!r} does not exist. "
+                                f"The /dev/shm directory may have been reclaimed."
+                            ),
+                            skill_command=resolved_command,
+                            session_id=session_id,
+                            order_id=effective_order_id,
+                        ).to_json()
                     skill_add_dirs.append(_restored)
                     replay_snapshot_used = True
                     logger.debug(
@@ -920,6 +935,21 @@ async def run_skill(
                     allow_only=allow_only,
                     backend=_effective_backend_obj,
                 )
+                if not tool_ctx.session_skill_manager.validate_session_exists(session_id):
+                    logger.warning(
+                        "stale_session_path",
+                        session_id=session_id,
+                        path=session_root.path,
+                    )
+                    return SkillResult.crashed(
+                        exception=RuntimeError(
+                            f"Session path {session_root.path!r} does not exist. "
+                            f"The /dev/shm directory may have been reclaimed."
+                        ),
+                        skill_command=resolved_command,
+                        session_id=session_id,
+                        order_id=effective_order_id,
+                    ).to_json()
                 skill_add_dirs.append(session_root)
 
                 if target_name:

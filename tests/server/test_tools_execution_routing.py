@@ -48,15 +48,17 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx_kitchen_open, monkey
 
 @pytest.mark.anyio
 async def test_run_skill_calls_session_skill_manager_init_session(
-    tool_ctx_kitchen_open, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """run_skill routes through session_skill_manager.init_session() for add_dirs."""
     from unittest.mock import MagicMock
 
     from autoskillit.core import ValidatedAddDir
 
-    # Create a spy on init_session
-    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    # Create a spy on init_session — use a real directory so the stale-path guard passes
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    fake_validated = ValidatedAddDir(path=str(session_dir))
     mock_ssm = MagicMock()
     mock_ssm.init_session.return_value = fake_validated
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
@@ -80,14 +82,17 @@ async def test_run_skill_calls_session_skill_manager_init_session(
 
 @pytest.mark.anyio
 async def test_run_skill_activates_deps_for_tier3_target(
-    tool_ctx_kitchen_open, monkeypatch
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
     """run_skill calls activate_skill_deps even when target is tier3 (not in tier2 list)."""
     from unittest.mock import MagicMock
 
     from autoskillit.core import ValidatedAddDir
 
-    fake_validated = ValidatedAddDir(path="/fake/session/dir")
+    # Use a real directory so the stale-path guard passes
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    fake_validated = ValidatedAddDir(path=str(session_dir))
     mock_ssm = MagicMock()
     mock_ssm.init_session.return_value = fake_validated
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm

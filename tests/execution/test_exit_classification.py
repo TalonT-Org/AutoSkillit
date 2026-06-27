@@ -56,8 +56,11 @@ def _sr(
     )
 
 
-def _turn_failed_ndjson(error_message: str) -> str:
-    return json.dumps({"type": "turn.failed", "error": {"message": error_message}})
+def _turn_failed_ndjson(error_message: str, *, error_code: str = "") -> str:
+    error: dict[str, str] = {"message": error_message}
+    if error_code:
+        error["code"] = error_code
+    return json.dumps({"type": "turn.failed", "error": error})
 
 
 class TestClassifyInfraExit:
@@ -411,6 +414,49 @@ class TestCodexContextExhaustionFromTurnFailed:
         agent_result = CodexResultParser().parse_stdout(ndjson)
         adapted = _adapt_agent_result(agent_result)
         assert adapted.jsonl_context_exhausted is False
+
+    def test_turn_failed_error_code_only_classify_returns_context_exhausted(self) -> None:
+        ndjson = _turn_failed_ndjson(
+            "Agent terminated unexpectedly", error_code="context_length_exceeded"
+        )
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        result = _sr(returncode=1)
+        assert classify_infra_exit(adapted, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    def test_turn_failed_error_code_and_message_classify_returns_context_exhausted(self) -> None:
+        ndjson = _turn_failed_ndjson(
+            "The model's context length has been exceeded",
+            error_code="context_length_exceeded",
+        )
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        result = _sr(returncode=1)
+        assert classify_infra_exit(adapted, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    def test_turn_failed_message_only_classify_returns_context_exhausted(self) -> None:
+        ndjson = _turn_failed_ndjson("context_length_exceeded", error_code="")
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        result = _sr(returncode=1)
+        assert classify_infra_exit(adapted, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+
+    def test_turn_failed_non_exhaustion_error_code_not_context_exhausted(self) -> None:
+        ndjson = _turn_failed_ndjson("Internal server error", error_code="server_error")
+        agent_result = CodexResultParser().parse_stdout(ndjson)
+        adapted = _adapt_agent_result(agent_result)
+        result = _sr(returncode=1)
+        assert classify_infra_exit(adapted, result) == InfraExitCategory.API_ERROR
+
+    def test_stderr_non_exhaustion_not_context_exhausted(self) -> None:
+        session = ClaudeSessionResult(
+            subtype="success",
+            is_error=False,
+            result="",
+            session_id="s1",
+        )
+        result = _sr(returncode=1, stderr="some transient error")
+        assert classify_infra_exit(session, result) == InfraExitCategory.COMPLETED
 
 
 class TestRateLimitClassification:

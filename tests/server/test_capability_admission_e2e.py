@@ -29,9 +29,10 @@ def test_capability_gate_callables_includes_gate_backend_write() -> None:
     assert "gate_backend_write" in CAPABILITY_GATE_CALLABLES
 
 
-def test_codex_backend_produces_infeasible_recipe() -> None:
+def test_codex_backend_produces_feasible_recipe_via_vacuous_gate() -> None:
     """Codex + implementation recipe chain: backend_supports_git_write=false
-    produces dispatch_feasible=False with gate_backend_write infeasible."""
+    produces dispatch_feasible=True because vacuous-gate detection recognises
+    all guarded steps were pruned."""
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,
@@ -39,8 +40,8 @@ def test_codex_backend_produces_infeasible_recipe() -> None:
         backend_name="codex",
     )
     assert result.get("valid") is True
-    assert result.get("dispatch_feasible") is False
-    assert "gate_backend_write" in result.get("infeasible_steps", [])
+    assert result.get("dispatch_feasible") is True
+    assert "gate_backend_write" not in result.get("infeasible_steps", [])
 
 
 def test_claude_code_backend_produces_feasible_recipe() -> None:

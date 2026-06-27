@@ -248,18 +248,6 @@ future use and have no current production consumer outside the exemption set.
 | `min_version` | Version validation in doctor (Codex: `"0.130.0"`; Claude: `""`) |
 | `mcp_env_forward_vars` | MCP env forwarding (Codex: `CODEX_MCP_ENV_FORWARD_VARS`; Claude: `frozenset()`) |
 
-### 3.4 Categorization discrepancy note
-
-The plan's draft categorization listed five forward-declared fields
-(`supports_thinking_blocks`, `mcp_config_capable`, `supports_context_exhaustion_detection`,
-`min_version`, `version_check_command`). Per the directive in the plan to
-validate against `_FORWARD_DECLARED`, this document uses the authoritative
-six-field set above. `mcp_config_capable` and `supports_context_exhaustion_detection`
-are categorized as ACP-Mappable; `version_check_command` is categorized as
-autoskillit-Local Extension (doctor version validation is an autoskillit concern,
-not ACP). The authoritative forward-declared set is `_FORWARD_DECLARED`.
-
----
 
 ## Section 4: Codex Shim Deviations
 

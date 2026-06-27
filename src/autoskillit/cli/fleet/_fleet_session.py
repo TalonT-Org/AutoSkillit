@@ -71,7 +71,6 @@ def _launch_fleet_session(
         prompt = _build_fleet_dispatch_prompt(
             mcp_prefix,
             recipe_table=recipe_table,
-            max_issues_per_food_truck=cfg.fleet.max_issues_per_food_truck,
             max_total_issues=cfg.fleet.max_total_issues,
             max_concurrent_dispatches=cfg.fleet.max_concurrent_dispatches,
             has_unguarded_filesystem_access=_backend_caps.has_unguarded_filesystem_access,

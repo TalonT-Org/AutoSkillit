@@ -811,32 +811,6 @@ class TestFleetSessionPromptPriorDispatchId:
 class TestLaunchFleetSessionMaxIssuesPerFoodTruck:
     """Contract: _launch_fleet_session threads max_issues_per_food_truck to prompt builders."""
 
-    def test_adhoc_dispatch_forwards_max_issues_per_food_truck(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """Ad-hoc threads cfg.fleet.max_issues_per_food_truck to _build_fleet_dispatch_prompt."""
-        captured: dict = {}
-
-        def _fake_build(*args: object, **kwargs: object) -> str:
-            captured.update(kwargs)
-            return "fake-prompt"
-
-        monkeypatch.setattr("autoskillit.cli._prompts._build_fleet_dispatch_prompt", _fake_build)
-        monkeypatch.setattr(
-            "autoskillit.cli.session._session_launch._run_interactive_session",
-            lambda *a, **kw: None,
-        )
-
-        config_dir = tmp_path / ".autoskillit"
-        config_dir.mkdir(exist_ok=True)
-        (config_dir / "config.yaml").write_text("fleet:\n  max_issues_per_food_truck: 7\n")
-        monkeypatch.chdir(tmp_path)
-
-        from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
-
-        _launch_fleet_session(None, None, None, None, fleet_mode="dispatch")
-        assert captured.get("max_issues_per_food_truck") == 7
-
     def test_campaign_dispatch_forwards_max_issues_per_food_truck(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:

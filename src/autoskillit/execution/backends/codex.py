@@ -584,7 +584,14 @@ class CodexBackend(BackendCmdBuilderBase):
             inspector_capable=False,
             supports_context_window_suffix=False,
             has_unguarded_filesystem_access=True,
-            git_metadata_writable=False,
+            # Codex workspace-write sandbox mounts .git/ read-only.
+            # Evidence: codex-rs/protocol/src/permissions.rs hardcodes
+            # .git in PROTECTED_METADATA_PATH_NAMES; enforced via
+            # Seatbelt (macOS) and bwrap/landlock (Linux).
+            # Consumers: _auto_overrides.py, fleet/_api.py gate on this
+            # field; rules_backend_compat.py emits ERROR for
+            # git_metadata_write skills on backends where this is False.
+            git_metadata_writable=False,  # sandbox excludes .git metadata path
             skill_sigil="$",
             session_dir_persistent=True,
         )

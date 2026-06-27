@@ -992,7 +992,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and write-target boundary guards add defense-in-depth gate checks",
     ),
     "execution/backends/codex.py": (
-        1114,
+        1125,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1011,7 +1011,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "for T5-P4-A3-WP3 guard-hook backend dispatch"
         "; _materialize_profile_skills function (~43 lines) for T5-P4-A4-WP2 profile skill "
         "materialization into Codex session directories"
-        "; debug-level symlink failure log in _materialize_profile_skills (+5 net lines)",
+        "; debug-level symlink failure log in _materialize_profile_skills (+5 net lines)"
+        "; evidence comment above git_metadata_writable=False citing permissions.rs sandbox "
+        "protection and consumer path (+7 net lines) for T5-P6-A11-WP1",
     ),
 }
 

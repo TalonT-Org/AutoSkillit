@@ -29,3 +29,8 @@ class TestCodexCapabilitiesNewFields:
         from autoskillit.execution.backends.codex import CodexBackend
 
         assert CodexBackend().capabilities.default_skill_sandbox_mode == "workspace-write"
+
+    def test_git_metadata_writable(self):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        assert CodexBackend().capabilities.git_metadata_writable is False

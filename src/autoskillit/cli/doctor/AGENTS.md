@@ -1,6 +1,6 @@
 # doctor/
 
-Diagnostic health checks for the autoskillit installation (28 checks).
+Diagnostic health checks for the autoskillit installation (33 checks).
 
 ## Files
 
@@ -15,7 +15,7 @@ Diagnostic health checks for the autoskillit installation (28 checks).
 | `_doctor_hooks.py` | Hook registration, executability, and registry drift checks |
 | `_doctor_install.py` | Install path, entry points, version drift, update dismissal checks |
 | `_doctor_mcp.py` | MCP server registration, dual registration, plugin cache checks |
-| `_doctor_runtime.py` | Quota cache schema version, claude process state, and codex version checks |
+| `_doctor_runtime.py` | Quota cache schema version, claude process state, codex version, and codex graduation checks |
 
 ## Architecture Notes
 

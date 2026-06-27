@@ -8,7 +8,13 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import CodingAgentBackend, Severity, default_log_dir, get_logger
+from autoskillit.core import (
+    AGENT_BACKEND_CODEX,
+    CodingAgentBackend,
+    Severity,
+    default_log_dir,
+    get_logger,
+)
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
 from ._doctor_types import DoctorResult
@@ -243,7 +249,7 @@ def _check_codex_graduation(
                 entry = json.loads(line)
             except (json.JSONDecodeError, ValueError):
                 continue
-            if entry.get("backend") == "codex":
+            if entry.get("backend") == AGENT_BACKEND_CODEX:
                 smoke_status = "pass" if entry.get("success") else "fail"
                 break
     except OSError:

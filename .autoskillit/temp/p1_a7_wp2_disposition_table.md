@@ -141,6 +141,6 @@ To identify post-kickoff issues in scope clusters, run:
 | ABSORBED | 2 | #3385 (R-A/A1, R-A/A3), #3699 (R-A/A2) |
 | INDEPENDENT | 10 | #2841, #2936, #3297, #3638, #3676, #3756, #3781, #3836, #3876, #3877 |
 | N/A | 1 | #3386 (PR number, not issue — included in SUPERSEDED count above) |
-| **Total** | **50** | 35 string-to-capability + 4 conformance + 1 builder-divergence + 2 guard-bypass + 8 D9 |
+| **Total** | **50** | 35 string-to-capability (§2) + 4 conformance (§3, incl. #3124 shared with §2) + 1 builder-divergence + 2 guard-bypass + 8 D9 = 50 rows; 49 unique issues |
 
-**Note on counts:** #3386 is both a PR number AND a disposition result (SUPERSEDED) — listed once in SUPERSEDED row. #3124 appears in §2 and §3 but counted once. The 37 SUPERSEDED = 34 string-to-capability (excluding #3124) + 1 (#3124 in conformance) + 1 (#3273) + 1 (#3386).
+**Note on counts:** #3386 is both a PR number AND a disposition result (SUPERSEDED) — listed once in SUPERSEDED row. #3124 appears in §2 and §3 but counted once. The 37 SUPERSEDED = 35 entries in §2 minus #3124 (counted once in §3) = 34 string-to-capability + 1 (#3124 in conformance) + 1 (#3273) + 1 (#3386).

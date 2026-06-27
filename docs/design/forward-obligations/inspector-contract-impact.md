@@ -1,4 +1,4 @@
-# Inspector Contract Impact
+# Health Inspector Contract Impact
 
 | Field | Value |
 |-------|-------|

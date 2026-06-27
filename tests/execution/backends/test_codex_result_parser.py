@@ -184,6 +184,16 @@ class TestScanCodexNdjson:
         assert acc.success is False
         assert acc.error_message == "error after success"
 
+    def test_scan_codex_ndjson_accumulator_counters_increment_independently(self) -> None:
+        unknown_event_line = json.dumps({"type": "brand_new_event_type", "data": 1})
+        unknown_item_line = json.dumps(
+            {"type": "item.completed", "item": {"type": "brand_new_item_type", "data": 1}}
+        )
+        ndjson = unknown_event_line + "\n" + unknown_item_line
+        acc = _scan_codex_ndjson(ndjson)
+        assert acc.ndjson_unknown_event_count == 1
+        assert acc.ndjson_unknown_item_count == 1
+
 
 class TestCodexResultParserStdout:
     def test_parse_stdout_empty_returns_error(self) -> None:

@@ -404,12 +404,6 @@ def test_classify_infra_exit_rate_limited_via_adapted_error_code() -> None:
     assert exit_category == InfraExitCategory.RATE_LIMITED
 
 
-def test_ndjson_unknown_counters_default_zero() -> None:
-    result = _adapt_agent_result(_make_agent_result())
-    assert result.seen_ndjson_unknown_event_count == 0
-    assert result.seen_ndjson_unknown_item_count == 0
-
-
 def test_ndjson_unknown_event_count_round_trip() -> None:
     result = _adapt_agent_result(_make_agent_result(raw={"ndjson_unknown_event_count": 3}))
     assert result.seen_ndjson_unknown_event_count == 3

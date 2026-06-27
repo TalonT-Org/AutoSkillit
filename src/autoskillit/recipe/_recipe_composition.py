@@ -9,8 +9,7 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import YAMLError, load_yaml
-from autoskillit.core.types import CAPABILITY_INGREDIENT_TO_SKIP_GUARD
+from autoskillit.core import CAPABILITY_INGREDIENT_TO_SKIP_GUARD, YAMLError, load_yaml
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
@@ -165,6 +164,7 @@ def _compute_capability_feasibility(
             continue
         if _is_vacuous_gate(
             gate_input_keys,
+            gate_step_name=step_name,
             skip_resolutions=skip_resolutions,
             pre_prune_steps=pre_prune_steps,
             post_prune_steps=steps,
@@ -178,6 +178,7 @@ def _compute_capability_feasibility(
 def _is_vacuous_gate(
     gate_input_keys: set[str],
     *,
+    gate_step_name: str,
     skip_resolutions: dict[str, bool | None] | None,
     pre_prune_steps: dict[str, Any] | None,
     post_prune_steps: dict[str, Any],
@@ -200,8 +201,8 @@ def _is_vacuous_gate(
         if not pruned_for_capability:
             return False
         live_uses_capability = False
-        for s in post_prune_steps.values():
-            if s is None:
+        for sn, s in post_prune_steps.items():
+            if s is None or sn == gate_step_name:
                 continue
             with_args = getattr(s, "with_args", None) or {}
             if cap_key in with_args:

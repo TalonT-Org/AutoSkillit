@@ -275,6 +275,7 @@ async def test_deferred_recall_returns_infeasible_when_dispatch_feasible_false()
     mock_recipe_obj = MagicMock()
     mock_recipe_obj.steps = {"gate_backend_write": MagicMock()}
     mock_ctx.recipes.load.return_value = mock_recipe_obj
+    mock_ctx.disable_components = AsyncMock()
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         result = await open_kitchen(name="test-recipe", ctx=mock_ctx)

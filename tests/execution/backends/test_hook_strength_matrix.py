@@ -54,7 +54,10 @@ def test_works_as_is_hooks_have_soft_or_better() -> None:
     rows = matrix["combinations"]
 
     works_as_is_stems: set[str] = {
-        Path(hd.scripts[0]).stem for hd in HOOK_REGISTRY if hd.codex_status == "works-as-is"
+        Path(script).stem
+        for hd in HOOK_REGISTRY
+        if hd.codex_status == "works-as-is"
+        for script in hd.scripts
     }
     seen_stems: set[str] = set()
     for row in rows:

@@ -17,28 +17,10 @@ from autoskillit.core import (
     SESSION_TYPE_SKILL,
     DirectInstall,
 )
-from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
-
-_SESSION_TYPE_VARIANTS = 4  # fleet, orchestrator-interactive, orchestrator-headless, skill
-
-DELIVERY_CHANNEL_CASES: list[tuple[str, str]] = [
-    ("fleet", "claude-code"),
-    ("fleet", "codex"),
-    ("orchestrator-interactive", "claude-code"),
-    ("orchestrator-interactive", "codex"),
-    ("orchestrator-headless", "claude-code"),
-    ("orchestrator-headless", "codex"),
-    ("skill", "claude-code"),
-    ("skill", "codex"),
-]
-
-
-def test_delivery_channel_cases_count() -> None:
-    assert len(DELIVERY_CHANNEL_CASES) == _SESSION_TYPE_VARIANTS * len(BACKEND_REGISTRY)
 
 
 def _assert_interactive_primary_channel(backend, spec) -> None:

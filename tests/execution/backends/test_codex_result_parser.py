@@ -101,6 +101,8 @@ class TestScanCodexNdjson:
         assert acc.success is False
         assert acc.error_message == ""
         assert acc.error_code == ""
+        assert acc.ndjson_unknown_event_count == 0
+        assert acc.ndjson_unknown_item_count == 0
 
     def test_scan_thread_started_populates_session_id(self) -> None:
         acc = _scan_codex_ndjson(_thread_started_line("t1"))
@@ -181,6 +183,16 @@ class TestScanCodexNdjson:
         acc = _scan_codex_ndjson(ndjson)
         assert acc.success is False
         assert acc.error_message == "error after success"
+
+    def test_scan_codex_ndjson_accumulator_counters_increment_independently(self) -> None:
+        unknown_event_line = json.dumps({"type": "brand_new_event_type", "data": 1})
+        unknown_item_line = json.dumps(
+            {"type": "item.completed", "item": {"type": "brand_new_item_type", "data": 1}}
+        )
+        ndjson = unknown_event_line + "\n" + unknown_item_line
+        acc = _scan_codex_ndjson(ndjson)
+        assert acc.ndjson_unknown_event_count == 1
+        assert acc.ndjson_unknown_item_count == 1
 
 
 class TestCodexResultParserStdout:
@@ -289,6 +301,8 @@ class TestCodexResultParserStdout:
         assert raw["mcp_tool_calls"][0]["tool_name"] == "mcp_tool"
         assert raw["file_changes"] == ["/path/file.py"]
         assert raw["error_code"] == ""
+        assert raw["ndjson_unknown_event_count"] == 0
+        assert raw["ndjson_unknown_item_count"] == 0
 
     def test_parse_result_completion_events_yield_success(self) -> None:
         parser = CodexResultParser()
@@ -758,6 +772,31 @@ class TestCodexResultParserV0136Schema:
         result = CodexResultParser().parse_stdout(ndjson)
         assert result.raw["agent_messages"] == ["hello from v0.136"]
         assert result.output == "hello from v0.136"
+
+    def test_ndjson_unknown_counters_in_raw_on_success(self) -> None:
+        """Normal success NDJSON stream → both counter keys present with value 0."""
+        ndjson = "\n".join(
+            [
+                _thread_started_line("s1"),
+                _item_completed_message_line("hello"),
+                _turn_completed_line({"input_tokens": 1, "output_tokens": 1}),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["ndjson_unknown_event_count"] == 0
+        assert result.raw["ndjson_unknown_item_count"] == 0
+
+    def test_ndjson_unknown_counters_in_raw_on_failure(self) -> None:
+        """Failure NDJSON stream → both counter keys present with value 0."""
+        ndjson = "\n".join(
+            [
+                _thread_started_line("s1"),
+                _turn_failed_line("something broke"),
+            ]
+        )
+        result = CodexResultParser().parse_stdout(ndjson)
+        assert result.raw["ndjson_unknown_event_count"] == 0
+        assert result.raw["ndjson_unknown_item_count"] == 0
 
     def test_command_execution_populates_command_executions(self) -> None:
         ndjson = "\n".join(

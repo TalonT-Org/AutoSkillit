@@ -74,6 +74,8 @@ class ClaudeSessionResult:
     api_retry_last_status: int | None = None
     api_retry_exhausted: bool = False
     api_error_status: int | None = None
+    seen_ndjson_unknown_event_count: int = 0
+    seen_ndjson_unknown_item_count: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.result, str):

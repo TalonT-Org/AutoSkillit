@@ -55,7 +55,11 @@ TOOL_CLASS_PAYLOADS: dict[str, dict] = {
     "Bash": {
         "tool_name": TOOL_CLASSES["Bash"],
         "tool_input": {
-            "command": "pip install -e . && pytest tests/ && gh pr create && gh run download && git commit --amend",
+            "command": (
+                "pip install -e . && pytest tests/ "
+                "&& gh pr create && gh run download "
+                "&& git commit --amend"
+            ),
             "run_in_background": True,
         },
     },
@@ -94,7 +98,11 @@ TOOL_CLASS_PAYLOADS: dict[str, dict] = {
     "mcp_run_cmd": {
         "tool_name": TOOL_CLASSES["mcp_run_cmd"],
         "tool_input": {
-            "command": "pip install -e . && pytest tests/ && gh pr create && gh run download && git commit --amend",
+            "command": (
+                "pip install -e . && pytest tests/ "
+                "&& gh pr create && gh run download "
+                "&& git commit --amend"
+            ),
             "run_in_background": True,
         },
     },
@@ -247,7 +255,7 @@ class TestHookDenyEfficacyProbe:
 
         # --- Inert check for codex backend ---
         # Mirrors generate_codex_hooks_config() at _codex_hooks.py:52-55: skip
-        # session_scope=="interactive_only" AND skip codex_status in {"fix-required", "not-applicable"}.
+        # interactive_only session_scope OR codex_status in {fix-required, not-applicable}.
         if backend == "codex":
             if hookdef.session_scope == "interactive_only" or hookdef.codex_status in _SKIP_CODEX:
                 codex_config = generate_codex_hooks_config()

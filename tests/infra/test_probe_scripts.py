@@ -49,6 +49,7 @@ class TestPostProbeFailureValidation:
             env={"PATH": os.environ["PATH"], "HOME": os.environ.get("HOME", "/tmp")},
         )
         assert result.returncode != 0
+        assert "Usage" in result.stderr
 
 
 class TestCreateProbeCanaryIssueValidation:

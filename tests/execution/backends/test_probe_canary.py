@@ -213,7 +213,11 @@ class TestCliMain:
         monkeypatch.setenv("GITHUB_REPOSITORY", "test-org/test-repo")
         state_path = tmp_path / "state.json"
 
+        gh_call_count = 0
+
         def mock_run_gh(args, **kwargs):
+            nonlocal gh_call_count
+            gh_call_count += 1
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
         monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
@@ -237,6 +241,7 @@ class TestCliMain:
         assert state_path.exists()
         raw = json.loads(state_path.read_text())
         assert raw["network_streak"] == 1
+        assert gh_call_count == 0, "run_gh must not be called when streak is below threshold"
 
     def test_post_failure_threshold_triggers_issue_creation(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -289,6 +294,9 @@ class TestCliMain:
         assert rc == 0
         assert any(call[0:2] == ["issue", "list"] for call in gh_calls)
         assert any(call[0:2] == ["issue", "create"] for call in gh_calls)
+        saved = json.loads(state_path.read_text())
+        assert saved["network_streak"] == N_CONSECUTIVE_FLAKE_GUARD
+        assert saved["last_issue_number"] == 7
 
     def test_post_failure_below_threshold_no_issue(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -587,19 +587,22 @@ class TestLoadRecipeFailClosed:
 
     @pytest.fixture(autouse=True)
     def _ensure_ctx(self, tool_ctx_kitchen_open):
-        pass
+        self.ctx = tool_ctx_kitchen_open
 
     @pytest.mark.anyio
     async def test_load_recipe_fail_closed_empty_content(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
-        from autoskillit.recipe._api import _LOAD_CACHE
+        from autoskillit.recipe._api_cache import _LOAD_CACHE
 
         _LOAD_CACHE.clear()
-        monkeypatch.setattr(
-            "autoskillit.recipe._api.load_and_validate",
-            lambda *a, **kw: {"valid": True, "content": "", "dispatch_feasible": True},
-        )
-        raw = await load_recipe(name="test-recipe")
+        test_result = {"valid": True, "content": "", "dispatch_feasible": True}
+        monkeypatch.setattr(self.ctx.recipes, "load_and_validate", lambda *a, **kw: test_result)
+        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: None)
+        with patch(
+            "autoskillit.server.tools.tools_recipe._apply_triage_gate",
+            new=AsyncMock(return_value=test_result),
+        ):
+            raw = await load_recipe(name="test-recipe")
         parsed = json.loads(raw)
         assert parsed["success"] is False
         assert "content" in parsed["error"].lower()
@@ -607,14 +610,17 @@ class TestLoadRecipeFailClosed:
     @pytest.mark.anyio
     async def test_load_recipe_fail_closed_missing_content(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
-        from autoskillit.recipe._api import _LOAD_CACHE
+        from autoskillit.recipe._api_cache import _LOAD_CACHE
 
         _LOAD_CACHE.clear()
-        monkeypatch.setattr(
-            "autoskillit.recipe._api.load_and_validate",
-            lambda *a, **kw: {"valid": True, "dispatch_feasible": True},
-        )
-        raw = await load_recipe(name="test-recipe")
+        test_result = {"valid": True, "dispatch_feasible": True}
+        monkeypatch.setattr(self.ctx.recipes, "load_and_validate", lambda *a, **kw: test_result)
+        monkeypatch.setattr(self.ctx.recipes, "find", lambda *a, **kw: None)
+        with patch(
+            "autoskillit.server.tools.tools_recipe._apply_triage_gate",
+            new=AsyncMock(return_value=test_result),
+        ):
+            raw = await load_recipe(name="test-recipe")
         parsed = json.loads(raw)
         assert parsed["success"] is False
         assert "content" in parsed["error"]

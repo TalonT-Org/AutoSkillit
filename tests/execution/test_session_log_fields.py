@@ -1844,3 +1844,83 @@ class TestBackendField:
         _flush(tmp_path)
         entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
         assert entry["backend"] == "claude-code"
+
+
+class TestNdjsonDriftFields:
+    """Verify ndjson_unknown_*_count fields persist to diagnostics and trigger anomaly."""
+
+    def test_zero_counters_in_summary_and_index(self, tmp_path):
+        """When both counters are 0, fields appear with value 0 in summary.json
+        and sessions.jsonl; no ndjson_drift anomaly is emitted."""
+        _flush(
+            tmp_path,
+            session_id="ndjson-zero",
+            proc_snapshots=None,
+            ndjson_unknown_event_count=0,
+            ndjson_unknown_item_count=0,
+        )
+        summary = json.loads((tmp_path / "sessions" / "ndjson-zero" / "summary.json").read_text())
+        assert summary["ndjson_unknown_event_count"] == 0
+        assert summary["ndjson_unknown_item_count"] == 0
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+        assert entry["ndjson_unknown_event_count"] == 0
+        assert entry["ndjson_unknown_item_count"] == 0
+        anomalies_path = tmp_path / "sessions" / "ndjson-zero" / "anomalies.jsonl"
+        assert not anomalies_path.exists()
+
+    def test_nonzero_event_count_triggers_anomaly(self, tmp_path):
+        """When ndjson_unknown_event_count > 0, anomalies.jsonl contains an entry
+        with kind='ndjson_drift' and severity='warning'."""
+        _flush(
+            tmp_path,
+            session_id="ndjson-event",
+            proc_snapshots=None,
+            ndjson_unknown_event_count=3,
+            ndjson_unknown_item_count=0,
+        )
+        anomalies_path = tmp_path / "sessions" / "ndjson-event" / "anomalies.jsonl"
+        assert anomalies_path.exists()
+        anomalies = [json.loads(line) for line in anomalies_path.read_text().splitlines() if line]
+        drift_entries = [a for a in anomalies if a.get("kind") == "ndjson_drift"]
+        assert len(drift_entries) == 1
+        assert drift_entries[0]["severity"] == "warning"
+        assert drift_entries[0]["detail"]["ndjson_unknown_event_count"] == 3
+        assert drift_entries[0]["detail"]["ndjson_unknown_item_count"] == 0
+
+    def test_nonzero_item_count_triggers_anomaly(self, tmp_path):
+        """When ndjson_unknown_item_count > 0, anomalies.jsonl contains an entry
+        with kind='ndjson_drift' and severity='warning'."""
+        _flush(
+            tmp_path,
+            session_id="ndjson-item",
+            proc_snapshots=None,
+            ndjson_unknown_event_count=0,
+            ndjson_unknown_item_count=7,
+        )
+        anomalies_path = tmp_path / "sessions" / "ndjson-item" / "anomalies.jsonl"
+        assert anomalies_path.exists()
+        anomalies = [json.loads(line) for line in anomalies_path.read_text().splitlines() if line]
+        drift_entries = [a for a in anomalies if a.get("kind") == "ndjson_drift"]
+        assert len(drift_entries) == 1
+        assert drift_entries[0]["severity"] == "warning"
+        assert drift_entries[0]["detail"]["ndjson_unknown_event_count"] == 0
+        assert drift_entries[0]["detail"]["ndjson_unknown_item_count"] == 7
+
+    def test_both_counters_in_anomaly_detail(self, tmp_path):
+        """When both counters are non-zero, the anomaly detail dict contains
+        both ndjson_unknown_event_count and ndjson_unknown_item_count values."""
+        _flush(
+            tmp_path,
+            session_id="ndjson-both",
+            proc_snapshots=None,
+            ndjson_unknown_event_count=2,
+            ndjson_unknown_item_count=5,
+        )
+        anomalies_path = tmp_path / "sessions" / "ndjson-both" / "anomalies.jsonl"
+        assert anomalies_path.exists()
+        anomalies = [json.loads(line) for line in anomalies_path.read_text().splitlines() if line]
+        drift_entries = [a for a in anomalies if a.get("kind") == "ndjson_drift"]
+        assert len(drift_entries) == 1
+        detail = drift_entries[0]["detail"]
+        assert detail["ndjson_unknown_event_count"] == 2
+        assert detail["ndjson_unknown_item_count"] == 5

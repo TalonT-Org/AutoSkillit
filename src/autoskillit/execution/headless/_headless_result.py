@@ -14,6 +14,7 @@ from autoskillit.core import (
     InfraExitCategory,
     InfraOutcome,
     KillReason,
+    NdjsonDriftOutcome,
     ProviderOutcome,
     RetryReason,
     SessionOutcome,
@@ -135,6 +136,10 @@ def _make_terminated_result(
         provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
         infra=infra,
         api_retry=api_retry,
+        ndjson_drift=NdjsonDriftOutcome(
+            unknown_event_count=session.seen_ndjson_unknown_event_count,
+            unknown_item_count=session.seen_ndjson_unknown_item_count,
+        ),
     )
 
 
@@ -727,6 +732,10 @@ def _build_skill_result(
         provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
         infra=InfraOutcome(exit_category=infra_category.value),
         api_retry=api_retry,
+        ndjson_drift=NdjsonDriftOutcome(
+            unknown_event_count=session.seen_ndjson_unknown_event_count,
+            unknown_item_count=session.seen_ndjson_unknown_item_count,
+        ),
         completion_required=completion_required,
     )
     if path_contamination:

@@ -147,6 +147,8 @@ def flush_session_log(
     api_retry_last_error: str = "",
     api_retry_last_status: int | None = None,
     api_retry_exhausted: bool = False,
+    ndjson_unknown_event_count: int = 0,
+    ndjson_unknown_item_count: int = 0,
     versions: dict[str, Any] | None = None,
     model_identity: ModelIdentity = ModelIdentity.unknown(),
     max_sessions: int | None = None,
@@ -326,6 +328,31 @@ def flush_session_log(
             }
         )
 
+    # NDJSON vocabulary drift anomaly — fires when Codex parser saw unknown event/item types
+    if ndjson_unknown_event_count > 0 or ndjson_unknown_item_count > 0:
+        from autoskillit.execution.anomaly_detection import (
+            OUTCOME_ANOMALY_PID_SENTINEL,
+            OUTCOME_ANOMALY_SEQ_SENTINEL,
+            AnomalyKind,
+            AnomalySeverity,
+        )
+
+        anomalies.append(
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "seq": OUTCOME_ANOMALY_SEQ_SENTINEL,
+                "event": "anomaly",
+                "kind": str(AnomalyKind.NDJSON_DRIFT),
+                "severity": str(AnomalySeverity.WARNING),
+                "pid": OUTCOME_ANOMALY_PID_SENTINEL,
+                "detail": {
+                    "ndjson_unknown_event_count": ndjson_unknown_event_count,
+                    "ndjson_unknown_item_count": ndjson_unknown_item_count,
+                },
+                "snapshot": {},
+            }
+        )
+
     effective_model_id = model_identity.effective_model or _primary_model_identifier(token_usage)
     _observed = _primary_model_identifier(token_usage) if token_usage else ""
     anomalies.extend(
@@ -427,6 +454,8 @@ def flush_session_log(
         "api_retry_last_error": api_retry_last_error,
         "api_retry_last_status": api_retry_last_status,
         "api_retry_exhausted": api_retry_exhausted,
+        "ndjson_unknown_event_count": ndjson_unknown_event_count,
+        "ndjson_unknown_item_count": ndjson_unknown_item_count,
     }
     if versions is not None:
         summary["versions"] = {
@@ -555,6 +584,8 @@ def flush_session_log(
         "api_retry_exhausted": api_retry_exhausted,
         "api_retry_last_error": api_retry_last_error,
         "api_retry_last_status": api_retry_last_status,
+        "ndjson_unknown_event_count": ndjson_unknown_event_count,
+        "ndjson_unknown_item_count": ndjson_unknown_item_count,
         "model_identifier": effective_model_id,
         "configured_model": model_identity.configured_model,
         "profile_name": model_identity.profile_name,

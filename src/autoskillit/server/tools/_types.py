@@ -69,6 +69,8 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     api_retry_exhausted: bool
     pre_contamination_retry_reason: RetryReason
     pre_contamination_subtype: str
+    ndjson_unknown_event_count: int
+    ndjson_unknown_item_count: int
 
 
 class _RunCmdResultBase(TypedDict):

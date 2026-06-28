@@ -538,6 +538,8 @@ async def _execute_claude_headless(
                 api_retry_last_error=skill_result.api_retry.last_error,
                 api_retry_last_status=skill_result.api_retry.last_status,
                 api_retry_exhausted=skill_result.api_retry.exhausted,
+                ndjson_unknown_event_count=skill_result.ndjson_drift.unknown_event_count,
+                ndjson_unknown_item_count=skill_result.ndjson_drift.unknown_item_count,
                 write_path_warnings=skill_result.write_path_warnings,
                 write_call_count=skill_result.evidence.write_call_count,
                 fs_writes_detected=skill_result.evidence.fs_writes_detected,

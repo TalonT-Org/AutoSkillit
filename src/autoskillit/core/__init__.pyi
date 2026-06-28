@@ -254,6 +254,7 @@ from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ContaminationOutcome as ContaminationOutcome
 from .types import CrossDomainAssessment as CrossDomainAssessment
+from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
 from .types import DialingConfig as DialingConfig

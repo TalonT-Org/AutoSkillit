@@ -223,7 +223,7 @@ def run_doctor(*, output_json: bool = False) -> None:
     results.append(_check_cli_conformance_probes(backend=_backend))
 
     # Check 35: Codex NDJSON vocabulary drift
-    results.append(_check_codex_ndjson_drift(log_dir=cfg.linux_tracing.log_dir))
+    results.append(_check_codex_ndjson_drift(log_dir=cfg.linux_tracing.log_dir, backend=_backend))
 
     # Output
     if output_json:

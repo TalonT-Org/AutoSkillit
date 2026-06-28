@@ -254,7 +254,6 @@ from .types import CodingAgentBackend as CodingAgentBackend
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ContaminationOutcome as ContaminationOutcome
 from .types import CrossDomainAssessment as CrossDomainAssessment
-from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
 from .types import DialingConfig as DialingConfig
@@ -297,6 +296,7 @@ from .types import ModelIdentity as ModelIdentity
 from .types import ModelTotalEntry as ModelTotalEntry
 from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
+from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver

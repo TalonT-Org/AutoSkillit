@@ -319,8 +319,15 @@ def _check_cli_conformance_probes(*, backend: CodingAgentBackend | None = None) 
     )
 
 
-def _check_codex_ndjson_drift(log_dir: str = "") -> DoctorResult:
+def _check_codex_ndjson_drift(
+    *,
+    log_dir: str = "",
+    backend: CodingAgentBackend | None = None,
+) -> DoctorResult:
     check_name = "codex_ndjson_drift"
+    if backend is None:
+        return DoctorResult(Severity.OK, check_name, "Skipped (no codex backend)")
+    backend_name = backend.name
     log_root = Path(log_dir).expanduser() if log_dir else default_log_dir()
     sessions_path = log_root / "sessions.jsonl"
     if not sessions_path.exists():
@@ -336,7 +343,7 @@ def _check_codex_ndjson_drift(log_dir: str = "") -> DoctorResult:
                 entry = json.loads(line)
             except (json.JSONDecodeError, ValueError):
                 continue
-            if entry.get("backend") != "codex":
+            if entry.get("backend") != backend_name:
                 continue
             if (
                 entry.get("ndjson_unknown_event_count", 0) > 0

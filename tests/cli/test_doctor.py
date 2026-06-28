@@ -1415,6 +1415,7 @@ class TestCheckCodexNdjsonDrift:
         """Returns Severity.OK when all codex entries have zero drift counters."""
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_ndjson_drift
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         sessions_path = tmp_path / "sessions.jsonl"
         sessions_path.write_text(
@@ -1435,7 +1436,7 @@ class TestCheckCodexNdjsonDrift:
             )
             + "\n"
         )
-        result = _check_codex_ndjson_drift(log_dir=str(tmp_path))
+        result = _check_codex_ndjson_drift(log_dir=str(tmp_path), backend=CodexBackend())
         assert result.severity == Severity.OK
         assert result.check == "codex_ndjson_drift"
 
@@ -1444,6 +1445,7 @@ class TestCheckCodexNdjsonDrift:
         message includes affected session count."""
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_ndjson_drift
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         sessions_path = tmp_path / "sessions.jsonl"
         sessions_path.write_text(
@@ -1464,7 +1466,7 @@ class TestCheckCodexNdjsonDrift:
             )
             + "\n"
         )
-        result = _check_codex_ndjson_drift(log_dir=str(tmp_path))
+        result = _check_codex_ndjson_drift(log_dir=str(tmp_path), backend=CodexBackend())
         assert result.severity == Severity.WARNING
         assert result.check == "codex_ndjson_drift"
         assert "2" in result.message
@@ -1473,6 +1475,7 @@ class TestCheckCodexNdjsonDrift:
         """Non-codex (claude-code) entries with non-zero counters are not counted."""
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_ndjson_drift
         from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
 
         sessions_path = tmp_path / "sessions.jsonl"
         sessions_path.write_text(
@@ -1493,6 +1496,6 @@ class TestCheckCodexNdjsonDrift:
             )
             + "\n"
         )
-        result = _check_codex_ndjson_drift(log_dir=str(tmp_path))
+        result = _check_codex_ndjson_drift(log_dir=str(tmp_path), backend=CodexBackend())
         assert result.severity == Severity.OK
         assert result.check == "codex_ndjson_drift"

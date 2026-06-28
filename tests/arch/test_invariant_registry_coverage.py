@@ -86,7 +86,11 @@ def _extract_prose_anchor(prohibition: str) -> str:
                 return " ".join(tail)
             return subject
 
-    return prohibition[:30]
+    # Final fallback: longest word (>= 5 chars) as a distinctive anchor.
+    # A 30-char prefix is unreliable — it may straddle a line break in source_doc.
+    words = [w.strip(".,!?;:'\"()[]{}") for w in prohibition.split()]
+    long_words = sorted((w for w in words if len(w) >= 5), key=len, reverse=True)
+    return long_words[0] if long_words else prohibition[:30]
 
 
 def _collect_source_doc_files(source_doc: str) -> list[Path]:

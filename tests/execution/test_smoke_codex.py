@@ -182,7 +182,7 @@ class TestCodexSmokeRecipeComposition:
                 break
 
         tmp_dir = tmp_path_factory.mktemp("codex_smoke")
-        rollout = tmp_dir / "codex-sessions" / "2026" / "06" / "28" / "rollout.jsonl"
+        rollout = tmp_dir / "codex-sessions" / "rollout.jsonl"
         rollout.parent.mkdir(parents=True)
         rollout.write_text(proc.stdout)
 

@@ -20,6 +20,8 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from autoskillit.core import (
+    AUTOSKILLIT_APPLICABLE_GUARDS,
+    AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     SkillSessionConfig,
@@ -88,22 +90,34 @@ class BackendCmdBuilderBase(ABC):
     @staticmethod
     def _assemble_shared_env_extras(
         *,
+        session_type: str = "",
+        applicable_guards: frozenset[str] = frozenset(),
+        write_guard_tool_names: frozenset[str] = frozenset(),
         write_prefix: str = "",
         write_prefixes: tuple[str, ...] = (),
         cwd: str = "",
         scenario_step_name: str = "",
     ) -> dict[str, str]:
-        """Assemble the eight shared env keys consumed by both backends.
+        """Assemble the shared env keys consumed by both backends.
 
-        Always-on keys (two): ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``.
+        Always-on keys (three): ``MAX_MCP_OUTPUT_TOKENS``, ``MCP_CONNECTION_NONBLOCKING``,
+        ``AUTOSKILLIT_HEADLESS``.
 
-        Conditional keys (six): ``SCENARIO_STEP_NAME``,
-        ``CAMPAIGN_ID_ENV_VAR``, ``KITCHEN_SESSION_ID_ENV_VAR``,
+        Conditional keys (nine): ``AUTOSKILLIT_SESSION_TYPE``,
+        ``AUTOSKILLIT_APPLICABLE_GUARDS``, ``AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES``,
+        ``SCENARIO_STEP_NAME``, ``CAMPAIGN_ID_ENV_VAR``, ``KITCHEN_SESSION_ID_ENV_VAR``,
         ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX``, ``AUTOSKILLIT_ALLOWED_WRITE_PREFIXES``,
         ``AUTOSKILLIT_CWD``. Each is included only when its input is non-empty
         (campaign/kitchen IDs are also read from the ambient ``os.environ``).
         """
         extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
+        extras["AUTOSKILLIT_HEADLESS"] = "1"
+        if session_type:
+            extras["AUTOSKILLIT_SESSION_TYPE"] = session_type
+        if applicable_guards:
+            extras[AUTOSKILLIT_APPLICABLE_GUARDS] = ",".join(sorted(applicable_guards))
+        if write_guard_tool_names:
+            extras[AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES] = ",".join(sorted(write_guard_tool_names))
         if scenario_step_name:
             extras["SCENARIO_STEP_NAME"] = scenario_step_name
         campaign_id = os.environ.get(CAMPAIGN_ID_ENV_VAR)

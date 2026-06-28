@@ -187,12 +187,10 @@ def test_build_skill_session_cmd_protocol_shape_call_succeeds():
     assert isinstance(result, CmdSpec)
 
 
-def test_build_skill_session_cmd_config_delegates_to_impl():
+def test_build_skill_session_cmd_config_produces_same_output():
     from pathlib import Path
-    from unittest.mock import patch
 
     from autoskillit.core import (
-        CmdSpec,
         DirectInstall,
         OutputFormat,
         SessionCheckpoint,
@@ -200,6 +198,7 @@ def test_build_skill_session_cmd_config_delegates_to_impl():
     )
     from autoskillit.execution.backends import ClaudeCodeBackend
 
+    chk = SessionCheckpoint(step_name="chk")
     config = SkillSessionConfig(
         completion_marker="%%VERIFY%%",
         model="sonnet",
@@ -214,48 +213,35 @@ def test_build_skill_session_cmd_config_delegates_to_impl():
         provider_extras={"EXTRA": "val"},
         profile_name="verify-profile",
         resume_session_id="sess-1",
-        resume_checkpoint=SessionCheckpoint(step_name="chk"),
+        resume_checkpoint=chk,
         resume_message="resume-msg",
         sandbox_mode="read-only",
     )
-    sentinel = CmdSpec(cmd=("sentinel",), env={})
 
-    with patch.object(
-        ClaudeCodeBackend, "_build_skill_session_cmd_impl", return_value=sentinel
-    ) as mock_impl:
-        backend = ClaudeCodeBackend()
-        result = backend.build_skill_session_cmd("/test", "/work", config)
-
-    assert result is sentinel
-    mock_impl.assert_called_once()
-    args = mock_impl.call_args.args
-    assert args == ("/test",), f"skill_command not forwarded: {args}"
-    kw = mock_impl.call_args.kwargs
-    assert kw["cwd"] == "/work"
-    assert kw["completion_marker"] == config.completion_marker
-    assert kw["model"] == config.model
-    assert kw["plugin_source"] == config.plugin_source
-    assert kw["output_format"] == config.output_format
-    assert kw["add_dirs"] == config.add_dirs
-    assert kw["exit_after_stop_delay_ms"] == config.exit_after_stop_delay_ms
-    assert kw["stream_idle_timeout_ms"] == config.stream_idle_timeout_ms
-    assert kw["scenario_step_name"] == config.scenario_step_name
-    assert kw["temp_dir_relpath"] == config.temp_dir_relpath
-    assert kw["allowed_write_prefix"] == config.allowed_write_prefix
-    assert kw["allowed_write_prefixes"] == config.allowed_write_prefixes
-    assert kw["provider_extras"] == config.provider_extras
-    assert kw["profile_name"] == config.profile_name
-    assert kw["resume_session_id"] == config.resume_session_id
-    assert kw["resume_checkpoint"] == config.resume_checkpoint
-    assert kw["resume_message"] == config.resume_message
-    assert kw["sandbox_mode"] == config.sandbox_mode
-
-
-def test_build_skill_session_cmd_impl_exists():
-    from autoskillit.execution.backends import ClaudeCodeBackend
-
-    assert hasattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl")
-    assert callable(getattr(ClaudeCodeBackend, "_build_skill_session_cmd_impl"))
+    backend = ClaudeCodeBackend()
+    via_config = backend.build_skill_session_cmd("/test", "/work", config=config)
+    via_flat = backend.build_skill_session_cmd(
+        "/test",
+        "/work",
+        completion_marker=config.completion_marker,
+        model=config.model,
+        plugin_source=config.plugin_source,
+        output_format=config.output_format,
+        add_dirs=config.add_dirs,
+        exit_after_stop_delay_ms=config.exit_after_stop_delay_ms,
+        stream_idle_timeout_ms=config.stream_idle_timeout_ms,
+        scenario_step_name=config.scenario_step_name,
+        temp_dir_relpath=config.temp_dir_relpath,
+        allowed_write_prefix=config.allowed_write_prefix,
+        allowed_write_prefixes=config.allowed_write_prefixes,
+        provider_extras=config.provider_extras,
+        profile_name=config.profile_name,
+        resume_session_id=config.resume_session_id,
+        resume_checkpoint=config.resume_checkpoint,
+        resume_message=config.resume_message,
+    )
+    assert via_config.cmd == via_flat.cmd
+    assert via_config.env == via_flat.env
 
 
 def test_build_interactive_cmd_satisfies_protocol_claude():

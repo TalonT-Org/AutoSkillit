@@ -73,14 +73,21 @@ class TestAssembleSharedEnvExtras:
 
     def test_all_eight_keys(self) -> None:
         result = BackendCmdBuilderBase._assemble_shared_env_extras(
+            session_type="skill",
+            applicable_guards=frozenset({"write_guard"}),
+            write_guard_tool_names=frozenset({"Write", "Edit"}),
             write_prefix="/tmp/wp",
             write_prefixes=("/tmp/a", "/tmp/b"),
             cwd="/work",
             scenario_step_name="step1",
         )
-        assert len(result) == 8
+        assert len(result) == 12
         assert result["MAX_MCP_OUTPUT_TOKENS"] == "50000"
         assert result["MCP_CONNECTION_NONBLOCKING"] == "0"
+        assert result["AUTOSKILLIT_HEADLESS"] == "1"
+        assert result["AUTOSKILLIT_SESSION_TYPE"] == "skill"
+        assert result["AUTOSKILLIT_APPLICABLE_GUARDS"] == "write_guard"
+        assert result["AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES"] == "Edit,Write"
         assert result[CAMPAIGN_ID_ENV_VAR] == "camp-123"
         assert result[KITCHEN_SESSION_ID_ENV_VAR] == "kitchen-456"
         assert result["AUTOSKILLIT_ALLOWED_WRITE_PREFIX"] == "/tmp/wp"
@@ -94,12 +101,16 @@ class TestAssembleSharedEnvExtras:
         result = BackendCmdBuilderBase._assemble_shared_env_extras()
         assert "MAX_MCP_OUTPUT_TOKENS" in result
         assert "MCP_CONNECTION_NONBLOCKING" in result
+        assert result["AUTOSKILLIT_HEADLESS"] == "1"
         assert CAMPAIGN_ID_ENV_VAR not in result
         assert KITCHEN_SESSION_ID_ENV_VAR not in result
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIX" not in result
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES" not in result
         assert "AUTOSKILLIT_CWD" not in result
         assert "SCENARIO_STEP_NAME" not in result
+        assert "AUTOSKILLIT_SESSION_TYPE" not in result
+        assert "AUTOSKILLIT_APPLICABLE_GUARDS" not in result
+        assert "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES" not in result
 
 
 class TestApplyConfig:

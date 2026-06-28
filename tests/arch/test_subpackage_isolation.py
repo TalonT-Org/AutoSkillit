@@ -1017,7 +1017,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "materialization into Codex session directories"
         "; debug-level symlink failure log in _materialize_profile_skills (+5 net lines)"
         "; evidence comment above git_metadata_writable=False citing permissions.rs sandbox "
-        "protection and consumer path (+7 net lines) for T5-P6-A11-WP1",
+        "protection and consumer path (+7 net lines) for T5-P6-A11-WP1"
+        "; env-assembly consolidation via _assemble_shared_env_extras (T5-P4-A1-WP2)",
     ),
 }
 

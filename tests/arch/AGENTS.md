@@ -126,6 +126,7 @@ AST enforcement, sub-package layer contracts, and architectural invariant tests.
 | `test_doc_fence_filter.py` | Unit and functional tests for `_strip_doc_fenced_blocks` section-aware code fence filter |
 | `test_capability_scanner_fence_immunity.py` | AST regression guard: capability scanners must import and call `_strip_doc_fenced_blocks` |
 | `test_backend_stdlib_boundaries.py` | Stdlib-boundary equality tests: write_guard fallback frozenset ↔ CLAUDE_CODE_CAPABILITIES, session type hook string literals ↔ SessionType enum |
+| `test_backend_builder_no_independent_copies.py` | AST and isinstance guards: shared env-key literals absent from per-backend files; BACKEND_REGISTRY entries inherit from BackendCmdBuilderBase; FlagVocabulary parity for Claude and Codex |
 
 ## Architecture Notes
 

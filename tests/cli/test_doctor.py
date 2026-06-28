@@ -1469,7 +1469,7 @@ class TestCheckCodexNdjsonDrift:
         result = _check_codex_ndjson_drift(log_dir=str(tmp_path), backend=CodexBackend())
         assert result.severity == Severity.WARNING
         assert result.check == "codex_ndjson_drift"
-        assert "2" in result.message
+        assert "2 codex session" in result.message
 
     def test_non_codex_entries_ignored(self, tmp_path: Path) -> None:
         """Non-codex (claude-code) entries with non-zero counters are not counted."""

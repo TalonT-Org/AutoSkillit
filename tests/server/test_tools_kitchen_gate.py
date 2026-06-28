@@ -376,6 +376,8 @@ async def test_open_kitchen_fail_closed_empty_content(monkeypatch, tmp_path):
     parsed = json.loads(raw)
     assert parsed["success"] is False
     assert parsed.get("kitchen") == "failed"
+    assert "error" in parsed
+    assert "failed validation" in parsed["error"]
 
 
 @pytest.mark.anyio
@@ -411,3 +413,5 @@ async def test_open_kitchen_fail_closed_missing_content(monkeypatch, tmp_path):
     parsed = json.loads(raw)
     assert parsed["success"] is False
     assert parsed.get("kitchen") == "failed"
+    assert "error" in parsed
+    assert "failed validation" in parsed["error"]

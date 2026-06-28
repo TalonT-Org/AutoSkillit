@@ -1,0 +1,34 @@
+{
+  "_codex_mcp_required_keys": [
+    "command",
+    "env_vars",
+    "startup_timeout_sec",
+    "tool_timeout_sec"
+  ],
+  "mcp_server_entry_required_keys": {
+    "command": {
+      "expected_type": "str"
+    },
+    "env_vars": {
+      "expected_type": "list"
+    },
+    "startup_timeout_sec": {
+      "expected_type": "float"
+    },
+    "tool_timeout_sec": {
+      "expected_type": "float"
+    }
+  },
+  "top_level_keys": {
+    "model_auto_compact_token_limit": {
+      "constraint": "minimum",
+      "expected_type": "int",
+      "floor_value": 999999999
+    },
+    "tool_output_token_limit": {
+      "constraint": "minimum",
+      "expected_type": "int",
+      "floor_value": 50000
+    }
+  }
+}

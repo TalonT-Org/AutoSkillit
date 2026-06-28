@@ -1,0 +1,296 @@
+{
+  "_registry_hash": "e2026897c0e2c46ff1b6beb448cade141294f1c7b296dad2b4cf46e61d8c646e",
+  "_staleness_note": "Regenerate in the same commit as P5-A6 (B4-hookdef-extension) when mechanism/enforcement_strength fields are added to HookDef.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py formatters/pretty_output_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py token_summary_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py quota_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py pipeline_step_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py recipe_confirmed_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__run_skill.*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py review_gate_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__(run_skill|run_python).*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py resume_gate_post_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "(mcp__.*autoskillit.*__)?dispatch_food_truck"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py lint_after_edit_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/skill_cmd_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/quota_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/skill_command_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/ingredient_lock_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/pipeline_step_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__run_skill.*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/remove_clone_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__remove_clone"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/open_kitchen_guard",
+            "timeout": 5,
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__open_kitchen.*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/branch_protection_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__merge_worktree"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/branch_protection_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__push_to_remote"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/unsafe_install_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/pr_create_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/compose_pr_body_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/planner_gh_discovery_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/artifact_download_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/git_ops_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/test_runner_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|mcp__.*autoskillit.*__run_cmd"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/generated_file_write_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/planner_result_naming_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/write_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/skill_orchestration_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/recipe_read_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|mcp__.*autoskillit.*__(run_cmd|run_python)"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/background_exec_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Agent"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/fleet_dispatch_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/resume_ownership_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/ingredient_lock_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          },
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/fleet_claim_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "(mcp__.*autoskillit.*__)?dispatch_food_truck"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/skill_load_guard",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Read|Write|Edit|Bash|Grep|Glob"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/review_loop_gate",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 SANITIZED_HOOKS_DIR/_dispatch.py guards/reset_resume_gate",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "(mcp__.*autoskillit.*__)?reset_dispatch"
+      }
+    ]
+  }
+}

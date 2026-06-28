@@ -586,8 +586,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             cwd=cwd,
             scenario_step_name=scenario_step_name,
         )
-        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
         if stream_idle_timeout_ms > 0:

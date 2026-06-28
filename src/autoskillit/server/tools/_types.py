@@ -7,6 +7,7 @@ and server internals — not cross-layer protocols.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal, TypedDict
 
 from autoskillit.core import ModelTotalEntry, RetryReason
@@ -23,6 +24,7 @@ __all__ = [
     "ToolFailureEnvelope",
     "server_failure_envelope",
     "input_failure_envelope",
+    "_validate_result",
 ]
 
 
@@ -244,3 +246,56 @@ def input_failure_envelope(
         stage=stage,
         retriable=False,
     )
+
+
+def _validate_result(
+    result: dict[str, Any],
+    *,
+    required_keys: frozenset[str],
+    tool_name: str,
+    retriable: bool = False,
+) -> str | None:
+    """Validate a tool result dict and return a fail-closed envelope on violation.
+
+    Returns ``None`` when all invariants hold, or a ``json.dumps``-serialized
+    ``ToolFailureEnvelope`` on the first violation detected.
+    """
+    _stage = f"validate_result:{tool_name}"
+    for key in sorted(required_keys):
+        if key not in result:
+            return json.dumps(
+                ToolFailureEnvelope(
+                    success=False,
+                    error=f"Missing required key: {key}",
+                    stage=_stage,
+                    retriable=retriable,
+                )
+            )
+        if result[key] is None:
+            return json.dumps(
+                ToolFailureEnvelope(
+                    success=False,
+                    error=f"Required key is None: {key}",
+                    stage=_stage,
+                    retriable=retriable,
+                )
+            )
+    if "success" in result and result["success"] is not True:
+        return json.dumps(
+            ToolFailureEnvelope(
+                success=False,
+                error=f"Result reports failure: success={result['success']!r}",
+                stage=_stage,
+                retriable=retriable,
+            )
+        )
+    if "content" in result and not result["content"]:
+        return json.dumps(
+            ToolFailureEnvelope(
+                success=False,
+                error="Result content is empty",
+                stage=_stage,
+                retriable=retriable,
+            )
+        )
+    return None

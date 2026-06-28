@@ -29,6 +29,7 @@ from autoskillit.server.tools._auto_overrides import (
     _promote_capability_keys,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
 
@@ -244,6 +245,19 @@ async def load_recipe(
                 )
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
+            _required_keys: frozenset[str] = frozenset()
+            if not ingredients_only and result.get("valid", False):
+                _required_keys = frozenset({"content"})
+            _validation_err = _validate_result(
+                result, required_keys=_required_keys, tool_name="load_recipe"
+            )
+            if _validation_err is not None:
+                logger.warning(
+                    "load_recipe_fail_closed",
+                    tool="load_recipe",
+                    stage="validate_result",
+                )
+                return _validation_err
             return json.dumps(result)
     except Exception as exc:
         logger.error("load_recipe unhandled exception", exc_info=True)

@@ -580,3 +580,41 @@ class TestLoadRecipeSurfacesValidationFailure:
         )
         assert "errors" in result
         assert len(result["errors"]) > 0
+
+
+class TestLoadRecipeFailClosed:
+    """Fail-closed validation for empty and missing content."""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_ctx(self, tool_ctx_kitchen_open):
+        pass
+
+    @pytest.mark.anyio
+    async def test_load_recipe_fail_closed_empty_content(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        from autoskillit.recipe._api import _LOAD_CACHE
+
+        _LOAD_CACHE.clear()
+        monkeypatch.setattr(
+            "autoskillit.recipe._api.load_and_validate",
+            lambda *a, **kw: {"valid": True, "content": "", "dispatch_feasible": True},
+        )
+        raw = await load_recipe(name="test-recipe")
+        parsed = json.loads(raw)
+        assert parsed["success"] is False
+        assert "content" in parsed["error"].lower()
+
+    @pytest.mark.anyio
+    async def test_load_recipe_fail_closed_missing_content(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        from autoskillit.recipe._api import _LOAD_CACHE
+
+        _LOAD_CACHE.clear()
+        monkeypatch.setattr(
+            "autoskillit.recipe._api.load_and_validate",
+            lambda *a, **kw: {"valid": True, "dispatch_feasible": True},
+        )
+        raw = await load_recipe(name="test-recipe")
+        parsed = json.loads(raw)
+        assert parsed["success"] is False
+        assert "content" in parsed["error"]

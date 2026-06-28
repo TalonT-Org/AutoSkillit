@@ -67,8 +67,8 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 28 checks (23 numbered + 5 lettered sub-checks: `2b`, `2c`, `2d`, `4b`, `7b`); up to 33 with the fleet feature enabled.
-Enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
+Doctor runs 33 checks (23 numbered + 5 lettered sub-checks: `2b`, `2c`, `2d`, `4b`, `7b` + 5 backend runtime probes, checks 30–34); up to 39 with the fleet feature enabled.
+Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 
 | # | Check | What it verifies |
 |---|-------|------------------|
@@ -101,6 +101,12 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/_doctor.py`:
 | 22 | Feature dependency consistency | Enabled features satisfy their declared dependencies |
 | 23 | Feature registry import consistency | All feature gate modules import without errors |
 | 24–28 | Fleet infrastructure | Sous-chef skill, dispatch guard, stale state, onboarding, clone collisions (fleet feature only) |
+| 29 | Fleet state schema | Fleet state schema version drift (fleet feature only) |
+| 30 | Codex version | Codex CLI version meets minimum requirement |
+| 31 | script(1) binary | PTY binary availability with -qefc support |
+| 32 | MCP timeouts | Codex MCP tool_timeout_sec coherence |
+| 33 | Codex graduation | Multi-criteria graduation readiness (version, probe, matrix, smoke) |
+| 34 | CLI conformance | Backend CLI accepts minimal TOML config probe |
 
 See **[Hooks](safety/hooks.md)** for what each PreToolUse / PostToolUse /
 SessionStart hook actually enforces.

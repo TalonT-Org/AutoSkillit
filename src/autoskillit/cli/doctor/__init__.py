@@ -61,6 +61,7 @@ from ._doctor_mcp import (
 )
 from ._doctor_runtime import (
     _check_claude_process_state_breakdown,
+    _check_cli_conformance_probes,
     _check_codex_graduation,
     _check_codex_version,
     _check_quota_cache_schema,
@@ -216,6 +217,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 33: Codex graduation criteria
     results.append(_check_codex_graduation(backend=_backend))
+
+    # Check 34: CLI config-acceptance probe
+    results.append(_check_cli_conformance_probes(backend=_backend))
 
     # Output
     if output_json:

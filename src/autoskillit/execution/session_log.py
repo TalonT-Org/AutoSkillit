@@ -328,7 +328,6 @@ def flush_session_log(
             }
         )
 
-    # NDJSON vocabulary drift anomaly — fires when Codex parser saw unknown event/item types
     if ndjson_unknown_event_count > 0 or ndjson_unknown_item_count > 0:
         from autoskillit.execution.anomaly_detection import (
             OUTCOME_ANOMALY_PID_SENTINEL,

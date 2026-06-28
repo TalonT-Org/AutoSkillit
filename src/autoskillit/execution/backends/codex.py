@@ -833,7 +833,7 @@ class CodexBackend(BackendCmdBuilderBase):
     ) -> CmdSpec:
         if plugin_source is not None:
             logger.warning("codex_plugin_source_discarded", plugin_source=str(plugin_source))
-        if output_format != OutputFormat.JSON:
+        if output_format != OutputFormat.STREAM_JSON:
             logger.warning("codex_output_format_coerced")
 
         if resume_session_id:

@@ -996,7 +996,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "crash-close before executor when /dev/shm path has been reclaimed (+26 net lines)",
     ),
     "execution/backends/codex.py": (
-        1125,
+        1150,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1018,7 +1018,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; debug-level symlink failure log in _materialize_profile_skills (+5 net lines)"
         "; evidence comment above git_metadata_writable=False citing permissions.rs sandbox "
         "protection and consumer path (+7 net lines) for T5-P6-A11-WP1"
-        "; env-assembly consolidation via _assemble_shared_env_extras (T5-P4-A1-WP2)",
+        "; env-assembly consolidation via _assemble_shared_env_extras (T5-P4-A1-WP2)"
+        "; explicit parameter dispositions for "
+        "plugin_source/output_format/exit_after_stop_delay_ms "
+        "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1",
     ),
 }
 

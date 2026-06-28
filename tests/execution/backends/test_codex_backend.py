@@ -1638,11 +1638,15 @@ class TestCodexDiscardDispositions:
         )
         assert spec.process_idle_timeout_ms == 10000
 
-    def test_zero_ms_no_idle_timeout_skill_builder(self) -> None:
+    def test_zero_ms_no_idle_timeout_skill_builder(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)
         spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
         assert "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT" not in spec.env
 
-    def test_zero_ms_no_idle_timeout_food_truck_builder(self) -> None:
+    def test_zero_ms_no_idle_timeout_food_truck_builder(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)
         spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
         assert "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT" not in spec.env
 

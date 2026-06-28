@@ -542,7 +542,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             resume_session_id = cfg["resume_session_id"]
             resume_checkpoint = cfg["resume_checkpoint"]
             resume_message = cfg["resume_message"]
-            sandbox_mode = cfg["sandbox_mode"]  # noqa: F841  # currently unused, reserved for future backend dispatch
+            sandbox_mode = cfg["sandbox_mode"]  # noqa: F841
 
         _has_prefix = (
             bool(profile_name)

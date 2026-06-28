@@ -191,7 +191,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
             output_format=OutputFormat.JSON,
         )
         via_config = backend.build_skill_session_cmd("/plan", cwd="/tmp", config=config)
-        via_impl = backend._build_skill_session_cmd_impl(
+        via_flat = backend.build_skill_session_cmd(
             "/plan",
             cwd="/tmp",
             completion_marker="%%DONE%%",
@@ -199,8 +199,8 @@ class TestBuildSkillSessionCmdConfigAdapter:
             plugin_source=None,
             output_format=OutputFormat.JSON,
         )
-        assert via_config.cmd == via_impl.cmd
-        assert via_config.env == via_impl.env
+        assert via_config.cmd == via_flat.cmd
+        assert via_config.env == via_flat.env
 
     def test_config_adapter_forwards_all_fields(self) -> None:
         backend = ClaudeCodeBackend()
@@ -223,7 +223,7 @@ class TestBuildSkillSessionCmdConfigAdapter:
             resume_message="resume-msg",
         )
         via_config = backend.build_skill_session_cmd("/plan", cwd="/tmp", config=config)
-        via_impl = backend._build_skill_session_cmd_impl(
+        via_flat = backend.build_skill_session_cmd(
             "/plan",
             cwd="/tmp",
             completion_marker="%%MARKER%%",
@@ -242,8 +242,8 @@ class TestBuildSkillSessionCmdConfigAdapter:
             resume_checkpoint=chk,
             resume_message="resume-msg",
         )
-        assert via_config.cmd == via_impl.cmd
-        assert via_config.env == via_impl.env
+        assert via_config.cmd == via_flat.cmd
+        assert via_config.env == via_flat.env
 
     def test_legacy_flat_params_still_work(self) -> None:
         backend = ClaudeCodeBackend()

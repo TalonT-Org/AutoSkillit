@@ -51,7 +51,7 @@ _SKILL_SESSION_EXTRAS_DENYLIST: frozenset[str] = _PROVIDER_EXTRAS_BASE_DENYLIST 
     }
 )
 
-# Variables that _build_skill_session_cmd_impl controls exclusively. They must not
+# Variables that build_skill_session_cmd controls exclusively. They must not
 # leak from the host process environment — the caller opts in via explicit
 # parameters (exit_after_stop_delay_ms, scenario_step_name, allowed_write_prefix, etc.).
 # Note: CLAUDE_CODE_EXIT_AFTER_STOP_DELAY, SCENARIO_STEP_NAME, and

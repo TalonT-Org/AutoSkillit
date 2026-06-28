@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import anyio  # noqa: E402  (added by mcp_tool_timeout plan)
+import anyio
 
 if TYPE_CHECKING:
     from autoskillit.fleet import DispatchOutcome

@@ -12,10 +12,10 @@ import regex as re
 from autoskillit.core import (
     CodingAgentBackend,
     Severity,
+    atomic_write,
     default_log_dir,
     get_logger,
 )
-from autoskillit.core.io import atomic_write
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
 from ._doctor_types import DoctorResult

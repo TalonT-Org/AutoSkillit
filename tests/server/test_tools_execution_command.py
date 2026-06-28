@@ -327,3 +327,30 @@ class TestRunSkillExecutionMarker:
         await run_skill("/investigate test", "/tmp")
 
         assert captured["marker_dir"] is None
+
+
+class TestRunSkillMcpTimeout:
+    """run_skill wraps executor.run with anyio.fail_after(mcp_tool_timeout_sec)."""
+
+    @pytest.mark.anyio
+    async def test_run_skill_returns_crashed_on_mcp_timeout(
+        self, tool_ctx_kitchen_open, monkeypatch
+    ):
+        """On TimeoutError, run_skill returns SkillResult.crashed() envelope."""
+        import json
+
+        cfg = AutomationConfig()
+        cfg.safety.require_dry_walkthrough = False
+        tool_ctx_kitchen_open.config = cfg
+
+        tool_ctx_kitchen_open.runner.push(_make_result(returncode=1))  # clone guard
+
+        async def _timeout_run(*args, **kwargs):
+            raise TimeoutError("mcp_tool_timeout_sec exceeded")
+
+        monkeypatch.setattr(tool_ctx_kitchen_open.executor, "run", _timeout_run)
+
+        result_json = await run_skill("/investigate something", "/tmp")
+        result = json.loads(result_json)
+        assert result["success"] is False
+        assert result["subtype"] == "crashed"

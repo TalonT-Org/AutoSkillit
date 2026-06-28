@@ -96,3 +96,4 @@ class TestDefaultsSyncYamlDataclass:
         assert cfg.run_skill.natural_exit_grace_seconds == dc.natural_exit_grace_seconds
         assert cfg.run_skill.max_suppression_seconds == dc.max_suppression_seconds
         assert cfg.run_skill.completion_drain_timeout == dc.completion_drain_timeout
+        assert cfg.run_skill.mcp_tool_timeout_sec == dc.mcp_tool_timeout_sec

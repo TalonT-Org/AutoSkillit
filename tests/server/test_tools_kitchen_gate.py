@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -341,3 +341,77 @@ async def test_close_kitchen_drains_orphaned_github_api_entries(tmp_path, monkey
     data = json.loads(orphan_path.read_text())
     assert data["total_requests"] == 1
     assert not log._entries
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_fail_closed_empty_content(monkeypatch, tmp_path):
+    """open_kitchen returns fail-closed when content is empty (caught at validity gate)."""
+    monkeypatch.chdir(tmp_path)
+    ctx = _make_mock_ctx()
+    ctx.gate.enabled = True
+    ctx.gate_infrastructure_ready = True
+    _load_result = {"valid": True, "content": "", "dispatch_feasible": True}
+    ctx.recipes.load_and_validate.return_value = _load_result
+    ctx.recipes.find.return_value = MagicMock(path=tmp_path / "r.yaml")
+    ctx.config.providers = MagicMock()
+    ctx.backend = MagicMock()
+    ctx.backend.name = "test"
+    with (
+        patch("autoskillit.server._get_ctx", return_value=ctx),
+        patch("autoskillit.server.logger"),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+            new=AsyncMock(return_value=_load_result),
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            new_callable=AsyncMock,
+        ),
+        patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
+    ):
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        raw = await open_kitchen(name="test-recipe")
+
+    parsed = json.loads(raw)
+    assert parsed["success"] is False
+    assert parsed.get("kitchen") == "failed"
+    assert "error" in parsed
+    assert "failed validation" in parsed["error"]
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_fail_closed_missing_content(monkeypatch, tmp_path):
+    """open_kitchen returns fail-closed when content key is missing (caught at validity gate)."""
+    monkeypatch.chdir(tmp_path)
+    ctx = _make_mock_ctx()
+    ctx.gate.enabled = True
+    ctx.gate_infrastructure_ready = True
+    _load_result = {"valid": True, "dispatch_feasible": True}
+    ctx.recipes.load_and_validate.return_value = _load_result
+    ctx.recipes.find.return_value = MagicMock(path=tmp_path / "r.yaml")
+    ctx.config.providers = MagicMock()
+    ctx.backend = MagicMock()
+    ctx.backend.name = "test"
+    with (
+        patch("autoskillit.server._get_ctx", return_value=ctx),
+        patch("autoskillit.server.logger"),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+            new=AsyncMock(return_value=_load_result),
+        ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            new_callable=AsyncMock,
+        ),
+        patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
+    ):
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        raw = await open_kitchen(name="test-recipe")
+
+    parsed = json.loads(raw)
+    assert parsed["success"] is False
+    assert parsed.get("kitchen") == "failed"
+    assert "error" in parsed
+    assert "failed validation" in parsed["error"]

@@ -126,6 +126,7 @@ class TestToolFailureEnvelope:
         assert "ToolFailureEnvelope" in types_all
         assert "server_failure_envelope" in types_all
         assert "input_failure_envelope" in types_all
+        assert "_validate_result" in types_all
 
     def test_tool_failure_envelope_distinct_from_kitchen_envelope(self):
         from autoskillit.server.tools._types import ToolFailureEnvelope

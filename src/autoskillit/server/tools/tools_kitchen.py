@@ -68,6 +68,7 @@ from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
     filter_steps_by_post_prune,
 )
+from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
 
@@ -887,6 +888,20 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
             if warning:
                 result["hook_warning"] = warning.strip()
+
+            _required_keys = frozenset({"success", "content", "valid"})
+            if ingredients_only:
+                _required_keys = _required_keys - {"content"}
+            _validation_err = _validate_result(
+                result, required_keys=_required_keys, tool_name="open_kitchen"
+            )
+            if _validation_err is not None:
+                logger.warning(
+                    "open_kitchen_fail_closed",
+                    tool="open_kitchen",
+                    stage="validate_result",
+                )
+                return _validation_err
 
             return json.dumps(result)
 

@@ -256,16 +256,16 @@ class TestCodexSmokeRecipeComposition:
         from autoskillit.execution.session_log import flush_session_log
 
         class _FakeLocator:
-            def __init__(self, path):
+            def __init__(self, path: Path) -> None:
                 self._path = path
 
-            def locate_session(self, session_id):
+            def locate_session(self, session_id: str) -> Path:
                 return self._path
 
-            def project_log_dir(self, cwd):
+            def project_log_dir(self, cwd: str) -> Path:
                 return Path(cwd)
 
-            def session_log_path(self, cwd, session_id):
+            def session_log_path(self, cwd: str, session_id: str) -> Path:
                 return self._path
 
         flush_session_log(
@@ -298,16 +298,16 @@ class TestCodexSmokeRecipeComposition:
         assert session_data.thread_id, "thread_id not resolved"
 
         class _StubLocator:
-            def __init__(self, path):
+            def __init__(self, path: Path) -> None:
                 self._path = path
 
-            def locate_session(self, session_id):
+            def locate_session(self, session_id: str) -> Path:
                 return self._path
 
-            def project_log_dir(self, cwd):
+            def project_log_dir(self, cwd: str) -> Path:
                 return Path("/stub")
 
-            def session_log_path(self, cwd, session_id):
+            def session_log_path(self, cwd: str, session_id: str) -> Path:
                 return self._path
 
         def _fake_backend(locator):

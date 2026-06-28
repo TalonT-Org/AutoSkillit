@@ -16,10 +16,12 @@ from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     CLAUDE_CODE_CAPABILITIES,
     CONTEXT_EXHAUSTION_MARKER,
+    NON_VARIADIC_CLAUDE_FLAGS,
     ORCHESTRATOR_SESSION_REQUIRED_ENV,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
+    VARIADIC_CLAUDE_FLAGS,
     AgentSessionResult,
     BackendCapabilities,
     BackendConventions,
@@ -283,17 +285,8 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
 
     def _flag_vocabulary(self) -> FlagVocabulary:
         return FlagVocabulary(
-            variadic_flags=frozenset(
-                {ClaudeFlags.ADD_DIR, ClaudeFlags.PLUGIN_DIR, ClaudeFlags.TOOLS}
-            ),
-            non_variadic_flags=frozenset(
-                {
-                    ClaudeFlags.PRINT,
-                    ClaudeFlags.MODEL,
-                    ClaudeFlags.RESUME,
-                    ClaudeFlags.DANGEROUSLY_SKIP_PERMISSIONS,
-                }
-            ),
+            variadic_flags=VARIADIC_CLAUDE_FLAGS,
+            non_variadic_flags=NON_VARIADIC_CLAUDE_FLAGS,
             model_flag=ClaudeFlags.MODEL,
             add_dir_flag=ClaudeFlags.ADD_DIR,
             resume_flag=ClaudeFlags.RESUME,

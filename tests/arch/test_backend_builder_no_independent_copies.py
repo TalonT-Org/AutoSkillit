@@ -1,4 +1,4 @@
-"""AST and structural guards: shared env-key literals must NOT appear independently in per-backend files."""
+"""AST and structural guards: shared env-key literals absent from per-backend files."""
 
 from __future__ import annotations
 

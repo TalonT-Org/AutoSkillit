@@ -104,6 +104,7 @@ class RunSkillConfig:
     idle_output_timeout: int = 1000
     max_suppression_seconds: int = 1800
     stream_idle_timeout_ms: int = 600000
+    mcp_tool_timeout_sec: float = 14364.0
 
     # Safety margin (ms) above exit_after_stop_delay_ms that
     # natural_exit_grace_seconds must cover so the drain window can absorb
@@ -111,6 +112,8 @@ class RunSkillConfig:
     _EXIT_GRACE_BUFFER_MS: ClassVar[int] = 500
 
     def __post_init__(self) -> None:
+        if self.mcp_tool_timeout_sec <= 0:
+            raise ValueError(f"mcp_tool_timeout_sec={self.mcp_tool_timeout_sec} must be > 0.")
         if self.stream_idle_timeout_ms < 0:
             raise ValueError(
                 f"stream_idle_timeout_ms={self.stream_idle_timeout_ms} must be >= 0 "

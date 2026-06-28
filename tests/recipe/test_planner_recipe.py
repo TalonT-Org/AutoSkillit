@@ -1,14 +1,18 @@
 """Structural assertions for the planner recipe."""
 
 import importlib
+from pathlib import Path
 
 import pytest
 
+from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
 from tests.recipe.conftest import assert_no_rule_errors
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @pytest.fixture(scope="module")
@@ -373,4 +377,29 @@ def test_refine_tier_steps_all_use_dispatch_items(planner_recipe, step_name):
     assert "dispatch_items" in step.with_args, (
         f"{step_name} must use dispatch_items for per-phase parallel dispatch. "
         "All refine_* steps at the assignment/WP tier must shard by phase."
+    )
+
+
+def test_planner_recipe_valid_on_codex_backend():
+    """Planner recipe must compose valid=True under codex backend capability overrides."""
+    result = load_and_validate(
+        "planner",
+        project_dir=_PROJECT_ROOT,
+        backend_name="codex",
+        ingredient_overrides={"backend_supports_git_write": "false"},
+    )
+    assert result["valid"] is True, "planner recipe invalid on codex: " + "; ".join(
+        f"[{s.get('rule')}] {s.get('message', '')[:80]}"
+        for s in result.get("suggestions", [])
+        if s.get("severity") == "error"
+    )
+    assert len(result.get("content", "")) > 0, "planner recipe produced empty content on codex"
+    backend_compat_errors = [
+        s
+        for s in result.get("suggestions", [])
+        if s.get("rule") == "backend-incompatible-skill" and s.get("severity") == "error"
+    ]
+    assert not backend_compat_errors, (
+        "planner recipe has backend-incompatible-skill errors on codex: "
+        + "; ".join(s.get("message", "") for s in backend_compat_errors)
     )

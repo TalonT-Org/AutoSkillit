@@ -39,7 +39,11 @@ from autoskillit.core import (
     resolve_kitchen_id,
     unregister_active_kitchen,
 )
-from autoskillit.fleet import FleetSemaphore
+from autoskillit.fleet import (
+    FleetSemaphore,
+    discover_campaign_state_files,
+    reap_stale_dispatches_async,
+)
 from autoskillit.pipeline import create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._guards import _backend_supports_quota, _require_orchestrator_exact
@@ -305,6 +309,17 @@ async def _open_kitchen_handler() -> str | None:
         register_active_kitchen(ctx.kitchen_id, os.getpid(), str(ctx.project_dir))
     except Exception:
         logger.warning("open_kitchen_registry_failed", exc_info=True)
+
+    try:
+        _campaign_state_paths = discover_campaign_state_files(ctx.project_dir)
+        if _campaign_state_paths:
+            await reap_stale_dispatches_async(
+                _campaign_state_paths,
+                min_reap_age_seconds=60.0,
+                heartbeat_grace_seconds=90.0,
+            )
+    except Exception:
+        logger.warning("open_kitchen_reap_failed", exc_info=True)
 
     ctx.gate_infrastructure_ready = True
     return None

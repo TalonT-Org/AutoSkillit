@@ -10,6 +10,9 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 LIFESPAN_PATH = Path(__file__).parents[2] / "src" / "autoskillit" / "server" / "_lifespan.py"
+KITCHEN_PATH = (
+    Path(__file__).parents[2] / "src" / "autoskillit" / "server" / "tools" / "tools_kitchen.py"
+)
 
 _REQUIRED_BOOT_STEPS: list[tuple[str, tuple[str, ...]]] = [
     ("sweep_stale_dispatch_labels", ("_fleet_auto_gate_boot", "_food_truck_auto_gate_boot")),
@@ -99,3 +102,18 @@ class TestBootStepSymmetry:
                 f"{node.name}: {before_symbol} (line {before_lineno}) must appear "
                 f"before {after_symbol} (line {after_lineno})"
             )
+
+    def test_open_kitchen_handler_calls_reaper(self) -> None:
+        """AST guard: _open_kitchen_handler must call reap_stale_dispatches_async.
+
+        Interactive sessions need the reaper at kitchen-open time since they
+        never go through _fleet_auto_gate_boot or _food_truck_auto_gate_boot.
+        """
+        assert KITCHEN_PATH.exists(), f"Production file not found: {KITCHEN_PATH}"
+        tree = ast.parse(KITCHEN_PATH.read_text())
+        assert _function_body_contains_symbol(
+            tree, "_open_kitchen_handler", "reap_stale_dispatches_async"
+        ), (
+            "_open_kitchen_handler must call reap_stale_dispatches_async "
+            "to provide dispatch recovery for interactive sessions"
+        )

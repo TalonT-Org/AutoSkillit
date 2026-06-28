@@ -13,14 +13,17 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import FleetErrorCode, IssueLabelState, fleet_error, get_logger
 from autoskillit.fleet import (
     _RESETTABLE_STATUSES,
+    CampaignStateMutator,
     DispatchStatus,
     ResetReport,
     cleanup_orphaned_labels,
     compute_reset_labels,
     discover_campaign_state_files,
     find_dispatch_in_campaigns,
+    find_locked_dispatch,
     format_resettable_statuses,
     reset_dispatch_artifacts,
+    resolve_stale_running,
     resolve_worktrees_dir,
     update_campaign_state,
 )
@@ -123,11 +126,24 @@ async def reset_dispatch(
         dispatch, state_path = result
 
         if dispatch.status == DispatchStatus.RUNNING:
-            return fleet_error(
-                FleetErrorCode.FLEET_RESET_STILL_RUNNING,
-                f"Dispatch {dispatch_id!r} is still RUNNING. "
-                "Wait for it to finish or reap it first.",
-            )
+            with CampaignStateMutator(state_path) as m:
+                locked_dispatch = find_locked_dispatch(dispatch_id, m)
+                if locked_dispatch is None:
+                    return fleet_error(
+                        FleetErrorCode.FLEET_RESET_NOT_FOUND,
+                        f"No dispatch found matching {dispatch_id!r} in any campaign state file.",
+                    )
+                if locked_dispatch.status != DispatchStatus.RUNNING:
+                    dispatch = locked_dispatch
+                elif resolve_stale_running(locked_dispatch, m):
+                    return fleet_error(
+                        FleetErrorCode.FLEET_RESET_STILL_RUNNING,
+                        f"Dispatch {dispatch_id!r} is still RUNNING "
+                        f"(process {locked_dispatch.dispatched_pid} is alive). "
+                        "Wait for it to finish.",
+                    )
+                else:
+                    dispatch = locked_dispatch
 
         if dispatch.status not in _RESETTABLE_STATUSES:
             return fleet_error(

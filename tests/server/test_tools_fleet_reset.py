@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from autoskillit.core import TerminationReason
+from autoskillit.core.runtime import read_boot_id, read_starttime_ticks
 from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("fleet")]
@@ -242,6 +244,65 @@ class TestResetDispatchErrors:
         self, build_ctx_open, tmp_path, monkeypatch
     ) -> None:
         state_path = _setup_state(tmp_path, status=DispatchStatus.RUNNING)
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_fleet_reset.resolve_stale_running",
+            lambda _d, _m, **_kw: True,
+        )
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123")
+        result = json.loads(raw)
+        assert result["success"] is False
+        assert result["error"] == "fleet_reset_still_running"
+
+    @pytest.mark.anyio
+    async def test_reset_dispatch_running_dead_process_succeeds(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        """Test 1A: reset_dispatch must succeed for RUNNING dispatch with dead process."""
+        state_path = _setup_state(tmp_path, status=DispatchStatus.RUNNING)
+        from autoskillit.fleet.state import CampaignStateMutator
+
+        with CampaignStateMutator(state_path) as m:
+            assert m.state is not None
+            m.state.dispatches[0].dispatched_pid = 999999999
+            m.state.dispatches[0].dispatched_boot_id = "fake-boot-id"
+            m.mark_dirty()
+
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123")
+        result = json.loads(raw)
+        assert result["success"] is True
+
+    @pytest.mark.anyio
+    async def test_reset_dispatch_running_alive_process_still_blocked(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        """Test 1B: reset_dispatch must still block when process is alive."""
+        state_path = _setup_state(tmp_path, status=DispatchStatus.RUNNING)
+        from autoskillit.fleet.state import CampaignStateMutator
+
+        current_pid = os.getpid()
+        current_boot_id = read_boot_id()
+        current_ticks = read_starttime_ticks(current_pid)
+        if current_boot_id is None or current_ticks is None:
+            pytest.skip("Liveness detection requires /proc (Linux only)")
+
+        with CampaignStateMutator(state_path) as m:
+            assert m.state is not None
+            m.state.dispatches[0].dispatched_pid = current_pid
+            m.state.dispatches[0].dispatched_boot_id = current_boot_id
+            m.state.dispatches[0].dispatched_starttime_ticks = current_ticks
+            m.mark_dirty()
+
         tool_ctx = build_ctx_open()
         _setup_tool(tool_ctx, monkeypatch, state_path)
 

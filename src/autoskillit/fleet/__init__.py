@@ -24,6 +24,7 @@ from ._reset import _RESETTABLE_STATUSES as _RESETTABLE_STATUSES
 from ._reset import (
     ResetReport,
     find_dispatch_in_campaigns,
+    find_locked_dispatch,
     format_resettable_statuses,
     reset_dispatch_artifacts,
     resolve_worktrees_dir,
@@ -181,6 +182,7 @@ __all__ = [
     "ResetReport",
     "compute_reset_labels",
     "find_dispatch_in_campaigns",
+    "find_locked_dispatch",
     "format_resettable_statuses",
     "reset_dispatch_artifacts",
     "resolve_worktrees_dir",

@@ -13,12 +13,14 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import FleetErrorCode, IssueLabelState, fleet_error, get_logger
 from autoskillit.fleet import (
     _RESETTABLE_STATUSES,
+    CampaignStateMutator,
     DispatchStatus,
     ResetReport,
     cleanup_orphaned_labels,
     compute_reset_labels,
     discover_campaign_state_files,
     find_dispatch_in_campaigns,
+    find_locked_dispatch,
     format_resettable_statuses,
     reset_dispatch_artifacts,
     resolve_stale_running,
@@ -124,23 +126,8 @@ async def reset_dispatch(
         dispatch, state_path = result
 
         if dispatch.status == DispatchStatus.RUNNING:
-            from autoskillit.fleet.state import CampaignStateMutator  # circular-break
-
             with CampaignStateMutator(state_path) as m:
-                if m.state is None:
-                    return fleet_error(
-                        FleetErrorCode.FLEET_RESET_NOT_FOUND,
-                        f"No dispatch found matching {dispatch_id!r} in any campaign state file.",
-                    )
-                locked_dispatch = next(
-                    (
-                        d
-                        for d in m.state.dispatches
-                        if (d.dispatch_id and d.dispatch_id == dispatch_id)
-                        or d.name == dispatch_id
-                    ),
-                    None,
-                )
+                locked_dispatch = find_locked_dispatch(dispatch_id, m)
                 if locked_dispatch is None:
                     return fleet_error(
                         FleetErrorCode.FLEET_RESET_NOT_FOUND,

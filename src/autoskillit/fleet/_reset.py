@@ -35,6 +35,7 @@ logger = get_logger(__name__)
 __all__ = [
     "ResetReport",
     "find_dispatch_in_campaigns",
+    "find_locked_dispatch",
     "compute_reset_labels",
     "format_resettable_statuses",
     "reset_dispatch_artifacts",
@@ -77,6 +78,16 @@ def find_dispatch_in_campaigns(
         for d in state.dispatches:
             if d.name == dispatch_id:
                 return d, state_path
+    return None
+
+
+def find_locked_dispatch(dispatch_id: str, mutator: CampaignStateMutator) -> DispatchRecord | None:
+    """Locate a dispatch inside a locked mutator's state by dispatch_id or name."""
+    if mutator.state is None:
+        return None
+    for d in mutator.state.dispatches:
+        if (d.dispatch_id and d.dispatch_id == dispatch_id) or d.name == dispatch_id:
+            return d
     return None
 
 

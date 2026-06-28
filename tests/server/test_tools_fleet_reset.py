@@ -266,18 +266,20 @@ class TestResetDispatchErrors:
         tool_ctx = build_ctx_open()
         _setup_tool(tool_ctx, monkeypatch, state_path)
 
-        from autoskillit.fleet import resolve_stale_running
+        def _mock_resolve_dead(d, _m, **_kw):
+            d.status = DispatchStatus.INTERRUPTED
+            return False
 
         monkeypatch.setattr(
             "autoskillit.server.tools.tools_fleet_reset.resolve_stale_running",
-            resolve_stale_running,
+            _mock_resolve_dead,
         )
 
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 
         raw = await reset_dispatch(dispatch_id="d-abc123")
         result = json.loads(raw)
-        assert result["error"] != "fleet_reset_still_running"
+        assert result["success"] is True
 
     @pytest.mark.anyio
     async def test_reset_dispatch_running_alive_process_still_blocked(
@@ -288,20 +290,10 @@ class TestResetDispatchErrors:
         tool_ctx = build_ctx_open()
         _setup_tool(tool_ctx, monkeypatch, state_path)
 
-        from autoskillit.fleet import resolve_stale_running
-
         monkeypatch.setattr(
             "autoskillit.server.tools.tools_fleet_reset.resolve_stale_running",
-            resolve_stale_running,
+            lambda _d, _m, **_kw: True,
         )
-
-        state_path_raw = state_path.read_text()
-        import json as _json
-
-        raw_obj = _json.loads(state_path_raw)
-        raw_obj["dispatches"][0]["dispatched_pid"] = 999999999
-        raw_obj["dispatches"][0]["dispatched_boot_id"] = "nonexistent-boot-id"
-        state_path.write_text(_json.dumps(raw_obj))
 
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 

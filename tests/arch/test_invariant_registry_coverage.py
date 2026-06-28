@@ -33,7 +33,11 @@ def _resolve_gate_target(target: str) -> bool:
             return True
         except ImportError:
             return False
-    return False
+    try:
+        importlib.import_module(target)
+        return True
+    except ImportError:
+        return False
 
 
 def _extract_prose_anchor(prohibition: str) -> str:

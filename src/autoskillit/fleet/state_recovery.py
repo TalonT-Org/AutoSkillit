@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     FleetErrorCode,
@@ -28,6 +28,9 @@ from autoskillit.fleet.state_types import (
 
 MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 
+if TYPE_CHECKING:
+    from autoskillit.fleet.state import CampaignStateMutator
+
 __all__ = [
     "classify_stale_dispatch",
     "derive_orchestrator_resume_spec",
@@ -36,6 +39,7 @@ __all__ = [
     "has_blocking_dispatch",
     "has_completed_dispatch",
     "has_failed_dispatch",
+    "resolve_stale_running",
     "resume_campaign_from_state",
 ]
 
@@ -209,6 +213,38 @@ def classify_stale_dispatch(
     return (DispatchStatus.INTERRUPTED, "")
 
 
+def resolve_stale_running(
+    dispatch: DispatchRecord,
+    mutator: CampaignStateMutator,
+    *,
+    reason: str = "stale_running_resolved",
+) -> bool:
+    """Check whether a RUNNING dispatch is actually alive.
+
+    Returns True if the dispatch is confirmed alive (caller should block).
+    Returns False if the dispatch is dead — reclassifies it in-place within
+    the mutator (to INTERRUPTED or RESUMABLE via classify_stale_dispatch)
+    and marks the mutator dirty. Caller can proceed with the demoted status.
+
+    Precondition: dispatch.status == DispatchStatus.RUNNING.
+    Precondition: dispatch is an element of mutator.state.dispatches
+                  (not a copy from an unlocked read).
+    Precondition: called within a CampaignStateMutator context.
+    """
+    from autoskillit.fleet import is_dispatch_session_alive
+
+    if is_dispatch_session_alive(dispatch):
+        return True
+
+    new_status, sidecar_path = classify_stale_dispatch(dispatch)
+    dispatch.status = new_status
+    dispatch.reason = reason
+    if sidecar_path:
+        dispatch.sidecar_path = sidecar_path
+    mutator.mark_dirty()
+    return False
+
+
 def resume_campaign_from_state(
     state_path: Path,
     continue_on_failure: bool,
@@ -230,10 +266,9 @@ def resume_campaign_from_state(
     ResumeDecision with next_dispatch_name="" if all dispatches are
     complete or the campaign is halted.
     """
-    from autoskillit.fleet import is_dispatch_session_alive  # noqa: PLC0415
-    from autoskillit.fleet.state import (
-        CampaignStateMutator,  # noqa: PLC0415
-        _clear_dispatch_for_retry,  # noqa: PLC0415
+    from autoskillit.fleet.state import (  # noqa: PLC0415
+        CampaignStateMutator,
+        _clear_dispatch_for_retry,
     )
 
     with CampaignStateMutator(state_path) as m:
@@ -242,14 +277,7 @@ def resume_campaign_from_state(
 
         for d in m.state.dispatches:
             if d.status == DispatchStatus.RUNNING:
-                if is_dispatch_session_alive(d):
-                    continue
-                new_status, sidecar_path = classify_stale_dispatch(d)
-                d.status = new_status
-                d.reason = "stale_running_on_resume"
-                if sidecar_path:
-                    d.sidecar_path = sidecar_path
-                m.mark_dirty()
+                resolve_stale_running(d, m, reason="stale_running_on_resume")
 
         if continue_on_failure and reset_on_retry:
             for d in m.state.dispatches:

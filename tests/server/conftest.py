@@ -152,6 +152,28 @@ def _suppress_pre_session_index(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _patch_kitchen_reaper(monkeypatch):
+    """Neutralize reaper calls inside _open_kitchen_handler for unit tests.
+
+    _open_kitchen_handler now calls discover_campaign_state_files and
+    reap_stale_dispatches_async. Existing kitchen handler tests rely on
+    filesystem absence to make these no-ops; this fixture makes that
+    guarantee explicit and stable regardless of host filesystem state.
+    """
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_kitchen.discover_campaign_state_files",
+        lambda _project_dir: [],
+    )
+
+    async def _noop_reaper(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_kitchen.reap_stale_dispatches_async", _noop_reaper
+    )
+
+
 @pytest.fixture
 def build_ctx(tmp_path):
     """Factory: build_ctx(**overrides) → minimal ToolContext with overrides applied."""

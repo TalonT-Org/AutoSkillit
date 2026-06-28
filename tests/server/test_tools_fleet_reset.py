@@ -245,6 +245,64 @@ class TestResetDispatchErrors:
         tool_ctx = build_ctx_open()
         _setup_tool(tool_ctx, monkeypatch, state_path)
 
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_fleet_reset.resolve_stale_running",
+            lambda _d, _m, **_kw: True,
+        )
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123")
+        result = json.loads(raw)
+        assert result["success"] is False
+        assert result["error"] == "fleet_reset_still_running"
+
+    @pytest.mark.anyio
+    async def test_reset_dispatch_running_dead_process_succeeds(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        """Test 1A: reset_dispatch must succeed for RUNNING dispatch with dead process."""
+        state_path = _setup_state(tmp_path, status=DispatchStatus.RUNNING)
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.fleet import resolve_stale_running
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_fleet_reset.resolve_stale_running",
+            resolve_stale_running,
+        )
+
+        from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
+
+        raw = await reset_dispatch(dispatch_id="d-abc123")
+        result = json.loads(raw)
+        assert result["error"] != "fleet_reset_still_running"
+
+    @pytest.mark.anyio
+    async def test_reset_dispatch_running_alive_process_still_blocked(
+        self, build_ctx_open, tmp_path, monkeypatch
+    ) -> None:
+        """Test 1B: reset_dispatch must still block when process is alive."""
+        state_path = _setup_state(tmp_path, status=DispatchStatus.RUNNING)
+        tool_ctx = build_ctx_open()
+        _setup_tool(tool_ctx, monkeypatch, state_path)
+
+        from autoskillit.fleet import resolve_stale_running
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools.tools_fleet_reset.resolve_stale_running",
+            resolve_stale_running,
+        )
+
+        state_path_raw = state_path.read_text()
+        import json as _json
+
+        raw_obj = _json.loads(state_path_raw)
+        raw_obj["dispatches"][0]["dispatched_pid"] = 999999999
+        raw_obj["dispatches"][0]["dispatched_boot_id"] = "nonexistent-boot-id"
+        state_path.write_text(_json.dumps(raw_obj))
+
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 
         raw = await reset_dispatch(dispatch_id="d-abc123")

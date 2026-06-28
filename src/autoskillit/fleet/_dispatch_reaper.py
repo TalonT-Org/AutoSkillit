@@ -44,13 +44,9 @@ def _apply_stale_dispatch(
     m: CampaignStateMutator,
     reaper_dispatch_id: str = "",
 ) -> None:
-    from autoskillit.fleet import classify_stale_dispatch  # noqa: PLC0415
+    from autoskillit.fleet import resolve_stale_running  # noqa: PLC0415
 
-    new_status, sidecar = classify_stale_dispatch(dispatch)
-    dispatch.status = new_status
-    dispatch.reason = reason
-    if sidecar:
-        dispatch.sidecar_path = sidecar
+    resolve_stale_running(dispatch, m, reason=reason)
     dispatch.ended_at = time.time()
 
     dispatch.reaper_reason = reason
@@ -74,7 +70,6 @@ def _apply_stale_dispatch(
                 logger.warning("reaper: failed to write tombstone", exc_info=True)
 
     _append_reaper_event(dispatch, reason, reaper_dispatch_id)
-    m.mark_dirty()
 
 
 def _mark_dead_pid(

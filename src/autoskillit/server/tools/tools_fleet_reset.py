@@ -21,6 +21,7 @@ from autoskillit.fleet import (
     find_dispatch_in_campaigns,
     format_resettable_statuses,
     reset_dispatch_artifacts,
+    resolve_stale_running,
     resolve_worktrees_dir,
     update_campaign_state,
 )
@@ -123,11 +124,39 @@ async def reset_dispatch(
         dispatch, state_path = result
 
         if dispatch.status == DispatchStatus.RUNNING:
-            return fleet_error(
-                FleetErrorCode.FLEET_RESET_STILL_RUNNING,
-                f"Dispatch {dispatch_id!r} is still RUNNING. "
-                "Wait for it to finish or reap it first.",
-            )
+            from autoskillit.fleet.state import CampaignStateMutator  # circular-break
+
+            with CampaignStateMutator(state_path) as m:
+                if m.state is None:
+                    return fleet_error(
+                        FleetErrorCode.FLEET_RESET_NOT_FOUND,
+                        f"No dispatch found matching {dispatch_id!r} in any campaign state file.",
+                    )
+                locked_dispatch = next(
+                    (
+                        d
+                        for d in m.state.dispatches
+                        if (d.dispatch_id and d.dispatch_id == dispatch_id)
+                        or d.name == dispatch_id
+                    ),
+                    None,
+                )
+                if locked_dispatch is None:
+                    return fleet_error(
+                        FleetErrorCode.FLEET_RESET_NOT_FOUND,
+                        f"No dispatch found matching {dispatch_id!r} in any campaign state file.",
+                    )
+                if locked_dispatch.status != DispatchStatus.RUNNING:
+                    dispatch = locked_dispatch
+                elif resolve_stale_running(locked_dispatch, m):
+                    return fleet_error(
+                        FleetErrorCode.FLEET_RESET_STILL_RUNNING,
+                        f"Dispatch {dispatch_id!r} is still RUNNING "
+                        f"(process {locked_dispatch.dispatched_pid} is alive). "
+                        "Wait for it to finish.",
+                    )
+                else:
+                    dispatch = locked_dispatch
 
         if dispatch.status not in _RESETTABLE_STATUSES:
             return fleet_error(

@@ -81,6 +81,7 @@ from .state_recovery import (
     find_dispatch_for_issue,
     has_blocking_dispatch,
     has_completed_dispatch,
+    resolve_stale_running,
 )
 from .state_types import (
     _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
@@ -126,6 +127,7 @@ __all__ = [
     "parse_campaign_summary",
     "serialize_campaign_summary",
     "validate_campaign_summary",
+    "resolve_stale_running",
     "TERMINAL_DISPATCH_STATUSES",
     "TERMINAL_UNCLEANED_STATUSES",
     "FLEET_HALTED_SENTINEL",

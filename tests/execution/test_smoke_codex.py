@@ -37,7 +37,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class _CodexSessionData(NamedTuple):
     result: subprocess.CompletedProcess
-    events: list
+    events: list[SessionEvent]
     thread_id: str
 
 

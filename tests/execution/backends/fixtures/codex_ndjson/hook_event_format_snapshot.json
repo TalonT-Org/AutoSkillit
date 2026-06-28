@@ -1,6 +1,5 @@
 {
-  "_registry_hash": "e2026897c0e2c46ff1b6beb448cade141294f1c7b296dad2b4cf46e61d8c646e",
-  "_staleness_note": "Regenerate in the same commit as P5-A6 (B4-hookdef-extension) when mechanism/enforcement_strength fields are added to HookDef.",
+  "_registry_hash": "cf12c32c7990708aedb676d6fcf239fb2b7c1a90d61444d5cb367daf0cfa7795",
   "hooks": {
     "PostToolUse": [
       {

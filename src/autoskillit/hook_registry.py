@@ -31,6 +31,7 @@ class HookDef:
         "works-as-is"
     )
     mechanism: Literal["deny", "additionalContext", "output-rewrite"] = "deny"
+    enforcement_strength: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.event_type != "SessionStart" and not self.matcher:
@@ -96,17 +97,20 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/pipeline_step_guard.py",
         ],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher="mcp__.*autoskillit.*__remove_clone",
         scripts=["guards/remove_clone_guard.py"],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__open_kitchen.*",
         scripts=["guards/open_kitchen_guard.py"],
         timeout_seconds=5,
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher="AskUserQuestion",
@@ -115,21 +119,25 @@ HOOK_REGISTRY: list[HookDef] = [
         session_scope="headless_only",
         codex_status="not-applicable",
         mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__merge_worktree",
         scripts=["guards/branch_protection_guard.py"],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__push_to_remote",
         scripts=["guards/branch_protection_guard.py"],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/unsafe_install_guard.py"],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -149,23 +157,27 @@ HOOK_REGISTRY: list[HookDef] = [
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/compose_pr_body_guard.py"],
         session_scope="headless_only",
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/planner_gh_discovery_guard.py"],
         session_scope="headless_only",
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/artifact_download_guard.py"],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -175,6 +187,7 @@ HOOK_REGISTRY: list[HookDef] = [
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_session_types=frozenset({"orchestrator"}),
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__run_cmd",
@@ -184,35 +197,41 @@ HOOK_REGISTRY: list[HookDef] = [
         # stdlib-only boundary on hook scripts prevents a shared import.
         exempt_skills=frozenset({"implement-experiment"}),
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/generated_file_write_guard.py"],
         mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Write|Edit|Bash|mcp__.*autoskillit.*__run_cmd",
         scripts=["guards/write_guard.py"],
         session_scope="headless_only",
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/planner_result_naming_guard.py"],
         session_scope="headless_only",
         mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Write|Edit",
         scripts=["guards/recipe_write_advisor.py"],
         session_scope="interactive_only",
         mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Grep",
         scripts=["guards/grep_pattern_lint_guard.py"],
         codex_status="not-applicable",
         mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
     ),
     HookDef(
         matcher=r"Bash|Write|Edit|Read|Glob|Grep",
@@ -221,24 +240,28 @@ HOOK_REGISTRY: list[HookDef] = [
         session_scope="interactive_only",
         codex_status="degraded",
         mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "degraded"},
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_cmd|run_python).*",
         scripts=["guards/skill_orchestration_guard.py"],
         session_scope="headless_only",
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|mcp__.*autoskillit.*__(run_cmd|run_python)",
         scripts=["guards/recipe_read_guard.py"],
         session_scope="headless_only",
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"Bash|Agent",
         scripts=["guards/background_exec_guard.py"],
         session_scope="headless_only",
         mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
@@ -249,12 +272,14 @@ HOOK_REGISTRY: list[HookDef] = [
             "guards/fleet_claim_guard.py",
         ],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         event_type="PostToolUse",
         matcher="mcp__.*autoskillit.*",
         scripts=["formatters/pretty_output_hook.py"],
         mechanism="output-rewrite",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         event_type="PostToolUse",
@@ -266,18 +291,21 @@ HOOK_REGISTRY: list[HookDef] = [
             "recipe_confirmed_post_hook.py",
         ],
         mechanism="output-rewrite",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         event_type="PostToolUse",
         matcher=r"mcp__.*autoskillit.*__(run_skill|run_python).*",
         scripts=["review_gate_post_hook.py"],
         mechanism="output-rewrite",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         event_type="PostToolUse",
         matcher=r"(mcp__.*autoskillit.*__)?dispatch_food_truck",
         scripts=["resume_gate_post_hook.py"],
         mechanism="output-rewrite",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         event_type="PostToolUse",
@@ -286,6 +314,7 @@ HOOK_REGISTRY: list[HookDef] = [
         session_scope="headless_only",
         codex_status="degraded",
         mechanism="output-rewrite",
+        enforcement_strength={"claude_code": "hard", "codex": "degraded"},
     ),
     HookDef(
         event_type="PostToolUse",
@@ -293,6 +322,7 @@ HOOK_REGISTRY: list[HookDef] = [
         scripts=["skill_load_post_hook.py"],
         codex_status="not-applicable",
         mechanism="additionalContext",
+        enforcement_strength={"claude_code": "hard", "codex": "not-applicable"},
     ),
     HookDef(
         matcher=r"Read|Write|Edit|Bash|Grep|Glob",
@@ -300,22 +330,26 @@ HOOK_REGISTRY: list[HookDef] = [
         session_scope="headless_only",
         codex_status="works-as-is",
         mechanism="deny",
+        enforcement_strength={"claude_code": "hard", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"mcp__.*autoskillit.*__(wait_for_ci|enqueue_pr)",
         scripts=["guards/review_loop_gate.py"],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         matcher=r"(mcp__.*autoskillit.*__)?reset_dispatch",
         scripts=["guards/reset_resume_gate.py"],
         mechanism="deny",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
     HookDef(
         event_type="SessionStart",
         scripts=["session_start_hook.py"],
         session_scope="interactive_only",
         mechanism="additionalContext",
+        enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
     ),
 ]
 
@@ -418,6 +452,7 @@ def _canonical_registry_payload(
         [
             {
                 "codex_status": h.codex_status,
+                "enforcement_strength": dict(sorted(h.enforcement_strength.items())),
                 "event_type": h.event_type,
                 "exempt_session_types": sorted(h.exempt_session_types),
                 "exempt_skills": sorted(h.exempt_skills),
@@ -432,7 +467,7 @@ def _canonical_registry_payload(
         key=lambda row: (row["event_type"], row["matcher"], tuple(row["scripts"])),  # type: ignore[arg-type]
     )
     return json.dumps(
-        {"format_version": 2, "registry": registry_rows, "retired": sorted(retired)},
+        {"format_version": 3, "registry": registry_rows, "retired": sorted(retired)},
         sort_keys=True,
         separators=(",", ":"),
     )

@@ -71,6 +71,8 @@ def _apply_stale_dispatch(
 
     _append_reaper_event(dispatch, reason, reaper_dispatch_id)
 
+    m.mark_dirty()
+
 
 def _mark_dead_pid(
     dry_run: bool,

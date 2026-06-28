@@ -163,23 +163,21 @@ class TestCodexSmokeRecipeComposition:
         )
         parser = CodexStreamParser()
         events: list[SessionEvent] = []
+        thread_id = ""
         for line in proc.stdout.splitlines():
             evt = parser.parse_line(line)
             if evt is not None:
                 events.append(evt)
-
-        thread_id = ""
-        for line in proc.stdout.splitlines():
+            if thread_id:
+                continue
             try:
                 obj = json.loads(line)
             except (json.JSONDecodeError, ValueError):
                 continue
             if obj.get("type") == "thread.started":
                 thread_id = obj.get("thread_id", "")
-                break
-            if obj.get("type") == "session_meta":
+            elif obj.get("type") == "session_meta":
                 thread_id = obj.get("payload", {}).get("id", "")
-                break
 
         tmp_dir = tmp_path_factory.mktemp("codex_smoke")
         rollout = tmp_dir / "codex-sessions" / "rollout.jsonl"

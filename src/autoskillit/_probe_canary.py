@@ -183,7 +183,11 @@ def _handle_post_failure(
     owner, repo = repo_slug.split("/", 1)
     state_path = Path(state_file)
     state = CanaryState.load(state_path)
-    kind = ErrorKind(failure_type)
+    try:
+        kind = ErrorKind(failure_type)
+    except ValueError:
+        logger.error("post_failure_invalid_failure_type", failure_type=failure_type)
+        return 1
     state.record_failure(kind)
 
     if state.should_report():
@@ -197,7 +201,10 @@ def _handle_post_failure(
             f"**Schema Streak:** {state.schema_streak}\n"
         )
         updater = CanaryIssueUpdater(owner=owner, repo=repo)
-        updater.ensure_issue(state, title, body)
+        try:
+            updater.ensure_issue(state, title, body)
+        except Exception as exc:
+            logger.error("canary_ensure_issue_failed", error=str(exc))
 
     state.save(state_path)
     return 0

@@ -185,16 +185,16 @@ opencode classification).
 
 | Cluster | TRIVIAL | SHIM-REQUIRED | GAP |
 |---|---|---|---|
-| Identity / introspection (`name`, `capabilities`, `conventions`, `binary_name`, `version`, `list_plugins`, `model_config_overrides`, `build_inspector_cmd`) | 8 | 0 | 0 |
+| Identity / introspection (`name`, `capabilities`, `conventions`, `binary_name`, `version`, `list_plugins`, `model_config_overrides`, `build_inspector_cmd`, `translate_model`) | 8 | 1 | 0 |
 | Command builders (`build_cmd`, `build_skill_session_cmd`, `build_food_truck_cmd`, `build_interactive_cmd`, `build_resume_cmd`) | 0 | 1 | 4 |
 | Validation (`validate_session_layout`, `validate_skill_content`, `ensure_pre_launch`) | 2 | 1 | 0 |
 | Parsing (`stream_parser`, `result_parser`) | 0 | 2 | 0 |
 | Session storage (`session_locator`, `setup_session_dir`, `write_tool_names`) | 0 | 3 | 0 |
 | Environment (`env_policy`) | 1 | 0 | 0 |
 | Sub-protocols (`StreamParser`, `ResultParser`, `EnvPolicy`, `SessionLocator`) | 1 | 6 | 0 |
-| **Total (30 rows)** | **12** | **13** | **5** |
+| **Total (30 rows)** | **12** | **14** | **4** |
 
-The 5 GAP rows map to 3 distinct root causes (sandbox blocker, resume
+The 4 GAP rows map to 3 distinct root causes (sandbox blocker, resume
 absence, orchestrator session absence), consolidated into PCR-001, PCR-002,
 and PCR-003 in Section 6.
 
@@ -398,7 +398,7 @@ single PCR with multiple affected surfaces. The PCR ID is sequential.
 
 | Classification | Count |
 |---|---|
-| Protocol change required | 8 (PCR-001, 002, 003, 004, 005, 007, 008, 010, 013) |
+| Protocol change required | 9 (PCR-001, 002, 003, 004, 005, 007, 008, 010, 013) |
 | Implementation-only | 3 (PCR-006, 009, 011) |
 | Test-infrastructure extension only | 1 (PCR-012) |
 | **Total** | **13 PCRs** |
@@ -418,6 +418,6 @@ semantics.
 | §3 capability categories | ACP-Mappable / autoskillit-Local / Forward-Declared counts | `docs/design/acp-session-contract.md` Section 3 |
 | §4 conventions | `BackendConventions` (2 fields) | `src/autoskillit/core/types/_type_backend.py:38–49` |
 | §5 B3a pattern | Codex NDJSON fixtures | `tests/execution/backends/fixtures/codex_ndjson/` |
-| §5 B4v pattern | Codex hook-efficacy probe | `tests/execution/backends/test_hook_deny_efficacy_probe.py` |
+| §5 B3b pattern | Codex hook-efficacy probe | `tests/execution/backends/test_hook_deny_efficacy_probe.py` |
 | §6 PCR-001 / 003 blocker | `--sandbox deny` hard-coding | sst/opencode#13851 |
 | §6 PCR-002 / 005 / 008 documentation | Resume, exit codes, exhaustion signals | sst/opencode repository |

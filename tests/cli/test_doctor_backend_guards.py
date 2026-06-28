@@ -691,3 +691,109 @@ class TestCheckCodexGraduation:
         assert "probe=not-yet-run" in result.message
         assert "matrix=not-yet-run" in result.message
         assert "smoke=not-found" in result.message
+
+
+class TestCheckCliConformanceProbes:
+    """Tests for _check_cli_conformance_probes doctor check (Check 34)."""
+
+    def test_skip_for_none_backend(self) -> None:
+        from autoskillit.cli.doctor._doctor_runtime import _check_cli_conformance_probes
+        from autoskillit.core import Severity
+
+        result = _check_cli_conformance_probes(backend=None)
+        assert result.severity == Severity.OK
+        assert result.check == "cli_conformance_probes"
+        assert "skipped" in result.message.lower()
+
+    def test_skip_for_backend_without_version_check_command(self) -> None:
+        from types import SimpleNamespace
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_cli_conformance_probes
+        from autoskillit.core import Severity
+
+        stub = SimpleNamespace(capabilities=SimpleNamespace(version_check_command=""))
+        result = _check_cli_conformance_probes(backend=stub)
+        assert result.severity == Severity.OK
+        assert "skipped" in result.message.lower()
+
+    def test_skip_when_cli_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_cli_conformance_probes
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        def _raise(*a, **kw):
+            raise FileNotFoundError("codex")
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = _check_cli_conformance_probes(backend=CodexBackend())
+        assert result.severity == Severity.OK
+        assert "unavailable" in result.message.lower()
+
+    def test_skip_when_cli_times_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_cli_conformance_probes
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        def _raise(*a, **kw):
+            raise subprocess.TimeoutExpired(cmd="codex", timeout=5)
+
+        monkeypatch.setattr(subprocess, "run", _raise)
+        result = _check_cli_conformance_probes(backend=CodexBackend())
+        assert result.severity == Severity.OK
+        assert "unavailable" in result.message.lower() or "timed out" in result.message.lower()
+
+    def test_ok_when_config_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_cli_conformance_probes
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        calls = []
+
+        def _fake_run(*a, **kw):
+            calls.append(a)
+            return type(
+                "CompletedProcess",
+                (),
+                {"returncode": 0, "stdout": "codex 0.130.0\n", "stderr": ""},
+            )()
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        result = _check_cli_conformance_probes(backend=CodexBackend())
+        assert result.severity == Severity.OK
+        assert "accepted" in result.message.lower()
+        assert len(calls) == 2
+
+    def test_warning_when_config_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from autoskillit.cli.doctor._doctor_runtime import _check_cli_conformance_probes
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        call_count = 0
+
+        def _fake_run(*a, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return type(
+                    "CompletedProcess",
+                    (),
+                    {"returncode": 0, "stdout": "codex 0.130.0\n", "stderr": ""},
+                )()
+            return type(
+                "CompletedProcess",
+                (),
+                {"returncode": 1, "stdout": "", "stderr": "unknown flag"},
+            )()
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+        result = _check_cli_conformance_probes(backend=CodexBackend())
+        assert result.severity == Severity.WARNING
+        assert "rejected" in result.message.lower() or "exit 1" in result.message

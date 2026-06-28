@@ -237,16 +237,16 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(95.0)
 
 
-def test_doctor_check_count_is_40() -> None:
-    # 40 total = 17 numbered base + 7 lettered sub-checks (2b–2e, 4b, 7b, 7c)
+def test_doctor_check_count_is_41() -> None:
+    # 41 total = 17 numbered base + 7 lettered sub-checks (2b–2e, 4b, 7b, 7c)
     # + 4 ambient env (18–21) + 2 feature (22–23) + 6 gated franchise (24–29)
     # + 1 codex version (30) + 1 script binary (31) + 1 MCP timeouts (32)
-    # + 1 codex graduation (33).
+    # + 1 codex graduation (33) + 1 CLI conformance probes (34).
     # The docs claim 17 user-visible checks; the gap is intentional (Check 2/4/7
     # split into sub-markers here but appear as single entries in docs).
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()
-    assert count == 40, f"Expected 40 doctor checks; found {count}"
+    assert count == 41, f"Expected 41 doctor checks; found {count}"
 
 
 def test_bundled_recipe_count_is_15() -> None:

@@ -238,12 +238,11 @@ def test_quota_thresholds_defaults() -> None:
 
 
 def test_doctor_check_count_is_41() -> None:
-    # 41 total = 17 numbered base + 7 lettered sub-checks (2b–2e, 4b, 7b, 7c)
-    # + 4 ambient env (18–21) + 2 feature (22–23) + 6 gated franchise (24–29)
-    # + 1 codex version (30) + 1 script binary (31) + 1 MCP timeouts (32)
-    # + 1 codex graduation (33) + 1 CLI conformance probes (34).
-    # The docs claim 17 user-visible checks; the gap is intentional (Check 2/4/7
-    # split into sub-markers here but appear as single entries in docs).
+    # 41 total = 23 numbered (1–17 base + 18–21 ambient env + 22–23 feature)
+    # + 7 lettered sub-checks (2b–2e, 4b, 7b, 7c)
+    # + 6 gated fleet (24–29) + 5 backend runtime (30–34).
+    # Docs list 33 user-visible checks (23 numbered + 5 documented lettered +
+    # 5 backend runtime); 2e and 7c are internal-only sub-checks not shown in docs.
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()
     assert count == 41, f"Expected 41 doctor checks; found {count}"

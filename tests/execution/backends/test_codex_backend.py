@@ -611,20 +611,17 @@ class TestCodexBuildSkillSessionCmd:
         spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "AUTOSKILLIT_COMPLETION_MARKER" not in spec2.env
 
-    def test_claude_only_params_accepted_but_ignored(self) -> None:
-        spec = CodexBackend().build_skill_session_cmd(
-            **{
-                **self.BASE,
-                "exit_after_stop_delay_ms": 5000,
-                "stream_idle_timeout_ms": 3000,
-            }
-        )
-        cmd_str = " ".join(spec.cmd)
-        assert "--output-format" not in cmd_str
-        assert "--plugin-dir" not in cmd_str
+    def test_default_params_emit_no_warnings(self) -> None:
+        with structlog.testing.capture_logs() as cap_logs:
+            spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        discard_events = [
+            e
+            for e in cap_logs
+            if e.get("event") in ("codex_plugin_source_discarded", "codex_output_format_coerced")
+        ]
+        assert discard_events == []
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
         assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
-        assert spec.process_idle_timeout_ms == 3000
 
     def test_stream_idle_timeout_routed_to_cmdspec(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(

@@ -1,6 +1,6 @@
 # doctor/
 
-Diagnostic health checks for the autoskillit installation (33 checks).
+Diagnostic health checks for the autoskillit installation (34 checks).
 
 ## Files
 

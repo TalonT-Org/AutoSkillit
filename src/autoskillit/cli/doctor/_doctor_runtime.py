@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 
 import regex as re
@@ -14,6 +15,7 @@ from autoskillit.core import (
     default_log_dir,
     get_logger,
 )
+from autoskillit.core.io import atomic_write
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
 from ._doctor_types import DoctorResult
@@ -270,3 +272,44 @@ def _check_codex_graduation(
         summary += f" — EXPERIMENTAL hold: {pending} of 4 criteria pending"
 
     return DoctorResult(Severity.INFO, check_name, summary)
+
+
+def _check_cli_conformance_probes(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
+    check_name = "cli_conformance_probes"
+
+    if backend is None or not backend.capabilities.version_check_command:
+        return DoctorResult(Severity.OK, check_name, "Skipped (no version check command)")
+
+    cli_argv = backend.capabilities.version_check_command.split()
+    try:
+        subprocess.run(cli_argv, capture_output=True, text=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return DoctorResult(Severity.OK, check_name, "CLI unavailable; skipping config probe")
+
+    cli_binary = cli_argv[0]
+    with tempfile.TemporaryDirectory() as tmpdir:
+        probe_path = Path(tmpdir) / "probe.toml"
+        atomic_write(probe_path, 'model = "gpt-4o"\n')
+        try:
+            result = subprocess.run(
+                [cli_binary, "-c", str(probe_path), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            return DoctorResult(
+                Severity.OK,
+                check_name,
+                f"{cli_binary} config probe timed out; skipping",
+            )
+        except (FileNotFoundError, OSError):
+            return DoctorResult(Severity.OK, check_name, "CLI unavailable; skipping config probe")
+
+    if result.returncode == 0:
+        return DoctorResult(Severity.OK, check_name, f"{cli_binary} accepted minimal config probe")
+    return DoctorResult(
+        Severity.WARNING,
+        check_name,
+        f"{cli_binary} rejected config probe (exit {result.returncode})",
+    )

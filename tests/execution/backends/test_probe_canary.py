@@ -12,6 +12,7 @@ from autoskillit._probe_canary import (
     CanaryIssueUpdater,
     CanaryState,
     ErrorKind,
+    _cli_main,
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -202,3 +203,150 @@ class TestCanaryIssueUpdater:
         assert num == 42
         assert state.last_issue_number == 42
         assert any(e.get("event") == "canary_issue_edit_failed" for e in cap_logs)
+
+
+class TestCliMain:
+    def test_post_failure_records_and_saves(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """post-failure writes updated state to the state file."""
+        monkeypatch.setenv("GITHUB_REPOSITORY", "test-org/test-repo")
+        state_path = tmp_path / "state.json"
+
+        def mock_run_gh(args, **kwargs):
+            return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+
+        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+
+        rc = _cli_main(
+            [
+                "post-failure",
+                "--state-file",
+                str(state_path),
+                "--backend",
+                "claude-code",
+                "--cli-version",
+                "1.0.0",
+                "--failure-type",
+                "network",
+                "--workflow-run-url",
+                "https://example.com/run/1",
+            ]
+        )
+        assert rc == 0
+        assert state_path.exists()
+        raw = json.loads(state_path.read_text())
+        assert raw["network_streak"] == 1
+
+    def test_post_failure_threshold_triggers_issue_creation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When streak reaches N_CONSECUTIVE_FLAKE_GUARD, ensure_issue is called."""
+        monkeypatch.setenv("GITHUB_REPOSITORY", "test-org/test-repo")
+        state_path = tmp_path / "state.json"
+        state_path.write_text(
+            json.dumps(
+                {
+                    "network_streak": N_CONSECUTIVE_FLAKE_GUARD - 1,
+                    "schema_streak": 0,
+                    "last_issue_number": None,
+                }
+            )
+        )
+
+        gh_calls: list[list[str]] = []
+
+        def mock_run_gh(args, **kwargs):
+            gh_calls.append(list(args))
+            if args[0:2] == ["issue", "list"]:
+                return CompletedProcess(args=args, returncode=0, stdout="[]", stderr="")
+            if args[0:2] == ["issue", "create"]:
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=json.dumps({"number": 7}),
+                    stderr="",
+                )
+            return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+
+        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+
+        rc = _cli_main(
+            [
+                "post-failure",
+                "--state-file",
+                str(state_path),
+                "--backend",
+                "claude-code",
+                "--cli-version",
+                "1.0.0",
+                "--failure-type",
+                "network",
+                "--workflow-run-url",
+                "https://example.com/run/2",
+            ]
+        )
+        assert rc == 0
+        assert any(call[0:2] == ["issue", "list"] for call in gh_calls)
+        assert any(call[0:2] == ["issue", "create"] for call in gh_calls)
+
+    def test_post_failure_below_threshold_no_issue(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Below threshold, no gh issue commands are issued."""
+        monkeypatch.setenv("GITHUB_REPOSITORY", "test-org/test-repo")
+        state_path = tmp_path / "state.json"
+
+        def mock_run_gh(args, **kwargs):
+            raise AssertionError(f"Unexpected gh call: {args}")
+
+        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+
+        rc = _cli_main(
+            [
+                "post-failure",
+                "--state-file",
+                str(state_path),
+                "--backend",
+                "claude-code",
+                "--cli-version",
+                "1.0.0",
+                "--failure-type",
+                "network",
+                "--workflow-run-url",
+                "https://example.com/run/3",
+            ]
+        )
+        assert rc == 0
+        assert state_path.exists()
+        raw = json.loads(state_path.read_text())
+        assert raw["network_streak"] == 1
+
+    def test_post_failure_missing_github_repository(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing GITHUB_REPOSITORY env var returns 1."""
+        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+        state_path = tmp_path / "state.json"
+
+        rc = _cli_main(
+            [
+                "post-failure",
+                "--state-file",
+                str(state_path),
+                "--backend",
+                "claude-code",
+                "--cli-version",
+                "1.0.0",
+                "--failure-type",
+                "network",
+                "--workflow-run-url",
+                "https://example.com/run/4",
+            ]
+        )
+        assert rc == 1
+
+    def test_cli_no_command_returns_nonzero(self) -> None:
+        """Calling _cli_main with no subcommand returns non-zero."""
+        rc = _cli_main([])
+        assert rc != 0

@@ -165,3 +165,83 @@ class CanaryIssueUpdater:
                 if isinstance(number, int):
                     return number
         return None
+
+
+def _handle_post_failure(
+    *,
+    state_file: str,
+    backend: str,
+    cli_version: str,
+    failure_type: str,
+    workflow_run_url: str,
+) -> int:
+    repo_slug = os.environ.get("GITHUB_REPOSITORY", "")
+    if not repo_slug or "/" not in repo_slug:
+        logger.error("post_failure_missing_github_repository")
+        return 1
+
+    owner, repo = repo_slug.split("/", 1)
+    state_path = Path(state_file)
+    state = CanaryState.load(state_path)
+    kind = ErrorKind(failure_type)
+    state.record_failure(kind)
+
+    if state.should_report():
+        title = f"[Canary] {backend} probe failure: {kind.value}"
+        body = (
+            f"**Backend:** {backend}\n"
+            f"**CLI Version:** {cli_version}\n"
+            f"**Failure Type:** {kind.value}\n"
+            f"**Workflow Run:** {workflow_run_url}\n"
+            f"**Network Streak:** {state.network_streak}\n"
+            f"**Schema Streak:** {state.schema_streak}\n"
+        )
+        updater = CanaryIssueUpdater(owner=owner, repo=repo)
+        updater.ensure_issue(state, title, body)
+
+    state.save(state_path)
+    return 0
+
+
+def _cli_main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="autoskillit._probe_canary")
+    sub = parser.add_subparsers(dest="command")
+
+    post = sub.add_parser(
+        "post-failure", help="Record a probe failure and optionally create an issue"
+    )
+    post.add_argument("--state-file", required=True, help="Path to canary state JSON file")
+    post.add_argument("--backend", required=True, help="Probe backend identifier")
+    post.add_argument("--cli-version", required=True, help="CLI version that ran the probe")
+    post.add_argument(
+        "--failure-type",
+        required=True,
+        choices=[e.value for e in ErrorKind],
+        help="Error kind: network or schema",
+    )
+    post.add_argument("--workflow-run-url", required=True, help="GitHub Actions workflow run URL")
+
+    args = parser.parse_args(argv)
+
+    if args.command is None:
+        parser.print_help()
+        return 1
+
+    if args.command == "post-failure":
+        return _handle_post_failure(
+            state_file=args.state_file,
+            backend=args.backend,
+            cli_version=args.cli_version,
+            failure_type=args.failure_type,
+            workflow_run_url=args.workflow_run_url,
+        )
+
+    return 1
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(_cli_main())

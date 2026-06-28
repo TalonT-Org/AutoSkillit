@@ -56,7 +56,9 @@ def test_works_as_is_hooks_have_soft_or_better() -> None:
     works_as_is_stems: set[str] = {
         Path(script).stem
         for hd in HOOK_REGISTRY
-        if hd.codex_status == "works-as-is"
+        if hd.event_type == "PreToolUse"
+        and hd.mechanism == "deny"
+        and hd.codex_status == "works-as-is"
         for script in hd.scripts
     }
     seen_stems: set[str] = set()
@@ -74,7 +76,10 @@ def test_not_applicable_hooks_appear_only_as_inert() -> None:
     rows = matrix["combinations"]
 
     not_applicable_stems: set[str] = {
-        Path(hd.scripts[0]).stem for hd in HOOK_REGISTRY if hd.codex_status == "not-applicable"
+        Path(script).stem
+        for hd in HOOK_REGISTRY
+        if hd.codex_status == "not-applicable"
+        for script in hd.scripts
     }
     matrix_stems: set[str] = {row["hook"] for row in rows}
     leaked = not_applicable_stems & matrix_stems

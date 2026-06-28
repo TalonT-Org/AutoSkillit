@@ -153,6 +153,9 @@ tests/recipe/fixtures/*:
 tests/fixtures/codex/*.ndjson:
   - execution/
 
+tests/execution/backends/fixtures/codex_ndjson/*.json:
+  - execution/
+
 # Local .autoskillit/ config and state files
 .autoskillit/test-source-map.json:
   - infra/

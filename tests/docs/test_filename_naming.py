@@ -22,6 +22,7 @@ ALLOWLIST = {
         "recording-replay-accepted-degradations.md",
         "0001-prohibit-background-subagent-execution.md",
         "0002-ban-inline-shell-scripts-from-cmd.md",
+        "paper-backend-n3-exercise.md",  # 4 segments; prescribed by issue #4052
     },
 }
 

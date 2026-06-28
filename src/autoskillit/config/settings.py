@@ -513,7 +513,9 @@ class AutomationConfig:
         except ValueError as exc:
             raise ValueError(f"fleet config: {exc}") from exc
         _timeout_coherence_gate(result.run_skill)
-        _codex_mcp_timeout_coherence_gate(result.run_skill, result.fleet)
+        _codex_mcp_timeout_coherence_gate(
+            result.run_skill, result.fleet, tool_timeout=result.run_skill.mcp_tool_timeout_sec
+        )
         return result
 
 

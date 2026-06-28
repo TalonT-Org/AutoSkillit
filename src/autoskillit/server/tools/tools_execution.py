@@ -1041,47 +1041,63 @@ async def run_skill(
 
             _start = time.monotonic()
             try:
-                async with execution_marker(
-                    _marker_dir,
-                    _orchestrator_sid,
-                    "run-skill",
-                ):
-                    skill_result = await tool_ctx.executor.run(
-                        resolved_command,
-                        cwd,
-                        model=effective_model,
-                        add_dirs=skill_add_dirs,
-                        step_name=step_name,
-                        kitchen_id=tool_ctx.kitchen_id,
-                        order_id=effective_order_id,
-                        expected_output_patterns=expected_output_patterns,
-                        write_behavior=write_spec,
-                        stale_threshold=float(stale_threshold)
-                        if stale_threshold is not None
-                        else None,
-                        idle_output_timeout=float(idle_output_timeout)
-                        if idle_output_timeout is not None
-                        else None,
-                        completion_marker=invocation_marker,
-                        recipe_name=tool_ctx.recipe_name,
-                        recipe_content_hash=tool_ctx.recipe_content_hash,
-                        recipe_composite_hash=tool_ctx.recipe_composite_hash,
-                        recipe_version=tool_ctx.recipe_version,
-                        allowed_write_prefix=allowed_write_prefix,
-                        allowed_write_prefixes=allowed_write_prefixes,
-                        readonly_skill=is_read_only,
-                        completion_required=completion_required,
-                        write_watch_dirs=write_watch_dirs,
-                        provider_extras=provider_extras,
-                        profile_name=profile_name_out,
-                        provider_name=profile_name_out,
-                        backend_override=backend_override,
-                        resume_session_id=resume_session_id,
-                        marker_dir=_marker_dir,
-                        caller_session_id=_orchestrator_sid,
-                        inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
-                        inspector_model=_inspector_model,
+                try:
+                    with anyio.fail_after(_cfg.run_skill.mcp_tool_timeout_sec):
+                        async with execution_marker(
+                            _marker_dir,
+                            _orchestrator_sid,
+                            "run-skill",
+                        ):
+                            skill_result = await tool_ctx.executor.run(
+                                resolved_command,
+                                cwd,
+                                model=effective_model,
+                                add_dirs=skill_add_dirs,
+                                step_name=step_name,
+                                kitchen_id=tool_ctx.kitchen_id,
+                                order_id=effective_order_id,
+                                expected_output_patterns=expected_output_patterns,
+                                write_behavior=write_spec,
+                                stale_threshold=float(stale_threshold)
+                                if stale_threshold is not None
+                                else None,
+                                idle_output_timeout=float(idle_output_timeout)
+                                if idle_output_timeout is not None
+                                else None,
+                                completion_marker=invocation_marker,
+                                recipe_name=tool_ctx.recipe_name,
+                                recipe_content_hash=tool_ctx.recipe_content_hash,
+                                recipe_composite_hash=tool_ctx.recipe_composite_hash,
+                                recipe_version=tool_ctx.recipe_version,
+                                allowed_write_prefix=allowed_write_prefix,
+                                allowed_write_prefixes=allowed_write_prefixes,
+                                readonly_skill=is_read_only,
+                                completion_required=completion_required,
+                                write_watch_dirs=write_watch_dirs,
+                                provider_extras=provider_extras,
+                                profile_name=profile_name_out,
+                                provider_name=profile_name_out,
+                                backend_override=backend_override,
+                                resume_session_id=resume_session_id,
+                                marker_dir=_marker_dir,
+                                caller_session_id=_orchestrator_sid,
+                                inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
+                                inspector_model=_inspector_model,
+                            )
+                except TimeoutError as exc:
+                    logger.error(
+                        "run_skill_mcp_tool_timeout",
+                        timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
                     )
+                    _timeout_exc = TimeoutError(
+                        f"MCP tool timeout ({_cfg.run_skill.mcp_tool_timeout_sec}s) exceeded"
+                    )
+                    _timeout_exc.__cause__ = exc
+                    return SkillResult.crashed(
+                        exception=_timeout_exc,
+                        skill_command=resolved_command,
+                        order_id=effective_order_id,
+                    ).to_json()
                 if skill_result.success:
                     tool_ctx.audit.record_success(skill_command)
                     _clear_run_skill_state(tool_ctx.project_dir)

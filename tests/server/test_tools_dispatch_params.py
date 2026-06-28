@@ -240,3 +240,36 @@ class TestDispatchFoodTruckIdleTimeout:
         executor = tool_ctx.executor
         assert executor.dispatch_calls, "dispatch_food_truck was never called"
         assert executor.dispatch_calls[0].idle_output_timeout == 0.0
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_returns_fleet_error_on_mcp_timeout(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+):
+    """dispatch_food_truck returns fleet_l3_timeout envelope on MCP tool TimeoutError."""
+    import json
+
+    from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+    monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    repo = InMemoryRecipeRepository()
+    recipe_info = _make_recipe_info("test-recipe")
+    repo.add_recipe("test-recipe", recipe_info)
+    repo.add_full_recipe(recipe_info.path, _make_standard_recipe("test-recipe"))
+    tool_ctx_kitchen_open.recipes = repo
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+
+    async def _timeout_dispatch(*args, **kwargs):
+        raise TimeoutError("mcp_tool_timeout_sec exceeded")
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
+        _timeout_dispatch,
+    )
+
+    result_json = await dispatch_food_truck(recipe="test-recipe", task="do-work")
+    result = json.loads(result_json)
+    assert result["success"] is False
+    assert result["error"] == "fleet_l3_timeout"

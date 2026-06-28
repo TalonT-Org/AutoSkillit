@@ -10,6 +10,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import anyio
+
 if TYPE_CHECKING:
     from autoskillit.fleet import DispatchOutcome
 
@@ -376,35 +378,47 @@ async def dispatch_food_truck(
             tool_ctx.backend is not None
             and tool_ctx.backend.capabilities.anthropic_provider_capable
         )
-        result = await execute_dispatch(
-            tool_ctx=tool_ctx,
-            recipe=recipe,
-            task=task,
-            ingredients=ingredients,
-            dispatch_name=dispatch_name,
-            timeout_sec=timeout_sec,
-            prompt_builder=_get_food_truck_prompt_builder(
-                has_unguarded_filesystem_access=(
-                    tool_ctx.backend.capabilities.has_unguarded_filesystem_access
-                    if tool_ctx.backend
-                    else False
-                ),
-            ),
-            quota_checker=lambda cfg: check_and_sleep_if_needed(
-                cfg,
-                provider="anthropic" if _supports_quota else "",
-            ),
-            quota_refresher=_refresh_quota_cache,
-            cache_invalidator=invalidate_cache,
-            capture=capture,
-            resume_session_id=resume_session_id,
-            resume_checkpoint=parsed_checkpoint,
-            idle_output_timeout=idle_output_timeout,
-            caller_session_id=caller_session_id,
-            prior_dispatch_id=prior_dispatch_id,
-            resume_message=resume_message,
-            caller_instructions=caller_instructions,
-        )
+        try:
+            with anyio.fail_after(tool_ctx.config.run_skill.mcp_tool_timeout_sec):
+                result = await execute_dispatch(
+                    tool_ctx=tool_ctx,
+                    recipe=recipe,
+                    task=task,
+                    ingredients=ingredients,
+                    dispatch_name=dispatch_name,
+                    timeout_sec=timeout_sec,
+                    prompt_builder=_get_food_truck_prompt_builder(
+                        has_unguarded_filesystem_access=(
+                            tool_ctx.backend.capabilities.has_unguarded_filesystem_access
+                            if tool_ctx.backend
+                            else False
+                        ),
+                    ),
+                    quota_checker=lambda cfg: check_and_sleep_if_needed(
+                        cfg,
+                        provider="anthropic" if _supports_quota else "",
+                    ),
+                    quota_refresher=_refresh_quota_cache,
+                    cache_invalidator=invalidate_cache,
+                    capture=capture,
+                    resume_session_id=resume_session_id,
+                    resume_checkpoint=parsed_checkpoint,
+                    idle_output_timeout=idle_output_timeout,
+                    caller_session_id=caller_session_id,
+                    prior_dispatch_id=prior_dispatch_id,
+                    resume_message=resume_message,
+                    caller_instructions=caller_instructions,
+                )
+        except TimeoutError:
+            logger.error(
+                "dispatch_food_truck_mcp_tool_timeout",
+                timeout_sec=tool_ctx.config.run_skill.mcp_tool_timeout_sec,
+            )
+            return fleet_error(
+                FleetErrorCode.FLEET_L3_TIMEOUT,
+                f"MCP tool timeout ({tool_ctx.config.run_skill.mcp_tool_timeout_sec}s) "
+                f"exceeded during dispatch",
+            )
 
         if campaign_state_path_str and isinstance(result, DispatchResult):
             _write_dispatch_to_campaign_state(

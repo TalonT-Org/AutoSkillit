@@ -333,7 +333,7 @@ class TestChannelBDrainWait:
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_A
 
-    @pytest.mark.timeout(180)
+    @pytest.mark.timeout(360)
     @pytest.mark.anyio
     async def test_channel_b_then_a_empty_result_data_confirmed_is_false(self, tmp_path):
         """Channel B fires (%%ORDER_UP%% in JSONL).
@@ -357,8 +357,9 @@ class TestChannelBDrainWait:
         preventing a race where Phase 2 sets scan_pos past the marker under xdist -n 4
         event-loop saturation on WSL2.
 
-        timeout=120: guards against the outer wall-clock expiring under xdist -n 4 load.
-        _phase1_timeout=250: must exceed outer timeout so Phase 1 never fires STALE first
+        timeout=300: guards against the outer wall-clock expiring under xdist -n 4 load.
+        _phase1_timeout=400: must exceed outer timeout (300s) so Phase 1 never fires
+        STALE before the outer wall-clock guard cancels — prevents spurious TIMED_OUT
         when subprocess startup is slow under WSL2 + xdist load.
         natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
         so shorten the grace window to reduce total test time under load.
@@ -371,7 +372,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=120,
+            timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
@@ -380,7 +381,7 @@ class TestChannelBDrainWait:
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
             _session_id_timeout=0.01,
-            _phase1_timeout=250,
+            _phase1_timeout=400,
         )
         assert result.termination == TerminationReason.COMPLETED
         assert (

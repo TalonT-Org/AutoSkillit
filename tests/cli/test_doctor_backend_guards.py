@@ -717,8 +717,6 @@ class TestCheckCliConformanceProbes:
         assert "skipped" in result.message.lower()
 
     def test_skip_when_cli_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import subprocess
-
         from autoskillit.cli.doctor._doctor_runtime import _check_cli_conformance_probes
         from autoskillit.core import Severity
         from autoskillit.execution.backends.codex import CodexBackend
@@ -726,7 +724,7 @@ class TestCheckCliConformanceProbes:
         def _raise(*a, **kw):
             raise FileNotFoundError("codex")
 
-        monkeypatch.setattr(subprocess, "run", _raise)
+        monkeypatch.setattr("autoskillit.cli.doctor._doctor_runtime.subprocess.run", _raise)
         result = _check_cli_conformance_probes(backend=CodexBackend())
         assert result.severity == Severity.OK
         assert "unavailable" in result.message.lower()
@@ -738,13 +736,23 @@ class TestCheckCliConformanceProbes:
         from autoskillit.core import Severity
         from autoskillit.execution.backends.codex import CodexBackend
 
-        def _raise(*a, **kw):
-            raise subprocess.TimeoutExpired(cmd="codex", timeout=5)
+        call_count = 0
 
-        monkeypatch.setattr(subprocess, "run", _raise)
+        def _stateful_fake(*a, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return type(
+                    "CompletedProcess", (), {"returncode": 0, "stdout": "", "stderr": ""}
+                )()
+            raise subprocess.TimeoutExpired(cmd="codex", timeout=10)
+
+        monkeypatch.setattr(
+            "autoskillit.cli.doctor._doctor_runtime.subprocess.run", _stateful_fake
+        )
         result = _check_cli_conformance_probes(backend=CodexBackend())
         assert result.severity == Severity.OK
-        assert "unavailable" in result.message.lower() or "timed out" in result.message.lower()
+        assert "timed out" in result.message.lower()
 
     def test_ok_when_config_accepted(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess

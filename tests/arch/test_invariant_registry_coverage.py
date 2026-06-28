@@ -129,12 +129,17 @@ def test_every_prohibition_appears_in_registry():
 
 
 def test_no_orphaned_registry_entries():
+    content_cache: dict[str, str] = {}
     for key, inv in INVARIANT_REGISTRY.items():
-        candidates = _collect_source_doc_files(inv.source_doc)
-        existing = [p for p in candidates if p.is_file()]
-        assert existing, f"{key}: source_doc {inv.source_doc!r} has no matching files on disk"
+        if inv.source_doc not in content_cache:
+            candidates = _collect_source_doc_files(inv.source_doc)
+            existing = [p for p in candidates if p.is_file()]
+            assert existing, f"{key}: source_doc {inv.source_doc!r} has no matching files on disk"
+            content_cache[inv.source_doc] = "\n".join(
+                p.read_text(encoding="utf-8") for p in existing
+            )
 
-        combined = "\n".join(p.read_text(encoding="utf-8") for p in existing)
+        combined = content_cache[inv.source_doc]
         anchor = _extract_prose_anchor(inv.prohibition)
         assert anchor.lower() in combined.lower(), (
             f"{key}: prose anchor {anchor!r} (from prohibition "

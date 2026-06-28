@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core.types import Severity
 from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
@@ -391,13 +392,13 @@ def test_planner_recipe_valid_on_codex_backend():
     assert result["valid"] is True, "planner recipe invalid on codex: " + "; ".join(
         f"[{s.get('rule')}] {s.get('message', '')[:80]}"
         for s in result.get("suggestions", [])
-        if s.get("severity") == "error"
+        if s.get("severity") == Severity.ERROR
     )
     assert len(result.get("content", "")) > 0, "planner recipe produced empty content on codex"
     backend_compat_errors = [
         s
         for s in result.get("suggestions", [])
-        if s.get("rule") == "backend-incompatible-skill" and s.get("severity") == "error"
+        if s.get("rule") == "backend-incompatible-skill" and s.get("severity") == Severity.ERROR
     ]
     assert not backend_compat_errors, (
         "planner recipe has backend-incompatible-skill errors on codex: "

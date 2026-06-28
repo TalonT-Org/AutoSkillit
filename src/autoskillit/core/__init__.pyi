@@ -296,6 +296,7 @@ from .types import ModelIdentity as ModelIdentity
 from .types import ModelTotalEntry as ModelTotalEntry
 from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
+from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver

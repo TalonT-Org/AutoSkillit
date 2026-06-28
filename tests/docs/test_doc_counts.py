@@ -237,15 +237,15 @@ def test_quota_thresholds_defaults() -> None:
     assert long_ == pytest.approx(95.0)
 
 
-def test_doctor_check_count_is_41() -> None:
-    # 41 total = 23 numbered (1–17 base + 18–21 ambient env + 22–23 feature)
+def test_doctor_check_count_is_42() -> None:
+    # 42 total = 23 numbered (1–17 base + 18–21 ambient env + 22–23 feature)
     # + 7 lettered sub-checks (2b–2e, 4b, 7b, 7c)
-    # + 6 gated fleet (24–29) + 5 backend runtime (30–34).
-    # Docs list 33 user-visible checks (23 numbered + 5 documented lettered +
-    # 5 backend runtime); 2e and 7c are internal-only sub-checks not shown in docs.
+    # + 6 gated fleet (24–29) + 6 backend runtime (30–35).
+    # Docs list 34 user-visible checks (23 numbered + 5 documented lettered +
+    # 6 backend runtime); 2e and 7c are internal-only sub-checks not shown in docs.
     # Update both tests whenever a new doctor check is added.
     count = _count_doctor_checks()
-    assert count == 41, f"Expected 41 doctor checks; found {count}"
+    assert count == 42, f"Expected 42 doctor checks; found {count}"
 
 
 def test_bundled_recipe_count_is_15() -> None:

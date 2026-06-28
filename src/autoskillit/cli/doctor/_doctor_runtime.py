@@ -317,3 +317,47 @@ def _check_cli_conformance_probes(*, backend: CodingAgentBackend | None = None) 
         check_name,
         f"{cli_binary} rejected config probe (exit {result.returncode})",
     )
+
+
+def _check_codex_ndjson_drift(
+    *,
+    log_dir: str = "",
+    backend: CodingAgentBackend | None = None,
+) -> DoctorResult:
+    check_name = "codex_ndjson_drift"
+    if backend is None:
+        return DoctorResult(Severity.OK, check_name, "Skipped (no codex backend)")
+    backend_name = backend.name
+    log_root = Path(log_dir).expanduser() if log_dir else default_log_dir()
+    sessions_path = log_root / "sessions.jsonl"
+    if not sessions_path.exists():
+        return DoctorResult(Severity.OK, check_name, "No sessions.jsonl found")
+
+    affected = 0
+    try:
+        for line in sessions_path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if entry.get("backend") != backend_name:
+                continue
+            if (
+                entry.get("ndjson_unknown_event_count", 0) > 0
+                or entry.get("ndjson_unknown_item_count", 0) > 0
+            ):
+                affected += 1
+    except OSError:
+        return DoctorResult(Severity.OK, check_name, "Could not read sessions.jsonl")
+
+    if affected > 0:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"{affected} codex session(s) contain unknown NDJSON event types"
+            " — parser vocabulary may be stale",
+        )
+    return DoctorResult(Severity.OK, check_name, "No NDJSON vocabulary drift detected")

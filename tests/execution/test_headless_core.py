@@ -1041,6 +1041,8 @@ class TestBuildSkillResultCrossValidation:
         "api_retry_exhausted",
         "pre_contamination_retry_reason",
         "pre_contamination_subtype",
+        "ndjson_unknown_event_count",
+        "ndjson_unknown_item_count",
     }
 
     def test_expected_skill_keys_includes_provider(self):

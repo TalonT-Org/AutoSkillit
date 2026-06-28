@@ -1397,3 +1397,105 @@ def test_doctor_cache_version_mismatch_ok_when_matching(
     result = _check_cache_version_mismatch()
 
     assert result.severity == Severity.OK
+
+
+class TestCheckCodexNdjsonDrift:
+    """Verify _check_codex_ndjson_drift doctor check."""
+
+    def test_ok_when_no_sessions_jsonl(self, tmp_path: Path) -> None:
+        """Returns Severity.OK when sessions.jsonl does not exist."""
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_ndjson_drift
+        from autoskillit.core import Severity
+
+        result = _check_codex_ndjson_drift(log_dir=str(tmp_path))
+        assert result.severity == Severity.OK
+        assert result.check == "codex_ndjson_drift"
+
+    def test_ok_when_zero_counters(self, tmp_path: Path) -> None:
+        """Returns Severity.OK when all codex entries have zero drift counters."""
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_ndjson_drift
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        sessions_path = tmp_path / "sessions.jsonl"
+        sessions_path.write_text(
+            json.dumps(
+                {
+                    "backend": "codex",
+                    "ndjson_unknown_event_count": 0,
+                    "ndjson_unknown_item_count": 0,
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "backend": "codex",
+                    "ndjson_unknown_event_count": 0,
+                    "ndjson_unknown_item_count": 0,
+                }
+            )
+            + "\n"
+        )
+        result = _check_codex_ndjson_drift(log_dir=str(tmp_path), backend=CodexBackend())
+        assert result.severity == Severity.OK
+        assert result.check == "codex_ndjson_drift"
+
+    def test_warning_when_nonzero_counters(self, tmp_path: Path) -> None:
+        """Returns Severity.WARNING when any codex entry has non-zero counters;
+        message includes affected session count."""
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_ndjson_drift
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        sessions_path = tmp_path / "sessions.jsonl"
+        sessions_path.write_text(
+            json.dumps(
+                {
+                    "backend": "codex",
+                    "ndjson_unknown_event_count": 2,
+                    "ndjson_unknown_item_count": 0,
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "backend": "codex",
+                    "ndjson_unknown_event_count": 0,
+                    "ndjson_unknown_item_count": 3,
+                }
+            )
+            + "\n"
+        )
+        result = _check_codex_ndjson_drift(log_dir=str(tmp_path), backend=CodexBackend())
+        assert result.severity == Severity.WARNING
+        assert result.check == "codex_ndjson_drift"
+        assert "2 codex session" in result.message
+
+    def test_non_codex_entries_ignored(self, tmp_path: Path) -> None:
+        """Non-codex (claude-code) entries with non-zero counters are not counted."""
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_ndjson_drift
+        from autoskillit.core import Severity
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        sessions_path = tmp_path / "sessions.jsonl"
+        sessions_path.write_text(
+            json.dumps(
+                {
+                    "backend": "claude-code",
+                    "ndjson_unknown_event_count": 5,
+                    "ndjson_unknown_item_count": 0,
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "backend": "codex",
+                    "ndjson_unknown_event_count": 0,
+                    "ndjson_unknown_item_count": 0,
+                }
+            )
+            + "\n"
+        )
+        result = _check_codex_ndjson_drift(log_dir=str(tmp_path), backend=CodexBackend())
+        assert result.severity == Severity.OK
+        assert result.check == "codex_ndjson_drift"

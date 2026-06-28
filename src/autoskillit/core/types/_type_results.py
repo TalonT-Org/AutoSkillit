@@ -33,6 +33,7 @@ __all__ = [
     "ProviderOutcome",
     "InfraOutcome",
     "ApiRetryOutcome",
+    "NdjsonDriftOutcome",
     "SkillResult",
     "CleanupResult",
     "CloneSuccessResult",
@@ -266,6 +267,21 @@ class ContaminationOutcome:
 
 
 @dataclass(frozen=True, slots=True)
+class NdjsonDriftOutcome:
+    """NDJSON parser vocabulary drift counters.
+
+    Aggregates unknown event and item counts emitted by Codex NDJSON parsing
+    when the parser encounters event/item types not in its known vocabulary.
+    Surfaced through ``SkillResult.ndjson_drift`` and propagated into
+    ``summary.json``, ``sessions.jsonl``, and ``anomalies.jsonl`` for
+    diagnostics and the doctor ``codex_ndjson_drift`` check.
+    """
+
+    unknown_event_count: int = 0
+    unknown_item_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class WriteEvidence:
     """Bundled write evidence signals — either explicitly constructed or absent."""
 
@@ -334,6 +350,8 @@ class SkillResult:
     """API retry event accumulation bundle."""
     contamination: ContaminationOutcome = field(default_factory=ContaminationOutcome)
     """Pre-contamination context bundle — populated only when clone_guard fires."""
+    ndjson_drift: NdjsonDriftOutcome = field(default_factory=NdjsonDriftOutcome)
+    """NDJSON parser vocabulary drift counters — populated by Codex sessions."""
     completion_required: bool = False
 
     def to_json(self) -> str:
@@ -369,6 +387,8 @@ class SkillResult:
             "api_retry_exhausted": self.api_retry.exhausted,
             "pre_contamination_retry_reason": self.contamination.retry_reason,
             "pre_contamination_subtype": self.contamination.subtype,
+            "ndjson_unknown_event_count": self.ndjson_drift.unknown_event_count,
+            "ndjson_unknown_item_count": self.ndjson_drift.unknown_item_count,
         }
         if self.worktree_path is not None:
             data["worktree_path"] = self.worktree_path
@@ -606,4 +626,6 @@ class SessionIndexEntry(TypedDict):
     api_retry_exhausted: bool
     api_retry_last_error: str
     api_retry_last_status: int | None
+    ndjson_unknown_event_count: int
+    ndjson_unknown_item_count: int
     schema_version: int

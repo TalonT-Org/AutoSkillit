@@ -27,6 +27,7 @@ class AnomalyKind(StrEnum):
     THINKING_ONLY_FINAL_TURN = "thinking_only_final_turn"
     API_RETRY_EXHAUSTION = "api_retry_exhaustion"
     MODEL_DRIFT = "model_drift"
+    NDJSON_DRIFT = "ndjson_drift"
 
 
 class AnomalySeverity(StrEnum):

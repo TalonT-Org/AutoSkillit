@@ -67,7 +67,7 @@ projects need.
 
     autoskillit doctor
 
-Doctor runs 33 checks (23 numbered + 5 lettered sub-checks: `2b`, `2c`, `2d`, `4b`, `7b` + 5 backend runtime probes, checks 30–34); up to 39 with the fleet feature enabled.
+Doctor runs 34 checks (23 numbered + 5 lettered sub-checks: `2b`, `2c`, `2d`, `4b`, `7b` + 6 backend runtime probes, checks 30–35); up to 40 with the fleet feature enabled.
 Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 
 | # | Check | What it verifies |

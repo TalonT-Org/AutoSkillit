@@ -126,7 +126,7 @@ provides:
 
 ### 1.3 Classification legend
 
-Each row in Sections 2–4 carries one of three classifications:
+Each row in Sections 2–5 carries one of three classifications:
 
 - **TRIVIAL** — the surface accepts the opencode value as-is (or with a
   constant literal). No adapter code beyond a constructor call.
@@ -276,13 +276,13 @@ same legend as Section 2.
 
 | Category | TRIVIAL | SHIM-REQUIRED | GAP |
 |---|---|---|---|
-| ACP-Mappable (17) | 7 | 2 | 8 |
-| autoskillit-Local Extension (18) | 9 | 5 | 4 |
+| ACP-Mappable (17) | 6 | 3 | 8 |
+| autoskillit-Local Extension (18) | 11 | 5 | 2 |
 | Forward-Declared (6) | 5 | 1 | 0 |
-| **Total (41)** | **21** | **8** | **12** |
+| **Total (41)** | **22** | **9** | **10** |
 
-The 12 GAP rows consolidate into 9 PCRs (PCR-001 through PCR-009, plus the
-sandbox-policy mismatch in row 28 maps to PCR-001); the 8 SHIM-REQUIRED rows
+The 10 GAP rows consolidate into 9 PCRs (PCR-001 through PCR-009, plus the
+sandbox-policy mismatch in row 28 maps to PCR-001); the 9 SHIM-REQUIRED rows
 consolidate into PCR-006 / PCR-010 / PCR-011 plus the opencode-vocabulary
 adapter family.
 

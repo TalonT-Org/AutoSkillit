@@ -13,8 +13,6 @@ from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
-    AUTOSKILLIT_APPLICABLE_GUARDS,
-    AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
     CLAUDE_CODE_CAPABILITIES,
     CONTEXT_EXHAUSTION_MARKER,
@@ -534,71 +532,25 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         resume_message: str | None = None,
     ) -> CmdSpec:
         if config is not None:
-            return self._build_skill_session_cmd_impl(
-                skill_command,
-                cwd=cwd,
-                completion_marker=config.completion_marker,
-                model=config.model,
-                plugin_source=config.plugin_source,
-                output_format=config.output_format,
-                add_dirs=config.add_dirs,
-                exit_after_stop_delay_ms=config.exit_after_stop_delay_ms,
-                stream_idle_timeout_ms=config.stream_idle_timeout_ms,
-                scenario_step_name=config.scenario_step_name,
-                temp_dir_relpath=config.temp_dir_relpath,
-                allowed_write_prefix=config.allowed_write_prefix,
-                allowed_write_prefixes=config.allowed_write_prefixes,
-                provider_extras=config.provider_extras,
-                profile_name=config.profile_name,
-                resume_session_id=config.resume_session_id,
-                resume_checkpoint=config.resume_checkpoint,
-                resume_message=config.resume_message,
-                sandbox_mode=config.sandbox_mode,
-            )
-        return self._build_skill_session_cmd_impl(
-            skill_command,
-            cwd=cwd,
-            completion_marker=completion_marker,
-            model=model,
-            plugin_source=plugin_source,
-            output_format=output_format,
-            add_dirs=add_dirs,
-            exit_after_stop_delay_ms=exit_after_stop_delay_ms,
-            stream_idle_timeout_ms=stream_idle_timeout_ms,
-            scenario_step_name=scenario_step_name,
-            temp_dir_relpath=temp_dir_relpath,
-            allowed_write_prefix=allowed_write_prefix,
-            allowed_write_prefixes=allowed_write_prefixes,
-            provider_extras=provider_extras,
-            profile_name=profile_name,
-            resume_session_id=resume_session_id,
-            resume_checkpoint=resume_checkpoint,
-            resume_message=resume_message,
-        )
+            cfg = self._apply_config(config)
+            completion_marker = cfg["completion_marker"]
+            model = cfg["model"]
+            plugin_source = cfg["plugin_source"]
+            output_format = cfg["output_format"]
+            add_dirs = cfg["add_dirs"]
+            exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]
+            stream_idle_timeout_ms = cfg["stream_idle_timeout_ms"]
+            scenario_step_name = cfg["scenario_step_name"]
+            temp_dir_relpath = cfg["temp_dir_relpath"]
+            allowed_write_prefix = cfg["allowed_write_prefix"]
+            allowed_write_prefixes = cfg["allowed_write_prefixes"]
+            provider_extras = cfg["provider_extras"]
+            profile_name = cfg["profile_name"]
+            resume_session_id = cfg["resume_session_id"]
+            resume_checkpoint = cfg["resume_checkpoint"]
+            resume_message = cfg["resume_message"]
+            sandbox_mode = cfg["sandbox_mode"]  # noqa: F841  # currently unused, reserved for future backend dispatch
 
-    def _build_skill_session_cmd_impl(
-        self,
-        skill_command: str,
-        *,
-        cwd: str,
-        completion_marker: str,
-        model: str | None,
-        plugin_source: PluginSource | None,
-        output_format: OutputFormat,
-        add_dirs: Sequence[ValidatedAddDir] = (),
-        exit_after_stop_delay_ms: int = 0,
-        stream_idle_timeout_ms: int = 0,
-        scenario_step_name: str = "",
-        temp_dir_relpath: str | None = None,
-        allowed_write_prefix: str = "",
-        allowed_write_prefixes: tuple[str, ...] = (),
-        provider_extras: Mapping[str, str] | None = None,
-        profile_name: str = "",
-        resume_session_id: str = "",
-        resume_checkpoint: SessionCheckpoint | None = None,
-        resume_message: str | None = None,
-        sandbox_mode: str = "workspace-write",
-    ) -> CmdSpec:
         _has_prefix = (
             bool(profile_name)
             and skill_command.strip().startswith("/")
@@ -632,28 +584,21 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
                 profile_name=profile_name,
             ),
         )
-        extras: dict[str, str] = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_SKILL,
-            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
-            AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
-            AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES: ",".join(
-                sorted(self.capabilities.write_guard_tool_names)
-            ),
-        }
+        extras = self._assemble_shared_env_extras(
+            session_type=SESSION_TYPE_SKILL,
+            applicable_guards=self.capabilities.applicable_guards,
+            write_guard_tool_names=self.capabilities.write_guard_tool_names,
+            write_prefix=allowed_write_prefix,
+            write_prefixes=allowed_write_prefixes,
+            cwd=cwd,
+            scenario_step_name=scenario_step_name,
+        )
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
         if stream_idle_timeout_ms > 0:
             extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
-        extras.update(
-            self._assemble_shared_env_extras(
-                write_prefix=allowed_write_prefix,
-                write_prefixes=allowed_write_prefixes,
-                cwd=cwd,
-                scenario_step_name=scenario_step_name,
-            )
-        )
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
@@ -729,28 +674,21 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             ),
         )
 
-        extras: dict[str, str] = {
-            "AUTOSKILLIT_HEADLESS": "1",
-            "AUTOSKILLIT_SESSION_TYPE": SESSION_TYPE_ORCHESTRATOR,
-            AGENT_BACKEND_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
-            AGENT_BACKEND_DYNACONF_ENV_VAR: AGENT_BACKEND_CLAUDE_CODE,
-            AUTOSKILLIT_APPLICABLE_GUARDS: ",".join(sorted(self.capabilities.applicable_guards)),
-            AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES: ",".join(
-                sorted(self.capabilities.write_guard_tool_names)
-            ),
-        }
+        extras = self._assemble_shared_env_extras(
+            session_type=SESSION_TYPE_ORCHESTRATOR,
+            applicable_guards=self.capabilities.applicable_guards,
+            write_guard_tool_names=self.capabilities.write_guard_tool_names,
+            write_prefix=allowed_write_prefix,
+            write_prefixes=allowed_write_prefixes,
+            cwd=cwd,
+            scenario_step_name=scenario_step_name,
+        )
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
+        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE
         if exit_after_stop_delay_ms > 0:
             extras["CLAUDE_CODE_EXIT_AFTER_STOP_DELAY"] = str(exit_after_stop_delay_ms)
         if stream_idle_timeout_ms > 0:
             extras["CLAUDE_STREAM_IDLE_TIMEOUT_MS"] = str(stream_idle_timeout_ms)
-        extras.update(
-            self._assemble_shared_env_extras(
-                write_prefix=allowed_write_prefix,
-                write_prefixes=allowed_write_prefixes,
-                cwd=cwd,
-                scenario_step_name=scenario_step_name,
-            )
-        )
         extras.pop(CAMPAIGN_ID_ENV_VAR, None)  # food truck does not propagate campaign ID
         if env_extras:
             for k, v in env_extras.items():

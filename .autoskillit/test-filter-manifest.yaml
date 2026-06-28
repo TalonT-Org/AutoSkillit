@@ -201,6 +201,12 @@ install.sh:
 scripts/verify-test-filter.sh:
   - infra/
 
+scripts/post-probe-failure.sh:
+  - infra/
+
+scripts/create-probe-canary-issue.sh:
+  - infra/
+
 # Python scripts under scripts/ — route to verified test consumers
 scripts/benchmark-testmon.py:
   - infra/

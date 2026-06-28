@@ -1084,15 +1084,17 @@ async def run_skill(
                                 inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
                                 inspector_model=_inspector_model,
                             )
-                except TimeoutError:
+                except TimeoutError as exc:
                     logger.error(
                         "run_skill_mcp_tool_timeout",
                         timeout_sec=_cfg.run_skill.mcp_tool_timeout_sec,
                     )
+                    _timeout_exc = TimeoutError(
+                        f"MCP tool timeout ({_cfg.run_skill.mcp_tool_timeout_sec}s) exceeded"
+                    )
+                    _timeout_exc.__cause__ = exc
                     return SkillResult.crashed(
-                        exception=TimeoutError(
-                            f"MCP tool timeout ({_cfg.run_skill.mcp_tool_timeout_sec}s) exceeded"
-                        ),
+                        exception=_timeout_exc,
                         skill_command=resolved_command,
                         order_id=effective_order_id,
                     ).to_json()

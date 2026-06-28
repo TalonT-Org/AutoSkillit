@@ -693,23 +693,24 @@ class CodexBackend(BackendCmdBuilderBase):
         sandbox_mode: str = "workspace-write",
     ) -> CmdSpec:
         if config is not None:
-            completion_marker = config.completion_marker
-            model = config.model
-            plugin_source = config.plugin_source  # noqa: F841  # no-op: Codex has no --plugin-dir equivalent
-            output_format = config.output_format  # noqa: F841  # no-op: --json is unconditional for Codex
-            add_dirs = config.add_dirs
-            exit_after_stop_delay_ms = config.exit_after_stop_delay_ms  # noqa: F841  # no-op: Claude-only
-            stream_idle_timeout_ms = config.stream_idle_timeout_ms
-            scenario_step_name = config.scenario_step_name
-            temp_dir_relpath = config.temp_dir_relpath
-            allowed_write_prefix = config.allowed_write_prefix
-            allowed_write_prefixes = config.allowed_write_prefixes
-            provider_extras = config.provider_extras
-            profile_name = config.profile_name
-            resume_session_id = config.resume_session_id
-            resume_checkpoint = config.resume_checkpoint
-            resume_message = config.resume_message
-            sandbox_mode = config.sandbox_mode
+            cfg = self._apply_config(config)
+            completion_marker = cfg["completion_marker"]
+            model = cfg["model"]
+            plugin_source = cfg["plugin_source"]  # noqa: F841  # no-op: Codex has no --plugin-dir equivalent
+            output_format = cfg["output_format"]  # noqa: F841  # no-op: --json is unconditional for Codex
+            add_dirs = cfg["add_dirs"]
+            exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]  # noqa: F841  # no-op: Claude-only
+            stream_idle_timeout_ms = cfg["stream_idle_timeout_ms"]
+            scenario_step_name = cfg["scenario_step_name"]
+            temp_dir_relpath = cfg["temp_dir_relpath"]
+            allowed_write_prefix = cfg["allowed_write_prefix"]
+            allowed_write_prefixes = cfg["allowed_write_prefixes"]
+            provider_extras = cfg["provider_extras"]
+            profile_name = cfg["profile_name"]
+            resume_session_id = cfg["resume_session_id"]
+            resume_checkpoint = cfg["resume_checkpoint"]
+            resume_message = cfg["resume_message"]
+            sandbox_mode = cfg["sandbox_mode"]
         _has_prefix = (
             bool(profile_name)
             and skill_command.strip().startswith("/")
@@ -744,20 +745,20 @@ class CodexBackend(BackendCmdBuilderBase):
             ),
         )
 
-        extras = _codex_exec_extras(
+        extras = self._assemble_shared_env_extras(
             session_type=SESSION_TYPE_SKILL,
-            include_agent_backend_flat=True,
             applicable_guards=self.capabilities.applicable_guards,
             write_guard_tool_names=self.capabilities.write_guard_tool_names,
+            write_prefix=allowed_write_prefix,
+            write_prefixes=allowed_write_prefixes,
+            cwd=cwd,
+            scenario_step_name=scenario_step_name,
         )
-        extras.update(
-            self._assemble_shared_env_extras(
-                write_prefix=allowed_write_prefix,
-                write_prefixes=allowed_write_prefixes,
-                cwd=cwd,
-                scenario_step_name=scenario_step_name,
-            )
-        )
+        extras["AUTOSKILLIT_HEADLESS_AUTO_GATE"] = "1"
+        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
         extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
         if provider_extras:
             for k, v in provider_extras.items():
@@ -843,20 +844,20 @@ class CodexBackend(BackendCmdBuilderBase):
             ),
         )
 
-        extras = _codex_exec_extras(
+        extras = self._assemble_shared_env_extras(
             session_type=SESSION_TYPE_ORCHESTRATOR,
-            include_agent_backend_flat=True,
             applicable_guards=self.capabilities.applicable_guards,
             write_guard_tool_names=self.capabilities.write_guard_tool_names,
+            write_prefix=allowed_write_prefix,
+            write_prefixes=allowed_write_prefixes,
+            cwd=cwd,
+            scenario_step_name=scenario_step_name,
         )
-        extras.update(
-            self._assemble_shared_env_extras(
-                write_prefix=allowed_write_prefix,
-                write_prefixes=allowed_write_prefixes,
-                cwd=cwd,
-                scenario_step_name=scenario_step_name,
-            )
-        )
+        extras["AUTOSKILLIT_HEADLESS_AUTO_GATE"] = "1"
+        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
+        extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
         if completion_marker:
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
         if env_extras:

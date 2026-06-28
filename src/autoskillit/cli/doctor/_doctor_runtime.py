@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -280,16 +281,17 @@ def _check_cli_conformance_probes(*, backend: CodingAgentBackend | None = None) 
     if backend is None or not backend.capabilities.version_check_command:
         return DoctorResult(Severity.OK, check_name, "Skipped (no version check command)")
 
-    cli_argv = backend.capabilities.version_check_command.split()
+    cli_argv = shlex.split(backend.capabilities.version_check_command)
     try:
         subprocess.run(cli_argv, capture_output=True, text=True, timeout=5)
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return DoctorResult(Severity.OK, check_name, "CLI unavailable; skipping config probe")
 
     cli_binary = cli_argv[0]
+    result = None
     with tempfile.TemporaryDirectory() as tmpdir:
         probe_path = Path(tmpdir) / "probe.toml"
-        atomic_write(probe_path, 'model = "gpt-4o"\n')
+        atomic_write(probe_path, 'model = "test-model"\n')
         try:
             result = subprocess.run(
                 [cli_binary, "-c", str(probe_path), "--version"],
@@ -306,8 +308,10 @@ def _check_cli_conformance_probes(*, backend: CodingAgentBackend | None = None) 
         except (FileNotFoundError, OSError):
             return DoctorResult(Severity.OK, check_name, "CLI unavailable; skipping config probe")
 
-    if result.returncode == 0:
+    if result is not None and result.returncode == 0:
         return DoctorResult(Severity.OK, check_name, f"{cli_binary} accepted minimal config probe")
+    if result is None:
+        return DoctorResult(Severity.OK, check_name, "CLI unavailable; skipping config probe")
     return DoctorResult(
         Severity.WARNING,
         check_name,

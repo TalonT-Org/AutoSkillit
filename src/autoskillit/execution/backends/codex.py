@@ -696,10 +696,10 @@ class CodexBackend(BackendCmdBuilderBase):
             cfg = self._apply_config(config)
             completion_marker = cfg["completion_marker"]
             model = cfg["model"]
-            plugin_source = cfg["plugin_source"]  # noqa: F841  # no-op: Codex has no --plugin-dir equivalent
-            output_format = cfg["output_format"]  # noqa: F841  # no-op: --json is unconditional for Codex
+            plugin_source = cfg["plugin_source"]
+            output_format = cfg["output_format"]
             add_dirs = cfg["add_dirs"]
-            exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]  # noqa: F841  # no-op: Claude-only
+            exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]
             stream_idle_timeout_ms = cfg["stream_idle_timeout_ms"]
             scenario_step_name = cfg["scenario_step_name"]
             temp_dir_relpath = cfg["temp_dir_relpath"]
@@ -711,6 +711,10 @@ class CodexBackend(BackendCmdBuilderBase):
             resume_checkpoint = cfg["resume_checkpoint"]
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]
+        if plugin_source is not None:
+            logger.warning("codex_plugin_source_discarded", plugin_source=str(plugin_source))
+        if output_format != OutputFormat.JSON:
+            logger.warning("codex_output_format_coerced")
         _has_prefix = (
             bool(profile_name)
             and skill_command.strip().startswith("/")
@@ -769,6 +773,14 @@ class CodexBackend(BackendCmdBuilderBase):
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
         if add_dirs:
             extras["CODEX_HOME"] = add_dirs[0].path
+        if exit_after_stop_delay_ms:
+            extras.setdefault(
+                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
+            )
+        if stream_idle_timeout_ms:
+            extras.setdefault(
+                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
+            )
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(
@@ -819,9 +831,10 @@ class CodexBackend(BackendCmdBuilderBase):
         sentinel_contract: str = "",
         resume_message: str | None = None,
     ) -> CmdSpec:
-        _plugin_source = plugin_source  # noqa: F841  # no-op: Codex has no --plugin-dir
-        _output_format = output_format  # noqa: F841  # no-op: --json is unconditional
-        _exit_ms = exit_after_stop_delay_ms  # noqa: F841  # no-op: Claude-only
+        if plugin_source is not None:
+            logger.warning("codex_plugin_source_discarded", plugin_source=str(plugin_source))
+        if output_format != OutputFormat.STREAM_JSON:
+            logger.warning("codex_output_format_coerced")
 
         if resume_session_id:
             effective_prompt = _compose_resume_prompt(
@@ -864,6 +877,14 @@ class CodexBackend(BackendCmdBuilderBase):
             for k, v in env_extras.items():
                 if k not in _PROVIDER_EXTRAS_BASE_DENYLIST:
                     extras[k] = v
+        if exit_after_stop_delay_ms:
+            extras.setdefault(
+                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
+            )
+        if stream_idle_timeout_ms:
+            extras.setdefault(
+                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
+            )
 
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = CodexEnvPolicy().build_env(

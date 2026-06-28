@@ -611,20 +611,17 @@ class TestCodexBuildSkillSessionCmd:
         spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert "AUTOSKILLIT_COMPLETION_MARKER" not in spec2.env
 
-    def test_claude_only_params_accepted_but_ignored(self) -> None:
-        spec = CodexBackend().build_skill_session_cmd(
-            **{
-                **self.BASE,
-                "exit_after_stop_delay_ms": 5000,
-                "stream_idle_timeout_ms": 3000,
-            }
-        )
-        cmd_str = " ".join(spec.cmd)
-        assert "--output-format" not in cmd_str
-        assert "--plugin-dir" not in cmd_str
+    def test_default_params_emit_no_warnings(self) -> None:
+        with structlog.testing.capture_logs() as cap_logs:
+            spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        discard_events = [
+            e
+            for e in cap_logs
+            if e.get("event") in ("codex_plugin_source_discarded", "codex_output_format_coerced")
+        ]
+        assert discard_events == []
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
         assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
-        assert spec.process_idle_timeout_ms == 3000
 
     def test_stream_idle_timeout_routed_to_cmdspec(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
@@ -1540,58 +1537,144 @@ class TestClaudeCodeBackendProcessIdleDefault:
 
 
 class TestCodexDiscardDispositions:
-    """Document the complete noqa:F841 discard disposition picture in codex.py.
+    """Codex builder parameter disposition contracts.
 
-    stream_idle_timeout_ms -> routed to CmdSpec.process_idle_timeout_ms (P1-A6-WP1).
-    plugin_source, output_format, exit_after_stop_delay_ms -> intentional
-    no-op discards (P2-A2 scope).
+    plugin_source -> logged warning when non-None.
+    output_format -> logged warning when != JSON.
+    exit_after_stop_delay_ms -> AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env injection via setdefault.
+    stream_idle_timeout_ms -> routed to CmdSpec.process_idle_timeout_ms + env injection.
     """
 
-    def test_stream_idle_timeout_routed_in_skill_builder(self) -> None:
+    SKILL_BASE: dict[str, object] = {
+        "skill_command": "/test",
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+    }
+    FOOD_TRUCK_BASE: dict[str, object] = {
+        "orchestrator_prompt": "go",
+        "plugin_source": DirectInstall(plugin_dir=Path("/pkg")),
+        "cwd": "/work",
+        "completion_marker": "%%DONE%%",
+    }
+
+    def test_plugin_source_warning_skill_builder(self) -> None:
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().build_skill_session_cmd(
+                **self.SKILL_BASE,
+                plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
+            )
+        events = [e for e in cap_logs if e.get("event") == "codex_plugin_source_discarded"]
+        assert len(events) == 1
+        assert events[0]["log_level"] == "warning"
+
+    def test_plugin_source_warning_food_truck_builder(self) -> None:
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        events = [e for e in cap_logs if e.get("event") == "codex_plugin_source_discarded"]
+        assert len(events) == 1
+        assert events[0]["log_level"] == "warning"
+
+    def test_output_format_warning_skill_builder(self) -> None:
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().build_skill_session_cmd(
+                **self.SKILL_BASE,
+                output_format=OutputFormat.STREAM_JSON,
+            )
+        events = [e for e in cap_logs if e.get("event") == "codex_output_format_coerced"]
+        assert len(events) == 1
+        assert events[0]["log_level"] == "warning"
+
+    def test_output_format_warning_food_truck_builder(self) -> None:
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().build_food_truck_cmd(
+                **self.FOOD_TRUCK_BASE,
+                output_format=OutputFormat.JSON,
+            )
+        events = [e for e in cap_logs if e.get("event") == "codex_output_format_coerced"]
+        assert len(events) == 1
+        assert events[0]["log_level"] == "warning"
+
+    def test_exit_delay_injects_idle_timeout_skill_builder(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
-            skill_command="/test",
-            cwd="/work",
-            completion_marker="%%DONE%%",
+            **self.SKILL_BASE,
+            exit_after_stop_delay_ms=5000,
+        )
+        assert spec.env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "5.0"
+
+    def test_exit_delay_injects_idle_timeout_food_truck_builder(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **self.FOOD_TRUCK_BASE,
+            exit_after_stop_delay_ms=5000,
+        )
+        assert spec.env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "5.0"
+
+    def test_stream_idle_injects_idle_timeout_skill_builder(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            **self.SKILL_BASE,
+            stream_idle_timeout_ms=3000,
+        )
+        assert spec.env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "3.0"
+        assert spec.process_idle_timeout_ms == 3000
+
+    def test_stream_idle_injects_idle_timeout_food_truck_builder(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **self.FOOD_TRUCK_BASE,
+            stream_idle_timeout_ms=3000,
+        )
+        assert spec.env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "3.0"
+        assert spec.process_idle_timeout_ms == 3000
+
+    def test_stream_idle_routed_to_process_idle_skill_builder(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            **self.SKILL_BASE,
             stream_idle_timeout_ms=10000,
         )
         assert spec.process_idle_timeout_ms == 10000
 
-    def test_stream_idle_timeout_routed_in_food_truck_builder(self) -> None:
+    def test_stream_idle_routed_to_process_idle_food_truck_builder(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
-            orchestrator_prompt="go",
-            plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
-            cwd="/work",
-            completion_marker="%%DONE%%",
-            stream_idle_timeout_ms=20000,
+            **self.FOOD_TRUCK_BASE,
+            stream_idle_timeout_ms=10000,
         )
-        assert spec.process_idle_timeout_ms == 20000
+        assert spec.process_idle_timeout_ms == 10000
 
-    def test_exit_after_stop_delay_still_discarded(self) -> None:
+    def test_zero_ms_no_idle_timeout_skill_builder(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)
+        spec = CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
+        assert "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT" not in spec.env
+
+    def test_zero_ms_no_idle_timeout_food_truck_builder(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)
+        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
+        assert "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT" not in spec.env
+
+    def test_existing_idle_timeout_not_overwritten_skill_builder(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
-            skill_command="/test",
-            cwd="/work",
-            completion_marker="%%DONE%%",
+            **self.SKILL_BASE,
             exit_after_stop_delay_ms=5000,
+            provider_extras={"AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": "99.0"},
         )
-        assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
+        assert spec.env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "99.0"
 
-    def test_plugin_source_still_discarded(self) -> None:
-        spec = CodexBackend().build_skill_session_cmd(
-            skill_command="/test",
-            cwd="/work",
-            completion_marker="%%DONE%%",
-            plugin_source=DirectInstall(plugin_dir=Path("/pkg")),
+    def test_existing_idle_timeout_not_overwritten_food_truck_builder(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(
+            **self.FOOD_TRUCK_BASE,
+            exit_after_stop_delay_ms=5000,
+            env_extras={"AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": "99.0"},
         )
-        assert "--plugin-dir" not in " ".join(spec.cmd)
+        assert spec.env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "99.0"
 
-    def test_output_format_still_discarded(self) -> None:
-        spec = CodexBackend().build_skill_session_cmd(
-            skill_command="/test",
-            cwd="/work",
-            completion_marker="%%DONE%%",
-            output_format=OutputFormat.STREAM_JSON,
-        )
-        assert "--json" in spec.cmd
+    def test_no_warnings_on_defaults_skill_builder(self) -> None:
+        with structlog.testing.capture_logs() as cap_logs:
+            CodexBackend().build_skill_session_cmd(**self.SKILL_BASE)
+        discard_events = [
+            e
+            for e in cap_logs
+            if e.get("event") in ("codex_plugin_source_discarded", "codex_output_format_coerced")
+        ]
+        assert discard_events == []
 
 
 class TestCodexBackendSetupSessionDir:

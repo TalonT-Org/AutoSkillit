@@ -140,7 +140,8 @@ class TestCodexLiveProbes:
         self._state_path = tmp_path / "canary_state.json"
         return self._cache_path, self._state_path
 
-    def _check_cache(self, cli_version: str) -> None:
+    def _check_cache(self) -> None:
+        cli_version = _get_codex_version()
         cached = read_probe_cache(self._cache_path, cli_version)
         if cached is not None and cached.passed:
             pytest.skip(f"Probe cached as passed for {cli_version}")
@@ -196,12 +197,17 @@ class TestCodexLiveProbes:
             self._record_failure(ErrorKind.NETWORK, probe_name, probe_output.cli_version, str(exc))
             raise
 
-    @pytest.fixture(scope="class")
-    def codex_probe_output(self) -> _CodexProbeOutput:
-        return _run_codex_probe()
+    _cls_probe_output: _CodexProbeOutput | None = None
 
-    def test_ndjson_event_vocabulary_conforms(self, codex_probe_output: _CodexProbeOutput) -> None:
-        self._check_cache(codex_probe_output.cli_version)
+    @classmethod
+    def _get_probe_output(cls) -> _CodexProbeOutput:
+        if cls._cls_probe_output is None:
+            cls._cls_probe_output = _run_codex_probe()
+        return cls._cls_probe_output
+
+    def test_ndjson_event_vocabulary_conforms(self) -> None:
+        self._check_cache()
+        probe_output = self._get_probe_output()
 
         def _assert(output: _CodexProbeOutput) -> None:
             assert_no_unknown_event_types(output.events)
@@ -209,26 +215,26 @@ class TestCodexLiveProbes:
             assert_turn_completed_usage_nonzero(output.events)
             assert_vocabulary_coverage(output.events, {"thread.started", "turn.completed"})
 
-        self._run_probe_with_discrimination("ndjson_event_vocabulary", codex_probe_output, _assert)
+        self._run_probe_with_discrimination("ndjson_event_vocabulary", probe_output, _assert)
 
-    def test_hook_firing_codex_status(self, codex_probe_output: _CodexProbeOutput) -> None:
-        self._check_cache(codex_probe_output.cli_version)
+    def test_hook_firing_codex_status(self) -> None:
+        self._check_cache()
+        probe_output = self._get_probe_output()
 
         def _assert(output: _CodexProbeOutput) -> None:
             if not output.config_dict:
                 pytest.skip("No session_configuration event in NDJSON output")
             assert_hook_event_format(output.config_dict)
 
-        self._run_probe_with_discrimination(
-            "hook_firing_codex_status", codex_probe_output, _assert
-        )
+        self._run_probe_with_discrimination("hook_firing_codex_status", probe_output, _assert)
 
-    def test_config_acceptance(self, codex_probe_output: _CodexProbeOutput) -> None:
-        self._check_cache(codex_probe_output.cli_version)
+    def test_config_acceptance(self) -> None:
+        self._check_cache()
+        probe_output = self._get_probe_output()
 
         def _assert(output: _CodexProbeOutput) -> None:
             if not output.config_dict:
                 pytest.skip("No session_configuration event in NDJSON output")
             assert_config_schema(output.config_dict, output.cli_version)
 
-        self._run_probe_with_discrimination("config_acceptance", codex_probe_output, _assert)
+        self._run_probe_with_discrimination("config_acceptance", probe_output, _assert)

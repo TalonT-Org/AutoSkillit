@@ -67,6 +67,7 @@ from autoskillit.server.tools._execution_helpers import (
     validate_path_arg_anchoring,
 )
 from autoskillit.server.tools._preflight import _get_fix_required_hook_matchers
+from autoskillit.server.tools._types import ToolFailureEnvelope
 
 logger = get_logger(__name__)
 
@@ -1124,7 +1125,34 @@ async def run_skill(
                         _refresh_quota_cache(tool_ctx.config.quota_guard),
                         label="quota_post_run_refresh",
                     )
-                return skill_result.to_json()
+                _json_str = skill_result.to_json()
+                try:
+                    _parsed = json.loads(_json_str)
+                except Exception as exc:
+                    logger.warning("run_skill_json_parse_failed", exc_info=True)
+                    return json.dumps(
+                        ToolFailureEnvelope(
+                            success=False,
+                            error=f"Degraded SkillResult payload: JSON parse failed: {exc}",
+                            stage="validate_result:run_skill",
+                            retriable=True,
+                        )
+                    )
+                _missing = {"success", "exit_code"} - _parsed.keys()
+                if _missing:
+                    logger.warning(
+                        "run_skill_degraded_payload",
+                        absent_fields=sorted(_missing),
+                    )
+                    return json.dumps(
+                        ToolFailureEnvelope(
+                            success=False,
+                            error=f"Degraded SkillResult payload: missing keys {sorted(_missing)}",
+                            stage="validate_result:run_skill",
+                            retriable=True,
+                        )
+                    )
+                return _json_str
             except Exception as exc:
                 logger.error("run_skill executor raised unexpectedly", exc_info=True)
                 return SkillResult.crashed(

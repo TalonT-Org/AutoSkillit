@@ -764,6 +764,118 @@ async def test_run_skill_returns_structured_result_on_cancelled_error(
     assert "cancelled" in data["result"].lower()
 
 
+class TestRunSkillPostSerializationValidation:
+    """Post-serialization validation: run_skill must catch degraded SkillResult payloads."""
+
+    @pytest.mark.anyio
+    async def test_missing_keys_returns_failure_envelope(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ) -> None:
+        """to_json() omits 'success' and 'exit_code' → run_skill returns retriable envelope."""
+        from autoskillit.core import SkillResult
+        from autoskillit.core.types import RetryReason
+
+        degraded = SkillResult(
+            success=True,
+            result="ok",
+            session_id="sess-degraded",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        # Shadow to_json to omit both required keys.
+        degraded.to_json = lambda: '{"result": "ok"}'  # type: ignore[method-assign]
+
+        class DegradedExecutor:
+            async def run(self, *args, **kwargs) -> SkillResult:
+                return degraded
+
+        tool_ctx_kitchen_open.executor = DegradedExecutor()
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+        result_json = await run_skill("/test cmd", str(tmp_path))
+        data = json.loads(result_json)
+        assert data["success"] is False
+        assert data["retriable"] is True
+        assert "validate_result:run_skill" in data["stage"]
+        _msg = data["error"].lower()
+        assert "missing" in _msg or "success" in _msg or "exit_code" in _msg
+
+    @pytest.mark.anyio
+    async def test_missing_exit_code_returns_failure_envelope(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ) -> None:
+        """to_json() has 'success' but omits 'exit_code' → run_skill returns retriable envelope."""
+        from autoskillit.core import SkillResult
+        from autoskillit.core.types import RetryReason
+
+        degraded = SkillResult(
+            success=True,
+            result="ok",
+            session_id="sess-degraded",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        # Shadow to_json to include success but omit exit_code.
+        degraded.to_json = lambda: '{"success": true, "result": "ok"}'  # type: ignore[method-assign]
+
+        class DegradedExecutor:
+            async def run(self, *args, **kwargs) -> SkillResult:
+                return degraded
+
+        tool_ctx_kitchen_open.executor = DegradedExecutor()
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+        result_json = await run_skill("/test cmd", str(tmp_path))
+        data = json.loads(result_json)
+        assert data["success"] is False
+        assert data["retriable"] is True
+        assert "missing" in data["error"].lower() and "exit_code" in data["error"]
+
+    @pytest.mark.anyio
+    async def test_valid_to_json_passes_through_unchanged(
+        self, tool_ctx_kitchen_open, monkeypatch, tmp_path
+    ) -> None:
+        """When to_json() emits both required keys, run_skill returns that JSON unchanged."""
+        from autoskillit.core import SkillResult
+        from autoskillit.core.types import RetryReason
+
+        valid = SkillResult(
+            success=True,
+            result="ok",
+            session_id="sess-valid",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+        )
+        # Do NOT shadow to_json — use the default implementation.
+
+        class ValidExecutor:
+            async def run(self, *args, **kwargs) -> SkillResult:
+                return valid
+
+        tool_ctx_kitchen_open.executor = ValidExecutor()
+        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+        result_json = await run_skill("/test cmd", str(tmp_path))
+        data = json.loads(result_json)
+        assert data["success"] is True
+        assert data["exit_code"] == 0
+        assert "retriable" not in data  # No envelope wrapping
+        assert data["subtype"] == "success"
+        assert result_json == valid.to_json()
+
+
 class TestCwdExistenceValidation:
     """run_skill and run_cmd reject non-existent cwd before reaching executor/subprocess."""
 

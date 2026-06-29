@@ -311,4 +311,4 @@ class TestClaudeCodeOutputSchemaProbe:
         async with Client(server) as client:
             tools = await client.list_tools()
 
-        assert len(tools) >= 1
+        assert any(t.name == "echo" for t in tools)

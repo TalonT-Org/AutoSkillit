@@ -217,7 +217,13 @@ class TestCodexLiveProbes:
 
     def test_ndjson_event_vocabulary_conforms(self) -> None:
         self._check_cache()
-        probe_output = self._get_probe_output()
+        try:
+            probe_output = self._get_probe_output()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            self._record_failure(
+                ErrorKind.NETWORK, "ndjson_event_vocabulary", _get_codex_version(), str(exc)
+            )
+            raise
 
         def _assert(output: _CodexProbeOutput) -> None:
             assert_no_unknown_event_types(output.events)
@@ -229,7 +235,13 @@ class TestCodexLiveProbes:
 
     def test_hook_firing_codex_status(self) -> None:
         self._check_cache()
-        probe_output = self._get_probe_output()
+        try:
+            probe_output = self._get_probe_output()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            self._record_failure(
+                ErrorKind.NETWORK, "hook_firing_codex_status", _get_codex_version(), str(exc)
+            )
+            raise
 
         def _assert(output: _CodexProbeOutput) -> None:
             if not output.config_dict:
@@ -240,7 +252,13 @@ class TestCodexLiveProbes:
 
     def test_config_acceptance(self) -> None:
         self._check_cache()
-        probe_output = self._get_probe_output()
+        try:
+            probe_output = self._get_probe_output()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            self._record_failure(
+                ErrorKind.NETWORK, "config_acceptance", _get_codex_version(), str(exc)
+            )
+            raise
 
         def _assert(output: _CodexProbeOutput) -> None:
             if not output.config_dict:

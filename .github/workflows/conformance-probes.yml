@@ -1,0 +1,202 @@
+name: Conformance Probes
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"  # Weekly Monday 05:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: conformance-probes-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  codex-probe:
+    name: Codex CLI conformance probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CODEX_SMOKE_TEST: "1"
+      AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
+      TMPDIR: /dev/shm/pytest-probes
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.9.21"
+
+      - name: Install go-task
+        uses: arduino/setup-task@24c5e13bce349197642746563945fcdf9355e8f4 # v2
+        with:
+          version: "3.43.3"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git auth for private deps
+        env:
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -z "$GH_USER" ] || [ -z "$GH_PAT" ]; then
+            echo "::error::GH_USER or GH_PAT secret is not configured"
+            exit 1
+          fi
+          git config --global url."https://$GH_USER:$GH_PAT@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Set up environment
+        run: |
+          mkdir -p "$TMPDIR"
+          mkdir -p .autoskillit/temp
+          uv sync --locked --extra dev
+
+      - name: Resolve Codex CLI version
+        id: resolve-version
+        run: |
+          CLI_VERSION=$(codex --version 2>/dev/null || echo 'unknown')
+          if [ "$CLI_VERSION" = "unknown" ]; then
+            echo "::error::Codex CLI is not installed — cannot run conformance probes"
+            exit 1
+          fi
+          echo "cli_version=${CLI_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore probe cache
+        id: restore-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .autoskillit/temp/probe-cache/codex
+          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}
+
+      - name: Run Codex conformance probes
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret is not configured — cannot run Codex probes"
+            exit 1
+          fi
+          mkdir -p .autoskillit/temp/probe-cache/codex
+          # codex-probe runs both smoke_codex.py and test_cli_conformance_probes.py;
+          # claude-probe runs only test_cli_conformance_probes.py (no Codex-specific smoke file)
+          .venv/bin/python -m pytest \
+            tests/execution/test_smoke_codex.py \
+            tests/execution/backends/test_cli_conformance_probes.py \
+            -m smoke -v --tb=short -o "addopts=" \
+            --basetemp="$TMPDIR/basetemp" \
+            -o "cache_dir=$TMPDIR/cache"
+          echo "passed" > .autoskillit/temp/probe-cache/codex/result
+
+      - name: Save probe cache
+        if: success() && steps.restore-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .autoskillit/temp/probe-cache/codex
+          key: probe-codex-${{ steps.resolve-version.outputs.cli_version }}
+
+      - name: Post probe failure
+        if: failure()
+        env:
+          CANARY_STATE_FILE: ${{ github.workspace }}/.autoskillit/temp/canary-state-codex.json
+          CLI_VERSION: ${{ steps.resolve-version.outputs.cli_version }}
+        run: |
+          scripts/post-probe-failure.sh codex \
+            "$CLI_VERSION" \
+            schema \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  claude-probe:
+    name: Claude Code CLI conformance probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLAUDE_CODE_SMOKE_TEST: "1"
+      AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED: "true"
+      TMPDIR: /dev/shm/pytest-probes
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.9.21"
+
+      - name: Install go-task
+        uses: arduino/setup-task@24c5e13bce349197642746563945fcdf9355e8f4 # v2
+        with:
+          version: "3.43.3"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git auth for private deps
+        env:
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -z "$GH_USER" ] || [ -z "$GH_PAT" ]; then
+            echo "::error::GH_USER or GH_PAT secret is not configured"
+            exit 1
+          fi
+          git config --global url."https://$GH_USER:$GH_PAT@github.com/TalonT-Org/".insteadOf "https://github.com/TalonT-Org/"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Set up environment
+        run: |
+          mkdir -p "$TMPDIR"
+          mkdir -p .autoskillit/temp
+          uv sync --locked --extra dev
+
+      - name: Resolve Claude CLI version
+        id: resolve-version
+        run: |
+          CLI_VERSION=$(claude --version 2>/dev/null || echo 'unknown')
+          if [ "$CLI_VERSION" = "unknown" ]; then
+            echo "::error::Claude CLI is not installed — cannot run conformance probes"
+            exit 1
+          fi
+          echo "cli_version=${CLI_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore probe cache
+        id: restore-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .autoskillit/temp/probe-cache/claude
+          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}
+
+      - name: Run Claude Code conformance probes
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .autoskillit/temp/probe-cache/claude
+          .venv/bin/python -m pytest \
+            tests/execution/backends/test_cli_conformance_probes.py \
+            -m smoke -v --tb=short -o "addopts=" \
+            --basetemp="$TMPDIR/basetemp" \
+            -o "cache_dir=$TMPDIR/cache"
+          echo "passed" > .autoskillit/temp/probe-cache/claude/result
+
+      - name: Save probe cache
+        if: success() && steps.restore-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .autoskillit/temp/probe-cache/claude
+          key: probe-claude-${{ steps.resolve-version.outputs.cli_version }}
+
+      - name: Post probe failure
+        if: failure()
+        env:
+          CANARY_STATE_FILE: ${{ github.workspace }}/.autoskillit/temp/canary-state-claude.json
+          CLI_VERSION: ${{ steps.resolve-version.outputs.cli_version }}
+        run: |
+          scripts/post-probe-failure.sh claude \
+            "$CLI_VERSION" \
+            schema \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

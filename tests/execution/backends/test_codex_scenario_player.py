@@ -265,3 +265,48 @@ class TestModuleExports:
         import autoskillit.execution.backends.codex_scenario_player as mod
 
         assert sorted(mod.__all__) == ["CodexScenarioPlayer", "make_codex_scenario_player"]
+
+
+class TestBuildReplayRunner:
+    """Verify build_replay_runner works with the local CodexScenarioPlayer."""
+
+    def _write_codex_scenario(self, tmp_path: Path) -> Path:
+        """Create a minimal codex-format scenario directory."""
+        session_dir = tmp_path / "step_a"
+        session_dir.mkdir()
+        stdout_file = session_dir / "codex_stdout.ndjson"
+        stdout_file.write_text('{"type":"thread.started","thread_id":"t1"}\n')
+        scenario_file = tmp_path / "scenario.json"
+        scenario_file.write_text(
+            json.dumps([_make_step_dict("step_a", stdout_path="step_a/codex_stdout.ndjson")])
+        )
+        return tmp_path
+
+    def test_succeeds_without_api_simulator(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import atexit
+        import weakref
+
+        from autoskillit.execution.recording import ReplayingSubprocessRunner, build_replay_runner
+
+        scenario_dir = self._write_codex_scenario(tmp_path)
+        monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
+        monkeypatch.setattr(atexit, "register", lambda *a, **kw: None)
+        result = build_replay_runner(str(scenario_dir))
+        assert isinstance(result, ReplayingSubprocessRunner)
+
+    def test_return_type_is_replaying_runner(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import atexit
+        import weakref
+
+        from autoskillit.execution.recording import ReplayingSubprocessRunner, build_replay_runner
+
+        scenario_dir = self._write_codex_scenario(tmp_path)
+        monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
+        monkeypatch.setattr(atexit, "register", lambda *a, **kw: None)
+        result = build_replay_runner(str(scenario_dir))
+        assert isinstance(result, ReplayingSubprocessRunner)
+        assert isinstance(result.player, CodexScenarioPlayer)

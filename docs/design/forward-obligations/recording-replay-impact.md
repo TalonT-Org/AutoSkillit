@@ -16,8 +16,9 @@ a non-goal (see `docs/design/recording-replay-accepted-degradations.md`).
   (`_type_backend.py:127–129`), both defaulting to `False`.
 - `ClaudeCodeBackend`: both set to `True` via `CLAUDE_CODE_CAPABILITIES`
   (`_type_backend.py:249–250`).
-- `CodexBackend`: both set to `False` (`codex.py:580–581`). Codex replay is handled via
-  `CodexScenarioPlayer`.
+- `CodexBackend`: `replay_capable=True` (`codex.py:580`), `record_capable=False`
+  (`codex.py:581`). Codex replay uses the local `CodexScenarioPlayer` in
+  `execution/backends/codex_scenario_player.py` (no `api_simulator` dependency).
 
 ## Format Detection
 

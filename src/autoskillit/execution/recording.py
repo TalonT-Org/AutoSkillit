@@ -34,6 +34,7 @@ from autoskillit.execution._recording_skills import (
 from autoskillit.execution._recording_skills import (
     restore_skill_snapshot as _restore_skill_snapshot,
 )
+from autoskillit.execution.backends.codex_scenario_player import CodexScenarioPlayer
 
 if TYPE_CHECKING:
     from api_simulator.claude import ScenarioPlayer, ScenarioRecorder
@@ -486,7 +487,8 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
         DefaultSubprocessRunner in a ToolContext.
 
     Raises:
-        RuntimeError: If ``api_simulator`` is not installed.
+        RuntimeError: If the scenario is claude-format and ``api_simulator``
+            is not installed.
         Exception: Any exception raised by ``player.scenario()`` or
             ``player.build_session_map()`` is re-raised after logging the
             scenario path for context.
@@ -498,13 +500,6 @@ def build_replay_runner(replay_dir: str) -> ReplayingSubprocessRunner:
 
     try:
         if fmt == "codex":
-            try:
-                from api_simulator.codex import CodexScenarioPlayer
-            except ImportError as exc:
-                raise RuntimeError(
-                    "Codex scenario detected but 'api_simulator.codex' is not installed. "
-                    "Install it to enable Codex scenario replay."
-                ) from exc
             player = CodexScenarioPlayer(
                 scenario_dir=replay_dir,
                 output_dir=tmp_replay,

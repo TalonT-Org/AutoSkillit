@@ -468,6 +468,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help="Git base ref for changed-file detection (overrides AUTOSKILLIT_TEST_BASE_REF).",
     )
+    parser.addoption(
+        "--update-fixtures",
+        action="store_true",
+        default=False,
+        help="Regenerate deterministic conformance fixtures in-place instead of asserting.",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:

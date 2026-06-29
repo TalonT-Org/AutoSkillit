@@ -13,7 +13,16 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from autoskillit.hook_registry import HOOK_REGISTRY
+
+
+@pytest.fixture
+def update_fixtures(request: pytest.FixtureRequest) -> bool:
+    """Expose --update-fixtures CLI flag as a fixture."""
+    return bool(request.config.getoption("--update-fixtures"))
+
 
 # Local mirror of _SKIP_CODEX_STATUSES from autoskillit.execution.backends._codex_hooks.
 # Defined here so the conftest has no import dependency on execution.backends (which

@@ -153,5 +153,6 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_stream_parser.py` | Full test suite for CodexStreamParser: happy-path, item parsing, degradation, fixture-driven integration, protocol conformance |
 | `test_codex_result_parser.py` | Tests for CodexResultParser |
 | `test_codex_config.py` | Tests for TOML read/write primitives, _is_autoskillit_registered, and ensure_codex_mcp_registered |
+| `test_codex_deterministic_conformance.py` | Sealed-enum vocabulary, hook event format, and config.toml schema template conformance tests with --update-fixtures review gate |
 | `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |
 | `test_coding_agent_backend_conformance.py` | Parametrized conformance tests for all CodingAgentBackend implementations via BackendContractBase |

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,6 +53,15 @@ _skip_unless_codex_smoke = pytest.mark.skipif(
         and not Path("~/.codex/auth.json").expanduser().exists()
     ),
     reason=_SKIP_REASON,
+)
+
+_CLAUDE_CODE_SKIP_REASON = (
+    "Set CLAUDE_CODE_SMOKE_TEST=1 and have 'claude' on PATH to run Claude Code smoke tests"
+)
+
+_skip_unless_claude_code_smoke = pytest.mark.skipif(
+    not os.environ.get("CLAUDE_CODE_SMOKE_TEST") or not shutil.which("claude"),
+    reason=_CLAUDE_CODE_SKIP_REASON,
 )
 
 _PROBE_BACKEND = "codex"
@@ -266,3 +276,39 @@ class TestCodexLiveProbes:
             assert_config_schema(output.config_dict, output.cli_version)
 
         self._run_probe_with_discrimination("config_acceptance", probe_output, _assert)
+
+
+@_skip_unless_claude_code_smoke
+class TestClaudeCodeOutputSchemaProbe:
+    """Retirement signal for ClaudeCodeCompatMiddleware (_wire_compat.py).
+
+    Claude Code bug anthropics/claude-code#25081 silently drops ALL tools
+    from any tools/list response containing ``outputSchema``.
+    ClaudeCodeCompatMiddleware strips the field as a workaround.
+
+    This probe constructs a standalone FastMCP server with an
+    output_schema-bearing tool and verifies list_tools() returns it.
+    Once Claude Code fixes #25081 and this probe passes against the
+    real CLI, the middleware can be retired.
+    """
+
+    @pytest.mark.anyio
+    async def test_output_schema_tool_list_not_dropped(self) -> None:
+        from fastmcp import FastMCP
+        from fastmcp.client import Client
+
+        server = FastMCP("probe")
+
+        @server.tool(
+            output_schema={
+                "type": "object",
+                "properties": {"result": {"type": "string"}},
+            }
+        )
+        def echo(x: str) -> str:
+            return x
+
+        async with Client(server) as client:
+            tools = await client.list_tools()
+
+        assert len(tools) >= 1

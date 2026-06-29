@@ -135,10 +135,9 @@ class TestCodexLiveProbes:
     """
 
     @pytest.fixture(autouse=True)
-    def _probe_state(self, tmp_path: Path) -> tuple[Path, Path]:
+    def _probe_state(self, tmp_path: Path) -> None:
         self._cache_path = tmp_path / "probe_cache.json"
         self._state_path = tmp_path / "canary_state.json"
-        return self._cache_path, self._state_path
 
     def _check_cache(self) -> None:
         cli_version = _get_codex_version()
@@ -165,6 +164,7 @@ class TestCodexLiveProbes:
     ) -> None:
         state = CanaryState.load(self._state_path)
         state.record_failure(kind)
+        state.save(self._state_path)
         if state.should_report():
             repo_slug = os.environ.get("GITHUB_REPOSITORY", "")
             if repo_slug and "/" in repo_slug:
@@ -173,7 +173,6 @@ class TestCodexLiveProbes:
                 title = f"{_CANARY_TITLE_PREFIX}: {probe_name}"
                 body = _make_canary_body(probe_name, kind, cli_version, detail)
                 updater.ensure_issue(state, title, body)
-        state.save(self._state_path)
         write_probe_cache(
             self._cache_path,
             ProbeResult(
@@ -192,9 +191,6 @@ class TestCodexLiveProbes:
             self._record_success(probe_output.cli_version)
         except AssertionError as exc:
             self._record_failure(ErrorKind.SCHEMA, probe_name, probe_output.cli_version, str(exc))
-            raise
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            self._record_failure(ErrorKind.NETWORK, probe_name, probe_output.cli_version, str(exc))
             raise
 
     _cls_probe_output: _CodexProbeOutput | None = None

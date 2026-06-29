@@ -134,10 +134,17 @@ class TestCodexLiveProbes:
     error discrimination → canary recording.
     """
 
+    _cls_state_dir: Path | None = None
+
+    @pytest.fixture(autouse=True, scope="class")
+    def _probe_class_state_dir(self, tmp_path_factory: pytest.TempPathFactory) -> None:
+        type(self)._cls_state_dir = tmp_path_factory.mktemp("canary_state")
+
     @pytest.fixture(autouse=True)
     def _probe_state(self, tmp_path: Path) -> None:
         self._cache_path = tmp_path / "probe_cache.json"
-        self._state_path = tmp_path / "canary_state.json"
+        cls_dir = type(self)._cls_state_dir
+        self._state_path = (cls_dir if cls_dir is not None else tmp_path) / "canary_state.json"
 
     def _check_cache(self) -> None:
         cli_version = _get_codex_version()

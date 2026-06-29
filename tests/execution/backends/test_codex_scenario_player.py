@@ -288,13 +288,13 @@ class TestBuildReplayRunner:
         import atexit
         import weakref
 
-        from autoskillit.execution.recording import build_replay_runner
+        from autoskillit.execution.recording import ReplayingSubprocessRunner, build_replay_runner
 
         scenario_dir = self._write_codex_scenario(tmp_path)
         monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
         monkeypatch.setattr(atexit, "register", lambda *a, **kw: None)
         result = build_replay_runner(str(scenario_dir))
-        assert result is not None
+        assert isinstance(result, ReplayingSubprocessRunner)
 
     def test_return_type_is_replaying_runner(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

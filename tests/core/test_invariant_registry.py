@@ -100,6 +100,20 @@ def test_env_key_enforcement_layer() -> None:
     assert INVARIANT_REGISTRY["env-key-in-with-args"].enforcement_layer == "server-side"
 
 
+def test_recipe_read_enforcement_layer() -> None:
+    """recipe-read-headless must have enforcement_layer='server-side'."""
+    from autoskillit.core import INVARIANT_REGISTRY
+
+    assert INVARIANT_REGISTRY["recipe-read-headless"].enforcement_layer == "server-side"
+
+
+def test_write_path_prefix_enforcement_layer() -> None:
+    """write-path-prefix must have enforcement_layer='server-side'."""
+    from autoskillit.core import INVARIANT_REGISTRY
+
+    assert INVARIANT_REGISTRY["write-path-prefix"].enforcement_layer == "server-side"
+
+
 def test_all_gate_targets_are_nonempty() -> None:
     """Every gate_target must be a non-empty string."""
     from autoskillit.core import INVARIANT_REGISTRY

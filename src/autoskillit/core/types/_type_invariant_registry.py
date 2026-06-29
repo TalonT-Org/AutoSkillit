@@ -82,7 +82,7 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
         prohibition="Must not read recipe/skill/agent files directly in headless sessions",
         source_doc="SKILL.md",
         gate_target="guards/recipe_read_guard.py",
-        enforcement_layer="hook-deny",
+        enforcement_layer="server-side",
         backends=_BOTH,
     ),
     "write-path-prefix": InvariantDef(
@@ -90,7 +90,7 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
         prohibition="Writes outside allowed prefix are blocked in write-scoped sessions",
         source_doc="SKILL.md",
         gate_target="guards/write_guard.py",
-        enforcement_layer="hook-deny",
+        enforcement_layer="server-side",
         backends=_CLAUDE_ONLY,
     ),
     "skill-orchestration-from-L1": InvariantDef(

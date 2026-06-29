@@ -25,11 +25,6 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 MIN_EXPECTED_HOOK_COUNT = 30
 
-assert len(HOOK_REGISTRY) >= MIN_EXPECTED_HOOK_COUNT, (
-    f"HOOK_REGISTRY appears truncated: {len(HOOK_REGISTRY)} entries "
-    f"(expected >= {MIN_EXPECTED_HOOK_COUNT})"
-)
-
 _HOOK_IDS = [
     f"{h.event_type}:{h.matcher[:40]}:{h.scripts[0] if h.scripts else 'no-script'}"
     for h in HOOK_REGISTRY
@@ -38,6 +33,13 @@ _HOOK_IDS = [
 _EXPECTED_STRENGTH_KEYS: frozenset[str] = frozenset(
     name.replace("-", "_") for name in KNOWN_BACKEND_NAMES
 )
+
+
+def test_registry_not_truncated() -> None:
+    assert len(HOOK_REGISTRY) >= MIN_EXPECTED_HOOK_COUNT, (
+        f"HOOK_REGISTRY appears truncated: {len(HOOK_REGISTRY)} entries "
+        f"(expected >= {MIN_EXPECTED_HOOK_COUNT})"
+    )
 
 
 class TestMechanismFieldPresent:

@@ -594,6 +594,7 @@ class CodexBackend(BackendCmdBuilderBase):
             git_metadata_writable=False,  # sandbox excludes .git metadata path
             skill_sigil="$",
             session_dir_persistent=True,
+            supports_model_invocation_gating=False,
         )
 
     @property

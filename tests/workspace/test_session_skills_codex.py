@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.core import ClaudeDirectoryConventions, ValidatedAddDir
+from autoskillit.core import ClaudeDirectoryConventions, SkillSource, ValidatedAddDir
 from tests.workspace._helpers import _CODEX_CAPABILITIES
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
@@ -19,6 +19,19 @@ def _make_codex_backend() -> MagicMock:
     b.conventions.skills_subdir = ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
     b.ensure_pre_launch.return_value = []
     return b
+
+
+def _make_config_with_tier2(tier2_names: list[str]) -> MagicMock:
+    config = MagicMock()
+    config.skills.tier1 = []
+    config.skills.tier2 = tier2_names
+    config.skills.tier3 = []
+    config.subsets.disabled = []
+    config.subsets.custom_tags = {}
+    config.packs.enabled = []
+    config.features = {}
+    config.experimental_enabled = False
+    return config
 
 
 @pytest.fixture
@@ -135,3 +148,45 @@ def test_missing_profile_skills_dir_does_not_raise(tmp_path, monkeypatch) -> Non
     count = _materialize_profile_skills(session_dir)
 
     assert count == 0
+
+
+def test_codex_session_omits_tier2_skills(make_session_skill_manager, codex_env) -> None:
+    """Non-cook Codex sessions must not receive tier-2 skill files."""
+    mgr = make_session_skill_manager()
+    provider = mgr._provider
+    tier2_names = [
+        s.name for s in provider.list_skills() if s.source == SkillSource.BUNDLED_EXTENDED
+    ]
+    if not tier2_names:
+        pytest.skip("No tier-2 skills available")
+
+    sample = tier2_names[:3]
+    config = _make_config_with_tier2(sample)
+    session_path = mgr.init_session(
+        "sid", cook_session=False, config=config, backend=codex_env.backend
+    )
+    skills_base = session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    for name in sample:
+        assert not (skills_base / name).exists(), (
+            f"Tier-2 skill {name!r} should not be written for Codex"
+        )
+
+
+def test_claude_code_session_keeps_tier2_skills(make_session_skill_manager) -> None:
+    """Cook sessions without a backend write all skills including tier-2."""
+    mgr = make_session_skill_manager()
+    session_path = mgr.init_session("sid", cook_session=True)
+    skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+    skill_files = list(skills_base.glob("*/SKILL.md"))
+    assert len(skill_files) > 0, "Cook sessions must write skill files"
+
+
+def test_codex_session_cook_mode_still_writes_all_skills(
+    make_session_skill_manager, codex_env
+) -> None:
+    """Cook sessions bypass the capability gate — all skills are written."""
+    mgr = make_session_skill_manager()
+    session_path = mgr.init_session("sid", cook_session=True, backend=codex_env.backend)
+    skills_base = session_path / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
+    skill_files = list(skills_base.glob("*/SKILL.md"))
+    assert len(skill_files) > 0, "Cook sessions must write all skills regardless of backend"

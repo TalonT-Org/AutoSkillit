@@ -33,6 +33,7 @@ NOT_YET_LIVE: frozenset[str] = frozenset(
         "patch_format",
         "required_session_files",
         "session_dir_symlinks",
+        "supports_model_invocation_gating",
         "supports_thinking_blocks",
     }
 )
@@ -73,6 +74,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "supports_claude_format_stdout": "REQUIRED",
     "supports_context_exhaustion_detection": "OPTIONAL",
     "supports_context_window_suffix": "OPTIONAL",
+    "supports_model_invocation_gating": "OPTIONAL",
     "supports_thinking_blocks": "OPTIONAL",
     "supports_tool_list_changed": "OPTIONAL",
     "triage_capable": "OPTIONAL",

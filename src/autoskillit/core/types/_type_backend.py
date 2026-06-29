@@ -152,6 +152,11 @@ class BackendCapabilities:
     # This is necessary when subagents inherit the session directory path as an
     # environment variable and may access it after the parent process exits.
     session_dir_persistent: bool = False
+    # True when backend honors the disable-model-invocation SKILL.md frontmatter
+    # key. When False, tier-2 skills are structurally omitted from the session
+    # directory rather than written with gating frontmatter that the backend
+    # would ignore.
+    supports_model_invocation_gating: bool = True
 
 
 ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS: tuple[str, ...] = (
@@ -259,6 +264,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     git_metadata_writable=True,
     skill_sigil="/",
     session_dir_persistent=False,
+    supports_model_invocation_gating=True,
 )
 
 

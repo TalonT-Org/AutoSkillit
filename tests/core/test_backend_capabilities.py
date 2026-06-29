@@ -101,6 +101,7 @@ def test_backend_capabilities_field_count():
         "supports_context_window_suffix",
         "git_metadata_writable",
         "session_dir_persistent",
+        "supports_model_invocation_gating",
     }
     assert frozenset_fields == {
         "completion_record_types",
@@ -173,6 +174,7 @@ def test_backend_capabilities_field_names_locked():
         "skill_sigil",
         "process_name_aliases",
         "session_dir_persistent",
+        "supports_model_invocation_gating",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
     assert actual == expected
@@ -222,6 +224,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.patch_format == "unified_diff"
     assert CLAUDE_CODE_CAPABILITIES.default_skill_sandbox_mode == ""
     assert CLAUDE_CODE_CAPABILITIES.skill_sigil == "/"
+    assert CLAUDE_CODE_CAPABILITIES.supports_model_invocation_gating is True
 
 
 def test_backend_capabilities_frozenset_defaults():

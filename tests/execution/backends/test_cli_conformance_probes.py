@@ -194,11 +194,18 @@ class TestCodexLiveProbes:
             raise
 
     _cls_probe_output: _CodexProbeOutput | None = None
+    _cls_probe_exc: BaseException | None = None
 
     @classmethod
     def _get_probe_output(cls) -> _CodexProbeOutput:
+        if cls._cls_probe_exc is not None:
+            raise cls._cls_probe_exc
         if cls._cls_probe_output is None:
-            cls._cls_probe_output = _run_codex_probe()
+            try:
+                cls._cls_probe_output = _run_codex_probe()
+            except BaseException as exc:
+                cls._cls_probe_exc = exc
+                raise
         return cls._cls_probe_output
 
     def test_ndjson_event_vocabulary_conforms(self) -> None:

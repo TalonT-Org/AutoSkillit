@@ -1129,12 +1129,13 @@ async def run_skill(
                 try:
                     _parsed = json.loads(_json_str)
                 except Exception:
+                    logger.warning("run_skill_json_parse_failed", exc_info=True)
                     _parsed = {}
                 _missing = {"success", "exit_code"} - _parsed.keys()
                 if _missing:
                     logger.warning(
                         "run_skill_degraded_payload",
-                        missing_keys=sorted(_missing),
+                        absent_fields=sorted(_missing),
                     )
                     return json.dumps(
                         ToolFailureEnvelope(

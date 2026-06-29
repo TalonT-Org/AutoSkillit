@@ -1128,9 +1128,16 @@ async def run_skill(
                 _json_str = skill_result.to_json()
                 try:
                     _parsed = json.loads(_json_str)
-                except Exception:
+                except Exception as exc:
                     logger.warning("run_skill_json_parse_failed", exc_info=True)
-                    _parsed = {}
+                    return json.dumps(
+                        ToolFailureEnvelope(
+                            success=False,
+                            error=f"Degraded SkillResult payload: JSON parse failed: {exc}",
+                            stage="validate_result:run_skill",
+                            retriable=True,
+                        )
+                    )
                 _missing = {"success", "exit_code"} - _parsed.keys()
                 if _missing:
                     logger.warning(

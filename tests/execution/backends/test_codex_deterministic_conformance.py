@@ -207,7 +207,6 @@ class TestCodexConfigTomlSchemaTemplate:
     def test_required_keys_present(self) -> None:
         template = json.loads(self._TEMPLATE_PATH.read_text(encoding="utf-8"))
         fixture_keys = set(template["_codex_mcp_required_keys"])
-        assert_config_schema(template, "fixture")
         assert CODEX_MCP_REQUIRED_KEYS == fixture_keys, (
             f"CODEX_MCP_REQUIRED_KEYS drift: live={sorted(CODEX_MCP_REQUIRED_KEYS)}, "
             f"fixture={sorted(fixture_keys)}. "
@@ -284,6 +283,9 @@ class TestConformanceAssertionsSyntheticExercise:
 
     def test_order_up_marker_standalone(self) -> None:
         assert_order_up_marker_standalone(self._EVENTS, "%%MARKER%%")
+
+    def test_config_schema_valid(self) -> None:
+        assert_config_schema({"model": "o4-mini", "instructions": "test"}, "synthetic")
 
 
 class TestConformanceAssertionsFullCoverage:

@@ -589,9 +589,16 @@ def test_tool_ctx_kitchen_open_fixture_gate_starts_open(tool_ctx_kitchen_open) -
 
 @pytest.fixture()
 def _register_aider_backend(monkeypatch):
+    import dataclasses
+
     from autoskillit.execution.backends import BACKEND_REGISTRY, CodexBackend
 
-    monkeypatch.setitem(BACKEND_REGISTRY, "aider", CodexBackend)
+    class _NonReplayBackend(CodexBackend):
+        @property
+        def capabilities(self):
+            return dataclasses.replace(super().capabilities, replay_capable=False)
+
+    monkeypatch.setitem(BACKEND_REGISTRY, "aider", _NonReplayBackend)
 
 
 def test_make_context_skips_replay_runner_for_non_claude_backend(

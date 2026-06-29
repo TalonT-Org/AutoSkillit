@@ -899,7 +899,13 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
     "_test_filter": frozenset({"arch", "infra", "contracts"}),
     "smoke_utils": frozenset({"test_smoke_utils.py", "recipe", "smoke_utils"}),
     "version": frozenset({"test_version.py", "server", "cli"}),
-    "_probe_canary": frozenset({"core", "execution/backends/test_probe_canary.py"}),
+    "_probe_canary": frozenset(
+        {
+            "core",
+            "execution/backends/test_probe_canary.py",
+            "execution/backends/test_cli_conformance_probes.py",
+        }
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -983,7 +989,13 @@ LAYER_CASCADE_AGGRESSIVE: dict[str, frozenset[str]] = {
     "version": frozenset({"test_version.py"}),
     "_test_filter": frozenset({"arch", "contracts"}),
     "report": frozenset({"report"}),
-    "_probe_canary": frozenset({"core", "execution/backends/test_probe_canary.py"}),
+    "_probe_canary": frozenset(
+        {
+            "core",
+            "execution/backends/test_probe_canary.py",
+            "execution/backends/test_cli_conformance_probes.py",
+        }
+    ),
 }
 
 # ---------------------------------------------------------------------------

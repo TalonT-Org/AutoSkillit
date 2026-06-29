@@ -88,11 +88,13 @@ class TestActionPinning:
 
     @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
     def test_setup_uv_uses_version_param(self, workflow: dict, job_name: str) -> None:
-        for step in workflow["jobs"][job_name].get("steps", []):
-            if "setup-uv" in step.get("uses", ""):
-                with_block = step.get("with", {})
-                assert "version" in with_block, "setup-uv must use 'version' param"
-                assert "uv-version" not in with_block, "setup-uv must not use 'uv-version'"
+        steps = workflow["jobs"][job_name].get("steps", [])
+        uv_steps = [s for s in steps if "setup-uv" in (s.get("uses") or "")]
+        assert uv_steps, f"No setup-uv step found in {job_name}"
+        for step in uv_steps:
+            with_block = step.get("with", {})
+            assert "version" in with_block, "setup-uv must use 'version' param"
+            assert "uv-version" not in with_block, "setup-uv must not use 'uv-version'"
 
 
 class TestVersionResolution:
@@ -148,10 +150,11 @@ class TestCacheGate:
         self, workflow: dict, job_name: str, expected_backend: str
     ) -> None:
         steps = workflow["jobs"][job_name]["steps"]
-        for step in steps:
-            if "cache/restore" in (step.get("uses") or ""):
-                key = step.get("with", {}).get("key", "")
-                assert f"probe-{expected_backend}" in key
+        restore_steps = [s for s in steps if "cache/restore" in (s.get("uses") or "")]
+        assert restore_steps, f"No cache/restore step found in {job_name}"
+        for step in restore_steps:
+            key = step.get("with", {}).get("key", "")
+            assert f"probe-{expected_backend}" in key
 
 
 class TestPostFailure:

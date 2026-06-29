@@ -64,7 +64,7 @@ class TestCodexHardClaimConsistency:
     @pytest.mark.parametrize("hook", HOOK_REGISTRY, ids=_HOOK_IDS)
     def test_codex_hard_requires_bash_matcher(self, hook) -> None:
         if hook.enforcement_strength.get("codex") != "hard":
-            return
+            pytest.skip(reason="hook codex enforcement_strength is not 'hard' — not applicable")
         assert re.search(r"Bash", hook.matcher) is not None, (
             f"Hook matcher={hook.matcher!r} scripts={hook.scripts} claims "
             f"enforcement_strength codex='hard' but matcher does not "

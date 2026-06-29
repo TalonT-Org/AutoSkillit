@@ -242,3 +242,7 @@ class TestCodexConfigTomlSchemaTemplate:
             reloaded["top_level_keys"]["tool_output_token_limit"]["floor_value"]
             == CODEX_TOOL_OUTPUT_TOKEN_LIMIT
         )
+        assert (
+            reloaded["top_level_keys"]["model_auto_compact_token_limit"]["floor_value"]
+            == CODEX_AUTO_COMPACT_LIMIT
+        )

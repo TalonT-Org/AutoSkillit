@@ -728,8 +728,6 @@ def test_detect_backend_format_claude(tmp_path):
 
 def test_build_replay_runner_detects_codex_format(tmp_path, monkeypatch):
     """build_replay_runner() uses CodexScenarioPlayer when codex sidecar detected."""
-    import sys
-    import types
     import weakref
 
     from autoskillit.execution.recording import build_replay_runner
@@ -746,9 +744,7 @@ def test_build_replay_runner_detects_codex_format(tmp_path, monkeypatch):
     mock_codex_instance.scenario.return_value = mock_scenario
     mock_codex_instance.build_session_map.return_value = {}
 
-    fake_codex_mod = types.ModuleType("api_simulator.codex")
-    fake_codex_mod.CodexScenarioPlayer = mock_codex_cls  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "api_simulator.codex", fake_codex_mod)
+    monkeypatch.setattr("autoskillit.execution.recording.CodexScenarioPlayer", mock_codex_cls)
 
     monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
     monkeypatch.setattr("atexit.register", Mock())

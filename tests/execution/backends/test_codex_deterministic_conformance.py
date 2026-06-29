@@ -25,6 +25,15 @@ from autoskillit.execution.backends._codex_config import (
 )
 from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
 from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR
+from tests.execution.backends._conformance_assertions import (
+    assert_config_schema,
+    assert_hook_event_format,
+    assert_no_unknown_event_types,
+    assert_order_up_marker_standalone,
+    assert_session_start_present,
+    assert_turn_completed_usage_nonzero,
+    assert_vocabulary_coverage,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -154,6 +163,7 @@ class TestCodexHookEventFormatFixture:
         snapshot = json.loads(self._SNAPSHOT_PATH.read_text(encoding="utf-8"))
         live_hooks = generate_codex_hooks_config()
         sanitized_live = _sanitize_hooks(live_hooks)
+        assert_hook_event_format({"hooks": live_hooks})
 
         assert snapshot["_registry_hash"] == HOOK_REGISTRY_HASH, (
             f"HOOK_REGISTRY_HASH drift detected: "
@@ -197,6 +207,7 @@ class TestCodexConfigTomlSchemaTemplate:
     def test_required_keys_present(self) -> None:
         template = json.loads(self._TEMPLATE_PATH.read_text(encoding="utf-8"))
         fixture_keys = set(template["_codex_mcp_required_keys"])
+        assert_config_schema(template, "fixture")
         assert CODEX_MCP_REQUIRED_KEYS == fixture_keys, (
             f"CODEX_MCP_REQUIRED_KEYS drift: live={sorted(CODEX_MCP_REQUIRED_KEYS)}, "
             f"fixture={sorted(fixture_keys)}. "
@@ -246,3 +257,66 @@ class TestCodexConfigTomlSchemaTemplate:
             reloaded["top_level_keys"]["model_auto_compact_token_limit"]["floor_value"]
             == CODEX_AUTO_COMPACT_LIMIT
         )
+
+
+class TestConformanceAssertionsSyntheticExercise:
+    """Exercise event-oriented conformance assertions with synthetic data."""
+
+    _EVENTS: list[dict] = [
+        {"type": "thread.started", "thread_id": "t1"},
+        {"type": "turn.started"},
+        {"type": "item.started"},
+        {"type": "item.completed", "item": {"content": [{"text": "%%MARKER%%"}]}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10, "output_tokens": 5}},
+    ]
+
+    def test_vocabulary_coverage(self) -> None:
+        assert_vocabulary_coverage(self._EVENTS, {"thread.started", "turn.completed"})
+
+    def test_no_unknown_event_types(self) -> None:
+        assert_no_unknown_event_types(self._EVENTS)
+
+    def test_session_start_present(self) -> None:
+        assert_session_start_present(self._EVENTS)
+
+    def test_turn_completed_usage_nonzero(self) -> None:
+        assert_turn_completed_usage_nonzero(self._EVENTS)
+
+    def test_order_up_marker_standalone(self) -> None:
+        assert_order_up_marker_standalone(self._EVENTS, "%%MARKER%%")
+
+
+class TestConformanceAssertionsFullCoverage:
+    """Meta-test: every assert_* name from _conformance_assertions is called in this file."""
+
+    def test_all_assertions_called(self) -> None:
+        import ast
+        import importlib
+        import inspect
+
+        import tests.execution.backends._conformance_assertions as ca_mod
+
+        exported_names = {
+            name
+            for name in dir(ca_mod)
+            if name.startswith("assert_") and callable(getattr(ca_mod, name))
+        }
+
+        source = inspect.getsource(
+            importlib.import_module(
+                "tests.execution.backends.test_codex_deterministic_conformance"
+            )
+        )
+        tree = ast.parse(source)
+
+        called_names: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                if isinstance(func, ast.Name) and func.id in exported_names:
+                    called_names.add(func.id)
+                elif isinstance(func, ast.Attribute) and func.attr in exported_names:
+                    called_names.add(func.attr)
+
+        missing = exported_names - called_names
+        assert not missing, f"Conformance assertions not called in test file: {sorted(missing)}"

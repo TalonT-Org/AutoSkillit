@@ -577,7 +577,7 @@ class CodexBackend(BackendCmdBuilderBase):
             patch_format="codex_star_update",
             default_skill_sandbox_mode="workspace-write",
             mcp_env_forward_vars=CODEX_MCP_ENV_FORWARD_VARS,
-            replay_capable=False,
+            replay_capable=True,
             record_capable=False,
             anthropic_provider_capable=False,
             plugin_install_capable=False,

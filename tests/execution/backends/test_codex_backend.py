@@ -154,8 +154,8 @@ class TestCodexBackend:
 
         assert CodexBackend().capabilities.mcp_env_forward_vars == CODEX_MCP_ENV_FORWARD_VARS
 
-    def test_capabilities_replay_capable_false(self) -> None:
-        assert CodexBackend().capabilities.replay_capable is False
+    def test_capabilities_replay_capable_true(self) -> None:
+        assert CodexBackend().capabilities.replay_capable is True
 
     def test_capabilities_record_capable_false(self) -> None:
         assert CodexBackend().capabilities.record_capable is False

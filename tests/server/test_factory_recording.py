@@ -196,14 +196,15 @@ def test_replay_takes_precedence_over_record(monkeypatch, tmp_path):
     mock_atexit.assert_not_called()
 
 
-# --- T-REPLAY-CODEX: codex backend is not replay-capable, so replay runner wrapping is skipped ---
+# --- T-REPLAY-CODEX: codex backend IS replay-capable, so replay runner wrapping occurs ---
 
 
-def test_make_context_replay_skipped_for_codex_backend(monkeypatch, tmp_path):
-    """REPLAY_SCENARIO with codex backend must NOT wrap runner in ReplayingSubprocessRunner."""
+def test_make_context_replay_wraps_for_codex_backend(monkeypatch, tmp_path):
+    """REPLAY_SCENARIO with codex backend wraps runner in ReplayingSubprocessRunner."""
+    from unittest.mock import MagicMock, patch
+
     from autoskillit.config import AutomationConfig
     from autoskillit.config._config_dataclasses import AgentBackendConfig
-    from autoskillit.execution import DefaultSubprocessRunner
     from autoskillit.execution.recording import ReplayingSubprocessRunner
     from autoskillit.server._factory import make_context
 
@@ -217,10 +218,12 @@ def test_make_context_replay_skipped_for_codex_backend(monkeypatch, tmp_path):
     config = AutomationConfig()
     config.agent_backend = AgentBackendConfig(backend="codex")
 
-    ctx = make_context(config, plugin_dir=str(tmp_path), project_dir=tmp_path)
+    mock_runner = MagicMock(spec=ReplayingSubprocessRunner)
+    with patch("autoskillit.server._factory.build_replay_runner", return_value=mock_runner):
+        ctx = make_context(config, plugin_dir=str(tmp_path), project_dir=tmp_path)
 
-    assert isinstance(ctx.runner, DefaultSubprocessRunner)
-    assert not isinstance(ctx.runner, ReplayingSubprocessRunner)
+    assert isinstance(ctx.runner, MagicMock)
+    assert ctx.runner is mock_runner
 
 
 # --- T-RECORD-CODEX: codex backend is not record-capable, so record runner wrapping is skipped ---

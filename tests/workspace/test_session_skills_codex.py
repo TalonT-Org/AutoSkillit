@@ -175,10 +175,18 @@ def test_codex_session_omits_tier2_skills(make_session_skill_manager, codex_env)
 def test_claude_code_session_keeps_tier2_skills(make_session_skill_manager) -> None:
     """Cook sessions without a backend write all skills including tier-2."""
     mgr = make_session_skill_manager()
+    provider = mgr._provider
+    tier2_names = {
+        s.name for s in provider.list_skills() if s.source == SkillSource.BUNDLED_EXTENDED
+    }
+    if not tier2_names:
+        pytest.skip("No tier-2 skills available")
     session_path = mgr.init_session("sid", cook_session=True)
     skills_base = session_path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
     skill_files = list(skills_base.glob("*/SKILL.md"))
-    assert len(skill_files) > 0, "Cook sessions must write skill files"
+    assert any(f.parent.name in tier2_names for f in skill_files), (
+        "Cook sessions must write tier-2 skill files"
+    )
 
 
 def test_codex_session_cook_mode_still_writes_all_skills(

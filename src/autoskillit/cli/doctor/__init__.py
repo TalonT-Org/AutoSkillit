@@ -63,6 +63,7 @@ from ._doctor_runtime import (
     _check_claude_process_state_breakdown,
     _check_cli_conformance_probes,
     _check_codex_graduation,
+    _check_codex_model_alias_staleness,
     _check_codex_ndjson_drift,
     _check_codex_version,
     _check_quota_cache_schema,
@@ -224,6 +225,9 @@ def run_doctor(*, output_json: bool = False) -> None:
 
     # Check 35: Codex NDJSON vocabulary drift
     results.append(_check_codex_ndjson_drift(log_dir=cfg.linux_tracing.log_dir, backend=_backend))
+
+    # Check 36: Codex model-alias staleness
+    results.append(_check_codex_model_alias_staleness())
 
     # Output
     if output_json:

@@ -6,11 +6,14 @@ import json
 import shlex
 import subprocess
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import regex as re
 
 from autoskillit.core import (
+    CODEX_MODEL_ALIASES,
+    CODEX_MODEL_ALIASES_LAST_VERIFIED,
     CodingAgentBackend,
     Severity,
     atomic_write,
@@ -24,6 +27,10 @@ from ._doctor_types import DoctorResult
 logger = get_logger(__name__)
 
 CODEX_MIN_VERSION: tuple[int, ...] = (0, 130, 0)
+
+VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.4", "gpt-5.4-mini", "gpt-5.5"})
+
+_CODEX_ALIAS_STALENESS_DAYS: int = 90
 
 
 def _check_codex_version(*, backend: CodingAgentBackend | None = None) -> DoctorResult:
@@ -361,3 +368,39 @@ def _check_codex_ndjson_drift(
             " — parser vocabulary may be stale",
         )
     return DoctorResult(Severity.OK, check_name, "No NDJSON vocabulary drift detected")
+
+
+def _check_codex_model_alias_staleness() -> DoctorResult:
+    check_name = "codex_model_alias_staleness"
+    try:
+        verified = date.fromisoformat(CODEX_MODEL_ALIASES_LAST_VERIFIED)
+    except (ValueError, TypeError):
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"Cannot parse CODEX_MODEL_ALIASES_LAST_VERIFIED="
+            f"{CODEX_MODEL_ALIASES_LAST_VERIFIED!r}",
+        )
+    age_days = (date.today() - verified).days
+    if age_days > _CODEX_ALIAS_STALENESS_DAYS:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"CODEX_MODEL_ALIASES last verified {age_days} days ago"
+            f" (threshold {_CODEX_ALIAS_STALENESS_DAYS}d);"
+            f" re-verify alias targets and update CODEX_MODEL_ALIASES_LAST_VERIFIED",
+        )
+    invalid = {k: v for k, v in CODEX_MODEL_ALIASES.items() if v not in VALID_CODEX_MODEL_IDS}
+    if invalid:
+        pairs = ", ".join(f"{k}={v!r}" for k, v in invalid.items())
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            f"CODEX_MODEL_ALIASES contains unrecognized model IDs: {pairs};"
+            f" update VALID_CODEX_MODEL_IDS or fix the alias",
+        )
+    return DoctorResult(
+        Severity.OK,
+        check_name,
+        f"CODEX_MODEL_ALIASES verified {age_days}d ago; all alias values valid",
+    )

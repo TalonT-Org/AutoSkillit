@@ -21,6 +21,7 @@ __all__ = [
     "CLAUDE_MODEL_ALIASES",
     "CODEX_EFFORT_MAPPING",
     "CODEX_MODEL_ALIASES",
+    "CODEX_MODEL_ALIASES_LAST_VERIFIED",
     "CmdOrigin",
     "CmdSpec",
     "ModelTranslation",
@@ -174,6 +175,8 @@ CODEX_MODEL_ALIASES: dict[str, str] = {
     "opus": "gpt-5.5",
     "haiku": "gpt-5.4-mini",
 }
+
+CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-06-11"
 
 CODEX_EFFORT_MAPPING: dict[str, str] = {
     "sonnet": "high",

@@ -219,11 +219,13 @@ def test_make_context_replay_wraps_for_codex_backend(monkeypatch, tmp_path):
     config.agent_backend = AgentBackendConfig(backend="codex")
 
     mock_runner = MagicMock(spec=ReplayingSubprocessRunner)
-    with patch("autoskillit.server._factory.build_replay_runner", return_value=mock_runner):
+    with patch(
+        "autoskillit.server._factory.build_replay_runner", return_value=mock_runner
+    ) as mock_build:
         ctx = make_context(config, plugin_dir=str(tmp_path), project_dir=tmp_path)
 
-    assert isinstance(ctx.runner, MagicMock)
     assert ctx.runner is mock_runner
+    mock_build.assert_called_once()
 
 
 # --- T-RECORD-CODEX: codex backend is not record-capable, so record runner wrapping is skipped ---

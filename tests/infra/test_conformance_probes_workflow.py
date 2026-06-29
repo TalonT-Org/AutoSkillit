@@ -16,6 +16,16 @@ _WORKFLOW_PATH = (
 )
 
 
+def _on(workflow: dict) -> dict:
+    """Return the workflow triggers section, compatible with both YAML 1.1 and 1.2 loaders.
+
+    PyYAML SafeLoader (YAML 1.1) parses bare ``on:`` as boolean ``True``.
+    A YAML 1.2-compliant loader (ruamel.yaml, etc.) preserves it as the string ``"on"``.
+    Using ``get`` with both keys avoids KeyError on either loader.
+    """
+    return workflow.get("on") or workflow.get(True) or {}
+
+
 @pytest.fixture(scope="module")
 def workflow() -> dict:
     return load_yaml(_WORKFLOW_PATH)
@@ -23,20 +33,20 @@ def workflow() -> dict:
 
 class TestTriggers:
     def test_schedule_trigger_present(self, workflow: dict) -> None:
-        assert "schedule" in workflow[True]
+        assert "schedule" in _on(workflow)
 
     def test_schedule_cron_weekly_monday(self, workflow: dict) -> None:
-        crons = workflow[True]["schedule"]
-        assert any("5 * * 1" in entry["cron"] for entry in crons)
+        crons = _on(workflow)["schedule"]
+        assert any("0 5 * * 1" in entry["cron"] for entry in crons)
 
     def test_workflow_dispatch_trigger(self, workflow: dict) -> None:
-        assert "workflow_dispatch" in workflow[True]
+        assert "workflow_dispatch" in _on(workflow)
 
     def test_no_push_trigger(self, workflow: dict) -> None:
-        assert "push" not in workflow[True]
+        assert "push" not in _on(workflow)
 
     def test_no_pull_request_trigger(self, workflow: dict) -> None:
-        assert "pull_request" not in workflow[True]
+        assert "pull_request" not in _on(workflow)
 
 
 class TestPermissionsAndConcurrency:
@@ -100,12 +110,15 @@ class TestVersionResolution:
     @pytest.mark.parametrize("job_name", ["codex-probe", "claude-probe"])
     def test_version_fallback_to_unknown(self, workflow: dict, job_name: str) -> None:
         steps = workflow["jobs"][job_name]["steps"]
-        for step in steps:
-            if (
-                "resolve" in (step.get("name") or "").lower()
-                and "version" in (step.get("name") or "").lower()
-            ):
-                assert "unknown" in step.get("run", ""), "Version step must fallback to 'unknown'"
+        resolve_steps = [
+            s
+            for s in steps
+            if "resolve" in (s.get("name") or "").lower()
+            and "version" in (s.get("name") or "").lower()
+        ]
+        assert resolve_steps, f"No version resolution step found in {job_name}"
+        for step in resolve_steps:
+            assert "unknown" in step.get("run", ""), "Version step must fallback to 'unknown'"
 
 
 class TestCacheGate:

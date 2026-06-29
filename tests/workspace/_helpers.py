@@ -20,4 +20,5 @@ _CODEX_CAPABILITIES = BackendCapabilities(
     session_dir_symlinks=frozenset({"auth.json", ".env", "sessions"}),
     skills_subdir="skills",
     session_dir_persistent=True,
+    supports_model_invocation_gating=False,
 )

@@ -668,6 +668,18 @@ class DefaultSessionSkillManager:
                 else:
                     logger.debug("init_session_subset_skip", skill=skill_info.name)
                 continue
+            if (
+                not cook_session
+                and skill_info.name in tier2_skills
+                and backend is not None
+                and not backend.capabilities.supports_model_invocation_gating
+            ):
+                logger.debug(
+                    "init_session_tier2_capability_omit",
+                    skill=skill_info.name,
+                    backend=backend.name,
+                )
+                continue
             gated = (not cook_session) and (skill_info.name in tier2_skills)
             if gated and (allow_only is None or skill_info.name not in allow_only):
                 logger.debug("init_session_tier2_omit", skill=skill_info.name)

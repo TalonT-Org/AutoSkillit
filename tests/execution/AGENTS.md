@@ -156,3 +156,4 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_codex_deterministic_conformance.py` | Sealed-enum vocabulary, hook event format, and config.toml schema template conformance tests with --update-fixtures review gate |
 | `test_cmd_builder.py` | CmdBuilder ordering invariant and CmdSpec origin tests |
 | `test_coding_agent_backend_conformance.py` | Parametrized conformance tests for all CodingAgentBackend implementations via BackendContractBase |
+| `test_cli_conformance_probes.py` | Live Codex CLI conformance probes: CODEX_SMOKE_TEST-gated probe class wiring real codex exec through shared assertion functions with ProbeCache and CanaryIssueUpdater |

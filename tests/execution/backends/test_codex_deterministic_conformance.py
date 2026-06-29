@@ -33,6 +33,13 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "codex_ndjson"
 _NON_UNKNOWN_EVENT_TYPES = [m for m in CodexEventType if m != CodexEventType.UNKNOWN]
 _NON_UNKNOWN_ITEM_TYPES = [m for m in CodexItemType if m != CodexItemType.UNKNOWN]
 
+_MCP_KEY_EXPECTED_TYPES: dict[str, str] = {
+    "command": "str",
+    "env_vars": "list",
+    "startup_timeout_sec": "float",
+    "tool_timeout_sec": "float",
+}
+
 
 def _sanitize_hooks(hooks: dict[str, list[dict]]) -> dict[str, list[dict]]:
     """Replace machine-specific paths and hashes with deterministic placeholders."""
@@ -58,13 +65,7 @@ def _generate_config_template() -> dict:
     return {
         "_codex_mcp_required_keys": sorted(CODEX_MCP_REQUIRED_KEYS),
         "mcp_server_entry_required_keys": {
-            key: {
-                "expected_type": "str"
-                if key in ("command",)
-                else "list"
-                if key == "env_vars"
-                else "float"
-            }
+            key: {"expected_type": _MCP_KEY_EXPECTED_TYPES[key]}
             for key in sorted(CODEX_MCP_REQUIRED_KEYS)
         },
         "top_level_keys": {

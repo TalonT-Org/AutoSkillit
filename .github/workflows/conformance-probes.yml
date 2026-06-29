@@ -105,9 +105,10 @@ jobs:
         if: failure()
         env:
           CANARY_STATE_FILE: ${{ github.workspace }}/.autoskillit/temp/canary-state-codex.json
+          CLI_VERSION: ${{ steps.resolve-version.outputs.cli_version }}
         run: |
           scripts/post-probe-failure.sh codex \
-            "${{ steps.resolve-version.outputs.cli_version }}" \
+            "$CLI_VERSION" \
             schema \
             "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
@@ -193,8 +194,9 @@ jobs:
         if: failure()
         env:
           CANARY_STATE_FILE: ${{ github.workspace }}/.autoskillit/temp/canary-state-claude.json
+          CLI_VERSION: ${{ steps.resolve-version.outputs.cli_version }}
         run: |
           scripts/post-probe-failure.sh claude \
-            "${{ steps.resolve-version.outputs.cli_version }}" \
+            "$CLI_VERSION" \
             schema \
             "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

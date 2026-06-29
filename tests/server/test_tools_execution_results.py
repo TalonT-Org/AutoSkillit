@@ -837,7 +837,7 @@ class TestRunSkillPostSerializationValidation:
         data = json.loads(result_json)
         assert data["success"] is False
         assert data["retriable"] is True
-        assert "exit_code" in data["error"]
+        assert "missing" in data["error"].lower() and "exit_code" in data["error"]
 
     @pytest.mark.anyio
     async def test_valid_to_json_passes_through_unchanged(
@@ -873,6 +873,7 @@ class TestRunSkillPostSerializationValidation:
         assert data["exit_code"] == 0
         assert "retriable" not in data  # No envelope wrapping
         assert data["subtype"] == "success"
+        assert result_json == valid.to_json()
 
 
 class TestCwdExistenceValidation:

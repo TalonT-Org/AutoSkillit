@@ -10,6 +10,8 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import CAPABILITY_INGREDIENT_TO_SKIP_GUARD, YAMLError, load_yaml
+from autoskillit.recipe._analysis_bfs import bfs_reachable
+from autoskillit.recipe._analysis_graph import _build_step_graph
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
@@ -168,6 +170,7 @@ def _compute_capability_feasibility(
             skip_resolutions=skip_resolutions,
             pre_prune_steps=pre_prune_steps,
             post_prune_steps=steps,
+            post_prune_recipe=post_prune_recipe,
         ):
             continue
         infeasible.append(step_name)
@@ -182,8 +185,15 @@ def _is_vacuous_gate(
     skip_resolutions: dict[str, bool | None] | None,
     pre_prune_steps: dict[str, Any] | None,
     post_prune_steps: dict[str, Any],
+    post_prune_recipe: Any,
 ) -> bool:
-    """Return True if the gate is vacuous — its guarded operations were all pruned."""
+    """Return True if the gate is vacuous — its guarded operations were all pruned
+    AND the gate step is unreachable in the post-prune flow graph.
+
+    A gate whose guarded steps are all pruned is only vacuous if no surviving
+    step routes to it. Route-repair in `_prune_skipped_steps` can redirect
+    upstream steps directly to the gate, making it reachable and executable.
+    """
     if skip_resolutions is None or pre_prune_steps is None:
         return False
     for cap_key in gate_input_keys:
@@ -210,7 +220,33 @@ def _is_vacuous_gate(
                 break
         if live_uses_capability:
             return False
+    if _gate_reachable_post_prune(post_prune_recipe, gate_step_name):
+        return False
     return True
+
+
+def _gate_reachable_post_prune(post_prune_recipe: Any, gate_step_name: str) -> bool:
+    """Return True if gate_step_name is reachable from the entry step in the
+    post-prune flow graph.
+
+    Uses `_analysis_graph._build_step_graph` (which handles on_exhausted edges,
+    on_result.routes legacy format, and skip_when_false bypass edges) plus
+    `bfs_reachable` from `_analysis_bfs`. Entry step is determined by the
+    no-in-edges heuristic (matches `rules_reachability.py:89-93`).
+    """
+    if not post_prune_recipe or not getattr(post_prune_recipe, "steps", None):
+        return False
+    graph = _build_step_graph(post_prune_recipe)
+    all_targets = {t for targets in graph.values() for t in targets}
+    entry = next(
+        (name for name in post_prune_recipe.steps if name not in all_targets),
+        next(iter(post_prune_recipe.steps), None),
+    )
+    if entry is None:
+        return False
+    if gate_step_name == entry:
+        return True
+    return gate_step_name in bfs_reachable(graph, entry)
 
 
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:

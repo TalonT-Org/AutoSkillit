@@ -152,6 +152,34 @@ def test_compute_capability_feasibility_receives_skip_resolutions() -> None:
     pytest.fail("load_and_validate function not found in _api.py")
 
 
+def test_compute_capability_feasibility_forwards_post_prune_recipe() -> None:
+    """_compute_capability_feasibility must pass post_prune_recipe to
+    _is_vacuous_gate so the reachability guard has access to the full Recipe
+    object for graph analysis."""
+    comp_path = SRC_ROOT / "recipe" / "_recipe_composition.py"
+    tree = ast.parse(comp_path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "_compute_capability_feasibility"
+        ):
+            for child in ast.walk(node):
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Name)
+                    and child.func.id == "_is_vacuous_gate"
+                ):
+                    kw_names = {kw.arg for kw in child.keywords if kw.arg is not None}
+                    assert "post_prune_recipe" in kw_names, (
+                        "_compute_capability_feasibility must pass post_prune_recipe "
+                        "kwarg to _is_vacuous_gate for reachability-aware vacuity "
+                        "detection."
+                    )
+                    return
+            pytest.fail("_is_vacuous_gate call not found in _compute_capability_feasibility")
+    pytest.fail("_compute_capability_feasibility function not found in _recipe_composition.py")
+
+
 def test_dispatch_food_truck_injects_capability_overrides() -> None:
     """dispatch_food_truck must reference _build_capability_overrides to inject
     backend capability signals into the load_and_validate call."""

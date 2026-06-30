@@ -84,6 +84,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_promote_to_main_wrapper.py` | Tests for the promote-to-main wrapper recipe |
 | `test_pseudocode_sync_rule.py` | Tests for the pseudocode-callable-divergence semantic rule |
 | `test_recipe_backend_composition_matrix.py` | Recipe x backend composition matrix: parametrized CI gate validating every (recipe, backend) combination with declared-unsupported and known-broken governance |
+| `test_recipe_composition_vacuous_gate.py` | Tests for reachability-aware `_is_vacuous_gate`: gate reachable post-prune is NOT vacuous, unreachable gate IS vacuous, all bundled gate-equipped recipes must report dispatch_feasible=False under codex |
 | `test_recipe_ci_applicable_routing.py` | Structural tests for ci_applicable routing guards across all wait_for_ci chains |
 | `test_recipe_ci_contracts.py` | Cross-recipe ci_event/branch coherence and remote_url structural tests |
 | `test_recipe_ci_watch_event.py` | Tests for CI watch event in recipe steps |

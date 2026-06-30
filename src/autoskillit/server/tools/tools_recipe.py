@@ -243,6 +243,14 @@ async def load_recipe(
                     f"Recipe is infeasible on current backend: "
                     f"steps {result.get('infeasible_steps', [])} route to terminal failure."
                 )
+                return json.dumps(
+                    {
+                        "success": False,
+                        "dispatch_infeasible": True,
+                        "infeasible_steps": result.get("infeasible_steps", []),
+                        "user_visible_message": result["user_visible_message"],
+                    }
+                )
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
             _required_keys: frozenset[str] = frozenset()

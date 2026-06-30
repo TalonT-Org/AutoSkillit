@@ -29,10 +29,11 @@ def test_capability_gate_callables_includes_gate_backend_write() -> None:
     assert "gate_backend_write" in CAPABILITY_GATE_CALLABLES
 
 
-def test_codex_backend_produces_feasible_recipe_via_vacuous_gate() -> None:
+def test_codex_backend_reachable_gate_returns_infeasible() -> None:
     """Codex + implementation recipe chain: backend_supports_git_write=false
-    produces dispatch_feasible=True because vacuous-gate detection recognises
-    all guarded steps were pruned."""
+    produces dispatch_feasible=False because the reachable gate (post-prune
+    route-repair redirects create_impl_worktree.on_success to gate_backend_write)
+    blocks dispatch via admission control."""
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,
@@ -40,8 +41,8 @@ def test_codex_backend_produces_feasible_recipe_via_vacuous_gate() -> None:
         backend_name="codex",
     )
     assert result.get("valid") is True
-    assert result.get("dispatch_feasible") is True
-    assert "gate_backend_write" not in result.get("infeasible_steps", [])
+    assert result.get("dispatch_feasible") is False
+    assert "gate_backend_write" in result.get("infeasible_steps", [])
 
 
 def test_claude_code_backend_produces_feasible_recipe() -> None:

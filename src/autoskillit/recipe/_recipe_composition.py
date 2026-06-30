@@ -168,6 +168,7 @@ def _compute_capability_feasibility(
             skip_resolutions=skip_resolutions,
             pre_prune_steps=pre_prune_steps,
             post_prune_steps=steps,
+            post_prune_recipe=post_prune_recipe,
         ):
             continue
         infeasible.append(step_name)
@@ -182,8 +183,15 @@ def _is_vacuous_gate(
     skip_resolutions: dict[str, bool | None] | None,
     pre_prune_steps: dict[str, Any] | None,
     post_prune_steps: dict[str, Any],
+    post_prune_recipe: Any,
 ) -> bool:
-    """Return True if the gate is vacuous — its guarded operations were all pruned."""
+    """Return True if the gate is vacuous — its guarded operations were all pruned
+    AND the gate step is unreachable in the post-prune flow graph.
+
+    A gate whose guarded steps are all pruned is only vacuous if no surviving
+    step routes to it. Route-repair in `_prune_skipped_steps` can redirect
+    upstream steps directly to the gate, making it reachable and executable.
+    """
     if skip_resolutions is None or pre_prune_steps is None:
         return False
     for cap_key in gate_input_keys:
@@ -210,7 +218,32 @@ def _is_vacuous_gate(
                 break
         if live_uses_capability:
             return False
+    if _gate_reachable_post_prune(post_prune_recipe, gate_step_name):
+        return False
     return True
+
+
+def _gate_reachable_post_prune(post_prune_recipe: Any, gate_step_name: str) -> bool:
+    """Return True if any surviving step routes to gate_step_name.
+
+    Uses `_collect_all_route_targets` to check all routing fields
+    (on_success, on_failure, on_context_limit, on_rate_limit, on_exhausted,
+    on_result conditions/routes). A gate with at least one incoming routing
+    edge from a surviving step is considered reachable.
+
+    BFS from entry is insufficient because unrelated pruning (e.g.
+    claim_and_resolve with a default-condition redirect to a failure step)
+    can disconnect the entry step from the main pipeline while the gate
+    remains routable via other surviving steps.
+    """
+    if not post_prune_recipe or not getattr(post_prune_recipe, "steps", None):
+        return False
+    for step_name, step in post_prune_recipe.steps.items():
+        if step_name == gate_step_name:
+            continue
+        if gate_step_name in _collect_all_route_targets(step):
+            return True
+    return False
 
 
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:

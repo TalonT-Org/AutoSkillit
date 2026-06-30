@@ -496,11 +496,12 @@ class TestRealCompositionPruning:
         )
 
     @pytest.mark.anyio
-    async def test_codex_open_kitchen_returns_success(self, tmp_path: Path) -> None:
+    async def test_codex_open_kitchen_blocks_on_reachable_gate(self, tmp_path: Path) -> None:
         """End-to-end integration: open_kitchen with codex backend on the bundled
-        implementation recipe must return success=True because vacuous-gate
-        detection recognises that all backend_supports_git_write-guarded steps
-        were pruned, making gate_backend_write vacuous.
+        implementation recipe must hard-block because gate_backend_write is reachable
+        post-prune (route-repair redirects create_impl_worktree.on_success to the
+        gate after implement is pruned). Admission control reports dispatch_feasible=False
+        and open_kitchen must reject the pipeline.
         """
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
@@ -554,11 +555,13 @@ class TestRealCompositionPruning:
 
             result = json.loads(result_str)
 
-        assert result.get("success") is True, (
-            f"open_kitchen must accept codex backend (vacuous gate); got: {result}"
+        assert result.get("success") is False, (
+            f"open_kitchen must hard-block codex backend (reachable gate); got: {result}"
         )
-        assert result.get("dispatch_feasible") is True, (
-            "dispatch_feasible must be True when "
-            f"gate_backend_write is vacuous; got: "
-            f"{result.get('dispatch_feasible')}"
+        assert result.get("kitchen") == "dispatch_infeasible", (
+            "kitchen must be 'dispatch_infeasible' when gate_backend_write is "
+            f"reachable post-prune; got: {result.get('kitchen')!r}"
+        )
+        assert "gate_backend_write" in result.get("infeasible_steps", []), (
+            f"infeasible_steps must list gate_backend_write; got: {result.get('infeasible_steps')}"
         )

@@ -266,8 +266,9 @@ def test_card_and_semantic_rules_agree_on_errors(recipe_name: str, tmp_path: Pat
 
 
 def test_codex_implementation_dispatch_infeasible() -> None:
-    """Codex backend + implementation recipe must report dispatch_feasible=True
-    when gate_backend_write is vacuous (all guarded steps were pruned)."""
+    """Codex backend + implementation recipe must report dispatch_feasible=False
+    when gate_backend_write is reachable post-prune (route-repair redirects
+    upstream steps to the gate after implement is pruned)."""
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,
@@ -275,11 +276,12 @@ def test_codex_implementation_dispatch_infeasible() -> None:
         backend_name="codex",
     )
     assert result["valid"] is True
-    assert result.get("dispatch_feasible") is True, (
-        "When all backend_supports_git_write-gated steps are pruned, "
-        "gate_backend_write is vacuous and should NOT block dispatch."
+    assert result.get("dispatch_feasible") is False, (
+        "When implement is pruned but create_impl_worktree.on_success is "
+        "route-repaired to gate_backend_write, the gate is reachable and "
+        "must block dispatch as infeasible."
     )
-    assert "gate_backend_write" not in result.get("infeasible_steps", [])
+    assert "gate_backend_write" in result.get("infeasible_steps", [])
 
 
 def test_claude_implementation_dispatch_feasible() -> None:
@@ -328,10 +330,13 @@ _CAPABILITY_GATE_RECIPES = _discover_capability_gate_recipes()
 
 @pytest.mark.parametrize("recipe_name", _CAPABILITY_GATE_RECIPES)
 def test_codex_capability_gate_recipes(recipe_name: str) -> None:
-    """Every recipe with a gate_backend_write step must pass vacuous-gate
-    detection under codex overrides — either dispatch_feasible=True (gate
-    is vacuous) or dispatch_feasible=False with gate in infeasible_steps
-    (gate guards live steps)."""
+    """Every recipe with a gate_backend_write step must report dispatch_feasible=False
+    with gate_backend_write in infeasible_steps when the gate is reachable post-prune.
+
+    Route-repair in _prune_skipped_steps redirects create_impl_worktree.on_success
+    to gate_backend_write after pruning the guarded steps, making the gate reachable
+    from the entry step. Admission control must identify this as an infeasible pipeline.
+    """
     result = load_and_validate(
         recipe_name,
         project_dir=_PROJECT_ROOT,
@@ -339,12 +344,12 @@ def test_codex_capability_gate_recipes(recipe_name: str) -> None:
         backend_name="codex",
     )
     assert result.get("valid") is True
-    dispatch_feasible = result.get("dispatch_feasible")
-    infeasible_steps = result.get("infeasible_steps", [])
-    if dispatch_feasible is True:
-        assert "gate_backend_write" not in infeasible_steps
-    else:
-        assert dispatch_feasible is False, (
-            f"Expected dispatch_feasible to be explicitly False, got {dispatch_feasible!r}"
-        )
-        assert "gate_backend_write" in infeasible_steps
+    assert result.get("dispatch_feasible") is False, (
+        f"Recipe '{recipe_name}' must report dispatch_feasible=False when "
+        f"gate_backend_write is reachable post-prune; got: "
+        f"{result.get('dispatch_feasible')!r}"
+    )
+    assert "gate_backend_write" in result.get("infeasible_steps", []), (
+        f"Recipe '{recipe_name}' must list gate_backend_write in infeasible_steps; "
+        f"got: {result.get('infeasible_steps')}"
+    )

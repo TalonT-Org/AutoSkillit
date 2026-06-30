@@ -10,8 +10,6 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import CAPABILITY_INGREDIENT_TO_SKIP_GUARD, YAMLError, load_yaml
-from autoskillit.recipe._analysis_bfs import bfs_reachable
-from autoskillit.recipe._analysis_graph import _build_step_graph
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
@@ -226,27 +224,26 @@ def _is_vacuous_gate(
 
 
 def _gate_reachable_post_prune(post_prune_recipe: Any, gate_step_name: str) -> bool:
-    """Return True if gate_step_name is reachable from the entry step in the
-    post-prune flow graph.
+    """Return True if any surviving step routes to gate_step_name.
 
-    Uses `_analysis_graph._build_step_graph` (which handles on_exhausted edges,
-    on_result.routes legacy format, and skip_when_false bypass edges) plus
-    `bfs_reachable` from `_analysis_bfs`. Entry step is determined by the
-    no-in-edges heuristic (matches `rules_reachability.py:89-93`).
+    Uses `_collect_all_route_targets` to check all routing fields
+    (on_success, on_failure, on_context_limit, on_rate_limit, on_exhausted,
+    on_result conditions/routes). A gate with at least one incoming routing
+    edge from a surviving step is considered reachable.
+
+    BFS from entry is insufficient because unrelated pruning (e.g.
+    claim_and_resolve with a default-condition redirect to a failure step)
+    can disconnect the entry step from the main pipeline while the gate
+    remains routable via other surviving steps.
     """
     if not post_prune_recipe or not getattr(post_prune_recipe, "steps", None):
         return False
-    graph = _build_step_graph(post_prune_recipe)
-    all_targets = {t for targets in graph.values() for t in targets}
-    entry = next(
-        (name for name in post_prune_recipe.steps if name not in all_targets),
-        next(iter(post_prune_recipe.steps), None),
-    )
-    if entry is None:
-        return False
-    if gate_step_name == entry:
-        return True
-    return gate_step_name in bfs_reachable(graph, entry)
+    for step_name, step in post_prune_recipe.steps.items():
+        if step_name == gate_step_name:
+            continue
+        if gate_step_name in _collect_all_route_targets(step):
+            return True
+    return False
 
 
 def _drop_sub_recipe_step(recipe: Any, step_name: str) -> Any:

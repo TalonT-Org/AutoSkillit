@@ -39,6 +39,7 @@ class _StubStep:
     on_result: object | None = None
     skip_when_false: str | None = None
     optional: bool = False
+    sub_recipe: str | None = None
 
 
 @dataclass

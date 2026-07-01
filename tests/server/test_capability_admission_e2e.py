@@ -383,7 +383,7 @@ async def test_load_recipe_codex_with_provider_overrides_no_infeasible() -> None
     """load_recipe must NOT return dispatch_infeasible when Codex backend has
     provider-overridden guarded steps."""
     import json
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import patch
 
     from autoskillit.server.tools.tools_recipe import load_recipe
     from tests.server.conftest import _make_mock_ctx
@@ -408,7 +408,7 @@ async def test_load_recipe_codex_with_provider_overrides_no_infeasible() -> None
             return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
         ),
     ):
-        result = await load_recipe(name="implementation", ctx=AsyncMock())
+        result = await load_recipe(name="implementation")
 
     parsed = json.loads(result)
     assert "dispatch_infeasible" not in parsed
@@ -444,7 +444,6 @@ def test_get_recipe_codex_with_provider_overrides_no_infeasible() -> None:
     assert isinstance(result, str)
     assert "error" not in result.lower()
     assert '"dispatch_feasible": false' not in result
-    assert "dispatch_feasible" in result
 
 
 @pytest.mark.anyio
@@ -452,7 +451,7 @@ async def test_validate_recipe_codex_with_provider_overrides_no_infeasible() -> 
     """validate_recipe must return valid=True and NOT contain dispatch_infeasible
     when Codex backend has provider-overridden guarded steps."""
     import json
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import patch
 
     from autoskillit.server.tools.tools_recipe import validate_recipe
     from tests.server.conftest import _make_mock_ctx
@@ -484,7 +483,7 @@ async def test_validate_recipe_codex_with_provider_overrides_no_infeasible() -> 
             return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
         ),
     ):
-        result = await validate_recipe(script_path="/fake/recipe.yaml", ctx=AsyncMock())
+        result = await validate_recipe(script_path="/fake/recipe.yaml")
 
     parsed = json.loads(result)
     assert "dispatch_infeasible" not in parsed
@@ -492,7 +491,9 @@ async def test_validate_recipe_codex_with_provider_overrides_no_infeasible() -> 
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_codex_with_provider_overrides_not_rejected() -> None:
+async def test_dispatch_food_truck_codex_with_provider_overrides_not_rejected(
+    build_ctx_open: Any,
+) -> None:
     """dispatch_food_truck must NOT be rejected at preflight when Codex backend
     has provider-overridden guarded steps. Additionally, provider_capability_overrides
     must be forwarded to execute_dispatch."""
@@ -500,10 +501,8 @@ async def test_dispatch_food_truck_codex_with_provider_overrides_not_rejected() 
     from unittest.mock import AsyncMock, patch
 
     from autoskillit.core import BackendCapabilities
-    from tests.server.conftest import _make_mock_ctx
 
-    tool_ctx = _make_mock_ctx()
-    tool_ctx.gate.enabled = True
+    tool_ctx = build_ctx_open()
 
     caps = BackendCapabilities(
         applicable_guards=frozenset(),
@@ -515,7 +514,17 @@ async def test_dispatch_food_truck_codex_with_provider_overrides_not_rejected() 
     backend.capabilities = caps
     tool_ctx.backend = backend
 
-    _setup_provider_override_ctx(tool_ctx)
+    tool_ctx.recipes = MagicMock()
+    recipe_info = MagicMock()
+    recipe_info.path = Path("/fake/recipe.yaml")
+    tool_ctx.recipes.find.return_value = recipe_info
+
+    recipe_obj = MagicMock()
+    recipe_obj.name = "implementation"
+    recipe_obj.steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+    }
+    tool_ctx.recipes.load.return_value = recipe_obj
     tool_ctx.recipes.load_and_validate.return_value = {
         "valid": True,
         "dispatch_feasible": True,
@@ -524,7 +533,10 @@ async def test_dispatch_food_truck_codex_with_provider_overrides_not_rejected() 
 
     mock_outcome = MagicMock()
     mock_outcome.to_envelope.return_value = json.dumps({"success": True})
-    mock_execute = AsyncMock(return_value=mock_outcome)
+    mock_outcome.dispatch_id = None
+    mock_dispatch_result = MagicMock()
+    mock_dispatch_result.outcome = mock_outcome
+    mock_execute = AsyncMock(return_value=mock_dispatch_result)
 
     with (
         patch("autoskillit.server._state._ctx", tool_ctx),

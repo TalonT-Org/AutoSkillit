@@ -198,6 +198,8 @@ class DispatchEnvelopeResult(TypedDict, total=False):
     error: str
     user_visible_message: str
     details: dict[str, Any] | None
+    missing_provider_steps: list[str]
+    escape_hatch: str
 
 
 class _ToolFailureEnvelopeRequired(TypedDict):

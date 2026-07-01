@@ -755,6 +755,251 @@ def test_non_base_url_provider_extras_bail() -> None:
     assert detail.bail_step is not None
 
 
+def test_partial_override_real_recipe_nine_steps() -> None:
+    """Test 1E: full 9-step guarded set, single step overridden, bails on next."""
+    from unittest.mock import patch
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.core import CapabilityResolutionDetail
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    _GIT_WRITE_STEPS = {
+        "implement",
+        "fix",
+        "merge_gate_fix",
+        "retry_worktree",
+        "rebase_conflict_fix",
+        "resolve_review",
+        "resolve_pre_review_conflicts",
+        "resolve_pre_resolve_conflicts",
+        "resolve_ci",
+    }
+    backend = _make_codex_backend()
+    providers = ProvidersConfig(
+        profiles={"minimax": {}},
+        step_overrides={"implement": "minimax"},
+    )
+    steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "fix": _make_recipe_step("fix", provider=""),
+        "merge_gate_fix": _make_recipe_step("merge_gate_fix", provider=""),
+        "retry_worktree": _make_recipe_step("retry_worktree", provider=""),
+        "rebase_conflict_fix": _make_recipe_step("rebase_conflict_fix", provider=""),
+        "resolve_review": _make_recipe_step("resolve_review", provider=""),
+        "resolve_pre_review_conflicts": _make_recipe_step(
+            "resolve_pre_review_conflicts", provider=""
+        ),
+        "resolve_pre_resolve_conflicts": _make_recipe_step(
+            "resolve_pre_resolve_conflicts", provider=""
+        ),
+        "resolve_ci": _make_recipe_step("resolve_ci", provider=""),
+    }
+
+    def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
+        if step_provider == "minimax":
+            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+        return ("", None)
+
+    with patch(
+        "autoskillit.server._guards._resolve_provider_profile",
+        side_effect=_per_step_resolve,
+    ):
+        result, detail = _provider_aware_capability_overrides(
+            backend,
+            "implementation",
+            providers,
+            steps,  # type: ignore[arg-type]
+        )
+    assert isinstance(detail, CapabilityResolutionDetail)
+    assert detail.resolution_path == "partial_bail"
+    assert detail.bail_step in _GIT_WRITE_STEPS - {"implement"}
+    assert result == {"backend_supports_git_write": "false"}
+
+
+@pytest.mark.anyio
+async def test_all_infeasibility_paths_have_escape_hatch(build_ctx_open: Any) -> None:
+    """Test 1F: structural parity — all three infeasibility paths plus preflight
+    include ``escape_hatch`` and ``missing_provider_steps`` in their JSON response.
+    """
+    import json
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from autoskillit.core import BackendCapabilities, CapabilityResolutionDetail
+    from autoskillit.server.tools.tools_kitchen import _dispatch_infeasible_response
+    from tests.server.conftest import _make_mock_ctx
+
+    detail = CapabilityResolutionDetail(
+        resolved_steps=(("implement", "minimax", True), ("fix", "", False)),
+        bail_step="fix",
+        resolution_path="partial_bail",
+    )
+
+    # Path 1: _dispatch_infeasible_response (kitchen)
+    result_dict = {
+        "infeasible_steps": ["gate_backend_write"],
+        "ingredients_table": None,
+    }
+    gate = MagicMock()
+    ctx = AsyncMock()
+    parsed = json.loads(
+        await _dispatch_infeasible_response(
+            result_dict, _make_codex_backend(), gate, ctx, capability_detail=detail
+        )
+    )
+    assert "escape_hatch" in parsed
+    assert "missing_provider_steps" in parsed
+
+    # Path 2: load_recipe (recipe)
+    tool_ctx = _make_mock_ctx()
+    tool_ctx.gate.enabled = True
+    tool_ctx.kitchen_id = "test-kitchen"
+
+    from types import SimpleNamespace
+
+    tool_ctx.backend = MagicMock()
+    tool_ctx.backend.name = "codex"
+    tool_ctx.backend.capabilities = SimpleNamespace(
+        git_metadata_writable=False,
+        anthropic_provider_capable=False,
+    )
+
+    recipe_info = MagicMock()
+    recipe_info.path = Path("/fake/recipe.yaml")
+    tool_ctx.recipes.find.return_value = recipe_info
+
+    recipe_obj = MagicMock()
+    recipe_obj.name = "implementation"
+    recipe_obj.steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "fix": _make_recipe_step("fix", provider=""),
+    }
+    tool_ctx.recipes.load.return_value = recipe_obj
+    tool_ctx.recipes.load_and_validate.return_value = {
+        **_make_feasible_load_result(),
+        "dispatch_feasible": False,
+        "infeasible_steps": ["gate_backend_write"],
+    }
+
+    def _per_step_resolve_recipe(_step_name, _recipe_name, _config_providers, step_provider=""):
+        if step_provider == "minimax":
+            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+        return ("", None)
+
+    with (
+        patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=tool_ctx,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_recipe._require_enabled",
+            return_value=None,
+        ),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            side_effect=_per_step_resolve_recipe,
+        ),
+    ):
+        from autoskillit.server.tools.tools_recipe import load_recipe
+
+        recipe_result = await load_recipe(name="implementation", ctx=AsyncMock())
+    parsed = json.loads(recipe_result)
+    assert "escape_hatch" in parsed
+    assert "missing_provider_steps" in parsed
+
+    # Path 3: dispatch_food_truck (fleet dispatch)
+    ft_ctx = build_ctx_open()
+    caps = BackendCapabilities(
+        applicable_guards=frozenset(),
+        anthropic_provider_capable=False,
+        git_metadata_writable=False,
+    )
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities = caps
+    ft_ctx.backend = backend
+
+    ft_ctx.recipes = MagicMock()
+    recipe_info = MagicMock()
+    recipe_info.path = Path("/fake/recipe.yaml")
+    ft_ctx.recipes.find.return_value = recipe_info
+
+    recipe_obj = MagicMock()
+    recipe_obj.name = "implementation"
+    recipe_obj.steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "fix": _make_recipe_step("fix", provider=""),
+    }
+    ft_ctx.recipes.load.return_value = recipe_obj
+    ft_ctx.recipes.load_and_validate.return_value = {
+        "valid": True,
+        "dispatch_feasible": False,
+        "infeasible_steps": ["gate_backend_write"],
+        "post_prune_step_names": ["implement"],
+    }
+
+    def _per_step_resolve_fleet(_step_name, _recipe_name, _config_providers, step_provider=""):
+        if step_provider == "minimax":
+            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+        return ("", None)
+
+    with (
+        patch("autoskillit.server._state._ctx", ft_ctx),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            side_effect=_per_step_resolve_fleet,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_fleet_dispatch._require_fleet",
+            lambda _name: None,
+        ),
+    ):
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        fleet_result = await dispatch_food_truck(
+            recipe="implementation",
+            task="test task",
+            ctx=AsyncMock(),
+        )
+    parsed = json.loads(fleet_result)
+    assert "escape_hatch" in parsed
+    assert "missing_provider_steps" in parsed
+
+    # Cross-validation: _check_dispatch_feasibility (preflight)
+    from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+
+    preflight_backend = MagicMock()
+    preflight_backend.name = "codex"
+    preflight_backend.capabilities = SimpleNamespace(
+        anthropic_provider_capable=False,
+        applicable_guards=frozenset({"some_guard"}),
+    )
+    preflight_step = MagicMock()
+    preflight_step.tool = "run_skill"
+    preflight_step.provider = ""
+    preflight_steps = {"some_step": preflight_step}
+
+    with (
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("", None),
+        ),
+        patch(
+            "autoskillit.server.tools._preflight._get_fix_required_hook_matchers",
+            return_value=["some_matcher"],
+        ),
+    ):
+        preflight_result = _check_dispatch_feasibility(
+            ["some_step"],
+            preflight_steps,
+            preflight_backend,
+            MagicMock(),
+            recipe_name="implementation",
+        )
+    assert preflight_result is not None
+    parsed = json.loads(preflight_result)
+    assert "escape_hatch" in parsed
+
+
 @pytest.mark.anyio
 async def test_load_recipe_partial_override_infeasible_includes_provider_guidance() -> None:
     """Test 1G: load_recipe with Codex + partial provider overrides returns
@@ -892,3 +1137,5 @@ async def test_dispatch_food_truck_partial_override_infeasible_includes_guidance
     parsed = json.loads(result)
     assert "fleet_recipe_invalid" in parsed.get("error", "")
     assert "ANTHROPIC_BASE_URL" in parsed.get("user_visible_message", "")
+    assert "missing_provider_steps" in parsed
+    assert "escape_hatch" in parsed

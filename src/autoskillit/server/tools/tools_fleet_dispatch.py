@@ -363,6 +363,21 @@ async def dispatch_food_truck(
                     f"{_missing}. Example config: "
                     f"providers.recipe_overrides.<recipe>.*: <profile>"
                 )
+                logger.warning(
+                    "dispatch_food_truck_capability_infeasible",
+                    recipe=recipe,
+                    infeasible_steps=_infeasible_steps,
+                )
+                _err_envelope = json.loads(
+                    fleet_error(FleetErrorCode.FLEET_RECIPE_INVALID, _infeasible_msg)
+                )
+                _err_envelope["missing_provider_steps"] = _missing
+                _err_envelope["escape_hatch"] = (
+                    f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
+                    f"{_missing}. Example config: "
+                    f"providers.recipe_overrides.<recipe>.*: <profile>"
+                )
+                return json.dumps(_err_envelope)
             logger.warning(
                 "dispatch_food_truck_capability_infeasible",
                 recipe=recipe,

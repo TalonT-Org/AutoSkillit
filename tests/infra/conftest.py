@@ -73,6 +73,15 @@ def _dispatch_food_truck_json_producer() -> dict:
         dispatch_id="d2",
     )
     error_str = fleet_error(FleetErrorCode.FLEET_ACQUIRE_TIMEOUT, "could not acquire lock")
+    partial_bail_envelope = {
+        "success": False,
+        "error": str(FleetErrorCode.FLEET_RECIPE_INVALID),
+        "user_visible_message": "partial bail",
+        "details": None,
+        "missing_provider_steps": ["fix"],
+        "escape_hatch": "Add provider overrides...",
+    }
+    partial_bail_str = json.dumps(partial_bail_envelope)
     result: dict = {}
     for envelope_str in (
         base.to_envelope(),
@@ -80,6 +89,7 @@ def _dispatch_food_truck_json_producer() -> dict:
         completed_failure.to_envelope(),
         rejected.to_envelope(),
         error_str,
+        partial_bail_str,
     ):
         result.update(json.loads(envelope_str))
     return result

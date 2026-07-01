@@ -455,11 +455,11 @@ def get_recipe(name: str) -> str:
 
     _defaults = resolve_ingredient_defaults(ctx.project_dir)
     _config_layer = build_config_authoritative_layer(_defaults)
-    _raw_recipe = ctx.recipes.load(match.path)
-    _backend_overrides = _provider_aware_capability_overrides(
-        ctx.backend, name, ctx.config.providers, _raw_recipe.steps
-    )
     try:
+        _raw_recipe = ctx.recipes.load(match.path)
+        _backend_overrides = _provider_aware_capability_overrides(
+            ctx.backend, name, ctx.config.providers, _raw_recipe.steps
+        )
         result = ctx.recipes.load_and_validate(
             name,
             ctx.project_dir,

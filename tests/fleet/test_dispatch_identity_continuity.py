@@ -32,3 +32,19 @@ class TestDispatchFoodTruckPriorDispatchId:
 
         sig = inspect.signature(dispatch_food_truck)
         assert "prior_dispatch_id" in sig.parameters
+
+
+class TestProviderCapabilityOverridesParameter:
+    async def test_execute_dispatch_accepts_provider_capability_overrides(self) -> None:
+        """execute_dispatch must accept provider_capability_overrides parameter."""
+        from autoskillit.fleet._api import execute_dispatch
+
+        sig = inspect.signature(execute_dispatch)
+        assert "provider_capability_overrides" in sig.parameters
+
+    async def test_run_dispatch_accepts_provider_capability_overrides(self) -> None:
+        """_run_dispatch must accept provider_capability_overrides parameter."""
+        from autoskillit.fleet._api import _run_dispatch
+
+        sig = inspect.signature(_run_dispatch)
+        assert "provider_capability_overrides" in sig.parameters

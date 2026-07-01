@@ -7,6 +7,8 @@ load_and_validate to the dispatch_feasible signal.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -69,7 +71,10 @@ def test_capability_override_parity() -> None:
     from unittest.mock import MagicMock
 
     from autoskillit.fleet._api import _build_capability_overrides
-    from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
+    from autoskillit.server.tools._auto_overrides import (
+        _backend_capability_overrides,
+        _provider_aware_capability_overrides,
+    )
 
     for writable in (True, False):
         backend = MagicMock()
@@ -80,6 +85,22 @@ def test_capability_override_parity() -> None:
 
     assert _backend_capability_overrides(None) == _build_capability_overrides(None), (
         "Parity violation for backend=None"
+    )
+
+    # Graceful degradation: _provider_aware_capability_overrides with no provider/steps
+    # input must equal _backend_capability_overrides for all backend states.
+    for writable in (True, False):
+        backend = MagicMock()
+        backend.capabilities.git_metadata_writable = writable
+        backend.capabilities.anthropic_provider_capable = True
+        degraded = _provider_aware_capability_overrides(backend, "", None, None)
+        assert degraded == _backend_capability_overrides(backend), (
+            f"Graceful-degradation violation for git_metadata_writable={writable}"
+        )
+
+    degraded_none = _provider_aware_capability_overrides(None, "", None, None)
+    assert degraded_none == _backend_capability_overrides(None), (
+        "Graceful-degradation violation for backend=None"
     )
 
 
@@ -127,3 +148,423 @@ async def test_open_kitchen_refuses_doa_codex_pipeline() -> None:
     tool_ctx.gate.disable.assert_called_once()
     tool_ctx.gate.enable.assert_not_called()
     fastmcp_ctx.disable_components.assert_called_once_with(tags={"kitchen"})
+
+
+def _make_codex_backend() -> MagicMock:
+    """Return a MagicMock backend resembling Codex (non-git-writable, non-anthropic-capable)."""
+    from types import SimpleNamespace
+
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities = SimpleNamespace(
+        git_metadata_writable=False,
+        anthropic_provider_capable=False,
+    )
+    return backend
+
+
+def _make_claude_backend() -> MagicMock:
+    """Return a MagicMock backend resembling Claude Code (git-writable, anthropic-capable)."""
+    from types import SimpleNamespace
+
+    backend = MagicMock()
+    backend.name = "claude-code"
+    backend.capabilities = SimpleNamespace(
+        git_metadata_writable=True,
+        anthropic_provider_capable=True,
+    )
+    return backend
+
+
+def _make_recipe_step(name: str, provider: str = "") -> MagicMock:
+    """Return a MagicMock recipe step with skip_when_false and optional provider."""
+    step = MagicMock()
+    step.name = name
+    step.tool = "run_skill"
+    step.skip_when_false = "inputs.backend_supports_git_write"
+    step.provider = provider
+    return step
+
+
+def _make_feasible_load_result(
+    post_prune_step_names: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return a load_and_validate result dict for a feasible dispatch."""
+    return {
+        "content": "name: implementation\nsteps:\n  implement:\n    tool: run_skill\n",
+        "valid": True,
+        "errors": [],
+        "requires_packs": [],
+        "requires_features": [],
+        "content_hash": "abc123",
+        "composite_hash": "def456",
+        "recipe_version": "1.0",
+        "suggestions": [],
+        "post_prune_step_names": post_prune_step_names or ["implement", "retry_worktree"],
+        "dispatch_feasible": True,
+    }
+
+
+def _setup_provider_override_ctx(tool_ctx: MagicMock) -> MagicMock:
+    """Configure tool_ctx as a Codex backend with provider-overridden guarded steps."""
+    from types import SimpleNamespace
+
+    tool_ctx.backend = MagicMock()
+    tool_ctx.backend.name = "codex"
+    tool_ctx.backend.capabilities = SimpleNamespace(
+        git_metadata_writable=False,
+        anthropic_provider_capable=False,
+    )
+
+    recipe_info = MagicMock()
+    recipe_info.path = Path("/fake/recipe.yaml")
+    tool_ctx.recipes.find.return_value = recipe_info
+
+    recipe_obj = MagicMock()
+    recipe_obj.name = "implementation"
+    recipe_obj.steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "retry_worktree": _make_recipe_step("retry_worktree", provider="minimax"),
+    }
+    tool_ctx.recipes.load.return_value = recipe_obj
+
+    return tool_ctx
+
+
+def test_provider_aware_capability_override_all_overridden_returns_true() -> None:
+    """All guarded run_skill steps have ANTHROPIC_BASE_URL provider -> returns 'true'."""
+    from unittest.mock import patch
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_codex_backend()
+    providers = ProvidersConfig(
+        profiles={"minimax": {}},
+        step_overrides={
+            "implement": "minimax",
+            "retry_worktree": "minimax",
+            "fix": "minimax",
+        },
+    )
+    steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "retry_worktree": _make_recipe_step("retry_worktree", provider="minimax"),
+        "fix": _make_recipe_step("fix", provider="minimax"),
+    }
+
+    with patch(
+        "autoskillit.server._guards._resolve_provider_profile",
+        return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+    ):
+        result = _provider_aware_capability_overrides(
+            backend,
+            "implementation",
+            providers,
+            steps,  # type: ignore[arg-type]
+        )
+    assert result == {"backend_supports_git_write": "true"}
+
+
+def test_provider_aware_capability_override_partial_overrides_stays_false() -> None:
+    """Partial provider overrides (conservative): capability stays 'false'."""
+    from unittest.mock import patch
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_codex_backend()
+    providers = ProvidersConfig(
+        profiles={"minimax": {}},
+        step_overrides={
+            "implement": "minimax",
+        },
+    )
+    steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "fix": _make_recipe_step("fix", provider=""),
+    }
+
+    def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
+        if step_provider == "minimax":
+            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+        return ("", None)
+
+    with patch(
+        "autoskillit.server._guards._resolve_provider_profile",
+        side_effect=_per_step_resolve,
+    ):
+        result = _provider_aware_capability_overrides(
+            backend,
+            "implementation",
+            providers,
+            steps,  # type: ignore[arg-type]
+        )
+    assert result == {"backend_supports_git_write": "false"}
+
+
+def test_provider_aware_capability_override_no_overrides_preserves_false() -> None:
+    """Codex backend with no provider overrides → backend_supports_git_write stays 'false'."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_codex_backend()
+    providers = ProvidersConfig()
+    steps = {
+        "implement": _make_recipe_step("implement", provider=""),
+    }
+
+    result = _provider_aware_capability_overrides(
+        backend,
+        "implementation",
+        providers,
+        steps,  # type: ignore[arg-type]
+    )
+    assert result == {"backend_supports_git_write": "false"}
+
+
+def test_provider_aware_capability_override_claude_backend_no_op() -> None:
+    """Claude Code backend (anthropic_provider_capable=True) — no-op path returns 'true'."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_claude_backend()
+    providers = ProvidersConfig()
+    steps = {
+        "implement": _make_recipe_step("implement", provider=""),
+    }
+
+    result = _provider_aware_capability_overrides(
+        backend,
+        "implementation",
+        providers,
+        steps,  # type: ignore[arg-type]
+    )
+    assert result == {"backend_supports_git_write": "true"}
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_codex_with_provider_overrides_feasible() -> None:
+    """open_kitchen must return success=True with kitchen='open' when Codex
+    backend has provider-overridden guarded steps (provider-aware path)."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+    from tests.server.conftest import _make_mock_ctx
+
+    tool_ctx = _make_mock_ctx()
+    tool_ctx.gate.enabled = True
+    tool_ctx.gate_infrastructure_ready = True
+    tool_ctx.recipe_name = "implementation"
+    tool_ctx.kitchen_id = "test-kitchen"
+    _setup_provider_override_ctx(tool_ctx)
+    tool_ctx.recipes.load_and_validate.return_value = _make_feasible_load_result()
+
+    fastmcp_ctx = AsyncMock()
+
+    with (
+        patch("autoskillit.server._get_ctx", return_value=tool_ctx),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+        ),
+    ):
+        result = await open_kitchen(name="implementation", ctx=fastmcp_ctx)
+
+    parsed = json.loads(result)
+    assert parsed["success"] is True
+    assert parsed["kitchen"] == "open"
+    assert "implement" in parsed.get("post_prune_step_names", [])
+
+
+@pytest.mark.anyio
+async def test_load_recipe_codex_with_provider_overrides_no_infeasible() -> None:
+    """load_recipe must NOT return dispatch_infeasible when Codex backend has
+    provider-overridden guarded steps."""
+    import json
+    from unittest.mock import patch
+
+    from autoskillit.server.tools.tools_recipe import load_recipe
+    from tests.server.conftest import _make_mock_ctx
+
+    tool_ctx = _make_mock_ctx()
+    tool_ctx.gate.enabled = True
+    tool_ctx.kitchen_id = "test-kitchen"
+    _setup_provider_override_ctx(tool_ctx)
+    tool_ctx.recipes.load_and_validate.return_value = _make_feasible_load_result()
+
+    with (
+        patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=tool_ctx,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_recipe._require_enabled",
+            return_value=None,
+        ),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+        ),
+    ):
+        result = await load_recipe(name="implementation")
+
+    parsed = json.loads(result)
+    assert "dispatch_infeasible" not in parsed
+    assert parsed.get("success") is not False
+
+
+def test_get_recipe_codex_with_provider_overrides_no_infeasible() -> None:
+    """get_recipe resource must return raw YAML content (not dispatch_infeasible)
+    when Codex backend has provider-overridden guarded steps."""
+    from unittest.mock import patch
+
+    from autoskillit.server.tools.tools_kitchen import get_recipe
+
+    tool_ctx = MagicMock()
+    _setup_provider_override_ctx(tool_ctx)
+    tool_ctx.recipes.load_and_validate.return_value = {
+        **_make_feasible_load_result(),
+        "content": "name: implementation\nsteps:\n  implement:\n    tool: run_skill\n",
+    }
+
+    with (
+        patch(
+            "autoskillit.server._state._get_ctx_or_none",
+            return_value=tool_ctx,
+        ),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+        ),
+    ):
+        result = get_recipe("implementation")
+
+    assert isinstance(result, str)
+    assert "error" not in result.lower()
+    assert '"dispatch_feasible": false' not in result
+
+
+@pytest.mark.anyio
+async def test_validate_recipe_codex_with_provider_overrides_no_infeasible() -> None:
+    """validate_recipe must return valid=True and NOT contain dispatch_infeasible
+    when Codex backend has provider-overridden guarded steps."""
+    import json
+    from unittest.mock import patch
+
+    from autoskillit.server.tools.tools_recipe import validate_recipe
+    from tests.server.conftest import _make_mock_ctx
+
+    tool_ctx = _make_mock_ctx()
+    tool_ctx.gate.enabled = True
+    _setup_provider_override_ctx(tool_ctx)
+    tool_ctx.recipes.load.return_value.name = "implementation"
+    tool_ctx.recipes.load.return_value.steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+    }
+    tool_ctx.recipes.validate_from_path.return_value = {
+        "valid": True,
+        "errors": [],
+        "suggestions": [],
+    }
+
+    with (
+        patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=tool_ctx,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_recipe._require_enabled",
+            return_value=None,
+        ),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+        ),
+    ):
+        result = await validate_recipe(script_path="/fake/recipe.yaml")
+
+    parsed = json.loads(result)
+    assert "dispatch_infeasible" not in parsed
+    assert parsed.get("valid") is True
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_codex_with_provider_overrides_not_rejected(
+    build_ctx_open: Any,
+) -> None:
+    """dispatch_food_truck must NOT be rejected at preflight when Codex backend
+    has provider-overridden guarded steps. Additionally, provider_capability_overrides
+    must be forwarded to execute_dispatch."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from autoskillit.core import BackendCapabilities
+
+    tool_ctx = build_ctx_open()
+
+    caps = BackendCapabilities(
+        applicable_guards=frozenset(),
+        anthropic_provider_capable=False,
+        git_metadata_writable=False,
+    )
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities = caps
+    tool_ctx.backend = backend
+
+    tool_ctx.recipes = MagicMock()
+    recipe_info = MagicMock()
+    recipe_info.path = Path("/fake/recipe.yaml")
+    tool_ctx.recipes.find.return_value = recipe_info
+
+    recipe_obj = MagicMock()
+    recipe_obj.name = "implementation"
+    recipe_obj.steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+    }
+    tool_ctx.recipes.load.return_value = recipe_obj
+    tool_ctx.recipes.load_and_validate.return_value = {
+        "valid": True,
+        "dispatch_feasible": True,
+        "post_prune_step_names": ["implement"],
+    }
+
+    mock_outcome = MagicMock()
+    mock_outcome.to_envelope.return_value = json.dumps({"success": True})
+    mock_outcome.dispatch_id = None
+    mock_dispatch_result = MagicMock()
+    mock_dispatch_result.outcome = mock_outcome
+    mock_execute = AsyncMock(return_value=mock_dispatch_result)
+
+    with (
+        patch("autoskillit.server._state._ctx", tool_ctx),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+        ),
+        patch(
+            "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
+            mock_execute,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_fleet_dispatch._require_fleet",
+            lambda _name: None,
+        ),
+    ):
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        result = await dispatch_food_truck(
+            recipe="implementation",
+            task="test task",
+            ctx=AsyncMock(),
+        )
+
+    mock_execute.assert_called_once()
+    assert mock_execute.call_args.kwargs["provider_capability_overrides"] == {
+        "backend_supports_git_write": "true"
+    }
+    parsed = json.loads(result)
+    assert "FLEET_RECIPE_INVALID" not in parsed.get("error", "")
+    assert parsed.get("success") is True

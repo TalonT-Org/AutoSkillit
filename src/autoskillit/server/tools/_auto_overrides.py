@@ -8,12 +8,13 @@ helper returns a plain dict suitable for merging into the
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
+    from autoskillit.recipe.schema import RecipeStep
 
 
 def _backend_capability_overrides(backend: CodingAgentBackend | None) -> dict[str, str]:
@@ -26,6 +27,66 @@ def _backend_capability_overrides(backend: CodingAgentBackend | None) -> dict[st
     """
     git_writable = backend is None or backend.capabilities.git_metadata_writable
     return {"backend_supports_git_write": "true" if git_writable else "false"}
+
+
+def _provider_aware_capability_overrides(
+    backend: CodingAgentBackend | None,
+    recipe_name: str,
+    config_providers: Any | None,
+    recipe_steps: dict[str, RecipeStep] | None,
+) -> dict[str, str]:
+    """Return capability overrides with per-step provider awareness.
+
+    Extends ``_backend_capability_overrides`` by considering per-step provider
+    overrides: when the orchestrator backend is not git-writable (e.g. Codex)
+    but every ``run_skill`` step gated by ``backend_supports_git_write`` has
+    a provider override that resolves to ``ANTHROPIC_BASE_URL``, the override
+    flips to ``"true"`` so those steps survive pruning.
+
+    Conservative fallback: any guarded step without an ANTHROPIC_BASE_URL
+    provider override keeps the capability falsy. This preserves
+    defense-in-depth — the runtime ``gate_backend_write`` still fires for
+    any step that genuinely cannot reach a writable backend.
+
+    Graceful degradation: when any of ``backend``, ``config_providers``, or
+    ``recipe_steps`` is ``None``, or when ``backend.capabilities.anthropic_provider_capable``
+    is ``True`` (i.e. Claude Code orchestrator), returns the underlying
+    ``_backend_capability_overrides`` result unchanged.
+    """
+    base = _backend_capability_overrides(backend)
+    if base["backend_supports_git_write"] == "true":
+        return base
+    if backend is None or config_providers is None or recipe_steps is None:
+        return base
+    if getattr(backend.capabilities, "anthropic_provider_capable", False):
+        return base
+
+    guarded_step_names: list[str] = []
+    for step_name, step in recipe_steps.items():
+        skip_when = getattr(step, "skip_when_false", None)
+        tool = getattr(step, "tool", None)
+        if skip_when == "inputs.backend_supports_git_write" and tool == "run_skill":
+            guarded_step_names.append(step_name)
+
+    if not guarded_step_names:
+        return base
+
+    from autoskillit.server._guards import _resolve_provider_profile  # circular-break
+
+    for step_name in guarded_step_names:
+        step = recipe_steps[step_name]
+        step_provider = getattr(step, "provider", "") or ""
+        _profile_name, provider_extras = _resolve_provider_profile(
+            step_name,
+            recipe_name,
+            config_providers,
+            step_provider=step_provider,
+        )
+        if not provider_extras or "ANTHROPIC_BASE_URL" not in provider_extras:
+            return base
+
+    base["backend_supports_git_write"] = "true"
+    return base
 
 
 def _promote_capability_keys(

@@ -60,8 +60,8 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._auto_overrides import (
-    _backend_capability_overrides,
     _promote_capability_keys,
+    _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._preflight import (
@@ -455,8 +455,11 @@ def get_recipe(name: str) -> str:
 
     _defaults = resolve_ingredient_defaults(ctx.project_dir)
     _config_layer = build_config_authoritative_layer(_defaults)
-    _backend_overrides = _backend_capability_overrides(ctx.backend)
     try:
+        _raw_recipe = ctx.recipes.load(match.path)
+        _backend_overrides = _provider_aware_capability_overrides(
+            ctx.backend, name, ctx.config.providers, _raw_recipe.steps
+        )
         result = ctx.recipes.load_and_validate(
             name,
             ctx.project_dir,
@@ -652,11 +655,26 @@ async def open_kitchen(
                 )
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
+            try:
+                _recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+            except Exception:
+                logger.warning("open_kitchen_early_find_failed", recipe=name, exc_info=True)
+                _recipe_info = None
+            _raw_recipe = (
+                tool_ctx.recipes.load(_recipe_info.path) if _recipe_info is not None else None
+            )
             _session_overrides: dict[str, str] = {
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
-            _session_overrides.update(_backend_capability_overrides(tool_ctx.backend))
+            _session_overrides.update(
+                _provider_aware_capability_overrides(
+                    tool_ctx.backend,
+                    name,
+                    tool_ctx.config.providers,
+                    _raw_recipe.steps if _raw_recipe is not None else None,
+                )
+            )
             _config_layer = build_config_authoritative_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}

@@ -25,8 +25,8 @@ from autoskillit.server._misc import (
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._auto_overrides import (
-    _backend_capability_overrides,
     _promote_capability_keys,
+    _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._types import _validate_result
@@ -215,11 +215,24 @@ async def load_recipe(
                 return json.dumps({"error": "Server not initialized"})
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
+            _recipe_info_pre = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+            _raw_recipe_obj = (
+                tool_ctx.recipes.load(_recipe_info_pre.path)
+                if _recipe_info_pre is not None
+                else None
+            )
             _session_overrides: dict[str, str] = {
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
-            _session_overrides.update(_backend_capability_overrides(tool_ctx.backend))
+            _session_overrides.update(
+                _provider_aware_capability_overrides(
+                    tool_ctx.backend,
+                    name,
+                    tool_ctx.config.providers,
+                    _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
+                )
+            )
             _config_layer = build_config_authoritative_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
@@ -233,7 +246,7 @@ async def load_recipe(
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
             )
-            recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+            recipe_info = _recipe_info_pre
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             if not result.get("valid", False):
                 result["validation_failed"] = True
@@ -306,11 +319,24 @@ async def validate_recipe(script_path: str) -> str:
             tool_ctx = _get_ctx_or_none()
             if tool_ctx is None or tool_ctx.recipes is None:
                 return json.dumps({"valid": False, "errors": ["Server not initialized"]})
+            try:
+                _raw_validate_recipe = tool_ctx.recipes.load(Path(script_path))
+                _validate_recipe_name = _raw_validate_recipe.name
+                _validate_recipe_steps = _raw_validate_recipe.steps
+            except Exception:
+                logger.warning("validate_recipe_load_failed", path=script_path, exc_info=True)
+                _validate_recipe_name = ""
+                _validate_recipe_steps = None
             result = tool_ctx.recipes.validate_from_path(
                 Path(script_path),
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
-                ingredient_overrides=_backend_capability_overrides(tool_ctx.backend),
+                ingredient_overrides=_provider_aware_capability_overrides(
+                    tool_ctx.backend,
+                    _validate_recipe_name,
+                    tool_ctx.config.providers,
+                    _validate_recipe_steps,
+                ),
             )
             return json.dumps(result)
     except Exception as exc:

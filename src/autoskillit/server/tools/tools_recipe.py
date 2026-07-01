@@ -319,8 +319,14 @@ async def validate_recipe(script_path: str) -> str:
             tool_ctx = _get_ctx_or_none()
             if tool_ctx is None or tool_ctx.recipes is None:
                 return json.dumps({"valid": False, "errors": ["Server not initialized"]})
-            _raw_validate_recipe = tool_ctx.recipes.load(Path(script_path))
-            _validate_recipe_name = _raw_validate_recipe.name
+            try:
+                _raw_validate_recipe = tool_ctx.recipes.load(Path(script_path))
+                _validate_recipe_name = _raw_validate_recipe.name
+                _validate_recipe_steps = _raw_validate_recipe.steps
+            except Exception:
+                logger.warning("validate_recipe_load_failed", path=script_path, exc_info=True)
+                _validate_recipe_name = ""
+                _validate_recipe_steps = None
             result = tool_ctx.recipes.validate_from_path(
                 Path(script_path),
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
@@ -329,7 +335,7 @@ async def validate_recipe(script_path: str) -> str:
                     tool_ctx.backend,
                     _validate_recipe_name,
                     tool_ctx.config.providers,
-                    _raw_validate_recipe.steps,
+                    _validate_recipe_steps,
                 ),
             )
             return json.dumps(result)

@@ -967,7 +967,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "co-located with the execution engine that calls them",
     ),
     "tools_kitchen.py": (
-        1310,
+        1321,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -982,7 +982,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "get_recipe paths (+22 net lines)"
         "; supports_quota_check bool at call sites replaces resolve_provider (+3 net lines)"
         "; reap_stale_dispatches_async call in _open_kitchen_handler for interactive session "
-        "dispatch recovery (+8 net lines)",
+        "dispatch recovery (+8 net lines)"
+        "; provider-aware capability override bridge: try/except around early find for "
+        "graceful degradation when recipes.find raises (+10 net lines)",
     ),
     "tools_execution.py": (
         1220,

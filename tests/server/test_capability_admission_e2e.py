@@ -239,9 +239,14 @@ def test_provider_aware_capability_override_partial_overrides_stays_false() -> N
         "fix": _make_recipe_step("fix", provider=""),
     }
 
+    def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
+        if step_provider == "minimax":
+            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+        return ("", None)
+
     with patch(
         "autoskillit.server._guards._resolve_provider_profile",
-        return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+        side_effect=_per_step_resolve,
     ):
         result = _provider_aware_capability_overrides(
             backend,

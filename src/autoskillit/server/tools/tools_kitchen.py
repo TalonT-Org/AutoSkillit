@@ -655,7 +655,11 @@ async def open_kitchen(
                 )
             suppressed = tool_ctx.config.migration.suppressed
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
-            _recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+            try:
+                _recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
+            except Exception:
+                logger.warning("open_kitchen_early_find_failed", recipe=name, exc_info=True)
+                _recipe_info = None
             _raw_recipe = (
                 tool_ctx.recipes.load(_recipe_info.path) if _recipe_info is not None else None
             )

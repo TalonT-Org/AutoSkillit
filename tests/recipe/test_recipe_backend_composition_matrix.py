@@ -136,3 +136,20 @@ def test_matrix_collection_count() -> None:
         f"expected {len(_ALL_RECIPE_NAMES)} recipes x {len(_BACKEND_NAMES)} backends "
         f"- {len(DECLARED_UNSUPPORTED)} unsupported = {expected}"
     )
+
+
+def test_recipe_backend_matrix_codex_with_provider_override() -> None:
+    """Codex with provider overrides (simulated via ingredient_overrides) must
+    produce dispatch_feasible=True for the implementation recipe."""
+    result = load_and_validate(
+        "implementation",
+        project_dir=_PROJECT_ROOT,
+        backend_name="codex",
+        ingredient_overrides={"backend_supports_git_write": "true"},
+        lister=_SKILL_RESOLVER,
+    )
+    assert result["valid"] is True, f"Recipe invalid: {result.get('errors', [])}"
+    assert result.get("dispatch_feasible") is True, (
+        f"Expected dispatch_feasible=True for codex-with-provider-override, "
+        f"got {result.get('dispatch_feasible')}"
+    )

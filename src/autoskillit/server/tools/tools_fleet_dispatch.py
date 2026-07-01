@@ -356,12 +356,14 @@ async def dispatch_food_truck(
             )
             if _cap_detail is not None and _cap_detail.resolution_path == "partial_bail":
                 _missing = list(_cap_detail.missing_provider_steps)
-                _infeasible_msg = (
-                    f"Recipe '{recipe}' is dispatch-infeasible: steps {_missing} "
-                    f"lack ANTHROPIC_BASE_URL provider overrides. "
+                _escape_hatch = (
                     f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
                     f"{_missing}. Example config: "
                     f"providers.recipe_overrides.<recipe>.*: <profile>"
+                )
+                _infeasible_msg = (
+                    f"Recipe '{recipe}' is dispatch-infeasible: steps {_missing} "
+                    f"lack ANTHROPIC_BASE_URL provider overrides. {_escape_hatch}"
                 )
                 logger.warning(
                     "dispatch_food_truck_capability_infeasible",
@@ -372,11 +374,7 @@ async def dispatch_food_truck(
                     fleet_error(FleetErrorCode.FLEET_RECIPE_INVALID, _infeasible_msg)
                 )
                 _err_envelope["missing_provider_steps"] = _missing
-                _err_envelope["escape_hatch"] = (
-                    f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
-                    f"{_missing}. Example config: "
-                    f"providers.recipe_overrides.<recipe>.*: <profile>"
-                )
+                _err_envelope["escape_hatch"] = _escape_hatch
                 return json.dumps(_err_envelope)
             logger.warning(
                 "dispatch_food_truck_capability_infeasible",

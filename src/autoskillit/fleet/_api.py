@@ -189,6 +189,7 @@ async def execute_dispatch(
     prior_dispatch_id: str | None = None,
     resume_message: str | None = None,
     caller_instructions: str | None = None,
+    provider_capability_overrides: dict[str, str] | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
@@ -255,6 +256,7 @@ async def execute_dispatch(
             prior_dispatch_id=prior_dispatch_id,
             resume_message=resume_message,
             caller_instructions=caller_instructions,
+            provider_capability_overrides=provider_capability_overrides,
         )
     except asyncio.CancelledError:
         raise
@@ -315,6 +317,7 @@ async def _run_dispatch(
     prior_dispatch_id: str | None = None,
     resume_message: str | None = None,
     caller_instructions: str | None = None,
+    provider_capability_overrides: dict[str, str] | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -347,7 +350,9 @@ async def _run_dispatch(
         )
 
     try:
-        _capability_overrides = _build_capability_overrides(tool_ctx.backend)
+        _capability_overrides = provider_capability_overrides or _build_capability_overrides(
+            tool_ctx.backend
+        )
         _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
         validation_result = tool_ctx.recipes.load_and_validate(
             recipe,
@@ -436,7 +441,9 @@ async def _run_dispatch(
         apply_config_authoritative_overrides,
     )
 
-    _capability_overrides = _build_capability_overrides(tool_ctx.backend)
+    _capability_overrides = provider_capability_overrides or _build_capability_overrides(
+        tool_ctx.backend
+    )
     effective_ingredients = apply_config_authoritative_overrides(
         effective_ingredients,
         full_recipe.ingredients,

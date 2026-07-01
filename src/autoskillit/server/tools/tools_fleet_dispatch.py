@@ -34,7 +34,6 @@ from autoskillit.fleet import (
     DispatchRejected,
     DispatchResult,
     DispatchStatus,
-    _build_capability_overrides,
     _build_food_truck_prompt,
     evaluate_skip_when,
     execute_dispatch,
@@ -50,6 +49,7 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
@@ -322,9 +322,18 @@ async def dispatch_food_truck(
         # all fix-required hooks for the recipe's run_skill steps before
         # spawning a subprocess.
         _fleet_load_result: dict[str, Any] = {}
+        _capability_overrides: dict[str, str] = {}
         if tool_ctx.recipes is not None:
             try:
-                _capability_overrides = _build_capability_overrides(tool_ctx.backend)
+                _preflight_recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
+                _preflight_raw_steps = (
+                    tool_ctx.recipes.load(_preflight_recipe_info.path).steps
+                    if _preflight_recipe_info is not None
+                    else None
+                )
+                _capability_overrides = _provider_aware_capability_overrides(
+                    tool_ctx.backend, recipe, tool_ctx.config.providers, _preflight_raw_steps
+                )
                 _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
                 _fleet_load_result = tool_ctx.recipes.load_and_validate(
                     recipe,
@@ -408,6 +417,7 @@ async def dispatch_food_truck(
                     prior_dispatch_id=prior_dispatch_id,
                     resume_message=resume_message,
                     caller_instructions=caller_instructions,
+                    provider_capability_overrides=_capability_overrides,
                 )
         except TimeoutError:
             logger.error(

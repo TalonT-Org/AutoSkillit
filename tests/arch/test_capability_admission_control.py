@@ -181,8 +181,8 @@ def test_compute_capability_feasibility_forwards_post_prune_recipe() -> None:
 
 
 def test_dispatch_food_truck_injects_capability_overrides() -> None:
-    """dispatch_food_truck must reference _build_capability_overrides to inject
-    backend capability signals into the load_and_validate call."""
+    """dispatch_food_truck must reference _provider_aware_capability_overrides to inject
+    provider-aware backend capability signals into the load_and_validate call."""
     fleet_path = SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch.py"
     src = fleet_path.read_text(encoding="utf-8")
     tree = ast.parse(src)
@@ -190,12 +190,15 @@ def test_dispatch_food_truck_injects_capability_overrides() -> None:
         if isinstance(node, ast.AsyncFunctionDef) and node.name == "dispatch_food_truck":
             found = False
             for child in ast.walk(node):
-                if isinstance(child, ast.Name) and child.id == "_build_capability_overrides":
+                if (
+                    isinstance(child, ast.Name)
+                    and child.id == "_provider_aware_capability_overrides"
+                ):
                     found = True
                     break
             assert found, (
-                "dispatch_food_truck must reference _build_capability_overrides "
-                "to inject backend capability signals into load_and_validate."
+                "dispatch_food_truck must reference _provider_aware_capability_overrides "
+                "to inject provider-aware backend capability signals into load_and_validate."
             )
             return
     pytest.fail("dispatch_food_truck function not found in tools_fleet_dispatch.py")

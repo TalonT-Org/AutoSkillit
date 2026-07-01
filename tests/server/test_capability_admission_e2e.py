@@ -7,6 +7,7 @@ load_and_validate to the dispatch_feasible signal.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -69,7 +70,10 @@ def test_capability_override_parity() -> None:
     from unittest.mock import MagicMock
 
     from autoskillit.fleet._api import _build_capability_overrides
-    from autoskillit.server.tools._auto_overrides import _backend_capability_overrides
+    from autoskillit.server.tools._auto_overrides import (
+        _backend_capability_overrides,
+        _provider_aware_capability_overrides,
+    )
 
     for writable in (True, False):
         backend = MagicMock()
@@ -80,6 +84,22 @@ def test_capability_override_parity() -> None:
 
     assert _backend_capability_overrides(None) == _build_capability_overrides(None), (
         "Parity violation for backend=None"
+    )
+
+    # Graceful degradation: _provider_aware_capability_overrides with no provider/steps
+    # input must equal _backend_capability_overrides for all backend states.
+    for writable in (True, False):
+        backend = MagicMock()
+        backend.capabilities.git_metadata_writable = writable
+        backend.capabilities.anthropic_provider_capable = True
+        degraded = _provider_aware_capability_overrides(backend, "", None, None)
+        assert degraded == _backend_capability_overrides(backend), (
+            f"Graceful-degradation violation for git_metadata_writable={writable}"
+        )
+
+    degraded_none = _provider_aware_capability_overrides(None, "", None, None)
+    assert degraded_none == _backend_capability_overrides(None), (
+        "Graceful-degradation violation for backend=None"
     )
 
 
@@ -127,3 +147,146 @@ async def test_open_kitchen_refuses_doa_codex_pipeline() -> None:
     tool_ctx.gate.disable.assert_called_once()
     tool_ctx.gate.enable.assert_not_called()
     fastmcp_ctx.disable_components.assert_called_once_with(tags={"kitchen"})
+
+
+def _make_codex_backend() -> MagicMock:
+    """Return a MagicMock backend resembling Codex (non-git-writable, non-anthropic-capable)."""
+    from types import SimpleNamespace
+
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities = SimpleNamespace(
+        git_metadata_writable=False,
+        anthropic_provider_capable=False,
+    )
+    return backend
+
+
+def _make_claude_backend() -> MagicMock:
+    """Return a MagicMock backend resembling Claude Code (git-writable, anthropic-capable)."""
+    from types import SimpleNamespace
+
+    backend = MagicMock()
+    backend.name = "claude-code"
+    backend.capabilities = SimpleNamespace(
+        git_metadata_writable=True,
+        anthropic_provider_capable=True,
+    )
+    return backend
+
+
+def _make_recipe_step(name: str, provider: str = "") -> MagicMock:
+    """Return a MagicMock recipe step with skip_when_false and optional provider."""
+    step = MagicMock()
+    step.name = name
+    step.tool = "run_skill"
+    step.skip_when_false = "inputs.backend_supports_git_write"
+    step.provider = provider
+    return step
+
+
+def test_provider_aware_capability_override_all_overridden_returns_true() -> None:
+    """All guarded run_skill steps have ANTHROPIC_BASE_URL provider -> returns 'true'."""
+    from unittest.mock import patch
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_codex_backend()
+    providers = ProvidersConfig(
+        profiles={"minimax": {}},
+        step_overrides={
+            "implement": "minimax",
+            "retry_worktree": "minimax",
+            "fix": "minimax",
+        },
+    )
+    steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "retry_worktree": _make_recipe_step("retry_worktree", provider="minimax"),
+        "fix": _make_recipe_step("fix", provider="minimax"),
+    }
+
+    with patch(
+        "autoskillit.server._guards._resolve_provider_profile",
+        return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+    ):
+        result = _provider_aware_capability_overrides(
+            backend,
+            "implementation",
+            providers,
+            steps,  # type: ignore[arg-type]
+        )
+    assert result == {"backend_supports_git_write": "true"}
+
+
+def test_provider_aware_capability_override_partial_overrides_stays_false() -> None:
+    """Partial provider overrides (conservative): capability stays 'false'."""
+    from unittest.mock import patch
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_codex_backend()
+    providers = ProvidersConfig(
+        profiles={"minimax": {}},
+        step_overrides={
+            "implement": "minimax",
+        },
+    )
+    steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "fix": _make_recipe_step("fix", provider=""),
+    }
+
+    with patch(
+        "autoskillit.server._guards._resolve_provider_profile",
+        return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
+    ):
+        result = _provider_aware_capability_overrides(
+            backend,
+            "implementation",
+            providers,
+            steps,  # type: ignore[arg-type]
+        )
+    assert result == {"backend_supports_git_write": "false"}
+
+
+def test_provider_aware_capability_override_no_overrides_preserves_false() -> None:
+    """Codex backend with no provider overrides → backend_supports_git_write stays 'false'."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_codex_backend()
+    providers = ProvidersConfig()
+    steps = {
+        "implement": _make_recipe_step("implement", provider=""),
+    }
+
+    result = _provider_aware_capability_overrides(
+        backend,
+        "implementation",
+        providers,
+        steps,  # type: ignore[arg-type]
+    )
+    assert result == {"backend_supports_git_write": "false"}
+
+
+def test_provider_aware_capability_override_claude_backend_no_op() -> None:
+    """Claude Code backend (anthropic_provider_capable=True) — no-op path returns 'true'."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_claude_backend()
+    providers = ProvidersConfig()
+    steps = {
+        "implement": _make_recipe_step("implement", provider=""),
+    }
+
+    result = _provider_aware_capability_overrides(
+        backend,
+        "implementation",
+        providers,
+        steps,  # type: ignore[arg-type]
+    )
+    assert result == {"backend_supports_git_write": "true"}

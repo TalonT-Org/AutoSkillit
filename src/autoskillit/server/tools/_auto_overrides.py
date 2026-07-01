@@ -37,7 +37,7 @@ def _provider_aware_capability_overrides(
     recipe_name: str,
     config_providers: Any | None,
     recipe_steps: dict[str, RecipeStep] | None,
-) -> tuple[dict[str, str], CapabilityResolutionDetail | None]:
+) -> tuple[dict[str, str], CapabilityResolutionDetail]:
     """Return capability overrides with per-step provider awareness.
 
     Extends ``_backend_capability_overrides`` by considering per-step provider
@@ -56,10 +56,11 @@ def _provider_aware_capability_overrides(
     is ``True`` (i.e. Claude Code orchestrator), returns the underlying
     ``_backend_capability_overrides`` result unchanged.
 
-    Returns ``(overrides_dict, resolution_detail)``. ``detail`` is ``None``
-    for the early-return paths (claude backend, graceful degradation, baseline
-    already true, no guarded steps) where no per-step resolution was
-    performed. ``detail.resolution_path`` identifies which branch was taken.
+    Returns ``(overrides_dict, resolution_detail)``. Early-return paths
+    (claude backend, graceful degradation, baseline already true, no guarded
+    steps) return ``CapabilityResolutionDetail.empty(path)`` with no
+    resolved-step data. ``detail.resolution_path`` identifies which branch
+    was taken.
     """
     base = _backend_capability_overrides(backend)
     if base["backend_supports_git_write"] == "true":

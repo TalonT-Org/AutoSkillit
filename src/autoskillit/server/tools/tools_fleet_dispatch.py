@@ -19,6 +19,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
+    CapabilityResolutionDetail,
     FleetErrorCode,
     SessionCheckpoint,
     detect_autoskillit_mcp_prefix,
@@ -323,6 +324,7 @@ async def dispatch_food_truck(
         # spawning a subprocess.
         _fleet_load_result: dict[str, Any] = {}
         _capability_overrides: dict[str, str] = {}
+        _cap_detail: CapabilityResolutionDetail | None = None
         if tool_ctx.recipes is not None:
             try:
                 _preflight_recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
@@ -331,7 +333,7 @@ async def dispatch_food_truck(
                     if _preflight_recipe_info is not None
                     else None
                 )
-                _capability_overrides = _provider_aware_capability_overrides(
+                _capability_overrides, _cap_detail = _provider_aware_capability_overrides(
                     tool_ctx.backend, recipe, tool_ctx.config.providers, _preflight_raw_steps
                 )
                 _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
@@ -352,6 +354,15 @@ async def dispatch_food_truck(
                 f"Recipe '{recipe}' is dispatch-infeasible: capability gate(s) "
                 f"blocked at preflight. Infeasible steps: {_infeasible_steps}"
             )
+            if _cap_detail is not None and _cap_detail.resolution_path == "partial_bail":
+                _missing = list(_cap_detail.missing_provider_steps)
+                _infeasible_msg = (
+                    f"Recipe '{recipe}' is dispatch-infeasible: steps {_missing} "
+                    f"lack ANTHROPIC_BASE_URL provider overrides. "
+                    f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
+                    f"{_missing}. Example config: "
+                    f"providers.recipe_overrides.<recipe>.*: <profile>"
+                )
             logger.warning(
                 "dispatch_food_truck_capability_infeasible",
                 recipe=recipe,

@@ -25,6 +25,7 @@ from autoskillit.config import (
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     PIPELINE_FORBIDDEN_TOOLS,
+    CapabilityResolutionDetail,
     ProcessStaleError,
     _collect_disabled_feature_tags,
     atomic_write,
@@ -135,29 +136,45 @@ async def _dispatch_infeasible_response(
     backend: Any,
     gate: Any,
     ctx: Context,
+    capability_detail: CapabilityResolutionDetail | None = None,
 ) -> str:
     """Refuse a dead-on-arrival pipeline before the gate is enabled.
 
     Used by the open_kitchen (both normal and deferred-recall) paths when
-    load_and_validate reports dispatch_feasible=False.
+    load_and_validate reports dispatch_feasible=False. When ``capability_detail``
+    is provided and indicates a partial-bail, the response carries
+    ``missing_provider_steps`` and an ``escape_hatch`` key with actionable
+    guidance, instead of blaming the backend generically.
     """
     gate.disable()
     await ctx.disable_components(tags={"kitchen"})
     _infeasible = result.get("infeasible_steps", [])
     _backend_name = backend.name if backend is not None else "unknown"
-    return json.dumps(
-        {
-            "success": False,
-            "kitchen": "dispatch_infeasible",
-            "infeasible_steps": _infeasible,
-            "ingredients_table": result.get("ingredients_table"),
-            "user_visible_message": (
-                f"Cannot dispatch recipe: backend {_backend_name!r} "
-                f"causes steps {_infeasible} to route to terminal failure. "
-                f"Use a backend with git_metadata_writable=True (e.g. claude-code)."
-            ),
-        }
-    )
+    _envelope: dict[str, Any] = {
+        "success": False,
+        "kitchen": "dispatch_infeasible",
+        "infeasible_steps": _infeasible,
+        "ingredients_table": result.get("ingredients_table"),
+        "user_visible_message": (
+            f"Cannot dispatch recipe: backend {_backend_name!r} "
+            f"causes steps {_infeasible} to route to terminal failure. "
+            f"Use a backend with git_metadata_writable=True (e.g. claude-code)."
+        ),
+    }
+    if capability_detail is not None and capability_detail.resolution_path == "partial_bail":
+        _missing = list(capability_detail.missing_provider_steps)
+        _envelope["missing_provider_steps"] = _missing
+        _envelope["escape_hatch"] = (
+            f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
+            f"{_missing}. Example config: "
+            f"providers.recipe_overrides.<recipe>.*: <profile>"
+        )
+        _envelope["user_visible_message"] = (
+            f"Cannot dispatch recipe: backend {_backend_name!r} "
+            f"lacks provider overrides for {_missing}. "
+            f"{_envelope['escape_hatch']}"
+        )
+    return json.dumps(_envelope)
 
 
 class QuotaGuardHookPayload(TypedDict):
@@ -457,7 +474,7 @@ def get_recipe(name: str) -> str:
     _config_layer = build_config_authoritative_layer(_defaults)
     try:
         _raw_recipe = ctx.recipes.load(match.path)
-        _backend_overrides = _provider_aware_capability_overrides(
+        _backend_overrides, _cap_detail = _provider_aware_capability_overrides(
             ctx.backend, name, ctx.config.providers, _raw_recipe.steps
         )
         result = ctx.recipes.load_and_validate(
@@ -667,14 +684,13 @@ async def open_kitchen(
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
-            _session_overrides.update(
-                _provider_aware_capability_overrides(
-                    tool_ctx.backend,
-                    name,
-                    tool_ctx.config.providers,
-                    _raw_recipe.steps if _raw_recipe is not None else None,
-                )
+            _provider_overrides, _cap_detail = _provider_aware_capability_overrides(
+                tool_ctx.backend,
+                name,
+                tool_ctx.config.providers,
+                _raw_recipe.steps if _raw_recipe is not None else None,
             )
+            _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
@@ -748,7 +764,11 @@ async def open_kitchen(
                     return _recipe_validation_error_response(name, result)
                 if not result.get("dispatch_feasible", True):
                     return await _dispatch_infeasible_response(
-                        result, tool_ctx.backend, tool_ctx.gate, ctx
+                        result,
+                        tool_ctx.backend,
+                        tool_ctx.gate,
+                        ctx,
+                        capability_detail=_cap_detail,
                     )
                 # Dispatch-feasibility preflight: verify the backend can enforce
                 # all fix-required hooks for the recipe's run_skill steps.
@@ -861,7 +881,11 @@ async def open_kitchen(
 
             if not result.get("dispatch_feasible", True):
                 return await _dispatch_infeasible_response(
-                    result, tool_ctx.backend, tool_ctx.gate, ctx
+                    result,
+                    tool_ctx.backend,
+                    tool_ctx.gate,
+                    ctx,
+                    capability_detail=_cap_detail,
                 )
 
             # Dispatch-feasibility preflight: verify the backend can enforce

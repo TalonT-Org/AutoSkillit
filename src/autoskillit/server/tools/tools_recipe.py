@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import structlog
 from fastmcp import Context
@@ -225,14 +226,13 @@ async def load_recipe(
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
             }
-            _session_overrides.update(
-                _provider_aware_capability_overrides(
-                    tool_ctx.backend,
-                    name,
-                    tool_ctx.config.providers,
-                    _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
-                )
+            _provider_overrides, _cap_detail = _provider_aware_capability_overrides(
+                tool_ctx.backend,
+                name,
+                tool_ctx.config.providers,
+                _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
             )
+            _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
@@ -256,14 +256,26 @@ async def load_recipe(
                     f"Recipe is infeasible on current backend: "
                     f"steps {result.get('infeasible_steps', [])} route to terminal failure."
                 )
-                return json.dumps(
-                    {
-                        "success": False,
-                        "dispatch_infeasible": True,
-                        "infeasible_steps": result.get("infeasible_steps", []),
-                        "user_visible_message": result["user_visible_message"],
-                    }
-                )
+                _infeasible_envelope: dict[str, Any] = {
+                    "success": False,
+                    "dispatch_infeasible": True,
+                    "infeasible_steps": result.get("infeasible_steps", []),
+                    "user_visible_message": result["user_visible_message"],
+                }
+                if _cap_detail is not None and _cap_detail.resolution_path == "partial_bail":
+                    _missing = list(_cap_detail.missing_provider_steps)
+                    _infeasible_envelope["missing_provider_steps"] = _missing
+                    _infeasible_envelope["escape_hatch"] = (
+                        f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "
+                        f"{_missing}. Example config: "
+                        f"providers.recipe_overrides.<recipe>.*: <profile>"
+                    )
+                    _infeasible_envelope["user_visible_message"] = (
+                        f"Recipe is infeasible on current backend: steps "
+                        f"{_missing} lack ANTHROPIC_BASE_URL provider overrides. "
+                        f"{_infeasible_envelope['escape_hatch']}"
+                    )
+                return json.dumps(_infeasible_envelope)
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
             _required_keys: frozenset[str] = frozenset()
@@ -327,16 +339,17 @@ async def validate_recipe(script_path: str) -> str:
                 logger.warning("validate_recipe_load_failed", path=script_path, exc_info=True)
                 _validate_recipe_name = ""
                 _validate_recipe_steps = None
+            _cap_overrides, _ = _provider_aware_capability_overrides(
+                tool_ctx.backend,
+                _validate_recipe_name,
+                tool_ctx.config.providers,
+                _validate_recipe_steps,
+            )
             result = tool_ctx.recipes.validate_from_path(
                 Path(script_path),
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
-                ingredient_overrides=_provider_aware_capability_overrides(
-                    tool_ctx.backend,
-                    _validate_recipe_name,
-                    tool_ctx.config.providers,
-                    _validate_recipe_steps,
-                ),
+                ingredient_overrides=_cap_overrides,
             )
             return json.dumps(result)
     except Exception as exc:

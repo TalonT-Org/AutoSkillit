@@ -901,7 +901,7 @@ async def test_all_infeasibility_paths_have_escape_hatch(build_ctx_open: Any) ->
     ):
         from autoskillit.server.tools.tools_recipe import load_recipe
 
-        recipe_result = await load_recipe(name="implementation", ctx=AsyncMock())
+        recipe_result = await load_recipe(name="implementation")
     parsed = json.loads(recipe_result)
     assert "escape_hatch" in parsed
     assert "missing_provider_steps" in parsed

@@ -19,6 +19,7 @@ from ._type_enums import KillReason, RetryReason, SessionOutcome
 T = TypeVar("T")
 
 __all__ = [
+    "CapabilityResolutionDetail",
     "ContaminationOutcome",
     "InputSpec",
     "LoadReport",
@@ -207,6 +208,45 @@ class ProviderOutcome:
     def none_used(cls) -> ProviderOutcome:
         """Sentinel for paths where no provider selection occurred."""
         return cls(provider_used="", fallback_activated=False)
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityResolutionDetail:
+    """Diagnostic metadata for per-step capability override resolution.
+
+    Carries the resolution path and per-step data through the capability
+    admission chain so downstream consumers (infeasibility response
+    formatters) can surface the actual cause of partial-overrides bailout
+    rather than blaming the backend generically.
+
+    resolution_path values:
+        "all_pass" — every guarded step resolved with ANTHROPIC_BASE_URL;
+            capability flipped to "true".
+        "partial_bail" — at least one guarded step lacked ANTHROPIC_BASE_URL;
+            bailed on first failure (all-or-nothing conservatism).
+        "no_guarded_steps" — recipe has no run_skill steps gated by
+            backend_supports_git_write; nothing to flip.
+        "claude_backend" — backend is anthropic_provider_capable=True;
+            no provider override needed.
+        "graceful_degradation" — backend, config_providers, or recipe_steps
+            was None; no resolution attempted.
+        "baseline_already_true" — backend_supports_git_write was already "true"
+            from the baseline capability; no provider override needed.
+    """
+
+    resolved_steps: tuple[tuple[str, str, bool], ...]
+    bail_step: str | None
+    resolution_path: str
+
+    @property
+    def missing_provider_steps(self) -> tuple[str, ...]:
+        """Step names whose resolved provider profile lacked ANTHROPIC_BASE_URL."""
+        return tuple(name for name, _, has_base_url in self.resolved_steps if not has_base_url)
+
+    @classmethod
+    def empty(cls, resolution_path: str) -> CapabilityResolutionDetail:
+        """Construct a detail with no resolved-step data."""
+        return cls(resolved_steps=(), bail_step=None, resolution_path=resolution_path)
 
 
 @dataclass(frozen=True, slots=True)

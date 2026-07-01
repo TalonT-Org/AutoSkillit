@@ -11,10 +11,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS
+from autoskillit.core import CapabilityResolutionDetail, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
     from autoskillit.recipe.schema import RecipeStep
+
+logger = get_logger(__name__)
 
 
 def _backend_capability_overrides(backend: CodingAgentBackend | None) -> dict[str, str]:
@@ -34,7 +37,7 @@ def _provider_aware_capability_overrides(
     recipe_name: str,
     config_providers: Any | None,
     recipe_steps: dict[str, RecipeStep] | None,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], CapabilityResolutionDetail]:
     """Return capability overrides with per-step provider awareness.
 
     Extends ``_backend_capability_overrides`` by considering per-step provider
@@ -52,14 +55,20 @@ def _provider_aware_capability_overrides(
     ``recipe_steps`` is ``None``, or when ``backend.capabilities.anthropic_provider_capable``
     is ``True`` (i.e. Claude Code orchestrator), returns the underlying
     ``_backend_capability_overrides`` result unchanged.
+
+    Returns ``(overrides_dict, resolution_detail)``. Early-return paths
+    (claude backend, graceful degradation, baseline already true, no guarded
+    steps) return ``CapabilityResolutionDetail.empty(path)`` with no
+    resolved-step data. ``detail.resolution_path`` identifies which branch
+    was taken.
     """
     base = _backend_capability_overrides(backend)
     if base["backend_supports_git_write"] == "true":
-        return base
+        return base, CapabilityResolutionDetail.empty("baseline_already_true")
     if backend is None or config_providers is None or recipe_steps is None:
-        return base
+        return base, CapabilityResolutionDetail.empty("graceful_degradation")
     if getattr(backend.capabilities, "anthropic_provider_capable", False):
-        return base
+        return base, CapabilityResolutionDetail.empty("claude_backend")
 
     guarded_step_names: list[str] = []
     for step_name, step in recipe_steps.items():
@@ -69,24 +78,45 @@ def _provider_aware_capability_overrides(
             guarded_step_names.append(step_name)
 
     if not guarded_step_names:
-        return base
+        return base, CapabilityResolutionDetail.empty("no_guarded_steps")
 
     from autoskillit.server._guards import _resolve_provider_profile  # circular-break
 
+    resolved: list[tuple[str, str, bool]] = []
     for step_name in guarded_step_names:
         step = recipe_steps[step_name]
         step_provider = getattr(step, "provider", "") or ""
-        _profile_name, provider_extras = _resolve_provider_profile(
+        profile_name, provider_extras = _resolve_provider_profile(
             step_name,
             recipe_name,
             config_providers,
             step_provider=step_provider,
         )
-        if not provider_extras or "ANTHROPIC_BASE_URL" not in provider_extras:
-            return base
+        has_base_url = bool(
+            provider_extras
+            and isinstance(provider_extras, dict)
+            and "ANTHROPIC_BASE_URL" in provider_extras
+        )
+        resolved.append((step_name, profile_name or "", has_base_url))
+        if not has_base_url:
+            logger.info(
+                "capability_override_bail",
+                bail_step=step_name,
+                resolved_steps=resolved,
+                recipe_name=recipe_name,
+            )
+            return base, CapabilityResolutionDetail(
+                resolved_steps=tuple(resolved),
+                bail_step=step_name,
+                resolution_path="partial_bail",
+            )
 
     base["backend_supports_git_write"] = "true"
-    return base
+    return base, CapabilityResolutionDetail(
+        resolved_steps=tuple(resolved),
+        bail_step=None,
+        resolution_path="all_pass",
+    )
 
 
 def _promote_capability_keys(

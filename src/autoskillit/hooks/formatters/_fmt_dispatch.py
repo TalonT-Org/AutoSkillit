@@ -50,6 +50,12 @@ def _fmt_dispatch_food_truck(data: dict, _pipeline: bool) -> str:
         dispatch_id = data.get("dispatch_id", "")
         if dispatch_id:
             lines.append(f"dispatch_id: {dispatch_id}")
+        missing_steps = data.get("missing_provider_steps")
+        if missing_steps:
+            lines.append(f"missing_provider_steps: {missing_steps}")
+        escape_hatch = data.get("escape_hatch", "")
+        if escape_hatch:
+            lines.append(f"escape_hatch: {escape_hatch}")
         return "\n".join(lines)
 
     # Success path — DispatchCompleted shape
@@ -153,6 +159,8 @@ _FMT_DISPATCH_FOOD_TRUCK_RENDERED: frozenset[str] = frozenset(
         "error",
         "user_visible_message",
         "details",
+        "missing_provider_steps",
+        "escape_hatch",
     }
 )
 _FMT_DISPATCH_FOOD_TRUCK_SUPPRESSED: frozenset[str] = frozenset({"kind"})

@@ -236,6 +236,7 @@ def test_provider_aware_capability_override_all_overridden_returns_true() -> Non
     from unittest.mock import patch
 
     from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.core import CapabilityResolutionDetail
     from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
 
     backend = _make_codex_backend()
@@ -257,13 +258,16 @@ def test_provider_aware_capability_override_all_overridden_returns_true() -> Non
         "autoskillit.server._guards._resolve_provider_profile",
         return_value=("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
     ):
-        result, _ = _provider_aware_capability_overrides(
+        result, detail = _provider_aware_capability_overrides(
             backend,
             "implementation",
             providers,
             steps,  # type: ignore[arg-type]
         )
     assert result == {"backend_supports_git_write": "true"}
+    assert isinstance(detail, CapabilityResolutionDetail)
+    assert detail.resolution_path == "any_pass"
+    assert detail.bail_step is None
 
 
 def test_provider_aware_capability_override_partial_overrides_flips_true() -> None:

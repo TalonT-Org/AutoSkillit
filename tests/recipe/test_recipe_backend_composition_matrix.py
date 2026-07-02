@@ -117,6 +117,32 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str) -> None
     )
 
 
+@pytest.mark.parametrize("recipe_name,backend_name", _apply_marks(_MATRIX_IDS))
+def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str) -> None:
+    """Dispatch feasibility must reflect gate_backend_write reachability per backend."""
+    backend = get_backend(backend_name)
+    result = load_and_validate(
+        recipe_name,
+        project_dir=_PROJECT_ROOT,
+        backend_name=backend_name,
+        ingredient_overrides=_backend_capability_overrides(backend),
+        lister=_SKILL_RESOLVER,
+    )
+
+    infeasible = result.get("infeasible_steps") or []
+    if backend_name == "codex" and "gate_backend_write" in infeasible:
+        assert result.get("dispatch_feasible") is False, (
+            f"Recipe '{recipe_name}' has reachable gate_backend_write under codex but "
+            f"dispatch_feasible is not False"
+        )
+    else:
+        assert result.get("dispatch_feasible") is True, (
+            f"Recipe '{recipe_name}' on backend '{backend_name}' expected "
+            f"dispatch_feasible=True (no infeasible gate), "
+            f"got {result.get('dispatch_feasible')}"
+        )
+
+
 def test_declared_unsupported_orphan_check() -> None:
     """Every DECLARED_UNSUPPORTED entry must reference a live recipe and backend."""
     recipe_names = frozenset(_ALL_RECIPE_NAMES)

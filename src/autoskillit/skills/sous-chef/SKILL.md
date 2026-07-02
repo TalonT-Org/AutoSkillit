@@ -847,6 +847,24 @@ translate those instructions into `lock_ingredients` calls **immediately after
 `open_kitchen`**. This converts natural language into machine-enforced locks that
 persist for the entire session.
 
+### Server-authoritative ingredients — cannot be locked
+
+Some ingredients are server-authoritative: `lock_ingredients` will reject them with a
+structured error. Do not attempt to lock them — use the config or runtime mechanism
+listed instead:
+
+- `base_branch` → config: `branching.default_base_branch`
+- `local_review_rounds` → config: `review.local_review_rounds`
+- `adversarial_review_level` → config: `plan.adversarial_review_level`
+- `post_run_diagnostics` → config: `diagnostics.post_run_analysis` (for one-off diagnostics outside a live run, use `run_skill /autoskillit:analyze-pipeline-health`)
+- `is_fleet_dispatch` → set by dispatch runtime at session launch, not user-configurable
+- `dispatch_id` → set by dispatch runtime at session launch, not user-configurable
+
+A server-authoritative rejection from `lock_ingredients` is advisory: report it to
+the user in one sentence and continue the pipeline. Do NOT generalize this to all
+configuration-tool failures — an infrastructure lock-write failure means a user
+instruction was silently unenforced, and the existing halt doctrine applies there.
+
 ### When to call lock_ingredients
 
 - User says "skip investigate" → `lock_ingredients(locked={"investigate": "false"}, pipeline_id="<pid>")`

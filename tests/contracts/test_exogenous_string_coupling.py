@@ -57,6 +57,30 @@ def test_quota_post_warning_trigger_coupled_to_sous_chef_skill():
     )
 
 
+def test_server_authoritative_ingredients_coupled_to_sous_chef_skill():
+    """Every SERVER_AUTHORITATIVE_INGREDIENTS member must appear in the sous-chef SKILL.md
+    INGREDIENT LOCKING section so the guidance stays in sync with the registry."""
+    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
+    from autoskillit.core import pkg_root
+
+    skill_path = pkg_root() / "skills" / "sous-chef" / "SKILL.md"
+    assert skill_path.exists(), "sous-chef SKILL.md not found"
+    content = skill_path.read_text()
+
+    section_start = content.find("## INGREDIENT LOCKING — STRUCTURAL ENFORCEMENT")
+    assert section_start != -1, "INGREDIENT LOCKING section not found in sous-chef SKILL.md"
+    section_end = content.find("---", section_start)
+    if section_end == -1:
+        section_end = len(content)
+    section = content[section_start:section_end]
+
+    for key in sorted(SERVER_AUTHORITATIVE_INGREDIENTS):
+        assert key in section, (
+            f"sous-chef SKILL.md INGREDIENT LOCKING section must mention "
+            f"server-authoritative ingredient {key!r}; not found in section text"
+        )
+
+
 def test_quota_post_budget_exceeded_trigger_coupled_to_food_truck_prompt():
     """QUOTA_POST_BUDGET_EXCEEDED_TRIGGER must appear verbatim in the food truck prompt."""
     from autoskillit.cli._mcp_names import DIRECT_PREFIX

@@ -545,6 +545,68 @@ class TestLoadRecipeIngredientsOnly:
         assert "suggestions" in result
 
 
+class TestLoadRecipeAuthorityClobber:
+    """load_recipe must emit an authority-clobber warning when a server-authoritative
+    key is overridden by the caller. Enforcement (config-layer wins) already works;
+    this test verifies the *feedback* contract."""
+
+    @pytest.mark.anyio
+    async def test_load_recipe_emits_authority_warning(self, tmp_path, monkeypatch):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from tests.server.conftest import _make_mock_ctx
+
+        monkeypatch.chdir(tmp_path)
+        mock_ctx = _make_mock_ctx()
+        mock_ctx.enable_components = AsyncMock()
+        mock_ctx.recipes = MagicMock()
+        mock_recipe_obj = MagicMock()
+        mock_recipe_obj.steps = {"do": MagicMock()}
+        mock_recipe_obj.ingredients = {"post_run_diagnostics": MagicMock()}
+        mock_ctx.recipes.load.return_value = mock_recipe_obj
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+            "valid": True,
+            "suggestions": [],
+            "diagram": None,
+            "ingredients_table": "--- TABLE ---",
+        }
+        mock_ctx.recipes.find.return_value = None
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+
+        with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+            with patch("autoskillit.server.logger"):
+                with patch(
+                    "autoskillit.server.tools.tools_recipe.resolve_kitchen_id",
+                    return_value="test-kitchen",
+                ):
+                    with patch(
+                        "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+                        return_value={
+                            "base_branch": "develop",
+                            "post_run_diagnostics": "false",
+                            "is_fleet_dispatch": "false",
+                            "dispatch_id": "",
+                        },
+                    ):
+                        from autoskillit.server.tools.tools_recipe import load_recipe
+
+                        result_str = await load_recipe(
+                            name="demo",
+                            overrides={"post_run_diagnostics": "true"},
+                            ctx=mock_ctx,
+                        )
+
+        parsed = json.loads(result_str)
+        warnings = parsed.get("warnings") or []
+        matching = [w for w in warnings if "post_run_diagnostics" in w]
+        assert matching, (
+            f"load_recipe must emit a warning naming post_run_diagnostics; got warnings={warnings}"
+        )
+
+
 # 1i: load_recipe tool surfaces validation failure
 class TestLoadRecipeSurfacesValidationFailure:
     """When load_and_validate returns valid=False, the load_recipe tool must include

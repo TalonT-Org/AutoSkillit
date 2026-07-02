@@ -125,6 +125,13 @@ SERVER_AUTHORITATIVE_INGREDIENTS: frozenset[str] = CONFIG_AUTHORITY_KEYS - {
     "backend_supports_git_write",
 }
 
+SERVER_AUTHORITATIVE_CONFIG_PATHS: dict[str, str] = {
+    "base_branch": "branching.default_base_branch",
+    "local_review_rounds": "review.local_review_rounds",
+    "adversarial_review_level": "plan.adversarial_review_level",
+    "post_run_diagnostics": "diagnostics.post_run_analysis",
+}
+
 
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     """Resolve auto-detect ingredient values from the project environment."""

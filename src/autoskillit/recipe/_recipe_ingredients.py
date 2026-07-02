@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 from autoskillit.core import (
     TerminalColumn,
@@ -129,6 +129,7 @@ class LoadRecipeResult(TypedDict, total=False):
     post_prune_step_names: list[str]
     dispatch_feasible: bool
     infeasible_steps: list[str]
+    warnings: NotRequired[list[str]]
 
 
 class OpenKitchenResult(TypedDict, total=False):
@@ -157,6 +158,7 @@ class OpenKitchenResult(TypedDict, total=False):
     post_prune_step_names: list[str]
     dispatch_feasible: bool
     infeasible_steps: list[str]
+    warnings: NotRequired[list[str]]
     # Post-return keys injected by open_kitchen handler (4 keys)
     success: bool
     kitchen: str

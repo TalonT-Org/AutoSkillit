@@ -409,6 +409,19 @@ async def test_deferred_recall_preserves_active_locks(tmp_path):
     ctx.active_recipe_steps = {"investigate": MagicMock(skip_when_false="inputs.investigate")}
     ctx.active_recipe_ingredients = frozenset(["investigate"])
     ctx.gate.enabled = True
+    ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test-recipe\nsteps:\n  investigate:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- TABLE ---",
+        "requires_packs": [],
+        "requires_features": [],
+        "content_hash": "abc",
+        "composite_hash": "def",
+        "recipe_version": "1.0",
+        "post_prune_step_names": ["investigate"],
+    }
 
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")

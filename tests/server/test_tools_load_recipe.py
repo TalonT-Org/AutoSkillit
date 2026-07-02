@@ -580,23 +580,26 @@ class TestLoadRecipeAuthorityClobber:
             "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
             return_value=mock_ctx,
         ):
-            with patch("autoskillit.server.logger"):
-                with patch(
-                    "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
-                    return_value={
-                        "base_branch": "develop",
-                        "post_run_diagnostics": "false",
-                        "is_fleet_dispatch": "false",
-                        "dispatch_id": "",
-                    },
-                ):
-                    from autoskillit.server.tools.tools_recipe import load_recipe
+            with patch(
+                "autoskillit.server.tools.tools_recipe._require_enabled",
+                return_value=None,
+            ):
+                with patch("autoskillit.server.logger"):
+                    with patch(
+                        "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+                        return_value={
+                            "base_branch": "develop",
+                            "post_run_diagnostics": "false",
+                            "is_fleet_dispatch": "false",
+                            "dispatch_id": "",
+                        },
+                    ):
+                        from autoskillit.server.tools.tools_recipe import load_recipe
 
-                    result_str = await load_recipe(
-                        name="demo",
-                        overrides={"post_run_diagnostics": "true"},
-                        ctx=mock_ctx,
-                    )
+                        result_str = await load_recipe(
+                            name="demo",
+                            overrides={"post_run_diagnostics": "true"},
+                        )
 
         parsed = json.loads(result_str)
         warnings = parsed.get("warnings") or []

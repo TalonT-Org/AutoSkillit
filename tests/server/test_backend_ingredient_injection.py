@@ -16,7 +16,7 @@ import pytest
 
 from autoskillit.core import CodingAgentBackend
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 def _make_backend_with_capability(git_writable: bool) -> CodingAgentBackend:
@@ -458,17 +458,17 @@ def test_backend_capability_overrides_matches_registry():
 class TestRealCompositionPruning:
     """REQ-PRUNE-001: real load_and_validate removes guarded steps under codex."""
 
-    _GIT_WRITE_STEPS = {
-        "implement",
-        "fix",
-        "merge_gate_fix",
-        "retry_worktree",
-        "rebase_conflict_fix",
-        "resolve_review",
-        "resolve_pre_review_conflicts",
-        "resolve_pre_resolve_conflicts",
-        "resolve_ci",
-    }
+    @staticmethod
+    def _discover_git_write_steps() -> frozenset[str]:
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+        recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+        return frozenset(
+            name
+            for name, step in recipe.steps.items()
+            if step.skip_when_false == "inputs.backend_supports_git_write"
+            and step.tool == "run_skill"
+        )
 
     def test_codex_overrides_remove_guarded_steps_from_content(self, tmp_path: Path) -> None:
         from autoskillit.recipe._api import load_and_validate
@@ -487,7 +487,7 @@ class TestRealCompositionPruning:
             "Content must be non-empty after codex pruning — "
             "empty content indicates unrepairable dangling routes after step pruning"
         )
-        for step_name in self._GIT_WRITE_STEPS:
+        for step_name in self._discover_git_write_steps():
             assert f"  {step_name}:" not in content, (
                 f"Guarded step {step_name!r} still present as YAML key in pruned content"
             )

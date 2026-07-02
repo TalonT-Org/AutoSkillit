@@ -216,14 +216,14 @@ class CapabilityResolutionDetail:
 
     Carries the resolution path and per-step data through the capability
     admission chain so downstream consumers (infeasibility response
-    formatters) can surface the actual cause of partial-overrides bailout
+    formatters) can surface the actual cause of capability resolution failure
     rather than blaming the backend generically.
 
     resolution_path values:
-        "all_pass" — every guarded step resolved with ANTHROPIC_BASE_URL;
+        "any_pass" — at least one guarded step resolved with ANTHROPIC_BASE_URL;
             capability flipped to "true".
-        "partial_bail" — at least one guarded step lacked ANTHROPIC_BASE_URL;
-            bailed on first failure (all-or-nothing conservatism).
+        "none_pass" — no guarded step had ANTHROPIC_BASE_URL;
+            capability remains "false".
         "no_guarded_steps" — recipe has no run_skill steps gated by
             backend_supports_git_write; nothing to flip.
         "claude_backend" — backend is anthropic_provider_capable=True;

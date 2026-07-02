@@ -11,7 +11,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS
-from autoskillit.core import CapabilityResolutionDetail, get_logger
+from autoskillit.core import (
+    CAPABILITY_INGREDIENT_TO_SKIP_GUARD,
+    CapabilityResolutionDetail,
+    get_logger,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -42,14 +46,15 @@ def _provider_aware_capability_overrides(
 
     Extends ``_backend_capability_overrides`` by considering per-step provider
     overrides: when the orchestrator backend is not git-writable (e.g. Codex)
-    but every ``run_skill`` step gated by ``backend_supports_git_write`` has
-    a provider override that resolves to ``ANTHROPIC_BASE_URL``, the override
+    but at least one ``run_skill`` step gated by ``backend_supports_git_write``
+    has a provider override that resolves to ``ANTHROPIC_BASE_URL``, the override
     flips to ``"true"`` so those steps survive pruning.
 
-    Conservative fallback: any guarded step without an ANTHROPIC_BASE_URL
-    provider override keeps the capability falsy. This preserves
-    defense-in-depth — the runtime ``gate_backend_write`` still fires for
-    any step that genuinely cannot reach a writable backend.
+    Any-suffices semantics: a single guarded step with ANTHROPIC_BASE_URL is
+    sufficient to flip the capability. This preserves defense-in-depth — the
+    runtime ``gate_backend_write`` still fires for any surviving step, and the
+    per-step ``_check_backend_compat()`` gate verifies skill backend
+    requirements at dispatch time.
 
     Graceful degradation: when any of ``backend``, ``config_providers``, or
     ``recipe_steps`` is ``None``, or when ``backend.capabilities.anthropic_provider_capable``
@@ -70,11 +75,12 @@ def _provider_aware_capability_overrides(
     if getattr(backend.capabilities, "anthropic_provider_capable", False):
         return base, CapabilityResolutionDetail.empty("claude_backend")
 
+    _guard_refs = frozenset(CAPABILITY_INGREDIENT_TO_SKIP_GUARD.values())
     guarded_step_names: list[str] = []
     for step_name, step in recipe_steps.items():
         skip_when = getattr(step, "skip_when_false", None)
         tool = getattr(step, "tool", None)
-        if skip_when == "inputs.backend_supports_git_write" and tool == "run_skill":
+        if skip_when in _guard_refs and tool == "run_skill":
             guarded_step_names.append(step_name)
 
     if not guarded_step_names:
@@ -83,6 +89,7 @@ def _provider_aware_capability_overrides(
     from autoskillit.server._guards import _resolve_provider_profile  # circular-break
 
     resolved: list[tuple[str, str, bool]] = []
+    any_has_base_url = False
     for step_name in guarded_step_names:
         step = recipe_steps[step_name]
         step_provider = getattr(step, "provider", "") or ""
@@ -98,24 +105,26 @@ def _provider_aware_capability_overrides(
             and "ANTHROPIC_BASE_URL" in provider_extras
         )
         resolved.append((step_name, profile_name or "", has_base_url))
-        if not has_base_url:
-            logger.info(
-                "capability_override_bail",
-                bail_step=step_name,
-                resolved_steps=resolved,
-                recipe_name=recipe_name,
-            )
-            return base, CapabilityResolutionDetail(
-                resolved_steps=tuple(resolved),
-                bail_step=step_name,
-                resolution_path="partial_bail",
-            )
+        if has_base_url:
+            any_has_base_url = True
 
-    base["backend_supports_git_write"] = "true"
+    if any_has_base_url:
+        base["backend_supports_git_write"] = "true"
+        return base, CapabilityResolutionDetail(
+            resolved_steps=tuple(resolved),
+            bail_step=None,
+            resolution_path="any_pass",
+        )
+
+    logger.info(
+        "capability_override_none_pass",
+        resolved_steps=resolved,
+        recipe_name=recipe_name,
+    )
     return base, CapabilityResolutionDetail(
         resolved_steps=tuple(resolved),
         bail_step=None,
-        resolution_path="all_pass",
+        resolution_path="none_pass",
     )
 
 

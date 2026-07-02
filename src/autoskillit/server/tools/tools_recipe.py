@@ -262,7 +262,7 @@ async def load_recipe(
                     "infeasible_steps": result.get("infeasible_steps", []),
                     "user_visible_message": result["user_visible_message"],
                 }
-                if _cap_detail is not None and _cap_detail.resolution_path == "partial_bail":
+                if _cap_detail is not None and _cap_detail.resolution_path == "none_pass":
                     _missing = list(_cap_detail.missing_provider_steps)
                     _infeasible_envelope["missing_provider_steps"] = _missing
                     _infeasible_envelope["escape_hatch"] = (

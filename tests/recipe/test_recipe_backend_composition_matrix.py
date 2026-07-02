@@ -90,6 +90,12 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str) -> None
         f"Recipe '{recipe_name}' on backend '{backend_name}' produced empty content"
     )
 
+    if backend_name == "codex" and "gate_backend_write" in (result.get("infeasible_steps") or []):
+        assert result.get("dispatch_feasible") is False, (
+            f"Recipe '{recipe_name}' has reachable gate under codex but "
+            f"dispatch_feasible is not False — admission control regression."
+        )
+
     suggestions: list[dict[str, Any]] = result.get("suggestions", [])
     dangling = [
         s for s in suggestions if s.get("message", "").startswith("[post-prune] dangling route:")
@@ -109,6 +115,35 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str) -> None
         f"backend-incompatible-skill errors: "
         + "; ".join(s.get("message", "") for s in backend_compat_errors)
     )
+
+
+@pytest.mark.parametrize(
+    "recipe_name,backend_name",
+    [pytest.param(r, b, id=f"{r}/{b}") for r, b in _MATRIX_IDS],
+)
+def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str) -> None:
+    """Dispatch feasibility must reflect gate_backend_write reachability per backend."""
+    backend = get_backend(backend_name)
+    result = load_and_validate(
+        recipe_name,
+        project_dir=_PROJECT_ROOT,
+        backend_name=backend_name,
+        ingredient_overrides=_backend_capability_overrides(backend),
+        lister=_SKILL_RESOLVER,
+    )
+
+    infeasible = result.get("infeasible_steps") or []
+    if backend_name == "codex" and "gate_backend_write" in infeasible:
+        assert result.get("dispatch_feasible") is False, (
+            f"Recipe '{recipe_name}' has reachable gate_backend_write under codex but "
+            f"dispatch_feasible is not False"
+        )
+    else:
+        assert result.get("dispatch_feasible") is True, (
+            f"Recipe '{recipe_name}' on backend '{backend_name}' expected "
+            f"dispatch_feasible=True (no infeasible gate), "
+            f"got {result.get('dispatch_feasible')}"
+        )
 
 
 def test_declared_unsupported_orphan_check() -> None:

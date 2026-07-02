@@ -986,7 +986,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; provider-aware capability override bridge: try/except around early find for "
         "graceful degradation when recipes.find raises (+10 net lines)"
         "; CapabilityResolutionDetail destructive tuple at open_kitchen call sites and "
-        "_dispatch_infeasible_response accepting capability_detail kwarg for partial-bail "
+        "_dispatch_infeasible_response accepting capability_detail kwarg for none_pass "
         "diagnostic enrichment (+24 net lines)",
     ),
     "tools_execution.py": (

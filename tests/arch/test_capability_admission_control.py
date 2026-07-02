@@ -247,3 +247,36 @@ def test_capability_ingredient_to_skip_guard_keys_subset() -> None:
     assert len(CAPABILITY_INGREDIENT_TO_SKIP_GUARD) > 0, (
         "CAPABILITY_INGREDIENT_TO_SKIP_GUARD must declare at least one mapping."
     )
+
+
+def test_provider_aware_override_iterates_capability_guards() -> None:
+    """Structural guard: _provider_aware_capability_overrides must be data-driven.
+
+    It must reference CAPABILITY_INGREDIENT_TO_SKIP_GUARD (not hardcode the literal
+    'inputs.backend_supports_git_write' string), so future capability ingredients
+    are automatically picked up without code changes.
+    """
+    auto_overrides_path = SRC_ROOT / "server" / "tools" / "_auto_overrides.py"
+    src = auto_overrides_path.read_text(encoding="utf-8")
+
+    func_src = ""
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.FunctionDef)
+            and node.name == "_provider_aware_capability_overrides"
+        ):
+            func_src = ast.get_source_segment(src, node) or ""
+            break
+    assert func_src, "_provider_aware_capability_overrides not found in _auto_overrides.py"
+
+    assert "CAPABILITY_INGREDIENT_TO_SKIP_GUARD" in func_src, (
+        "_provider_aware_capability_overrides must reference CAPABILITY_INGREDIENT_TO_SKIP_GUARD "
+        "to be data-driven — hardcoding capability guard strings causes silent breakage when "
+        "new capability ingredients are added."
+    )
+    assert "inputs.backend_supports_git_write" not in func_src, (
+        "_provider_aware_capability_overrides must NOT hardcode "
+        "'inputs.backend_supports_git_write' — this string should only appear in "
+        "CAPABILITY_INGREDIENT_TO_SKIP_GUARD as the single source of truth."
+    )

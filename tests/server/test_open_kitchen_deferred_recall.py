@@ -393,3 +393,57 @@ async def test_cold_open_kitchen_runs_handler():
 
     mock_handler.assert_called_once()
     assert isinstance(result, str)
+
+
+@pytest.mark.anyio
+async def test_deferred_recall_preserves_active_locks(tmp_path):
+    """Locks survive across deferred-recall re-open (overlay file persists)."""
+    from autoskillit.server.tools.tools_kitchen import lock_ingredients, open_kitchen
+
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True)
+    (temp_dir / ".hook_config.json").write_text("{}")
+
+    ctx = _make_deferred_recall_ctx("test-recipe")
+    ctx.project_dir = tmp_path
+    ctx.active_recipe_steps = {"investigate": MagicMock(skip_when_false="inputs.investigate")}
+    ctx.active_recipe_ingredients = frozenset(["investigate"])
+    ctx.gate.enabled = True
+    ctx.recipes.load_and_validate.return_value = {
+        "content": "name: test-recipe\nsteps:\n  investigate:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- TABLE ---",
+        "requires_packs": [],
+        "requires_features": [],
+        "content_hash": "abc",
+        "composite_hash": "def",
+        "recipe_version": "1.0",
+        "post_prune_step_names": ["investigate"],
+    }
+
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")
+    ctx.recipes.find.return_value = mock_recipe_info
+    mock_recipe_obj = MagicMock()
+    mock_recipe_obj.steps = {"investigate": MagicMock()}
+    mock_recipe_obj.ingredients = {"investigate": MagicMock()}
+    ctx.recipes.load.return_value = mock_recipe_obj
+
+    with patch("autoskillit.server._get_ctx", return_value=ctx):
+        # Lock investigate=false
+        lock_result = json.loads(
+            await lock_ingredients(locked={"investigate": "false"}, pipeline_id="a")
+        )
+        assert lock_result["success"] is True
+
+        # Re-open kitchen (deferred-recall path) — locks must still be in effect
+        result_str = await open_kitchen(name="test-recipe", ctx=ctx)
+        parsed = json.loads(result_str)
+        assert parsed["success"] is True
+
+        overlay_path = temp_dir / ".hook_config_overlay.json"
+        assert overlay_path.exists(), "Overlay must persist across re-open"
+        data = json.loads(overlay_path.read_text())
+        assert data["locked_ingredients"]["a"]["investigate"] == "false"

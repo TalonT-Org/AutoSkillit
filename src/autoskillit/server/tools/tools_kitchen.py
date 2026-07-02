@@ -60,6 +60,10 @@ from autoskillit.server._misc import (
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.tools._authority_feedback import (
+    build_authority_clobber_warnings,
+    build_authority_rejection_envelope,
+)
 from autoskillit.server.tools._auto_overrides import (
     _promote_capability_keys,
     _provider_aware_capability_overrides,
@@ -526,17 +530,20 @@ def _check_override_keys(
     overrides: dict[str, str] | None,
     declared: frozenset[str],
     session_keys: set[str],
+    config_layer: dict[str, str],
 ) -> list[str]:
     if not overrides:
         return []
     user_keys = set(overrides.keys()) - session_keys - SERVER_AUTHORITATIVE_INGREDIENTS
     unknown = user_keys - declared
-    if not unknown:
-        return []
-    return [
-        f"Unknown override keys ignored: {sorted(unknown)}. "
-        f"Valid ingredient keys: {sorted(declared)}"
-    ]
+    warnings: list[str] = []
+    if unknown:
+        warnings.append(
+            f"Unknown override keys ignored: {sorted(unknown)}. "
+            f"Valid ingredient keys: {sorted(declared)}"
+        )
+    warnings.extend(build_authority_clobber_warnings(overrides, config_layer))
+    return warnings
 
 
 @mcp.tool(
@@ -560,7 +567,10 @@ async def open_kitchen(
     Args:
         name: Optional recipe name to load immediately after opening.
         overrides: Optional dict of ingredient name → value to override recipe defaults.
-            Use to activate hidden features (e.g., ``{"sprint_mode": "true"}``).
+            Use to activate hidden features (e.g., ``{"sprint_mode": "true"}``). Ingredients
+            with ``authority: config`` (base_branch, local_review_rounds,
+            adversarial_review_level, post_run_diagnostics) cannot be set via overrides —
+            they resolve from server config and caller values are ignored with a warning.
         ingredients_only: When True and name is provided, return only the ingredient
             schema (ingredients_table, validity, suggestions) without the full recipe
             content, orchestration rules, or sous-chef discipline. Use for dispatch
@@ -802,6 +812,7 @@ async def open_kitchen(
                         overrides,
                         frozenset(_deferred_recipe_obj.ingredients.keys()),
                         set(_session_overrides.keys()),
+                        _config_layer,
                     )
                     if _override_warnings:
                         result["warnings"] = _override_warnings
@@ -919,6 +930,7 @@ async def open_kitchen(
                     overrides,
                     frozenset(_normal_recipe_obj.ingredients.keys()),
                     set(_session_overrides.keys()),
+                    _config_layer,
                 )
                 if _override_warnings:
                     result["warnings"] = _override_warnings
@@ -1193,6 +1205,11 @@ async def lock_ingredients(
     run_skill calls for steps whose skip_when_false ingredient is locked
     to a falsy value will be denied.
 
+    Server-authoritative ingredients (base_branch, local_review_rounds,
+    adversarial_review_level, post_run_diagnostics, is_fleet_dispatch,
+    dispatch_id) are rejected with a structured error envelope; the
+    rejected key names appear in both ``error`` and ``user_visible_message``.
+
     Call with unlock=["ingredient_name"] to release a lock.
 
     Never raises.
@@ -1216,16 +1233,7 @@ async def lock_ingredients(
         if locked:
             server_auth_overlap = set(locked.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS
             if server_auth_overlap:
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": (
-                            f"Cannot lock server-authoritative ingredients: "
-                            f"{sorted(server_auth_overlap)}. "
-                            "These are set by the server and cannot be overridden."
-                        ),
-                    }
-                )
+                return json.dumps(build_authority_rejection_envelope(server_auth_overlap))
 
         if not locked and not unlock:
             return json.dumps(

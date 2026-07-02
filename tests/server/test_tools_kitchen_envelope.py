@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -453,6 +454,68 @@ async def test_open_kitchen_config_authority_overrides_caller(tmp_path, monkeypa
     call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
     assert overrides["base_branch"] == "develop"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatch):
+    """open_kitchen must emit a warning naming the clobbered key and its config path."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_recipe_obj = MagicMock()
+    mock_recipe_obj.steps = {"do": MagicMock()}
+    mock_recipe_obj.ingredients = {"base_branch": MagicMock(), "post_run_diagnostics": MagicMock()}
+    mock_ctx.recipes.load.return_value = mock_recipe_obj
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- TABLE ---",
+    }
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = Path("/fake/recipe.yaml")
+    mock_ctx.recipes.find.return_value = mock_recipe_info
+    mock_ctx.config.migration.suppressed = []
+    mock_ctx.kitchen_id = "test-kitchen-abc"
+    mock_ctx.config.linux_tracing.log_dir = ""
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen-abc",
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                            return_value={
+                                "base_branch": "develop",
+                                "post_run_diagnostics": "false",
+                                "is_fleet_dispatch": "false",
+                                "dispatch_id": "",
+                            },
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            result_str = await open_kitchen(
+                                name="demo",
+                                overrides={"post_run_diagnostics": "true"},
+                                ctx=mock_ctx,
+                            )
+
+    parsed = json.loads(result_str)
+    warnings = parsed.get("warnings") or []
+    matching = [w for w in warnings if "post_run_diagnostics" in w]
+    assert matching, f"Expected a warning naming post_run_diagnostics; got warnings={warnings}"
+    assert any("diagnostics.post_run_analysis" in w for w in warnings), (
+        f"Expected the warning to name the config path diagnostics.post_run_analysis; "
+        f"got warnings={warnings}"
+    )
 
 
 @pytest.mark.anyio

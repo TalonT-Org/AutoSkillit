@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -99,6 +100,40 @@ class TestLockIngredientsRejectsServerAuthoritative:
 
         assert result["success"] is False
         assert "server-authoritative" in result["error"].lower()
+
+
+@pytest.mark.parametrize(
+    "server_auth_key",
+    ["post_run_diagnostics", "base_branch"],
+)
+@pytest.mark.anyio
+async def test_lock_ingredients_envelope_has_structured_fields(server_auth_key, tmp_path):
+    """Server-authoritative rejection envelope must carry user_visible_message, stage, retriable."""  # noqa: E501
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True)
+    (temp_dir / ".hook_config.json").write_text("{}")
+
+    ctx = _make_mock_ctx()
+    ctx.project_dir = tmp_path
+    ctx.active_recipe_steps = {}
+
+    with patch("autoskillit.server._get_ctx", return_value=ctx):
+        from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+        result = json.loads(
+            await lock_ingredients(locked={server_auth_key: "value"}, pipeline_id="a")
+        )
+
+    assert result["success"] is False
+    assert "server-authoritative" in result["error"].lower()
+    assert "stage" in result
+    assert isinstance(result["stage"], str)
+    assert len(result["stage"]) > 0
+    assert "retriable" in result
+    assert result["retriable"] is False
+    assert "user_visible_message" in result
+    assert isinstance(result["user_visible_message"], str)
+    assert len(result["user_visible_message"]) > 0
 
 
 class TestLockIngredientsUnlock:
@@ -321,6 +356,93 @@ class TestLockIngredientsUnknownKeyValidation:
             result = json.loads(await lock_ingredients(unlock=["audit_impl"], pipeline_id="a"))
 
         assert result["success"] is True
+
+
+class TestAuthorityFeedbackConsistency:
+    """Cross-tool consistency: every SERVER_AUTHORITATIVE_INGREDIENTS key must
+    produce feedback on BOTH open_kitchen and lock_ingredients surfaces."""
+
+    @pytest.mark.anyio
+    async def test_every_authority_key_emits_feedback_on_both_surfaces(
+        self, tmp_path, monkeypatch
+    ):
+        # --- open_kitchen: authority clobber warning must appear ---
+        from unittest.mock import MagicMock
+
+        from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
+        from tests.server._helpers import _PATCHED_DEFAULTS
+        from tests.server.conftest import _make_mock_ctx
+
+        mock_ctx = _make_mock_ctx()
+        mock_ctx.enable_components = AsyncMock()
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.recipes.load_and_validate.return_value = {
+            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+            "valid": True,
+            "suggestions": [],
+            "diagram": None,
+            "ingredients_table": "--- TABLE ---",
+        }
+        mock_recipe_info = MagicMock()
+        mock_recipe_info.path = Path("/fake/recipe.yaml")
+        mock_ctx.recipes.find.return_value = mock_recipe_info
+        mock_recipe_obj = MagicMock()
+        mock_recipe_obj.steps = {"do": MagicMock()}
+        mock_recipe_obj.ingredients = {k: MagicMock() for k in SERVER_AUTHORITATIVE_INGREDIENTS}
+        mock_ctx.recipes.load.return_value = mock_recipe_obj
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.kitchen_id = "test-kitchen"
+        mock_ctx.config.linux_tracing.log_dir = ""
+
+        with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+            with patch("autoskillit.server.logger"):
+                with patch(
+                    "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+                ):
+                    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                            return_value="test-kitchen",
+                        ):
+                            with patch(
+                                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                                return_value=_PATCHED_DEFAULTS,
+                            ):
+                                from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                                for key in sorted(SERVER_AUTHORITATIVE_INGREDIENTS):
+                                    result_str = await open_kitchen(
+                                        name="demo",
+                                        overrides={key: "clobber_value"},
+                                        ctx=mock_ctx,
+                                    )
+                                    parsed = json.loads(result_str)
+                                    warnings = parsed.get("warnings") or []
+                                    matching = [w for w in warnings if key in w]
+                                    assert matching, (
+                                        f"open_kitchen must emit a warning mentioning {key!r} "
+                                        f"when overridden; got warnings={warnings}"
+                                    )
+
+        # --- lock_ingredients: structured rejection must mention each key ---
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+
+        ctx_lk = _make_mock_ctx()
+        ctx_lk.project_dir = tmp_path
+        ctx_lk.active_recipe_steps = {}
+
+        with patch("autoskillit.server._get_ctx", return_value=ctx_lk):
+            from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+            for key in sorted(SERVER_AUTHORITATIVE_INGREDIENTS):
+                result = json.loads(await lock_ingredients(locked={key: "value"}, pipeline_id="a"))
+                assert result["success"] is False
+                assert key in result["user_visible_message"], (
+                    f"lock_ingredients user_visible_message must mention {key!r}; "
+                    f"got {result['user_visible_message']!r}"
+                )
 
 
 class TestLockIngredientsConcurrentFlock:

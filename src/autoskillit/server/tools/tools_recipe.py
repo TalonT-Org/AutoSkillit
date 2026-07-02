@@ -25,6 +25,7 @@ from autoskillit.server._misc import (
 )
 from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import (
     _promote_capability_keys,
     _provider_aware_capability_overrides,
@@ -276,6 +277,11 @@ async def load_recipe(
                         f"{_infeasible_envelope['escape_hatch']}"
                     )
                 return json.dumps(_infeasible_envelope)
+            _authority_warnings = build_authority_clobber_warnings(
+                overrides or {}, _config_layer, caller_tool="load_recipe"
+            )
+            if _authority_warnings:
+                result["warnings"] = _authority_warnings
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
             _required_keys: frozenset[str] = frozenset()

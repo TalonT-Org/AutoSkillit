@@ -398,7 +398,7 @@ SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
 
 MODULE_CASCADE_CONFIG: dict[str, frozenset[str]] = {
     "_config_loader": frozenset({"config", "cli"}),
-    "ingredient_defaults": frozenset({"config", "recipe"}),
+    "ingredient_defaults": frozenset({"config", "recipe", "server"}),
 }
 
 MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {

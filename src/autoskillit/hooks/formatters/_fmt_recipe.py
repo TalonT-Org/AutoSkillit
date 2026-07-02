@@ -28,6 +28,7 @@ _FMT_LOAD_RECIPE_RENDERED: frozenset[str] = frozenset(
         "content",
         "ingredients_table",
         "orchestration_rules",
+        "warnings",
     }
 )
 _FMT_LOAD_RECIPE_SUPPRESSED: frozenset[str] = frozenset(
@@ -119,6 +120,9 @@ def _fmt_recipe_body(data: Mapping[str, Any]) -> list[str]:
     orch_rules = data.get("orchestration_rules")
     if orch_rules:
         lines.append(f"\n{orch_rules}")
+    warnings = data.get("warnings") or []
+    for warning in warnings:
+        lines.append(f"\n{_WARN_MARK} {warning}")
     return lines
 
 
@@ -168,6 +172,7 @@ _FMT_OPEN_KITCHEN_RENDERED: frozenset[str] = frozenset(
         "ingredients_table",
         "orchestration_rules",
         "version",
+        "warnings",
     }
 )
 _FMT_OPEN_KITCHEN_SUPPRESSED: frozenset[str] = frozenset(

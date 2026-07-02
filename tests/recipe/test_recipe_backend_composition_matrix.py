@@ -90,6 +90,12 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str) -> None
         f"Recipe '{recipe_name}' on backend '{backend_name}' produced empty content"
     )
 
+    if backend_name == "codex" and "gate_backend_write" in (result.get("infeasible_steps") or []):
+        assert result.get("dispatch_feasible") is False, (
+            f"Recipe '{recipe_name}' has reachable gate under codex but "
+            f"dispatch_feasible is not False — admission control regression."
+        )
+
     suggestions: list[dict[str, Any]] = result.get("suggestions", [])
     dangling = [
         s for s in suggestions if s.get("message", "").startswith("[post-prune] dangling route:")

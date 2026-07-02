@@ -266,11 +266,13 @@ def test_provider_aware_capability_override_all_overridden_returns_true() -> Non
     assert result == {"backend_supports_git_write": "true"}
 
 
-def test_provider_aware_capability_override_partial_overrides_stays_false() -> None:
-    """Partial provider overrides (conservative): capability stays 'false'."""
+def test_provider_aware_capability_override_partial_overrides_flips_true() -> None:
+    """Partial provider overrides (any-suffices): at least one step with ANTHROPIC_BASE_URL
+    flips capability to 'true'."""
     from unittest.mock import patch
 
     from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.core import CapabilityResolutionDetail
     from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
 
     backend = _make_codex_backend()
@@ -294,13 +296,15 @@ def test_provider_aware_capability_override_partial_overrides_stays_false() -> N
         "autoskillit.server._guards._resolve_provider_profile",
         side_effect=_per_step_resolve,
     ):
-        result, _ = _provider_aware_capability_overrides(
+        result, detail = _provider_aware_capability_overrides(
             backend,
             "implementation",
             providers,
             steps,  # type: ignore[arg-type]
         )
-    assert result == {"backend_supports_git_write": "false"}
+    assert result == {"backend_supports_git_write": "true"}
+    assert detail.resolution_path == "any_pass"
+    assert isinstance(detail, CapabilityResolutionDetail)
 
 
 def test_provider_aware_capability_override_no_overrides_preserves_false() -> None:
@@ -572,8 +576,8 @@ async def test_dispatch_food_truck_codex_with_provider_overrides_not_rejected(
 
 def test_provider_aware_override_returns_resolution_detail() -> None:
     """Test 1A: _provider_aware_capability_overrides returns a tuple
-    (dict, CapabilityResolutionDetail | None). Partial-override scenario
-    produces detail with bail_step populated and resolution_path='partial_bail'.
+    (dict, CapabilityResolutionDetail | None). Any-suffices scenario with at
+    least one step having ANTHROPIC_BASE_URL produces resolution_path='any_pass'.
     """
     from autoskillit.config._config_dataclasses import ProvidersConfig
     from autoskillit.core import CapabilityResolutionDetail
@@ -607,16 +611,15 @@ def test_provider_aware_override_returns_resolution_detail() -> None:
             steps,  # type: ignore[arg-type]
         )
     assert isinstance(detail, CapabilityResolutionDetail)
-    assert detail.resolution_path == "partial_bail"
-    assert detail.bail_step is not None
-    assert detail.bail_step == "fix"
+    assert detail.resolution_path == "any_pass"
+    assert detail.bail_step is None
     assert len(detail.resolved_steps) >= 1
-    assert overrides == {"backend_supports_git_write": "false"}
+    assert overrides == {"backend_supports_git_write": "true"}
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_partial_override_infeasible_includes_provider_guidance() -> None:
-    """Test 1B: open_kitchen with Codex + partial provider overrides produces
+async def test_open_kitchen_no_override_infeasible_includes_provider_guidance() -> None:
+    """Test 1B: open_kitchen with Codex + NO provider overrides (none_pass) produces
     dispatch_infeasible envelope with missing_provider_steps and escape_hatch."""
     import json
     from unittest.mock import AsyncMock, patch
@@ -647,7 +650,7 @@ async def test_open_kitchen_partial_override_infeasible_includes_provider_guidan
     recipe_obj = MagicMock()
     recipe_obj.name = "implementation"
     recipe_obj.steps = {
-        "implement": _make_recipe_step("implement", provider="minimax"),
+        "implement": _make_recipe_step("implement", provider=""),
         "fix": _make_recipe_step("fix", provider=""),
     }
     tool_ctx.recipes.load.return_value = recipe_obj
@@ -660,16 +663,11 @@ async def test_open_kitchen_partial_override_infeasible_includes_provider_guidan
 
     fastmcp_ctx = AsyncMock()
 
-    def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
-        if step_provider == "minimax":
-            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
-        return ("", None)
-
     with (
         patch("autoskillit.server._get_ctx", return_value=tool_ctx),
         patch(
             "autoskillit.server._guards._resolve_provider_profile",
-            side_effect=_per_step_resolve,
+            return_value=("", None),
         ),
     ):
         result = await open_kitchen(name="implementation", ctx=fastmcp_ctx)
@@ -712,13 +710,13 @@ def test_wildcard_override_flips_capability_true() -> None:
         )
     assert result == {"backend_supports_git_write": "true"}
     assert detail is not None
-    assert detail.resolution_path == "all_pass"
+    assert detail.resolution_path == "any_pass"
     assert detail.bail_step is None
 
 
 def test_non_base_url_provider_extras_bail() -> None:
     """Test 1D: provider profile with extras but no ANTHROPIC_BASE_URL
-    (e.g. Bedrock-style {AWS_REGION: us-east-1}) correctly bails."""
+    (e.g. Bedrock-style {AWS_REGION: us-east-1}) correctly bails with none_pass."""
     from unittest.mock import patch
 
     from autoskillit.config._config_dataclasses import ProvidersConfig
@@ -751,29 +749,25 @@ def test_non_base_url_provider_extras_bail() -> None:
         )
     assert result == {"backend_supports_git_write": "false"}
     assert detail is not None
-    assert detail.resolution_path == "partial_bail"
-    assert detail.bail_step is not None
+    assert detail.resolution_path == "none_pass"
+    assert detail.bail_step is None
 
 
 def test_partial_override_real_recipe_nine_steps() -> None:
-    """Test 1E: full 9-step guarded set, single step overridden, bails on next."""
+    """Test 1E: full 9-step guarded set, single step overridden, any-suffices flips to true."""
     from unittest.mock import patch
 
     from autoskillit.config._config_dataclasses import ProvidersConfig
     from autoskillit.core import CapabilityResolutionDetail
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
     from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
 
-    _GIT_WRITE_STEPS = {
-        "implement",
-        "fix",
-        "merge_gate_fix",
-        "retry_worktree",
-        "rebase_conflict_fix",
-        "resolve_review",
-        "resolve_pre_review_conflicts",
-        "resolve_pre_resolve_conflicts",
-        "resolve_ci",
-    }
+    recipe_obj = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    _GIT_WRITE_STEPS = frozenset(
+        name
+        for name, step in recipe_obj.steps.items()
+        if step.skip_when_false == "inputs.backend_supports_git_write" and step.tool == "run_skill"
+    )
     backend = _make_codex_backend()
     providers = ProvidersConfig(
         profiles={"minimax": {}},
@@ -811,9 +805,9 @@ def test_partial_override_real_recipe_nine_steps() -> None:
             steps,  # type: ignore[arg-type]
         )
     assert isinstance(detail, CapabilityResolutionDetail)
-    assert detail.resolution_path == "partial_bail"
-    assert detail.bail_step in _GIT_WRITE_STEPS - {"implement"}
-    assert result == {"backend_supports_git_write": "false"}
+    assert detail.resolution_path == "any_pass"
+    assert detail.bail_step is None
+    assert result == {"backend_supports_git_write": "true"}
 
 
 @pytest.mark.anyio
@@ -830,8 +824,8 @@ async def test_all_infeasibility_paths_have_escape_hatch(build_ctx_open: Any) ->
 
     detail = CapabilityResolutionDetail(
         resolved_steps=(("implement", "minimax", True), ("fix", "", False)),
-        bail_step="fix",
-        resolution_path="partial_bail",
+        bail_step=None,
+        resolution_path="none_pass",
     )
 
     # Path 1: _dispatch_infeasible_response (kitchen)
@@ -1002,7 +996,7 @@ async def test_all_infeasibility_paths_have_escape_hatch(build_ctx_open: Any) ->
 
 @pytest.mark.anyio
 async def test_load_recipe_partial_override_infeasible_includes_provider_guidance() -> None:
-    """Test 1G: load_recipe with Codex + partial provider overrides returns
+    """Test 1G: load_recipe with Codex + no provider overrides (none_pass) returns
     dispatch_infeasible response with missing_provider_steps and escape_hatch."""
     import json
     from unittest.mock import patch
@@ -1030,7 +1024,7 @@ async def test_load_recipe_partial_override_infeasible_includes_provider_guidanc
     recipe_obj = MagicMock()
     recipe_obj.name = "implementation"
     recipe_obj.steps = {
-        "implement": _make_recipe_step("implement", provider="minimax"),
+        "implement": _make_recipe_step("implement", provider=""),
         "fix": _make_recipe_step("fix", provider=""),
     }
     tool_ctx.recipes.load.return_value = recipe_obj
@@ -1040,11 +1034,6 @@ async def test_load_recipe_partial_override_infeasible_includes_provider_guidanc
         "dispatch_feasible": False,
         "infeasible_steps": ["gate_backend_write"],
     }
-
-    def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
-        if step_provider == "minimax":
-            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
-        return ("", None)
 
     with (
         patch(
@@ -1057,7 +1046,7 @@ async def test_load_recipe_partial_override_infeasible_includes_provider_guidanc
         ),
         patch(
             "autoskillit.server._guards._resolve_provider_profile",
-            side_effect=_per_step_resolve,
+            return_value=("", None),
         ),
     ):
         result = await load_recipe(name="implementation")
@@ -1072,7 +1061,7 @@ async def test_load_recipe_partial_override_infeasible_includes_provider_guidanc
 async def test_dispatch_food_truck_partial_override_infeasible_includes_guidance(
     build_ctx_open: Any,
 ) -> None:
-    """Test 1H: dispatch_food_truck with Codex + partial provider overrides
+    """Test 1H: dispatch_food_truck with Codex + no provider overrides (none_pass)
     returns fleet error containing provider guidance."""
     import json
     from unittest.mock import AsyncMock, patch
@@ -1099,7 +1088,7 @@ async def test_dispatch_food_truck_partial_override_infeasible_includes_guidance
     recipe_obj = MagicMock()
     recipe_obj.name = "implementation"
     recipe_obj.steps = {
-        "implement": _make_recipe_step("implement", provider="minimax"),
+        "implement": _make_recipe_step("implement", provider=""),
         "fix": _make_recipe_step("fix", provider=""),
     }
     tool_ctx.recipes.load.return_value = recipe_obj
@@ -1110,16 +1099,11 @@ async def test_dispatch_food_truck_partial_override_infeasible_includes_guidance
         "post_prune_step_names": ["implement"],
     }
 
-    def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
-        if step_provider == "minimax":
-            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
-        return ("", None)
-
     with (
         patch("autoskillit.server._state._ctx", tool_ctx),
         patch(
             "autoskillit.server._guards._resolve_provider_profile",
-            side_effect=_per_step_resolve,
+            return_value=("", None),
         ),
         patch(
             "autoskillit.server.tools.tools_fleet_dispatch._require_fleet",
@@ -1139,3 +1123,105 @@ async def test_dispatch_food_truck_partial_override_infeasible_includes_guidance
     assert "ANTHROPIC_BASE_URL" in parsed.get("user_visible_message", "")
     assert "missing_provider_steps" in parsed
     assert "escape_hatch" in parsed
+
+
+def test_provider_override_any_step_with_base_url_flips_capability() -> None:
+    """Test 1a (new): codex backend with ONE guarded step having ANTHROPIC_BASE_URL
+    and all other guarded steps lacking overrides → capability flips to 'true'
+    (any-suffices semantics). Previously this would bail with 'false'."""
+    from unittest.mock import patch
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.core import CapabilityResolutionDetail
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    backend = _make_codex_backend()
+    providers = ProvidersConfig(
+        profiles={"minimax": {}},
+        step_overrides={"implement": "minimax"},
+    )
+    steps = {
+        "implement": _make_recipe_step("implement", provider="minimax"),
+        "fix": _make_recipe_step("fix", provider=""),
+        "merge_gate_fix": _make_recipe_step("merge_gate_fix", provider=""),
+        "retry_worktree": _make_recipe_step("retry_worktree", provider=""),
+    }
+
+    def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
+        if step_provider == "minimax":
+            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+        return ("", None)
+
+    with patch(
+        "autoskillit.server._guards._resolve_provider_profile",
+        side_effect=_per_step_resolve,
+    ):
+        result, detail = _provider_aware_capability_overrides(
+            backend,
+            "implementation",
+            providers,
+            steps,  # type: ignore[arg-type]
+        )
+    assert result == {"backend_supports_git_write": "true"}, (
+        "Any-suffices: at least one step with ANTHROPIC_BASE_URL must flip capability to 'true'"
+    )
+    assert isinstance(detail, CapabilityResolutionDetail)
+    assert detail.resolution_path == "any_pass"
+
+
+def test_guarded_step_set_matches_real_recipe() -> None:
+    """Test 1b (new): dynamically discover guarded steps from real implementation.yaml.
+    The discovered set must be non-empty and reflect the real recipe structure."""
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+
+    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    discovered = frozenset(
+        name
+        for name, step in recipe.steps.items()
+        if step.skip_when_false == "inputs.backend_supports_git_write" and step.tool == "run_skill"
+    )
+    assert discovered, "Real implementation.yaml must have at least one guarded run_skill step"
+    assert "implement" in discovered
+    assert "fix" in discovered
+
+
+def test_real_recipe_single_provider_override_dispatch_feasible() -> None:
+    """Test 1e (new): with a real recipe and only 'implement' having ANTHROPIC_BASE_URL,
+    the capability overrides must flip to 'true' (any-suffices)."""
+    from unittest.mock import patch
+
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    recipe_obj = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    real_guarded_steps = {
+        name: step
+        for name, step in recipe_obj.steps.items()
+        if step.skip_when_false == "inputs.backend_supports_git_write" and step.tool == "run_skill"
+    }
+    assert real_guarded_steps, "Real recipe must have guarded run_skill steps"
+
+    providers = ProvidersConfig(
+        profiles={"minimax": {}},
+        step_overrides={"implement": "minimax"},
+    )
+
+    def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
+        if step_provider == "minimax":
+            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
+        return ("", None)
+
+    with patch(
+        "autoskillit.server._guards._resolve_provider_profile",
+        side_effect=_per_step_resolve,
+    ):
+        result, _ = _provider_aware_capability_overrides(
+            _make_codex_backend(),
+            "implementation",
+            providers,
+            real_guarded_steps,  # type: ignore[arg-type]
+        )
+    assert result == {"backend_supports_git_write": "true"}, (
+        "Any-suffices: real recipe with one overridden step must flip to 'true'"
+    )

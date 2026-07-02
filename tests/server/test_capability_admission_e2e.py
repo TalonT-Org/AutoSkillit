@@ -307,8 +307,8 @@ def test_provider_aware_capability_override_partial_overrides_flips_true() -> No
             steps,  # type: ignore[arg-type]
         )
     assert result == {"backend_supports_git_write": "true"}
-    assert detail.resolution_path == "any_pass"
     assert isinstance(detail, CapabilityResolutionDetail)
+    assert detail.resolution_path == "any_pass"
 
 
 def test_provider_aware_capability_override_no_overrides_preserves_false() -> None:
@@ -1126,9 +1126,9 @@ async def test_dispatch_food_truck_partial_override_infeasible_includes_guidance
 
 
 def test_provider_override_any_step_with_base_url_flips_capability() -> None:
-    """Test 1a (new): codex backend with ONE guarded step having ANTHROPIC_BASE_URL
+    """Codex backend with ONE guarded step having ANTHROPIC_BASE_URL
     and all other guarded steps lacking overrides → capability flips to 'true'
-    (any-suffices semantics). Previously this would bail with 'false'."""
+    (any-suffices semantics)."""
     from unittest.mock import patch
 
     from autoskillit.config._config_dataclasses import ProvidersConfig
@@ -1170,7 +1170,7 @@ def test_provider_override_any_step_with_base_url_flips_capability() -> None:
 
 
 def test_guarded_step_set_matches_real_recipe() -> None:
-    """Test 1b (new): dynamically discover guarded steps from real implementation.yaml.
+    """Dynamically discover guarded steps from real implementation.yaml.
     The discovered set must be non-empty and reflect the real recipe structure."""
     from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 
@@ -1186,11 +1186,12 @@ def test_guarded_step_set_matches_real_recipe() -> None:
 
 
 def test_real_recipe_single_provider_override_dispatch_feasible() -> None:
-    """Test 1e (new): with a real recipe and only 'implement' having ANTHROPIC_BASE_URL,
+    """With a real recipe and only 'implement' having ANTHROPIC_BASE_URL,
     the capability overrides must flip to 'true' (any-suffices)."""
     from unittest.mock import patch
 
     from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.core import CapabilityResolutionDetail
     from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
     from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
 
@@ -1225,4 +1226,5 @@ def test_real_recipe_single_provider_override_dispatch_feasible() -> None:
     assert result == {"backend_supports_git_write": "true"}, (
         "Any-suffices: real recipe with one overridden step must flip to 'true'"
     )
+    assert isinstance(detail, CapabilityResolutionDetail)
     assert detail.resolution_path == "any_pass"

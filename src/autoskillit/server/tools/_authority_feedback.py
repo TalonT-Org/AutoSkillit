@@ -6,15 +6,20 @@ route through this module to guarantee consistency across warning and rejection 
 
 from __future__ import annotations
 
+from typing import Any
+
 from autoskillit.config import (
     SERVER_AUTHORITATIVE_CONFIG_PATHS,
     SERVER_AUTHORITATIVE_INGREDIENTS,
+    SERVER_AUTHORITATIVE_KEY_HINTS,
 )
 
 
 def build_authority_clobber_warnings(
     overrides: dict[str, str],
     config_layer: dict[str, str],
+    *,
+    caller_tool: str = "open_kitchen",
 ) -> list[str]:
     """Return warnings for overrides clobbered by server-authoritative layer."""
     warnings: list[str] = []
@@ -25,7 +30,7 @@ def build_authority_clobber_warnings(
             warnings.append(
                 f"Override for server-authoritative ingredient '{key}' ignored — "
                 f"server value '{server_value}' (from config {config_path}) wins; "
-                f"set the config key and re-call open_kitchen to change it"
+                f"set the config key and re-call {caller_tool} to change it"
             )
         else:
             warnings.append(
@@ -35,7 +40,7 @@ def build_authority_clobber_warnings(
     return warnings
 
 
-def build_authority_rejection_envelope(rejected_keys: set[str]) -> dict:
+def build_authority_rejection_envelope(rejected_keys: set[str]) -> dict[str, Any]:
     """Return a structured failure envelope for lock_ingredients server-authoritative rejection."""
     config_backed: list[str] = []
     runtime_derived: list[str] = []
@@ -56,11 +61,10 @@ def build_authority_rejection_envelope(rejected_keys: set[str]) -> dict:
             "Runtime-derived server-authoritative ingredients "
             "(set by dispatch runtime, not user-configurable): " + ", ".join(runtime_derived)
         )
-    if "post_run_diagnostics" in rejected_keys:
-        parts.append(
-            "For post_run_diagnostics diagnostics outside of a live run, "
-            "use run_skill /autoskillit:analyze-pipeline-health"
-        )
+    for key in sorted(rejected_keys):
+        hint = SERVER_AUTHORITATIVE_KEY_HINTS.get(key)
+        if hint:
+            parts.append(hint)
     parts.append("This rejection does NOT affect the running pipeline.")
 
     return {

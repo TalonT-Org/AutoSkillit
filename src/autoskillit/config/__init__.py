@@ -11,6 +11,7 @@ from autoskillit.config._config_dataclasses import (
 from autoskillit.config.ingredient_defaults import (
     SERVER_AUTHORITATIVE_CONFIG_PATHS,
     SERVER_AUTHORITATIVE_INGREDIENTS,
+    SERVER_AUTHORITATIVE_KEY_HINTS,
     apply_config_authoritative_overrides,
     build_config_authoritative_layer,
     iter_display_categories,
@@ -99,6 +100,7 @@ __all__ = [
     "BACKEND_CAPABILITY_INGREDIENTS",
     "SERVER_AUTHORITATIVE_CONFIG_PATHS",
     "SERVER_AUTHORITATIVE_INGREDIENTS",
+    "SERVER_AUTHORITATIVE_KEY_HINTS",
     "apply_config_authoritative_overrides",
     "build_config_authoritative_layer",
     "validate_layer_keys",

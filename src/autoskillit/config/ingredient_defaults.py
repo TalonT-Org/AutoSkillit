@@ -132,6 +132,13 @@ SERVER_AUTHORITATIVE_CONFIG_PATHS: dict[str, str] = {
     "post_run_diagnostics": "diagnostics.post_run_analysis",
 }
 
+SERVER_AUTHORITATIVE_KEY_HINTS: dict[str, str] = {
+    "post_run_diagnostics": (
+        "For post_run_diagnostics diagnostics outside of a live run, "
+        "use run_skill /autoskillit:analyze-pipeline-health"
+    ),
+}
+
 
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:
     """Resolve auto-detect ingredient values from the project environment."""

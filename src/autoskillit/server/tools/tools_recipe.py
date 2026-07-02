@@ -277,7 +277,9 @@ async def load_recipe(
                         f"{_infeasible_envelope['escape_hatch']}"
                     )
                 return json.dumps(_infeasible_envelope)
-            _authority_warnings = build_authority_clobber_warnings(overrides or {}, _config_layer)
+            _authority_warnings = build_authority_clobber_warnings(
+                overrides or {}, _config_layer, caller_tool="load_recipe"
+            )
             if _authority_warnings:
                 result["warnings"] = _authority_warnings
             if ingredients_only:

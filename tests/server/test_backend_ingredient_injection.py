@@ -16,7 +16,7 @@ import pytest
 
 from autoskillit.core import CodingAgentBackend
 
-pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 
 def _make_backend_with_capability(git_writable: bool) -> CodingAgentBackend:

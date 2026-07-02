@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -473,7 +474,9 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
         "diagram": None,
         "ingredients_table": "--- TABLE ---",
     }
-    mock_ctx.recipes.find.return_value = None
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = Path("/fake/recipe.yaml")
+    mock_ctx.recipes.find.return_value = mock_recipe_info
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
     mock_ctx.config.linux_tracing.log_dir = ""

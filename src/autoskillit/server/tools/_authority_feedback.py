@@ -6,7 +6,7 @@ route through this module to guarantee consistency across warning and rejection 
 
 from __future__ import annotations
 
-from autoskillit.config.ingredient_defaults import (
+from autoskillit.config import (
     SERVER_AUTHORITATIVE_CONFIG_PATHS,
     SERVER_AUTHORITATIVE_INGREDIENTS,
 )
@@ -16,7 +16,7 @@ def build_authority_clobber_warnings(
     overrides: dict[str, str],
     config_layer: dict[str, str],
 ) -> list[str]:
-    """Return warnings for caller-supplied overrides that were clobbered by the server-authoritative layer."""
+    """Return warnings for overrides clobbered by server-authoritative layer."""
     warnings: list[str] = []
     for key in sorted(set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS):
         config_path = SERVER_AUTHORITATIVE_CONFIG_PATHS.get(key)
@@ -53,8 +53,8 @@ def build_authority_rejection_envelope(rejected_keys: set[str]) -> dict:
         )
     if runtime_derived:
         parts.append(
-            "Runtime-derived server-authoritative ingredients (set by dispatch runtime, not user-configurable): "
-            + ", ".join(runtime_derived)
+            "Runtime-derived server-authoritative ingredients "
+            "(set by dispatch runtime, not user-configurable): " + ", ".join(runtime_derived)
         )
     if "post_run_diagnostics" in rejected_keys:
         parts.append(

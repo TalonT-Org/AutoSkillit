@@ -405,6 +405,7 @@ async def test_deferred_recall_preserves_active_locks(tmp_path):
     (temp_dir / ".hook_config.json").write_text("{}")
 
     ctx = _make_deferred_recall_ctx("test-recipe")
+    ctx.project_dir = tmp_path
     ctx.active_recipe_steps = {"investigate": MagicMock(skip_when_false="inputs.investigate")}
     ctx.active_recipe_ingredients = frozenset(["investigate"])
     ctx.gate.enabled = True

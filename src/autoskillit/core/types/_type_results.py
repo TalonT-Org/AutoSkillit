@@ -216,7 +216,7 @@ class CapabilityResolutionDetail:
 
     Carries the resolution path and per-step data through the capability
     admission chain so downstream consumers (infeasibility response
-    formatters) can surface the actual cause of partial-overrides bailout
+    formatters) can surface the actual cause of capability resolution failure
     rather than blaming the backend generically.
 
     resolution_path values:

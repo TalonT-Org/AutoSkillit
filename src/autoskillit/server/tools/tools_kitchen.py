@@ -142,7 +142,7 @@ async def _dispatch_infeasible_response(
 
     Used by the open_kitchen (both normal and deferred-recall) paths when
     load_and_validate reports dispatch_feasible=False. When ``capability_detail``
-    is provided and indicates a partial-bail, the response carries
+    is provided and indicates a none_pass, the response carries
     ``missing_provider_steps`` and an ``escape_hatch`` key with actionable
     guidance, instead of blaming the backend generically.
     """
@@ -161,7 +161,7 @@ async def _dispatch_infeasible_response(
             f"Use a backend with git_metadata_writable=True (e.g. claude-code)."
         ),
     }
-    if capability_detail is not None and capability_detail.resolution_path == "partial_bail":
+    if capability_detail is not None and capability_detail.resolution_path == "none_pass":
         _missing = list(capability_detail.missing_provider_steps)
         _envelope["missing_provider_steps"] = _missing
         _envelope["escape_hatch"] = (

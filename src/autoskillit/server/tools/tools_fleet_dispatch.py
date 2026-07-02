@@ -354,7 +354,7 @@ async def dispatch_food_truck(
                 f"Recipe '{recipe}' is dispatch-infeasible: capability gate(s) "
                 f"blocked at preflight. Infeasible steps: {_infeasible_steps}"
             )
-            if _cap_detail is not None and _cap_detail.resolution_path == "partial_bail":
+            if _cap_detail is not None and _cap_detail.resolution_path == "none_pass":
                 _missing = list(_cap_detail.missing_provider_steps)
                 _escape_hatch = (
                     f"Add provider overrides with ANTHROPIC_BASE_URL for steps: "

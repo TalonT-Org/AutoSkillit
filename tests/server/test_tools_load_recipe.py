@@ -607,6 +607,16 @@ class TestLoadRecipeAuthorityClobber:
         assert matching, (
             f"load_recipe must emit a warning naming post_run_diagnostics; got warnings={warnings}"
         )
+        server_value_match = [w for w in warnings if "server value 'false'" in w]
+        assert server_value_match, (
+            "Authority-clobber warning must confirm config value won — "
+            f"expected \"server value 'false'\" in warning text; got warnings={warnings}"
+        )
+        caller_value_absent = [w for w in warnings if "server value 'true'" in w]
+        assert not caller_value_absent, (
+            "Authority-clobber warning must NOT report the caller override as the server value — "
+            f"got warnings={warnings}"
+        )
 
 
 # 1i: load_recipe tool surfaces validation failure

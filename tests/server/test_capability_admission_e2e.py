@@ -875,8 +875,6 @@ async def test_all_infeasibility_paths_have_escape_hatch(build_ctx_open: Any) ->
     }
 
     def _per_step_resolve_recipe(_step_name, _recipe_name, _config_providers, step_provider=""):
-        if step_provider == "minimax":
-            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
         return ("", None)
 
     with (
@@ -932,8 +930,6 @@ async def test_all_infeasibility_paths_have_escape_hatch(build_ctx_open: Any) ->
     }
 
     def _per_step_resolve_fleet(_step_name, _recipe_name, _config_providers, step_provider=""):
-        if step_provider == "minimax":
-            return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
         return ("", None)
 
     with (
@@ -1208,7 +1204,7 @@ def test_real_recipe_single_provider_override_dispatch_feasible() -> None:
     )
 
     def _per_step_resolve(_step_name, _recipe_name, _config_providers, step_provider=""):
-        if step_provider == "minimax":
+        if _step_name == "implement":
             return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
         return ("", None)
 
@@ -1216,7 +1212,7 @@ def test_real_recipe_single_provider_override_dispatch_feasible() -> None:
         "autoskillit.server._guards._resolve_provider_profile",
         side_effect=_per_step_resolve,
     ):
-        result, _ = _provider_aware_capability_overrides(
+        result, detail = _provider_aware_capability_overrides(
             _make_codex_backend(),
             "implementation",
             providers,
@@ -1225,3 +1221,4 @@ def test_real_recipe_single_provider_override_dispatch_feasible() -> None:
     assert result == {"backend_supports_git_write": "true"}, (
         "Any-suffices: real recipe with one overridden step must flip to 'true'"
     )
+    assert detail.resolution_path == "any_pass"

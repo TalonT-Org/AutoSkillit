@@ -17,8 +17,6 @@ from autoskillit.core import (
     get_logger,
 )
 
-_SKIP_GUARD_REFS = frozenset(CAPABILITY_INGREDIENT_TO_SKIP_GUARD.values())
-
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
     from autoskillit.recipe.schema import RecipeStep
@@ -77,11 +75,12 @@ def _provider_aware_capability_overrides(
     if getattr(backend.capabilities, "anthropic_provider_capable", False):
         return base, CapabilityResolutionDetail.empty("claude_backend")
 
+    _guard_refs = frozenset(CAPABILITY_INGREDIENT_TO_SKIP_GUARD.values())
     guarded_step_names: list[str] = []
     for step_name, step in recipe_steps.items():
         skip_when = getattr(step, "skip_when_false", None)
         tool = getattr(step, "tool", None)
-        if skip_when in _SKIP_GUARD_REFS and tool == "run_skill":
+        if skip_when in _guard_refs and tool == "run_skill":
             guarded_step_names.append(step_name)
 
     if not guarded_step_names:

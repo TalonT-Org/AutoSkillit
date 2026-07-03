@@ -125,8 +125,8 @@ def test_admission_dispatch_agreement(recipe_name: str, backend_name: str) -> No
         if getattr(step, "tool", None) != "run_skill":
             continue
         skill_cmd = getattr(step, "with_args", {}).get("skill_command", "")
-        # Skip dynamic skill names (templated like `${inputs.foo}`).
-        if "${" in skill_cmd or "<" in skill_cmd:
+        # Skip dynamic skill names (templated like `${inputs.foo}` or `{slug}`).
+        if "${" in skill_cmd or "<" in skill_cmd or "{" in skill_cmd:
             continue
         # Extract skill name (first token after the leading slash).
         skill_name = skill_cmd.lstrip("/").split()[0] if skill_cmd.lstrip("/") else ""

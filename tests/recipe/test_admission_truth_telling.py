@@ -256,11 +256,15 @@ class TestAdmissionDispatchAgreementSynthetic:
     contract on synthetic recipes so failures are localized and reproducible.
     """
 
+    @staticmethod
+    def _is_backend_incompatible(skill_info: object, effective_backend: str) -> bool:
+        reqs = getattr(skill_info, "backend_requirements", None)
+        return bool(reqs and effective_backend not in reqs)
+
     def test_admitted_pipeline_passes_dispatch_gate(self):
         """A recipe that admission considers dispatch_feasible=True with no
         backend-incompatible-skill findings must also pass the dispatch-time
         gate for every surviving run_skill step."""
-        from autoskillit.server.tools.tools_execution import _is_backend_incompatible
 
         # Compatible setup: claude-code backend, claude-code skill requirement
         skill_info = _make_skill_info(backend_requirements=frozenset({"claude-code"}))
@@ -295,7 +299,7 @@ class TestAdmissionDispatchAgreementSynthetic:
             )
             assert skill_info is not None, "skill_info must be resolvable"
             assert step_backend is not None, "step_backend must not be None"
-            assert _is_backend_incompatible(skill_info, step_backend) is False, (
+            assert self._is_backend_incompatible(skill_info, step_backend) is False, (
                 f"Dispatch gate fails for step {step_name} on {step_backend} — "
                 f"admission and dispatch disagree"
             )

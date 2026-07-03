@@ -10,9 +10,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS
+from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS, ProvidersConfig
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
     CAPABILITY_INGREDIENT_TO_SKIP_GUARD,
+    SKILL_TOOLS,
     CapabilityResolutionDetail,
     get_logger,
 )
@@ -160,8 +162,6 @@ def _compute_effective_backend_map(
     """
     if backend_name is None or recipe_steps is None or config_providers is None:
         return None
-    from autoskillit.config import ProvidersConfig  # noqa: PLC0415
-    from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, SKILL_TOOLS  # noqa: PLC0415
     from autoskillit.server._guards import _resolve_provider_profile  # circular-break
 
     result: dict[str, str] = {}

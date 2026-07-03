@@ -28,9 +28,25 @@ _BACKEND_NAMES = sorted(BACKEND_REGISTRY.keys())
 
 
 # -- By-design unsupported combos (skip) ------------------------------------
-DECLARED_UNSUPPORTED: frozenset[tuple[str, str]] = frozenset()
+DECLARED_UNSUPPORTED: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("implementation", "codex"),
+        ("implementation-groups", "codex"),
+        ("remediation", "codex"),
+    }
+)
 
-UNSUPPORTED_REASONS: dict[tuple[str, str], dict[str, str]] = {}
+UNSUPPORTED_REASONS: dict[tuple[str, str], dict[str, str]] = {
+    ("implementation", "codex"): {
+        "reason": "merge-conflict steps (resolve-merge-conflicts) require claude-code backend",
+    },
+    ("implementation-groups", "codex"): {
+        "reason": "merge-conflict steps (resolve-merge-conflicts) require claude-code backend",
+    },
+    ("remediation", "codex"): {
+        "reason": "merge-conflict steps (resolve-merge-conflicts) require claude-code backend",
+    },
+}
 
 _MATRIX_IDS: list[tuple[str, str]] = [
     (r, b) for r in _ALL_RECIPE_NAMES for b in _BACKEND_NAMES if (r, b) not in DECLARED_UNSUPPORTED
@@ -174,8 +190,10 @@ def test_matrix_collection_count() -> None:
 
 
 def test_recipe_backend_matrix_codex_with_provider_override() -> None:
-    """Codex with provider overrides (simulated via ingredient_overrides) must
-    produce dispatch_feasible=True for the implementation recipe."""
+    """Codex with backend_supports_git_write=true (simulated via ingredient_overrides)
+    but no effective_backend_map: admission truth-telling flags merge-conflict steps
+    whose skill requires claude-code, because the rule evaluates per-step effective
+    backends and falls back to ctx.backend_name='codex' without a map."""
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,
@@ -183,8 +201,20 @@ def test_recipe_backend_matrix_codex_with_provider_override() -> None:
         ingredient_overrides={"backend_supports_git_write": "true"},
         lister=_SKILL_RESOLVER,
     )
-    assert result["valid"] is True, f"Recipe invalid: {result.get('errors', [])}"
+    assert result["valid"] is False, (
+        "Expected valid=False: merge-conflict steps invoke resolve-merge-conflicts "
+        "(requires claude-code) and have no effective_backend_map entry to override "
+        "the raw backend_name='codex'. Got valid=True."
+    )
+    backend_compat_errors = [
+        s
+        for s in result.get("suggestions", [])
+        if s.get("rule") == "backend-incompatible-skill" and s.get("severity") == Severity.ERROR
+    ]
+    assert len(backend_compat_errors) >= 1, (
+        "Expected at least one backend-incompatible-skill ERROR for merge-conflict steps"
+    )
     assert result.get("dispatch_feasible") is True, (
-        f"Expected dispatch_feasible=True for codex-with-provider-override, "
-        f"got {result.get('dispatch_feasible')}"
+        f"Expected dispatch_feasible=True (backend_supports_git_write=true prevents "
+        f"gate infeasibility), got {result.get('dispatch_feasible')}"
     )

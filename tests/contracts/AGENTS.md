@@ -95,6 +95,7 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_no_interpreter_writes_in_skills.py` | Contract: no SKILL.md may prescribe interpreter-mediated file writes (python3 -c / heredoc with write APIs) |
 | `test_dry_walkthrough_transformation_extent.py` | Contract test: dry-walkthrough SKILL.md Step 2 must check transformation extent/scope |
 | `test_dry_walkthrough_arch_catalog_reference.py` | Contract test: dry-walkthrough SKILL.md Step 4 must reference the Architectural Constraint Catalog |
+| `test_dry_walkthrough_issue_coverage.py` | Contract test: dry-walkthrough SKILL.md must contain plan-vs-issue coverage check step (Step 4.6) |
 | `test_download_data_contracts.py` | Contract tests for download-data SKILL.md — external dataset acquisition step |
 | `test_source_attribution_contracts.py` | Cross-skill contract: source-attribution prohibition in dual-source skills |
 | `test_project_local_skill_delivery_contract.py` | Symmetric delivery contract tests for project-local skill overrides |

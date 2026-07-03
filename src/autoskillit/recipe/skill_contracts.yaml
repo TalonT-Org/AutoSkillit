@@ -191,6 +191,9 @@ skills:
     - name: plan_path
       type: file_path
       required: true
+    - name: issue_url
+      type: string
+      required: false
     outputs: []
     write_behavior: always
   implement-worktree:

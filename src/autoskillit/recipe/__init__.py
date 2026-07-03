@@ -140,6 +140,9 @@ from autoskillit.recipe.rules import rules_inline_script as _rules_inline_script
 from autoskillit.recipe.rules import rules_inputs as _rules_inputs  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_isolation as _rules_isolation  # noqa: E402 F401
 from autoskillit.recipe.rules import (
+    rules_issue_scope_threading as _rules_issue_scope_threading,  # noqa: E402 F401
+)
+from autoskillit.recipe.rules import (
     rules_loop_artifact_scope as _rules_loop_artifact_scope,  # noqa: E402 F401
 )
 from autoskillit.recipe.rules import rules_loop_counter as _rules_loop_counter  # noqa: E402 F401

@@ -303,6 +303,7 @@
         "cwd": "${{ context.work_dir }}",
         "output_dir": "{{AUTOSKILLIT_TEMP}}",
         "review_path": "${{ context.review_path }}",
+        "issue_url": "${{ inputs.issue_url }}",
         "step_name": "dry_walkthrough"
       },
       "on_success": "create_impl_worktree",

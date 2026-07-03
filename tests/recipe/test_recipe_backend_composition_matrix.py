@@ -15,7 +15,7 @@ import pytest
 from autoskillit.core import Severity
 from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
 from autoskillit.recipe._api import load_and_validate
-from autoskillit.recipe.io import all_validated_recipe_names, builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_names, list_recipes, load_recipe
 from autoskillit.server.tools._auto_overrides import (
     _backend_capability_overrides,
     _compute_effective_backend_map,
@@ -27,6 +27,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _ALL_RECIPE_NAMES = sorted(all_validated_recipe_names(_PROJECT_ROOT))
+_RECIPE_PATHS: dict[str, Path] = {r.name: r.path for r in list_recipes(_PROJECT_ROOT).items}
 _BACKEND_NAMES = sorted(BACKEND_REGISTRY.keys())
 
 
@@ -77,7 +78,7 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeyp
         lambda name: "/usr/local/bin/claude" if name == "claude" else None,
     )
     backend = get_backend(backend_name)
-    _raw = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    _raw = load_recipe(_RECIPE_PATHS[recipe_name])
     _eff_map = _compute_effective_backend_map(
         _raw.steps,
         backend_name,
@@ -133,10 +134,7 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeyp
     )
 
 
-@pytest.mark.parametrize(
-    "recipe_name,backend_name",
-    [pytest.param(r, b, id=f"{r}/{b}") for r, b in _MATRIX_IDS],
-)
+@pytest.mark.parametrize("recipe_name,backend_name", _apply_marks(_MATRIX_IDS))
 def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str, monkeypatch) -> None:
     """Dispatch feasibility must reflect gate_backend_write reachability per backend."""
     monkeypatch.setattr(
@@ -144,7 +142,7 @@ def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str, monk
         lambda name: "/usr/local/bin/claude" if name == "claude" else None,
     )
     backend = get_backend(backend_name)
-    _raw = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    _raw = load_recipe(_RECIPE_PATHS[recipe_name])
     _eff_map = _compute_effective_backend_map(
         _raw.steps,
         backend_name,

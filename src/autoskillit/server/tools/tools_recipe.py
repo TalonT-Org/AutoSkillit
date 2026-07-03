@@ -27,6 +27,7 @@ from autoskillit.server._notify import _notify, track_response_size
 from autoskillit.server._state import _get_ctx_or_none
 from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import (
+    _compute_effective_backend_map,
     _promote_capability_keys,
     _provider_aware_capability_overrides,
 )
@@ -237,6 +238,12 @@ async def load_recipe(
             _config_layer = build_config_authoritative_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
+            _effective_backend_map = _compute_effective_backend_map(
+                _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
+                tool_ctx.backend.name if tool_ctx.backend else None,
+                tool_ctx.config.providers,
+                name,
+            )
             result = tool_ctx.recipes.load_and_validate(
                 name,
                 tool_ctx.project_dir,
@@ -246,6 +253,7 @@ async def load_recipe(
                 temp_dir=tool_ctx.temp_dir,
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
+                effective_backend_map=_effective_backend_map,
             )
             recipe_info = _recipe_info_pre
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)

@@ -197,6 +197,7 @@ def load_and_validate(
     lister: SkillLister | None = None,
     defer_unresolved: bool = False,
     backend_name: str | None = None,
+    effective_backend_map: dict[str, str] | None = None,
 ) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
@@ -263,6 +264,7 @@ def load_and_validate(
         _method_traditions_hash,
         _user_method_traditions_hash,
         backend_name,
+        tuple(sorted(effective_backend_map.items())) if effective_backend_map else (),
         _manifest_mtime,
         _manifest_size,
         _budgets_mtime,
@@ -367,13 +369,31 @@ def load_and_validate(
                 errors.extend(f"[combined] {e}" for e in combined_errors)
             t0 = _t("validate_recipe_structure", t0, name)
 
+            # Stage: resolve skill_resolver (needed by both pre-prune and post-prune contexts)
+            if lister is None:
+                from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
+
+                lister = DefaultSkillResolver()
+
+            from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
+
+            _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
+
             # Stage: skip_when_false pruning (Python-side evaluation)
             # MUST run before semantic rules so pruned steps are never seen by
             # rules like backend-incompatible-skill. See test_semantic_rules_run_after_pruning.
             # Snapshot pre-prune semantic findings: graph-aware rules (dead-output,
             # capture-inversion) produce false positives when pruning changes step
-            # graph reachability. Only findings that ALSO appear pre-prune are kept.
-            _pre_prune_val_ctx = make_validation_context(active_recipe, backend_name=backend_name)
+            # graph reachability. Resolver-dependent rules (backend-incompatible-skill)
+            # must also fire pre-prune so the filter intersection retains their
+            # findings. Pre-prune context receives skill_resolver and effective_backend_map
+            # for this reason — see test_filter_pruning_scope.
+            _pre_prune_val_ctx = make_validation_context(
+                active_recipe,
+                backend_name=backend_name,
+                skill_resolver=_skill_resolver,
+                effective_backend_map=effective_backend_map,
+            )
             _pre_prune_findings = run_semantic_rules(_pre_prune_val_ctx)
             _pre_prune_steps = dict(active_recipe.steps)
             active_recipe, _skip_resolutions = _prune_skipped_steps(
@@ -413,15 +433,6 @@ def load_and_validate(
             t0 = _t("capability_feasibility", t0, name)
 
             # Stage: semantic rules (builds ValidationContext from post-prune recipe)
-            if lister is None:
-                from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415
-
-                lister = DefaultSkillResolver()
-
-            from autoskillit.core import SkillResolver as _SkillResolver  # noqa: PLC0415
-
-            _skill_resolver = lister if isinstance(lister, _SkillResolver) else None
-
             known = frozenset(
                 r.name
                 for r in (_recipe_list if _recipe_list is not None else list_recipes(_pdir).items)
@@ -444,6 +455,7 @@ def load_and_validate(
                 project_dir=_pdir,
                 skill_resolver=_skill_resolver,
                 backend_name=backend_name,
+                effective_backend_map=effective_backend_map,
             )
             semantic_findings = run_semantic_rules(val_ctx)
             semantic_suggestions = findings_to_dicts(semantic_findings)

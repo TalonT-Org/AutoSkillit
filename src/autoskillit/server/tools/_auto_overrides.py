@@ -8,7 +8,7 @@ helper returns a plain dict suitable for merging into the
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS
 from autoskillit.core import (
@@ -139,3 +139,49 @@ def _promote_capability_keys(
     for key in BACKEND_CAPABILITY_INGREDIENTS:
         if key in session_overrides:
             config_layer[key] = session_overrides[key]
+
+
+def _compute_effective_backend_map(
+    recipe_steps: dict[str, RecipeStep] | None,
+    backend_name: str | None,
+    config_providers: Any | None,
+    recipe_name: str,
+) -> dict[str, str] | None:
+    """Build a per-step effective backend map mirroring ``tools_execution`` dispatch logic.
+
+    For each ``run_skill`` step, returns the backend that ``run_skill`` would dispatch
+    to: ``AGENT_BACKEND_CLAUDE_CODE`` if the step has a provider override with
+    ``ANTHROPIC_BASE_URL``; otherwise the orchestrator's ``backend_name``. Returns
+    ``None`` when there is no orchestrator backend — callers treat ``None`` as
+    "no per-step awareness; fall back to ``ctx.backend_name``".
+
+    Mirrors lines 762-776 of ``tools_execution.py`` so admission and dispatch evaluate
+    backend compatibility using identical per-step logic.
+    """
+    if backend_name is None or recipe_steps is None or config_providers is None:
+        return None
+    from autoskillit.config import ProvidersConfig  # noqa: PLC0415
+    from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, SKILL_TOOLS  # noqa: PLC0415
+    from autoskillit.server._guards import _resolve_provider_profile  # circular-break
+
+    result: dict[str, str] = {}
+    for step_name, step in recipe_steps.items():
+        if getattr(step, "tool", None) not in SKILL_TOOLS:
+            continue
+        step_provider = getattr(step, "provider", "") or ""
+        _, provider_extras = _resolve_provider_profile(
+            step_name,
+            recipe_name,
+            cast(ProvidersConfig, config_providers),
+            step_provider=step_provider,
+        )
+        has_base_url = bool(
+            provider_extras
+            and isinstance(provider_extras, dict)
+            and "ANTHROPIC_BASE_URL" in provider_extras
+        )
+        if has_base_url:
+            result[step_name] = AGENT_BACKEND_CLAUDE_CODE
+        else:
+            result[step_name] = backend_name
+    return result if result else None

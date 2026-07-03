@@ -65,6 +65,7 @@ from autoskillit.server.tools._authority_feedback import (
     build_authority_rejection_envelope,
 )
 from autoskillit.server.tools._auto_overrides import (
+    _compute_effective_backend_map,
     _promote_capability_keys,
     _provider_aware_capability_overrides,
 )
@@ -481,12 +482,19 @@ def get_recipe(name: str) -> str:
         _backend_overrides, _cap_detail = _provider_aware_capability_overrides(
             ctx.backend, name, ctx.config.providers, _raw_recipe.steps
         )
+        _effective_backend_map = _compute_effective_backend_map(
+            _raw_recipe.steps,
+            ctx.backend.name if ctx.backend else None,
+            ctx.config.providers,
+            name,
+        )
         result = ctx.recipes.load_and_validate(
             name,
             ctx.project_dir,
             resolved_defaults=_defaults,
             ingredient_overrides={**_backend_overrides, **_config_layer},
             backend_name=ctx.backend.name if ctx.backend else None,
+            effective_backend_map=_effective_backend_map,
         )
     except ProcessStaleError:
         logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
@@ -704,6 +712,12 @@ async def open_kitchen(
             _config_layer = build_config_authoritative_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
             _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
+            _effective_backend_map = _compute_effective_backend_map(
+                _raw_recipe.steps if _raw_recipe is not None else None,
+                tool_ctx.backend.name if tool_ctx.backend else None,
+                tool_ctx.config.providers,
+                name,
+            )
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":
                 _om_value = (overrides or {}).get("output_mode")
@@ -727,6 +741,7 @@ async def open_kitchen(
                         ingredient_overrides=_merged_overrides,
                         defer_unresolved=False,
                         backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
+                        effective_backend_map=_effective_backend_map,
                     )
                 except ProcessStaleError as exc:
                     logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
@@ -828,6 +843,7 @@ async def open_kitchen(
                     ingredient_overrides=_merged_overrides,
                     defer_unresolved=not _user_overrides_present,
                     backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
+                    effective_backend_map=_effective_backend_map,
                 )
             except ProcessStaleError as exc:
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)

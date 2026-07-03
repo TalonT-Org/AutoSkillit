@@ -38,6 +38,7 @@ class RecipeRepository(Protocol):
         temp_dir_relpath: str | None = None,
         defer_unresolved: bool = False,
         backend_name: str | None = None,
+        effective_backend_map: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Load and validate a recipe.
 

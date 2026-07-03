@@ -163,3 +163,189 @@ def test_admission_dispatch_agreement(
     assert not unresolvable, "Unresolvable skills (test infra gap):\n  " + "\n  ".join(
         unresolvable
     )
+
+
+# ---------------------------------------------------------------------------
+# Capability-route unit tests (audit remediation: Tests 3a–3d, REQ-ADMIT-002)
+# ---------------------------------------------------------------------------
+
+
+def _mock_git_write_resolver():
+    """Resolver whose every skill carries git_metadata_write → claude-code."""
+    from unittest.mock import MagicMock
+
+    info = MagicMock()
+    info.uses_capabilities = frozenset({"git_metadata_write"})
+    info.backend_requirements = frozenset({"claude-code"})
+    resolver = MagicMock()
+    resolver.resolve.return_value = info
+    return resolver
+
+
+def _mock_run_skill_step():
+    """Minimal run_skill step shape consumed by the admission helpers."""
+    from unittest.mock import MagicMock
+
+    step = MagicMock()
+    step.tool = "run_skill"
+    step.provider = ""
+    step.with_args = {"skill_command": "/autoskillit:resolve-failures"}
+    step.skip_when_false = "inputs.backend_supports_git_write"
+    return step
+
+
+def test_effective_backend_map_capability_route_unit() -> None:
+    """Test 3a: _compute_effective_backend_map routes a git_metadata_write step
+    to claude-code when a skill_resolver is supplied."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+
+    eff_map = _compute_effective_backend_map(
+        {"fix": _mock_run_skill_step()},
+        "codex",
+        ProvidersConfig(),
+        "implementation",
+        skill_resolver=_mock_git_write_resolver(),
+    )
+    assert eff_map is not None
+    assert eff_map["fix"] == "claude-code"
+
+
+def test_provider_aware_overrides_capability_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test 3b: capability route with binary present flips the override to 'true'
+    with resolution_path='capability_route'."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+    overrides, detail = _provider_aware_capability_overrides(
+        get_backend("codex"),
+        "implementation",
+        ProvidersConfig(),
+        {"fix": _mock_run_skill_step()},
+        skill_resolver=_mock_git_write_resolver(),
+    )
+    assert overrides["backend_supports_git_write"] == "true"
+    assert detail.resolution_path == "capability_route"
+
+
+def test_provider_aware_overrides_capability_route_no_binary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test 3c: capability route with binary ABSENT fails closed —
+    override stays 'false' with resolution_path='capability_route_no_binary'."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: None,
+    )
+    overrides, detail = _provider_aware_capability_overrides(
+        get_backend("codex"),
+        "implementation",
+        ProvidersConfig(),
+        {"fix": _mock_run_skill_step()},
+        skill_resolver=_mock_git_write_resolver(),
+    )
+    assert overrides["backend_supports_git_write"] == "false"
+    assert detail.resolution_path == "capability_route_no_binary"
+
+
+def test_provider_aware_overrides_capability_route_none_providers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test 3d (REQ-ADMIT-002): the capability branch functions when
+    config_providers is None — zero provider config is the primary R0 scenario."""
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+    overrides, detail = _provider_aware_capability_overrides(
+        get_backend("codex"),
+        "implementation",
+        None,
+        {"fix": _mock_run_skill_step()},
+        skill_resolver=_mock_git_write_resolver(),
+    )
+    assert overrides["backend_supports_git_write"] == "true"
+    assert detail.resolution_path == "capability_route"
+
+
+def test_admission_dispatch_agreement_real_providers_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REQ-TEST-006: the agreement contract exercised with a real (non-None)
+    ProvidersConfig on codex+implementation — the combination the original
+    incident chain shipped unchecked. Capability route + partial provider
+    override must yield an admissible recipe with zero dispatch disagreements."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+    from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+    providers = ProvidersConfig(
+        profiles={"minimax": {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}},
+        step_overrides={"implement": "minimax"},
+    )
+    backend = get_backend("codex")
+    raw_recipe = load_recipe_yaml(_BUILTIN_DIR / "implementation.yaml")
+
+    overrides, _detail = _provider_aware_capability_overrides(
+        backend,
+        "implementation",
+        providers,
+        raw_recipe.steps,
+        skill_resolver=_SKILL_RESOLVER,
+    )
+    assert overrides["backend_supports_git_write"] == "true"
+
+    effective_map = _compute_effective_backend_map(
+        raw_recipe.steps,
+        "codex",
+        providers,
+        "implementation",
+        skill_resolver=_SKILL_RESOLVER,
+    )
+    assert effective_map is not None
+
+    result = load_and_validate(
+        "implementation",
+        project_dir=_PROJECT_ROOT,
+        backend_name="codex",
+        ingredient_overrides=overrides,
+        effective_backend_map=effective_map,
+        lister=_SKILL_RESOLVER,
+    )
+    assert result.get("valid") is True
+    assert result.get("dispatch_feasible") is True
+
+    dispatch_backends = _dispatch_effective_backends(raw_recipe, "codex", effective_map)
+    violations: list[str] = []
+    for step_name, step in raw_recipe.steps.items():
+        if getattr(step, "tool", None) != "run_skill":
+            continue
+        skill_cmd = getattr(step, "with_args", {}).get("skill_command", "")
+        if "${" in skill_cmd or "<" in skill_cmd or "{" in skill_cmd:
+            continue
+        skill_name = skill_cmd.lstrip("/").split()[0] if skill_cmd.lstrip("/") else ""
+        skill_name = skill_name.removeprefix("autoskillit:")
+        if not skill_name:
+            continue
+        skill_info = _SKILL_RESOLVER.resolve(skill_name)
+        if skill_info is None:
+            continue
+        step_effective = dispatch_backends.get(step_name)
+        if step_effective is None:
+            continue
+        if _is_backend_incompatible(skill_info, step_effective):
+            violations.append(f"{step_name}: '{skill_name}' vs '{step_effective}'")
+    assert not violations, "Agreement violated under real ProvidersConfig:\n  " + "\n  ".join(
+        violations
+    )

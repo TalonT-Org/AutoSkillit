@@ -237,3 +237,80 @@ def test_compute_capability_feasibility_feasible_when_capability_route_active(
     assert result.get("dispatch_feasible") is True, (
         f"Recipe '{recipe_name}' with capability route active must be dispatch_feasible=True"
     )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups"],
+)
+def test_capability_route_binary_absent_fails_closed(
+    recipe_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R0 REQ-TEST-007 (binary-absent half): real recipe YAML, real resolver,
+    real backend registry, only shutil.which mocked. With the claude binary
+    absent the capability route fails closed — the override stays 'false'
+    (resolution_path='capability_route_no_binary'), guarded steps prune, and
+    admission refuses with the gate reachable instead of admitting a pipeline
+    that would crash at dispatch."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from autoskillit.recipe._api import load_and_validate
+    from autoskillit.recipe.io import find_recipe_by_name, load_recipe
+    from autoskillit.server.tools._auto_overrides import (
+        _compute_effective_backend_map,
+        _provider_aware_capability_overrides,
+    )
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: None,
+    )
+    resolver = DefaultSkillResolver()
+    _info = find_recipe_by_name(recipe_name, _PROJECT_ROOT)
+    assert _info is not None, f"Recipe {recipe_name!r} not found"
+    raw = load_recipe(_info.path)
+
+    # Minimal codex-shaped backend stand-in: tests/recipe may not import
+    # autoskillit.execution (layer boundary), and only these two capability
+    # flags are consulted by the override computation.
+    codex_like = MagicMock()
+    codex_like.name = "codex"
+    codex_like.capabilities = SimpleNamespace(
+        git_metadata_writable=False,
+        anthropic_provider_capable=False,
+    )
+    overrides, detail = _provider_aware_capability_overrides(
+        codex_like,
+        recipe_name,
+        None,
+        raw.steps,
+        skill_resolver=resolver,
+    )
+    assert overrides["backend_supports_git_write"] == "false"
+    assert detail.resolution_path == "capability_route_no_binary"
+
+    eff_map = _compute_effective_backend_map(
+        raw.steps,
+        "codex",
+        None,
+        recipe_name,
+        skill_resolver=resolver,
+    )
+    result = load_and_validate(
+        recipe_name,
+        project_dir=_PROJECT_ROOT,
+        effective_backend_map=eff_map,
+        ingredient_overrides=overrides,
+        backend_name="codex",
+        lister=resolver,
+    )
+    assert result.get("dispatch_feasible") is False, (
+        f"Recipe '{recipe_name}' with binary absent must refuse (fail closed); "
+        f"got dispatch_feasible={result.get('dispatch_feasible')}"
+    )
+    assert "gate_backend_write" in result.get("infeasible_steps", []), (
+        f"Refusal must name the reachable gate; got: {result.get('infeasible_steps')}"
+    )

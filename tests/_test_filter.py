@@ -201,7 +201,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "claude_conventions": frozenset({"core", "execution", "server", "workspace"}),
     "_type_resume": frozenset({"core", "cli", "execution", "fleet"}),
     "_type_helpers": frozenset({"core", "execution", "fleet", "pipeline", "recipe", "server"}),
-    "_type_protocols_workspace": frozenset({"core", "pipeline", "recipe", "workspace"}),
+    "_type_protocols_workspace": frozenset({"core", "pipeline", "recipe", "server", "workspace"}),
     "_type_protocols_backend": frozenset(
         {"_llm_triage", "cli", "core", "execution", "pipeline", "server", "workspace"}
     ),
@@ -685,6 +685,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "recipe/test_contracts.py",
             "recipe/test_backend_reachability.py",
             "recipe/test_recipe_backend_composition_matrix.py",
+            "recipe/test_recipe_composition_vacuous_gate.py",
             "recipe/test_rules_backend_compat.py",
             "recipe/test_rules_skill_content.py",
             "recipe/test_rules_stamp_ownership.py",

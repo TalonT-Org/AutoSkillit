@@ -94,7 +94,8 @@ def _provider_aware_capability_overrides(
         for step_name, step in recipe_steps.items():
             if getattr(step, "tool", None) not in SKILL_TOOLS:
                 continue
-            skill_cmd = getattr(step, "with_args", {}).get("skill_command", "")
+            _wa = getattr(step, "with_args", None)
+            skill_cmd = _wa.get("skill_command", "") if isinstance(_wa, dict) else ""
             skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
             if not skill_name:
                 continue
@@ -245,7 +246,8 @@ def _compute_effective_backend_map(
             continue
 
         if skill_resolver is not None:
-            skill_cmd = getattr(step, "with_args", {}).get("skill_command", "")
+            _wa2 = getattr(step, "with_args", None)
+            skill_cmd = _wa2.get("skill_command", "") if isinstance(_wa2, dict) else ""
             skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
             if skill_name:
                 resolved = skill_resolver.resolve(skill_name)

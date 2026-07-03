@@ -206,7 +206,7 @@ def test_compute_capability_feasibility_feasible_when_capability_route_active(
     making dispatch_feasible=True for codex+implementation. Decision record: gate
     is vacuous-by-design on codex when the binary is present."""
     from autoskillit.recipe._api import load_and_validate
-    from autoskillit.recipe.io import load_recipe
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
     from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
     from autoskillit.workspace.skills import DefaultSkillResolver
 
@@ -215,7 +215,7 @@ def test_compute_capability_feasibility_feasible_when_capability_route_active(
         lambda name: "/usr/local/bin/claude" if name == "claude" else None,
     )
     resolver = DefaultSkillResolver()
-    raw = load_recipe(_PROJECT_ROOT / ".autoskillit" / "recipes" / f"{recipe_name}.yaml")
+    raw = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     eff_map = _compute_effective_backend_map(
         raw.steps,
         "codex",

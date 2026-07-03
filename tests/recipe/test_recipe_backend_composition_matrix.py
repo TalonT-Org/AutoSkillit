@@ -15,7 +15,7 @@ import pytest
 from autoskillit.core import Severity
 from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
 from autoskillit.recipe._api import load_and_validate
-from autoskillit.recipe.io import all_validated_recipe_names, load_recipe
+from autoskillit.recipe.io import all_validated_recipe_names, builtin_recipes_dir, load_recipe
 from autoskillit.server.tools._auto_overrides import (
     _backend_capability_overrides,
     _compute_effective_backend_map,
@@ -77,7 +77,7 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeyp
         lambda name: "/usr/local/bin/claude" if name == "claude" else None,
     )
     backend = get_backend(backend_name)
-    _raw = load_recipe(_PROJECT_ROOT / ".autoskillit" / "recipes" / f"{recipe_name}.yaml")
+    _raw = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     _eff_map = _compute_effective_backend_map(
         _raw.steps,
         backend_name,
@@ -144,7 +144,7 @@ def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str, monk
         lambda name: "/usr/local/bin/claude" if name == "claude" else None,
     )
     backend = get_backend(backend_name)
-    _raw = load_recipe(_PROJECT_ROOT / ".autoskillit" / "recipes" / f"{recipe_name}.yaml")
+    _raw = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
     _eff_map = _compute_effective_backend_map(
         _raw.steps,
         backend_name,

@@ -291,8 +291,7 @@ async def test_backend_incompatibility_gate_rejects_before_init_session_binary_p
     fake_backend.capabilities.anthropic_provider_capable = False
     tool_ctx_kitchen_open.backend = fake_backend
 
-    mock_ssm = MagicMock()
-    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+    tool_ctx_kitchen_open.session_skill_manager = None
 
     mock_skill_info = MagicMock()
     mock_skill_info.backend_requirements = frozenset({"claude-code"})

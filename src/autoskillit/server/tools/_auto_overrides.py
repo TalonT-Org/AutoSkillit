@@ -157,8 +157,9 @@ def _compute_effective_backend_map(
     ``None`` when there is no orchestrator backend — callers treat ``None`` as
     "no per-step awareness; fall back to ``ctx.backend_name``".
 
-    Mirrors lines 762-776 of ``tools_execution.py`` so admission and dispatch evaluate
-    backend compatibility using identical per-step logic.
+    Mirrors the ``ANTHROPIC_BASE_URL`` backend-override block in ``run_skill()``
+    (``tools_execution.py``) so admission and dispatch evaluate backend compatibility
+    using identical per-step logic.
     """
     if backend_name is None or recipe_steps is None or config_providers is None:
         return None

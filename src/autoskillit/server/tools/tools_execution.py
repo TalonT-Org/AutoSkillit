@@ -765,8 +765,41 @@ async def run_skill(
                 and tool_ctx.backend is not None
                 and not tool_ctx.backend.capabilities.anthropic_provider_capable
             )
+
+            _skill_reqs: frozenset[str] = (
+                getattr(_skill_info, "backend_requirements", frozenset())
+                if _skill_info
+                else frozenset()
+            )
+            _skill_caps: frozenset[str] = (
+                getattr(_skill_info, "uses_capabilities", frozenset())
+                if _skill_info
+                else frozenset()
+            )
+            _skill_requires_claude = bool(
+                _skill_reqs
+                and "git_metadata_write" in _skill_caps
+                and tool_ctx.backend is not None
+                and not tool_ctx.backend.capabilities.anthropic_provider_capable
+            )
+
+            if _skill_requires_claude:
+                if shutil.which("claude") is None:
+                    return SkillResult.crashed(
+                        exception=RuntimeError(
+                            f"Skill {target_name!r} requires claude-code backend "
+                            f"(git_metadata_write capability) but 'claude' binary "
+                            f"is not found on PATH. Install Claude Code CLI to "
+                            f"enable capability-driven routing."
+                        ),
+                        skill_command=resolved_command,
+                        order_id=effective_order_id,
+                    ).to_json()
+
             backend_override: str | None = (
-                AGENT_BACKEND_CLAUDE_CODE if _provider_override else None
+                AGENT_BACKEND_CLAUDE_CODE
+                if (_provider_override or _skill_requires_claude)
+                else None
             )
 
             _effective_backend_obj: CodingAgentBackend | None = (
@@ -776,9 +809,16 @@ async def run_skill(
             )
 
             if backend_override:
+                _override_reasons: list[str] = []
+                if _skill_requires_claude:
+                    _override_reasons.append("skill_requirement")
+                if _provider_override:
+                    _override_reasons.append("provider_profile")
                 logger.info(
                     "backend_override_activated",
-                    reason="provider_profile",
+                    reason=(
+                        _override_reasons[0] if len(_override_reasons) == 1 else _override_reasons
+                    ),
                     skill=skill_command,
                     original_backend=tool_ctx.backend.name if tool_ctx.backend else "none",
                     target_backend=backend_override,

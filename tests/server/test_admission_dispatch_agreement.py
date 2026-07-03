@@ -87,17 +87,27 @@ def _dispatch_effective_backends(
 
 @pytest.mark.parametrize("recipe_name", _RECIPES, ids=lambda x: x)
 @pytest.mark.parametrize("backend_name", _BACKENDS, ids=lambda x: x)
-def test_admission_dispatch_agreement(recipe_name: str, backend_name: str) -> None:
+def test_admission_dispatch_agreement(
+    recipe_name: str, backend_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Admission agreement: when load_and_validate returns dispatch_feasible=True,
     every surviving run_skill step must pass _is_backend_incompatible against
     the dispatch-time effective backend."""
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
     backend = get_backend(backend_name)
     ingredient_overrides = _backend_capability_overrides(backend)
 
     # Pre-load recipe to compute effective backend map (mirrors IL-3 call sites).
     raw_recipe = load_recipe_yaml(_BUILTIN_DIR / f"{recipe_name}.yaml")
     effective_map = _compute_effective_backend_map(
-        raw_recipe.steps, backend_name, None, recipe_name
+        raw_recipe.steps,
+        backend_name,
+        None,
+        recipe_name,
+        skill_resolver=_SKILL_RESOLVER,
     )
 
     result = load_and_validate(

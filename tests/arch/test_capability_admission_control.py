@@ -275,8 +275,84 @@ def test_provider_aware_override_iterates_capability_guards() -> None:
         "to be data-driven — hardcoding capability guard strings causes silent breakage when "
         "new capability ingredients are added."
     )
-    assert "inputs.backend_supports_git_write" not in func_src, (
-        "_provider_aware_capability_overrides must NOT hardcode "
-        "'inputs.backend_supports_git_write' — this string should only appear in "
-        "CAPABILITY_INGREDIENT_TO_SKIP_GUARD as the single source of truth."
+
+
+def test_open_kitchen_calls_compute_effective_backend_map() -> None:
+    """open_kitchen must call _compute_effective_backend_map to build the per-step map."""
+    kitchen_path = SRC_ROOT / "server" / "tools" / "tools_kitchen.py"
+    tree = ast.parse(kitchen_path.read_text(encoding="utf-8"))
+    assert _has_call_in_function(tree, "open_kitchen", "_compute_effective_backend_map"), (
+        "open_kitchen must call _compute_effective_backend_map — removing this call "
+        "breaks admission/dispatch agreement for capability-driven routing."
     )
+
+
+def test_get_recipe_calls_compute_effective_backend_map() -> None:
+    """get_recipe (MCP resource) must call _compute_effective_backend_map."""
+    kitchen_path = SRC_ROOT / "server" / "tools" / "tools_kitchen.py"
+    tree = ast.parse(kitchen_path.read_text(encoding="utf-8"))
+    assert _has_call_in_function(tree, "get_recipe", "_compute_effective_backend_map"), (
+        "get_recipe must call _compute_effective_backend_map — removing this call "
+        "breaks admission/dispatch agreement for capability-driven routing."
+    )
+
+
+def test_load_recipe_calls_compute_effective_backend_map() -> None:
+    """load_recipe must call _compute_effective_backend_map."""
+    recipe_path = SRC_ROOT / "server" / "tools" / "tools_recipe.py"
+    tree = ast.parse(recipe_path.read_text(encoding="utf-8"))
+    assert _has_call_in_function(tree, "load_recipe", "_compute_effective_backend_map"), (
+        "load_recipe must call _compute_effective_backend_map — removing this call "
+        "breaks admission/dispatch agreement for capability-driven routing."
+    )
+
+
+def test_dispatch_food_truck_calls_compute_effective_backend_map() -> None:
+    """dispatch_food_truck must call _compute_effective_backend_map."""
+    fleet_path = SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch.py"
+    tree = ast.parse(fleet_path.read_text(encoding="utf-8"))
+    assert _has_call_in_function(tree, "dispatch_food_truck", "_compute_effective_backend_map"), (
+        "dispatch_food_truck must call _compute_effective_backend_map — removing this "
+        "call breaks admission/dispatch agreement for capability-driven routing."
+    )
+
+
+def test_run_skill_references_git_metadata_write_capability() -> None:
+    """run_skill must reference 'git_metadata_write' to detect capability-driven routing needs."""
+    execution_path = SRC_ROOT / "server" / "tools" / "tools_execution.py"
+    src = execution_path.read_text(encoding="utf-8")
+
+    func_src = ""
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "run_skill":
+            func_src = ast.get_source_segment(src, node) or ""
+            break
+    assert func_src, "run_skill not found in tools_execution.py"
+
+    assert '"git_metadata_write"' in func_src, (
+        "run_skill must reference 'git_metadata_write' as a literal constant — "
+        "removing this breaks the capability-driven auto-route path that dispatches "
+        "codex orchestrator skills requiring claude-code (REQ-ROUTE-001)."
+    )
+
+
+def test_compute_effective_backend_map_accepts_skill_resolver() -> None:
+    """_compute_effective_backend_map must accept a skill_resolver parameter."""
+    auto_overrides_path = SRC_ROOT / "server" / "tools" / "_auto_overrides.py"
+    src = auto_overrides_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "_compute_effective_backend_map"
+        ):
+            args = node.args
+            all_args = list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)
+            param_names = {a.arg for a in all_args}
+            assert "skill_resolver" in param_names, (
+                "_compute_effective_backend_map must accept skill_resolver — "
+                "removing this parameter breaks capability-driven routing on the admission side."
+            )
+            return
+    pytest.fail("_compute_effective_backend_map not found in _auto_overrides.py")

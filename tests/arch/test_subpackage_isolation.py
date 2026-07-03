@@ -990,7 +990,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "diagnostic enrichment (+24 net lines)",
     ),
     "tools_execution.py": (
-        1220,
+        1260,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
@@ -1000,7 +1000,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "stale-path is_dir() guards on both init_session and replay-snapshot branches "
         "crash-close before executor when /dev/shm path has been reclaimed (+26 net lines); "
         "post-serialization validation gate at run_skill return site adds fail-closed "
-        "ToolFailureEnvelope substitution for structurally degraded payloads (+13 net lines)",
+        "ToolFailureEnvelope substitution for structurally degraded payloads (+13 net lines); "
+        "R0 capability-driven routing: _skill_requires_claude computation, binary probe "
+        "for fail-closed behavior, and composite log reason emission (+40 net lines)",
     ),
     "execution/backends/codex.py": (
         1150,

@@ -107,51 +107,9 @@ async def test_anthropic_capable_backend_profile_without_base_url_no_override(
 async def test_skill_backend_requirement_triggers_incompatibility_gate(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    """Skill with backend_requirements=[claude-code] on a non-claude backend
-    -> _is_backend_incompatible gate rejects the call (no silent override)."""
+    """Skill with backend_requirements=[claude-code] + git_metadata_write capability
+    on a non-claude backend triggers capability-driven auto-route when binary present."""
     import json
-    from unittest.mock import MagicMock
-
-    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
-    from tests.fakes import InMemoryHeadlessExecutor
-
-    executor = InMemoryHeadlessExecutor()
-    tool_ctx_kitchen_open.executor = executor
-    fake_backend = MagicMock(spec=CodingAgentBackend)
-    fake_backend.name = "codex"
-    fake_backend.capabilities.anthropic_provider_capable = False
-    tool_ctx_kitchen_open.backend = fake_backend
-    tool_ctx_kitchen_open.session_skill_manager = None
-
-    mock_skill_info = MagicMock()
-    mock_skill_info.backend_requirements = frozenset({"claude-code"})
-    mock_resolver = MagicMock()
-    mock_resolver.resolve.return_value = mock_skill_info
-    tool_ctx_kitchen_open.skill_resolver = mock_resolver
-
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
-    monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
-        lambda *a, **kw: ("default", {}),
-    )
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.resolve_target_skill",
-        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
-    )
-
-    result = await run_skill("/autoskillit:probe", str(tmp_path))
-    data = json.loads(result)
-    assert data.get("subtype") == "crashed"
-    assert "requires backend" in data.get("result", "")
-
-
-@pytest.mark.anyio
-async def test_backend_incompatibility_does_not_emit_override_log(
-    tool_ctx_kitchen_open, tmp_path, monkeypatch
-) -> None:
-    """Skill-requirement incompatibility crashes (no override log emitted)."""
     from unittest.mock import MagicMock
 
     import structlog
@@ -169,6 +127,7 @@ async def test_backend_incompatibility_does_not_emit_override_log(
 
     mock_skill_info = MagicMock()
     mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    mock_skill_info.uses_capabilities = frozenset({"git_metadata_write"})
     mock_resolver = MagicMock()
     mock_resolver.resolve.return_value = mock_skill_info
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
@@ -184,6 +143,67 @@ async def test_backend_incompatibility_does_not_emit_override_log(
         "autoskillit.server.tools.tools_execution.resolve_target_skill",
         lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
     )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+
+    with structlog.testing.capture_logs() as log_list:
+        result = await run_skill("/autoskillit:probe", str(tmp_path))
+    json.loads(result)
+
+    override_logs = [
+        entry for entry in log_list if entry.get("event") == "backend_override_activated"
+    ]
+    assert len(override_logs) == 1
+    log = override_logs[0]
+    assert log["reason"] == "skill_requirement"
+    assert log["target_backend"] == "claude-code"
+    assert len(executor.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_backend_incompatibility_does_not_emit_override_log(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    """Skill-requirement capability route fires -> logger.info with reason='skill_requirement'."""
+    from unittest.mock import MagicMock
+
+    import structlog
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+    tool_ctx_kitchen_open.backend = fake_backend
+    tool_ctx_kitchen_open.session_skill_manager = None
+
+    mock_skill_info = MagicMock()
+    mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    mock_skill_info.uses_capabilities = frozenset({"git_metadata_write"})
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = mock_skill_info
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("default", {}),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
 
     with structlog.testing.capture_logs() as log_list:
         await run_skill("/autoskillit:probe", str(tmp_path))
@@ -191,7 +211,10 @@ async def test_backend_incompatibility_does_not_emit_override_log(
     override_logs = [
         entry for entry in log_list if entry.get("event") == "backend_override_activated"
     ]
-    assert len(override_logs) == 0
+    assert len(override_logs) == 1
+    log = override_logs[0]
+    assert log["reason"] == "skill_requirement"
+    assert log["target_backend"] == "claude-code"
 
 
 @pytest.mark.anyio
@@ -251,11 +274,59 @@ async def test_backend_override_emits_structured_log_provider_profile(
 
 
 @pytest.mark.anyio
-async def test_backend_incompatibility_gate_rejects_before_init_session(
+async def test_backend_incompatibility_gate_rejects_before_init_session_binary_present(
     tool_ctx_kitchen_open, tmp_path, monkeypatch
 ) -> None:
-    """When skill requires claude-code and effective backend is codex,
-    the incompatibility gate rejects before init_session is called."""
+    """When skill requires claude-code (git_metadata_write) and binary IS present,
+    capability route fires — init_session IS called with the overridden backend."""
+    from unittest.mock import MagicMock
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+    tool_ctx_kitchen_open.backend = fake_backend
+
+    mock_ssm = MagicMock()
+    tool_ctx_kitchen_open.session_skill_manager = mock_ssm
+
+    mock_skill_info = MagicMock()
+    mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    mock_skill_info.uses_capabilities = frozenset({"git_metadata_write"})
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = mock_skill_info
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("default", {}),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+
+    await run_skill("/autoskillit:test-skill", str(tmp_path))
+    assert len(executor.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_backend_incompatibility_gate_rejects_before_init_session_binary_absent(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    """When skill requires claude-code (git_metadata_write) and binary is ABSENT,
+    the binary probe crashes the call before init_session (REQ-ROUTE-004)."""
     import json
     from unittest.mock import MagicMock
 
@@ -274,6 +345,7 @@ async def test_backend_incompatibility_gate_rejects_before_init_session(
 
     mock_skill_info = MagicMock()
     mock_skill_info.backend_requirements = frozenset({"claude-code"})
+    mock_skill_info.uses_capabilities = frozenset({"git_metadata_write"})
     mock_resolver = MagicMock()
     mock_resolver.resolve.return_value = mock_skill_info
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
@@ -289,11 +361,15 @@ async def test_backend_incompatibility_gate_rejects_before_init_session(
         "autoskillit.server.tools.tools_execution.resolve_target_skill",
         lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
     )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.shutil.which",
+        lambda name: None,
+    )
 
     result = await run_skill("/autoskillit:test-skill", str(tmp_path))
     data = json.loads(result)
     assert data.get("subtype") == "crashed"
-    assert "requires backend" in data.get("result", "")
+    assert "claude" in data.get("result", "").lower()
     mock_ssm.init_session.assert_not_called()
 
 

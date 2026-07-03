@@ -191,3 +191,47 @@ def test_compute_capability_feasibility_returns_infeasible_for_codex_recipes(
         f"Recipe '{recipe_name}' must list gate_backend_write in infeasible_steps; "
         f"got: {result.get('infeasible_steps')}"
     )
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["implementation", "remediation", "implementation-groups"],
+)
+def test_compute_capability_feasibility_feasible_when_capability_route_active(
+    recipe_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R0: when capability-driven routing fires (skill_resolver + binary present),
+    the effective backend map routes git_metadata_write steps to claude-code,
+    making dispatch_feasible=True for codex+implementation. Decision record: gate
+    is vacuous-by-design on codex when the binary is present."""
+    from autoskillit.recipe._api import load_and_validate
+    from autoskillit.recipe.io import load_recipe
+    from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
+    from autoskillit.workspace.skills import DefaultSkillResolver
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+    resolver = DefaultSkillResolver()
+    raw = load_recipe(_PROJECT_ROOT / ".autoskillit" / "recipes" / f"{recipe_name}.yaml")
+    eff_map = _compute_effective_backend_map(
+        raw.steps,
+        "codex",
+        None,
+        recipe_name,
+        skill_resolver=resolver,
+    )
+    assert eff_map is not None
+    result = load_and_validate(
+        recipe_name,
+        project_dir=_PROJECT_ROOT,
+        effective_backend_map=eff_map,
+        ingredient_overrides={"backend_supports_git_write": "true"},
+        backend_name="codex",
+        lister=resolver,
+    )
+    assert result.get("dispatch_feasible") is True, (
+        f"Recipe '{recipe_name}' with capability route active must be dispatch_feasible=True"
+    )

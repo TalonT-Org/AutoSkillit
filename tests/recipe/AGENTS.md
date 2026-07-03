@@ -9,6 +9,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `__init__.py` | empty |
 | `conftest.py` | Shared fixtures for tests/recipe/ |
 | `test_analysis_public_api.py` | Tests for the recipe analysis public API surface |
+| `test_admission_truth_telling.py` | Admission truth-telling regression tests — pre-prune resolver, effective-backend awareness, admission↔dispatch agreement contract |
 | `test_anti_pattern_guards.py` | Guards for anti-patterns in recipe definitions |
 | `test_backend_reachability.py` | Backend-parametrized recipe reachability tests — pruned recipe satisfiability and codex pruning |
 | `test_api.py` | Tests for recipe/_api.py orchestration API |

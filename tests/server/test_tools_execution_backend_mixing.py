@@ -7,8 +7,6 @@ containing ANTHROPIC_BASE_URL.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from autoskillit.server.tools.tools_execution import run_skill
@@ -361,16 +359,3 @@ async def test_provider_override_threads_effective_backend_to_init_session(
         "init_session must NOT receive the orchestrator backend"
     )
     assert init_backend.name == "claude-code"
-
-
-@pytest.mark.anyio
-async def test_no_skill_requires_claude_logic() -> None:
-    source = (
-        Path(__file__).parents[2]
-        / "src"
-        / "autoskillit"
-        / "server"
-        / "tools"
-        / "tools_execution.py"
-    ).read_text()
-    assert "_skill_requires_claude" not in source

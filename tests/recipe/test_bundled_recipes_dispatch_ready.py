@@ -125,11 +125,13 @@ _BACKEND_OVERRIDES: dict[str, dict[str, str]] = {
 def test_bundled_recipe_dispatch_ready_per_backend(
     recipe_name: str, backend_name: str, ingredient_overrides: dict[str, str]
 ) -> None:
-    """All bundled dispatch-gate recipes must be valid for every backend.
+    """All bundled dispatch-gate recipes must have no structural errors per backend.
 
-    For codex, guarded steps with backend_supports_git_write=false are pruned —
-    semantic rules must run post-prune so pruned steps don't produce false
-    backend-incompatible-skill errors.
+    For codex, guarded steps with backend_supports_git_write=false are pruned.
+    backend-incompatible-skill findings are expected on codex (merge-conflict steps
+    require claude-code but are guarded by open_pr, not backend_supports_git_write)
+    and are excluded from the dispatch-ready check — those are covered by
+    test_admission_dispatch_agreement.
     """
     result = load_and_validate(
         recipe_name,
@@ -138,13 +140,14 @@ def test_bundled_recipe_dispatch_ready_per_backend(
         backend_name=backend_name,
     )
     assert "error" not in result, f"Recipe '{recipe_name}' failed to load: {result.get('error')}"
-    assert result.get("valid") is True, (
+    non_compat_errors = [
+        s
+        for s in result.get("suggestions", [])
+        if s.get("severity") == Severity.ERROR and s.get("rule") != "backend-incompatible-skill"
+    ]
+    assert not non_compat_errors, (
         f"Recipe '{recipe_name}' on backend '{backend_name}' not dispatch-ready: "
-        + "; ".join(
-            f"[{s.get('rule')}] {s.get('message', '')[:80]}"
-            for s in result.get("suggestions", [])
-            if s.get("severity") == Severity.ERROR
-        )
+        + "; ".join(f"[{s.get('rule')}] {s.get('message', '')[:80]}" for s in non_compat_errors)
     )
 
 
@@ -268,14 +271,17 @@ def test_card_and_semantic_rules_agree_on_errors(recipe_name: str, tmp_path: Pat
 def test_codex_implementation_dispatch_infeasible() -> None:
     """Codex backend + implementation recipe must report dispatch_feasible=False
     when gate_backend_write is reachable post-prune (route-repair redirects
-    upstream steps to the gate after implement is pruned)."""
+    upstream steps to the gate after implement is pruned).
+
+    Note: valid may be False due to backend-incompatible-skill findings for
+    merge-conflict steps (guarded by open_pr, not backend_supports_git_write).
+    """
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,
         ingredient_overrides={"backend_supports_git_write": "false"},
         backend_name="codex",
     )
-    assert result["valid"] is True
     assert result.get("dispatch_feasible") is False, (
         "When implement is pruned but create_impl_worktree.on_success is "
         "route-repaired to gate_backend_write, the gate is reachable and "
@@ -336,6 +342,9 @@ def test_codex_capability_gate_recipes(recipe_name: str) -> None:
     Route-repair in _prune_skipped_steps redirects create_impl_worktree.on_success
     to gate_backend_write after pruning the guarded steps, making the gate reachable
     from the entry step. Admission control must identify this as an infeasible pipeline.
+
+    Note: valid may be False due to backend-incompatible-skill findings for
+    merge-conflict steps (guarded by open_pr, not backend_supports_git_write).
     """
     result = load_and_validate(
         recipe_name,
@@ -343,7 +352,6 @@ def test_codex_capability_gate_recipes(recipe_name: str) -> None:
         ingredient_overrides={"backend_supports_git_write": "false"},
         backend_name="codex",
     )
-    assert result.get("valid") is True
     assert result.get("dispatch_feasible") is False, (
         f"Recipe '{recipe_name}' must report dispatch_feasible=False when "
         f"gate_backend_write is reachable post-prune; got: "

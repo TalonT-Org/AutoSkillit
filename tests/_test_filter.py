@@ -727,6 +727,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_run_skill_add_dirs.py",
             "server/test_run_skill_backend_compat.py",
             "server/test_tools_workspace.py",
+            "server/test_admission_dispatch_agreement.py",
             "cli",
             "fleet",
             "skills",
@@ -759,6 +760,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_execution_step_resolution.py",
             "server/test_tools_execution_input_gates.py",
             "server/test_capability_admission_e2e.py",
+            "server/test_admission_dispatch_agreement.py",
             # CLI file-level entries (6 of 38 import autoskillit.recipe):
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",

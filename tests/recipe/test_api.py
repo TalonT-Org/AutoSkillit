@@ -355,6 +355,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         "_method_traditions_hash": 8,
         "_user_method_traditions_hash": 9,
         "backend_name": 10,
+        "effective_backend_map": 11,
     }
 
     missing_params: list[str] = []
@@ -472,6 +473,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
         temp_dir_relpath=None,
         defer_unresolved=False,
         backend_name=None,
+        effective_backend_map=None,
     ):
         captured["recipe_info"] = recipe_info
         captured["recipe_list"] = recipe_list
@@ -487,6 +489,7 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             temp_dir_relpath=temp_dir_relpath,
             defer_unresolved=defer_unresolved,
             backend_name=backend_name,
+            effective_backend_map=effective_backend_map,
         )
 
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)

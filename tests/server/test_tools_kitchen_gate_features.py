@@ -413,6 +413,7 @@ def test_recipe_resource_returns_composed_content():
         resolved_defaults={},
         ingredient_overrides={"backend_supports_git_write": "true"},
         backend_name=None,
+        effective_backend_map=None,
     )
     assert result == ("name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n")
     assert "optional: true" not in result

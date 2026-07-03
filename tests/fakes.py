@@ -430,6 +430,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         temp_dir_relpath: str | None = None,
         defer_unresolved: bool = False,
         backend_name: str | None = None,
+        effective_backend_map: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         self.calls.append(
             {
@@ -443,6 +444,7 @@ class InMemoryRecipeRepository(RecipeRepository):
                 "temp_dir_relpath": temp_dir_relpath,
                 "defer_unresolved": defer_unresolved,
                 "backend_name": backend_name,
+                "effective_backend_map": effective_backend_map,
             }
         )
         if self._stale:

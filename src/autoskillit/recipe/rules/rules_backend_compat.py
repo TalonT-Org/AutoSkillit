@@ -42,10 +42,17 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
         skill_info = ctx.skill_resolver.resolve(skill_name)
         if skill_info is None:
             continue
-        if (
-            skill_info.backend_requirements
-            and ctx.backend_name not in skill_info.backend_requirements
-        ):
+        # Per-step effective backend: when providers route a single step to
+        # a different backend (ANTHROPIC_BASE_URL → claude-code), the global
+        # ctx.backend_name would incorrectly flag that covered step.
+        step_backend = (
+            ctx.effective_backend_map.get(step_name, ctx.backend_name)
+            if ctx.effective_backend_map
+            else ctx.backend_name
+        )
+        if step_backend is None:
+            continue
+        if skill_info.backend_requirements and step_backend not in skill_info.backend_requirements:
             uses_caps: frozenset[str] = getattr(skill_info, "uses_capabilities", frozenset())
             cap_def = SKILL_CAPABILITY_REGISTRY.get(_GIT_METADATA_WRITE_CAP)
             _required = CLAUDE_CODE_CAPABILITIES.git_metadata_writable
@@ -61,7 +68,7 @@ def _check_backend_incompatible_skill(ctx: ValidationContext) -> list[RuleFindin
                     message=(
                         f"step '{step_name}': skill '{skill_name}' requires backend "
                         f"{sorted(skill_info.backend_requirements)} but recipe targets "
-                        f"backend '{ctx.backend_name}'.{git_detail}"
+                        f"backend '{step_backend}'.{git_detail}"
                     ),
                 )
             )

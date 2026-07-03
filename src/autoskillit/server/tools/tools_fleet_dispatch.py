@@ -50,7 +50,10 @@ from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import resolve_log_dir
 from autoskillit.server._notify import track_response_size
-from autoskillit.server.tools._auto_overrides import _provider_aware_capability_overrides
+from autoskillit.server.tools._auto_overrides import (
+    _compute_effective_backend_map,
+    _provider_aware_capability_overrides,
+)
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
@@ -337,6 +340,12 @@ async def dispatch_food_truck(
                     tool_ctx.backend, recipe, tool_ctx.config.providers, _preflight_raw_steps
                 )
                 _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
+                _effective_backend_map = _compute_effective_backend_map(
+                    _preflight_raw_steps,
+                    tool_ctx.backend.name if tool_ctx.backend else None,
+                    tool_ctx.config.providers,
+                    recipe,
+                )
                 _fleet_load_result = tool_ctx.recipes.load_and_validate(
                     recipe,
                     tool_ctx.project_dir,
@@ -344,6 +353,7 @@ async def dispatch_food_truck(
                     ingredient_overrides=_merged_ingredients,
                     temp_dir=tool_ctx.temp_dir,
                     backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
+                    effective_backend_map=_effective_backend_map,
                 )
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)

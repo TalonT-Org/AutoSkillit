@@ -164,6 +164,11 @@ def test_compute_capability_feasibility_returns_infeasible_for_codex_recipes(
     Route-repair redirects create_impl_worktree.on_success to gate_backend_write
     after pruning `implement`, making the gate reachable. Admission control
     must identify this as an infeasible pipeline.
+
+    With admission truth-telling, the recipe is also valid=False because
+    merge-conflict steps (guarded by open_pr, not backend_supports_git_write)
+    survive pruning and the backend-incompatible-skill rule correctly flags
+    them as requiring claude-code.
     """
     from autoskillit.recipe._api import load_and_validate
 
@@ -173,7 +178,10 @@ def test_compute_capability_feasibility_returns_infeasible_for_codex_recipes(
         ingredient_overrides={"backend_supports_git_write": "false"},
         backend_name="codex",
     )
-    assert result["valid"] is True
+    assert result["valid"] is False, (
+        f"Recipe '{recipe_name}' with codex backend must be valid=False: "
+        f"merge-conflict steps require claude-code (admission truth-telling)"
+    )
     assert result.get("dispatch_feasible") is False, (
         f"Recipe '{recipe_name}' with backend_supports_git_write=false under codex "
         f"must report dispatch_feasible=False (gate is reachable post-prune); "

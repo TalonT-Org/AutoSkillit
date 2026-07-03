@@ -224,7 +224,7 @@ If Part A and Part B produce no findings, record: "No historical regressions or 
 
 If `issue_url` or `issue_number` was provided to this skill, verify that the plan covers every remediation/requirement item enumerated in the source issue. Without this check, a planner that silently drops an item produces a plan that the implementation pipeline faithfully follows — leaving the issue item unaddressed.
 
-1. **Guard:** If `issue_url` or `issue_number` is not provided, skip this step and record: "Plan-vs-issue coverage check skipped — no issue context provided."
+1. **Guard:** If `issue_url` or `issue_number` is not provided, omit this check and record: "Plan-vs-issue coverage check omitted — no issue context provided."
 
 2. **Fetch the issue body:**
    ```bash
@@ -237,7 +237,7 @@ If `issue_url` or `issue_number` was provided to this skill, verify that the pla
    - Numbered lists under `## Remediation`, `## Requirements`, or `## Items` headings
    - Checkbox items (`- [ ]` or `- [x]`) under scope headings
 
-4. **If no enumerated items found:** Skip the coverage check — the issue does not use structured enumeration. Record: "No enumerated items detected in issue body — coverage check not applicable."
+4. **When the issue body contains no enumerated items:** The issue does not use structured enumeration — coverage validation is not applicable. Record: "No enumerated items detected in issue body — coverage check not applicable."
 
 5. **Cross-reference each enumerated item** against plan phases and steps:
    - For each item, search the plan text for the item's label (e.g., "R0"), its description keywords, and its referenced file paths

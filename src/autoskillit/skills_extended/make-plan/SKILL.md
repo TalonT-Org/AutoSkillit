@@ -323,6 +323,7 @@ Before writing the final plan, verify:
 - Include verification steps
 - Be willing to recommend significant refactoring if that's the right answer
 - Issue all Task calls in a single message to maximize parallelism
+- The plan must cover every remediation item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan
 
 ## Output
 

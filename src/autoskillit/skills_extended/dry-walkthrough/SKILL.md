@@ -31,6 +31,7 @@ The plan file must remain a **clean, self-contained implementation instruction s
 ## Arguments
 
 `{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent {{AUTOSKILLIT_TEMP}}/ artifact if omitted)
+`{issue_url}`   — (Optional) GitHub issue URL. When provided, enables plan-vs-issue coverage check in Step 4.6.
 
 ## Critical Constraints
 
@@ -218,6 +219,49 @@ This is a quick cross-reference sanity check — not a deep audit.
 Gather all weak-signal git findings and open-issue area overlaps into a list.
 These are forwarded to Step 7 for inclusion in the `### Historical Context` terminal section.
 If Part A and Part B produce no findings, record: "No historical regressions or issue overlaps detected."
+
+### Step 4.6: Plan-vs-Issue Coverage Check
+
+If `issue_url` or `issue_number` was provided to this skill, verify that the plan covers every remediation/requirement item enumerated in the source issue. Without this check, a planner that silently drops an item produces a plan that the implementation pipeline faithfully follows — leaving the issue item unaddressed.
+
+1. **Guard:** If `issue_url` or `issue_number` is not provided, omit this check and record: "Plan-vs-issue coverage check omitted — no issue context provided."
+
+2. **Fetch the issue body:**
+   ```bash
+   gh issue view {issue_number} --json body -q .body
+   ```
+
+3. **Extract enumerated items** from the issue body. Scan for patterns indicating structured remediation or requirement items:
+   - `R0`, `R1`, `R2`, … (Rn pattern)
+   - `REQ-*-NNN` patterns
+   - Numbered lists under `## Remediation`, `## Requirements`, or `## Items` headings
+   - Checkbox items (`- [ ]` or `- [x]`) under scope headings
+
+4. **When the issue body contains no enumerated items:** The issue does not use structured enumeration — coverage validation is not applicable. Record: "No enumerated items detected in issue body — coverage check not applicable."
+
+5. **Cross-reference each enumerated item** against plan phases and steps:
+   - For each item, search the plan text for the item's label (e.g., "R0"), its description keywords, and its referenced file paths
+   - Classify as `COVERED` (plan step explicitly addresses this item) or `UNMAPPED` (no plan step addresses it)
+
+6. **If any items are UNMAPPED:** Do NOT stamp the plan. Output a blocking failure:
+   ```
+   ## Dry Walkthrough FAILED — Plan-vs-Issue Coverage Gap
+
+   **Plan:** {path}
+   **Issue:** #{issue_number}
+   **Status:** FAILED — plan does not cover all issue-enumerated items
+
+   ### Unmapped Items
+   - {item_label}: {item_description} — not addressed by any plan step
+
+   The plan must cover every remediation/requirement item enumerated in the source
+   issue. If an item cannot be delivered, re-scope the issue body first (issue body
+   is the source of truth per AGENTS.md §3.4) and re-plan. Do not descope items
+   in the plan.
+   ```
+   Stop execution — do not proceed to Step 5.
+
+7. **If all items are COVERED:** Record coverage confirmation and proceed to Step 5.
 
 ### Step 5: Fix the Plan
 

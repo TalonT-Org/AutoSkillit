@@ -159,6 +159,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_inputs.py` | Tests for inputs semantic validation rule |
 | `test_rules_integration_predicate.py` | Tests for integration_predicate semantic validation rule |
 | `test_rules_isolation.py` | Tests for isolation semantic validation rule |
+| `test_rules_issue_scope_threading.py` | Tests for issue-scope-not-threaded-to-walkthrough semantic validation rule |
 | `test_rules_merge.py` | Tests for merge semantic validation rule |
 | `test_rules_merge_base_unpublished.py` | Tests for merge_base_unpublished semantic validation rule |
 | `test_rules_merge_queue_push.py` | Tests for merge_queue_push semantic validation rule |

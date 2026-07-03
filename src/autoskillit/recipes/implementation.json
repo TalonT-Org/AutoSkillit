@@ -271,6 +271,7 @@
         "cwd": "${{ context.work_dir }}",
         "step_name": "verify",
         "review_path": "${{ context.review_path }}",
+        "issue_url": "${{ inputs.issue_url }}",
         "output_dir": "{{AUTOSKILLIT_TEMP}}"
       },
       "on_success": "create_impl_worktree",

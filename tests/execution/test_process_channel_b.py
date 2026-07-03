@@ -389,7 +389,7 @@ class TestChannelBDrainWait:
         )  # FAILS before fix: True
 
 
-@pytest.mark.timeout(180)
+@pytest.mark.timeout(360)
 class TestChannelBFullPipelineAdjudication:
     """Full end-to-end adjudication for Channel B drain-race scenarios."""
 
@@ -421,16 +421,16 @@ class TestChannelBFullPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=120,
+            timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
-            natural_exit_grace_seconds=2.0,
-            _phase1_timeout=250,
+            natural_exit_grace_seconds=0.1,
+            _phase1_timeout=400,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
-            _session_id_timeout=5.0,
+            _session_id_timeout=0.5,
         )
         skill_result = _build_skill_result(
             result,

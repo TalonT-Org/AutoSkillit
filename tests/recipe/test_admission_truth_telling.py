@@ -220,20 +220,19 @@ class TestEffectiveBackendAwareness:
         recipe = _make_recipe_with_skill_step("/git-only-skill something")
         resolver = _mock_resolver(skill_info)
 
-        # Construct a context where backend_name exists but the per-step
-        # backend is explicitly None via a map entry (defensive guard test).
-        # We can't easily force None from ctx, so we construct via a synthesized
-        # finding list and validate that the rule itself handles it.
         ctx = make_validation_context(
             recipe,
-            backend_name="claude-code",  # compatible — should produce no findings
+            backend_name="codex",
             skill_resolver=resolver,
-            effective_backend_map={"run-skill-step": "claude-code"},
+            effective_backend_map={"run-skill-step": None},  # type: ignore[dict-item]
             available_skills=frozenset({"git-only-skill"}),
         )
         findings = run_semantic_rules(ctx)
-        # No compat findings expected — just sanity check the rule runs.
-        _ = findings
+        compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert len(compat_findings) == 0, (
+            "step_backend=None must be skipped (not flagged); got: "
+            f"{[f.message for f in compat_findings]}"
+        )
 
 
 # ---------------------------------------------------------------------------

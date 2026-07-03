@@ -134,7 +134,10 @@ def test_recipe_backend_matrix_cell(recipe_name: str, backend_name: str, monkeyp
     )
 
 
-@pytest.mark.parametrize("recipe_name,backend_name", _apply_marks(_MATRIX_IDS))
+@pytest.mark.parametrize(
+    "recipe_name,backend_name",
+    [pytest.param(r, b, id=f"{r}/{b}") for r, b in _MATRIX_IDS],
+)
 def test_dispatch_feasible_per_backend(recipe_name: str, backend_name: str, monkeypatch) -> None:
     """Dispatch feasibility must reflect gate_backend_write reachability per backend."""
     monkeypatch.setattr(

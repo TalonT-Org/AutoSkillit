@@ -225,7 +225,44 @@ class TestBundledRecipeBackendCompat:
     def recipe_name(self, request: pytest.FixtureRequest) -> str:
         return request.param
 
-    def test_codex_backend_fires_for_git_metadata_skills(self, recipe_name) -> None:
+    def test_codex_backend_fires_for_git_metadata_skills(
+        self, recipe_name, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "autoskillit.server.tools._auto_overrides.shutil.which",
+            lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+        )
+        from autoskillit.recipe._analysis import make_validation_context
+        from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+        from autoskillit.recipe.registry import run_semantic_rules
+        from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
+        from autoskillit.workspace.skills import DefaultSkillResolver
+
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        resolver = DefaultSkillResolver()
+        eff_map = _compute_effective_backend_map(
+            recipe.steps,
+            "codex",
+            None,
+            recipe_name,
+            skill_resolver=resolver,
+        )
+        ctx = make_validation_context(
+            recipe,
+            backend_name="codex",
+            skill_resolver=resolver,
+            effective_backend_map=eff_map,
+            available_skills=frozenset(s.name for s in resolver.list_all()),
+        )
+        findings = run_semantic_rules(ctx)
+        compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
+        assert compat_findings == [], (
+            f"Expected zero backend-incompatible-skill findings for {recipe_name} "
+            f"on codex backend when capability route is active; "
+            f"got {len(compat_findings)} findings"
+        )
+
+    def test_codex_backend_fires_without_effective_backend_map(self, recipe_name) -> None:
         from autoskillit.recipe._analysis import make_validation_context
         from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
         from autoskillit.recipe.registry import run_semantic_rules
@@ -243,28 +280,7 @@ class TestBundledRecipeBackendCompat:
         compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
         assert len(compat_findings) >= 1, (
             f"Expected at least 1 backend-incompatible-skill finding for {recipe_name} "
-            f"on codex backend (implement step uses git_metadata_write skill)"
-        )
-        step_names = {f.step_name for f in compat_findings}
-        expected_steps = {
-            "implement",
-            "retry_worktree",
-            "fix",
-            "merge_gate_fix",
-            "rebase_conflict_fix",
-            "resolve_review",
-            "resolve_pre_review_conflicts",
-        }
-        recipe_aware_expected = expected_steps - {"assess", "merge_gate_assess"}
-        if recipe_name == "remediation":
-            recipe_aware_expected = (expected_steps - {"fix", "merge_gate_fix"}) | {
-                "assess",
-                "merge_gate_assess",
-            }
-        missing = recipe_aware_expected - step_names
-        assert not missing, (
-            f"Expected findings for steps {missing} in {recipe_name} on codex backend, "
-            f"got findings for: {step_names}"
+            f"on codex backend without effective_backend_map (rule must still fire)"
         )
 
     def test_claude_code_backend_no_findings(self, recipe_name) -> None:

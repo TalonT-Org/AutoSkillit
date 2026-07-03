@@ -232,6 +232,14 @@ class CapabilityResolutionDetail:
             was None; no resolution attempted.
         "baseline_already_true" — backend_supports_git_write was already "true"
             from the baseline capability; no provider override needed.
+        "capability_route" — skill capability scan detected a step requiring
+            ``git_metadata_write``; capability flipped to "true" without
+            requiring provider config (REQ-ADMIT-002).
+        "capability_route_no_binary" — skill capability scan detected a step
+            requiring ``git_metadata_write`` but ``shutil.which("claude")``
+            returned ``None``; capability remains "false" (fail-closed, REQ-ROUTE-004).
+        "no_providers_configured" — ``config_providers`` was ``None`` and no
+            skill capability route applied; capability remains "false".
     """
 
     resolved_steps: tuple[tuple[str, str, bool], ...]

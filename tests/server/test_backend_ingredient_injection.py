@@ -496,14 +496,25 @@ class TestRealCompositionPruning:
         )
 
     @pytest.mark.anyio
-    async def test_codex_open_kitchen_blocks_on_reachable_gate(self, tmp_path: Path) -> None:
+    async def test_codex_open_kitchen_blocks_on_reachable_gate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """End-to-end integration: open_kitchen with codex backend on the bundled
         implementation recipe must hard-block because gate_backend_write is reachable
         post-prune (route-repair redirects create_impl_worktree.on_success to the
         gate after implement is pruned). Admission control reports dispatch_feasible=False
         and open_kitchen must reject the pipeline.
+
+        The claude binary is forced absent so the R0 capability route fails closed
+        (capability_route_no_binary) — the block is deterministic regardless of the
+        local claude installation.
         """
         from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+        monkeypatch.setattr(
+            "autoskillit.server.tools._auto_overrides.shutil.which",
+            lambda name: None,
+        )
 
         mock_ctx = MagicMock()
         mock_ctx.kitchen_id = "test-kitchen"

@@ -480,13 +480,18 @@ def get_recipe(name: str) -> str:
     try:
         _raw_recipe = ctx.recipes.load(match.path)
         _backend_overrides, _cap_detail = _provider_aware_capability_overrides(
-            ctx.backend, name, ctx.config.providers, _raw_recipe.steps
+            ctx.backend,
+            name,
+            ctx.config.providers,
+            _raw_recipe.steps,
+            skill_resolver=ctx.skill_resolver,
         )
         _effective_backend_map = _compute_effective_backend_map(
             _raw_recipe.steps,
             ctx.backend.name if ctx.backend else None,
             ctx.config.providers,
             name,
+            skill_resolver=ctx.skill_resolver,
         )
         result = ctx.recipes.load_and_validate(
             name,
@@ -707,6 +712,7 @@ async def open_kitchen(
                 name,
                 tool_ctx.config.providers,
                 _raw_recipe.steps if _raw_recipe is not None else None,
+                skill_resolver=tool_ctx.skill_resolver,
             )
             _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
@@ -717,6 +723,7 @@ async def open_kitchen(
                 tool_ctx.backend.name if tool_ctx.backend else None,
                 tool_ctx.config.providers,
                 name,
+                skill_resolver=tool_ctx.skill_resolver,
             )
             # Runtime enum check: output_mode must be validated before recipe loading
             if name == "research":

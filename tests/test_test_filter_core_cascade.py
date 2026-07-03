@@ -129,8 +129,10 @@ class TestModuleCascadeCore:
         )
 
     def test_type_protocols_workspace_cascade(self) -> None:
+        # server included since R0: server/tools/_auto_overrides.py consumes the
+        # SkillResolver protocol for capability-driven admission routing (#4174).
         assert MODULE_CASCADE_CORE["_type_protocols_workspace"] == frozenset(
-            {"core", "pipeline", "recipe", "workspace"}
+            {"core", "pipeline", "recipe", "server", "workspace"}
         )
 
     def test_type_checkpoint_entry_exists(self) -> None:
@@ -433,9 +435,11 @@ class TestBuildTestScopeCoreCascade:
         )
         assert result is not None
         dir_names = {p.name for p in result}
-        for pkg in ["core", "pipeline", "recipe", "workspace"]:
+        # server included since R0: server/tools/_auto_overrides.py consumes the
+        # SkillResolver protocol for capability-driven admission routing (#4174).
+        for pkg in ["core", "pipeline", "recipe", "server", "workspace"]:
             assert pkg in dir_names, f"_type_protocols_workspace cascade should include {pkg}"
-        for excluded in ["cli", "server", "execution", "fleet", "migration", "hooks"]:
+        for excluded in ["cli", "execution", "fleet", "migration", "hooks"]:
             assert excluded not in dir_names, (
                 f"_type_protocols_workspace cascade should not include {excluded}"
             )

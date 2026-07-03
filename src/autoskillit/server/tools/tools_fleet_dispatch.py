@@ -337,7 +337,11 @@ async def dispatch_food_truck(
                     else None
                 )
                 _capability_overrides, _cap_detail = _provider_aware_capability_overrides(
-                    tool_ctx.backend, recipe, tool_ctx.config.providers, _preflight_raw_steps
+                    tool_ctx.backend,
+                    recipe,
+                    tool_ctx.config.providers,
+                    _preflight_raw_steps,
+                    skill_resolver=tool_ctx.skill_resolver,
                 )
                 _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
                 _effective_backend_map = _compute_effective_backend_map(
@@ -345,6 +349,7 @@ async def dispatch_food_truck(
                     tool_ctx.backend.name if tool_ctx.backend else None,
                     tool_ctx.config.providers,
                     recipe,
+                    skill_resolver=tool_ctx.skill_resolver,
                 )
                 _fleet_load_result = tool_ctx.recipes.load_and_validate(
                     recipe,

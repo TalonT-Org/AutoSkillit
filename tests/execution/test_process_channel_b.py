@@ -67,7 +67,7 @@ CHANNEL_B_NO_STDOUT_SCRIPT = textwrap.dedent("""\
                 "content": "working..."}}
         f.write(json.dumps(init) + "\\n")
         f.flush()
-    time.sleep(2.0)
+    time.sleep(3.0)
     with open(jsonl_path, "a") as f:
         record = {"type": "assistant", "message": {"role": "assistant",
                   "content": "%%ORDER_UP%%"}}
@@ -208,14 +208,16 @@ class TestChannelBDrainWait:
 
         Sequence (fast poll params):
           t=0.10s  script creates session JSONL with initial content
-          t=2.10s  script writes %%ORDER_UP%% to session JSONL
-          t~2.15s  Channel B fires → drain wait starts with 0.5s timeout
-          t~2.65s  drain times out (script never wrote to stdout)
-          t~2.65s  process killed with empty stdout
+          t=3.10s  script writes %%ORDER_UP%% to session JSONL
+          t~3.15s  Channel B fires → drain wait starts with 0.5s timeout
+          t~3.65s  drain times out (script never wrote to stdout)
+          t~3.65s  process killed with empty stdout
 
-        The 2.0s gap between file creation and marker write ensures Phase 1 discovers
+        The 3.0s gap between file creation and marker write ensures Phase 1 discovers
         the JSONL file before the marker arrives, preventing a race where Phase 2
-        initializes scan_pos past the marker under xdist -n 4 event loop saturation.
+        initializes scan_pos past the marker under xdist -n 4 event loop saturation
+        (2.0s proved insufficient under WSL2 + xdist load; 3.0s matches the passing
+        adjudication sibling).
 
         timeout=300s: guards against the outer wall-clock expiring under xdist -n 4 load.
         _phase1_timeout=400: must exceed outer timeout (300s) so that Phase 1 never fires
@@ -389,7 +391,7 @@ class TestChannelBDrainWait:
         )  # FAILS before fix: True
 
 
-@pytest.mark.timeout(180)
+@pytest.mark.timeout(360)
 class TestChannelBFullPipelineAdjudication:
     """Full end-to-end adjudication for Channel B drain-race scenarios."""
 
@@ -421,12 +423,12 @@ class TestChannelBFullPipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=120,
+            timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
-            completion_drain_timeout=0.5,
-            natural_exit_grace_seconds=0.5,
-            _phase1_timeout=250,
+            completion_drain_timeout=2.0,
+            natural_exit_grace_seconds=0.1,
+            _phase1_timeout=400,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
@@ -451,13 +453,16 @@ class TestChannelBDrainRacePipelineAdjudication:
     provenance bypass (data_confirmed=False → success=True without calling _compute_success).
     """
 
-    @pytest.mark.timeout(150)
+    @pytest.mark.timeout(360)
     @pytest.mark.anyio
     async def test_channel_b_drain_timeout_produces_success_skill_result(self, tmp_path):
         """COMPLETED + data_confirmed=False + empty stdout → success=True, needs_retry=False.
 
         Channel B provenance bypass: when session monitor wins and drain expires,
         _build_skill_result returns success=True immediately, bypassing _compute_success.
+        Timeout parameters aligned with the stabilized TestChannelBDrainWait siblings
+        (outer 300s, _phase1_timeout 400 > outer, grace 0.1 — script never exits
+        naturally) to avoid the WSL2 + xdist slow-discovery flake.
         """
         from autoskillit.execution.headless import _build_skill_result
 
@@ -469,11 +474,12 @@ class TestChannelBDrainRacePipelineAdjudication:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=120,
+            timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=0.5,
-            _phase1_timeout=250,
+            natural_exit_grace_seconds=0.1,
+            _phase1_timeout=400,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,

@@ -1128,6 +1128,235 @@ async def test_dispatch_food_truck_partial_override_infeasible_includes_guidance
     assert "escape_hatch" in parsed
 
 
+def _make_git_write_step(name: str) -> MagicMock:
+    """Recipe step whose skill_command resolves to a git_metadata_write skill."""
+    step = _make_recipe_step(name, provider="")
+    step.with_args = {"skill_command": "/autoskillit:resolve-failures"}
+    return step
+
+
+def _make_git_write_resolver() -> MagicMock:
+    """Skill resolver whose every skill carries git_metadata_write."""
+    info = MagicMock()
+    info.uses_capabilities = frozenset({"git_metadata_write"})
+    info.backend_requirements = frozenset({"claude-code"})
+    resolver = MagicMock()
+    resolver.resolve.return_value = info
+    return resolver
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_capability_route_reaches_admission_with_true_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Step 5d sibling of Test 1B: open_kitchen with Codex + NO provider overrides
+    but capability route active (git_metadata_write skills + binary present) must
+    reach admission with backend_supports_git_write='true' and a claude-code
+    effective backend map — not the dispatch_infeasible envelope."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from autoskillit.server.tools.tools_kitchen import open_kitchen
+    from tests.server.conftest import _make_mock_ctx
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+
+    tool_ctx = _make_mock_ctx()
+    tool_ctx.gate.enabled = True
+    tool_ctx.gate_infrastructure_ready = True
+    tool_ctx.recipe_name = "implementation"
+    tool_ctx.kitchen_id = "test-kitchen"
+
+    from types import SimpleNamespace
+
+    tool_ctx.backend = MagicMock()
+    tool_ctx.backend.name = "codex"
+    tool_ctx.backend.capabilities = SimpleNamespace(
+        git_metadata_writable=False,
+        anthropic_provider_capable=False,
+    )
+    tool_ctx.skill_resolver = _make_git_write_resolver()
+
+    recipe_info = MagicMock()
+    recipe_info.path = Path("/fake/recipe.yaml")
+    tool_ctx.recipes.find.return_value = recipe_info
+
+    recipe_obj = MagicMock()
+    recipe_obj.name = "implementation"
+    recipe_obj.steps = {
+        "implement": _make_git_write_step("implement"),
+        "fix": _make_git_write_step("fix"),
+    }
+    tool_ctx.recipes.load.return_value = recipe_obj
+    tool_ctx.recipes.load_and_validate.return_value = _make_feasible_load_result()
+
+    fastmcp_ctx = AsyncMock()
+
+    with (
+        patch("autoskillit.server._get_ctx", return_value=tool_ctx),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("", None),
+        ),
+    ):
+        result = await open_kitchen(name="implementation", ctx=fastmcp_ctx)
+
+    parsed = json.loads(result)
+    assert parsed.get("kitchen") != "dispatch_infeasible", (
+        f"capability route must prevent the dispatch_infeasible refusal; got: {parsed}"
+    )
+    lv_kwargs = tool_ctx.recipes.load_and_validate.call_args.kwargs
+    assert lv_kwargs["ingredient_overrides"]["backend_supports_git_write"] == "true"
+    assert lv_kwargs["effective_backend_map"]["fix"] == "claude-code"
+    assert lv_kwargs["effective_backend_map"]["implement"] == "claude-code"
+
+
+@pytest.mark.anyio
+async def test_load_recipe_capability_route_not_infeasible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Step 5d sibling of Test 1G: load_recipe with Codex + no provider overrides
+    but capability route active must not return the dispatch_infeasible response,
+    and must thread the capability-derived override and map into admission."""
+    import json
+    from unittest.mock import patch
+
+    from autoskillit.server.tools.tools_recipe import load_recipe
+    from tests.server.conftest import _make_mock_ctx
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+
+    tool_ctx = _make_mock_ctx()
+    tool_ctx.gate.enabled = True
+    tool_ctx.kitchen_id = "test-kitchen"
+
+    from types import SimpleNamespace
+
+    tool_ctx.backend = MagicMock()
+    tool_ctx.backend.name = "codex"
+    tool_ctx.backend.capabilities = SimpleNamespace(
+        git_metadata_writable=False,
+        anthropic_provider_capable=False,
+    )
+    tool_ctx.skill_resolver = _make_git_write_resolver()
+
+    recipe_info = MagicMock()
+    recipe_info.path = Path("/fake/recipe.yaml")
+    tool_ctx.recipes.find.return_value = recipe_info
+
+    recipe_obj = MagicMock()
+    recipe_obj.name = "implementation"
+    recipe_obj.steps = {
+        "implement": _make_git_write_step("implement"),
+        "fix": _make_git_write_step("fix"),
+    }
+    tool_ctx.recipes.load.return_value = recipe_obj
+    tool_ctx.recipes.load_and_validate.return_value = _make_feasible_load_result()
+
+    with (
+        patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=tool_ctx,
+        ),
+        patch(
+            "autoskillit.server.tools.tools_recipe._require_enabled",
+            return_value=None,
+        ),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("", None),
+        ),
+    ):
+        result = await load_recipe(name="implementation")
+
+    parsed = json.loads(result)
+    assert parsed.get("dispatch_infeasible") is not True
+    lv_kwargs = tool_ctx.recipes.load_and_validate.call_args.kwargs
+    assert lv_kwargs["ingredient_overrides"]["backend_supports_git_write"] == "true"
+    assert lv_kwargs["effective_backend_map"]["fix"] == "claude-code"
+
+
+@pytest.mark.anyio
+async def test_dispatch_food_truck_capability_route_no_binary_fails_closed(
+    build_ctx_open: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Step 5d sibling of Test 1H: fleet dispatch with capability-requiring steps
+    and the claude binary ABSENT keeps the fail-closed refusal — the capability
+    route must not admit a fleet pipeline it cannot actually route."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from autoskillit.core import BackendCapabilities
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools._auto_overrides.shutil.which",
+        lambda name: None,
+    )
+
+    tool_ctx = build_ctx_open()
+
+    caps = BackendCapabilities(
+        applicable_guards=frozenset(),
+        anthropic_provider_capable=False,
+        git_metadata_writable=False,
+    )
+    backend = MagicMock()
+    backend.name = "codex"
+    backend.capabilities = caps
+    tool_ctx.backend = backend
+    tool_ctx.skill_resolver = _make_git_write_resolver()
+
+    tool_ctx.recipes = MagicMock()
+    recipe_info = MagicMock()
+    recipe_info.path = Path("/fake/recipe.yaml")
+    tool_ctx.recipes.find.return_value = recipe_info
+
+    recipe_obj = MagicMock()
+    recipe_obj.name = "implementation"
+    recipe_obj.steps = {
+        "implement": _make_git_write_step("implement"),
+        "fix": _make_git_write_step("fix"),
+    }
+    tool_ctx.recipes.load.return_value = recipe_obj
+    tool_ctx.recipes.load_and_validate.return_value = {
+        "valid": True,
+        "dispatch_feasible": False,
+        "infeasible_steps": ["gate_backend_write"],
+        "post_prune_step_names": ["implement"],
+    }
+
+    with (
+        patch("autoskillit.server._state._ctx", tool_ctx),
+        patch(
+            "autoskillit.server._guards._resolve_provider_profile",
+            return_value=("", None),
+        ),
+        patch(
+            "autoskillit.server.tools.tools_fleet_dispatch._require_fleet",
+            lambda _name: None,
+        ),
+    ):
+        from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
+
+        result = await dispatch_food_truck(
+            recipe="implementation",
+            task="test task",
+            ctx=AsyncMock(),
+        )
+
+    parsed = json.loads(result)
+    assert "fleet_recipe_invalid" in parsed.get("error", "")
+    lv_kwargs = tool_ctx.recipes.load_and_validate.call_args.kwargs
+    assert lv_kwargs["ingredient_overrides"]["backend_supports_git_write"] == "false"
+
+
 def test_provider_override_any_step_with_base_url_flips_capability() -> None:
     """Codex backend with ONE guarded step having ANTHROPIC_BASE_URL
     and all other guarded steps lacking overrides → capability flips to 'true'

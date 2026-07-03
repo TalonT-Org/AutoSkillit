@@ -8,6 +8,7 @@ helper returns a plain dict suitable for merging into the
 
 from __future__ import annotations
 
+import shutil
 from typing import TYPE_CHECKING, Any, cast
 
 from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS, ProvidersConfig
@@ -16,11 +17,13 @@ from autoskillit.core import (
     CAPABILITY_INGREDIENT_TO_SKIP_GUARD,
     SKILL_TOOLS,
     CapabilityResolutionDetail,
+    extract_skill_name,
     get_logger,
 )
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
+    from autoskillit.core.types._type_protocols_workspace import SkillResolver
     from autoskillit.recipe.schema import RecipeStep
 
 logger = get_logger(__name__)
@@ -43,6 +46,8 @@ def _provider_aware_capability_overrides(
     recipe_name: str,
     config_providers: Any | None,
     recipe_steps: dict[str, RecipeStep] | None,
+    *,
+    skill_resolver: SkillResolver | None = None,
 ) -> tuple[dict[str, str], CapabilityResolutionDetail]:
     """Return capability overrides with per-step provider awareness.
 
@@ -52,16 +57,23 @@ def _provider_aware_capability_overrides(
     has a provider override that resolves to ``ANTHROPIC_BASE_URL``, the override
     flips to ``"true"`` so those steps survive pruning.
 
+    Capability-route disjunct: when ``skill_resolver`` is supplied, any step
+    whose skill carries the ``git_metadata_write`` capability routes the
+    override to ``"true"`` regardless of provider config (REQ-ADMIT-002).
+    The binary probe (``shutil.which("claude")``) gates the override — if
+    the claude binary is absent, the route fails closed with
+    ``resolution_path="capability_route_no_binary"``.
+
     Any-suffices semantics: a single guarded step with ANTHROPIC_BASE_URL is
     sufficient to flip the capability. This preserves defense-in-depth — the
     runtime ``gate_backend_write`` still fires for any surviving step, and the
     per-step ``_check_backend_compat()`` gate verifies skill backend
     requirements at dispatch time.
 
-    Graceful degradation: when any of ``backend``, ``config_providers``, or
-    ``recipe_steps`` is ``None``, or when ``backend.capabilities.anthropic_provider_capable``
-    is ``True`` (i.e. Claude Code orchestrator), returns the underlying
-    ``_backend_capability_overrides`` result unchanged.
+    Graceful degradation: when any of ``backend`` or ``recipe_steps`` is
+    ``None``, returns the underlying ``_backend_capability_overrides`` result
+    unchanged. ``config_providers is None`` no longer triggers graceful
+    degradation — it only gates the provider-scan path (REQ-ADMIT-002).
 
     Returns ``(overrides_dict, resolution_detail)``. Early-return paths
     (claude backend, graceful degradation, baseline already true, no guarded
@@ -72,10 +84,42 @@ def _provider_aware_capability_overrides(
     base = _backend_capability_overrides(backend)
     if base["backend_supports_git_write"] == "true":
         return base, CapabilityResolutionDetail.empty("baseline_already_true")
-    if backend is None or config_providers is None or recipe_steps is None:
+    if backend is None or recipe_steps is None:
         return base, CapabilityResolutionDetail.empty("graceful_degradation")
     if getattr(backend.capabilities, "anthropic_provider_capable", False):
         return base, CapabilityResolutionDetail.empty("claude_backend")
+
+    if skill_resolver is not None:
+        has_capability_requirement = False
+        for step_name, step in recipe_steps.items():
+            if getattr(step, "tool", None) not in SKILL_TOOLS:
+                continue
+            _wa = getattr(step, "with_args", None)
+            skill_cmd = _wa.get("skill_command", "") if isinstance(_wa, dict) else ""
+            skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
+            if not skill_name:
+                continue
+            cap_resolved = skill_resolver.resolve(skill_name)
+            if cap_resolved and "git_metadata_write" in getattr(
+                cap_resolved, "uses_capabilities", frozenset()
+            ):
+                has_capability_requirement = True
+                break
+
+        if has_capability_requirement:
+            if shutil.which("claude") is not None:
+                base["backend_supports_git_write"] = "true"
+                return base, CapabilityResolutionDetail(
+                    resolved_steps=(),
+                    bail_step=None,
+                    resolution_path="capability_route",
+                )
+            else:
+                return base, CapabilityResolutionDetail(
+                    resolved_steps=(),
+                    bail_step=None,
+                    resolution_path="capability_route_no_binary",
+                )
 
     _guard_refs = frozenset(CAPABILITY_INGREDIENT_TO_SKIP_GUARD.values())
     guarded_step_names: list[str] = []
@@ -87,6 +131,9 @@ def _provider_aware_capability_overrides(
 
     if not guarded_step_names:
         return base, CapabilityResolutionDetail.empty("no_guarded_steps")
+
+    if config_providers is None:
+        return base, CapabilityResolutionDetail.empty("no_providers_configured")
 
     from autoskillit.server._guards import _resolve_provider_profile  # circular-break
 
@@ -148,20 +195,29 @@ def _compute_effective_backend_map(
     backend_name: str | None,
     config_providers: Any | None,
     recipe_name: str,
+    *,
+    skill_resolver: SkillResolver | None = None,
 ) -> dict[str, str] | None:
     """Build a per-step effective backend map mirroring ``tools_execution`` dispatch logic.
 
     For each ``run_skill`` step, returns the backend that ``run_skill`` would dispatch
     to: ``AGENT_BACKEND_CLAUDE_CODE`` if the step has a provider override with
-    ``ANTHROPIC_BASE_URL``; otherwise the orchestrator's ``backend_name``. Returns
-    ``None`` when there is no orchestrator backend — callers treat ``None`` as
-    "no per-step awareness; fall back to ``ctx.backend_name``".
+    ``ANTHROPIC_BASE_URL`` OR the step's skill requires ``git_metadata_write``;
+    otherwise the orchestrator's ``backend_name``. Returns ``None`` when there is
+    no orchestrator backend — callers treat ``None`` as "no per-step awareness;
+    fall back to ``ctx.backend_name``".
 
-    Mirrors the ``ANTHROPIC_BASE_URL`` backend-override block in ``run_skill()``
+    Mirrors the ``ANTHROPIC_BASE_URL`` backend-override block and the
+    ``_skill_requires_claude`` capability disjunct in ``run_skill()``
     (``tools_execution.py``) so admission and dispatch evaluate backend compatibility
     using identical per-step logic.
+
+    The ``skill_resolver`` parameter enables capability-driven routing: when
+    supplied, steps whose skills have ``git_metadata_write`` in
+    ``uses_capabilities`` map to ``AGENT_BACKEND_CLAUDE_CODE`` regardless of
+    provider config (REQ-ADMIT-002).
     """
-    if backend_name is None or recipe_steps is None or config_providers is None:
+    if backend_name is None or recipe_steps is None:
         return None
     from autoskillit.server._guards import _resolve_provider_profile  # circular-break
 
@@ -169,20 +225,44 @@ def _compute_effective_backend_map(
     for step_name, step in recipe_steps.items():
         if getattr(step, "tool", None) not in SKILL_TOOLS:
             continue
-        step_provider = getattr(step, "provider", "") or ""
-        _, provider_extras = _resolve_provider_profile(
-            step_name,
-            recipe_name,
-            cast(ProvidersConfig, config_providers),
-            step_provider=step_provider,
-        )
-        has_base_url = bool(
-            provider_extras
-            and isinstance(provider_extras, dict)
-            and "ANTHROPIC_BASE_URL" in provider_extras
-        )
+
+        has_base_url = False
+        if config_providers is not None:
+            step_provider = getattr(step, "provider", "") or ""
+            _, provider_extras = _resolve_provider_profile(
+                step_name,
+                recipe_name,
+                cast(ProvidersConfig, config_providers),
+                step_provider=step_provider,
+            )
+            has_base_url = bool(
+                provider_extras
+                and isinstance(provider_extras, dict)
+                and "ANTHROPIC_BASE_URL" in provider_extras
+            )
+
         if has_base_url:
             result[step_name] = AGENT_BACKEND_CLAUDE_CODE
-        else:
-            result[step_name] = backend_name
+            continue
+
+        if skill_resolver is not None:
+            _wa2 = getattr(step, "with_args", None)
+            skill_cmd = _wa2.get("skill_command", "") if isinstance(_wa2, dict) else ""
+            skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
+            if skill_name:
+                resolved = skill_resolver.resolve(skill_name)
+                _resolved_reqs: frozenset[str] = (
+                    getattr(resolved, "backend_requirements", frozenset())
+                    if resolved
+                    else frozenset()
+                )
+                if (
+                    resolved
+                    and "git_metadata_write" in getattr(resolved, "uses_capabilities", frozenset())
+                    and _resolved_reqs
+                ):
+                    result[step_name] = AGENT_BACKEND_CLAUDE_CODE
+                    continue
+
+        result[step_name] = backend_name
     return result if result else None

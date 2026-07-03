@@ -119,37 +119,37 @@ def test_admission_dispatch_agreement(recipe_name: str, backend_name: str) -> No
 
     # Admission says feasible + valid → dispatch must agree for every step.
     dispatch_backends = _dispatch_effective_backends(raw_recipe, backend_name, effective_map)
-    failing: list[str] = []
+    unresolvable: list[str] = []
+    violations: list[str] = []
 
     for step_name, step in raw_recipe.steps.items():
         if getattr(step, "tool", None) != "run_skill":
             continue
         skill_cmd = getattr(step, "with_args", {}).get("skill_command", "")
-        # Skip dynamic skill names (templated like `${inputs.foo}` or `{slug}`).
         if "${" in skill_cmd or "<" in skill_cmd or "{" in skill_cmd:
             continue
-        # Extract skill name (first token after the leading slash).
         skill_name = skill_cmd.lstrip("/").split()[0] if skill_cmd.lstrip("/") else ""
-        # Strip optional "autoskillit:" prefix to match DefaultSkillResolver names.
         skill_name = skill_name.removeprefix("autoskillit:")
         if not skill_name:
             continue
         skill_info = _SKILL_RESOLVER.resolve(skill_name)
         if skill_info is None:
-            # Unresolvable skill: this is a test infra failure, not a vacuous pass.
-            failing.append(
+            unresolvable.append(
                 f"{recipe_name}/{step_name}: skill '{skill_name}' is not resolvable "
                 f"via DefaultSkillResolver — cannot verify dispatch compatibility"
             )
             continue
         step_effective = dispatch_backends.get(step_name)
         if step_effective is None:
-            continue  # non-skill step
+            continue
         if _is_backend_incompatible(skill_info, step_effective):
-            failing.append(
+            violations.append(
                 f"{recipe_name}/{step_name}: admission says dispatch_feasible=True "
                 f"but skill '{skill_name}' requires {sorted(skill_info.backend_requirements)} "
                 f"and effective backend is '{step_effective}'"
             )
 
-    assert not failing, "Admission ↔ dispatch agreement violated:\n  " + "\n  ".join(failing)
+    assert not violations, "Admission ↔ dispatch agreement violated:\n  " + "\n  ".join(violations)
+    assert not unresolvable, "Unresolvable skills (test infra gap):\n  " + "\n  ".join(
+        unresolvable
+    )

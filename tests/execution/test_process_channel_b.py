@@ -462,44 +462,17 @@ class TestChannelBDrainRacePipelineAdjudication:
         _build_skill_result returns success=True immediately, bypassing _compute_success.
 
         Timing notes:
-        - Script uses 3.0s gap between file creation and marker write (not the shared
-          CHANNEL_B_NO_STDOUT_SCRIPT which uses 2.0s) to ensure Phase 1 discovers the
-          JSONL file before the marker arrives under xdist -n 4 load on WSL2, where
-          coroutine scheduling jitter can delay Phase 1 discovery by >1s.
         - timeout=300 / _phase1_timeout=400: Phase 1 timeout exceeds outer timeout so
           Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
         - natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
           so shorten grace window to avoid asyncio-waitpid thread contention under CI load.
         """
-        import textwrap
-
         from autoskillit.execution.headless import _build_skill_result
-
-        # 3.0s gap (vs CHANNEL_B_NO_STDOUT_SCRIPT's 2.0s) to survive xdist-4 WSL2 jitter.
-        _CHANNEL_B_NO_STDOUT_3S_SCRIPT = textwrap.dedent("""\
-            import sys, time, json, os
-            session_dir = sys.argv[1]
-            os.makedirs(session_dir, exist_ok=True)
-            time.sleep(0.1)
-            jsonl_path = os.path.join(session_dir, "session.jsonl")
-            with open(jsonl_path, "w") as f:
-                init = {"type": "assistant", "message": {"role": "assistant",
-                        "content": "working..."}}
-                f.write(json.dumps(init) + "\\n")
-                f.flush()
-            time.sleep(3.0)
-            with open(jsonl_path, "a") as f:
-                record = {"type": "assistant", "message": {"role": "assistant",
-                          "content": "%%ORDER_UP%%"}}
-                f.write(json.dumps(record) + "\\n")
-                f.flush()
-            time.sleep(3600)
-        """)
 
         session_dir = tmp_path / "session"
         session_dir.mkdir()
-        script = tmp_path / "channel_b_no_stdout_3s.py"
-        script.write_text(_CHANNEL_B_NO_STDOUT_3S_SCRIPT)
+        script = tmp_path / "channel_b_no_stdout.py"
+        script.write_text(CHANNEL_B_NO_STDOUT_SCRIPT)
 
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],

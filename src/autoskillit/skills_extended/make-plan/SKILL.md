@@ -325,6 +325,13 @@ Before writing the final plan, verify:
 - Issue all Task calls in a single message to maximize parallelism
 - The plan must cover every remediation item enumerated in the source issue; if an item cannot be delivered, stop and surface it — do not descope it in the plan
 
+**Requirement Echo Rule:** Every behavioral requirement stated in `## Summary`, `## Proposed Architecture`, or `## Design Decisions` prose MUST be echoed as an explicit `## Implementation Steps` directive. After drafting the plan:
+
+1. Enumerate every behavioral constraint in the prose sections above.
+2. For each constraint, verify it maps to at least one explicit step directive.
+3. If a constraint has no corresponding step, add one. Never leave behavioral requirements as prose-only.
+4. Include a `## Requirements Map` section at the end of the plan listing each constraint with its corresponding step reference.
+
 ## Output
 
 If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b`, etc.) at natural section boundaries. Use as many parts as needed.
@@ -400,6 +407,11 @@ verdict = false_positive
 
 ## Verification
 {How to verify the implementation is correct}
+
+## Requirements Map
+| Requirement (from prose) | Implementation Step |
+|---|---|
+| {behavioral constraint from Summary/Architecture/Design Decisions} | Step {N.M}: {step description} |
 ```
 
 **Plan structure (multi-part — use for EACH part file):**
@@ -424,4 +436,9 @@ verdict = false_positive
 
 ## Verification
 {How to verify THIS part's implementation is correct}
+
+## Requirements Map
+| Requirement (from prose) | Implementation Step |
+|---|---|
+| {behavioral constraint from THIS part's Summary/Architecture/Design Decisions} | Step {N.M}: {step description} |
 ```

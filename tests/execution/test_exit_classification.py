@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 
 import pytest
 
@@ -477,7 +476,10 @@ class TestCodexContextExhaustionFromTurnFailed:
         agent_result = CodexResultParser().parse_stdout(ndjson)
         adapted = _adapt_agent_result(agent_result)
         result = _sr(returncode=1)
-        assert classify_infra_exit(adapted, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+        assert (
+            classify_infra_exit(adapted, result, capabilities=_CAPS)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
     def test_turn_failed_error_code_and_message_classify_returns_context_exhausted(self) -> None:
         ndjson = _turn_failed_ndjson(
@@ -487,21 +489,29 @@ class TestCodexContextExhaustionFromTurnFailed:
         agent_result = CodexResultParser().parse_stdout(ndjson)
         adapted = _adapt_agent_result(agent_result)
         result = _sr(returncode=1)
-        assert classify_infra_exit(adapted, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+        assert (
+            classify_infra_exit(adapted, result, capabilities=_CAPS)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
     def test_turn_failed_message_only_classify_returns_context_exhausted(self) -> None:
         ndjson = _turn_failed_ndjson("context_length_exceeded", error_code="")
         agent_result = CodexResultParser().parse_stdout(ndjson)
         adapted = _adapt_agent_result(agent_result)
         result = _sr(returncode=1)
-        assert classify_infra_exit(adapted, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+        assert (
+            classify_infra_exit(adapted, result, capabilities=_CAPS)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
     def test_turn_failed_non_exhaustion_error_code_not_context_exhausted(self) -> None:
         ndjson = _turn_failed_ndjson("Internal server error", error_code="server_error")
         agent_result = CodexResultParser().parse_stdout(ndjson)
         adapted = _adapt_agent_result(agent_result)
         result = _sr(returncode=1)
-        assert classify_infra_exit(adapted, result) == InfraExitCategory.API_ERROR
+        assert (
+            classify_infra_exit(adapted, result, capabilities=_CAPS) == InfraExitCategory.API_ERROR
+        )
 
     def test_stderr_non_exhaustion_not_context_exhausted(self) -> None:
         session = ClaudeSessionResult(
@@ -511,42 +521,8 @@ class TestCodexContextExhaustionFromTurnFailed:
             session_id="s1",
         )
         result = _sr(returncode=1, stderr="some transient error")
-        assert classify_infra_exit(session, result) == InfraExitCategory.COMPLETED
-
-
-class TestContextExhaustionCapabilityGate:
-    """Branch coverage: supports_context_exhaustion_detection gates CONTEXT_EXHAUSTED."""
-
-    def test_capability_false_suppresses_context_exhausted(self) -> None:
-        """capability=False: session that would be CONTEXT_EXHAUSTED falls through."""
-        caps = replace(CLAUDE_CODE_CAPABILITIES, supports_context_exhaustion_detection=False)
-        session = ClaudeSessionResult(
-            subtype=CliSubtype.SUCCESS,
-            is_error=True,
-            result="prompt is too long",
-            session_id="s1",
-            jsonl_context_exhausted=True,
-        )
-        result = _sr(returncode=1, stderr="")
         assert (
-            classify_infra_exit(session, result, capabilities=caps)
-            != InfraExitCategory.CONTEXT_EXHAUSTED
-        )
-
-    def test_capability_true_allows_context_exhausted(self) -> None:
-        """capability=True: same session correctly classifies as CONTEXT_EXHAUSTED."""
-        caps = replace(CLAUDE_CODE_CAPABILITIES, supports_context_exhaustion_detection=True)
-        session = ClaudeSessionResult(
-            subtype=CliSubtype.SUCCESS,
-            is_error=True,
-            result="prompt is too long",
-            session_id="s1",
-            jsonl_context_exhausted=True,
-        )
-        result = _sr(returncode=1, stderr="")
-        assert (
-            classify_infra_exit(session, result, capabilities=caps)
-            == InfraExitCategory.CONTEXT_EXHAUSTED
+            classify_infra_exit(session, result, capabilities=_CAPS) == InfraExitCategory.COMPLETED
         )
 
 

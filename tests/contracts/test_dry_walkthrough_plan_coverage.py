@@ -27,7 +27,7 @@ def test_dry_walkthrough_references_plan_vs_inventory() -> None:
     in remediation context."""
     content = _read_skill_md()
     assert "requirements_inventory" in content, (
-        "dry-walkthrough/SKILL.md must reference 'requirements_inventory' for plan-vs-inventory mode"
+        "dry-walkthrough/SKILL.md must reference 'requirements_inventory'"
     )
     assert "Step 4.7" in content or "4.7" in content, (
         "dry-walkthrough/SKILL.md must reference Step 4.7 for plan-vs-inventory coverage"

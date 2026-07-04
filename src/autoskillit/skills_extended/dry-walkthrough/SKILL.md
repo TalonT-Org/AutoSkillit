@@ -268,7 +268,7 @@ If `issue_url` or `issue_number` was provided to this skill, verify that the pla
 When `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` exists (indicating the pipeline has run at least one audit round), perform plan-vs-inventory coverage check:
 
 1. Check for file existence: `ls {{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`
-2. If the file does not exist, skip this step with note: "Plan-vs-inventory check skipped — no inventory file present."
+2. If the file does not exist, omit this check with note: "Plan-vs-inventory coverage check omitted — no inventory file present."
 3. If the file exists, read the pinned inventory.
 4. For each `REQ-NNN` entry, search the current plan for a matching Implementation Steps directive.
 5. Any `UNMAPPED` requirement → blocking failure with the requirement ID and text cited.

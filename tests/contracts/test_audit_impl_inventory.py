@@ -27,7 +27,7 @@ def test_audit_impl_references_inventory_persistence() -> None:
     inventory to AUTOSKILLIT_TEMP on round 1 and reading it on round ≥2."""
     content = _read_skill_md()
     assert "requirements_inventory" in content, (
-        "audit-impl/SKILL.md must reference 'requirements_inventory' for pinned inventory persistence"
+        "audit-impl/SKILL.md must reference 'requirements_inventory'"
     )
     assert "AUTOSKILLIT_TEMP" in content or "{{AUTOSKILLIT_TEMP}}" in content, (
         "audit-impl/SKILL.md must reference AUTOSKILLIT_TEMP for inventory file location"

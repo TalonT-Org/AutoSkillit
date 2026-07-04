@@ -448,9 +448,9 @@ class TestChannelBFullPipelineAdjudication:
 class TestChannelBDrainRacePipelineAdjudication:
     """Integration: COMPLETED (Channel B drain timeout) flows through _build_skill_result.
 
-    Uses the existing CHANNEL_B_NO_STDOUT_SCRIPT: session monitor fires, drain expires,
-    process is killed with empty stdout. _build_skill_result must apply the Channel B
-    provenance bypass (data_confirmed=False → success=True without calling _compute_success).
+    Session monitor fires, drain expires, process is killed with empty stdout.
+    _build_skill_result must apply the Channel B provenance bypass
+    (data_confirmed=False → success=True without calling _compute_success).
     """
 
     @pytest.mark.timeout(360)
@@ -460,9 +460,12 @@ class TestChannelBDrainRacePipelineAdjudication:
 
         Channel B provenance bypass: when session monitor wins and drain expires,
         _build_skill_result returns success=True immediately, bypassing _compute_success.
-        Timeout parameters aligned with the stabilized TestChannelBDrainWait siblings
-        (outer 300s, _phase1_timeout 400 > outer, grace 0.1 — script never exits
-        naturally) to avoid the WSL2 + xdist slow-discovery flake.
+
+        Timing notes:
+        - timeout=300 / _phase1_timeout=400: Phase 1 timeout exceeds outer timeout so
+          Phase 1 never fires STALE before the outer guard under WSL2 + xdist load.
+        - natural_exit_grace_seconds=0.1: script never exits naturally (time.sleep(3600)),
+          so shorten grace window to avoid asyncio-waitpid thread contention under CI load.
         """
         from autoskillit.execution.headless import _build_skill_result
 

@@ -13,7 +13,9 @@ import json
 import pytest
 
 from autoskillit.core.types import (
+    CLAUDE_CODE_CAPABILITIES,
     ChannelConfirmation,
+    CliSubtype,
     InfraExitCategory,
     RetryReason,
     SubprocessResult,
@@ -29,6 +31,8 @@ from tests.execution.conftest import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_CAPS = CLAUDE_CODE_CAPABILITIES
 
 _RATE_LIMIT_SIGNAL_STRINGS: frozenset[str] = frozenset(
     {
@@ -108,44 +112,52 @@ class TestApiErrorChannelInvariant:
         """PTY mode: signal in assistant_messages (via stdout NDJSON) → correct category."""
         session = _make_api_error_session(signal)
         result = _make_result(returncode=0, stderr="", stdout="")
-        assert classify_infra_exit(session, result) == _expected_category(signal)
+        assert classify_infra_exit(session, result, capabilities=_CAPS) == _expected_category(
+            signal
+        )
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
     def test_api_error_in_result_field(self, signal: str) -> None:
         """Signal in session.result (via parsed stdout) → correct category."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result=f"Error: {signal}",
             session_id="s1",
         )
         result = _make_result(returncode=0, stderr="")
-        assert classify_infra_exit(session, result) == _expected_category(signal)
+        assert classify_infra_exit(session, result, capabilities=_CAPS) == _expected_category(
+            signal
+        )
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
     def test_api_error_in_errors_field(self, signal: str) -> None:
         """Signal in session.errors (via parsed stdout) → correct category."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
             errors=[f"APIError: {signal}"],
         )
         result = _make_result(returncode=0, stderr="")
-        assert classify_infra_exit(session, result) == _expected_category(signal)
+        assert classify_infra_exit(session, result, capabilities=_CAPS) == _expected_category(
+            signal
+        )
 
     @pytest.mark.parametrize("signal", API_ERROR_SIGNALS)
     def test_api_error_in_stderr_fallback(self, signal: str) -> None:
         """Stderr fallback: signal in result.stderr → correct category via classify_infra_exit."""
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
         )
         result = _make_result(returncode=1, stderr=f"Error: {signal}", stdout="")
-        assert classify_infra_exit(session, result) == _expected_category(signal)
+        assert classify_infra_exit(session, result, capabilities=_CAPS) == _expected_category(
+            signal
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -276,38 +288,50 @@ class TestContextExhaustedCodexInvariant:
     def test_context_exhausted_in_assistant_messages(self) -> None:
         session = _make_api_error_session("context_length_exceeded")
         result = _make_result(returncode=0, stderr="", stdout="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+        assert (
+            classify_infra_exit(session, result, capabilities=_CAPS)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
     def test_context_exhausted_in_result_field(self) -> None:
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="Error: context_length_exceeded",
             session_id="s1",
         )
         result = _make_result(returncode=0, stderr="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+        assert (
+            classify_infra_exit(session, result, capabilities=_CAPS)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
     def test_context_exhausted_in_errors_field(self) -> None:
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
             errors=["APIError: context_length_exceeded"],
         )
         result = _make_result(returncode=0, stderr="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+        assert (
+            classify_infra_exit(session, result, capabilities=_CAPS)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
     def test_context_exhausted_in_stderr(self) -> None:
         session = ClaudeSessionResult(
-            subtype="empty_output",
+            subtype=CliSubtype.EMPTY_OUTPUT,
             is_error=True,
             result="",
             session_id="s1",
         )
         result = _make_result(returncode=1, stderr="Error: context_length_exceeded", stdout="")
-        assert classify_infra_exit(session, result) == InfraExitCategory.CONTEXT_EXHAUSTED
+        assert (
+            classify_infra_exit(session, result, capabilities=_CAPS)
+            == InfraExitCategory.CONTEXT_EXHAUSTED
+        )
 
 
 class TestApiErrorStatusChannelInvariance:

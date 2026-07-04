@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core.types import (
+    CLAUDE_CODE_CAPABILITIES,
     AgentSessionResult,
     CliSubtype,
     InfraExitCategory,
@@ -17,6 +18,8 @@ from autoskillit.execution.headless._headless_evidence import _adapt_agent_resul
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_CAPS = CLAUDE_CODE_CAPABILITIES
 
 
 def _make_agent_result(**kwargs: Any) -> AgentSessionResult:
@@ -135,7 +138,7 @@ def test_classify_infra_exit_context_exhausted() -> None:
         session_id="",
         channel_b_session_id="",
     )
-    exit_category = classify_infra_exit(adapted, subprocess_result)
+    exit_category = classify_infra_exit(adapted, subprocess_result, capabilities=_CAPS)
     assert exit_category == InfraExitCategory.CONTEXT_EXHAUSTED
 
 
@@ -400,7 +403,7 @@ def test_classify_infra_exit_rate_limited_via_adapted_error_code() -> None:
         session_id="",
         channel_b_session_id="",
     )
-    exit_category = classify_infra_exit(adapted, subprocess_result)
+    exit_category = classify_infra_exit(adapted, subprocess_result, capabilities=_CAPS)
     assert exit_category == InfraExitCategory.RATE_LIMITED
 
 

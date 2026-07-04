@@ -205,13 +205,21 @@ class TestLoopBudgetSeparation:
         assert "merge_fix_max_retries" in recipe.ingredients
         assert recipe.ingredients["merge_fix_max_retries"].default == "3"
         assert "audit_remediation_max_retries" in recipe.ingredients
-        assert recipe.ingredients["audit_remediation_max_retries"].default == "2"
+        assert recipe.ingredients["audit_remediation_max_retries"].default == "3"
         assert "test_fix_max_retries" in recipe.ingredients
         assert recipe.ingredients["test_fix_max_retries"].default == "3"
         assert recipe.ingredients["test_fix_max_retries"].hidden is True
         assert "merge_test_fix_max_retries" in recipe.ingredients
         assert recipe.ingredients["merge_test_fix_max_retries"].default == "3"
         assert recipe.ingredients["merge_test_fix_max_retries"].hidden is True
+
+    @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
+    def test_audit_remediation_description_documents_arithmetic(self, recipe_name: str) -> None:
+        recipe = self.recipes[recipe_name]
+        desc = recipe.ingredients["audit_remediation_max_retries"].description
+        assert "value − 1" in desc or "value - 1" in desc, (
+            f"audit_remediation_max_retries description must document arithmetic: {desc!r}"
+        )
 
     @pytest.mark.parametrize("recipe_name", RECIPE_NAMES)
     def test_guard_steps_use_ingredients(self, recipe_name: str) -> None:

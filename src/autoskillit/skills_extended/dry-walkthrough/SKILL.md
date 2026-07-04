@@ -263,6 +263,19 @@ If `issue_url` or `issue_number` was provided to this skill, verify that the pla
 
 7. **If all items are COVERED:** Record coverage confirmation and proceed to Step 5.
 
+### Step 4.7: Plan-vs-Inventory Coverage Check
+
+When `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` exists (indicating the pipeline has run at least one audit round), perform plan-vs-inventory coverage check:
+
+1. Check for file existence: `ls {{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`
+2. If the file does not exist, skip this step with note: "Plan-vs-inventory check skipped — no inventory file present."
+3. If the file exists, read the pinned inventory.
+4. For each `REQ-NNN` entry, search the current plan for a matching Implementation Steps directive.
+5. Any `UNMAPPED` requirement → blocking failure with the requirement ID and text cited.
+6. All `COVERED` → proceed.
+
+This mode fires in remediation context where the remediation plan must cover both the delta findings AND carry forward all original requirements. It composes with the existing plan-vs-issue check in Step 4.6 (both can fire if both inputs are present).
+
 ### Step 5: Fix the Plan
 
 For each issue found:

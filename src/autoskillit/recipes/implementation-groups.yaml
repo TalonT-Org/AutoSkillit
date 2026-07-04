@@ -56,8 +56,10 @@ ingredients:
     description: Maximum number of merge-fix retry cycles before failing
     default: "3"
   audit_remediation_max_retries:
-    description: Maximum number of audit remediation cycles (audit NO GO recovery) before failing
-    default: "2"
+    description: >-
+      Maximum audit remediation budget (allowed remediation rounds = value − 1).
+      Set to 3 for 2 remediation rounds.
+    default: "3"
   test_fix_max_retries:
     default: "3"
     description: Maximum iterations of the pre-merge test → fix → test cycle.

@@ -373,6 +373,25 @@ def test_check_loop_iteration_defaults() -> None:
     assert result == {"next_iteration": "1", "max_exceeded": "false"}
 
 
+def test_check_loop_iteration_budget_semantics_documented() -> None:
+    """Document: max_iterations=N allows N-1 loop body executions (>= comparison).
+
+    With max_iterations="3" (the corrected default for audit remediation):
+    - Round 0→1: allowed (first remediation attempt)
+    - Round 1→2: allowed (second remediation attempt)
+    - Round 2→3: blocked (budget exhausted)
+    Result: 2 remediation rounds with max_iterations="3".
+    """
+    r1 = check_loop_iteration(current_iteration="", max_iterations="3")
+    assert r1["max_exceeded"] == "false"
+
+    r2 = check_loop_iteration(current_iteration=r1["next_iteration"], max_iterations="3")
+    assert r2["max_exceeded"] == "false"
+
+    r3 = check_loop_iteration(current_iteration=r2["next_iteration"], max_iterations="3")
+    assert r3["max_exceeded"] == "true"
+
+
 # ---------------------------------------------------------------------------
 # T_SU_CL1–T_SU_CL4: check_loop_with_progress tests (progress-aware loop guard)
 # ---------------------------------------------------------------------------

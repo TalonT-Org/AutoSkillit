@@ -141,14 +141,41 @@ sibling parallel-call cancellations.
 
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
-Launch one Explore subagent per plan file in parallel. Each returns:
+**Round detection:** Before launching extraction subagents, check for the existence of `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`.
+
+- If the file exists, this is round ≥2 — read the pinned inventory instead of re-extracting.
+- If the file does not exist, this is round 1 — proceed with extraction and persist the result.
+
+**Union extraction (round 1 only):** Launch ≥2 independent Explore subagents per plan file (not 1). Each extracts requirements independently. Take the union of all extracted requirements (deduplicate by semantic equivalence). This raises extraction recall — a requirement missed by one extractor is caught by another.
+
+Each Explore subagent returns:
 
 - Plan title and stated scope
 - All files the plan said it would create, modify, or delete
 - All tests the plan said it would add or modify
 - Key requirements and constraints listed in the plan
 
-Aggregate into a unified requirements inventory.
+**Inventory schema:**
+```json
+{
+  "schema_version": 1,
+  "generated_at": "ISO-8601",
+  "all_plan_paths": "comma-separated plan file paths (provenance key)",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "stderr: retry diagnostics and final gh error text go to stderr",
+      "source_file": "plan.md",
+      "source_line": 122,
+      "source_section": "Design Decisions"
+    }
+  ]
+}
+```
+
+**Provenance guard:** When reading an existing inventory on round ≥2, validate that the inventory's `all_plan_paths` field matches the current `context.all_plan_paths`. If mismatched (new plans added), extend the inventory with requirements extracted from new plan files only.
+
+Aggregate into a unified requirements inventory and write it to `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` on round 1.
 
 ### Step 2 — Load Implementation Diff
 
@@ -251,9 +278,11 @@ audited. Do NOT use Read, Grep, or Glob — subagents are tool-restricted to Bas
 their agent definition, blocking filesystem reads at the platform level. When full file
 content is needed beyond the diff, subagents use `git show {implementation_ref}:{path}`.
 
-Divide the requirements inventory into up to 3 slices. Launch parallel subagents using
-`Agent(subagent_type="autoskillit:audit-impl-slice-auditor")`, each receiving its slice,
-the full diff, and the `implementation_ref`. Each subagent checks:
+Slice from the pinned inventory (written in Step 1) into up to 3 slices. On round ≥2, read the
+pinned inventory from `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` rather
+than re-extracting. Each slice receives a subset of `requirements[].id` values. Launch parallel
+subagents using `Agent(subagent_type="autoskillit:audit-impl-slice-auditor")`, each receiving
+its slice, the full diff, and the `implementation_ref`. Each subagent checks:
 
 1. **Coverage** — Is every file and function the plan named present in the diff?
 2. **Correctness** — Does the implementation match the plan's stated intent? Flag inversions,

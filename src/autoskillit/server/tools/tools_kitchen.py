@@ -116,12 +116,17 @@ def _recipe_validation_error_response(name: str, result: dict[str, Any]) -> str:
     _structural_errs: list[str] = result.get("errors", [])
     if _structural_errs:
         _error_parts = _structural_errs[:3]
+        if len(_structural_errs) > 3:
+            _error_parts.append(f"+{len(_structural_errs) - 3} more errors")
     else:
-        _error_parts = [
+        _all_errors = [
             f"[{s.get('rule', 'unknown-rule')}] {s.get('message', '')}"
             for s in result.get("suggestions", [])
             if isinstance(s, dict) and s.get("severity") == "error"
-        ][:3]
+        ]
+        _error_parts = _all_errors[:3]
+        if len(_all_errors) > 3:
+            _error_parts.append(f"+{len(_all_errors) - 3} more errors")
     _error_detail = "; ".join(_error_parts) if _error_parts else "unknown structural error"
     _label = "structural validation" if _structural_errs else "validation"
     return json.dumps(

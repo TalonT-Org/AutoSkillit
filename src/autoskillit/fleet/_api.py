@@ -391,9 +391,13 @@ async def _run_dispatch(
         error_findings = [
             s for s in validation_result.get("suggestions", []) if s.get("severity") == "error"
         ]
+        total_errors = len(structural_errors) + len(error_findings)
         error_parts = structural_errors[:3] + [
             f"[{f['rule']}] {f['message']}" for f in error_findings[:3]
         ]
+        shown = len(error_parts)
+        if total_errors > shown:
+            error_parts.append(f"+{total_errors - shown} more errors")
         return DispatchResult(
             DispatchRejected(
                 error_code=FleetErrorCode.FLEET_RECIPE_INVALID,

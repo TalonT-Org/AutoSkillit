@@ -27,6 +27,7 @@ from autoskillit.recipe._analysis import (
     _bfs_with_facts,
     bfs_reachable,
 )
+from autoskillit.recipe._analysis_bfs import bfs_reachable_without_barrier
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 # Regex to find ${{ context.X }} references anywhere in a string value.
@@ -128,6 +129,24 @@ def _check_capture_inversion(ctx: ValidationContext) -> list[RuleFinding]:
             producers = _find_capture_producers(ctx, var)
             if not producers:
                 continue  # no producer anywhere — not an inversion, different bug
+
+            # Strict forward-path dominance: exonerate if any producer strictly
+            # dominates step_name on success paths — every success-path from entry
+            # to step_name crosses the producer, so var is always captured before
+            # step_name runs. Using backward reachability (_ancestors) here would
+            # accept "on some path" producers that don't dominate fork-join readers,
+            # producing false negatives in real inversions. bfs_reachable_without_barrier
+            # builds its own success-path graph from ctx.recipe (post-prune) and
+            # returns all steps reachable from entry without crossing the barrier.
+            # If step_name is NOT in this set, the producer strictly dominates it.
+            exonerated = False
+            for _producer in producers:
+                _reachable_without = bfs_reachable_without_barrier(ctx.recipe, entry, _producer)
+                if step_name not in _reachable_without:
+                    exonerated = True
+                    break
+            if exonerated:
+                continue
 
             findings.append(
                 make_finding(

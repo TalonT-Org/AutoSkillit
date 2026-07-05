@@ -30,8 +30,9 @@ The plan file must remain a **clean, self-contained implementation instruction s
 
 ## Arguments
 
-`{plan_path}`   — Absolute path to the plan file to validate (optional: falls back to most recent {{AUTOSKILLIT_TEMP}}/ artifact if omitted)
-`{issue_url}`   — (Optional) GitHub issue URL. When provided, enables plan-vs-issue coverage check in Step 4.6.
+`{plan_path}`       — Absolute path to the plan file to validate (optional: falls back to most recent {{AUTOSKILLIT_TEMP}}/ artifact if omitted)
+`{issue_url}`       — (Optional) GitHub issue URL. When provided, enables plan-vs-issue coverage check in Step 4.6.
+`{remediation_path}` — (Optional) Absolute path to the current audit-impl remediation findings file. When provided together with a pinned inventory, enables the two-disposition plan-vs-inventory gate in Step 4.7.
 
 ## Critical Constraints
 
@@ -265,16 +266,43 @@ If `issue_url` or `issue_number` was provided to this skill, verify that the pla
 
 ### Step 4.7: Plan-vs-Inventory Coverage Check
 
-When `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` exists (indicating the pipeline has run at least one audit round), perform plan-vs-inventory coverage check:
+When `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` exists (indicating the pipeline has run at least one audit round), perform a two-disposition plan-vs-inventory coverage check. This mode fires in remediation context where the remediation plan must cover both the delta findings AND carry forward all original requirements.
 
-1. Check for file existence: `ls {{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`
-2. If the file does not exist, omit this check with note: "Plan-vs-inventory coverage check omitted — no inventory file present."
-3. If the file exists, read the pinned inventory.
-4. For each `REQ-NNN` entry, search the current plan for a matching Implementation Steps directive.
-5. Any `UNMAPPED` requirement → blocking failure with the requirement ID and text cited.
-6. All `COVERED` → proceed.
+**Precondition:** This disposition depends on audit-impl re-evaluating the entire requirements inventory each round (not a diff-only subset). If audit-impl were changed to emit partial findings, silence would become ambiguous rather than confirmatory.
 
-This mode fires in remediation context where the remediation plan must cover both the delta findings AND carry forward all original requirements. It composes with the existing plan-vs-issue check in Step 4.6 (both can fire if both inputs are present).
+1. **Guard:** If `requirements_inventory.json` does not exist, omit this check with note: "Plan-vs-inventory coverage check omitted — requirements_inventory.json not present."
+
+2. **Read the pinned inventory** from `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`. Each entry contains a `REQ-NNN` id, requirement text, and source location.
+
+3. **Read the current remediation findings** from the `remediation_path` argument (threaded from recipe context). If `remediation_path` was not provided, treat the findings as empty — every inventory requirement is therefore UNMAPPED and the gate blocks.
+
+4. **For each `REQ-NNN` in the inventory**, classify using a two-disposition evaluation:
+   - **satisfied** — the requirement is NOT cited in the current remediation findings. This means audit-impl round N re-verified this requirement and did not flag it; the prior round already confirmed completion. Pass.
+   - **carried** — the requirement IS cited in the current remediation findings, AND the plan contains a matching Implementation Steps directive that addresses it. Pass.
+   - **UNMAPPED** — the requirement IS cited in the current remediation findings, BUT no matching Implementation Steps directive exists in the plan. Blocking failure.
+
+5. **If any requirement is UNMAPPED:** Do NOT stamp the plan. Output a blocking failure:
+   ```
+   ## Dry Walkthrough FAILED — Plan-vs-Inventory Coverage Gap
+
+   **Plan:** {path}
+   **Inventory:** {{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json
+   **Findings:** {remediation_path}
+   **Status:** FAILED — plan does not cover all remediation-cited requirements
+
+   ### Unmapped Items
+   - {req_id}: {requirement_text} — cited by finding but no Implementation Steps directive addresses it
+
+   The remediation plan must carry forward every requirement cited in the current
+   audit findings. If a finding was a false positive, update the finding's status
+   via the audit-impl verdict mechanism rather than dropping the requirement from
+   the plan.
+   ```
+   Stop execution — do not proceed to Step 5.
+
+6. **If all requirements are satisfied or carried:** Record the disposition summary and proceed to Step 5.
+
+This check composes with the existing plan-vs-issue check in Step 4.6 (both can fire independently if both inputs are present). The two-disposition gate prevents the one-sided failure mode where audit-impl round >=2 structurally fails because every delta-only plan is rejected as UNMAPPED.
 
 ### Step 5: Fix the Plan
 

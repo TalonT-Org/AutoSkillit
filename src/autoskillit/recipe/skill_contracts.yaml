@@ -194,6 +194,9 @@ skills:
     - name: issue_url
       type: string
       required: false
+    - name: remediation_path
+      type: file_path
+      required: false
     outputs: []
     write_behavior: always
   implement-worktree:

@@ -271,10 +271,14 @@
         "step_name": "verify",
         "review_path": "${{ context.review_path }}",
         "issue_url": "${{ inputs.issue_url }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}",
+        "remediation_path": "${{ context.remediation_path }}"
       },
       "on_success": "create_impl_worktree",
       "on_failure": "release_issue_failure",
+      "optional_context_refs": [
+        "remediation_path"
+      ],
       "note": "SEQUENTIAL EXECUTION: For each plan_part, run the FULL cycle — verify → implement → test → merge — for that part before advancing to the next part. Never run verify for all parts first. If review produced a report, context.review_path is available — pass it as an additional arg to dry-walkthrough."
     },
     "create_impl_worktree": {

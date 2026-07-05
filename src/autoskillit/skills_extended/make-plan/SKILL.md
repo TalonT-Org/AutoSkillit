@@ -359,6 +359,31 @@ If `audit_remediation_mode=true` is NOT present in ARGUMENTS, NEVER emit `false_
 
 **Remediation mode detection:** Scan ARGUMENTS for a line matching `audit_remediation_mode=true`. When present, the skill is operating in remediation context and MAY emit `verdict = false_positive` if all findings are false positives. When absent, the skill MUST emit `verdict = plan` regardless of assessment.
 
+**Remediation-mode inventory awareness:** When `audit_remediation_mode=true` is present AND `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json` exists:
+
+1. Read the pinned inventory from `{{AUTOSKILLIT_TEMP}}/audit-impl/requirements_inventory.json`. Each entry contains a `REQ-NNN` id, requirement text, and source location.
+
+2. Read the remediation findings file — the path passed as the positional argument to this skill (the audit-impl remediation output).
+
+3. For each `REQ-NNN` in the inventory, classify:
+   - **carried** — cited in the current remediation findings AND addressed by a new Implementation Steps directive in this plan.
+   - **satisfied-by-prior-round** — NOT cited in the current remediation findings. This means audit-impl round N re-verified this requirement and did not flag it; the prior round already confirmed completion. No new directive is needed.
+
+4. Emit a `## Requirements Disposition Table` section in the plan body (before the Implementation Steps directives):
+
+   ```
+   ## Requirements Disposition Table
+
+   | REQ | Disposition | Evidence |
+   |-----|-------------|----------|
+   | REQ-001 | satisfied-by-prior-round | Not cited in remediation findings |
+   | REQ-007 | carried | MISSING finding: "mktemp not used" → Step 3 adds mktemp |
+   ```
+
+   This table makes the plan-vs-inventory gate in dry-walkthrough Step 4.7 decidable: requirements not listed in the table will be treated as UNMAPPED. Every inventory entry must appear in the table with a disposition of either `carried` or `satisfied-by-prior-round`.
+
+5. If `audit_remediation_mode=true` is present but the inventory file does NOT exist, proceed without the disposition table (this is the round-1 case where audit-impl has not yet pinned an inventory).
+
 For a single-part plan:
 
 > **IMPORTANT:** Emit the structured output tokens as **literal plain text with no

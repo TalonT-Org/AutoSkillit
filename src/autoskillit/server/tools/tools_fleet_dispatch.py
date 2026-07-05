@@ -20,6 +20,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     CapabilityResolutionDetail,
+    CodingAgentBackend,
     FleetErrorCode,
     SessionCheckpoint,
     detect_autoskillit_mcp_prefix,
@@ -48,7 +49,7 @@ from autoskillit.fleet import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled, _require_fleet
-from autoskillit.server._misc import resolve_log_dir
+from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
@@ -227,22 +228,15 @@ async def dispatch_food_truck(
         if caller_instructions and len(caller_instructions) > _MAX_CALLER_INSTRUCTIONS_LEN:
             caller_instructions = caller_instructions[:_MAX_CALLER_INSTRUCTIONS_LEN]
 
-        from autoskillit.core import CodingAgentBackend  # noqa: PLC0415
-
         dispatch_backend: CodingAgentBackend | None = None
         if backend is not None:
-            from autoskillit.execution.backends import (  # noqa: PLC0415
-                BACKEND_REGISTRY,
-                get_backend,
-            )
-
-            if backend not in BACKEND_REGISTRY:
-                valid = ", ".join(sorted(BACKEND_REGISTRY))
+            try:
+                dispatch_backend = resolve_backend_override(backend)
+            except ValueError as exc:
                 return fleet_error(
                     FleetErrorCode.FLEET_INVALID_BACKEND,
-                    f"Unknown backend {backend!r}. Valid names: {valid}",
+                    str(exc),
                 )
-            dispatch_backend = get_backend(backend)
 
         # Feature guard: config authority check independent of MCP visibility state.
         # Fleet sessions open the gate unconditionally at boot; this catch-all ensures

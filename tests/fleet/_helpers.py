@@ -185,5 +185,6 @@ def _mock_backend_with_locator(
     else:
         mock_locator.session_log_path.return_value = None
     mock_backend = Mock()
+    mock_backend.name = "mock-backend"
     mock_backend.session_locator.return_value = mock_locator
     return mock_backend

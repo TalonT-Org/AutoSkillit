@@ -203,7 +203,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_helpers": frozenset({"core", "execution", "fleet", "pipeline", "recipe", "server"}),
     "_type_protocols_workspace": frozenset({"core", "pipeline", "recipe", "server", "workspace"}),
     "_type_protocols_backend": frozenset(
-        {"_llm_triage", "cli", "core", "execution", "pipeline", "server", "workspace"}
+        {"_llm_triage", "cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
     ),
     "_type_inspector": frozenset({"core", "execution"}),
     "_type_invariant_registry": frozenset({"core"}),
@@ -830,6 +830,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli",
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_api.py",
+            "fleet/test_dispatch_backend_override.py",
             "fleet/test_dispatch_crash_diagnostics.py",
             "fleet/test_fleet_e2e.py",
             "fleet/test_pack_enforcement.py",

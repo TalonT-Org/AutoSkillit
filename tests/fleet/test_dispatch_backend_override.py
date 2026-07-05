@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -21,7 +22,7 @@ def _mock_backend(name: str = "claude-code", *, food_truck_capable: bool = True)
     backend.capabilities.has_unguarded_filesystem_access = False
     backend.capabilities.process_name = "claude"
     backend.session_locator.return_value = Mock(
-        project_log_dir=Mock(return_value="/tmp/logs"),
+        project_log_dir=Mock(return_value=Path("/tmp/logs")),
         session_log_path=Mock(return_value=None),
     )
     backend.ensure_pre_launch.return_value = []
@@ -111,13 +112,26 @@ class TestDispatchBackendOverrideFoodTruckIncapableRaises:
     async def test_dispatch_backend_override_food_truck_incapable_raises(
         self, tool_ctx, monkeypatch
     ):
+        """When executor raises RuntimeError for incapable backend, dispatch returns rejection."""
         _setup(tool_ctx, monkeypatch)
         tool_ctx.backend = _mock_backend("claude-code")
 
-        incapable = _mock_backend("codex", food_truck_capable=False)
+        original_dispatch = tool_ctx.executor.dispatch_food_truck
 
-        with pytest.raises(RuntimeError, match="food_truck_capable=False"):
-            await _run_with_backend(tool_ctx, dispatch_backend=incapable)
+        async def _raising_dispatch(*args, **kwargs):
+            if kwargs.get("backend_override") == "incapable":
+                raise RuntimeError(
+                    "backend does not support food truck dispatch "
+                    "(food_truck_capable=False); got 'incapable'"
+                )
+            return await original_dispatch(*args, **kwargs)
+
+        tool_ctx.executor.dispatch_food_truck = _raising_dispatch
+
+        incapable = _mock_backend("incapable", food_truck_capable=False)
+        envelope = await _run_with_backend(tool_ctx, dispatch_backend=incapable)
+        assert envelope.get("success") is False
+        assert "food_truck_capable=False" in envelope.get("user_visible_message", "")
 
 
 class TestDispatchRecordPersistsBackendName:
@@ -137,7 +151,7 @@ class TestDispatchRecordPersistsBackendName:
 
 class TestDispatchRecordBackendNameDefaultsEmptyWhenOmitted:
     @pytest.mark.anyio
-    async def test_dispatch_record_backend_name_defaults_empty_when_omitted(
+    async def test_dispatch_record_backend_name_defaults_to_ctx_backend_when_omitted(
         self, tool_ctx, monkeypatch
     ):
         from tests.fleet._helpers import _read_dispatch_record
@@ -148,7 +162,7 @@ class TestDispatchRecordBackendNameDefaultsEmptyWhenOmitted:
         await _run_with_backend(tool_ctx)
 
         record = _read_dispatch_record(tool_ctx)
-        assert record["backend_name"] == ""
+        assert record["backend_name"] == "claude-code"
 
 
 class TestDispatchBackendOverrideSessionLocatorUsesDispatchBackend:
@@ -184,10 +198,10 @@ class TestDispatchBackendOverrideSessionLocatorUsesDispatchBackend:
 
 class TestDispatchBackendOverrideInvalidNameRaises:
     def test_dispatch_backend_override_invalid_name_raises(self):
-        from autoskillit.execution.backends import get_backend
+        from autoskillit.server._misc import resolve_backend_override
 
         with pytest.raises(ValueError, match="Unknown backend"):
-            get_backend("nonexistent")
+            resolve_backend_override("nonexistent")
 
 
 class TestDispatchBackendOverridePreservedAcrossRetry:

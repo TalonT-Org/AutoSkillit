@@ -450,6 +450,7 @@ class FleetErrorCode(StrEnum):
     FLEET_RESET_NOT_FOUND = "fleet_reset_not_found"
     FLEET_RESET_INVALID_TARGET = "fleet_reset_invalid_target"
     FLEET_RESET_STILL_RUNNING = "fleet_reset_still_running"
+    FLEET_INVALID_BACKEND = "fleet_invalid_backend"
 
 
 class FeatureLifecycle(StrEnum):

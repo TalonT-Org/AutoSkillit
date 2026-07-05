@@ -175,6 +175,7 @@ async def dispatch_food_truck(
     skip_when: str | None = None,
     resume_message: str | None = None,
     caller_instructions: str | None = None,
+    backend: str | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
     """Dispatch a single food truck L2 session for one recipe.
@@ -225,6 +226,23 @@ async def dispatch_food_truck(
     try:
         if caller_instructions and len(caller_instructions) > _MAX_CALLER_INSTRUCTIONS_LEN:
             caller_instructions = caller_instructions[:_MAX_CALLER_INSTRUCTIONS_LEN]
+
+        from autoskillit.core import CodingAgentBackend  # noqa: PLC0415
+
+        dispatch_backend: CodingAgentBackend | None = None
+        if backend is not None:
+            from autoskillit.execution.backends import (  # noqa: PLC0415
+                BACKEND_REGISTRY,
+                get_backend,
+            )
+
+            if backend not in BACKEND_REGISTRY:
+                valid = ", ".join(sorted(BACKEND_REGISTRY))
+                return fleet_error(
+                    FleetErrorCode.FLEET_INVALID_BACKEND,
+                    f"Unknown backend {backend!r}. Valid names: {valid}",
+                )
+            dispatch_backend = get_backend(backend)
 
         # Feature guard: config authority check independent of MCP visibility state.
         # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
@@ -284,6 +302,7 @@ async def dispatch_food_truck(
             SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
         )
         tool_ctx = _get_ctx()
+        _override_backend = dispatch_backend or tool_ctx.backend
         caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
         effective_name = dispatch_name or recipe
 
@@ -337,7 +356,7 @@ async def dispatch_food_truck(
                     else None
                 )
                 _capability_overrides, _cap_detail = _provider_aware_capability_overrides(
-                    tool_ctx.backend,
+                    _override_backend,
                     recipe,
                     tool_ctx.config.providers,
                     _preflight_raw_steps,
@@ -346,7 +365,7 @@ async def dispatch_food_truck(
                 _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
                 _effective_backend_map = _compute_effective_backend_map(
                     _preflight_raw_steps,
-                    tool_ctx.backend.name if tool_ctx.backend else None,
+                    _override_backend.name if _override_backend else None,
                     tool_ctx.config.providers,
                     recipe,
                     skill_resolver=tool_ctx.skill_resolver,
@@ -357,7 +376,7 @@ async def dispatch_food_truck(
                     suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
                     ingredient_overrides=_merged_ingredients,
                     temp_dir=tool_ctx.temp_dir,
-                    backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
+                    backend_name=_override_backend.name if _override_backend else None,
                     effective_backend_map=_effective_backend_map,
                 )
             except Exception:
@@ -411,11 +430,11 @@ async def dispatch_food_truck(
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_recipe_load_failed", exc_info=True)
 
-        if tool_ctx.backend is not None and _active_recipe_steps is not None:
+        if _override_backend is not None and _active_recipe_steps is not None:
             _preflight_err = _check_dispatch_feasibility(
                 post_prune_step_names=_fleet_load_result.get("post_prune_step_names", []),
                 active_recipe_steps=_active_recipe_steps,
-                backend=tool_ctx.backend,
+                backend=_override_backend,
                 config_providers=tool_ctx.config.providers,
                 recipe_name=recipe,
             )
@@ -423,8 +442,8 @@ async def dispatch_food_truck(
                 return _preflight_err
 
         _supports_quota = (
-            tool_ctx.backend is not None
-            and tool_ctx.backend.capabilities.anthropic_provider_capable
+            _override_backend is not None
+            and _override_backend.capabilities.anthropic_provider_capable
         )
         try:
             with anyio.fail_after(tool_ctx.config.run_skill.mcp_tool_timeout_sec):
@@ -437,8 +456,8 @@ async def dispatch_food_truck(
                     timeout_sec=timeout_sec,
                     prompt_builder=_get_food_truck_prompt_builder(
                         has_unguarded_filesystem_access=(
-                            tool_ctx.backend.capabilities.has_unguarded_filesystem_access
-                            if tool_ctx.backend
+                            _override_backend.capabilities.has_unguarded_filesystem_access
+                            if _override_backend
                             else False
                         ),
                     ),
@@ -457,6 +476,7 @@ async def dispatch_food_truck(
                     resume_message=resume_message,
                     caller_instructions=caller_instructions,
                     provider_capability_overrides=_capability_overrides,
+                    dispatch_backend=dispatch_backend,
                 )
         except TimeoutError:
             logger.error(

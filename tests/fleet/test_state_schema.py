@@ -395,6 +395,7 @@ class TestDispatchRecordToDict:
             "resets_at",
             "labels_cleaned",
             "resume_count",
+            "backend_name",
         }
 
     def test_dispatch_record_to_dict_token_usage_is_shallow_copy(self) -> None:

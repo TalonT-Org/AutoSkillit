@@ -549,7 +549,6 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(tool_ctx_kitchen_
     call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
     assert overrides["kitchen_id"] == "test-kitchen-xyz"
-    assert overrides["post_run_diagnostics"] == _PATCHED_DEFAULTS["post_run_diagnostics"]
 
 
 @pytest.mark.anyio
@@ -581,7 +580,6 @@ async def test_load_recipe_config_authority_overrides_caller(tool_ctx_kitchen_op
             "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
             return_value={
                 "base_branch": "develop",
-                "post_run_diagnostics": "false",
                 "is_fleet_dispatch": "false",
                 "dispatch_id": "",
             },
@@ -627,7 +625,6 @@ async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_ope
             "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
             return_value={
                 "base_branch": "develop",
-                "post_run_diagnostics": "false",
                 "is_fleet_dispatch": "false",
                 "dispatch_id": "",
             },

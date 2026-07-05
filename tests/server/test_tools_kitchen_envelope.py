@@ -345,14 +345,18 @@ async def test_config_layer_keys_match_server_authoritative_ingredients(tmp_path
                             # No caller overrides — _merged_overrides == _auto_overrides
                             await open_kitchen(name="demo", ctx=mock_ctx)
 
-    from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
+    from autoskillit.config.ingredient_defaults import (
+        CONFIG_DEFAULT_INGREDIENTS,
+        SERVER_AUTHORITATIVE_INGREDIENTS,
+    )
 
     call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
     overrides = call_kwargs["ingredient_overrides"]
     config_resolvable_in_overrides = frozenset(overrides.keys()) - _SERVER_ONLY_KEYS
-    assert config_resolvable_in_overrides == SERVER_AUTHORITATIVE_INGREDIENTS, (
-        f"Mismatch: added={config_resolvable_in_overrides - SERVER_AUTHORITATIVE_INGREDIENTS}, "
-        f"missing={SERVER_AUTHORITATIVE_INGREDIENTS - config_resolvable_in_overrides}"
+    expected = SERVER_AUTHORITATIVE_INGREDIENTS | CONFIG_DEFAULT_INGREDIENTS
+    assert config_resolvable_in_overrides == expected, (
+        f"Mismatch: added={config_resolvable_in_overrides - expected}, "
+        f"missing={expected - config_resolvable_in_overrides}"
     )
 
 
@@ -465,7 +469,7 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
     mock_ctx.recipes = MagicMock()
     mock_recipe_obj = MagicMock()
     mock_recipe_obj.steps = {"do": MagicMock()}
-    mock_recipe_obj.ingredients = {"base_branch": MagicMock(), "post_run_diagnostics": MagicMock()}
+    mock_recipe_obj.ingredients = {"base_branch": MagicMock()}
     mock_ctx.recipes.load.return_value = mock_recipe_obj
     mock_ctx.recipes.load_and_validate.return_value = {
         "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
@@ -495,7 +499,6 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
                             "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
                             return_value={
                                 "base_branch": "develop",
-                                "post_run_diagnostics": "false",
                                 "is_fleet_dispatch": "false",
                                 "dispatch_id": "",
                             },
@@ -504,16 +507,16 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
 
                             result_str = await open_kitchen(
                                 name="demo",
-                                overrides={"post_run_diagnostics": "true"},
+                                overrides={"base_branch": "custom-branch"},
                                 ctx=mock_ctx,
                             )
 
     parsed = json.loads(result_str)
     warnings = parsed.get("warnings") or []
-    matching = [w for w in warnings if "post_run_diagnostics" in w]
-    assert matching, f"Expected a warning naming post_run_diagnostics; got warnings={warnings}"
-    assert any("diagnostics.post_run_analysis" in w for w in warnings), (
-        f"Expected the warning to name the config path diagnostics.post_run_analysis; "
+    matching = [w for w in warnings if "base_branch" in w]
+    assert matching, f"Expected a warning naming base_branch; got warnings={warnings}"
+    assert any("branching.default_base_branch" in w for w in warnings), (
+        f"Expected the warning to name the config path branching.default_base_branch; "
         f"got warnings={warnings}"
     )
 
@@ -1085,3 +1088,152 @@ def test_recipe_validation_error_response_handles_malformed_suggestions():
     response = json.loads(_recipe_validation_error_response("demo", result))
     assert "unknown structural error" not in response["user_visible_message"]
     assert response["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# post_run_diagnostics demotion tests (T1, T2, T5)
+# ---------------------------------------------------------------------------
+
+
+# T1: REQ-ING-001
+@pytest.mark.anyio
+async def test_post_run_diagnostics_override_wins_over_config(tmp_path, monkeypatch):
+    """REQ-ING-001: open_kitchen override for post_run_diagnostics wins over config."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_recipe_obj = MagicMock()
+    mock_recipe_obj.steps = {"do": MagicMock()}
+    mock_recipe_obj.ingredients = {"post_run_diagnostics": MagicMock()}
+    mock_ctx.recipes.load.return_value = mock_recipe_obj
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- TABLE ---",
+    }
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = Path("/fake/recipe.yaml")
+    mock_ctx.recipes.find.return_value = mock_recipe_info
+    mock_ctx.config.migration.suppressed = []
+    mock_ctx.kitchen_id = "test-kitchen-abc"
+    mock_ctx.config.linux_tracing.log_dir = ""
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen-abc",
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                            return_value={
+                                "base_branch": "develop",
+                                "post_run_diagnostics": "false",
+                                "is_fleet_dispatch": "false",
+                                "dispatch_id": "",
+                            },
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            await open_kitchen(
+                                name="demo",
+                                overrides={"post_run_diagnostics": "true"},
+                                ctx=mock_ctx,
+                            )
+
+    call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+    overrides = call_kwargs["ingredient_overrides"]
+    assert overrides["post_run_diagnostics"] == "true", (
+        f"Override must win; got overrides={overrides}"
+    )
+    # Also: post_run_diagnostics is no longer in SERVER_AUTHORITATIVE_INGREDIENTS,
+    # so no clobber warning should fire for it.
+    call_args_list = mock_ctx.recipes.load_and_validate.call_args_list
+    assert call_args_list, "open_kitchen should call load_and_validate"
+    # post_run_diagnostics was successfully passed through — verify via overrides dict above.
+
+
+# T2: REQ-ING-002
+@pytest.mark.anyio
+async def test_post_run_diagnostics_config_default_applied(tmp_path, monkeypatch):
+    """REQ-ING-002: Without override, config value is used as default."""
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    mock_ctx.enable_components = AsyncMock()
+    mock_ctx.recipes = MagicMock()
+    mock_recipe_obj = MagicMock()
+    mock_recipe_obj.steps = {"do": MagicMock()}
+    mock_recipe_obj.ingredients = {"post_run_diagnostics": MagicMock()}
+    mock_ctx.recipes.load.return_value = mock_recipe_obj
+    mock_ctx.recipes.load_and_validate.return_value = {
+        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
+        "valid": True,
+        "suggestions": [],
+        "diagram": None,
+        "ingredients_table": "--- TABLE ---",
+    }
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = Path("/fake/recipe.yaml")
+    mock_ctx.recipes.find.return_value = mock_recipe_info
+    mock_ctx.config.migration.suppressed = []
+    mock_ctx.kitchen_id = "test-kitchen-abc"
+    mock_ctx.config.linux_tracing.log_dir = ""
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen-abc",
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                            return_value={
+                                "base_branch": "develop",
+                                "post_run_diagnostics": "true",
+                                "is_fleet_dispatch": "false",
+                                "dispatch_id": "",
+                            },
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            await open_kitchen(name="demo", ctx=mock_ctx)
+
+    call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
+    overrides = call_kwargs["ingredient_overrides"]
+    assert overrides["post_run_diagnostics"] == "true", (
+        f"Config default must apply; got overrides={overrides}"
+    )
+
+
+# T5: REQ-FDB-001
+def test_clobber_warning_includes_hint_when_available(monkeypatch):
+    """REQ-FDB-001: Clobber warning includes SERVER_AUTHORITATIVE_KEY_HINTS line."""
+    from autoskillit.server.tools._authority_feedback import (
+        SERVER_AUTHORITATIVE_KEY_HINTS,
+        build_authority_clobber_warnings,
+    )
+
+    monkeypatch.setitem(
+        SERVER_AUTHORITATIVE_KEY_HINTS, "base_branch", "<test hint for base_branch>"
+    )
+    try:
+        warnings = build_authority_clobber_warnings(
+            {"base_branch": "x"}, config_layer={"base_branch": "develop"}
+        )
+    finally:
+        SERVER_AUTHORITATIVE_KEY_HINTS.pop("base_branch", None)
+
+    assert any("<test hint for base_branch>" in w for w in warnings), (
+        f"Hint must be appended to warnings; got warnings={warnings}"
+    )

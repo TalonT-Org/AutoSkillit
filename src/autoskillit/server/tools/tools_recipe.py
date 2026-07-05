@@ -12,6 +12,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.config import (
     build_config_authoritative_layer,
+    build_config_default_layer,
     resolve_ingredient_defaults,
 )
 from autoskillit.core import FLEET_DISPATCH_TOOLS, get_logger, temp_dir_display_str  # noqa: F401
@@ -237,8 +238,14 @@ async def load_recipe(
             )
             _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
+            _config_default = build_config_default_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
-            _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
+            _merged_overrides = {
+                **_config_default,
+                **_session_overrides,
+                **(overrides or {}),
+                **_config_layer,
+            }
             _effective_backend_map = _compute_effective_backend_map(
                 _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,

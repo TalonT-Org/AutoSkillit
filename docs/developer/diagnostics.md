@@ -86,6 +86,22 @@ linux_tracing:
   log_dir: ""            # empty = platform default, set absolute path to override
 ```
 
+## Per-Run Enablement
+
+By default, `post_run_diagnostics` resolves from `diagnostics.post_run_analysis` (shipped
+default: `false`). To enable diagnostics for a single run, the orchestrator can pass
+`overrides={"post_run_diagnostics": "true"}` to `open_kitchen`. The override takes effect
+for that kitchen session only and does not modify the persistent config.
+
+The orchestrator can also lock the value for the session via
+`lock_ingredients(locked={"post_run_diagnostics": "true"})` to ensure it is not overridden
+by downstream steps.
+
+For post-hoc diagnostics on a completed run, use:
+```bash
+run_skill /autoskillit:analyze-pipeline-health <kitchen_id>
+```
+
 ## Finding Problematic Sessions
 
 ```bash

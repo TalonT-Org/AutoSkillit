@@ -19,6 +19,7 @@ from autoskillit import __version__
 from autoskillit.config import (
     SERVER_AUTHORITATIVE_INGREDIENTS,
     build_config_authoritative_layer,
+    build_config_default_layer,
     iter_display_categories,
     resolve_ingredient_defaults,
 )
@@ -493,11 +494,16 @@ def get_recipe(name: str) -> str:
             name,
             skill_resolver=ctx.skill_resolver,
         )
+        _config_default = build_config_default_layer(_defaults)
         result = ctx.recipes.load_and_validate(
             name,
             ctx.project_dir,
             resolved_defaults=_defaults,
-            ingredient_overrides={**_backend_overrides, **_config_layer},
+            ingredient_overrides={
+                **_config_default,
+                **_backend_overrides,
+                **_config_layer,
+            },
             backend_name=ctx.backend.name if ctx.backend else None,
             effective_backend_map=_effective_backend_map,
         )
@@ -582,8 +588,10 @@ async def open_kitchen(
         overrides: Optional dict of ingredient name → value to override recipe defaults.
             Use to activate hidden features (e.g., ``{"sprint_mode": "true"}``). Ingredients
             with ``authority: config`` (base_branch, local_review_rounds,
-            adversarial_review_level, post_run_diagnostics) cannot be set via overrides —
-            they resolve from server config and caller values are ignored with a warning.
+            adversarial_review_level) cannot be set via overrides — they resolve from
+            server config and caller values are ignored with a warning.
+            Config-default ingredients (post_run_diagnostics) use config as the default
+            but an explicit override wins.
         ingredients_only: When True and name is provided, return only the ingredient
             schema (ingredients_table, validity, suggestions) without the full recipe
             content, orchestration rules, or sous-chef discipline. Use for dispatch
@@ -716,8 +724,14 @@ async def open_kitchen(
             )
             _session_overrides.update(_provider_overrides)
             _config_layer = build_config_authoritative_layer(_defaults)
+            _config_default = build_config_default_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
-            _merged_overrides = {**_session_overrides, **(overrides or {}), **_config_layer}
+            _merged_overrides = {
+                **_config_default,
+                **_session_overrides,
+                **(overrides or {}),
+                **_config_layer,
+            }
             _effective_backend_map = _compute_effective_backend_map(
                 _raw_recipe.steps if _raw_recipe is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
@@ -1229,7 +1243,7 @@ async def lock_ingredients(
     to a falsy value will be denied.
 
     Server-authoritative ingredients (base_branch, local_review_rounds,
-    adversarial_review_level, post_run_diagnostics, is_fleet_dispatch,
+    adversarial_review_level, is_fleet_dispatch,
     dispatch_id) are rejected with a structured error envelope; the
     rejected key names appear in both ``error`` and ``user_visible_message``.
 

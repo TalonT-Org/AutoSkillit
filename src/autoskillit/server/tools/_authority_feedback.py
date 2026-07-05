@@ -37,6 +37,9 @@ def build_authority_clobber_warnings(
                 f"Override for server-authoritative ingredient '{key}' ignored — "
                 f"set by the dispatch runtime at session launch, not user-configurable"
             )
+        hint = SERVER_AUTHORITATIVE_KEY_HINTS.get(key)
+        if hint:
+            warnings.append(hint)
     return warnings
 
 

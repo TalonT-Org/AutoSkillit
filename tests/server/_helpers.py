@@ -75,7 +75,6 @@ _PATCHED_DEFAULTS = {
     "base_branch": "develop",
     "local_review_rounds": "7",
     "adversarial_review_level": "aggressive",
-    "post_run_diagnostics": "true",
     "is_fleet_dispatch": "true",
     "dispatch_id": "test-dispatch-999",
 }

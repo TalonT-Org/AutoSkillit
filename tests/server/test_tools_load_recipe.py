@@ -562,7 +562,7 @@ class TestLoadRecipeAuthorityClobber:
         mock_ctx.recipes = MagicMock()
         mock_recipe_obj = MagicMock()
         mock_recipe_obj.steps = {"do": MagicMock()}
-        mock_recipe_obj.ingredients = {"post_run_diagnostics": MagicMock()}
+        mock_recipe_obj.ingredients = {"base_branch": MagicMock()}
         mock_ctx.recipes.load.return_value = mock_recipe_obj
         mock_ctx.recipes.load_and_validate.return_value = {
             "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
@@ -589,7 +589,6 @@ class TestLoadRecipeAuthorityClobber:
                         "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
                         return_value={
                             "base_branch": "develop",
-                            "post_run_diagnostics": "false",
                             "is_fleet_dispatch": "false",
                             "dispatch_id": "",
                         },
@@ -598,14 +597,14 @@ class TestLoadRecipeAuthorityClobber:
 
                         result_str = await load_recipe(
                             name="demo",
-                            overrides={"post_run_diagnostics": "true"},
+                            overrides={"base_branch": "custom"},
                         )
 
         parsed = json.loads(result_str)
         warnings = parsed.get("warnings") or []
-        matching = [w for w in warnings if "post_run_diagnostics" in w]
+        matching = [w for w in warnings if "base_branch" in w]
         assert matching, (
-            f"load_recipe must emit a warning naming post_run_diagnostics; got warnings={warnings}"
+            f"load_recipe must emit a warning naming base_branch; got warnings={warnings}"
         )
         server_value_match = [w for w in warnings if "server value 'false'" in w]
         assert server_value_match, (

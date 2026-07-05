@@ -840,6 +840,16 @@ every step at full fidelity regardless of session length.
 
 ---
 
+### open_kitchen warnings — mandatory relay
+
+When `open_kitchen` returns a non-empty `warnings` array in its result, relay each
+warning to the user in your next response before proceeding with the pipeline. Do not
+suppress, reword, or batch these warnings — they indicate that a user-supplied override
+was silently overridden by server policy, and the user must know which instructions were
+not honored.
+
+---
+
 ## INGREDIENT LOCKING — STRUCTURAL ENFORCEMENT
 
 When the user requests skipping or enabling specific recipe steps at session start,
@@ -856,7 +866,6 @@ listed instead:
 - `base_branch` → config: `branching.default_base_branch`
 - `local_review_rounds` → config: `review.local_review_rounds`
 - `adversarial_review_level` → config: `plan.adversarial_review_level`
-- `post_run_diagnostics` → config: `diagnostics.post_run_analysis` (for one-off diagnostics outside a live run, use `run_skill /autoskillit:analyze-pipeline-health`)
 - `is_fleet_dispatch` → set by dispatch runtime at session launch, not user-configurable
 - `dispatch_id` → set by dispatch runtime at session launch, not user-configurable
 

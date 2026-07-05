@@ -429,9 +429,10 @@ class DefaultHeadlessExecutor:
             if idle_cfg_val > 0:
                 merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
 
-        assert dispatch_backend is not None, (
-            "dispatch_backend must be resolved before dispatch_food_truck execution"
-        )
+        if dispatch_backend is None:
+            raise RuntimeError(
+                "dispatch_backend must be resolved before dispatch_food_truck execution"
+            )
         backend = dispatch_backend
         cmd_spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,

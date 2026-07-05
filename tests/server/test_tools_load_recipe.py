@@ -606,12 +606,12 @@ class TestLoadRecipeAuthorityClobber:
         assert matching, (
             f"load_recipe must emit a warning naming base_branch; got warnings={warnings}"
         )
-        server_value_match = [w for w in warnings if "server value 'false'" in w]
+        server_value_match = [w for w in warnings if "server value 'develop'" in w]
         assert server_value_match, (
             "Authority-clobber warning must confirm config value won — "
-            f"expected \"server value 'false'\" in warning text; got warnings={warnings}"
+            f"expected \"server value 'develop'\" in warning text; got warnings={warnings}"
         )
-        caller_value_absent = [w for w in warnings if "server value 'true'" in w]
+        caller_value_absent = [w for w in warnings if "server value 'custom'" in w]
         assert not caller_value_absent, (
             "Authority-clobber warning must NOT report the caller override as the server value — "
             f"got warnings={warnings}"

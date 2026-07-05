@@ -68,7 +68,7 @@ def test_done_unconfirmed_stop_exists(recipe) -> None:
 
 
 def test_register_clone_unconfirmed_routes_to_done_unconfirmed(recipe) -> None:
-    """register_clone_unconfirmed must route to done_unconfirmed, not done."""
+    """register_clone_unconfirmed must route to run_diagnostic_unconfirmed."""
     step = recipe.steps["register_clone_unconfirmed"]
-    assert step.on_success == "done_unconfirmed"
-    assert step.on_failure == "done_unconfirmed"
+    assert step.on_success == "run_diagnostic_unconfirmed"
+    assert step.on_failure == "run_diagnostic_unconfirmed"

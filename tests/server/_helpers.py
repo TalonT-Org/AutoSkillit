@@ -77,6 +77,7 @@ _PATCHED_DEFAULTS = {
     "adversarial_review_level": "aggressive",
     "is_fleet_dispatch": "true",
     "dispatch_id": "test-dispatch-999",
+    "post_run_diagnostics": "true",
 }
 
 _SERVER_ONLY_KEYS = frozenset({"kitchen_id", "diagnostics_log_dir", "backend_supports_git_write"})

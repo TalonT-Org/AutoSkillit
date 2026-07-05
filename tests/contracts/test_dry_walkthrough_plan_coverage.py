@@ -25,7 +25,11 @@ def _read_skill_md() -> str:
 
 def _step47_section() -> str:
     content = _read_skill_md()
-    return content[content.find("### Step 4.7") : content.find("### Step 5:")]
+    start = content.find("### Step 4.7")
+    end = content.find("### Step 5:")
+    assert start != -1, "Step 4.7 section must exist in dry-walkthrough SKILL.md"
+    assert end != -1, "Step 5 section must exist in dry-walkthrough SKILL.md"
+    return content[start:end]
 
 
 def test_dry_walkthrough_has_inventory_coverage_step() -> None:

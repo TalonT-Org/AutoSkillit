@@ -462,10 +462,46 @@ def load_and_validate(
             t0 = _t("semantic_rules", t0, name)
 
             if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
+                # Note: the capture-inversion-detection rule is intentionally NOT
+                # filtered here. Its strict forward-path dominance check (R1) in
+                # _check_capture_inversion subsumes what the filter would mask for
+                # this rule, so the filter would be a no-op for it by construction
+                # (the pre-prune baseline is structurally blind for that rule due
+                # to bypass edges emptying the BFS fact intersection). The filter
+                # remains useful for other rules like dead-output where pruning
+                # genuinely introduces new findings.
+                #
+                # Also: _skip_resolutions values are tristate — True (kept),
+                # False (pruned), None (deferred when defer_unresolved=True).
+                # The `is False` identity comparison correctly excludes None.
                 semantic_findings = filter_pruning_false_positives(
                     semantic_findings, _pre_prune_findings
                 )
                 semantic_suggestions = findings_to_dicts(semantic_findings)
+
+                # Defense-in-depth diagnostic: surface any post-prune finding from
+                # a graph-aware rule that did NOT appear in the pre-prune baseline.
+                # If a future rule has a gap similar to the original capture-inversion
+                # bug, this surfaces it during development rather than masking it
+                # silently via the filter. Logged at debug level (no production impact).
+                _graph_aware_rules = {"capture-inversion-detection", "dead-output"}
+                _pre_prune_keys = {(f.rule, f.step_name) for f in _pre_prune_findings}
+                for _f in semantic_findings:
+                    if (
+                        _f.rule in _graph_aware_rules
+                        and (
+                            _f.rule,
+                            _f.step_name,
+                        )
+                        not in _pre_prune_keys
+                    ):
+                        logger.debug(
+                            "pruning_filter_new_finding",
+                            recipe=name,
+                            rule=_f.rule,
+                            step=_f.step_name,
+                            message=_f.message,
+                        )
 
             _suppressed = suppressed or []
             if name in _suppressed:

@@ -42,20 +42,7 @@ _MATRIX_IDS: list[tuple[str, str]] = [
 
 
 # -- Known-broken combos (xfail strict) -------------------------------------
-KNOWN_BROKEN: dict[tuple[str, str], str] = {
-    ("agent-eval", "claude-code"): (
-        "tracking: #4069 -- violates all-dispatchable-stops-have-sentinel + dead-output"
-    ),
-    ("agent-eval", "codex"): (
-        "tracking: #4069 -- violates all-dispatchable-stops-have-sentinel + dead-output"
-    ),
-    ("skill-eval", "claude-code"): (
-        "tracking: #4069 -- violates all-dispatchable-stops-have-sentinel + dead-output"
-    ),
-    ("skill-eval", "codex"): (
-        "tracking: #4069 -- violates all-dispatchable-stops-have-sentinel + dead-output"
-    ),
-}
+KNOWN_BROKEN: dict[tuple[str, str], str] = {}
 
 _SKILL_RESOLVER = DefaultSkillResolver()
 

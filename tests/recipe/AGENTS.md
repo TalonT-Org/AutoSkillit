@@ -26,6 +26,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_bundled_recipes_general.py` | General structural tests for all bundled recipes |
 | `test_bundled_recipes_dispatch_ready.py` | Universal dispatch-readiness gate for all bundled recipes and contract cards |
 | `test_bundled_recipes_no_inversions.py` | Guard: no inversion step order violations in bundled recipes |
+| `test_bundled_recipes_all_truthy.py` | Regression guard: every bundled recipe validates cleanly under all-truthy and default ingredient configs (R1, R3) |
 | `test_bundled_recipes_pipeline_structure.py` | Pipeline structure tests for bundled recipes |
 | `test_bundled_recipes_research.py` | Tests for research bundled recipe structure |
 | `test_bundled_recipes_research_design.py` | Tests for research-design bundled recipe structure |

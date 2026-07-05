@@ -28,16 +28,7 @@ _RECIPE_STEMS = all_validated_recipe_names(_PROJECT_ROOT)
 _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
 
 
-_KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {
-    "agent-eval": {  # tracking: #4069
-        "all-dispatchable-stops-have-sentinel",
-        "dead-output",
-    },
-    "skill-eval": {  # tracking: #4069
-        "all-dispatchable-stops-have-sentinel",
-        "dead-output",
-    },
-}
+_KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {}
 
 _RECIPES_WITH_OTHER_ERROR_RULES: frozenset[str] = frozenset(
     k for k, v in _KNOWN_NON_CONFORMING_RULES.items() if v

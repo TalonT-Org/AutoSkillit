@@ -147,6 +147,11 @@ def validate_from_path(
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)
     if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
+        # Note: the capture-inversion-detection rule is intentionally NOT
+        # filtered here. Its strict forward-path dominance check (R1) in
+        # _check_capture_inversion subsumes what the filter would mask for
+        # this rule. The filter remains useful for other rules like
+        # dead-output where pruning genuinely introduces new findings.
         semantic_findings = filter_pruning_false_positives(semantic_findings, _pre_prune_findings)
 
     quality = build_quality_dict(report)

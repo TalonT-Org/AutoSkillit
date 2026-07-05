@@ -78,9 +78,6 @@ steps:
       output_dir: "${{ inputs.output_dir }}"
     capture:
       eval_run_dir: "${{ result.eval_run_dir }}"
-      canary_count: "${{ result.canary_count }}"
-      variant_count: "${{ result.variant_count }}"
-      manifest_index_path: "${{ result.manifest_index_path }}"
     on_success: run_canaries
     on_failure: escalate
     note: >-
@@ -100,7 +97,7 @@ steps:
       Instead, follow these instructions using MCP tool calls directly:
 
 
-      1. Read the manifest index: run_cmd cat {context.manifest_index_path}
+      1. Read the manifest index: run_cmd cat {context.eval_run_dir}/manifest_index.json
          Parse the JSON to get canary_ids, variant_ids, and directory paths.
 
 
@@ -175,4 +172,5 @@ steps:
       (${{ context.passed_runs }}/${{ context.total_runs }}).
       Vacuous passes: ${{ context.vacuous_passes }}.
       Effective pass rate: ${{ context.effective_pass_rate }}.
-      Scorecard: ${{ context.scorecard_path }}
+      Scorecard: ${{ context.scorecard_path }}.
+      Emit the L3 sentinel with success status.

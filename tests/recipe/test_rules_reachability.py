@@ -10,9 +10,14 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.recipe._analysis import _bfs_with_facts, _build_step_graph
+from autoskillit.recipe._analysis import (
+    _bfs_with_facts,
+    _build_step_graph,
+    make_validation_context,
+)
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
+from autoskillit.recipe.rules.rules_reachability import _check_capture_inversion
 from autoskillit.recipe.schema import (
     Recipe,
     RecipeStep,
@@ -177,4 +182,178 @@ def _make_branching_recipe() -> Recipe:
             "on_branch_b": on_branch_b,
             "join": join,
         },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dominance exoneration tests (R1)
+# ---------------------------------------------------------------------------
+
+
+def _make_dominating_producer_recipe() -> Recipe:
+    """Recipe where producer B unconditionally captures var_x and dominates reader D.
+
+    Layout:
+      entry ─has_gate→ has_gate (skip_when_false) → producer → router_x → reader
+                bypass: entry → router_x (skips producer when skip_when_false)
+
+    The bypass edge from skip_when_false creates a path that does NOT go through
+    the producer, causing the fact intersection to drop var_x from known_vars
+    at the reader — but the producer dominates the reader on every success
+    path, so the reader is safe.
+    """
+    entry = RecipeStep(name="entry", action="route", on_success="has_gate")
+    has_gate = RecipeStep(
+        name="has_gate",
+        action="route",
+        skip_when_false="some_gate",
+        on_success="producer",
+        on_result=StepResultRoute(
+            conditions=[
+                StepResultCondition(route="router_x", when="context.some_gate == 'true'"),
+                StepResultCondition(route="router_x"),
+            ]
+        ),
+    )
+    producer = RecipeStep(
+        name="producer",
+        tool="run_cmd",
+        with_args={"cmd": "echo capturing var_x"},
+        capture={"var_x": "${{ result.output }}"},
+        on_success="router_x",
+    )
+    router_x = RecipeStep(
+        name="router_x",
+        action="route",
+        on_result=StepResultRoute(
+            conditions=[
+                StepResultCondition(route="consumer", when="context.var_x == 'yes'"),
+                StepResultCondition(route="consumer"),
+            ]
+        ),
+    )
+    consumer = RecipeStep(
+        name="consumer",
+        tool="run_cmd",
+        with_args={"cmd": "echo ${{ context.var_x }}"},
+    )
+    return Recipe(
+        name="synthetic-dominating-producer",
+        description="producer dominates reader via success-path barrier",
+        steps={
+            "entry": entry,
+            "has_gate": has_gate,
+            "producer": producer,
+            "router_x": router_x,
+            "consumer": consumer,
+        },
+    )
+
+
+def test_dominating_producer_exonerates_reader():
+    """R1: an unconditional producer that strictly dominates the reader exonerates it.
+
+    The skip_when_false bypass creates a path that bypasses the producer in the
+    pre-prune graph, dropping var_x from known_vars at the reader. The strict
+    forward-path dominance check correctly exonerates the reader because the
+    producer is on every success path.
+    """
+    recipe = _make_dominating_producer_recipe()
+    ctx = make_validation_context(recipe)
+    findings = _check_capture_inversion(ctx)
+    consumer_findings = [f for f in findings if "consumer" in f.message]
+    assert consumer_findings == [], (
+        "Dominating producer should exonerate consumer, got: "
+        + ", ".join(f.message for f in consumer_findings)
+    )
+
+
+def _make_non_dominating_producer_recipe() -> Recipe:
+    """Recipe where producer is on only ONE branch of a fork (not a dominator).
+
+    Layout:
+      entry → fork → branch_producer (captures var_x) → joiner
+                    → branch_other (no capture) → joiner
+      joiner → check_x (conditional on var_x) → reader
+             → reader (fallback)
+      reader reads var_x
+
+    The producer is on one branch only — does NOT dominate the reader. Should
+    produce a capture-inversion finding.
+
+    The joiner routes to two DIFFERENT targets (check_x vs reader) so the
+    conditional edge fact (var_x, yes) only reaches reader via the check_x
+    path, while the fallback path carries no fact. The intersection at reader
+    drops var_x from known_vars, exercising the dominance check.
+    """
+    entry = RecipeStep(
+        name="entry",
+        action="route",
+        on_result=StepResultRoute(
+            conditions=[
+                StepResultCondition(route="branch_producer", when="context.flag == 'yes'"),
+                StepResultCondition(route="branch_other"),
+            ]
+        ),
+    )
+    branch_producer = RecipeStep(
+        name="branch_producer",
+        tool="run_cmd",
+        with_args={"cmd": "echo producing"},
+        capture={"var_x": "${{ result.output }}"},
+        on_success="joiner",
+    )
+    branch_other = RecipeStep(
+        name="branch_other",
+        tool="run_cmd",
+        with_args={"cmd": "echo nothing"},
+        on_success="joiner",
+    )
+    joiner = RecipeStep(
+        name="joiner",
+        action="route",
+        on_result=StepResultRoute(
+            conditions=[
+                StepResultCondition(route="check_x", when="context.var_x == 'yes'"),
+                StepResultCondition(route="reader"),
+            ]
+        ),
+    )
+    check_x = RecipeStep(
+        name="check_x",
+        tool="run_cmd",
+        with_args={"cmd": "echo check"},
+        on_success="reader",
+    )
+    reader = RecipeStep(
+        name="reader",
+        tool="run_cmd",
+        with_args={"cmd": "echo ${{ context.var_x }}"},
+    )
+    return Recipe(
+        name="synthetic-non-dominating",
+        description="producer on one branch only — not a dominator",
+        steps={
+            "entry": entry,
+            "branch_producer": branch_producer,
+            "branch_other": branch_other,
+            "joiner": joiner,
+            "check_x": check_x,
+            "reader": reader,
+        },
+    )
+
+
+def test_non_dominating_producer_does_not_exonerate_reader():
+    """Negative test: producer on one branch only should NOT exonerate reader.
+
+    Distinguishes "on some path" (ancestor) from "on every path" (dominator).
+    """
+    recipe = _make_non_dominating_producer_recipe()
+    ctx = make_validation_context(recipe)
+    findings = _check_capture_inversion(ctx)
+    reader_findings = [f for f in findings if "reader" in f.message]
+    assert reader_findings, (
+        "Non-dominating producer should flag reader with capture-inversion, "
+        "but no findings were produced."
     )

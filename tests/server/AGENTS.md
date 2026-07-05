@@ -97,6 +97,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_tools_kitchen_preflight.py` | Tests for dispatch-feasibility preflight in open_kitchen and shared _check_dispatch_feasibility function |
 | `test_tools_fleet_dispatch_preflight.py` | Tests for dispatch_food_truck preflight wiring — preflight before execute_dispatch |
 | `test_tools_kitchen_helpers.py` | Tests for tools_kitchen.py helper functions: _recipe_validation_error_response semantic-finding surfacing |
+| `test_error_count_surfacing.py` | Tests for the +N more errors indicator in validation error responses (R4) |
 | `test_tools_kitchen_gate.py` | Tests for tools_kitchen.py: gate toggle, review gate cleanup, kitchen_id, misc |
 | `test_tools_kitchen_gate_features.py` | Tests for tools_kitchen.py: recipe packs, quota refresh, ingredients_only, project_dir |
 | `test_tools_kitchen_gate_hook_config.py` | Tests for tools_kitchen.py: hook config lifecycle, overlay, and quota guard tool |

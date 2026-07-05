@@ -293,7 +293,6 @@ CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
         "base_branch",
         "local_review_rounds",
         "adversarial_review_level",
-        "post_run_diagnostics",
         "is_fleet_dispatch",
         "dispatch_id",
         "backend_supports_git_write",

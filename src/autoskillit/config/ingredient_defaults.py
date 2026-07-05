@@ -129,15 +129,16 @@ SERVER_AUTHORITATIVE_CONFIG_PATHS: dict[str, str] = {
     "base_branch": "branching.default_base_branch",
     "local_review_rounds": "review.local_review_rounds",
     "adversarial_review_level": "plan.adversarial_review_level",
-    "post_run_diagnostics": "diagnostics.post_run_analysis",
 }
 
-SERVER_AUTHORITATIVE_KEY_HINTS: dict[str, str] = {
-    "post_run_diagnostics": (
-        "For post_run_diagnostics diagnostics outside of a live run, "
-        "use run_skill /autoskillit:analyze-pipeline-health"
-    ),
-}
+SERVER_AUTHORITATIVE_KEY_HINTS: dict[str, str] = {}
+
+CONFIG_DEFAULT_INGREDIENTS: frozenset[str] = frozenset({"post_run_diagnostics"})
+
+
+def build_config_default_layer(defaults: dict[str, str]) -> dict[str, str]:
+    """Return config-derived defaults for overridable config-backed ingredients."""
+    return {k: v for k, v in defaults.items() if k in CONFIG_DEFAULT_INGREDIENTS}
 
 
 def resolve_ingredient_defaults(project_dir: Path) -> dict[str, str]:

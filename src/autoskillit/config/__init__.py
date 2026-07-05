@@ -9,11 +9,13 @@ from autoskillit.config._config_dataclasses import (
     _MAX_CONCURRENT_DISPATCHES as _MAX_CONCURRENT_DISPATCHES,
 )
 from autoskillit.config.ingredient_defaults import (
+    CONFIG_DEFAULT_INGREDIENTS,
     SERVER_AUTHORITATIVE_CONFIG_PATHS,
     SERVER_AUTHORITATIVE_INGREDIENTS,
     SERVER_AUTHORITATIVE_KEY_HINTS,
     apply_config_authoritative_overrides,
     build_config_authoritative_layer,
+    build_config_default_layer,
     iter_display_categories,
     resolve_ingredient_defaults,
 )
@@ -98,11 +100,13 @@ __all__ = [
     "load_config",
     "resolve_ingredient_defaults",
     "BACKEND_CAPABILITY_INGREDIENTS",
+    "CONFIG_DEFAULT_INGREDIENTS",
     "SERVER_AUTHORITATIVE_CONFIG_PATHS",
     "SERVER_AUTHORITATIVE_INGREDIENTS",
     "SERVER_AUTHORITATIVE_KEY_HINTS",
     "apply_config_authoritative_overrides",
     "build_config_authoritative_layer",
+    "build_config_default_layer",
     "validate_layer_keys",
     "write_config_layer",
 ]

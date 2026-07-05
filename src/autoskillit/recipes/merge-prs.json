@@ -37,8 +37,7 @@
     "post_run_diagnostics": {
       "description": "Run diagnostic analysis after pipeline completion",
       "default": "false",
-      "hidden": true,
-      "authority": "config"
+      "hidden": true
     },
     "kitchen_id": {
       "description": "Kitchen session identifier (auto-injected)",

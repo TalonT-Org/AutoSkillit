@@ -104,7 +104,7 @@ class TestLockIngredientsRejectsServerAuthoritative:
 
 @pytest.mark.parametrize(
     "server_auth_key",
-    ["post_run_diagnostics", "base_branch"],
+    ["adversarial_review_level", "base_branch"],
 )
 @pytest.mark.anyio
 async def test_lock_ingredients_envelope_has_structured_fields(server_auth_key, tmp_path):
@@ -486,3 +486,28 @@ class TestLockIngredientsConcurrentFlock:
         data = json.loads(overlay.read_text())
         assert "a" in data["locked_ingredients"]
         assert "b" in data["locked_ingredients"]
+
+
+# T3: REQ-ING-004
+@pytest.mark.anyio
+async def test_post_run_diagnostics_lockable(tmp_path):
+    """REQ-ING-004: lock_ingredients accepts post_run_diagnostics."""
+    temp_dir = tmp_path / ".autoskillit" / "temp"
+    temp_dir.mkdir(parents=True)
+    (temp_dir / ".hook_config.json").write_text("{}")
+
+    ctx = _make_mock_ctx()
+    ctx.project_dir = tmp_path
+    ctx.active_recipe_steps = {}
+
+    with patch("autoskillit.server._get_ctx", return_value=ctx):
+        from autoskillit.server.tools.tools_kitchen import lock_ingredients
+
+        result_str = await lock_ingredients(
+            locked={"post_run_diagnostics": "true"}, pipeline_id="a"
+        )
+
+    result = json.loads(result_str)
+    assert result.get("success") is True, (
+        f"post_run_diagnostics must be lockable; got result={result}"
+    )

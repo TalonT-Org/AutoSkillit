@@ -967,7 +967,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "co-located with the execution engine that calls them",
     ),
     "tools_kitchen.py": (
-        1380,
+        1395,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -987,7 +987,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "graceful degradation when recipes.find raises (+10 net lines)"
         "; CapabilityResolutionDetail destructive tuple at open_kitchen call sites and "
         "_dispatch_infeasible_response accepting capability_detail kwarg for none_pass "
-        "diagnostic enrichment (+24 net lines)",
+        "diagnostic enrichment (+24 net lines)"
+        "; config-default ingredient layer: build_config_default_layer call and "
+        "docstring update for post_run_diagnostics demotion (+10 net lines)",
     ),
     "tools_execution.py": (
         1260,

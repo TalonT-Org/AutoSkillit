@@ -301,7 +301,7 @@ def test_skill_tools_matches_expected() -> None:
 
 
 def test_config_authority_keys_constant() -> None:
-    """CONFIG_AUTHORITY_KEYS must be a frozenset of exactly the 8 known config-authority keys."""
+    """CONFIG_AUTHORITY_KEYS must be a frozenset of exactly the 7 known config-authority keys."""
     from autoskillit.core import CONFIG_AUTHORITY_KEYS
 
     assert isinstance(CONFIG_AUTHORITY_KEYS, frozenset)
@@ -311,7 +311,6 @@ def test_config_authority_keys_constant() -> None:
             "base_branch",
             "local_review_rounds",
             "adversarial_review_level",
-            "post_run_diagnostics",
             "is_fleet_dispatch",
             "dispatch_id",
             "backend_supports_git_write",

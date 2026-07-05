@@ -193,15 +193,20 @@ def test_resolve_ingredient_defaults_base_branch_from_config(tmp_path):
 
 def test_server_authoritative_ingredients_covers_resolved_defaults(tmp_path):
     """1a: Every config-resolvable key from resolve_ingredient_defaults must be declared
-    in SERVER_AUTHORITATIVE_INGREDIENTS."""
-    from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS, resolve_ingredient_defaults
+    in SERVER_AUTHORITATIVE_INGREDIENTS or CONFIG_DEFAULT_INGREDIENTS."""
+    from autoskillit.config import (
+        CONFIG_DEFAULT_INGREDIENTS,
+        SERVER_AUTHORITATIVE_INGREDIENTS,
+        resolve_ingredient_defaults,
+    )
 
     subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
     defaults = resolve_ingredient_defaults(tmp_path)
     config_resolvable = {k for k in defaults if k != "source_dir"}
-    missing = config_resolvable - SERVER_AUTHORITATIVE_INGREDIENTS
+    missing = config_resolvable - SERVER_AUTHORITATIVE_INGREDIENTS - CONFIG_DEFAULT_INGREDIENTS
     assert not missing, (
-        f"Config-resolvable keys missing from SERVER_AUTHORITATIVE_INGREDIENTS: {missing}"
+        f"Config-resolvable keys missing from SERVER_AUTHORITATIVE_INGREDIENTS or "
+        f"CONFIG_DEFAULT_INGREDIENTS: {missing}"
     )
 
 
@@ -271,3 +276,19 @@ def test_apply_config_authoritative_overrides_unknown_key_warns_and_retains(tmp_
 
     assert result["totally_unknown_key"] == "caller-value"
     assert any("config-authority key" in e.get("event", "") for e in cap_logs)
+
+
+# T4: REQ-ING-003
+def test_post_run_diagnostics_not_server_authoritative() -> None:
+    """post_run_diagnostics must be a config-default, not server-authoritative."""
+    from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS
+
+    assert "post_run_diagnostics" not in SERVER_AUTHORITATIVE_INGREDIENTS
+
+
+# T6: REQ-ING-005
+def test_post_run_diagnostics_in_config_default_ingredients() -> None:
+    """post_run_diagnostics must be in CONFIG_DEFAULT_INGREDIENTS."""
+    from autoskillit.config import CONFIG_DEFAULT_INGREDIENTS
+
+    assert "post_run_diagnostics" in CONFIG_DEFAULT_INGREDIENTS

@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import CaptureEntrySpec, Severity
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (
     Recipe,
     RecipeStep,
@@ -127,3 +128,22 @@ def test_inventory_gate_bilateral_silent_when_audit_impl_no_remediation_capture(
     """audit_impl without remediation_path capture must not fire."""
     findings = _findings(_audit_impl_without_remediation_capture_steps())
     assert findings == []
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "remediation.yaml",
+        "implementation.yaml",
+        "implementation-groups.yaml",
+        "merge-prs.yaml",
+    ],
+)
+def test_bundled_recipes_pass_inventory_gate_bilateral_rule(recipe_name: str) -> None:
+    """Bundled recipes must not trigger inventory-gate-not-bilateral."""
+    recipe = load_recipe(builtin_recipes_dir() / recipe_name)
+    findings = [f for f in run_semantic_rules(recipe) if f.rule == _RULE_NAME]
+    assert findings == [], (
+        f"{recipe_name} must not trigger {_RULE_NAME}. "
+        f"Findings: {[(f.step_name, f.message) for f in findings]}"
+    )

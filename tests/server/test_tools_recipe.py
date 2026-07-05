@@ -488,10 +488,12 @@ async def test_list_recipes_mcp_tool_hides_campaign_when_fleet_disabled(
 
 
 @pytest.mark.anyio
-async def test_list_recipes_returns_error_string_when_context_missing() -> None:
+async def test_list_recipes_returns_error_string_when_context_missing(monkeypatch) -> None:
     """list_recipes must return an error message string (not []) when tool_ctx is None."""
+    from autoskillit.server import _state
     from autoskillit.server.tools.tools_recipe import list_recipes
 
+    monkeypatch.setattr(_state, "_ctx", None)
     result = await list_recipes()
     assert isinstance(result, str)
     parsed = json.loads(result)

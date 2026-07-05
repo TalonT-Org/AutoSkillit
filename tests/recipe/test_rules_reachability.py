@@ -272,12 +272,19 @@ def _make_non_dominating_producer_recipe() -> Recipe:
     """Recipe where producer is on only ONE branch of a fork (not a dominator).
 
     Layout:
-      entry → fork → branch_producer (captures var_x) → join
-                    → branch_other (no capture) → join
-      join → reader (reads var_x)
+      entry → fork → branch_producer (captures var_x) → joiner
+                    → branch_other (no capture) → joiner
+      joiner → check_x (conditional on var_x) → reader
+             → reader (fallback)
+      reader reads var_x
 
     The producer is on one branch only — does NOT dominate the reader. Should
     produce a capture-inversion finding.
+
+    The joiner routes to two DIFFERENT targets (check_x vs reader) so the
+    conditional edge fact (var_x, yes) only reaches reader via the check_x
+    path, while the fallback path carries no fact. The intersection at reader
+    drops var_x from known_vars, exercising the dominance check.
     """
     entry = RecipeStep(
         name="entry",
@@ -294,23 +301,29 @@ def _make_non_dominating_producer_recipe() -> Recipe:
         tool="run_cmd",
         with_args={"cmd": "echo producing"},
         capture={"var_x": "${{ result.output }}"},
-        on_success="join",
+        on_success="joiner",
     )
     branch_other = RecipeStep(
         name="branch_other",
         tool="run_cmd",
         with_args={"cmd": "echo nothing"},
-        on_success="join",
+        on_success="joiner",
     )
-    router = RecipeStep(
-        name="join",
+    joiner = RecipeStep(
+        name="joiner",
         action="route",
         on_result=StepResultRoute(
             conditions=[
-                StepResultCondition(route="reader", when="context.var_x == 'yes'"),
+                StepResultCondition(route="check_x", when="context.var_x == 'yes'"),
                 StepResultCondition(route="reader"),
             ]
         ),
+    )
+    check_x = RecipeStep(
+        name="check_x",
+        tool="run_cmd",
+        with_args={"cmd": "echo check"},
+        on_success="reader",
     )
     reader = RecipeStep(
         name="reader",
@@ -324,7 +337,8 @@ def _make_non_dominating_producer_recipe() -> Recipe:
             "entry": entry,
             "branch_producer": branch_producer,
             "branch_other": branch_other,
-            "join": router,
+            "joiner": joiner,
+            "check_x": check_x,
             "reader": reader,
         },
     )

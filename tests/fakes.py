@@ -133,6 +133,7 @@ class DispatchFoodTruckCall:
     session_id: str | None = None
     resume_message: str | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
+    backend_override: str | None = None
 
 
 _DEFAULT_SKILL_RESULT = SkillResult(
@@ -284,6 +285,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         session_id: str | None = None,
         resume_message: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        backend_override: str | None = None,
     ) -> SkillResult:
         self.dispatch_calls.append(
             DispatchFoodTruckCall(
@@ -315,6 +317,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 session_id=session_id,
                 resume_message=resume_message,
                 on_session_id_resolved=on_session_id_resolved,
+                backend_override=backend_override,
             )
         )
         if self._queue:

@@ -35,6 +35,7 @@ from autoskillit.fleet.state_types import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.core import CodingAgentBackend
     from autoskillit.fleet.sidecar import IssueSidecarEntry
     from autoskillit.fleet.state import DispatchRecord, DispatchStateHandle
     from autoskillit.pipeline.context import ToolContext
@@ -190,6 +191,7 @@ async def execute_dispatch(
     resume_message: str | None = None,
     caller_instructions: str | None = None,
     provider_capability_overrides: dict[str, str] | None = None,
+    dispatch_backend: CodingAgentBackend | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
@@ -257,6 +259,7 @@ async def execute_dispatch(
             resume_message=resume_message,
             caller_instructions=caller_instructions,
             provider_capability_overrides=provider_capability_overrides,
+            dispatch_backend=dispatch_backend,
         )
     except asyncio.CancelledError:
         raise
@@ -318,6 +321,7 @@ async def _run_dispatch(
     resume_message: str | None = None,
     caller_instructions: str | None = None,
     provider_capability_overrides: dict[str, str] | None = None,
+    dispatch_backend: CodingAgentBackend | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -349,9 +353,11 @@ async def _run_dispatch(
             per_dispatch_state_path=None,
         )
 
+    _effective_backend = dispatch_backend if dispatch_backend is not None else tool_ctx.backend
+
     try:
         _capability_overrides = provider_capability_overrides or _build_capability_overrides(
-            tool_ctx.backend
+            _effective_backend
         )
         _merged_ingredients = {**(ingredients or {}), **_capability_overrides}
         validation_result = tool_ctx.recipes.load_and_validate(
@@ -360,7 +366,7 @@ async def _run_dispatch(
             suppressed=tool_ctx.config.migration.suppressed if tool_ctx.config else None,
             ingredient_overrides=_merged_ingredients,
             temp_dir=tool_ctx.temp_dir,
-            backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
+            backend_name=_effective_backend.name if _effective_backend else None,
         )
     except ProcessStaleError as exc:
         return DispatchResult(
@@ -442,7 +448,7 @@ async def _run_dispatch(
     )
 
     _capability_overrides = provider_capability_overrides or _build_capability_overrides(
-        tool_ctx.backend
+        _effective_backend
     )
     effective_ingredients = apply_config_authoritative_overrides(
         effective_ingredients,
@@ -573,7 +579,7 @@ async def _run_dispatch(
     if quota_result.get("should_sleep"):
         await asyncio.sleep(quota_result.get("sleep_seconds", 0))
 
-    _locator = tool_ctx.backend.session_locator() if tool_ctx.backend is not None else None
+    _locator = _effective_backend.session_locator() if _effective_backend is not None else None
 
     if resume_session_id:
         _primary_jsonl = (
@@ -758,6 +764,9 @@ async def _run_dispatch(
                     on_spawn=_on_spawn,
                     sentinel_contract=sentinel_contract,
                     resume_message=resume_message,
+                    backend_override=dispatch_backend.name
+                    if dispatch_backend is not None
+                    else None,
                 )
 
         ended_at = time.time()
@@ -957,6 +966,7 @@ async def _run_dispatch(
         labels_cleaned=_labels_cleaned,
         issue_url=_issue_urls_raw,
         branch_name=_branch_name,
+        backend_name=_effective_backend.name if _effective_backend else "",
         resume_checkpoint=_checkpoint_to_dict(dispatch_checkpoint),
     )
 

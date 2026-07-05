@@ -26,6 +26,7 @@ _RETRY_IDENTITY_FIELDS: frozenset[str] = frozenset(
         "session_chain",
         "resume_count",
         "issue_url",
+        "backend_name",
     }
 )
 
@@ -130,6 +131,7 @@ class DispatchRecord:
     wait_seconds: float | None = None
     resets_at: str = ""
     resume_count: int = 0
+    backend_name: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -164,6 +166,7 @@ class DispatchRecord:
             "wait_seconds": self.wait_seconds,
             "resets_at": self.resets_at,
             "resume_count": self.resume_count,
+            "backend_name": self.backend_name,
         }
 
     @classmethod
@@ -224,6 +227,7 @@ class DispatchRecord:
             wait_seconds=d.get("wait_seconds"),
             resets_at=d.get("resets_at", ""),
             resume_count=d.get("resume_count", 0),
+            backend_name=d.get("backend_name", ""),
         )
 
     @classmethod

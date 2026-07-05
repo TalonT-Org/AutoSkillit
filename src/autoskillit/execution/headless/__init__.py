@@ -382,11 +382,28 @@ class DefaultHeadlessExecutor:
         backend_override: str | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
     ) -> SkillResult:
-        if self._ctx.backend is not None and not self._ctx.backend.capabilities.food_truck_capable:
+        dispatch_backend: CodingAgentBackend | None
+        if backend_override is not None:
+            from autoskillit.execution.backends import get_backend
+
+            dispatch_backend = get_backend(backend_override)
+        else:
+            dispatch_backend = self._ctx.backend
+
+        if dispatch_backend is not None and not dispatch_backend.capabilities.food_truck_capable:
             raise RuntimeError(
                 f"backend does not support food truck dispatch "
-                f"(food_truck_capable=False); got {self._ctx.backend.name!r}"
+                f"(food_truck_capable=False); got {dispatch_backend.name!r}"
             )
+        if backend_override is not None:
+            assert dispatch_backend is not None
+            pre_launch_errors = dispatch_backend.ensure_pre_launch()
+            if pre_launch_errors:
+                raise RuntimeError(
+                    f"Pre-launch check failed for dispatch backend "
+                    f"{dispatch_backend.name!r}: {'; '.join(pre_launch_errors)}"
+                )
+
         cfg = self._ctx.config
         model_identity = resolve_model_identity(
             model, cfg, step_name=step_name, profile_name=profile_name
@@ -412,8 +429,11 @@ class DefaultHeadlessExecutor:
             if idle_cfg_val > 0:
                 merged_extras.setdefault("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(idle_cfg_val))
 
-        assert self._ctx.backend is not None, "ctx.backend must be set before dispatch_food_truck"
-        backend = self._ctx.backend
+        if dispatch_backend is None:
+            raise RuntimeError(
+                "dispatch_backend must be resolved before dispatch_food_truck execution"
+            )
+        backend = dispatch_backend
         cmd_spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
             plugin_source=self._ctx.plugin_source,
@@ -451,7 +471,7 @@ class DefaultHeadlessExecutor:
         )
 
         effective_marker_dir: Path | None = marker_dir or (
-            _resolve_session_log_dir(cwd, cast(CodingAgentBackend, self._ctx.backend))
+            _resolve_session_log_dir(cwd, cast(CodingAgentBackend, dispatch_backend))
             if cwd
             else None
         )
@@ -485,4 +505,5 @@ class DefaultHeadlessExecutor:
             session_id=session_id,
             model_identity=model_identity,
             on_session_id_resolved=on_session_id_resolved,
+            step_backend=dispatch_backend,
         )

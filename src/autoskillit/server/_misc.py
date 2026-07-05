@@ -20,13 +20,14 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.execution import (
-    SCENARIO_STEP_NAME_ENV as SCENARIO_STEP_NAME_ENV,
-)
-from autoskillit.execution import (
+    BACKEND_REGISTRY,
     SessionState,
     clear_session_state,
     persist_session_state,
     resolve_remote_repo,
+)
+from autoskillit.execution import (
+    SCENARIO_STEP_NAME_ENV as SCENARIO_STEP_NAME_ENV,
 )
 from autoskillit.execution import (
     _refresh_quota_cache as _refresh_quota_cache,
@@ -69,9 +70,21 @@ from autoskillit.workspace import (
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig
-    from autoskillit.core import SkillResult
+    from autoskillit.core import CodingAgentBackend, SkillResult
 
 logger = get_logger(__name__)
+
+
+def resolve_backend_override(name: str) -> CodingAgentBackend:
+    """Resolve a backend name to a CodingAgentBackend instance.
+
+    Raises ValueError if the name is not in BACKEND_REGISTRY.
+    """
+    if name not in BACKEND_REGISTRY:
+        valid = ", ".join(sorted(BACKEND_REGISTRY))
+        raise ValueError(f"Unknown backend {name!r}. Valid names: {valid}")
+    return get_backend(name)
+
 
 _HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]
 _HOOK_CONFIG_OVERLAY_FILENAME: str = ".hook_config_overlay.json"

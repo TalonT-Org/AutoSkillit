@@ -407,7 +407,7 @@ class TestDispatchFoodTruckGuards:
         minimal_ctx.plugin_source = DirectInstall(plugin_dir=tmp_path)
         executor = DefaultHeadlessExecutor(minimal_ctx)
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError, match="dispatch_backend must be resolved"):
             await executor.dispatch_food_truck(
                 "some prompt",
                 str(tmp_path),

@@ -1153,11 +1153,8 @@ async def test_post_run_diagnostics_override_wins_over_config(tmp_path, monkeypa
     assert overrides["post_run_diagnostics"] == "true", (
         f"Override must win; got overrides={overrides}"
     )
-    # Also: post_run_diagnostics is no longer in SERVER_AUTHORITATIVE_INGREDIENTS,
-    # so no clobber warning should fire for it.
     call_args_list = mock_ctx.recipes.load_and_validate.call_args_list
     assert call_args_list, "open_kitchen should call load_and_validate"
-    # post_run_diagnostics was successfully passed through — verify via overrides dict above.
 
 
 # T2: REQ-ING-002

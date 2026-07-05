@@ -296,7 +296,7 @@ async def dispatch_food_truck(
             SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
         )
         tool_ctx = _get_ctx()
-        _override_backend = dispatch_backend or tool_ctx.backend
+        _override_backend = dispatch_backend if dispatch_backend is not None else tool_ctx.backend
         caller_session_id = find_caller_session_id(project_dir=tool_ctx.project_dir)
         effective_name = dispatch_name or recipe
 

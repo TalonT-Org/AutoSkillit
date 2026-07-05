@@ -25,7 +25,11 @@ def _read_skill_md() -> str:
 def _step1_section() -> str:
     """Extract Step 1 section of audit-impl SKILL.md."""
     content = _read_skill_md()
-    return content[content.find("### Step 1") : content.find("### Step 2")]
+    start = content.find("### Step 1")
+    end = content.find("### Step 2")
+    assert start != -1, "Step 1 section must exist in audit-impl SKILL.md"
+    assert end != -1, "Step 2 section must exist in audit-impl SKILL.md"
+    return content[start:end]
 
 
 def test_audit_impl_references_inventory_persistence() -> None:

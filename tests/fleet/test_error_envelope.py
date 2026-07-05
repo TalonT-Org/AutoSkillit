@@ -54,6 +54,7 @@ class TestFleetErrorCodeEnum:
             "fleet_reset_not_found",
             "fleet_reset_invalid_target",
             "fleet_reset_still_running",
+            "fleet_invalid_backend",
         }
         assert {c.value for c in FleetErrorCode} == expected_values
 

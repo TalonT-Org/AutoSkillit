@@ -26,8 +26,7 @@ def _remediation_section() -> str:
     """Extract the section of make-plan SKILL.md that discusses remediation mode."""
     content = _read_skill_md()
     start = content.find("audit_remediation_mode")
-    if start == -1:
-        return content
+    assert start != -1, "make-plan SKILL.md must contain 'audit_remediation_mode' section"
     return content[start:]
 
 

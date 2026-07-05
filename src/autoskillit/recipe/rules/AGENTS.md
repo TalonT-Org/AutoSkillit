@@ -38,6 +38,7 @@ See each subdirectory's AGENTS.md for details.
 | `rules_inline_script.py` | Detects inline shell scripts in `run_cmd` cmd fields |
 | `rules_inputs.py` | Input/ingredient validation; version compatibility checks |
 | `rules_isolation.py` | Workspace isolation rules (prevents operating on source repo) |
+| `rules_inventory_gate_bilateral.py` | inventory-gate-not-bilateral semantic rule: dry-walkthrough must receive remediation_path in recipes with audit-impl remediation loops |
 | `rules_issue_scope_threading.py` | issue-scope-not-threaded-to-walkthrough semantic rule: ensures dry-walkthrough receives issue_url in recipes with issue_url ingredients |
 | `rules_merge.py` | `merge_worktree` routing completeness |
 | `rules_model.py` | Model field adequacy: flags context-intensive steps with empty model (dispatch_items users) |

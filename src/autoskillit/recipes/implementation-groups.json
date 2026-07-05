@@ -272,7 +272,8 @@
         "step_name": "verify",
         "review_path": "${{ context.review_path }}",
         "issue_url": "${{ inputs.issue_url }}",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}",
+        "remediation_path": "${{ context.remediation_path }}"
       },
       "on_success": "create_impl_worktree",
       "on_failure": "release_issue_failure",

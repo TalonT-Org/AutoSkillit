@@ -937,13 +937,17 @@
         "skill_command": "/autoskillit:dry-walkthrough ${{ context.pr_plan_path }}",
         "cwd": "${{ context.work_dir }}",
         "step_name": "verify",
-        "output_dir": "{{AUTOSKILLIT_TEMP}}"
+        "output_dir": "{{AUTOSKILLIT_TEMP}}",
+        "remediation_path": "${{ context.remediation_path }}"
       },
       "on_success": "implement",
       "on_failure": "register_clone_failure",
       "retries": 5,
       "on_exhausted": "register_clone_failure",
       "on_context_limit": "register_clone_failure",
+      "optional_context_refs": [
+        "remediation_path"
+      ],
       "note": "SEQUENTIAL: For each plan_part, run the full cycle (verify → implement → test → push_worktree_branch → create_conflict_pr → wait_for_conflict_ci → merge_conflict_pr) before advancing.\n"
     },
     "implement": {

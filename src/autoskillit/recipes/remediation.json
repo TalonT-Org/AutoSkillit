@@ -310,6 +310,9 @@
       "on_failure": "release_issue_failure",
       "retries": 3,
       "on_exhausted": "release_issue_failure",
+      "optional_context_refs": [
+        "remediation_path"
+      ],
       "note": "Dry walkthrough retries on failure. It never routes back to a previous step."
     },
     "create_impl_worktree": {

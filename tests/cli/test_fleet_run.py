@@ -1,4 +1,4 @@
-"""Tests: fleet CLI run command gates — session-type guard, feature gates, CLAUDECODE relaxation."""
+"""Tests: fleet run command gates — session guard, feature gates, CLAUDECODE relaxation."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class TestFleetRunGates:
     def test_fleet_run_blocks_in_leaf_session(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """fleet_run exits with JSON FLEET_SESSION_TYPE_BLOCKED when AUTOSKILLIT_SESSION_TYPE=leaf."""
+        """fleet_run exits with FLEET_SESSION_TYPE_BLOCKED when SESSION_TYPE=leaf."""
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
         monkeypatch.setattr(
             "autoskillit.config.load_config",
@@ -50,7 +50,7 @@ class TestFleetRunGates:
     def test_fleet_run_blocks_in_skill_session(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
-        """fleet_run exits with JSON FLEET_SESSION_TYPE_BLOCKED when AUTOSKILLIT_SESSION_TYPE=skill."""
+        """fleet_run exits with FLEET_SESSION_TYPE_BLOCKED when SESSION_TYPE=skill."""
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
         monkeypatch.setattr(
             "autoskillit.config.load_config",

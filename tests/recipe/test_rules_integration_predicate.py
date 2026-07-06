@@ -298,7 +298,6 @@ def _has_counter_reset_on_path(recipe, start: str, end: str, counter: str) -> bo
     return False
 
 
-@pytest.mark.xfail(strict=True, reason="reset step added in Step 2")
 def test_test_fix_loop_count_resets_on_remediation_cycle_implementation() -> None:
     """implementation.yaml must reset test_fix_loop_count between audit cycles."""
     recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
@@ -307,7 +306,6 @@ def test_test_fix_loop_count_resets_on_remediation_cycle_implementation() -> Non
     ), "implementation.yaml must reset test_fix_loop_count between audit-remediation cycles"
 
 
-@pytest.mark.xfail(strict=True, reason="reset step added in Step 2")
 def test_test_fix_loop_count_resets_in_remediation_recipe() -> None:
     """remediation.yaml must reset test_fix_loop_count between audit cycles."""
     recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
@@ -316,7 +314,6 @@ def test_test_fix_loop_count_resets_in_remediation_recipe() -> None:
     ), "remediation.yaml must reset test_fix_loop_count between audit-remediation cycles"
 
 
-@pytest.mark.xfail(strict=True, reason="reset step added in Step 2")
 def test_test_fix_loop_count_resets_in_implementation_groups_recipe() -> None:
     """implementation-groups.yaml must reset test_fix_loop_count between audit cycles."""
     recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")

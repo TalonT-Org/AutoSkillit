@@ -195,3 +195,108 @@ def _check_loop_guard_before_verify(ctx: ValidationContext) -> list[RuleFinding]
             )
 
     return findings
+
+
+@semantic_rule(
+    name="loop-counter-not-reset-on-outer-cycle",
+    description=(
+        "An inner check_loop_iteration guard's counter variable is reachable "
+        "from an outer check_loop_iteration guard's non-max_exceeded route "
+        "without passing through a step that resets the inner counter"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list[RuleFinding]:
+    """Detect temporal counter sharing across outer-loop iterations.
+
+    When an outer guard (e.g. check_audit_remediation_loop) loops back into
+    the recipe's main flow on the non-max_exceeded branch, any inner guard
+    (e.g. check_test_fix_loop) whose counter variable is captured along that
+    path will accumulate across outer iterations unless a step resets it.
+
+    Algorithm:
+    1. For each check_loop_iteration step (inner guard), identify its counter.
+    2. For each OTHER check_loop_iteration step (outer guard), check if the
+       inner guard is reachable from the outer guard's non-max_exceeded route.
+    3. If reachable, walk the intermediate steps (barrier = inner guard).
+    4. Emit a finding if no intermediate step captures the inner counter.
+    """
+    findings: list[RuleFinding] = []
+    recipe = ctx.recipe
+    graph = ctx.step_graph
+
+    guard_steps: dict[str, str] = {}
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_python":
+            continue
+        if step.with_args.get("callable") != "autoskillit.smoke_utils.check_loop_iteration":
+            continue
+        current_iter_expr = step.with_args.get("current_iteration", "")
+        m = _CTX_VAR_RE.search(current_iter_expr)
+        if not m:
+            continue
+        guard_steps[step_name] = m.group(1)
+
+    if len(guard_steps) < 2:
+        return findings
+
+    for inner_name, inner_counter in guard_steps.items():
+        for outer_name, _outer_counter in guard_steps.items():
+            if inner_name == outer_name:
+                continue
+
+            outer_step = recipe.steps[outer_name]
+            if outer_step.on_result is None:
+                continue
+
+            non_exit_target: str | None = None
+            for cond in outer_step.on_result.conditions:
+                if cond.when and "max_exceeded" in cond.when:
+                    continue
+                non_exit_target = cond.route
+                break
+
+            if non_exit_target is None or non_exit_target not in recipe.steps:
+                continue
+
+            if inner_name not in bfs_reachable(graph, non_exit_target):
+                continue
+
+            reachable_to_inner = bfs_reachable(graph, non_exit_target)
+            if inner_name not in reachable_to_inner:
+                continue
+            cut_at: set[str] = set(reachable_to_inner) - {non_exit_target}
+            cut_at = {
+                n
+                for n in cut_at
+                if bfs_reachable(graph, n) and inner_name in bfs_reachable(graph, n)
+            }
+
+            has_reset = False
+            for sn in reachable_to_inner:
+                if sn == non_exit_target or sn == inner_name:
+                    continue
+                if sn in cut_at:
+                    continue
+                candidate = recipe.steps.get(sn)
+                if candidate is not None and inner_counter in candidate.capture:
+                    has_reset = True
+                    break
+
+            if not has_reset:
+                findings.append(
+                    make_finding(
+                        rule_name="loop-counter-not-reset-on-outer-cycle",
+                        step_name=inner_name,
+                        message=(
+                            f"Inner guard '{inner_name}' uses counter '{inner_counter}' "
+                            f"but is reachable from outer guard '{outer_name}' via "
+                            f"'{non_exit_target}' without a reset step. Add a step "
+                            f"using 'autoskillit.smoke_utils.init_counter' to capture "
+                            f"'{inner_counter}' on this path so each outer cycle gets "
+                            f"a fresh budget."
+                        ),
+                    )
+                )
+
+    return findings

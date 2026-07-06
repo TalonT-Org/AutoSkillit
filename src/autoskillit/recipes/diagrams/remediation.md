@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:0dd8a6d577c45dc893c71b1ad17f770901470f2e128bc911a6bdd35c9deb30ac -->
+<!-- autoskillit-recipe-hash: sha256:c0b46f2ed86362d2104bf8689e07345e746a29f01479ecae013e2c2e266a74d3 -->
 <!-- autoskillit-diagram-format: v7 -->
 ## remediation
 Investigate, rectify, implement, and merge a bug fix with CI and PR gates.

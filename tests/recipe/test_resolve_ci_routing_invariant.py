@@ -177,7 +177,7 @@ def test_resolve_ci_on_result_routes_escalation_verdicts_to_failure(
             continue
         cmd = (step.with_args or {}).get("skill_command", "")
         has_ci_context = any(v in cmd for v in _CI_CONTEXT_VARS)
-        for verdict in ("ci_only_failure",):
+        for verdict in ("no_test_infrastructure",):
             routes = [
                 cond.route
                 for cond in (step.on_result.conditions or [])
@@ -311,4 +311,54 @@ def test_check_flake_loop_step_exists(recipe_name: str) -> None:
     assert any("failure" in r or "escalat" in r for r in max_routes), (
         f"{recipe_name}: check_flake_loop max_exceeded=true must route to "
         f"a failure/escalation step, got routes: {max_routes}"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
+def test_ci_only_failure_routes_to_continuation(recipe_name: str) -> None:
+    """All resolve-failures steps must route ci_only_failure to continuation, not escalation."""
+    recipe_path = _RECIPES_DIR / recipe_name
+    recipe = load_recipe(recipe_path)
+    violations = []
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        cmd = (step.with_args or {}).get("skill_command", "")
+        if "resolve-failures" not in cmd:
+            continue
+        if step.on_result is None:
+            continue
+        for cond in step.on_result.conditions or []:
+            if cond.when and "ci_only_failure" in cond.when:
+                if _classify_route_target(cond.route) == "escalation":
+                    violations.append(f"{step_name}: ci_only_failure → {cond.route}")
+    assert not violations, (
+        f"{recipe_name}: ci_only_failure must route to continuation (re-diagnosis), "
+        f"not escalation. Violations: {violations}"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
+def test_ci_only_failure_routes_symmetric_across_steps(recipe_name: str) -> None:
+    """All resolve-failures steps must classify ci_only_failure to the same outcome category."""
+    recipe_path = _RECIPES_DIR / recipe_name
+    recipe = load_recipe(recipe_path)
+    classifications: list[tuple[str, str]] = []
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        cmd = (step.with_args or {}).get("skill_command", "")
+        if "resolve-failures" not in cmd:
+            continue
+        if step.on_result is None:
+            continue
+        for cond in step.on_result.conditions or []:
+            if cond.when and "ci_only_failure" in cond.when:
+                cls = _classify_route_target(cond.route)
+                classifications.append((step_name, cls))
+    assert classifications, f"{recipe_name}: no ci_only_failure routes found"
+    distinct = {cls for _, cls in classifications}
+    assert len(distinct) == 1, (
+        f"{recipe_name}: ci_only_failure classifies inconsistently across steps. "
+        f"Classifications: {classifications}. All steps must agree on continuation vs escalation."
     )

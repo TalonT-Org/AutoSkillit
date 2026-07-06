@@ -159,24 +159,25 @@ def test_resolve_ci_on_result_routes_real_fix_to_re_push(recipe_name: str) -> No
 def test_resolve_ci_on_result_routes_escalation_verdicts_to_failure(
     recipe_name: str,
 ) -> None:
-    """ci_only_failure must route to release_issue_failure."""
+    """no_test_infrastructure must always route to escalation regardless of CI context."""
     recipe_path = _RECIPES_DIR / recipe_name
     recipe = load_recipe(recipe_path)
     resolve_steps = _find_resolve_steps_reaching_push(recipe)
     for step_name, step in resolve_steps:
         if step.on_result is None:
             continue
-        for verdict in ("ci_only_failure",):
+        for verdict in ("no_test_infrastructure",):
             routes = [
                 cond.route
                 for cond in (step.on_result.conditions or [])
                 if cond.when and verdict in cond.when
             ]
             if not routes:
-                continue  # if not present yet, other tests catch missing verdict
+                continue
             assert any("failure" in r or "escalat" in r for r in routes), (
                 f"{recipe_name}/{step_name}: verdict={verdict} must route to "
-                f"a failure/escalation step, got routes: {routes}"
+                f"a failure/escalation step (no_test_infrastructure is always "
+                f"detectable regardless of CI context), got routes: {routes}"
             )
 
 
@@ -292,4 +293,54 @@ def test_check_flake_loop_step_exists(recipe_name: str) -> None:
     assert any("failure" in r or "escalat" in r for r in max_routes), (
         f"{recipe_name}: check_flake_loop max_exceeded=true must route to "
         f"a failure/escalation step, got routes: {max_routes}"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
+def test_ci_only_failure_routes_to_continuation(recipe_name: str) -> None:
+    """All resolve-failures steps must route ci_only_failure to continuation, not escalation."""
+    recipe_path = _RECIPES_DIR / recipe_name
+    recipe = load_recipe(recipe_path)
+    violations = []
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        cmd = (step.with_args or {}).get("skill_command", "")
+        if "resolve-failures" not in cmd:
+            continue
+        if step.on_result is None:
+            continue
+        for cond in step.on_result.conditions or []:
+            if cond.when and "ci_only_failure" in cond.when:
+                if _classify_route_target(cond.route) == "escalation":
+                    violations.append(f"{step_name}: ci_only_failure → {cond.route}")
+    assert not violations, (
+        f"{recipe_name}: ci_only_failure must route to continuation (re-diagnosis), "
+        f"not escalation. Violations: {violations}"
+    )
+
+
+@pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
+def test_ci_only_failure_routes_symmetric_across_steps(recipe_name: str) -> None:
+    """All resolve-failures steps must classify ci_only_failure to the same outcome category."""
+    recipe_path = _RECIPES_DIR / recipe_name
+    recipe = load_recipe(recipe_path)
+    classifications: list[tuple[str, str]] = []
+    for step_name, step in recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        cmd = (step.with_args or {}).get("skill_command", "")
+        if "resolve-failures" not in cmd:
+            continue
+        if step.on_result is None:
+            continue
+        for cond in step.on_result.conditions or []:
+            if cond.when and "ci_only_failure" in cond.when:
+                cls = _classify_route_target(cond.route)
+                classifications.append((step_name, cls))
+    assert classifications, f"{recipe_name}: no ci_only_failure routes found"
+    distinct = {cls for _, cls in classifications}
+    assert len(distinct) == 1, (
+        f"{recipe_name}: ci_only_failure classifies inconsistently across steps. "
+        f"Classifications: {classifications}. All steps must agree on continuation vs escalation."
     )

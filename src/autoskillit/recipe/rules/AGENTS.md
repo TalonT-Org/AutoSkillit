@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (49 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis (53 flat rule files + 4 subdirectories).
 
 ## Subdirectories
 
@@ -68,6 +68,7 @@ See each subdirectory's AGENTS.md for details.
 | `rules_terminal_convergence.py` | Success-stop reason uniqueness; detects convergent success paths with shared reasons |
 | `rules_tools.py` | MCP tool name validity (must be in known tool sets) |
 | `rules_verdict.py` | Skill verdict routing completeness and cross-step consistency |
+| `rules_verdict_context.py` | Verdict-context precondition: CI-dependent verdicts require CI context in skill invocation args |
 | `rules_verdict_degradation.py` | verdict-ungated-degradation: errors when degradation path emits a verdict used by nominal success path |
 | `rules_worktree.py` | Worktree and retry validation rules |
 

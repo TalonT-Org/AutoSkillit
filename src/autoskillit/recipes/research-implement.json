@@ -655,7 +655,7 @@
         },
         {
           "when": "${{ context.verdict }} == 'ci_only_failure'",
-          "route": "escalate_stop"
+          "route": "retest"
         },
         {
           "when": "${{ context.verdict }} == 'no_test_infrastructure'",

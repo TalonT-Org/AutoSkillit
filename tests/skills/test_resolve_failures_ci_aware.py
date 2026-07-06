@@ -289,20 +289,81 @@ def test_step2d_table_scoped_to_no_fix_path(skill_text: str) -> None:
     )
 
 
-def test_ci_only_failure_requires_no_fix_applied(skill_text: str) -> None:
-    """ci_only_failure must only be emittable when no fix was applied."""
+def _extract_invariant_paragraph(skill_text: str) -> str:
+    """Extract the invariant paragraph from SKILL.md.
+
+    Scoped to the single paragraph starting with **Invariant:** — does NOT
+    use re.DOTALL across the full document (which caused the 476059fbb
+    weakening to evade detection).
+    """
+    lines = skill_text.splitlines()
+    in_paragraph = False
+    collected: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not in_paragraph:
+            if stripped.startswith("**Invariant:**") or stripped.startswith("> **Invariant:**"):
+                in_paragraph = True
+                collected.append(stripped)
+            continue
+        if stripped == "":
+            break
+        if stripped.startswith("### "):
+            break
+        collected.append(stripped)
+    assert collected, "resolve-failures SKILL.md must contain an **Invariant:** paragraph"
+    return " ".join(collected)
+
+
+def test_ci_only_failure_invariant_paragraph_exists(skill_text: str) -> None:
+    """The invariant paragraph must exist with a clear anchor."""
+    invariant = _extract_invariant_paragraph(skill_text)
+    assert "ci_only_failure" in invariant, "Invariant paragraph must reference ci_only_failure"
+
+
+def test_ci_only_failure_invariant_requires_no_fix(skill_text: str) -> None:
+    """Invariant paragraph: ci_only_failure must require no-fix-applied.
+
+    Scoped to the invariant paragraph (not full-DOTALL across SKILL.md).
+    The weakening language from 476059fbb would appear WITHIN this paragraph.
+    """
+    invariant = _extract_invariant_paragraph(skill_text)
     assert re.search(
-        r"ci_only_failure.*(no fix|never.*fix.*applied|fixes_applied.*0|without.*commit)",
-        skill_text,
-        re.IGNORECASE | re.DOTALL,
-    ) or re.search(
-        r"(no fix|never.*fix|fixes_applied.*0).*ci_only_failure",
-        skill_text,
-        re.IGNORECASE | re.DOTALL,
+        r"ci_only_failure.*?(?:NEVER|must\s+not|is\s+not\s+emitted)",
+        invariant,
+        re.IGNORECASE,
     ), (
-        "resolve-failures SKILL.md must explicitly state that ci_only_failure "
-        "is only emitted when no fix was applied"
+        "Invariant paragraph must state ci_only_failure is NEVER/must not/is not emitted "
+        "when fixes_applied >= 1"
     )
+
+
+def test_ci_only_failure_invariant_not_weakened(skill_text: str) -> None:
+    """Invariant paragraph must not contain the weakening language from 476059fbb.
+
+    The weakening said: 'ci_only_failure MAY be emitted when fixes_applied >= 1'.
+    This test catches any attempt to re-introduce that exact softening.
+    """
+    invariant = _extract_invariant_paragraph(skill_text)
+    forbidden_phrases = (
+        "MAY be emitted when fixes_applied >= 1",
+        "MAY be emitted when fixes_applied>=1",
+        "may be emitted when fixes_applied",
+    )
+    for phrase in forbidden_phrases:
+        assert phrase not in invariant, (
+            f"Invariant paragraph must not contain weakening language: {phrase!r}. "
+            f"The invariant was weakened in 476059fbb; this test prevents regression."
+        )
+
+
+def test_ci_only_failure_hard_invariant_pinned(skill_text: str) -> None:
+    """Pin the hard invariant: ci_only_failure NEVER when fixes_applied >= 1."""
+    invariant = _extract_invariant_paragraph(skill_text)
+    assert re.search(
+        r"ci_only_failure.*NEVER.*fixes_applied\s*>=\s*1",
+        invariant,
+    ), "Invariant paragraph must contain 'ci_only_failure NEVER ... fixes_applied >= 1'"
 
 
 def test_step3_green_always_yields_real_fix(skill_text: str) -> None:
@@ -317,4 +378,48 @@ def test_step3_green_always_yields_real_fix(skill_text: str) -> None:
     assert "real_fix" in step3_text, "Step 3 must directly assign verdict = real_fix on green exit"
     assert "step 2d" not in step3_text.lower() or "do not" in step3_text.lower(), (
         "Step 3 must not redirect back to Step 2d for verdict evaluation"
+    )
+
+
+def test_step3_excludes_ci_only_failure(skill_text: str) -> None:
+    """Step 3 (fix loop) must NOT reference ci_only_failure.
+
+    ci_only_failure applies ONLY on the no-fix path (Step 2d). If it appears
+    in Step 3, it suggests Step 3 might emit ci_only_failure after applying
+    fixes — which violates the hard invariant.
+    """
+    step3_match = re.search(
+        r"### Step 3.*?(?=\n### Step [45]|\Z)",
+        skill_text,
+        re.DOTALL,
+    )
+    assert step3_match is not None, "### Step 3 section must exist in SKILL.md"
+    step3_text = step3_match.group(0)
+    assert "ci_only_failure" not in step3_text, (
+        "Step 3 (fix loop) must not reference ci_only_failure — that verdict is "
+        "only valid on the no-fix path (Step 2d, fixes_applied == 0)"
+    )
+
+
+def test_invariant_paragraph_no_permissive_ci_only_failure(skill_text: str) -> None:
+    """Invariant paragraph must not permit ci_only_failure with fixes_applied >= 1.
+
+    Specifically: no phrase matching ci_only_failure ... (allowed|permitted|may|valid)
+    in proximity to fixes_applied >= 1 or 'after a fix' or 'after the fix'.
+    """
+    invariant = _extract_invariant_paragraph(skill_text)
+    permissive = re.search(
+        r"ci_only_failure.*?(allowed|permitted|may\s+be\s+valid|may\s+be\s+emitted)",
+        invariant,
+        re.IGNORECASE,
+    )
+    after_fix = re.search(
+        r"(after\s+(a|the)\s+fix|fixes_applied\s*>=\s*1|fixes_applied\s*>=\s*1\s+if)",
+        invariant,
+        re.IGNORECASE,
+    )
+    assert not (permissive and after_fix), (
+        "Invariant paragraph must not permit ci_only_failure after fixes are applied. "
+        f"Found permissive phrase: {permissive.group(0) if permissive else None!r} "
+        f"near: {after_fix.group(0) if after_fix else None!r}"
     )

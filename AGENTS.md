@@ -33,6 +33,7 @@ A coding-agent plugin that orchestrates automated skill-driven workflows using h
     - `*Def` — static definition of a registered entity (e.g., `HookDef`, `PackDef`, `FeatureDef`, `RuleDef`). Typically a `NamedTuple` or `@dataclass(frozen=True)`, used as elements in a registry or lookup table. Typically lives in `core/`; stdlib-only types importable from hook scripts may live at the package root (e.g., `HookDef` in `hook_registry.py`).
     - `*Spec` — behavioral specification or validation rule (e.g., `ExperimentTypeSpec`, `WriteBehaviorSpec`). Typically a `@dataclass` or `TypedDict` configuring a pipeline or validation stage. Typically lives in `recipe/` or domain layers; `*Spec` types used by IL-0 core protocols live in `core/` (e.g., `WriteBehaviorSpec` in `core/types/_type_results.py`).
   * **Commit discipline**: Always create NEW commits. Never use `git commit --amend`, `--fixup`, or `--squash` unless the active recipe or SKILL.md explicitly requires it. This applies to all session types including headless sessions.
+  * **Multi-part plan green-gate invariant**: Every part of a multi-part plan must independently pass `task test-check`. If a part's changes invalidate a pre-existing test, that test must be updated, removed, or marked `xfail(strict=True)` in the same part. The `xfail(strict=True)` bridge is the canonical mechanism: `check_test_passed` ignores xfailed counts; `strict=True` forces cleanup when the xfail condition is resolved.
 
 #### **3.1.a. Pre-commit Hooks**
 

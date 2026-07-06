@@ -330,10 +330,10 @@ on `verdict`:
 - `ci_only_failure` → `release_issue_failure` (human escalation)
 - `no_test_infrastructure` → `release_issue_failure` / `escalate_stop` / `register_clone_failure` (depending on recipe)
 
-**Invariant:** `ci_only_failure` MAY be emitted when `fixes_applied >= 1` if the remaining
-failures (after the fix) are all CI-only. The verdict reflects the status of the remaining
-failures, not whether fixes were applied. If a fix was committed and all tests pass, the
-verdict is `real_fix`.
+**Invariant:** `ci_only_failure` is NEVER emitted when `fixes_applied >= 1`. The Step 2d
+decision table applies ONLY on the no-fix path (`fixes_applied == 0`). If a fix was
+committed and all tests pass, the verdict is `real_fix`. If a fix was committed but some
+tests still fail, re-enter the fix loop — do not fall through to Step 2d.
 
 ### Step 5: Report Failure
 - Total fix iterations attempted

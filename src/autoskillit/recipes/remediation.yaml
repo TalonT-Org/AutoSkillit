@@ -670,7 +670,7 @@ steps:
     - when: ${{ result.verdict }} == 'flake_suspected'
       route: test
     - when: ${{ result.verdict }} == 'ci_only_failure'
-      route: release_issue_failure
+      route: test
     - when: ${{ result.verdict }} == 'no_test_infrastructure'
       route: release_issue_failure
     - route: release_issue_failure
@@ -726,7 +726,7 @@ steps:
     - when: ${{ result.verdict }} == 'flake_suspected'
       route: merge_gate_test
     - when: ${{ result.verdict }} == 'ci_only_failure'
-      route: release_issue_failure
+      route: merge_gate_test
     - when: ${{ result.verdict }} == 'no_test_infrastructure'
       route: release_issue_failure
     - route: release_issue_failure
@@ -1203,7 +1203,7 @@ steps:
     - when: ${{ result.verdict }} == 'flake_suspected'
       route: pre_review_rebase
     - when: ${{ result.verdict }} == 'ci_only_failure'
-      route: release_issue_failure
+      route: pre_review_rebase
     - route: release_issue_failure
     on_failure: release_issue_failure
     optional: true
@@ -1213,8 +1213,8 @@ steps:
       resolve-review fetches inline and summary review comments via the GitHub API,
       applies fixes for each actionable finding (critical + warning severity), and
       commits each fix. Routes via on_result: verdict dispatch — real_fix/already_green/
-      flake_suspected all route to pre_review_rebase (fetch+rebase before push); ci_only_failure
-      escalates to release_issue_failure.
+      flake_suspected/ci_only_failure all route to pre_review_rebase (fetch+rebase
+      before push); ci_only_failure cannot be emitted without CI context.
 
       '
     optional_context_refs:
@@ -2216,7 +2216,7 @@ steps:
     - when: ${{ result.verdict }} == 'flake_suspected'
       route: check_flake_loop
     - when: ${{ result.verdict }} == 'ci_only_failure'
-      route: release_issue_failure
+      route: check_flake_loop
     - when: ${{ result.verdict }} == 'no_test_infrastructure'
       route: release_issue_failure
     - route: release_issue_failure
@@ -2226,7 +2226,8 @@ steps:
       on_result: verdict dispatch — real_fix pushes, already_green rebases and re-diagnoses
       (sibling fix may have landed), flake_suspected routes to check_flake_loop (bounded
       by ci_flake_count <= 3, shared across all diagnose_ci callers; escalates to
-      release_issue_failure when exceeded), ci_only_failure escalates to human.
+      release_issue_failure when exceeded), ci_only_failure routes to check_flake_loop
+      (bounded retry, then escalates via max_exceeded).
       Retries up to 2 times (3 total attempts) before exhausting to release_issue_failure.
 
       '

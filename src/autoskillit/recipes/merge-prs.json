@@ -1194,7 +1194,7 @@
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
-          "route": "register_clone_failure"
+          "route": "test"
         },
         {
           "when": "${{ result.verdict }} == 'no_test_infrastructure'",
@@ -1564,7 +1564,7 @@
         },
         {
           "when": "${{ result.verdict }} == 'ci_only_failure'",
-          "route": "register_clone_failure"
+          "route": "pre_review_rebase_integration"
         },
         {
           "route": "register_clone_failure"

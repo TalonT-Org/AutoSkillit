@@ -158,6 +158,20 @@ PROJECT RULES CHECKLIST:
 
 **Architectural constraint enforcement:** Read the Architectural Constraint Catalog table in `resolve-review/SKILL.md` (under the heading "Architectural Constraint Catalog — consult before classifying ACCEPT"). For each code sample or code block in the plan, verify it does not violate any cataloged constraint. If a violation is found, flag it with the constraint name and enforcing test file, and note the required alternative (e.g., "Plan line 260 uses `.write_text()` — REQ-AST-002 requires `_atomic_write()`").
 
+### Step 4.3: Pipeline Gate Compatibility Check
+
+Scan the plan text (this part only — do not read other parts) for any statement that a test is expected to fail after implementation. Detectable patterns include:
+- "test will fail" / "test is expected to fail" / "test remains red"
+- "exception of test_X" / "single expected failure"
+- "deferred to Part [B/C/...]" in the context of test changes
+- "removal deferred" / "deletion deferred" for test files
+
+**If any such pattern is found:** Emit `Dry Walkthrough FAILED` with reason: "Plan declares expected test failure after implementation — gate incompatible. Each part must independently pass the test gate. Use xfail(strict=True) bridging or co-locate the test change."
+
+This check does not require cross-part reading — a plan declaring a post-part red test in its own text is gate-incompatible by definition.
+
+Stop execution — do not proceed to Step 5.
+
 ### Step 4.5: Historical Regression Check
 
 Run a lightweight two-part scan to detect whether the plan risks reintroducing

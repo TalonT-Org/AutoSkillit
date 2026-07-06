@@ -341,6 +341,9 @@ If the plan exceeds 500 lines, split it into multiple files (`_part_a`, `_part_b
 - Include only a brief plain-text note about what subsequent parts cover (e.g., "Part B will cover X and Y — implement as a separate task").
 - The title of each part file MUST include `— PART A ONLY` (or B, C, etc.) so scope is immediately visible.
 - Each part file MUST open with the scope warning block shown in the multi-part template below.
+- **Every part MUST independently pass `task test-check`.** A part that registers a symbol, adds a route, or changes behavior that causes a pre-existing test to fail must also update, remove, or `xfail`-bridge that test in the same part. Split boundaries must keep gate-prerequisites with the code that triggers them.
+  - **`xfail(strict=True)` bridge:** When a test must temporarily fail during a multi-part implementation (e.g., a deletion-guard canary that will be removed in a later part), mark it with `pytest.mark.xfail(strict=True, reason="<symbol> registered in Part X; guard removed in Part Y")` in the current part. `check_test_passed` ignores xfailed counts, so the gate passes. `strict=True` ensures the xfail mark is removed when the guard is deleted — if the test starts passing unexpectedly (because the later part landed), CI breaks until the mark is cleaned up.
+  - **Deletion-guard canaries** (tests asserting a name/symbol/command is absent) must be removed or xfail-bridged in the same part that re-registers the name. Never defer canary removal to a later part.
 
 Save the plan to: `{{AUTOSKILLIT_TEMP}}/make-plan/{task_name}_plan_{YYYY-MM-DD_HHMMSS}.md` (relative to the current working directory)
 

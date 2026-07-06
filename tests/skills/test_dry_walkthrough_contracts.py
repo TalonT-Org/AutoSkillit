@@ -5,6 +5,8 @@ for Step 4.5: Historical Regression Check — the git history scan and
 GitHub issues cross-reference between Step 4 (Project Rules) and Step 5 (Fix Plan).
 """
 
+import re
+
 import pytest
 
 from autoskillit.core.paths import pkg_root
@@ -36,6 +38,33 @@ def test_dry_walkthrough_has_historical_regression_step(skill_text: str) -> None
     assert "Step 4.5" in skill_text, (
         "dry-walkthrough SKILL.md must contain a 'Step 4.5: Historical Regression Check' "
         "section inserted between Step 4 (Project Rules) and Step 5 (Fix the Plan)"
+    )
+
+
+def test_dry_walkthrough_rejects_plan_declared_test_failure(skill_text: str) -> None:
+    """dry-walkthrough must FAIL when the plan declares an expected test failure."""
+    assert re.search(
+        r"(plan|text)\s+(states?|declares?|admits?|expects?)\s+.*(test|gate)\s+.*(fail|red|break)",
+        skill_text,
+        re.IGNORECASE | re.DOTALL,
+    ) and re.search(
+        r"(FAIL|block|reject|error)",
+        skill_text,
+        re.IGNORECASE,
+    ), (
+        "dry-walkthrough SKILL.md must contain a blocking check that rejects "
+        "plans declaring expected test failures"
+    )
+
+
+def test_dry_walkthrough_has_gate_compatibility_step() -> None:
+    """dry-walkthrough must contain a Step 4.3: Pipeline Gate Compatibility Check section."""
+    skill_path = pkg_root() / "skills_extended" / "dry-walkthrough" / "SKILL.md"
+    content = skill_path.read_text()
+    assert "Step 4.3" in content, (
+        "dry-walkthrough SKILL.md must contain a 'Step 4.3: Pipeline Gate "
+        "Compatibility Check' section inserted between Step 4 (Project Rules) "
+        "and Step 4.5 (Historical Regression Check)"
     )
 
 

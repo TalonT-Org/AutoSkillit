@@ -359,9 +359,10 @@ def test_ci_only_failure_invariant_not_weakened(skill_text: str) -> None:
 
 def test_ci_only_failure_hard_invariant_pinned(skill_text: str) -> None:
     """Pin the hard invariant: ci_only_failure NEVER when fixes_applied >= 1."""
+    invariant = _extract_invariant_paragraph(skill_text)
     assert re.search(
-        r"\*\*Invariant:\*\*.*ci_only_failure.*NEVER.*fixes_applied\s*>=\s*1",
-        skill_text,
+        r"ci_only_failure.*NEVER.*fixes_applied\s*>=\s*1",
+        invariant,
     ), "Invariant paragraph must contain 'ci_only_failure NEVER ... fixes_applied >= 1'"
 
 

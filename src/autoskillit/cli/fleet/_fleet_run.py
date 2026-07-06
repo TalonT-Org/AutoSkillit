@@ -5,11 +5,16 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from cyclopts import Parameter
 
 from autoskillit.core import get_logger, is_feature_enabled
+
+if TYPE_CHECKING:
+    from autoskillit.config import AutomationConfig
+    from autoskillit.core import CodingAgentBackend
+    from autoskillit.fleet import DispatchResult
 
 logger = get_logger(__name__)
 
@@ -18,6 +23,75 @@ def _fleet_run_error(error: str, message: str, exit_code: int = 1) -> NoReturn:
     envelope = {"success": False, "error": error, "user_visible_message": message}
     print(json.dumps(envelope))
     raise SystemExit(exit_code)
+
+
+async def _execute_fleet_run(
+    cfg: AutomationConfig,
+    recipe: str,
+    task: str,
+    ingredients: dict[str, str] | None,
+    timeout_sec: int | None,
+    dispatch_backend: CodingAgentBackend | None,
+    resume_session_id: str | None,
+    prior_dispatch_id: str | None,
+    disable_quota_guard: bool,
+) -> DispatchResult:
+    import functools
+
+    from autoskillit.core import detect_autoskillit_mcp_prefix
+    from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
+    from autoskillit.server._factory import make_context
+
+    ctx = make_context(cfg, project_dir=Path.cwd())
+
+    effective_backend = dispatch_backend or ctx.backend
+    has_ufa = (
+        effective_backend.capabilities.has_unguarded_filesystem_access
+        if effective_backend
+        else False
+    )
+    prompt_builder = functools.partial(
+        _build_food_truck_prompt,
+        mcp_prefix=detect_autoskillit_mcp_prefix(),
+        has_unguarded_filesystem_access=has_ufa,
+    )
+
+    if disable_quota_guard:
+
+        async def quota_checker(_cfg: object) -> dict[str, object]:
+            return {"should_sleep": False}
+    else:
+        from autoskillit.execution import check_and_sleep_if_needed
+
+        _supports_quota = (
+            effective_backend.capabilities.anthropic_provider_capable
+            if effective_backend
+            else True
+        )
+
+        async def quota_checker(_cfg: object) -> dict[str, object]:
+            return await check_and_sleep_if_needed(
+                _cfg, provider="anthropic" if _supports_quota else ""
+            )
+
+    async def quota_refresher(_cfg: object) -> None:
+        pass
+
+    return await execute_dispatch(
+        tool_ctx=ctx,
+        recipe=recipe,
+        task=task,
+        ingredients=ingredients,
+        dispatch_name=None,
+        timeout_sec=timeout_sec,
+        prompt_builder=prompt_builder,
+        quota_checker=quota_checker,
+        quota_refresher=quota_refresher,
+        cache_invalidator=None,
+        resume_session_id=resume_session_id,
+        prior_dispatch_id=prior_dispatch_id,
+        dispatch_backend=dispatch_backend,
+    )
 
 
 def fleet_run(
@@ -78,8 +152,65 @@ def fleet_run(
             "Or: AUTOSKILLIT_FEATURES__FLEET_HEADLESS_RUN=true",
         )
 
-    # --- Part B implements the dispatch body here ---
-    _fleet_run_error(
-        "FLEET_NOT_IMPLEMENTED",
-        "'fleet run' dispatch is not yet implemented. See Part B.",
-    )
+    # --- Parse ingredients ---
+    ingredients: dict[str, str] | None = None
+    if ingredient:
+        ingredients = {}
+        for item in ingredient:
+            if "=" not in item:
+                _fleet_run_error(
+                    "FLEET_INVALID_ARGUMENT",
+                    f"Ingredient must be key=value, got: {item!r}",
+                )
+            k, v = item.split("=", 1)
+            ingredients[k] = v
+
+    # --- Resolve backend ---
+    dispatch_backend = None
+    if backend is not None:
+        from autoskillit.server._misc import resolve_backend_override
+
+        try:
+            dispatch_backend = resolve_backend_override(backend)
+        except ValueError as exc:
+            _fleet_run_error("FLEET_INVALID_BACKEND", str(exc))
+
+    # --- Run dispatch ---
+    import asyncio
+
+    from autoskillit.fleet import DispatchRejected, DispatchStatus
+
+    try:
+        result = asyncio.run(
+            _execute_fleet_run(
+                cfg=cfg,
+                recipe=recipe,
+                task=task,
+                ingredients=ingredients,
+                timeout_sec=timeout_sec,
+                dispatch_backend=dispatch_backend,
+                resume_session_id=resume_session_id,
+                prior_dispatch_id=prior_dispatch_id,
+                disable_quota_guard=disable_quota_guard,
+            )
+        )
+    except (KeyboardInterrupt, SystemExit) as exc:
+        logger.error("fleet run: dispatch interrupted: %s", exc)
+        _fleet_run_error(
+            "FLEET_DISPATCH_INTERRUPTED", "Dispatch interrupted by signal.", exit_code=1
+        )
+    except BaseException as exc:
+        logger.error("fleet run: dispatch crashed", exc_info=True)
+        _fleet_run_error("FLEET_L3_STARTUP_OR_CRASH", str(exc))
+
+    # --- Output result envelope ---
+    print(result.outcome.to_envelope())
+
+    # --- Exit code (DispatchRejected has no .success/.dispatch_status — check it first) ---
+    if isinstance(result.outcome, DispatchRejected):
+        raise SystemExit(3)
+    if result.outcome.success:
+        raise SystemExit(0)
+    if result.outcome.dispatch_status == DispatchStatus.RESUMABLE:
+        raise SystemExit(2)
+    raise SystemExit(1)

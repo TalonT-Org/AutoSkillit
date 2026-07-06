@@ -194,12 +194,12 @@ def fleet_run(
                 disable_quota_guard=disable_quota_guard,
             )
         )
-    except (KeyboardInterrupt, SystemExit) as exc:
+    except KeyboardInterrupt as exc:
         logger.error("fleet run: dispatch interrupted: %s", exc)
         _fleet_run_error(
             "FLEET_DISPATCH_INTERRUPTED", "Dispatch interrupted by signal.", exit_code=1
         )
-    except BaseException as exc:
+    except Exception as exc:
         logger.error("fleet run: dispatch crashed", exc_info=True)
         _fleet_run_error("FLEET_L3_STARTUP_OR_CRASH", str(exc))
 

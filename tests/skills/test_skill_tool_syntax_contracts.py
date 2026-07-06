@@ -9,7 +9,11 @@ from pathlib import Path
 import pytest
 
 from autoskillit.recipe._skill_placeholder_parser import extract_bash_blocks
-from autoskillit.recipe.rules.rules_skill_content import _GIT_GREP_BRE_RE, _GREP_BRE_ALTERNATION_RE
+from autoskillit.recipe.rules.rules_skill_content import (
+    _GIT_GREP_BRE_RE,
+    _GREP_BRE_ALTERNATION_RE,
+    _POSIX_CHAR_CLASS_RE,
+)
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -62,4 +66,37 @@ def test_no_grep_bre_alternation_in_bash_blocks(skill_dir: Path) -> None:
         + "\n".join(violations)
         + "\n\nFix: replace `grep 'foo\\|bar'` with `rg 'foo|bar'` "
         "(ripgrep ERE matches Grep tool syntax)."
+    )
+
+
+@pytest.mark.parametrize("skill_dir", _all_skill_dirs())
+def test_no_posix_char_class_in_bash_blocks(skill_dir: Path) -> None:
+    """No SKILL.md bash block should contain POSIX bracket expressions ([[:space:]], etc.).
+
+    POSIX bracket expressions are valid in grep -E but silently mis-parsed by Python re:
+    `[[:space:]]` becomes a character class containing the literal characters [ : s p a c e,
+    not whitespace. Models that copy these patterns into Python code or ripgrep invocations
+    get silently wrong matches.
+
+    Use the portable Python re / ripgrep-compatible equivalent:
+    [[:space:]] → [ \\t] or just [ \t]    (whitespace class)
+    [[:alnum:]] → [A-Za-z0-9]
+    [[:digit:]] → [0-9]
+    """
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        return
+    bash_blocks = extract_bash_blocks(skill_md.read_text())
+    violations: list[str] = []
+    for block in bash_blocks:
+        for line in block.splitlines():
+            if _POSIX_CHAR_CLASS_RE.search(line):
+                violations.append(f"  Line: {line.strip()!r}")
+    assert not violations, (
+        f"{skill_md.relative_to(Path.cwd())} contains POSIX bracket expressions "
+        f"([[:space:]], [[:alnum:]], etc.) in bash blocks:\n"
+        + "\n".join(violations)
+        + "\n\nThese are valid in grep -E but silently mis-parsed by Python re. "
+        + "Use portable Python re / ripgrep equivalents instead, e.g. "
+        + "[[:space:]_-] → [ _-]"
     )

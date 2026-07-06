@@ -75,10 +75,6 @@ class TestFleetRunGates:
     ) -> None:
         """fleet_run exits with FLEET_SESSION_TYPE_BLOCKED when SESSION_TYPE=leaf."""
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaf")
-        monkeypatch.setattr(
-            "autoskillit.config.load_config",
-            lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
-        )
         from autoskillit.cli.fleet import fleet_run
 
         with pytest.raises(SystemExit) as exc_info:
@@ -94,10 +90,6 @@ class TestFleetRunGates:
     ) -> None:
         """fleet_run exits with FLEET_SESSION_TYPE_BLOCKED when SESSION_TYPE=skill."""
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
-        monkeypatch.setattr(
-            "autoskillit.config.load_config",
-            lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
-        )
         from autoskillit.cli.fleet import fleet_run
 
         with pytest.raises(SystemExit) as exc_info:
@@ -386,8 +378,6 @@ class TestFleetRunDispatch:
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
         )
 
-        from autoskillit.execution import check_and_sleep_if_needed
-
         fake_ctx = MagicMock()
         fake_ctx.backend = None
         fake_ctx.config = MagicMock()
@@ -413,8 +403,11 @@ class TestFleetRunDispatch:
         with pytest.raises(SystemExit):
             fleet_run("test-recipe", task="test", disable_quota_guard=True)
 
+        import asyncio
+
         quota_checker = captured["quota_checker"]
-        assert quota_checker is not check_and_sleep_if_needed
+        result = asyncio.run(quota_checker(None))
+        assert result == {"should_sleep": False}
 
     def test_fleet_run_passes_resume_params(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """--resume-session-id and --prior-dispatch-id are forwarded to execute_dispatch."""
@@ -465,7 +458,10 @@ class TestFleetRunDispatch:
             fake_make_context,
         )
 
+        dispatch_ctx: list[object] = []
+
         async def fake_execute_dispatch(**kwargs: object) -> DispatchResult:
+            dispatch_ctx.append(kwargs.get("tool_ctx"))
             return _mock_success_result()
 
         monkeypatch.setattr(
@@ -479,4 +475,5 @@ class TestFleetRunDispatch:
             fleet_run("test-recipe", task="test")
 
         assert len(make_context_calls) == 1
-        assert fake_ctx.fleet_lock is not None
+        assert len(dispatch_ctx) == 1
+        assert dispatch_ctx[0] is fake_ctx

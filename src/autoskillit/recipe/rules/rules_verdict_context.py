@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 _CI_CONTEXT_DEPENDENT_VERDICTS = frozenset({"ci_only_failure"})
 
 _CI_CONTEXT_VAR_PATTERN = re.compile(
-    r"(?:context\.)?(?:diagnosis_path|ci_conclusion|merge_gate_ci_conclusion"
+    r"(?:\{\{.*?)?context\.(?:diagnosis_path|ci_conclusion|merge_gate_ci_conclusion"
     r"|merge_gate_diagnosis_path|ci_failed_jobs)"
 )
 

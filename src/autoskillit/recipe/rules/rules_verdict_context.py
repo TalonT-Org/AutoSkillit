@@ -77,7 +77,7 @@ def _check_verdict_context_precondition(ctx: ValidationContext) -> list[RuleFind
         if not ci_context_values:
             continue
 
-        if not _CI_CONTEXT_VAR_PATTERN.search(skill_command):
+        if _CI_CONTEXT_VAR_PATTERN.search(skill_command):
             continue
 
         if not step.on_result or not step.on_result.conditions:

@@ -879,7 +879,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "hooks": 14,  # +recipe_confirmed_post_hook.py
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
-        "recipe/rules": 53,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral  # noqa: E501
+        "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501
         "server/tools": 28,  # +_preflight.py +_authority_feedback.py
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
         "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py

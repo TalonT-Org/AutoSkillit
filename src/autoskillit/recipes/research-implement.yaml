@@ -610,7 +610,7 @@ steps:
     - when: "${{ context.verdict }} == 'flake_suspected'"
       route: retest
     - when: "${{ context.verdict }} == 'ci_only_failure'"
-      route: escalate_stop
+      route: retest
     - when: "${{ context.verdict }} == 'no_test_infrastructure'"
       route: escalate_stop
     - route: escalate_stop

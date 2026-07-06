@@ -49,7 +49,7 @@ _MANIFEST: dict = {
 
 
 def _make_fix_step_no_ci_context() -> RecipeStep:
-    """Pre-merge `fix` step: no CI context in skill_command, routes ci_only_failure to escalation."""
+    """Pre-merge fix step: no CI context, routes ci_only_failure to escalation."""
     return RecipeStep(
         name="fix",
         tool="run_skill",
@@ -169,7 +169,7 @@ def _make_recipe_with_non_terminal_route() -> Recipe:
 def test_verdict_context_precondition_fires_on_fix_step_without_ci_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Rule fires ERROR when a pre-merge fix step has no CI context but routes ci_only_failure to escalation."""
+    """Rule fires ERROR when fix step has no CI context but routes to escalation."""
     monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: _MANIFEST)
 
     recipe = _make_recipe_with_fix_step()

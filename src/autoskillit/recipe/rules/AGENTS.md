@@ -1,6 +1,6 @@
 # rules/
 
-Semantic validation rule modules for recipe analysis (50 flat rule files + 4 subdirectories).
+Semantic validation rule modules for recipe analysis (53 flat rule files + 4 subdirectories).
 
 ## Subdirectories
 

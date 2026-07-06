@@ -155,28 +155,17 @@ def test_resolve_ci_on_result_routes_real_fix_to_re_push(recipe_name: str) -> No
         )
 
 
-_CI_CONTEXT_VARS = (
-    "diagnosis_path",
-    "ci_conclusion",
-    "merge_gate_ci_conclusion",
-    "merge_gate_diagnosis_path",
-    "ci_failed_jobs",
-)
-
-
 @pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)
 def test_resolve_ci_on_result_routes_escalation_verdicts_to_failure(
     recipe_name: str,
 ) -> None:
-    """ci_only_failure must route to escalation only when CI context is available."""
+    """no_test_infrastructure must always route to escalation regardless of CI context."""
     recipe_path = _RECIPES_DIR / recipe_name
     recipe = load_recipe(recipe_path)
     resolve_steps = _find_resolve_steps_reaching_push(recipe)
     for step_name, step in resolve_steps:
         if step.on_result is None:
             continue
-        cmd = (step.with_args or {}).get("skill_command", "")
-        has_ci_context = any(v in cmd for v in _CI_CONTEXT_VARS)
         for verdict in ("no_test_infrastructure",):
             routes = [
                 cond.route
@@ -185,18 +174,11 @@ def test_resolve_ci_on_result_routes_escalation_verdicts_to_failure(
             ]
             if not routes:
                 continue
-            if has_ci_context:
-                assert any("failure" in r or "escalat" in r for r in routes), (
-                    f"{recipe_name}/{step_name}: verdict={verdict} must route to "
-                    f"a failure/escalation step when CI context is available, "
-                    f"got routes: {routes}"
-                )
-            else:
-                assert not any("failure" in r or "escalat" in r for r in routes), (
-                    f"{recipe_name}/{step_name}: verdict={verdict} must NOT route "
-                    f"to escalation without CI context (verdict is semantically "
-                    f"impossible), got routes: {routes}"
-                )
+            assert any("failure" in r or "escalat" in r for r in routes), (
+                f"{recipe_name}/{step_name}: verdict={verdict} must route to "
+                f"a failure/escalation step (no_test_infrastructure is always "
+                f"detectable regardless of CI context), got routes: {routes}"
+            )
 
 
 @pytest.mark.parametrize("recipe_name", _PIPELINE_RECIPES)

@@ -207,19 +207,17 @@ def _check_loop_guard_before_verify(ctx: ValidationContext) -> list[RuleFinding]
     severity=Severity.ERROR,
 )
 def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list[RuleFinding]:
-    """Detect temporal counter sharing across outer-loop iterations.
+    """Detect temporal counter sharing across outer audit-remediation cycles.
 
-    When an outer guard (e.g. check_audit_remediation_loop) loops back into
-    the recipe's main flow on the non-max_exceeded branch, any inner guard
-    (e.g. check_test_fix_loop) whose counter variable is captured along that
-    path will accumulate across outer iterations unless a step resets it.
+    When the audit-remediation outer loop re-enters the implementation
+    sub-cycle, any inner guard whose counter variable is captured along that
+    path (e.g. test_fix_loop_count) will accumulate across outer iterations
+    unless a step resets it via autoskillit.smoke_utils.init_counter.
 
-    Algorithm:
-    1. For each check_loop_iteration step (inner guard), identify its counter.
-    2. For each OTHER check_loop_iteration step (outer guard), check if the
-       inner guard is reachable from the outer guard's non-max_exceeded route.
-    3. If reachable, walk the intermediate steps (barrier = inner guard).
-    4. Emit a finding if no intermediate step captures the inner counter.
+    Scoped to outer guards whose counter variable indicates an audit-
+    remediation cycle (audit_remediation_count) — other outer/inner guard
+    relationships (e.g. merge_fix wrapping merge_rebase) have separate
+    reset mechanisms and are out of scope for this rule.
     """
     findings: list[RuleFinding] = []
     recipe = ctx.recipe
@@ -240,8 +238,17 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
     if len(guard_steps) < 2:
         return findings
 
+    audit_outer_guards = {
+        name for name, counter in guard_steps.items() if "audit_remediation" in counter
+    }
+    if not audit_outer_guards:
+        return findings
+
     for inner_name, inner_counter in guard_steps.items():
-        for outer_name, _outer_counter in guard_steps.items():
+        if guard_steps[inner_name] in audit_outer_guards:
+            continue
+
+        for outer_name in audit_outer_guards:
             if inner_name == outer_name:
                 continue
 
@@ -259,24 +266,13 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
             if non_exit_target is None or non_exit_target not in recipe.steps:
                 continue
 
-            if inner_name not in bfs_reachable(graph, non_exit_target):
-                continue
-
             reachable_to_inner = bfs_reachable(graph, non_exit_target)
             if inner_name not in reachable_to_inner:
                 continue
-            cut_at: set[str] = set(reachable_to_inner) - {non_exit_target}
-            cut_at = {
-                n
-                for n in cut_at
-                if bfs_reachable(graph, n) and inner_name in bfs_reachable(graph, n)
-            }
 
             has_reset = False
             for sn in reachable_to_inner:
                 if sn == non_exit_target or sn == inner_name:
-                    continue
-                if sn in cut_at:
                     continue
                 candidate = recipe.steps.get(sn)
                 if candidate is not None and inner_counter in candidate.capture:
@@ -290,11 +286,12 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
                         step_name=inner_name,
                         message=(
                             f"Inner guard '{inner_name}' uses counter '{inner_counter}' "
-                            f"but is reachable from outer guard '{outer_name}' via "
-                            f"'{non_exit_target}' without a reset step. Add a step "
-                            f"using 'autoskillit.smoke_utils.init_counter' to capture "
-                            f"'{inner_counter}' on this path so each outer cycle gets "
-                            f"a fresh budget."
+                            f"but is reachable from audit-remediation guard "
+                            f"'{outer_name}' via '{non_exit_target}' without a reset "
+                            f"step. Add a step using "
+                            f"'autoskillit.smoke_utils.init_counter' to capture "
+                            f"'{inner_counter}' on this path so each audit-remediation "
+                            f"cycle gets a fresh budget."
                         ),
                     )
                 )

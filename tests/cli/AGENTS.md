@@ -43,6 +43,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_fleet_campaign_preview.py` | Tests: fleet_campaign shows preview + confirmation before launch |
 | `test_fleet_dispatch.py` | Tests: fleet CLI dispatch command |
 | `test_fleet_list.py` | Tests: fleet CLI list command |
+| `test_fleet_run.py` | Tests: fleet CLI run command gates — session-type guard, feature gates, CLAUDECODE relaxation |
 | `test_fleet_session.py` | Tests: _launch_fleet_session forwards ingredients_table to prompt builder |
 | `test_fleet_split.py` | Structural guard for fleet test split |
 | `test_fleet_status.py` | Tests: fleet CLI status command |

@@ -60,6 +60,17 @@ FEATURE_REGISTRY: dict[str, FeatureDef] = {
         default_enabled=False,
         since_version="0.9.119",
     ),
+    "fleet_headless_run": FeatureDef(
+        lifecycle=FeatureLifecycle.EXPERIMENTAL,
+        description="Headless one-shot recipe dispatch via CLI (fleet run)",
+        tool_tags=frozenset(),
+        skill_categories=frozenset(),
+        import_package=None,
+        tier=1,
+        default_enabled=False,
+        depends_on=frozenset({"fleet"}),
+        since_version="0.10.845",
+    ),
     "planner": FeatureDef(
         lifecycle=FeatureLifecycle.EXPERIMENTAL,
         description=(

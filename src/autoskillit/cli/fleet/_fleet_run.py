@@ -40,7 +40,7 @@ async def _execute_fleet_run(
 
     from autoskillit.core import detect_autoskillit_mcp_prefix
     from autoskillit.fleet import _build_food_truck_prompt, execute_dispatch
-    from autoskillit.server._factory import make_context
+    from autoskillit.server import make_context
 
     ctx = make_context(cfg, project_dir=Path.cwd())
 
@@ -168,7 +168,7 @@ def fleet_run(
     # --- Resolve backend ---
     dispatch_backend = None
     if backend is not None:
-        from autoskillit.server._misc import resolve_backend_override
+        from autoskillit.server import resolve_backend_override
 
         try:
             dispatch_backend = resolve_backend_override(backend)

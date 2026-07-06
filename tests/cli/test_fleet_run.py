@@ -235,7 +235,7 @@ class TestFleetRunDispatch:
         fake_backend = MagicMock()
         fake_backend.name = "claude-code"
         monkeypatch.setattr(
-            "autoskillit.server._misc.resolve_backend_override",
+            "autoskillit.server.resolve_backend_override",
             lambda name: fake_backend,
         )
         captured_args: dict[str, object] = {}
@@ -267,7 +267,7 @@ class TestFleetRunDispatch:
             raise ValueError(f"Unknown backend {name!r}. Valid names: claude-code, codex")
 
         monkeypatch.setattr(
-            "autoskillit.server._misc.resolve_backend_override",
+            "autoskillit.server.resolve_backend_override",
             fake_resolve,
         )
         from autoskillit.cli.fleet import fleet_run
@@ -392,7 +392,7 @@ class TestFleetRunDispatch:
         fake_ctx.backend = None
         fake_ctx.config = MagicMock()
         monkeypatch.setattr(
-            "autoskillit.server._factory.make_context",
+            "autoskillit.server.make_context",
             lambda cfg, **kwargs: fake_ctx,
         )
 
@@ -461,7 +461,7 @@ class TestFleetRunDispatch:
             return fake_ctx
 
         monkeypatch.setattr(
-            "autoskillit.server._factory.make_context",
+            "autoskillit.server.make_context",
             fake_make_context,
         )
 

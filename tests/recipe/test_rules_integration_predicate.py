@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.types import Severity
+from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_success_step_graph
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import run_semantic_rules
 
@@ -282,3 +283,43 @@ class TestLoopBudgetSeparation:
         assert mgt_failure == "check_merge_test_fix_loop", (
             f"merge_gate_test.on_failure should be check_merge_test_fix_loop, got {mgt_failure}"
         )
+
+
+def _has_counter_reset_on_path(recipe, start: str, end: str, counter: str) -> bool:
+    """Walk from start toward end and check if any intermediate step captures ``counter``."""
+    graph = _build_success_step_graph(recipe)
+    visited = _bfs_capped(graph, {start}, {end})
+    for sn in visited:
+        if sn == start or sn == end:
+            continue
+        step = recipe.steps.get(sn)
+        if step and counter in step.capture:
+            return True
+    return False
+
+
+@pytest.mark.xfail(strict=True, reason="reset step added in Step 2")
+def test_test_fix_loop_count_resets_on_remediation_cycle_implementation() -> None:
+    """implementation.yaml must reset test_fix_loop_count between audit cycles."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    assert _has_counter_reset_on_path(
+        recipe, "check_audit_remediation_loop", "remediate", "test_fix_loop_count"
+    ), "implementation.yaml must reset test_fix_loop_count between audit-remediation cycles"
+
+
+@pytest.mark.xfail(strict=True, reason="reset step added in Step 2")
+def test_test_fix_loop_count_resets_in_remediation_recipe() -> None:
+    """remediation.yaml must reset test_fix_loop_count between audit cycles."""
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    assert _has_counter_reset_on_path(
+        recipe, "check_audit_remediation_loop", "pre_remediation_merge", "test_fix_loop_count"
+    ), "remediation.yaml must reset test_fix_loop_count between audit-remediation cycles"
+
+
+@pytest.mark.xfail(strict=True, reason="reset step added in Step 2")
+def test_test_fix_loop_count_resets_in_implementation_groups_recipe() -> None:
+    """implementation-groups.yaml must reset test_fix_loop_count between audit cycles."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
+    assert _has_counter_reset_on_path(
+        recipe, "check_audit_remediation_loop", "remediate", "test_fix_loop_count"
+    ), "implementation-groups.yaml must reset test_fix_loop_count between audit-remediation cycles"

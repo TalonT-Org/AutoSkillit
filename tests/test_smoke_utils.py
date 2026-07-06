@@ -23,6 +23,7 @@ from autoskillit.smoke_utils import (
     consolidate_health_reports,
     enrich_diff_context,
     gate_backend_write,
+    init_counter,
     parse_agent_eval_manifests,
     parse_eval_manifests,
     patch_pr_token_summary,
@@ -390,6 +391,28 @@ def test_check_loop_iteration_budget_semantics_documented() -> None:
 
     r3 = check_loop_iteration(current_iteration=r2["next_iteration"], max_iterations="3")
     assert r3["max_exceeded"] == "true"
+
+
+def test_check_loop_iteration_cross_cycle_budget_starvation() -> None:
+    """Cross-cycle budget starvation: counter persists → new cycle has zero budget.
+
+    Simulates: cycle 1 uses 2 fix attempts (counter reaches "2"), then cycle 2
+    tries to use the counter without resetting — max_exceeded fires immediately.
+    After resetting via init_counter, the budget is fresh.
+    """
+    r1 = check_loop_iteration(current_iteration="", max_iterations="3")
+    assert r1["max_exceeded"] == "false"
+
+    r2 = check_loop_iteration(current_iteration=r1["next_iteration"], max_iterations="3")
+    assert r2["max_exceeded"] == "false"
+
+    r3 = check_loop_iteration(current_iteration=r2["next_iteration"], max_iterations="3")
+    assert r3["max_exceeded"] == "true"
+
+    reset = init_counter(counter_value="")
+    r4 = check_loop_iteration(current_iteration=reset["value"], max_iterations="3")
+    assert r4["max_exceeded"] == "false"
+    assert r4["next_iteration"] == "1"
 
 
 # ---------------------------------------------------------------------------
@@ -2754,21 +2777,18 @@ def test_consolidate_health_reports_rejects_relative_log_dir() -> None:
 
 def test_init_counter_with_empty_string() -> None:
     """init_counter returns value='0' when counter_value is empty."""
-    from autoskillit.smoke_utils import init_counter  # noqa: PLC0415
 
     assert init_counter(counter_value="") == {"value": "0"}
 
 
 def test_init_counter_with_whitespace_only() -> None:
     """init_counter returns value='0' when counter_value is whitespace."""
-    from autoskillit.smoke_utils import init_counter  # noqa: PLC0415
 
     assert init_counter(counter_value="  ") == {"value": "0"}
 
 
 def test_init_counter_with_numeric_value() -> None:
     """init_counter passes through a numeric string unchanged."""
-    from autoskillit.smoke_utils import init_counter  # noqa: PLC0415
 
     assert init_counter(counter_value="2") == {"value": "2"}
 

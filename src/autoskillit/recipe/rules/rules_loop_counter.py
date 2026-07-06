@@ -204,7 +204,7 @@ def _check_loop_guard_before_verify(ctx: ValidationContext) -> list[RuleFinding]
         "from an outer check_loop_iteration guard's non-max_exceeded route "
         "without passing through a step that resets the inner counter"
     ),
-    severity=Severity.ERROR,
+    severity=Severity.WARNING,
 )
 def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list[RuleFinding]:
     """Detect temporal counter sharing across outer audit-remediation cycles.

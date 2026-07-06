@@ -17,6 +17,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_audit_impl_named_deviation.py` | Tests for NAMED_DEVIATION classification in audit-impl slice auditor |
 | `test_audit_review_decisions_contracts.py` | Contract tests for the audit-review-decisions skill SKILL.md |
 | `test_make_plan_false_positive.py` | Tests for false_positive verdict support in make-plan SKILL.md |
+| `test_make_plan_multipart_contracts.py` | Contract tests for make-plan multi-part green-gate rule and xfail bridge documentation |
 | `test_compose_pr.py` | Guard tests for compose-pr/SKILL.md template structure |
 | `test_conflict_resolution_guards.py` | Structural guards for conflict resolution safeguards in SKILL.md files |
 | `test_deletion_regression_guards.py` | Structural guards for deletion regression detection in merge-pr and review-pr skills |

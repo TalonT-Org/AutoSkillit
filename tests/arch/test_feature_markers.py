@@ -31,6 +31,7 @@ _FLEET_CROSS_DIR_FILES: frozenset[Path] = frozenset(
         _TESTS_ROOT / "cli" / "test_fleet_campaign.py",
         _TESTS_ROOT / "cli" / "test_fleet_status.py",
         _TESTS_ROOT / "cli" / "test_fleet_list.py",
+        _TESTS_ROOT / "cli" / "test_fleet_run.py",
         _TESTS_ROOT / "server" / "test_tools_dispatch.py",
         _TESTS_ROOT / "server" / "test_tools_dispatch_validation.py",
         _TESTS_ROOT / "server" / "test_tools_dispatch_params.py",

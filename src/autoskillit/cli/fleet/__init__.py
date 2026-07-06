@@ -31,6 +31,7 @@ from autoskillit.cli.fleet._fleet_preview import (
     _FLEET_DISPATCH_GREETINGS,
     _print_dispatch_preview,
 )
+from autoskillit.cli.fleet._fleet_run import fleet_run
 from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
 from autoskillit.core import TerminalColumn, get_logger, is_feature_enabled
 
@@ -408,3 +409,6 @@ def fleet_status(
             return
 
         print(_render_terminal_table(columns, rows_list))
+
+
+fleet_run = fleet_app.command(name="run")(fleet_run)

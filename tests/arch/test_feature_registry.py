@@ -345,6 +345,32 @@ def test_build_features_dict_franchise_raises_config_schema_error():
         AutomationConfig._build_features_dict({"franchise": True})
 
 
+# ── fleet_headless_run feature registry tests ─────────────────────────────────
+
+
+def test_fleet_headless_run_in_feature_registry():
+    """fleet_headless_run is registered with correct FeatureDef field values."""
+    from autoskillit.core.types._type_constants_features import FEATURE_REGISTRY
+    from autoskillit.core.types._type_enums import FeatureLifecycle
+
+    entry = FEATURE_REGISTRY["fleet_headless_run"]
+    assert entry.lifecycle == FeatureLifecycle.EXPERIMENTAL
+    assert entry.tier == 1
+    assert entry.default_enabled is False
+    assert entry.tool_tags == frozenset()
+    assert entry.skill_categories == frozenset()
+    assert entry.depends_on == frozenset({"fleet"})
+    assert entry.import_package is None
+
+
+def test_fleet_headless_run_promoted_by_experimental_blanket():
+    """fleet_headless_run has no requires_backend_alignment, experimental blanket promotes it."""
+    from autoskillit.core.feature_flags import is_feature_enabled
+
+    assert is_feature_enabled("fleet_headless_run", {}, experimental_enabled=True) is True
+    assert is_feature_enabled("fleet_headless_run", {}, experimental_enabled=False) is False
+
+
 # ── Providers feature registry tests ─────────────────────────────────────────
 
 

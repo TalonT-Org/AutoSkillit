@@ -56,6 +56,7 @@ __all__ = [
     # Public utilities consumed by CLI and tests
     "version_info",
     "make_context",
+    "resolve_backend_override",
     # Wire-format compatibility middleware
     "ClaudeCodeCompatMiddleware",
     # Session-type visibility dispatcher (callable by tests)
@@ -77,6 +78,7 @@ from autoskillit.server import (  # noqa: E402, F401
     _notify,
 )
 from autoskillit.server._factory import make_context  # noqa: E402, F401
+from autoskillit.server._misc import resolve_backend_override  # noqa: E402, F401
 from autoskillit.server._session_type import _apply_session_type_visibility  # noqa: E402, F401
 from autoskillit.server.tools import (  # noqa: E402, F401
     tools_agents as _tools_agents,

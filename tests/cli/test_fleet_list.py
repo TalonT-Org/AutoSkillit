@@ -97,7 +97,7 @@ class TestFleetCLIRegistration:
 
         assert "campaign" in _subcommand_names(fleet_app)
 
-    def test_fleet_run_command_not_registered(self) -> None:
+    def test_fleet_run_command_registered(self) -> None:
         from autoskillit.cli.fleet import fleet_app
 
-        assert "run" not in _subcommand_names(fleet_app)
+        assert "run" in _subcommand_names(fleet_app)

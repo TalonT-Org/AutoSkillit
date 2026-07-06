@@ -204,6 +204,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_tools.py` | Tests for tools semantic validation rule |
 | `test_rules_unsatisfied_input.py` | Tests for unsatisfied_input semantic validation rule |
 | `test_rules_verdict.py` | Tests for verdict semantic validation rule |
+| `test_rules_verdict_context.py` | Verdict-context precondition semantic rule tests |
 | `test_rules_verdict_degradation.py` | Tests for verdict-ungated-degradation semantic rule |
 | `test_rules_weak_constraint.py` | Tests for weak_constraint semantic validation rule |
 | `test_rules_worktree.py` | Tests for worktree semantic validation rule |

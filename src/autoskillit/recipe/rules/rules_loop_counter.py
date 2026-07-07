@@ -245,7 +245,7 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
         return findings
 
     for inner_name, inner_counter in guard_steps.items():
-        if guard_steps[inner_name] in audit_outer_guards:
+        if inner_name in audit_outer_guards:
             continue
 
         for outer_name in audit_outer_guards:

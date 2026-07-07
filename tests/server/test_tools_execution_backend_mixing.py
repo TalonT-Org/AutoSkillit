@@ -497,3 +497,127 @@ async def test_open_kitchen_capability_skill_not_auto_routed(
         "capability route must not fire for open_kitchen-derived requirements"
     )
     assert len(executor.calls) == 0
+
+
+@pytest.mark.anyio
+async def test_github_api_write_capability_skill_not_auto_routed(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    """github_api_write (fix-required, worker_routable=False) must NOT trigger auto-routing.
+
+    The skill runs on whatever backend the session uses (Codex), with network_access=True
+    injected via required_sandbox_overrides. No backend_override_activated log emitted."""
+    import json
+    from unittest.mock import MagicMock
+
+    import structlog
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+    tool_ctx_kitchen_open.backend = fake_backend
+    tool_ctx_kitchen_open.session_skill_manager = None
+
+    mock_skill_info = MagicMock()
+    mock_skill_info.backend_requirements = frozenset()
+    mock_skill_info.uses_capabilities = frozenset({"github_api_write"})
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = mock_skill_info
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("default", {}),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+
+    with structlog.testing.capture_logs() as log_list:
+        result = await run_skill("/autoskillit:test-skill", str(tmp_path))
+
+    data = json.loads(result)
+    assert data.get("subtype") == "success", (
+        "github_api_write skill must run successfully on Codex — not auto-routed, not blocked"
+    )
+    override_logs = [
+        entry for entry in log_list if entry.get("event") == "backend_override_activated"
+    ]
+    assert not override_logs, "worker_routable=False must not trigger capability route"
+    assert len(executor.calls) == 1
+    assert executor.calls[0].network_access is True, (
+        "github_api_write required_sandbox_overrides must inject network_access=True"
+    )
+
+
+@pytest.mark.anyio
+async def test_git_metadata_write_capability_still_routed(
+    tool_ctx_kitchen_open, tmp_path, monkeypatch
+) -> None:
+    """git_metadata_write (not-applicable, worker_routable=True) must still auto-route
+    after the worker_routable discriminator fix."""
+    import json
+    from unittest.mock import MagicMock
+
+    import structlog
+
+    from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    fake_backend = MagicMock(spec=CodingAgentBackend)
+    fake_backend.name = "codex"
+    fake_backend.capabilities.anthropic_provider_capable = False
+    tool_ctx_kitchen_open.backend = fake_backend
+    tool_ctx_kitchen_open.session_skill_manager = None
+
+    mock_skill_info = MagicMock()
+    mock_skill_info.backend_requirements = frozenset()
+    mock_skill_info.uses_capabilities = frozenset({"git_metadata_write"})
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = mock_skill_info
+    tool_ctx_kitchen_open.skill_resolver = mock_resolver
+
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
+    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(
+        "autoskillit.server._guards._resolve_provider_profile",
+        lambda *a, **kw: ("default", {}),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.resolve_target_skill",
+        lambda cmd, resolver: ("/autoskillit:test-skill", "test-skill"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution.shutil.which",
+        lambda name: "/usr/local/bin/claude" if name == "claude" else None,
+    )
+
+    with structlog.testing.capture_logs() as log_list:
+        result = await run_skill("/autoskillit:probe", str(tmp_path))
+
+    json.loads(result)
+    override_logs = [
+        entry for entry in log_list if entry.get("event") == "backend_override_activated"
+    ]
+    assert len(override_logs) == 1, "worker_routable=True must trigger capability route"
+    log = override_logs[0]
+    assert log["reason"] == "skill_requirement"
+    assert log["target_backend"] == "claude-code"
+    assert len(executor.calls) == 1
+    assert executor.calls[0].backend_override == "claude-code"

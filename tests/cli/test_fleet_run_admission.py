@@ -224,42 +224,176 @@ class TestFleetRunCliAdmission:
             "fleet_recipe_invalid must appear in the output envelope when recipe is rejected"
         )
 
-    def test_admission_agreement_cli_computes_same_map_as_kitchen(
-        self,
-        tmp_path: Path,
+    def test_fleet_run_cli_codex_fails_without_claude_binary(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, tmp_path: Path
     ) -> None:
-        """_compute_effective_backend_map is deterministic across CLI and kitchen paths.
+        """_execute_fleet_run with codex backend fails closed when claude binary is absent.
 
-        Both _execute_fleet_run and dispatch_food_truck call _compute_effective_backend_map
-        with equivalent inputs. This verifies the function produces identical output for
-        both callers given the same recipe steps and backend.
+        Exercises the real admission path: fleet_run CLI → _execute_fleet_run (real, not
+        mocked) → execute_dispatch (real) → _run_dispatch → load_and_validate (real fake,
+        not MagicMock). shutil.which=None in the _auto_overrides namespace triggers the
+        no-claude-binary scenario; InMemoryRecipeRepository returns backend-incompatible-skill.
         """
-        from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
+        from tests.fakes import InMemoryRecipeRepository
 
-        recipe_steps: dict[str, Any] = {}
-        backend_name = "codex"
-        config_providers = None
-        recipe_name = "test-recipe"
-
-        cli_map = _compute_effective_backend_map(
-            recipe_steps,
-            backend_name,
-            config_providers,
-            recipe_name,
-            skill_resolver=None,
+        # Configure InMemoryRecipeRepository to return a backend-incompatible rejection.
+        # load_and_validate is NOT a MagicMock — it runs the real InMemoryRecipeRepository
+        # logic (records calls, checks _validated, raises RecipeNotFoundError if absent).
+        repo = InMemoryRecipeRepository()
+        repo.set_validated(
+            "test-recipe",
+            {
+                "valid": False,
+                "errors": ["backend-incompatible-skill: step-1 requires claude-code"],
+            },
         )
 
+        # Build ctx. Use MagicMock for find/load (pre-dispatch recipe lookups in
+        # _execute_fleet_run); wire load_and_validate to the real InMemoryRecipeRepository
+        # method so the dispatch path exercises real fake logic.
+        codex_backend = _make_codex_backend()
+        ctx = MagicMock()
+        ctx.project_dir = tmp_path
+        ctx.skill_resolver = None
+        ctx.config.providers = None
+        ctx.config.migration.suppressed = None
+        ctx.temp_dir = tmp_path / ".autoskillit" / "temp"
+        ctx.backend = codex_backend
+
+        # fleet_lock: execute_dispatch awaits lock.acquire() then calls lock.release() sync.
+        ctx.fleet_lock.at_capacity.return_value = False
+        ctx.fleet_lock.acquire = AsyncMock(return_value=None)
+
+        # Pre-dispatch recipe lookups in _execute_fleet_run (find/load for steps computation)
+        recipe_info = MagicMock()
+        recipe_info.path = tmp_path / "test-recipe.yaml"
+        ctx.recipes.find.return_value = recipe_info
+        ctx.recipes.load.return_value.steps = {}
+
+        # Override load_and_validate on the MagicMock to use the real InMemoryRecipeRepository
+        # method — this is a real fake, not a predetermined return-value mock.
+        ctx.recipes.load_and_validate = repo.load_and_validate
+
+        monkeypatch.setattr(
+            "autoskillit.config.load_config",
+            lambda path=None: type(
+                "C",
+                (),
+                {
+                    "features": {"fleet": True, "fleet_headless_run": True},
+                    "experimental_enabled": True,
+                },
+            )(),
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.resolve_backend_override",
+            lambda name: codex_backend,
+        )
+        # shutil.which=None in the _auto_overrides namespace: no claude binary.
+        # This exercises the real _provider_aware_capability_overrides and
+        # _compute_effective_backend_map code paths inside _execute_fleet_run.
+        monkeypatch.setattr(
+            "autoskillit.server.tools._auto_overrides.shutil.which",
+            lambda cmd: None,
+        )
+        monkeypatch.setattr(
+            "autoskillit.server.make_context",
+            lambda _cfg, project_dir=None: ctx,
+        )
+
+        from autoskillit.cli.fleet import fleet_run
+
+        with pytest.raises(SystemExit) as exc_info:
+            fleet_run("test-recipe", backend="codex")
+
+        assert exc_info.value.code == 3, (
+            "Exit code must be 3 (FLEET_RECIPE_INVALID) when admission fails"
+        )
+        captured_out = capsys.readouterr()
+        envelope = json.loads(captured_out.out)
+        assert envelope.get("error") == "fleet_recipe_invalid", (
+            "fleet_recipe_invalid must appear in the output envelope"
+        )
+        rejection_message = envelope.get("message", "")
+        assert "backend-incompatible-skill" in rejection_message, (
+            f"backend-incompatible-skill must be present in the rejection message; "
+            f"got: {rejection_message!r}"
+        )
+
+        # Verify the real dispatch path was exercised: load_and_validate was called with
+        # the effective_backend_map kwarg from the real _execute_fleet_run computation.
+        lav_calls = [c for c in repo.calls if c["method"] == "load_and_validate"]
+        assert lav_calls, (
+            "load_and_validate must be called through the real dispatch path — "
+            "if this assertion fails, execute_dispatch was not reached"
+        )
+        assert "effective_backend_map" in lav_calls[0], (
+            "load_and_validate call must include effective_backend_map kwarg — "
+            "REQ-004: effective_backend_map must be threaded to load_and_validate"
+        )
+
+    @pytest.mark.parametrize("backend_name", ["codex", "claude-code"])
+    def test_admission_agreement_cli_matches_kitchen_path(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backend_name: str
+    ) -> None:
+        """effective_backend_map at execute_dispatch is identical from CLI and kitchen paths.
+
+        Runs _execute_fleet_run with a spy on execute_dispatch to capture the
+        effective_backend_map kwarg (CLI path). Separately computes what dispatch_food_truck
+        would pass to execute_dispatch by calling _compute_effective_backend_map directly
+        with equivalent inputs (kitchen path). Asserts the two values are equal.
+
+        Parametrized over backends to guard against per-backend routing divergence.
+        """
+        from autoskillit.server import _compute_effective_backend_map
+
+        captured: dict[str, object] = {}
+
+        async def spy_dispatch(**kwargs: object) -> DispatchResult:
+            captured.update(kwargs)
+            return _make_success_result()
+
+        # Build backend mock for the requested backend_name
+        if backend_name == "codex":
+            backend = _make_codex_backend()
+        else:
+            backend = MagicMock()
+            backend.name = "claude-code"
+            backend.capabilities.git_metadata_writable = True
+            backend.capabilities.has_unguarded_filesystem_access = False
+            backend.capabilities.anthropic_provider_capable = True
+
+        # Run CLI path via existing _run_execute_fleet_run helper.
+        # _run_execute_fleet_run mocks execute_dispatch with spy_dispatch so the real
+        # _execute_fleet_run computation (_compute_effective_backend_map, etc.) runs but
+        # dispatch does not. spy_dispatch captures all kwargs passed to execute_dispatch.
+        asyncio.run(
+            _run_execute_fleet_run(
+                monkeypatch=monkeypatch,
+                tmp_path=tmp_path,
+                dispatch_backend=backend,
+                execute_dispatch_fn=spy_dispatch,
+            )
+        )
+
+        cli_map = captured.get("effective_backend_map")
+
+        # Kitchen path: compute what dispatch_food_truck passes to execute_dispatch.
+        # dispatch_food_truck calls _compute_effective_backend_map(recipe_steps, backend_name,
+        # config_providers, recipe_name, skill_resolver=skill_resolver) with the same recipe
+        # steps that _make_mock_ctx returns (empty dict).
+        recipe_steps: dict[str, Any] = {}
         kitchen_map = _compute_effective_backend_map(
             recipe_steps,
             backend_name,
-            config_providers,
-            recipe_name,
+            None,  # config_providers
+            "test-recipe",
             skill_resolver=None,
         )
 
         assert cli_map == kitchen_map, (
-            f"CLI path map {cli_map!r} != kitchen path map {kitchen_map!r} — "
-            "_compute_effective_backend_map must be deterministic given the same inputs."
+            f"CLI path effective_backend_map {cli_map!r} != "
+            f"kitchen path {kitchen_map!r} for backend {backend_name!r}. "
+            "Both _execute_fleet_run and dispatch_food_truck must pass identical "
+            "effective_backend_map values to execute_dispatch."
         )
-        # cli_map may be None for recipes with no steps (empty dict returns None);
-        # the equality assertion above is the key invariant.

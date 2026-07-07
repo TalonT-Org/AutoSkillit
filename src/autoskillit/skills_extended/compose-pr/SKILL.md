@@ -77,7 +77,8 @@ Parse positional arguments:
 
 Derive `feature_branch` and set shell variables:
 ```bash
-FEATURE_BRANCH=$(git -C $WORK_DIR rev-parse --abbrev-ref HEAD)
+WORK_DIR=$3
+FEATURE_BRANCH=$(git -C "$WORK_DIR" rev-parse --abbrev-ref HEAD)
 BASE_BRANCH=$4
 ```
 
@@ -230,15 +231,64 @@ If exit code is non-zero:
 
 ### Step 5: Create Pull Request
 
+Run `gh pr create` with bounded retry on transient failures. Capture PR URL from stdout.
+On success or successful response-loss recovery, emit `pr_url = <URL>`. On exhausted retries or
+terminal validation failures, print the final `gh pr create` stderr to stderr and return the
+final create status (the empty-`pr_url` path is reserved for Step 4's `gh auth status` preflight).
+
 ```bash
-gh pr create \
-  --base $BASE_BRANCH \
-  --head $FEATURE_BRANCH \
-  --title "$TASK_TITLE" \
-  --body-file {{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md
+PR_CREATE_BODY={{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md
+PR_CREATE_LOG_DIR={{AUTOSKILLIT_TEMP}}/compose-pr
+PR_CREATE_ATTEMPT=1
+PR_CREATE_MAX=3
+PR_URL=""
+while [ "$PR_CREATE_ATTEMPT" -le "$PR_CREATE_MAX" ]; do
+  case "$PR_CREATE_ATTEMPT" in
+    2) sleep 1 ;;
+    3) sleep 2 ;;
+  esac
+  if gh pr create \
+       --base "$BASE_BRANCH" \
+       --head "$FEATURE_BRANCH" \
+       --title "$TASK_TITLE" \
+       --body-file "$PR_CREATE_BODY" \
+       > "$PR_CREATE_LOG_DIR/pr_stdout_$ts.$PR_CREATE_ATTEMPT.txt" \
+       2> "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt"; then
+    PR_URL=$(grep -E '^https://github\.com/' "$PR_CREATE_LOG_DIR/pr_stdout_$ts.$PR_CREATE_ATTEMPT.txt" | head -1)
+    [ -n "$PR_URL" ] && break
+  fi
+  PR_CREATE_ERR=$(cat "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt")
+  case "$PR_CREATE_ERR" in
+    *HTTP\ 4*|*validation*|*required*|*not\ found*)
+      break ;;
+  esac
+  RECOVERED=$(gh pr view "$FEATURE_BRANCH" --json url -q .url 2>/dev/null || true)
+  if [ -n "$RECOVERED" ]; then
+    PR_URL="$RECOVERED"
+    break
+  fi
+  PR_CREATE_ATTEMPT=$((PR_CREATE_ATTEMPT + 1))
+done
+
+if [ -n "$PR_URL" ]; then
+  printf 'pr_url = %s\n' "$PR_URL"
+fi
 ```
 
-Capture PR URL from stdout.
+Bounded retry policy:
+- Maximum 3 total `gh pr create` attempts
+- Backoff sleeps of 1 second before attempt 2 and 2 seconds before attempt 3
+- Each attempt's stdout/stderr captured under `{{AUTOSKILLIT_TEMP}}/compose-pr/`
+  so final diagnostics can print useful detail without contaminating the PR URL capture
+- Retry only transient or ambiguous response-loss failures (HTTP 5xx, secondary rate limit,
+  timeout, connection reset/refused, temporary DNS resolution, remote/internal server errors)
+- Do not retry terminal validation or usage failures (HTTP 4xx, validation errors, missing required fields)
+
+Response-loss recovery: when a create attempt fails with a transient/ambiguous status (or empty
+stderr that suggests the create succeeded but the response was lost), run a best-effort
+`gh pr view "$FEATURE_BRANCH" --json url -q .url` before sleeping and retrying. If it returns
+a URL, treat the create as recovered and emit that URL. The recovery path runs only for
+transient/ambiguous failures — never for terminal validation failures.
 
 ## Output
 

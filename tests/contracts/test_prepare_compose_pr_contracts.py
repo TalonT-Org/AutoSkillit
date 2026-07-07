@@ -302,3 +302,92 @@ def test_prepare_pr_arch_lens_classification_covers_all_slugs():
         assert slug in step5_text, (
             f"arch-lens slug '{slug}' not found in Step 5 classification table"
         )
+
+
+# ---------------------------------------------------------------------------
+# compose-pr Step 5 bounded retry contract (issue #3987)
+# ---------------------------------------------------------------------------
+
+
+def _compose_pr_step5_bash() -> str:
+    """Return the literal bash block from compose-pr Step 5."""
+    from autoskillit.recipe._skill_placeholder_parser import (
+        extract_bash_blocks,
+        extract_step_sections,
+    )
+
+    text = COMPOSE_PR.read_text()
+    sections = extract_step_sections(text)
+    step5 = sections.get("Step 5")
+    assert step5, "compose-pr/SKILL.md is missing a Step 5 section"
+    blocks = extract_bash_blocks(step5)
+    assert len(blocks) == 1, f"Expected exactly 1 bash block in Step 5, found {len(blocks)}"
+    return blocks[0]
+
+
+def test_compose_pr_step5_has_bounded_retry_count_of_three():
+    """Step 5 must cap total gh pr create attempts at 3."""
+    import re
+
+    bash = _compose_pr_step5_bash()
+    # A loop guard tied to PR_CREATE_MAX whose value is exactly 3.
+    match = re.search(r"PR_CREATE_MAX\s*=\s*(\d+)", bash)
+    assert match, "Step 5 must declare PR_CREATE_MAX to bound retry attempts"
+    assert match.group(1) == "3", f"PR_CREATE_MAX must be 3, got {match.group(1)!r}"
+    assert "PR_CREATE_MAX=3" in bash or "PR_CREATE_MAX = 3" in bash, (
+        "Step 5 must use the canonical PR_CREATE_MAX=3 form"
+    )
+
+
+def test_compose_pr_step5_classifies_transient_failures():
+    """Step 5 must classify transient (HTTP 5xx / network) failures as retryable."""
+    bash = _compose_pr_step5_bash()
+    transient_markers = ["HTTP 5", "rate limit", "timeout", "connection reset"]
+    hits = sum(1 for m in transient_markers if m in bash)
+    assert hits >= 2, (
+        "Step 5 must classify transient failures (HTTP 5xx / rate limit / timeout / "
+        "connection reset) as retryable; found only "
+        f"{hits} of {transient_markers}"
+    )
+
+
+def test_compose_pr_step5_uses_1s_and_2s_backoff_sleeps():
+    """Step 5 must back off 1s before attempt 2 and 2s before attempt 3."""
+    import re
+
+    bash = _compose_pr_step5_bash()
+    sleep_matches = re.findall(r"sleep\s+(\d+)", bash)
+    assert sleep_matches, "Step 5 must include at least one bounded backoff sleep"
+    # Both 1 and 2 must appear somewhere in the backoff ladder.
+    assert "1" in sleep_matches, "Step 5 must sleep 1 second (e.g., before attempt 2)"
+    assert "2" in sleep_matches, "Step 5 must sleep 2 seconds (e.g., before attempt 3)"
+
+
+def test_compose_pr_step5_preserves_pr_arguments():
+    """Step 5 must keep --base, --head, --title, --body-file arguments intact."""
+    bash = _compose_pr_step5_bash()
+    assert "--base" in bash, "Step 5 must include --base argument"
+    assert "--head" in bash, "Step 5 must include --head argument"
+    assert "--title" in bash, "Step 5 must include --title argument"
+    assert "--body-file" in bash, "Step 5 must include --body-file argument"
+    # Literal body-file path with the canonical {{AUTOSKILLIT_TEMP}} prefix
+    # and the $ts.md suffix.
+    assert "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md" in bash, (
+        "Step 5 must use the literal --body-file path "
+        "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md"
+    )
+
+
+def test_compose_pr_step4_auth_preflight_unchanged():
+    """Step 4 must retain the gh auth status preflight behavior."""
+    from autoskillit.recipe._skill_placeholder_parser import extract_step_sections
+
+    text = COMPOSE_PR.read_text()
+    sections = extract_step_sections(text)
+    step4 = sections.get("Step 4", "")
+    assert step4, "compose-pr/SKILL.md is missing a Step 4 section"
+    assert "gh auth status" in step4, "Step 4 must run gh auth status preflight"
+    # Empty pr_url emit path must remain documented in Step 4.
+    assert "pr_url =" in step4, (
+        "Step 4 must document the empty pr_url emit path on gh preflight failure"
+    )

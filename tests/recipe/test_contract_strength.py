@@ -93,6 +93,7 @@ def test_write_always_skills_require_completion_marker_pattern():
 
 _KNOWN_OPTIONAL_CAPTURE_EXEMPTIONS = frozenset(
     {
+        "compose-pr",
         "promote-to-main",
     }
 )

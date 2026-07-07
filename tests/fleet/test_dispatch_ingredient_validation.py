@@ -319,8 +319,9 @@ class TestConfigAuthoritativeIngredientInjection:
 
     @pytest.mark.anyio
     async def test_config_authoritative_ingredients_injected_for_all_resolved_keys(self, tool_ctx):
-        """All ingredients declared authority='config' receive config values,
-        not just base_branch."""
+        """SERVER_AUTHORITATIVE_INGREDIENTS keys with authority='config' receive config values;
+        source_dir with authority='config' is caller-sovereign and is NOT overridden from
+        resolved defaults."""
         from unittest.mock import patch
 
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
@@ -373,7 +374,9 @@ class TestConfigAuthoritativeIngredientInjection:
             )
 
         assert captured["ingredients"]["base_branch"] == "develop"
-        assert captured["ingredients"]["source_dir"] == "/repo/src"
+        # source_dir is caller-sovereign — the URL from resolve_ingredient_defaults must NOT
+        # be injected even when the recipe declares authority="config".
+        assert captured["ingredients"].get("source_dir") != "/repo/src"
         assert captured["ingredients"]["local_review_rounds"] == "3"
 
     @pytest.mark.anyio
@@ -536,6 +539,152 @@ class TestConfigAuthoritativeIngredientInjection:
             )
 
         assert captured["ingredients"]["backend_supports_git_write"] == "false"
+
+    @pytest.mark.anyio
+    async def test_apply_config_authoritative_overrides_source_dir_preserves_caller_local_path(
+        self, tool_ctx
+    ):
+        """When the recipe declares source_dir with authority='config' and the caller
+        supplies a local path, apply_config_authoritative_overrides must preserve the
+        caller's value — source_dir is caller-sovereign project identity."""
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "source_dir": RecipeIngredient(
+                        description="Source directory", default="", authority="config"
+                    ),
+                },
+            ),
+        )
+        captured: dict = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={
+                "source_dir": "https://github.com/TalonT-Org/AutoSkillit",
+                "base_branch": "main",
+            },
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={"source_dir": "/home/user/myproject"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert captured["ingredients"]["source_dir"] == "/home/user/myproject"
+
+    @pytest.mark.anyio
+    async def test_apply_config_authoritative_overrides_source_dir_not_injected_when_absent(
+        self, tool_ctx
+    ):
+        """When the recipe declares source_dir with authority='config' but the caller
+        does not supply source_dir, the URL from resolve_ingredient_defaults must NOT
+        be injected — source_dir is caller-sovereign and must not be auto-populated."""
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
+
+        _setup_config_authority_recipe(
+            tool_ctx,
+            Recipe(
+                name="test-recipe",
+                description="test",
+                kind=RecipeKind.STANDARD,
+                ingredients={
+                    "source_dir": RecipeIngredient(
+                        description="Source directory", default="", authority="config"
+                    ),
+                },
+            ),
+        )
+        captured: dict = {}
+
+        def _capture_prompt_builder(**kwargs):
+            captured.update(kwargs)
+            return "prompt"
+
+        from autoskillit.fleet._api import execute_dispatch
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={"source_dir": "https://github.com/TalonT-Org/AutoSkillit"},
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
+
+        assert (
+            captured["ingredients"].get("source_dir")
+            != "https://github.com/TalonT-Org/AutoSkillit"
+        )
+
+    def test_apply_config_authoritative_overrides_only_mutates_enforcement_keys(self, tmp_path):
+        """For a recipe that declares ALL CONFIG_AUTHORITY_KEYS as authority='config',
+        the function must only mutate keys in SERVER_AUTHORITATIVE_INGREDIENTS |
+        BACKEND_CAPABILITY_INGREDIENTS. source_dir is caller-sovereign and must not
+        appear in the changed-key set."""
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from autoskillit.config import apply_config_authoritative_overrides
+        from autoskillit.config.ingredient_defaults import (
+            BACKEND_CAPABILITY_INGREDIENTS,
+            SERVER_AUTHORITATIVE_INGREDIENTS,
+        )
+        from autoskillit.core import CONFIG_AUTHORITY_KEYS
+
+        recipe_ingredients = {
+            key: SimpleNamespace(authority="config") for key in CONFIG_AUTHORITY_KEYS
+        }
+        resolved_values = {key: f"resolved-{key}" for key in CONFIG_AUTHORITY_KEYS}
+        capability_values = {key: f"cap-{key}" for key in BACKEND_CAPABILITY_INGREDIENTS}
+
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value=resolved_values,
+        ):
+            result = apply_config_authoritative_overrides(
+                {},
+                recipe_ingredients,
+                tmp_path,
+                capability_overrides=capability_values,
+            )
+
+        changed_keys = set(result.keys())
+        assert changed_keys <= (
+            SERVER_AUTHORITATIVE_INGREDIENTS | BACKEND_CAPABILITY_INGREDIENTS
+        ), (
+            f"apply_config_authoritative_overrides mutated caller-sovereign keys: "
+            f"{changed_keys - (SERVER_AUTHORITATIVE_INGREDIENTS | BACKEND_CAPABILITY_INGREDIENTS)}"
+        )
 
 
 def test_capability_overrides_dict_covers_registry_keys():

@@ -314,7 +314,7 @@ class TestFleetRunCliAdmission:
         assert envelope.get("error") == "fleet_recipe_invalid", (
             "fleet_recipe_invalid must appear in the output envelope"
         )
-        rejection_message = envelope.get("message", "")
+        rejection_message = envelope.get("user_visible_message", "")
         assert "backend-incompatible-skill" in rejection_message, (
             f"backend-incompatible-skill must be present in the rejection message; "
             f"got: {rejection_message!r}"

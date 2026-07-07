@@ -253,15 +253,20 @@ def test_apply_config_authoritative_overrides_unknown_key_retains_caller_value(t
     is retained silently (no warning)."""
     from types import SimpleNamespace
 
+    import structlog.testing
+
     from autoskillit.config import apply_config_authoritative_overrides
 
     recipe_ingredients = {
         "totally_unknown_key": SimpleNamespace(authority="config"),
     }
 
-    with patch(
-        "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-        return_value={},
+    with (
+        patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={},
+        ),
+        structlog.testing.capture_logs() as cap_logs,
     ):
         result = apply_config_authoritative_overrides(
             {"totally_unknown_key": "caller-value"},
@@ -271,6 +276,7 @@ def test_apply_config_authoritative_overrides_unknown_key_retains_caller_value(t
         )
 
     assert result["totally_unknown_key"] == "caller-value"
+    assert not any("config-authority key" in e.get("event", "") for e in cap_logs)
 
 
 # T4: REQ-ING-003

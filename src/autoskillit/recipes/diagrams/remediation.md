@@ -14,7 +14,8 @@ dry_walkthrough → implement ↔ [retry_worktree on context limit]
 |
 test → assess
 |
-+-- audit_impl → reset_test_fix_counter → reset_merge_test_fix_counter → reset_ref_push_counter → pre_remediation_merge → remediate (optional)
++-- audit_impl → reset_test_fix_counter → reset_merge_test_fix_counter
+    → reset_ref_push_counter → pre_remediation_merge → remediate (optional)
 |
 make_plan → commit_guard → merge → push
 |

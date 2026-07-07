@@ -18,7 +18,8 @@ group → plan → review_approach (optional)
 │    fix (on failure) → next_or_done
 └────┘
 |
-+-- audit_impl → reset_test_fix_counter → reset_merge_test_fix_counter → reset_ref_push_counter → remediate (optional)
++-- audit_impl → reset_test_fix_counter → reset_merge_test_fix_counter
+    → reset_ref_push_counter → remediate (optional)
 |
 +-- [open-pr] (optional):
 |     prepare_pr → compose_pr → review_pr → resolve_review

@@ -885,6 +885,20 @@ Immediately after the verdict line, emit the review gate tag on a new line:
 Exit 0 in all normal cases (approved, needs_human, changes_requested).
 Exit 1 only for unrecoverable tool-level errors.
 
+**Network Failure Degradation (Codex sandbox):**
+
+When `gh api` exits non-zero and the error output contains a network/connection
+error (e.g., `curl: (7) Failed to connect`, `Could not resolve host`) rather
+than an API-level error (HTTP 4xx/5xx), the `gh` binary is present but the
+sandbox blocks outbound network access. In this case:
+
+- Set `verdict=needs_human` and emit `%%REVIEW_GATE::CLEAR%%`
+- Exit 0 — this is a sandbox constraint, not a skill failure
+- Log: `"gh api network error in sandbox — setting verdict=needs_human"`
+
+The `needs_human` verdict is in `_SAFE_DEGRADATION_VERDICTS`, so the
+`verdict-ungated-degradation` rule does not fire for this path.
+
 ## Output
 
 - `verdict=approved` → `%%REVIEW_GATE::CLEAR%%` — No blocking issues; CI can proceed

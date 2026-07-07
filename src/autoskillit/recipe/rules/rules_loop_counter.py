@@ -244,6 +244,11 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
     if not audit_outer_guards:
         return findings
 
+    reverse_graph: dict[str, set[str]] = {}
+    for src, targets in graph.items():
+        for tgt in targets:
+            reverse_graph.setdefault(tgt, set()).add(src)
+
     for inner_name, inner_counter in guard_steps.items():
         if inner_name in audit_outer_guards:
             continue
@@ -266,14 +271,17 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
             if non_exit_target is None or non_exit_target not in recipe.steps:
                 continue
 
-            reachable_to_inner = bfs_reachable(graph, non_exit_target)
-            if inner_name not in reachable_to_inner:
+            forward_reachable = bfs_reachable(graph, non_exit_target)
+            if inner_name not in forward_reachable:
                 continue
 
+            backward_reachable = bfs_reachable(reverse_graph, inner_name)
+            on_path = forward_reachable & backward_reachable
+            on_path.add(non_exit_target)
+            on_path.discard(inner_name)
+
             has_reset = False
-            for sn in reachable_to_inner:
-                if sn == inner_name:
-                    continue
+            for sn in on_path:
                 candidate = recipe.steps.get(sn)
                 if candidate is not None and inner_counter in candidate.capture:
                     has_reset = True

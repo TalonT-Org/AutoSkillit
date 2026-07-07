@@ -214,7 +214,7 @@ class TestLoopCounterNotResetOnOuterCycle:
             "work": RecipeStep(tool="run_skill", on_success="inner_guard", on_failure="done"),
             "inner_guard": _guard_step("fix_count", non_exit="fix", exit_route="done"),
             "fix": RecipeStep(tool="run_skill", on_success="test", on_failure="done"),
-            "test": RecipeStep(tool="test_check", on_success="done", on_failure="fix"),
+            "test": RecipeStep(tool="test_check", on_success="outer_guard", on_failure="fix"),
             "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
         }
         recipe = _make_recipe(steps)
@@ -243,7 +243,7 @@ class TestLoopCounterNotResetOnOuterCycle:
             "work": RecipeStep(tool="run_skill", on_success="inner_guard", on_failure="done"),
             "inner_guard": _guard_step("fix_count", non_exit="fix", exit_route="done"),
             "fix": RecipeStep(tool="run_skill", on_success="test", on_failure="done"),
-            "test": RecipeStep(tool="test_check", on_success="done", on_failure="fix"),
+            "test": RecipeStep(tool="test_check", on_success="outer_guard", on_failure="fix"),
             "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
         }
         recipe = _make_recipe(steps)

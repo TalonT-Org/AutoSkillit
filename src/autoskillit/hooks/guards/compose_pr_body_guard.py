@@ -123,9 +123,41 @@ def _resolve_variable_body_path(raw_token: str, tokens: list[str], gh_index: int
     return _resolve_nested_vars(raw_value, assignments)
 
 
+def _preprocess_newlines(cmd: str) -> str:
+    """Replace bare (unquoted) newlines with ' ; ' to preserve command boundaries.
+
+    In shell a bare newline terminates a command just like ';'. shlex.split()
+    collapses newlines to whitespace, so a later command's --body-file can
+    bleed into an earlier gh pr create that has none. Replacing unquoted
+    newlines before tokenisation inserts a proper ';' separator.
+    """
+    result: list[str] = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(cmd):
+        c = cmd[i]
+        if c == "\\" and not in_single and i + 1 < len(cmd):
+            result.append(c)
+            result.append(cmd[i + 1])
+            i += 2
+            continue
+        if c == "'" and not in_double:
+            in_single = not in_single
+        elif c == '"' and not in_single:
+            in_double = not in_double
+        elif c == "\n" and not in_single and not in_double:
+            result.append(" ; ")
+            i += 1
+            continue
+        result.append(c)
+        i += 1
+    return "".join(result)
+
+
 def _extract_body_file_path(cmd: str) -> str | None:
     try:
-        tokens = shlex.split(cmd)
+        tokens = shlex.split(_preprocess_newlines(cmd))
     except ValueError:
         return None
 

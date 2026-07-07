@@ -201,6 +201,30 @@ def check_review_loop(
     }
 
 
+def check_review_posted(
+    pr_number: int,
+    output_dir: str,
+    mode: str,
+) -> dict[str, str]:
+    """Verify that batch_review_response_{pr_number}.json exists in output_dir.
+
+    In github mode, returns reviews_posted="false" with sentinel="no_reviews_posted"
+    when the receipt file is absent, indicating the review POST did not complete.
+    In local mode, always returns reviews_posted="true" (no API calls made).
+
+    output_dir must be an absolute path (enforced by is_absolute() guard required by
+    tests/arch/test_run_python_path_resolution.py for output_dir parameters).
+    """
+    if not Path(output_dir).is_absolute():
+        raise ValueError(f"output_dir must be an absolute path, got: {output_dir!r}")
+    if mode == "local":
+        return {"reviews_posted": "true", "sentinel": ""}
+    receipt = Path(output_dir) / f"batch_review_response_{pr_number}.json"
+    if receipt.exists():
+        return {"reviews_posted": "true", "sentinel": ""}
+    return {"reviews_posted": "false", "sentinel": "no_reviews_posted"}
+
+
 def check_loop_iteration(
     current_iteration: str = "",
     max_iterations: str = "2",

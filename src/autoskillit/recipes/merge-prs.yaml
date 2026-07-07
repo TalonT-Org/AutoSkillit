@@ -1488,21 +1488,33 @@ steps:
     - when: ${{ result.verdict }} == approved_with_comments
       route: resolve_review_integration
     - when: ${{ result.verdict }} == needs_human
-      route: derive_batch_ci_event
+      route: check_review_posted
     - when: ${{ result.verdict }} == approved
-      route: derive_batch_ci_event
+      route: check_review_posted
     - when: 'true'
-      route: derive_batch_ci_event
+      route: check_review_posted
     on_failure: resolve_review_integration
     note: 'Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr
       against context.batch_branch. All four verdicts have explicit routes: changes_requested
       → resolve_review_integration, approved_with_comments → resolve_review_integration,
-      needs_human → derive_batch_ci_event (human reviews inline), approved → derive_batch_ci_event.
-      On tool-level failure, routes to resolve_review_integration (matches implementation.yaml
-      pattern). needs_human is explicitly routed to satisfy the unrouted-verdict-value
-      semantic rule.
+      needs_human → check_review_posted (effect verification gate) → derive_batch_ci_event,
+      approved → check_review_posted → derive_batch_ci_event. On tool-level failure,
+      routes to resolve_review_integration. needs_human is explicitly routed to satisfy
+      the unrouted-verdict-value semantic rule.
 
       '
+  check_review_posted:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.check_review_posted
+      pr_number: ${{ context.review_pr_number }}
+      output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr'
+      mode: github
+    on_result:
+    - when: ${{ result.reviews_posted }} == 'false'
+      route: register_clone_failure
+    - when: ${{ result.reviews_posted }} == 'true'
+      route: derive_batch_ci_event
   resolve_review_integration:
     tool: run_skill
     model: ''

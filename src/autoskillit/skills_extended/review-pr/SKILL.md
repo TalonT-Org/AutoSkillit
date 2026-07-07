@@ -623,6 +623,12 @@ jq -n \
   '{body: $body, event: $event, comments: $comments}' | \
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
   --method POST --input -
+
+# Write receipt file on success — checked by check_review_posted gate in the recipe
+if [ $? -eq 0 ]; then
+  printf '{"posted":true}' \
+    > "${REVIEW_OUTPUT_DIR}batch_review_response_${pr_number}.json"
+fi
 ```
 
 Event mapping:

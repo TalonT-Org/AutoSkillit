@@ -8,6 +8,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 |------|---------|
 | `__init__.py` | empty |
 | `conftest.py` | Shared fixtures for tests/recipe/ |
+| `test_analysis_bfs.py` | Tests for bfs_reachable_without_barrier API — frozenset barrier support |
 | `test_analysis_public_api.py` | Tests for the recipe analysis public API surface |
 | `test_admission_truth_telling.py` | Admission truth-telling regression tests — pre-prune resolver, effective-backend awareness, admission↔dispatch agreement contract |
 | `test_anti_pattern_guards.py` | Guards for anti-patterns in recipe definitions |
@@ -179,6 +180,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_project_local_override.py` | Tests for project_local_override semantic validation rule |
 | `test_rules_reachability.py` | Tests for reachability semantic validation rule |
 | `test_rules_remediation.py` | Tests for audit-impl-remediation-route semantic validation rule |
+| `test_rules_review_effect_waypoint.py` | Tests for review-effect-verification-waypoint semantic rule |
 | `test_rules_review_loop_waypoint.py` | Tests for review-loop-waypoint-guard semantic rule |
 | `test_rules_route_gate.py` | Tests for route-gate-shared-stop semantic validation rule |
 | `test_rules_loop_counter.py` | Tests for loop-counter-cross-path-sharing, loop-guard-before-verify, and loop-counter-not-reset-on-outer-cycle semantic rules |

@@ -99,12 +99,16 @@ def _build_success_step_graph(recipe: Recipe) -> dict[str, set[str]]:
 def bfs_reachable_without_barrier(
     recipe: Recipe,
     start: str,
-    barrier: str,
+    barrier: str | frozenset[str],
 ) -> set[str]:
     """BFS from ``start`` through success-path routing edges, stopping at ``barrier``.
 
     Returns all step names reachable from ``start`` without crossing ``barrier``.
-    The barrier step itself is not included in the returned set.
+    The barrier step itself is included in the returned set — it is visited but
+    not expanded beyond.
+
+    ``barrier`` may be a single step name (str) or a frozenset of step names.
+    When a frozenset is provided, any of the named steps acts as a barrier.
 
     Only follows on_result conditions and on_success edges — error paths
     (on_failure, on_context_limit) are excluded because they are not
@@ -113,8 +117,9 @@ def bfs_reachable_without_barrier(
     This is the canonical implementation of the BFS-barrier pattern previously
     duplicated inline in ``push-before-audit`` and ``merge-base-unpublished``.
     """
+    barriers: set[str] = {barrier} if isinstance(barrier, str) else set(barrier)
     graph = _build_success_step_graph(recipe)
-    return _bfs_capped(graph, {start}, {barrier})
+    return _bfs_capped(graph, {start}, barriers)
 
 
 def _bfs_capped(

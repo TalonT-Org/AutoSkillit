@@ -2574,6 +2574,33 @@ callable_contracts:
       type: str
     - name: had_blocking
       type: str
+  autoskillit.smoke_utils.check_review_posted:
+    description: >
+      Verifies that batch_review_response_{pr_number}.json exists in output_dir
+      (github mode) or always passes (local mode). No subprocess calls.
+      output_dir must be an absolute path.
+    inputs:
+    - name: pr_number
+      type: int
+      required: true
+    - name: output_dir
+      type: str
+      required: true
+    - name: mode
+      type: str
+      required: true
+      allowed_values:
+      - local
+      - github
+    outputs:
+    - name: reviews_posted
+      allowed_values:
+      - "true"
+      - "false"
+    - name: sentinel
+      allowed_values:
+      - no_reviews_posted
+      - ""
   autoskillit.smoke_utils.check_bug_report_non_empty:
     inputs:
     - name: workspace

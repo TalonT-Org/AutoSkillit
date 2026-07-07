@@ -66,19 +66,20 @@ class TestReviewPrRecipeIntegration:
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
         assert step.skip_when_false == "inputs.open_pr"
 
-    def test_review_pr_catch_all_routes_to_check_review_loop(self, recipe: object) -> None:
-        """T_RP4: catch-all routes through check_review_loop (mandatory waypoint).
+    def test_review_pr_catch_all_routes_to_check_review_posted(self, recipe: object) -> None:
+        """T_RP4: catch-all routes through check_review_posted (effect verification gate).
 
         All verdicts (approved, needs_human, any future verdict) must pass through
-        check_review_loop to ensure review_loop_count is always incremented.
+        check_review_posted to verify the review was actually posted before advancing
+        the loop counter via check_review_loop.
         """
         step = recipe.steps["review_pr"]  # type: ignore[attr-defined]
         assert step.on_result is not None
         default_conditions = [
             c for c in step.on_result.conditions if c.when is None or c.when == "true"
         ]
-        assert any(c.route == "check_review_loop" for c in default_conditions), (
-            "catch-all must route to check_review_loop, not directly to check_repo_ci_event"
+        assert any(c.route == "check_review_posted" for c in default_conditions), (
+            "catch-all must route to check_review_posted, not directly to check_review_loop"
         )
 
     def test_review_pr_captures_verdict(self, recipe: object) -> None:
@@ -153,9 +154,9 @@ class TestReviewPrRecipeIntegration:
         assert "re_push_review" in clean_routes
         assert step.on_failure == "resolve_pre_review_conflicts"
 
-    def test_re_push_review_routes_to_check_review_loop(self, recipe: object) -> None:
-        """T_RP8: re_push_review routes to check_review_loop (bounded retry gate)."""
-        assert recipe.steps["re_push_review"].on_success == "check_review_loop"  # type: ignore[attr-defined]
+    def test_re_push_review_routes_to_check_review_posted(self, recipe: object) -> None:
+        """T_RP8: re_push_review routes to check_review_posted (effect verification gate)."""
+        assert recipe.steps["re_push_review"].on_success == "check_review_posted"  # type: ignore[attr-defined]
 
     def test_ci_watch_present(self, recipe: object) -> None:
         """T_RP9: ci_watch step present in all four recipes."""
@@ -447,3 +448,54 @@ class TestPreReviewRebaseConflictResolution:
         assert step.tool == "run_skill"
         cmd = step.with_args.get("skill_command", "")
         assert "resolve-merge-conflicts" in cmd
+
+
+# ---------------------------------------------------------------------------
+# T-B-RP1: check_review_posted false-case routes to failure (not CI)
+# ---------------------------------------------------------------------------
+
+
+def test_check_review_posted_false_routes_to_failure_not_ci() -> None:
+    """T-B-RP1: implementation.yaml check_review_posted false-case routes to hard failure."""
+    recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+    crp_step = recipe.steps.get("check_review_posted")
+    assert crp_step is not None, "check_review_posted step missing from implementation.yaml"
+    false_cond = next(
+        c
+        for c in crp_step.on_result.conditions
+        if "false" in str(c.when) or "no_reviews_posted" in str(c.when)
+    )
+    assert false_cond.route not in {"check_repo_ci_event", "ci_watch", "enqueue_to_queue"}
+
+
+# ---------------------------------------------------------------------------
+# T-B-MP1: merge-prs.yaml check_review_posted wiring
+# ---------------------------------------------------------------------------
+
+
+def test_merge_prs_check_review_posted_uses_review_pr_number() -> None:
+    """T-B-MP1a: merge-prs check_review_posted must use context.review_pr_number."""
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    crp_step = recipe.steps.get("check_review_posted")
+    assert crp_step is not None, "check_review_posted step missing from merge-prs.yaml"
+    args_str = str(crp_step.with_args)
+    assert "review_pr_number" in args_str
+
+
+def test_merge_prs_check_review_posted_mode_is_hardcoded_github() -> None:
+    """T-B-MP1b: merge-prs check_review_posted mode must be hardcoded 'github'."""
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    crp_step = recipe.steps.get("check_review_posted")
+    assert crp_step is not None
+    args_str = str(crp_step.with_args)
+    assert "github" in args_str
+    assert "review_mode" not in args_str
+
+
+def test_merge_prs_check_review_posted_true_routes_to_derive_batch_ci_event() -> None:
+    """T-B-MP1c: merge-prs check_review_posted true-case routes to derive_batch_ci_event."""
+    recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    crp_step = recipe.steps.get("check_review_posted")
+    assert crp_step is not None
+    true_cond = next(c for c in crp_step.on_result.conditions if "true" in str(c.when))
+    assert true_cond.route == "derive_batch_ci_event"

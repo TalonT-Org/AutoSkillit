@@ -163,6 +163,56 @@ def _check_run_skill_missing_context_limit(ctx: ValidationContext) -> list[RuleF
     return findings
 
 
+_REVIEW_EFFECT_ADVANCE_GATES = frozenset({"check_review_loop", "derive_batch_ci_event"})
+
+
+@semantic_rule(
+    name="review-effect-verification-waypoint",
+    severity=Severity.ERROR,
+    description=(
+        "No advance gate (check_review_loop or derive_batch_ci_event) must be reachable "
+        "from any review-pr skill step on the success path without first crossing "
+        "check_review_posted. Applies to all steps dispatching the review-pr skill "
+        "regardless of step id (covers review_pr_integration in merge-prs.yaml)."
+    ),
+)
+def _review_effect_verification_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
+    effect_steps = [
+        step_id
+        for step_id, step in ctx.recipe.steps.items()
+        if (
+            step.tool == "run_skill"
+            and str((step.with_args or {}).get("skill_command", "")).startswith(
+                "/autoskillit:review-pr"
+            )
+        )
+    ]
+    if not effect_steps:
+        return []
+    findings = []
+    for start in effect_steps:
+        reachable = bfs_reachable_without_barrier(
+            ctx.recipe,
+            start=start,
+            barrier=frozenset({"check_review_posted"}),
+        )
+        for advance_gate in _REVIEW_EFFECT_ADVANCE_GATES:
+            if advance_gate in reachable:
+                findings.append(
+                    make_finding(
+                        rule_name="review-effect-verification-waypoint",
+                        step_name=start,
+                        message=(
+                            f"Step '{start}' (review-pr skill) can reach '{advance_gate}' "
+                            f"without crossing check_review_posted. Insert a check_review_posted "
+                            f"run_python step on every success path from '{start}' to "
+                            f"'{advance_gate}'."
+                        ),
+                    )
+                )
+    return findings
+
+
 @semantic_rule(
     name="review-mode-reentry-waypoint-guard",
     description=(

@@ -139,13 +139,9 @@ def _extract_body_file_path(cmd: str) -> str | None:
         start = i + 3
         for j in range(start, len(tokens)):
             t = tokens[j]
-            if t in _GH_COMMAND_BOUNDARY:
+            if t in _SHELL_OPS:
                 break
-            if (
-                t == "--body-file"
-                and j + 1 < len(tokens)
-                and tokens[j + 1] not in _GH_COMMAND_BOUNDARY
-            ):
+            if t == "--body-file" and j + 1 < len(tokens) and tokens[j + 1] not in _SHELL_OPS:
                 raw = tokens[j + 1]
                 if raw.startswith("$"):
                     return _resolve_variable_body_path(raw, tokens, i)

@@ -220,8 +220,8 @@ def apply_config_authoritative_overrides(
                 result[key] = capability_overrides[key]
             else:
                 logger.warning(
-                    "config-authority key %r not found in resolved defaults — "
-                    "caller-supplied value retained (config-authoritative contract not enforced)",
+                    "capability-based key %r not found in capability_overrides — "
+                    "caller-supplied value retained (capability contract not enforced)",
                     key,
                 )
         # else: key is caller-sovereign (e.g., source_dir) — leave result unchanged

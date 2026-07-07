@@ -43,6 +43,8 @@ _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
 
 def _detect_capabilities(body: str, skill_name: str) -> set[str]:
     filtered = _strip_doc_fenced_blocks(body)
+    # Collapse shell line continuations so multi-line gh api calls are detected
+    filtered = re.sub(r"\\\n\s*", " ", filtered)
     detected: set[str] = set()
     for cap_name, patterns in _CAPABILITY_PATTERNS.items():
         for pat in patterns:

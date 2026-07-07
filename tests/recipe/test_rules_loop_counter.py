@@ -1,4 +1,5 @@
-"""Tests for loop-counter-cross-path-sharing and loop-guard-before-verify semantic rules."""
+"""Tests for loop-counter-cross-path-sharing, loop-guard-before-verify, and
+loop-counter-not-reset-on-outer-cycle semantic rules."""
 
 from __future__ import annotations
 
@@ -196,3 +197,104 @@ class TestLoopGuardBeforeVerify:
         findings = run_semantic_rules(recipe)
         gbv = [f for f in findings if f.rule == "loop-guard-before-verify"]
         assert gbv == [], f"{recipe_name}: {[(f.step_name, f.message) for f in gbv]}"
+
+
+def _audit_outer_guard(counter_var: str, *, non_exit: str, exit_route: str) -> RecipeStep:
+    """A check_loop_iteration guard whose counter contains 'audit_remediation'."""
+    return _guard_step(counter_var, non_exit=non_exit, exit_route=exit_route)
+
+
+class TestLoopCounterNotResetOnOuterCycle:
+    def test_missing_reset_fires(self) -> None:
+        """Inner guard reachable from audit_remediation outer without reset step fires."""
+        steps = {
+            "outer_guard": _audit_outer_guard(
+                "audit_remediation_count", non_exit="work", exit_route="done"
+            ),
+            "work": RecipeStep(tool="run_skill", on_success="inner_guard", on_failure="done"),
+            "inner_guard": _guard_step("fix_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="test", on_failure="done"),
+            "test": RecipeStep(tool="test_check", on_success="done", on_failure="fix"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
+        assert len(rule_findings) == 1
+        assert rule_findings[0].severity == Severity.ERROR
+        assert rule_findings[0].step_name == "inner_guard"
+
+    def test_reset_present_does_not_fire(self) -> None:
+        """A reset step on the path suppresses the finding."""
+        steps = {
+            "outer_guard": _audit_outer_guard(
+                "audit_remediation_count", non_exit="reset_fix", exit_route="done"
+            ),
+            "reset_fix": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.init_counter",
+                    "counter_value": "",
+                },
+                capture={"fix_count": "${{ result.value }}"},
+                on_success="work",
+                on_failure="work",
+            ),
+            "work": RecipeStep(tool="run_skill", on_success="inner_guard", on_failure="done"),
+            "inner_guard": _guard_step("fix_count", non_exit="fix", exit_route="done"),
+            "fix": RecipeStep(tool="run_skill", on_success="test", on_failure="done"),
+            "test": RecipeStep(tool="test_check", on_success="done", on_failure="fix"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
+        assert rule_findings == []
+
+    def test_post_audit_terminal_guard_excluded(self) -> None:
+        """A guard downstream with no path back to outer is excluded by bilateral check."""
+        steps = {
+            "outer_guard": _audit_outer_guard(
+                "audit_remediation_count", non_exit="work", exit_route="done"
+            ),
+            "work": RecipeStep(tool="run_skill", on_success="push", on_failure="done"),
+            "push": RecipeStep(tool="push_to_remote", on_success="ci_guard", on_failure="done"),
+            "ci_guard": _guard_step("ci_count", non_exit="ci_watch", exit_route="done"),
+            "ci_watch": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
+        assert rule_findings == []
+
+    def test_wrapper_loop_exempt_counter_excluded(self) -> None:
+        """group_iteration_count counter is exempt even when in the bilateral cycle."""
+        steps = {
+            "outer_guard": _audit_outer_guard(
+                "audit_remediation_count", non_exit="work", exit_route="done"
+            ),
+            "work": RecipeStep(tool="run_skill", on_success="inner_guard", on_failure="done"),
+            "inner_guard": _guard_step(
+                "group_iteration_count", non_exit="process", exit_route="done"
+            ),
+            "process": RecipeStep(tool="run_skill", on_success="test", on_failure="done"),
+            "test": RecipeStep(tool="test_check", on_success="outer_guard", on_failure="process"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+        recipe = _make_recipe(steps)
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
+        assert rule_findings == []
+
+    @pytest.mark.parametrize(
+        "recipe_name",
+        ("remediation", "implementation", "implementation-groups"),
+    )
+    def test_bundled_recipes_no_missing_reset(self, recipe_name: str) -> None:
+        recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+        findings = run_semantic_rules(recipe)
+        rule_findings = [f for f in findings if f.rule == "loop-counter-not-reset-on-outer-cycle"]
+        assert rule_findings == [], (
+            f"{recipe_name}: {[(f.step_name, f.message) for f in rule_findings]}"
+        )

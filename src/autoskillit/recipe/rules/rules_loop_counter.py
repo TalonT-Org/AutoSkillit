@@ -197,6 +197,21 @@ def _check_loop_guard_before_verify(ctx: ValidationContext) -> list[RuleFinding]
     return findings
 
 
+_WRAPPER_LOOP_EXEMPT_COUNTERS: frozenset[str] = frozenset(
+    {
+        "group_iteration_count",
+    }
+)
+"""Counters exempt from the cross-cycle reset requirement.
+
+These counters guard run-wide safety ceilings (e.g. group_iteration_count caps the
+total number of recipe-group iterations across the entire pipeline run) and must
+NOT be reset per audit-remediation cycle — doing so would defeat the safety
+ceiling and allow indefinite repetition. Counter names are stable across
+recipes; step names vary, so we key the exemption on counter variable rather
+than step name."""
+
+
 @semantic_rule(
     name="loop-counter-not-reset-on-outer-cycle",
     description=(
@@ -204,7 +219,7 @@ def _check_loop_guard_before_verify(ctx: ValidationContext) -> list[RuleFinding]
         "from an outer check_loop_iteration guard's non-max_exceeded route "
         "without passing through a step that resets the inner counter"
     ),
-    severity=Severity.WARNING,
+    severity=Severity.ERROR,
 )
 def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list[RuleFinding]:
     """Detect temporal counter sharing across outer audit-remediation cycles.
@@ -218,6 +233,12 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
     remediation cycle (audit_remediation_count) — other outer/inner guard
     relationships (e.g. merge_fix wrapping merge_rebase) have separate
     reset mechanisms and are out of scope for this rule.
+
+    Bilateral cycle-membership: an inner guard is only considered in-scope
+    when it is BOTH forward-reachable from the outer guard's non-exit route
+    AND backward-reachable to the outer guard. This structurally excludes
+    post-audit terminal guards (CI watch, stall recovery, etc.) that lie
+    downstream of the audit-remediation cycle but cannot return to it.
     """
     findings: list[RuleFinding] = []
     recipe = ctx.recipe
@@ -244,38 +265,39 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
     if not audit_outer_guards:
         return findings
 
-    reverse_graph: dict[str, set[str]] = {}
-    for src, targets in graph.items():
-        for tgt in targets:
-            reverse_graph.setdefault(tgt, set()).add(src)
-
-    for inner_name, inner_counter in guard_steps.items():
-        if inner_name in audit_outer_guards:
+    for outer_name in audit_outer_guards:
+        outer_step = recipe.steps[outer_name]
+        if outer_step.on_result is None:
             continue
 
-        for outer_name in audit_outer_guards:
-            if inner_name == outer_name:
+        non_exit_target: str | None = None
+        for cond in outer_step.on_result.conditions:
+            if cond.when and "max_exceeded" in cond.when:
+                continue
+            non_exit_target = cond.route
+            break
+
+        if non_exit_target is None or non_exit_target not in recipe.steps:
+            continue
+
+        forward_reachable = bfs_reachable(graph, non_exit_target)
+        forward_reachable.add(non_exit_target)
+        cycle_candidates = bfs_reachable(ctx.predecessors, outer_name)
+
+        for inner_name, inner_counter in guard_steps.items():
+            if inner_name in audit_outer_guards:
                 continue
 
-            outer_step = recipe.steps[outer_name]
-            if outer_step.on_result is None:
+            if inner_counter in _WRAPPER_LOOP_EXEMPT_COUNTERS:
                 continue
 
-            non_exit_target: str | None = None
-            for cond in outer_step.on_result.conditions:
-                if cond.when and "max_exceeded" in cond.when:
-                    continue
-                non_exit_target = cond.route
-                break
-
-            if non_exit_target is None or non_exit_target not in recipe.steps:
-                continue
-
-            forward_reachable = bfs_reachable(graph, non_exit_target)
             if inner_name not in forward_reachable:
                 continue
 
-            backward_reachable = bfs_reachable(reverse_graph, inner_name)
+            if inner_name not in cycle_candidates:
+                continue
+
+            backward_reachable = bfs_reachable(ctx.predecessors, inner_name)
             on_path = forward_reachable & backward_reachable
             on_path.add(non_exit_target)
             on_path.discard(inner_name)
@@ -293,13 +315,14 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
                         rule_name="loop-counter-not-reset-on-outer-cycle",
                         step_name=inner_name,
                         message=(
-                            f"Inner guard '{inner_name}' uses counter '{inner_counter}' "
-                            f"but is reachable from audit-remediation guard "
-                            f"'{outer_name}' via '{non_exit_target}' without a reset "
-                            f"step. Add a step using "
-                            f"'autoskillit.smoke_utils.init_counter' to capture "
-                            f"'{inner_counter}' on this path so each audit-remediation "
-                            f"cycle gets a fresh budget."
+                            f"Inner guard '{inner_name}' uses counter "
+                            f"'{inner_counter}' but is reachable from "
+                            f"audit-remediation guard '{outer_name}' via "
+                            f"'{non_exit_target}' without a reset step. Add "
+                            f"a step using "
+                            f"'autoskillit.smoke_utils.init_counter' to "
+                            f"capture '{inner_counter}' on this path so each "
+                            f"audit-remediation cycle gets a fresh budget."
                         ),
                     )
                 )

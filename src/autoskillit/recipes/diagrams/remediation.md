@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:3c77001f20b467137e2be091e3df4208647f6a4f4c0af9a974a55a350176b8f5 -->
+<!-- autoskillit-recipe-hash: sha256:057a181a0b203eb19fff416f34fa9b8e29675c46fc3fe09637f26d177a83b5be -->
 <!-- autoskillit-diagram-format: v7 -->
 ## remediation
 Investigate, rectify, implement, and merge a bug fix with CI and PR gates.
@@ -14,7 +14,7 @@ dry_walkthrough → implement ↔ [retry_worktree on context limit]
 |
 test → assess
 |
-+-- audit_impl → reset_test_fix_counter → pre_remediation_merge → remediate (optional)
++-- audit_impl → reset_test_fix_counter → reset_merge_test_fix_counter → reset_ref_push_counter → pre_remediation_merge → remediate (optional)
 |
 make_plan → commit_guard → merge → push
 |

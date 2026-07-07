@@ -248,20 +248,20 @@ while [ "$PR_CREATE_ATTEMPT" -le "$PR_CREATE_MAX" ]; do
     2) sleep 1 ;;
     3) sleep 2 ;;
   esac
-  if gh pr create \
+  gh pr create \
        --base "$BASE_BRANCH" \
        --head "$FEATURE_BRANCH" \
        --title "$TASK_TITLE" \
        --body-file "$PR_CREATE_BODY" \
        > "$PR_CREATE_LOG_DIR/pr_stdout_$ts.$PR_CREATE_ATTEMPT.txt" \
-       2> "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt"; then
+       2> "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt"
+  PR_CREATE_STATUS=$?
+  if [ "$PR_CREATE_STATUS" -eq 0 ]; then
     PR_URL=$(grep -E '^https://github\.com/' "$PR_CREATE_LOG_DIR/pr_stdout_$ts.$PR_CREATE_ATTEMPT.txt" | head -1)
     if [ -n "$PR_URL" ]; then
-      PR_CREATE_STATUS=0
       break
     fi
   fi
-  PR_CREATE_STATUS=$?
   PR_CREATE_ERR=$(cat "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt")
   case "$PR_CREATE_ERR" in
     # Terminal — do not retry (HTTP 4xx / validation / required-field missing).

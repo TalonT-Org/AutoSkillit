@@ -563,12 +563,13 @@ skills:
     - name: pr_url
       type: string
     expected_output_patterns:
-    - "pr_url[ \\t]*=[ \\t]*https://github\\.com/.*/pull/\\d+"
+    - "pr_url[ \\t]*=[ \\t]*(?:https://github\\.com/.*/pull/\\d+)?"
     pattern_examples:
     - "pr_url = https://github.com/owner/repo/pull/42\n%%ORDER_UP%%"
+    - "pr_url = \n%%ORDER_UP%%"
     write_behavior: conditional
     write_expected_when:
-    - "pr_url[ \\t]*=[ \\t]*https://"
+    - "pr_url[ \\t]*=[ \\t]*(?:https://|$)"
     source_pin_fields:
     - field: task_title
       required_source: "prep file ## Title section"

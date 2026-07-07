@@ -302,3 +302,183 @@ def test_prepare_pr_arch_lens_classification_covers_all_slugs():
         assert slug in step5_text, (
             f"arch-lens slug '{slug}' not found in Step 5 classification table"
         )
+
+
+# ---------------------------------------------------------------------------
+# compose-pr Step 5 bounded retry contract (issue #3987)
+# ---------------------------------------------------------------------------
+
+
+def _compose_pr_step5_bash() -> str:
+    """Return the literal bash block from compose-pr Step 5."""
+    from autoskillit.recipe._skill_placeholder_parser import (
+        extract_bash_blocks,
+        extract_step_sections,
+    )
+
+    text = COMPOSE_PR.read_text()
+    sections = extract_step_sections(text)
+    step5 = sections.get("Step 5")
+    assert step5, "compose-pr/SKILL.md is missing a Step 5 section"
+    blocks = extract_bash_blocks(step5)
+    assert len(blocks) == 1, f"Expected exactly 1 bash block in Step 5, found {len(blocks)}"
+    return blocks[0]
+
+
+def test_compose_pr_step5_has_bounded_retry_count_of_three():
+    """Step 5 must cap total gh pr create attempts at 3."""
+    import re
+
+    bash = _compose_pr_step5_bash()
+    # A loop guard tied to PR_CREATE_MAX whose value is exactly 3.
+    match = re.search(r"PR_CREATE_MAX\s*=\s*(\d+)", bash)
+    assert match, "Step 5 must declare PR_CREATE_MAX to bound retry attempts"
+    assert match.group(1) == "3", f"PR_CREATE_MAX must be 3, got {match.group(1)!r}"
+    assert "PR_CREATE_MAX=3" in bash or "PR_CREATE_MAX = 3" in bash, (
+        "Step 5 must use the canonical PR_CREATE_MAX=3 form"
+    )
+
+
+def test_compose_pr_step5_classifies_transient_failures():
+    """Step 5 must classify transient (HTTP 5xx / network) failures as retryable."""
+    bash = _compose_pr_step5_bash()
+    transient_markers = ["HTTP 5", "rate limit", "timeout", "connection reset"]
+    hits = sum(1 for m in transient_markers if m in bash)
+    assert hits >= 2, (
+        "Step 5 must classify transient failures (HTTP 5xx / rate limit / timeout / "
+        "connection reset) as retryable; found only "
+        f"{hits} of {transient_markers}"
+    )
+
+
+def test_compose_pr_step5_uses_1s_and_2s_backoff_sleeps():
+    """Step 5 must back off 1s before attempt 2 and 2s before attempt 3."""
+    import re
+
+    bash = _compose_pr_step5_bash()
+    sleep_matches = re.findall(r"sleep\s+(\d+)", bash)
+    assert sleep_matches, "Step 5 must include at least one bounded backoff sleep"
+    # Both 1 and 2 must appear somewhere in the backoff ladder.
+    assert "1" in sleep_matches, "Step 5 must sleep 1 second (e.g., before attempt 2)"
+    assert "2" in sleep_matches, "Step 5 must sleep 2 seconds (e.g., before attempt 3)"
+
+
+def test_compose_pr_step5_preserves_pr_arguments():
+    """Step 5 must keep --base, --head, --title, --body-file arguments intact."""
+    bash = _compose_pr_step5_bash()
+    assert "--base" in bash, "Step 5 must include --base argument"
+    assert "--head" in bash, "Step 5 must include --head argument"
+    assert "--title" in bash, "Step 5 must include --title argument"
+    assert "--body-file" in bash, "Step 5 must include --body-file argument"
+    # Literal body-file path with the canonical {{AUTOSKILLIT_TEMP}} prefix
+    # and the $ts.md suffix.
+    assert "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md" in bash, (
+        "Step 5 must use the literal --body-file path "
+        "{{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md"
+    )
+
+
+def test_compose_pr_step4_auth_preflight_unchanged():
+    """Step 4 must retain the gh auth status preflight behavior."""
+    from autoskillit.recipe._skill_placeholder_parser import extract_step_sections
+
+    text = COMPOSE_PR.read_text()
+    sections = extract_step_sections(text)
+    step4 = sections.get("Step 4", "")
+    assert step4, "compose-pr/SKILL.md is missing a Step 4 section"
+    assert "gh auth status" in step4, "Step 4 must run gh auth status preflight"
+    # Empty pr_url emit path must remain documented in Step 4.
+    assert "pr_url =" in step4, (
+        "Step 4 must document the empty pr_url emit path on gh preflight failure"
+    )
+
+
+def test_compose_pr_step5_rate_limit_classified_before_broad_4xx():
+    """HTTP 429 and secondary rate limits must precede the broad HTTP 4xx terminal pattern."""
+    bash = _compose_pr_step5_bash()
+
+    http_429_pos = bash.find("HTTP\\ 429")
+    secondary_rl_pos = bash.find("secondary\\ rate\\ limit")
+    rate_limit_pos = bash.find("rate\\ limit")
+
+    assert http_429_pos != -1, "Step 5 must classify HTTP 429 as retryable"
+    assert secondary_rl_pos != -1, "Step 5 must classify secondary rate limit as retryable"
+    assert rate_limit_pos != -1, "Step 5 must classify broad rate limit as retryable"
+
+    # Anchor the broad HTTP 4xx terminal pattern by searching from the terminal comment.
+    terminal_comment_pos = bash.find("Terminal")
+    assert terminal_comment_pos != -1, "Step 5 must have a Terminal failure comment"
+    broad_4xx_in_terminal = bash.find("HTTP\\ 4", terminal_comment_pos)
+    assert broad_4xx_in_terminal != -1, (
+        "Step 5 must have a broad HTTP 4xx pattern in the terminal failure branch"
+    )
+
+    assert http_429_pos < terminal_comment_pos, (
+        "HTTP 429 retryable pattern must appear before the terminal failure branch "
+        f"(found at positions {http_429_pos} vs terminal comment at {terminal_comment_pos})"
+    )
+    assert secondary_rl_pos < terminal_comment_pos, (
+        "secondary rate limit retryable pattern must appear before the terminal failure branch "
+        f"(found at positions {secondary_rl_pos} vs terminal comment at {terminal_comment_pos})"
+    )
+    assert rate_limit_pos < terminal_comment_pos, (
+        "Broad rate limit retryable pattern must appear before the terminal failure branch"
+    )
+
+
+def test_compose_pr_step5_tracks_last_attempt_separately():
+    """Step 5 must set PR_CREATE_LAST_ATTEMPT immediately after each gh pr create execution."""
+    bash = _compose_pr_step5_bash()
+
+    assert "PR_CREATE_LAST_ATTEMPT" in bash, (
+        "Step 5 must declare PR_CREATE_LAST_ATTEMPT to track the last executed attempt"
+    )
+    # The assignment must appear after the gh pr create command (tracks each execution).
+    gh_create_pos = bash.find("gh pr create")
+    last_attempt_assign_pos = bash.find("PR_CREATE_LAST_ATTEMPT=$PR_CREATE_ATTEMPT")
+    assert last_attempt_assign_pos != -1, (
+        "Step 5 must set PR_CREATE_LAST_ATTEMPT=$PR_CREATE_ATTEMPT after each create attempt"
+    )
+    assert last_attempt_assign_pos > gh_create_pos, (
+        "PR_CREATE_LAST_ATTEMPT must be assigned after the gh pr create invocation"
+    )
+
+    # Final error reporting must use PR_CREATE_LAST_ATTEMPT, not the raw loop counter.
+    fail_report_pos = bash.find("gh pr create failed after")
+    assert fail_report_pos != -1, "Step 5 must print a failure message on exhaustion"
+    last_attempt_in_report = bash.find("PR_CREATE_LAST_ATTEMPT", fail_report_pos)
+    assert last_attempt_in_report != -1, (
+        "Final failure reporting must reference PR_CREATE_LAST_ATTEMPT "
+        "(not the post-increment loop counter)"
+    )
+
+
+def test_compose_pr_step5_has_explicit_no_url_failure_branch():
+    """Step 5 must force nonzero status when all attempts end without a PR URL."""
+    bash = _compose_pr_step5_bash()
+
+    # The no-URL failure path must set status to nonzero explicitly.
+    assert "PR_CREATE_STATUS=1" in bash, (
+        "Step 5 must explicitly set PR_CREATE_STATUS=1 when PR_URL is empty "
+        "to prevent zero-exit/no-URL from becoming a silent empty success"
+    )
+    # There must be no unconditional 'pr_url = ' (empty) emit from Step 5.
+    # (Step 4 is the only successful empty-pr_url path.)
+    assert "pr_url = \n" not in bash and "printf 'pr_url = \\n'" not in bash, (
+        "Step 5 must not emit 'pr_url = ' (empty) — that path is reserved for Step 4"
+    )
+
+
+def test_compose_pr_step5_body_file_uses_variable_form():
+    """Step 5 must use --body-file \"$PR_CREATE_BODY\" (guard-resolvable variable form)."""
+    bash = _compose_pr_step5_bash()
+
+    # The guard resolves $PR_CREATE_BODY from the preamble assignment.
+    assert '--body-file "$PR_CREATE_BODY"' in bash, (
+        'Step 5 must pass --body-file "$PR_CREATE_BODY" so the guard can resolve '
+        "the variable from the preamble assignment"
+    )
+    assert "PR_CREATE_BODY=" in bash, (
+        "Step 5 must declare PR_CREATE_BODY= assignment before the loop "
+        "so the guard can resolve it"
+    )

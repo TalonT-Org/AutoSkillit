@@ -45,6 +45,24 @@ _WRITE_CALL_SITE_RE = re.compile(
 
 _SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 
+# Shell control words that mark the start of a new command in compound
+# shell constructs (loops, conditionals, case statements). When a `gh` token
+# is preceded by one of these, treat it as the verb of a fresh command — even
+# though shlex does not treat them as operators. Keep this set narrow: only
+# words that legitimately precede a command in real shell scripts.
+_SHELL_CONTROL_WORDS: frozenset[str] = frozenset(
+    {
+        "do",
+        "done",
+        "then",
+        "else",
+        "elif",
+        "esac",
+        "fi",
+        "in",
+    }
+)
+
 _REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
 _REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
 _FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")

@@ -19,6 +19,7 @@ Skill SKILL.md content compliance, placeholder contracts, and verdict guard test
 | `test_make_plan_false_positive.py` | Tests for false_positive verdict support in make-plan SKILL.md |
 | `test_make_plan_multipart_contracts.py` | Contract tests for make-plan multi-part green-gate rule and xfail bridge documentation |
 | `test_compose_pr.py` | Guard tests for compose-pr/SKILL.md template structure |
+| `test_compose_pr_retry.py` | Step 5 bounded retry behavior tests — transient retry, terminal fail-fast, response-loss recovery (fake gh on PATH) |
 | `test_conflict_resolution_guards.py` | Structural guards for conflict resolution safeguards in SKILL.md files |
 | `test_deletion_regression_guards.py` | Structural guards for deletion regression detection in merge-pr and review-pr skills |
 | `test_dry_walkthrough_contracts.py` | Structural contracts for the dry-walkthrough historical regression check step |

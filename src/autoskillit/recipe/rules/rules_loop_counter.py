@@ -272,7 +272,7 @@ def _check_loop_counter_not_reset_on_outer_cycle(ctx: ValidationContext) -> list
 
             has_reset = False
             for sn in reachable_to_inner:
-                if sn == non_exit_target or sn == inner_name:
+                if sn == inner_name:
                     continue
                 candidate = recipe.steps.get(sn)
                 if candidate is not None and inner_counter in candidate.capture:

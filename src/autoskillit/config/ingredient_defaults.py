@@ -224,6 +224,12 @@ def apply_config_authoritative_overrides(
                     "caller-supplied value retained (config-authoritative contract not enforced)",
                     key,
                 )
+        elif key not in CONFIG_AUTHORITY_KEYS:
+            logger.warning(
+                "config-authority key %r is not a recognized enforcement key — "
+                "caller-supplied value retained",
+                key,
+            )
         # else: key is caller-sovereign (e.g., source_dir) — leave result unchanged
     return result
 

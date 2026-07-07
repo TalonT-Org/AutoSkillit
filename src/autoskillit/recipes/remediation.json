@@ -1479,8 +1479,8 @@
           "route": "check_review_loop"
         }
       ],
+      "on_failure": "release_issue_failure",
       "optional": true,
-      "skip_when_false": "inputs.open_pr",
       "optional_context_refs": [
         "review_loop_count",
         "review_mode"

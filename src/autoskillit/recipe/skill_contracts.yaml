@@ -2594,10 +2594,12 @@ callable_contracts:
       - github
     outputs:
     - name: reviews_posted
+      type: str
       allowed_values:
       - "true"
       - "false"
     - name: sentinel
+      type: str
       allowed_values:
       - no_reviews_posted
       - ""

@@ -1551,7 +1551,8 @@
           "when": "${{ result.reviews_posted }} == 'true'",
           "route": "derive_batch_ci_event"
         }
-      ]
+      ],
+      "on_failure": "register_clone_failure"
     },
     "resolve_review_integration": {
       "tool": "run_skill",

@@ -53,10 +53,10 @@ def test_pre_review_rebase_routes_to_re_push_review(recipe) -> None:
     assert step.on_failure == "resolve_pre_review_conflicts"
 
 
-def test_re_push_review_routes_to_check_review_loop(recipe) -> None:
-    """re_push_review on_success must route to check_review_loop in remediation recipe."""
+def test_re_push_review_routes_to_check_review_posted(recipe) -> None:
+    """re_push_review on_success must route to check_review_posted (effect verification gate)."""
     step = recipe.steps["re_push_review"]
-    assert step.on_success == "check_review_loop"
+    assert step.on_success == "check_review_posted"
 
 
 def test_pre_remediation_merge_routes_path_validation_to_remediate(recipe) -> None:

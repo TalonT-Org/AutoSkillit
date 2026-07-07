@@ -182,9 +182,7 @@ def _review_effect_verification_waypoint(ctx: ValidationContext) -> list[RuleFin
         for step_id, step in ctx.recipe.steps.items()
         if (
             step.tool == "run_skill"
-            and str((step.with_args or {}).get("skill_command", "")).startswith(
-                "/autoskillit:review-pr"
-            )
+            and str((step.with_args or {}).get("skill_command", "")).startswith("/review-pr")
         )
     ]
     if not effect_steps:

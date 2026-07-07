@@ -1,7 +1,7 @@
 ---
 name: review-research-pr
 categories: [research]
-uses_capabilities: [agent_model, run_skill]
+uses_capabilities: [agent_model, github_api_write, run_skill]
 description: Automated diff-scoped research PR review using parallel audit subagents aligned to research quality dimensions. Posts inline GitHub review comments and submits a summary verdict. Use after a research PR is opened to gate on review approval.
 hooks:
   PreToolUse:

@@ -318,7 +318,7 @@ def test_dispatch_food_truck_calls_compute_effective_backend_map() -> None:
 
 
 def test_run_skill_references_git_metadata_write_capability() -> None:
-    """run_skill must reference 'git_metadata_write' to detect capability-driven routing needs."""
+    """run_skill must use registry-driven capability routing (REQ-ROUTE-001)."""
     execution_path = SRC_ROOT / "server" / "tools" / "tools_execution.py"
     src = execution_path.read_text(encoding="utf-8")
 
@@ -330,10 +330,14 @@ def test_run_skill_references_git_metadata_write_capability() -> None:
             break
     assert func_src, "run_skill not found in tools_execution.py"
 
-    assert '"git_metadata_write"' in func_src, (
-        "run_skill must reference 'git_metadata_write' as a literal constant — "
+    assert "_has_routing_capability" in func_src, (
+        "run_skill must call _has_routing_capability() — "
         "removing this breaks the capability-driven auto-route path that dispatches "
         "codex orchestrator skills requiring claude-code (REQ-ROUTE-001)."
+    )
+    assert "required_backends" in src, (
+        "tools_execution.py must reference 'required_backends' in the routing helper — "
+        "this field drives the registry-based routing gate (REQ-ROUTE-001)."
     )
 
 

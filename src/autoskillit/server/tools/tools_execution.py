@@ -505,6 +505,36 @@ def _compute_write_prefixes(
     return base_prefixes[0] if base_prefixes else "", tuple(all_prefixes)
 
 
+def _aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
+    """Aggregate required_sandbox_overrides from all declared capabilities."""
+    return frozenset().union(
+        *(
+            SKILL_CAPABILITY_REGISTRY[cap].required_sandbox_overrides
+            for cap in skill_caps
+            if cap in SKILL_CAPABILITY_REGISTRY
+        )
+    )
+
+
+def _has_routing_capability(skill_caps: frozenset[str]) -> bool:
+    """Return True if any declared capability requires a specific backend."""
+    return any(
+        SKILL_CAPABILITY_REGISTRY.get(cap) is not None
+        and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
+        for cap in skill_caps
+    )
+
+
+def _get_routing_caps(skill_caps: frozenset[str]) -> list[str]:
+    """Return sorted list of capabilities that require a specific backend."""
+    return sorted(
+        cap
+        for cap in skill_caps
+        if SKILL_CAPABILITY_REGISTRY.get(cap)
+        and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
+    )
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("run_skill")
@@ -772,19 +802,9 @@ async def run_skill(
                 if _skill_info
                 else frozenset()
             )
-            _sandbox_overrides: frozenset[str] = frozenset().union(
-                *(
-                    SKILL_CAPABILITY_REGISTRY[cap].required_sandbox_overrides
-                    for cap in _skill_caps
-                    if cap in SKILL_CAPABILITY_REGISTRY
-                )
-            )
+            _sandbox_overrides = _aggregate_sandbox_overrides(_skill_caps)
             _network_access = "sandbox_workspace_write.network_access=true" in _sandbox_overrides
-            _has_routing_cap = any(
-                SKILL_CAPABILITY_REGISTRY.get(cap) is not None
-                and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
-                for cap in _skill_caps
-            )
+            _has_routing_cap = _has_routing_capability(_skill_caps)
             _skill_requires_claude = bool(
                 _has_routing_cap
                 and tool_ctx.backend is not None
@@ -793,12 +813,7 @@ async def run_skill(
 
             if _skill_requires_claude:
                 if shutil.which("claude") is None:
-                    _routing_caps = sorted(
-                        cap
-                        for cap in _skill_caps
-                        if SKILL_CAPABILITY_REGISTRY.get(cap)
-                        and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
-                    )
+                    _routing_caps = _get_routing_caps(_skill_caps)
                     return SkillResult.crashed(
                         exception=RuntimeError(
                             f"Skill {target_name!r} requires claude-code backend "

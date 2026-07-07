@@ -299,6 +299,7 @@ def test_skill_session_config_fields_exhaustive():
         "resume_message",
         "sandbox_mode",
         "backend_override",
+        "network_access",
     }
 
 

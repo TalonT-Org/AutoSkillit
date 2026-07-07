@@ -39,6 +39,89 @@ _CLOSING_RE = re.compile(
 
 _METADATA_CLOSING_RE = re.compile(r"^-[ \t]*closing_issue:[ \t]*(\S+)", re.MULTILINE)
 
+_SIMPLE_ASSIGN_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+_VAR_REF_RE = re.compile(r"^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$")
+_UNSAFE_ASSIGN_VALUE_RE = re.compile(r"[`()|&;]")
+_NESTED_VAR_RE = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
+
+# Keywords that open a nesting level (loop/conditional/case bodies).
+_DEPTH_INCREASE: frozenset[str] = frozenset({"while", "for", "until", "if", "case"})
+# Keywords that close a nesting level.
+_DEPTH_DECREASE: frozenset[str] = frozenset({"done", "fi", "esac"})
+
+
+def _collect_depth0_assignments(tokens: list[str], before_index: int) -> dict[str, str]:
+    """Collect simple variable assignments at nesting depth 0 before *before_index*.
+
+    Only assignments with safe values (no command substitution, backticks, or
+    shell operators in the value) are included. Simple $VAR references in values
+    are left as-is for downstream resolution.
+    """
+    assignments: dict[str, str] = {}
+    depth = 0
+    for i, tok in enumerate(tokens):
+        if i >= before_index:
+            break
+        if tok in _DEPTH_INCREASE:
+            depth += 1
+        elif tok in _DEPTH_DECREASE:
+            if depth > 0:
+                depth -= 1
+        elif depth == 0:
+            m = _SIMPLE_ASSIGN_RE.match(tok)
+            if m:
+                name, value = m.group(1), m.group(2)
+                if not _UNSAFE_ASSIGN_VALUE_RE.search(value):
+                    assignments[name] = value
+    return assignments
+
+
+def _resolve_nested_vars(value: str, assignments: dict[str, str]) -> str | None:
+    """Expand simple $VAR references in *value* from *assignments*.
+
+    Returns the expanded string, or None if any variable cannot be resolved
+    (fail-open: caller should treat None as "path unknown").
+    """
+    result_parts: list[str] = []
+    i = 0
+    while i < len(value):
+        if value[i] == "$":
+            m = _NESTED_VAR_RE.match(value, i)
+            if not m:
+                return None
+            var_name = m.group(1)
+            if var_name not in assignments:
+                return None
+            nested_val = assignments[var_name]
+            if "$" in nested_val:
+                return None
+            result_parts.append(nested_val)
+            i = m.end()
+        else:
+            result_parts.append(value[i])
+            i += 1
+    return "".join(result_parts)
+
+
+def _resolve_variable_body_path(raw_token: str, tokens: list[str], gh_index: int) -> str | None:
+    """Resolve a $VAR or ${VAR} body-file token from depth-0 assignments before *gh_index*.
+
+    Returns the resolved path string, or None if resolution fails (fail-open).
+    """
+    m = _VAR_REF_RE.match(raw_token)
+    if not m:
+        return None
+    var_name = m.group(1)
+
+    assignments = _collect_depth0_assignments(tokens, gh_index)
+    if var_name not in assignments:
+        return None
+
+    raw_value = assignments[var_name]
+    if "$" not in raw_value:
+        return raw_value
+    return _resolve_nested_vars(raw_value, assignments)
+
 
 def _extract_body_file_path(cmd: str) -> str | None:
     try:
@@ -63,9 +146,15 @@ def _extract_body_file_path(cmd: str) -> str | None:
                 and j + 1 < len(tokens)
                 and tokens[j + 1] not in _GH_COMMAND_BOUNDARY
             ):
-                return tokens[j + 1]
+                raw = tokens[j + 1]
+                if raw.startswith("$"):
+                    return _resolve_variable_body_path(raw, tokens, i)
+                return raw
             if t.startswith("--body-file="):
-                return t.split("=", 1)[1]
+                raw = t.split("=", 1)[1]
+                if raw.startswith("$"):
+                    return _resolve_variable_body_path(raw, tokens, i)
+                return raw
     return None
 
 

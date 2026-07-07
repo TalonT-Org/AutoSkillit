@@ -184,3 +184,81 @@ class TestStep5Retry:
         assert attempts == 1
         # Recovery diagnostics off stdout
         assert "Bad Gateway" not in proc.stdout
+
+    def test_http_429_retries_and_succeeds_on_attempt_2(self, tmp_path):
+        """HTTP 429 Too Many Requests is retryable; second attempt succeeds."""
+        bin_dir = _make_fake_gh(tmp_path)
+        proc = _run_step5(
+            tmp_path,
+            bin_dir,
+            env_overrides={
+                "FAKE_GH_CREATE_1_EXIT": "1",
+                "FAKE_GH_CREATE_1_STDERR": "HTTP 429 Too Many Requests",
+                "FAKE_GH_CREATE_2_EXIT": "0",
+                "FAKE_GH_CREATE_2_STDOUT": "https://github.com/owner/repo/pull/99",
+            },
+        )
+        assert proc.returncode == 0
+        assert "pr_url = https://github.com/owner/repo/pull/99" in proc.stdout
+        attempts = int((tmp_path / "gh_create_attempts").read_text())
+        assert attempts == 2
+
+    def test_secondary_rate_limit_retries_before_success(self, tmp_path):
+        """HTTP 403 secondary rate limit is retryable; second attempt succeeds."""
+        bin_dir = _make_fake_gh(tmp_path)
+        proc = _run_step5(
+            tmp_path,
+            bin_dir,
+            env_overrides={
+                "FAKE_GH_CREATE_1_EXIT": "1",
+                "FAKE_GH_CREATE_1_STDERR": "HTTP 403: secondary rate limit exceeded",
+                "FAKE_GH_CREATE_2_EXIT": "0",
+                "FAKE_GH_CREATE_2_STDOUT": "https://github.com/owner/repo/pull/100",
+            },
+        )
+        assert proc.returncode == 0
+        assert "pr_url = https://github.com/owner/repo/pull/100" in proc.stdout
+        attempts = int((tmp_path / "gh_create_attempts").read_text())
+        assert attempts == 2
+
+    def test_three_transient_failures_exhaust_retry_budget(self, tmp_path):
+        """Three transient failures exhaust the retry budget with correct diagnostics."""
+        bin_dir = _make_fake_gh(tmp_path)
+        proc = _run_step5(
+            tmp_path,
+            bin_dir,
+            env_overrides={
+                "FAKE_GH_CREATE_1_EXIT": "1",
+                "FAKE_GH_CREATE_1_STDERR": "HTTP 503 Service Unavailable",
+                "FAKE_GH_CREATE_2_EXIT": "1",
+                "FAKE_GH_CREATE_2_STDERR": "HTTP 503 Service Unavailable",
+                "FAKE_GH_CREATE_3_EXIT": "1",
+                "FAKE_GH_CREATE_3_STDERR": "HTTP 503 final attempt unavailable",
+            },
+        )
+        assert proc.returncode != 0
+        attempts = int((tmp_path / "gh_create_attempts").read_text())
+        assert attempts == 3
+        assert "gh pr create failed after 3 attempt(s):" in proc.stderr
+        assert "HTTP 503 final attempt unavailable" in proc.stderr
+        # Must not attempt to read a missing attempt-4 stderr file
+        assert "attempt(s): 4" not in proc.stderr
+        assert "$PR_CREATE_ATTEMPT" not in proc.stderr
+
+    def test_zero_exit_no_url_all_attempts_is_failure(self, tmp_path):
+        """gh pr create exits 0 but returns no URL on all attempts → nonzero exit."""
+        bin_dir = _make_fake_gh(tmp_path)
+        proc = _run_step5(
+            tmp_path,
+            bin_dir,
+            env_overrides={
+                # All three attempts exit 0 with no stdout URL and empty stderr.
+                "FAKE_GH_CREATE_1_EXIT": "0",
+                "FAKE_GH_CREATE_2_EXIT": "0",
+                "FAKE_GH_CREATE_3_EXIT": "0",
+                # gh pr view also returns no URL.
+            },
+        )
+        assert proc.returncode != 0
+        # Must not emit a successful empty pr_url token.
+        assert "pr_url = " not in proc.stdout

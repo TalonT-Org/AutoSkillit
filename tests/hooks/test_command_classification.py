@@ -18,6 +18,18 @@ from autoskillit.hooks._command_classification import (
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 
+def test_shell_control_words_includes_closing_keywords():
+    """_SHELL_CONTROL_WORDS must include the closing keywords added by this task.
+
+    Pinning the shared primitive directly so boundary expansion is not only
+    covered indirectly through compose_pr_body_guard integration tests.
+    """
+    from autoskillit.hooks._command_classification import _SHELL_CONTROL_WORDS  # noqa: PLC0415
+
+    for word in ("esac", "fi", "done"):
+        assert word in _SHELL_CONTROL_WORDS, f"_SHELL_CONTROL_WORDS is missing '{word}'"
+
+
 def test_detects_python3_subprocess_run():
     cmd = "python3 -c \"import subprocess; subprocess.run('gh pr create', shell=True)\""
     assert has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"])

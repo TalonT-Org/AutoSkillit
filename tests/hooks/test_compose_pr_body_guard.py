@@ -676,3 +676,179 @@ class TestRetryShape:
         output = _run_hook(event, monkeypatch, headless=True)
         # gh pr create has no body-file, so nothing to deny → empty output.
         assert output == ""
+
+
+# ---------------------------------------------------------------------------
+# T11: TestVariableBodyPath — guard resolves $VAR form used by compose-pr Step 5
+# ---------------------------------------------------------------------------
+
+
+class TestVariableBodyPath:
+    """compose-pr Step 5 uses --body-file "$PR_CREATE_BODY" (a variable form).
+
+    The guard must resolve PR_CREATE_BODY from safe depth-0 assignments
+    that appear before the matched gh pr create, handle nested $ts variables
+    in the value, and reject assignments from out-of-scope positions (post-gh
+    or inside alternate control branches).
+    """
+
+    def _make_body_path(self, tmp_path, content: str) -> str:
+        """Create the body file at the compose-pr standard location and return its path."""
+        body_path = tmp_path / ".autoskillit" / "temp" / "compose-pr" / "pr_body_testts.md"
+        body_path.parent.mkdir(parents=True, exist_ok=True)
+        body_path.write_text(content, encoding="utf-8")
+        return str(body_path)
+
+    def test_denies_variable_body_path_after_esac_boundary(self, monkeypatch, tmp_path):
+        """PR_CREATE_BODY variable resolved from preamble; gh pr create after esac → deny."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body_path = self._make_body_path(tmp_path, "Some description with no closing ref")
+
+        cmd = (
+            f"PR_CREATE_BODY={body_path}\n"
+            f"while true; do\n"
+            f'  case "$PR_CREATE_ATTEMPT" in\n'
+            f"    2) sleep 1 ;;\n"
+            f"  esac\n"
+            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
+            f"  break\n"
+            f"done"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_allows_variable_body_path_with_closing_ref(self, monkeypatch, tmp_path):
+        """PR_CREATE_BODY resolved and body contains Closes #N → guard allows."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body_path = self._make_body_path(tmp_path, "Summary\n\nCloses #123")
+
+        cmd = (
+            f"PR_CREATE_BODY={body_path}\n"
+            f"while true; do\n"
+            f'  case "$PR_CREATE_ATTEMPT" in\n'
+            f"    2) sleep 1 ;;\n"
+            f"  esac\n"
+            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
+            f"  break\n"
+            f"done"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == ""
+
+    def test_resolves_nested_ts_variable_in_body_path(self, monkeypatch, tmp_path):
+        """PR_CREATE_BODY contains $ts; both assigned before loop → deny."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+
+        compose_dir = tmp_path / ".autoskillit" / "temp" / "compose-pr"
+        compose_dir.mkdir(parents=True, exist_ok=True)
+        body_path = compose_dir / "pr_body_testts.md"
+        body_path.write_text("Some description with no closing ref", encoding="utf-8")
+
+        compose_dir_str = str(compose_dir)
+        cmd = (
+            f"ts=testts\n"
+            f"PR_CREATE_BODY={compose_dir_str}/pr_body_$ts.md\n"
+            f"while true; do\n"
+            f'  case "$PR_CREATE_ATTEMPT" in\n'
+            f"    2) sleep 1 ;;\n"
+            f"  esac\n"
+            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
+            f"  break\n"
+            f"done"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_denies_variable_body_path_after_fi_boundary(self, monkeypatch, tmp_path):
+        """Guard recognizes gh pr create immediately after fi command boundary."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body_path = self._make_body_path(tmp_path, "No closing ref here")
+
+        cmd = (
+            f"PR_CREATE_BODY={body_path}\n"
+            f'if [ "$PRECONDITION" = "ok" ]; then\n'
+            f"  : # setup\n"
+            f"fi\n"
+            f'gh pr create --base main --body-file "$PR_CREATE_BODY"'
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_denies_variable_body_path_after_done_boundary(self, monkeypatch, tmp_path):
+        """Guard recognizes gh pr create immediately after done command boundary."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body_path = self._make_body_path(tmp_path, "No closing ref here")
+
+        cmd = (
+            f"PR_CREATE_BODY={body_path}\n"
+            f"for i in 1; do\n"
+            f"  : # setup\n"
+            f"done\n"
+            f'gh pr create --base main --body-file "$PR_CREATE_BODY"'
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_post_gh_assignment_is_not_used(self, monkeypatch, tmp_path):
+        """An assignment appearing after gh pr create must not be used for resolution."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body_path = self._make_body_path(tmp_path, "No closing ref here")
+
+        # PR_CREATE_BODY only assigned AFTER gh pr create — resolution must fail-open.
+        cmd = (
+            f"while true; do\n"
+            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
+            f"  PR_CREATE_BODY={body_path}\n"
+            f"  break\n"
+            f"done"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == ""
+
+    def test_alternate_branch_assignment_is_not_used(self, monkeypatch, tmp_path):
+        """Assignment inside an if-then branch cannot be proven to reach the else branch."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body_path = self._make_body_path(tmp_path, "No closing ref here")
+
+        # PR_CREATE_BODY is assigned in the `then` branch; gh pr create is in `else`.
+        # Since the assignment is at depth 1, it must not be collected → fail-open.
+        cmd = (
+            f'if [ "$PRECONDITION" = "ok" ]; then\n'
+            f"  PR_CREATE_BODY={body_path}\n"
+            f"else\n"
+            f'  gh pr create --base main --body-file "$PR_CREATE_BODY"\n'
+            f"fi"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == ""
+
+    def test_allows_echo_mentioning_variable_form(self, monkeypatch, tmp_path):
+        """Echo of gh pr create with $PR_CREATE_BODY must remain a benign false-positive."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        cmd = "echo 'About to run: gh pr create --body-file $PR_CREATE_BODY'"
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == ""

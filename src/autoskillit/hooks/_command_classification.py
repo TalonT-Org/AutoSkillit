@@ -53,9 +53,12 @@ _SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
 _SHELL_CONTROL_WORDS: frozenset[str] = frozenset(
     {
         "do",
+        "done",
         "then",
         "else",
         "elif",
+        "esac",
+        "fi",
         "in",
     }
 )

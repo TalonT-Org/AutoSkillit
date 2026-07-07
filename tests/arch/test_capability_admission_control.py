@@ -335,8 +335,8 @@ def test_run_skill_references_git_metadata_write_capability() -> None:
         "removing this breaks the capability-driven auto-route path that dispatches "
         "codex orchestrator skills requiring claude-code (REQ-ROUTE-001)."
     )
-    assert "required_backends" in src, (
-        "tools_execution.py must reference 'required_backends' in the routing helper — "
+    assert "worker_routable" in src, (
+        "tools_execution.py must reference 'worker_routable' in the routing helper — "
         "this field drives the registry-based routing gate (REQ-ROUTE-001)."
     )
 

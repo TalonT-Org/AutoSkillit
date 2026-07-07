@@ -103,7 +103,7 @@ def _provider_aware_capability_overrides(
             cap_resolved = skill_resolver.resolve(skill_name)
             if cap_resolved and any(
                 SKILL_CAPABILITY_REGISTRY.get(cap) is not None
-                and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
+                and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
                 for cap in getattr(cap_resolved, "uses_capabilities", frozenset())
             ):
                 has_capability_requirement = True
@@ -205,20 +205,21 @@ def _compute_effective_backend_map(
 
     For each ``run_skill`` step, returns the backend that ``run_skill`` would dispatch
     to: ``AGENT_BACKEND_CLAUDE_CODE`` if the step has a provider override with
-    ``ANTHROPIC_BASE_URL`` OR the step's skill requires ``git_metadata_write``;
-    otherwise the orchestrator's ``backend_name``. Returns ``None`` when there is
-    no orchestrator backend — callers treat ``None`` as "no per-step awareness;
-    fall back to ``ctx.backend_name``".
+    ``ANTHROPIC_BASE_URL`` OR the step's skill declares a ``worker_routable``
+    capability (e.g. ``git_metadata_write``); otherwise the orchestrator's
+    ``backend_name``. Returns ``None`` when there is no orchestrator backend —
+    callers treat ``None`` as "no per-step awareness; fall back to
+    ``ctx.backend_name``".
 
     Mirrors the ``ANTHROPIC_BASE_URL`` backend-override block and the
-    ``_skill_requires_claude`` capability disjunct in ``run_skill()``
-    (``tools_execution.py``) so admission and dispatch evaluate backend compatibility
-    using identical per-step logic.
+    ``_skill_requires_claude`` / ``_has_routing_capability`` predicate in
+    ``run_skill()`` (``tools_execution.py``) so admission and dispatch evaluate
+    backend compatibility using identical per-step logic.
 
     The ``skill_resolver`` parameter enables capability-driven routing: when
-    supplied, steps whose skills have ``git_metadata_write`` in
-    ``uses_capabilities`` map to ``AGENT_BACKEND_CLAUDE_CODE`` regardless of
-    provider config (REQ-ADMIT-002).
+    supplied, steps whose skills declare any ``worker_routable=True`` capability
+    map to ``AGENT_BACKEND_CLAUDE_CODE`` regardless of provider config
+    (REQ-ADMIT-002).
     """
     if backend_name is None or recipe_steps is None:
         return None
@@ -256,7 +257,7 @@ def _compute_effective_backend_map(
                 resolved = skill_resolver.resolve(skill_name)
                 if resolved and any(
                     SKILL_CAPABILITY_REGISTRY.get(cap) is not None
-                    and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
+                    and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
                     for cap in getattr(resolved, "uses_capabilities", frozenset())
                 ):
                     result[step_name] = AGENT_BACKEND_CLAUDE_CODE

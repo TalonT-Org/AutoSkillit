@@ -517,21 +517,20 @@ def _aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
 
 
 def _has_routing_capability(skill_caps: frozenset[str]) -> bool:
-    """Return True if any declared capability requires a specific backend."""
+    """Return True if any declared capability is worker_routable (triggers backend reroute)."""
     return any(
         SKILL_CAPABILITY_REGISTRY.get(cap) is not None
-        and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
+        and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
         for cap in skill_caps
     )
 
 
 def _get_routing_caps(skill_caps: frozenset[str]) -> list[str]:
-    """Return sorted list of capabilities that require a specific backend."""
+    """Return sorted list of worker_routable capabilities that trigger backend reroute."""
     return sorted(
         cap
         for cap in skill_caps
-        if SKILL_CAPABILITY_REGISTRY.get(cap)
-        and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
+        if SKILL_CAPABILITY_REGISTRY.get(cap) and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
     )
 
 

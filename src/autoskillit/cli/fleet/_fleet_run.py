@@ -44,6 +44,32 @@ async def _execute_fleet_run(
 
     ctx = make_context(cfg, project_dir=Path.cwd())
 
+    from autoskillit.server import (  # noqa: PLC0415
+        _compute_effective_backend_map,
+        _provider_aware_capability_overrides,
+    )
+
+    _recipe_info = ctx.recipes.find(recipe, ctx.project_dir) if ctx.recipes else None
+    _raw_steps = (
+        ctx.recipes.load(_recipe_info.path).steps
+        if _recipe_info is not None and ctx.recipes is not None
+        else None
+    )
+    _prov_overrides, _ = _provider_aware_capability_overrides(
+        dispatch_backend,
+        recipe,
+        ctx.config.providers,
+        _raw_steps,
+        skill_resolver=ctx.skill_resolver,
+    )
+    _effective_backend_map = _compute_effective_backend_map(
+        _raw_steps,
+        dispatch_backend.name if dispatch_backend else None,
+        ctx.config.providers,
+        recipe,
+        skill_resolver=ctx.skill_resolver,
+    )
+
     effective_backend = dispatch_backend or ctx.backend
     has_ufa = (
         effective_backend.capabilities.has_unguarded_filesystem_access
@@ -91,6 +117,8 @@ async def _execute_fleet_run(
         resume_session_id=resume_session_id,
         prior_dispatch_id=prior_dispatch_id,
         dispatch_backend=dispatch_backend,
+        provider_capability_overrides=_prov_overrides,
+        effective_backend_map=_effective_backend_map,
     )
 
 

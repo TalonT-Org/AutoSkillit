@@ -44,6 +44,7 @@ CLI command, subcommand, and interactive workflow tests.
 | `test_fleet_dispatch.py` | Tests: fleet CLI dispatch command |
 | `test_fleet_list.py` | Tests: fleet CLI list command |
 | `test_fleet_run.py` | Tests: fleet CLI run command gates — session-type guard, feature gates, CLAUDECODE relaxation |
+| `test_fleet_run_admission.py` | Tests: fleet run CLI backend admission — effective_backend_map threading, fail-closed rejection path (shutil.which=None), CLI/kitchen agreement (issue #4197) |
 | `test_fleet_session.py` | Tests: _launch_fleet_session forwards ingredients_table to prompt builder |
 | `test_fleet_split.py` | Structural guard for fleet test split |
 | `test_fleet_status.py` | Tests: fleet CLI status command |

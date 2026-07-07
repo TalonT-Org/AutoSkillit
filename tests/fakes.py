@@ -469,6 +469,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         *,
         backend_name: str | None = None,
         ingredient_overrides: dict[str, str] | None = None,
+        effective_backend_map: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         self.calls.append(
             {
@@ -477,6 +478,7 @@ class InMemoryRecipeRepository(RecipeRepository):
                 "temp_dir_relpath": temp_dir_relpath,
                 "backend_name": backend_name,
                 "ingredient_overrides": ingredient_overrides,
+                "effective_backend_map": effective_backend_map,
             }
         )
         key = str(script_path)

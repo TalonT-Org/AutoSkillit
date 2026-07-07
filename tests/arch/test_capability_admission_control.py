@@ -337,6 +337,112 @@ def test_run_skill_references_git_metadata_write_capability() -> None:
     )
 
 
+def test_execute_dispatch_accepts_effective_backend_map() -> None:
+    """execute_dispatch signature must include effective_backend_map parameter."""
+    import inspect
+
+    from autoskillit.fleet._api import execute_dispatch
+
+    sig = inspect.signature(execute_dispatch)
+    assert "effective_backend_map" in sig.parameters, (
+        "execute_dispatch must accept effective_backend_map — "
+        "without it the CLI and dispatch_food_truck cannot thread the per-step map "
+        "into the engine's internal load_and_validate call."
+    )
+
+
+def _find_load_and_validate_call_in_run_dispatch(src: str) -> ast.Call | None:
+    """Return the load_and_validate Call node inside _run_dispatch, or None."""
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_run_dispatch":
+            for child in ast.walk(node):
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Attribute)
+                    and child.func.attr == "load_and_validate"
+                ):
+                    return child
+    return None
+
+
+def test_run_dispatch_passes_effective_backend_map_to_load_and_validate() -> None:
+    """_run_dispatch must pass effective_backend_map kwarg to load_and_validate."""
+    api_path = SRC_ROOT / "fleet" / "_api.py"
+    src = api_path.read_text(encoding="utf-8")
+    call_node = _find_load_and_validate_call_in_run_dispatch(src)
+    assert call_node is not None, (
+        "load_and_validate call not found inside _run_dispatch in fleet/_api.py"
+    )
+    kw_names = {kw.arg for kw in call_node.keywords if kw.arg is not None}
+    assert "effective_backend_map" in kw_names, (
+        "_run_dispatch must pass effective_backend_map to load_and_validate — "
+        "without it the engine's validation always runs without per-step routing context."
+    )
+
+
+def test_execute_fleet_run_calls_provider_aware_capability_overrides() -> None:
+    """_execute_fleet_run must call _provider_aware_capability_overrides (CLI admission parity)."""
+    fleet_run_path = SRC_ROOT / "cli" / "fleet" / "_fleet_run.py"
+    tree = ast.parse(fleet_run_path.read_text(encoding="utf-8"))
+    assert _has_call_in_function(
+        tree, "_execute_fleet_run", "_provider_aware_capability_overrides"
+    ), (
+        "_execute_fleet_run must call _provider_aware_capability_overrides — "
+        "without this, the CLI path does not compute provider-aware capability signals "
+        "before dispatching, causing backend-incompatible-skill errors for Codex runs."
+    )
+
+
+def test_execute_fleet_run_calls_compute_effective_backend_map() -> None:
+    """_execute_fleet_run must call _compute_effective_backend_map (CLI admission parity)."""
+    fleet_run_path = SRC_ROOT / "cli" / "fleet" / "_fleet_run.py"
+    tree = ast.parse(fleet_run_path.read_text(encoding="utf-8"))
+    assert _has_call_in_function(tree, "_execute_fleet_run", "_compute_effective_backend_map"), (
+        "_execute_fleet_run must call _compute_effective_backend_map — "
+        "without this, the CLI path never computes per-step routing and always "
+        "evaluates backend-compat with a flat backend map."
+    )
+
+
+def test_dispatch_food_truck_forwards_effective_backend_map_to_execute_dispatch() -> None:
+    """dispatch_food_truck must pass effective_backend_map to execute_dispatch call."""
+    fleet_path = SRC_ROOT / "server" / "tools" / "tools_fleet_dispatch.py"
+    src = fleet_path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "dispatch_food_truck":
+            for child in ast.walk(node):
+                if (
+                    isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Name)
+                    and child.func.id == "execute_dispatch"
+                ):
+                    kw_names = {kw.arg for kw in child.keywords if kw.arg is not None}
+                    assert "effective_backend_map" in kw_names, (
+                        "dispatch_food_truck must pass effective_backend_map to "
+                        "execute_dispatch — without it, the per-step routing map "
+                        "computed by the preflight is silently dropped at the engine boundary."
+                    )
+                    return
+            pytest.fail("execute_dispatch call not found inside dispatch_food_truck")
+    pytest.fail("dispatch_food_truck function not found in tools_fleet_dispatch.py")
+
+
+def test_validate_from_path_accepts_effective_backend_map() -> None:
+    """validate_from_path signature must accept effective_backend_map."""
+    import inspect
+
+    from autoskillit.recipe._api_listing import validate_from_path
+
+    sig = inspect.signature(validate_from_path)
+    assert "effective_backend_map" in sig.parameters, (
+        "validate_from_path must accept effective_backend_map — "
+        "without it the validate_recipe MCP tool cannot thread per-step routing "
+        "context into backend-compat rule evaluation."
+    )
+
+
 def test_compute_effective_backend_map_accepts_skill_resolver() -> None:
     """_compute_effective_backend_map must accept a skill_resolver parameter."""
     auto_overrides_path = SRC_ROOT / "server" / "tools" / "_auto_overrides.py"

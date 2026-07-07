@@ -459,11 +459,16 @@ class TestConfigAuthoritativeIngredientInjection:
             captured.update(kwargs)
             return "prompt"
 
+        import structlog.testing
+
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-            return_value={},  # key absent from all registries
+        with (
+            patch(
+                "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+                return_value={},  # key absent from all registries
+            ),
+            structlog.testing.capture_logs() as cap_logs,
         ):
             await execute_dispatch(
                 tool_ctx=tool_ctx,
@@ -478,6 +483,7 @@ class TestConfigAuthoritativeIngredientInjection:
             )
 
         assert captured["ingredients"]["truly_unknown_key"] == "caller-supplied"
+        assert not any("config-authority key" in e.get("event", "") for e in cap_logs)
 
     @pytest.mark.anyio
     async def test_non_writable_backend_forces_git_write_false_at_dispatch(self, tool_ctx):

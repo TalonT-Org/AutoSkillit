@@ -286,6 +286,11 @@ done
 if [ -n "$PR_URL" ]; then
   printf 'pr_url = %s\n' "$PR_URL"
 fi
+
+if [ "$PR_CREATE_STATUS" -ne 0 ]; then
+  echo "gh pr create failed after $PR_CREATE_ATTEMPT attempt(s):" >&2
+  cat "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt" >&2
+fi
 exit "$PR_CREATE_STATUS"
 ```
 

@@ -20,7 +20,15 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
-from _command_classification import _SHELL_OPS  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    _SHELL_CONTROL_WORDS,
+    _SHELL_OPS,
+)
+
+# Tokens that mark the boundary of a fresh command — either a shell operator
+# (already in _SHELL_OPS) or a shell control word like `do`/`then` that
+# introduces a new command inside a compound construct (loops, conditionals).
+_GH_COMMAND_BOUNDARY: frozenset[str] = _SHELL_OPS | _SHELL_CONTROL_WORDS
 
 COMPOSE_PR_BODY_DENY_TRIGGER: str = "compose-pr body missing Closes reference"
 
@@ -41,16 +49,20 @@ def _extract_body_file_path(cmd: str) -> str | None:
     for i, tok in enumerate(tokens):
         if tok != "gh":
             continue
-        if i != 0 and tokens[i - 1] not in _SHELL_OPS:
+        if i != 0 and tokens[i - 1] not in _GH_COMMAND_BOUNDARY:
             continue
         if i + 2 >= len(tokens) or tokens[i + 1] != "pr" or tokens[i + 2] != "create":
             continue
         start = i + 3
         for j in range(start, len(tokens)):
             t = tokens[j]
-            if t in _SHELL_OPS:
+            if t in _GH_COMMAND_BOUNDARY:
                 break
-            if t == "--body-file" and j + 1 < len(tokens) and tokens[j + 1] not in _SHELL_OPS:
+            if (
+                t == "--body-file"
+                and j + 1 < len(tokens)
+                and tokens[j + 1] not in _GH_COMMAND_BOUNDARY
+            ):
                 return tokens[j + 1]
             if t.startswith("--body-file="):
                 return t.split("=", 1)[1]

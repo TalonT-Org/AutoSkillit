@@ -518,3 +518,157 @@ class TestSessionScope:
         event = _build_event(cmd)
         output = _run_hook(event, monkeypatch, headless=True)
         assert _is_denied(output)
+
+
+# ---------------------------------------------------------------------------
+# T10: TestRetryShape — guard compatibility with retry-block command shape
+# ---------------------------------------------------------------------------
+
+
+class TestRetryShape:
+    """Step 5 of compose-pr wraps `gh pr create` in a bounded retry loop.
+
+    The guard must still extract the --body-file path when `gh pr create`
+    appears inside `while ... do ... done`, `if ... then ... fi`, or
+    `for ... do ... done` constructs — and still deny when the body file
+    omits the required closing reference. Existing echo/print false-positive
+    protections must remain intact.
+    """
+
+    def test_denies_when_inside_while_loop(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body = _setup_body_file(tmp_path, "Some description with no closing ref")
+        cmd = (
+            f'while [ "$ATTEMPT" -le 3 ]; do\n'
+            f"  gh pr create --body-file {body} --base main\n"
+            f"  ATTEMPT=$((ATTEMPT + 1))\n"
+            f"done"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_denies_when_inside_for_loop(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body = _setup_body_file(tmp_path, "Some description with no closing ref")
+        cmd = f"for ATTEMPT in 1 2 3; do\n  gh pr create --body-file {body} --base main\ndone"
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_denies_when_after_then_keyword(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body = _setup_body_file(tmp_path, "Some description with no closing ref")
+        cmd = f'if [ "$PRECONDITION" = "ok" ]; then\n  gh pr create --body-file {body} --base main\nfi'
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_denies_when_after_else_keyword(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body = _setup_body_file(tmp_path, "Some description with no closing ref")
+        cmd = (
+            f'if [ "$PRECONDITION" = "skip" ]; then\n'
+            f"  :\n"
+            f"else\n"
+            f"  gh pr create --body-file {body} --base main\n"
+            f"fi"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_denies_when_after_elif_keyword(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body = _setup_body_file(tmp_path, "Some description with no closing ref")
+        cmd = (
+            f'if [ "$A" = "x" ]; then\n'
+            f"  :\n"
+            f'elif [ "$B" = "y" ]; then\n'
+            f"  gh pr create --body-file {body} --base main\n"
+            f"fi"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_allows_when_body_has_closing_ref_inside_loop(self, monkeypatch, tmp_path):
+        """The guard approves loop-wrapped gh pr create when the body contains a closing ref."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body = _setup_body_file(tmp_path, "Summary\n\nCloses #123")
+        cmd = (
+            f"for ATTEMPT in 1 2 3; do\n"
+            f"  gh pr create --body-file {body} --base main\n"
+            f"  ATTEMPT=$((ATTEMPT + 1))\n"
+            f"done"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == ""
+
+    def test_allows_echo_only_command_mentioning_gh_pr_create(self, monkeypatch, tmp_path):
+        """echo/print of gh pr create text must remain a benign false-positive."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        cmd = "echo 'About to run: gh pr create --body-file /tmp/whatever.md --base main'"
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == ""
+
+    def test_allows_print_only_command_mentioning_gh_pr_create(self, monkeypatch, tmp_path):
+        """printf of gh pr create text must remain a benign false-positive."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        cmd = "printf 'Will run: gh pr create --body-file /tmp/whatever.md --base main\\n'"
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == ""
+
+    def test_denies_fused_body_file_inside_loop(self, monkeypatch, tmp_path):
+        """The --body-file=<path> fused form must still be extracted from inside a loop."""
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        body = _setup_body_file(tmp_path, "Some description with no closing ref")
+        cmd = f"for ATTEMPT in 1 2 3; do\n  gh pr create --body-file={body}\ndone"
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
+
+    def test_stops_extraction_at_loop_do_keyword(self, monkeypatch, tmp_path):
+        """A --body-file that appears AFTER a `do` keyword on a chained line
+        must not be attributed to a later `gh pr create` invocation.
+
+        With the new boundary set, `do` terminates the previous segment
+        and the next command starts fresh. This test verifies the parser
+        still stops cleanly at the keyword.
+        """
+        monkeypatch.setenv("AUTOSKILLIT_SKILL_NAME", "compose-pr")
+        monkeypatch.chdir(tmp_path)
+        _setup_prep_file(tmp_path, "123")
+        # gh pr create has no --body-file, and the curl --body-file that
+        # follows after `do` should not be picked up.
+        cmd = (
+            "while true; do\n"
+            '  gh pr create --title "x" --base main\n'
+            "  curl --body-file /unrelated.md\n"
+            "done"
+        )
+        event = _build_event(cmd)
+        output = _run_hook(event, monkeypatch, headless=True)
+        # gh pr create has no body-file, so nothing to deny → empty output.
+        assert output == ""

@@ -262,7 +262,7 @@ class TestBundledRecipeBackendCompat:
             f"got {len(compat_findings)} findings"
         )
 
-    def test_codex_backend_fires_without_effective_backend_map(self, recipe_name) -> None:
+    def test_codex_backend_no_compat_findings_for_routable_skills(self, recipe_name) -> None:
         from autoskillit.recipe._analysis import make_validation_context
         from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
         from autoskillit.recipe.registry import run_semantic_rules
@@ -278,9 +278,11 @@ class TestBundledRecipeBackendCompat:
         )
         findings = run_semantic_rules(ctx)
         compat_findings = [f for f in findings if f.rule == "backend-incompatible-skill"]
-        assert len(compat_findings) >= 1, (
-            f"Expected at least 1 backend-incompatible-skill finding for {recipe_name} "
-            f"on codex backend without effective_backend_map (rule must still fire)"
+        assert len(compat_findings) == 0, (
+            f"Expected 0 backend-incompatible-skill findings for {recipe_name} "
+            f"on codex backend: git_metadata_write skills are worker_routable=True "
+            f"(required_backends=frozenset()) so the compat gate must NOT fire for them; "
+            f"got {len(compat_findings)} findings: {compat_findings}"
         )
 
     def test_claude_code_backend_no_findings(self, recipe_name) -> None:

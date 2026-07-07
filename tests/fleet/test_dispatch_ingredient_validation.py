@@ -434,11 +434,9 @@ class TestConfigAuthoritativeIngredientInjection:
         self, tool_ctx
     ):
         """When a config-authority key is absent from resolved defaults AND not in
-        BACKEND_CAPABILITY_INGREDIENTS, the caller-supplied value is retained and a
-        warning is logged."""
+        BACKEND_CAPABILITY_INGREDIENTS, the caller-supplied value is retained silently
+        (caller-sovereign path — no warning)."""
         from unittest.mock import patch
-
-        import structlog.testing
 
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
@@ -463,28 +461,23 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with structlog.testing.capture_logs() as cap_logs:
-            with patch(
-                "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-                return_value={},  # key absent from all registries
-            ):
-                await execute_dispatch(
-                    tool_ctx=tool_ctx,
-                    recipe="test-recipe",
-                    task="t",
-                    ingredients={"truly_unknown_key": "caller-supplied"},
-                    dispatch_name=None,
-                    timeout_sec=None,
-                    prompt_builder=_capture_prompt_builder,
-                    quota_checker=_no_sleep_quota_checker,
-                    quota_refresher=_noop_quota_refresher,
-                )
+        with patch(
+            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            return_value={},  # key absent from all registries
+        ):
+            await execute_dispatch(
+                tool_ctx=tool_ctx,
+                recipe="test-recipe",
+                task="t",
+                ingredients={"truly_unknown_key": "caller-supplied"},
+                dispatch_name=None,
+                timeout_sec=None,
+                prompt_builder=_capture_prompt_builder,
+                quota_checker=_no_sleep_quota_checker,
+                quota_refresher=_noop_quota_refresher,
+            )
 
         assert captured["ingredients"]["truly_unknown_key"] == "caller-supplied"
-        assert any(
-            e.get("log_level") == "warning" and "config-authority key" in e.get("event", "")
-            for e in cap_logs
-        )
 
     @pytest.mark.anyio
     async def test_non_writable_backend_forces_git_write_false_at_dispatch(self, tool_ctx):

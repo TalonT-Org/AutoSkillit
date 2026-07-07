@@ -247,12 +247,11 @@ def test_apply_config_authoritative_overrides_capability_key_overrides_caller(tm
     assert result["backend_supports_git_write"] == "false"
 
 
-def test_apply_config_authoritative_overrides_unknown_key_warns_and_retains(tmp_path):
-    """A config-authority key not in any registry (truly unknown) must trigger the
-    warning-and-retain path, not the capability override path."""
+def test_apply_config_authoritative_overrides_unknown_key_retains_caller_value(tmp_path):
+    """A config-authority key not in SERVER_AUTHORITATIVE_INGREDIENTS or
+    BACKEND_CAPABILITY_INGREDIENTS is caller-sovereign — the caller-supplied value
+    is retained silently (no warning)."""
     from types import SimpleNamespace
-
-    import structlog.testing
 
     from autoskillit.config import apply_config_authoritative_overrides
 
@@ -260,12 +259,9 @@ def test_apply_config_authoritative_overrides_unknown_key_warns_and_retains(tmp_
         "totally_unknown_key": SimpleNamespace(authority="config"),
     }
 
-    with (
-        patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
-            return_value={},
-        ),
-        structlog.testing.capture_logs() as cap_logs,
+    with patch(
+        "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        return_value={},
     ):
         result = apply_config_authoritative_overrides(
             {"totally_unknown_key": "caller-value"},
@@ -275,7 +271,6 @@ def test_apply_config_authoritative_overrides_unknown_key_warns_and_retains(tmp_
         )
 
     assert result["totally_unknown_key"] == "caller-value"
-    assert any("config-authority key" in e.get("event", "") for e in cap_logs)
 
 
 # T4: REQ-ING-003

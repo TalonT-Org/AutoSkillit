@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from autoskillit.core import (
+    BACKEND_CAPABILITY_INGREDIENTS,
     CONFIG_AUTHORITY_KEYS,
     DISPATCH_ID_ENV_VAR,
     FLEET_MENU_TOOLS,
@@ -205,18 +206,25 @@ def apply_config_authoritative_overrides(
     resolved = resolve_ingredient_defaults(project_dir)
     result = dict(effective_ingredients)
     for key in config_keys:
-        if key in resolved:
-            result[key] = resolved[key]
-        elif capability_overrides and key in capability_overrides:
-            # Fallback: only reached when resolve_ingredient_defaults() has no value for
-            # this key. Adding a key to resolve_ingredient_defaults shadows this branch.
-            result[key] = capability_overrides[key]
-        else:
-            logger.warning(
-                "config-authority key %r not found in resolved defaults — "
-                "caller-supplied value retained (config-authoritative contract not enforced)",
-                key,
-            )
+        if key in SERVER_AUTHORITATIVE_INGREDIENTS:
+            if key in resolved:
+                result[key] = resolved[key]
+            else:
+                logger.warning(
+                    "config-authority key %r not found in resolved defaults — "
+                    "caller-supplied value retained (config-authoritative contract not enforced)",
+                    key,
+                )
+        elif key in BACKEND_CAPABILITY_INGREDIENTS:
+            if capability_overrides and key in capability_overrides:
+                result[key] = capability_overrides[key]
+            else:
+                logger.warning(
+                    "capability-based key %r not found in capability_overrides — "
+                    "caller-supplied value retained (capability contract not enforced)",
+                    key,
+                )
+        # else: key is caller-sovereign (e.g., source_dir) — leave result unchanged
     return result
 
 

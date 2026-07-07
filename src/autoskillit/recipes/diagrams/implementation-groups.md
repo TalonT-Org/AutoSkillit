@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:7b1752e3b62d4cff41b935c363aa6655fabd231943791784009db587633a70c0 -->
+<!-- autoskillit-recipe-hash: sha256:64c9d08f8daa9e5277d160a1e86119a2e4b3e64a84c70ddae6d1db6fed73ea41 -->
 <!-- autoskillit-diagram-format: v7 -->
 ## implementation-groups
 Group-based implementation with per-group plan/implement/test cycles and PR gates.
@@ -18,7 +18,7 @@ group → plan → review_approach (optional)
 │    fix (on failure) → next_or_done
 └────┘
 |
-+-- audit_impl → remediate (optional)
++-- audit_impl → reset_test_fix_counter → remediate (optional)
 |
 +-- [open-pr] (optional):
 |     prepare_pr → compose_pr → review_pr → resolve_review

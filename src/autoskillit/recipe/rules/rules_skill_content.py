@@ -353,6 +353,67 @@ _GREP_BRE_ALTERNATION_RE: re.Pattern[str] = re.compile(
 )
 _GIT_GREP_BRE_RE: re.Pattern[str] = re.compile(r"--grep=[\"'].*\\\|")
 
+_POSIX_CHAR_CLASS_RE: re.Pattern[str] = re.compile(
+    r"\[\[:"
+    r"(?:alpha|digit|alnum|space|upper|lower|print|punct|blank|cntrl|graph|xdigit)"
+    r":\]\]"
+)
+
+
+@semantic_rule(
+    name="posix-char-class-in-skill",
+    severity=Severity.ERROR,
+    description=(
+        "A SKILL.md bash block uses a POSIX bracket expression ([[:space:]], "
+        "[[:alnum:]], etc.). These are valid in grep -E but silently mis-parsed "
+        "by Python re — [[:space:]] becomes a character class containing "
+        "[, :, s, p, a, c, e instead of matching whitespace. "
+        "Fix: replace [[:space:]] with [ \\t] or a Python-compatible equivalent."
+    ),
+)
+def _check_no_posix_char_class(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        skill_cmd = step.with_args.get("skill_command", "")
+        if not skill_cmd:
+            continue
+        skill_name = resolve_skill_name(skill_cmd)
+        if skill_name is None:
+            continue
+        skill_md = _resolve_skill_md(skill_name, resolver=ctx.skill_resolver)
+        if skill_md is None:
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        bash_blocks = extract_bash_blocks(content)
+        if not bash_blocks:
+            continue
+        violations: list[str] = []
+        for block in bash_blocks:
+            for line in block.splitlines():
+                if _POSIX_CHAR_CLASS_RE.search(line):
+                    violations.append(line.strip())
+        if violations:
+            findings.append(
+                make_finding(
+                    rule_name="posix-char-class-in-skill",
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' bash block uses POSIX bracket expression "
+                        f"in {len(violations)} line(s). Python re silently mis-parses "
+                        f"these — [[:space:]] becomes a character class containing "
+                        f"[, :, s, p, a, c, e instead of matching whitespace. "
+                        f"Fix: replace [[:space:]] with [ \\t] or a Python-compatible equivalent. "
+                        f"Violations: {violations!r}"
+                    ),
+                )
+            )
+    return findings
+
 
 @semantic_rule(
     name="grep-bre-alternation-in-skill",

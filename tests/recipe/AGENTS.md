@@ -181,7 +181,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_rules_remediation.py` | Tests for audit-impl-remediation-route semantic validation rule |
 | `test_rules_review_loop_waypoint.py` | Tests for review-loop-waypoint-guard semantic rule |
 | `test_rules_route_gate.py` | Tests for route-gate-shared-stop semantic validation rule |
-| `test_rules_loop_counter.py` | Tests for loop-counter-cross-path-sharing and loop-guard-before-verify semantic rules |
+| `test_rules_loop_counter.py` | Tests for loop-counter-cross-path-sharing, loop-guard-before-verify, and loop-counter-not-reset-on-outer-cycle semantic rules |
 | `test_rules_loop_artifact_scope.py` | Tests for loop-iterated-step-requires-iteration-scoped-output semantic validation rule |
 | `test_rules_loop_progress.py` | Tests for loop-body-uncaptured-output semantic validation rule |
 | `test_rules_recipe.py` | Tests for recipe-level semantic validation rule |

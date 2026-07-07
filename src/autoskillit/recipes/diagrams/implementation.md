@@ -1,4 +1,4 @@
-<!-- autoskillit-recipe-hash: sha256:512146091e1b0925b6963280a929d4586ce652d0b498d43a5280ed5b724f459c -->
+<!-- autoskillit-recipe-hash: sha256:1cf6514f266b3334d7ae8845e5321f62f4d160e6bc25dbe65e1ed13dfd254404 -->
 <!-- autoskillit-diagram-format: v7 -->
 # implementation
 
@@ -19,7 +19,7 @@
  |
  +----+
       |
-      +-- audit_impl → remediate (optional)
+      +-- audit_impl → reset_test_fix_counter → remediate (optional)
       |
       +-- [open-pr] (optional):
       |     prepare_pr → compose_pr → review_pr → resolve_review

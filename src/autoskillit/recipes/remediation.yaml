@@ -99,7 +99,9 @@ ingredients:
     default: '3'
   test_fix_max_retries:
     default: '3'
-    description: Maximum iterations of the pre-merge test → fix → test cycle.
+    description: >-
+      Maximum pre-merge test → fix → test budget (allowed fix rounds = value − 1).
+      Set to 3 for 2 fix rounds per remediation cycle.
     hidden: true
   merge_test_fix_max_retries:
     default: '3'
@@ -577,13 +579,27 @@ steps:
     on_result:
     - when: ${{ result.max_exceeded }} == true
       route: release_issue_failure
-    - route: pre_remediation_merge
+    - route: reset_test_fix_counter
     on_failure: release_issue_failure
     optional_context_refs:
     - audit_remediation_count
     note: >
       Guards the audit_impl → remediate → plan → implement → test
       remediation cycle. Separate counter from merge_fix_count.
+
+  reset_test_fix_counter:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      test_fix_loop_count: ${{ result.value }}
+    on_success: pre_remediation_merge
+    on_failure: pre_remediation_merge
+    note: >-
+      Resets test_fix_loop_count to 0 so each audit-remediation cycle gets a
+      fresh pre-merge fix budget. Routes to pre_remediation_merge to preserve
+      the worktree-merge step before starting a new remediation cycle.
 
   pre_remediation_merge:
     tool: merge_worktree

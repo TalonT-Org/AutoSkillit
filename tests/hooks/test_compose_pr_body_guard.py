@@ -565,7 +565,11 @@ class TestRetryShape:
         monkeypatch.chdir(tmp_path)
         _setup_prep_file(tmp_path, "123")
         body = _setup_body_file(tmp_path, "Some description with no closing ref")
-        cmd = f'if [ "$PRECONDITION" = "ok" ]; then\n  gh pr create --body-file {body} --base main\nfi'
+        cmd = (
+            f'if [ "$PRECONDITION" = "ok" ]; then\n'
+            f"  gh pr create --body-file {body} --base main\n"
+            f"fi"
+        )
         event = _build_event(cmd)
         output = _run_hook(event, monkeypatch, headless=True)
         assert _is_denied(output)

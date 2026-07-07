@@ -241,6 +241,7 @@ PR_CREATE_BODY={{AUTOSKILLIT_TEMP}}/compose-pr/pr_body_$ts.md
 PR_CREATE_LOG_DIR={{AUTOSKILLIT_TEMP}}/compose-pr
 PR_CREATE_ATTEMPT=1
 PR_CREATE_MAX=3
+PR_CREATE_STATUS=0
 PR_URL=""
 while [ "$PR_CREATE_ATTEMPT" -le "$PR_CREATE_MAX" ]; do
   case "$PR_CREATE_ATTEMPT" in
@@ -255,16 +256,28 @@ while [ "$PR_CREATE_ATTEMPT" -le "$PR_CREATE_MAX" ]; do
        > "$PR_CREATE_LOG_DIR/pr_stdout_$ts.$PR_CREATE_ATTEMPT.txt" \
        2> "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt"; then
     PR_URL=$(grep -E '^https://github\.com/' "$PR_CREATE_LOG_DIR/pr_stdout_$ts.$PR_CREATE_ATTEMPT.txt" | head -1)
-    [ -n "$PR_URL" ] && break
+    if [ -n "$PR_URL" ]; then
+      PR_CREATE_STATUS=0
+      break
+    fi
   fi
+  PR_CREATE_STATUS=$?
   PR_CREATE_ERR=$(cat "$PR_CREATE_LOG_DIR/pr_stderr_$ts.$PR_CREATE_ATTEMPT.txt")
   case "$PR_CREATE_ERR" in
+    # Terminal — do not retry (HTTP 4xx / validation / required-field missing).
     *HTTP\ 4*|*validation*|*required*|*not\ found*)
       break ;;
+    # Transient — retryable (HTTP 5xx, rate limit, timeout, connection reset/refused).
+    *HTTP\ 5*|*HTTP\ 429*|*rate\ limit*|*secondary\ rate\ limit*|*timeout*|*connection\ reset*|*connection\ refused*|*temporary\ DNS*|*internal\ server\ error*|*remote\ server\ error*)
+      : ;;
+    # Ambiguous (empty / unknown stderr) — attempt response-loss recovery, then retry.
+    *)
+      : ;;
   esac
   RECOVERED=$(gh pr view "$FEATURE_BRANCH" --json url -q .url 2>/dev/null || true)
   if [ -n "$RECOVERED" ]; then
     PR_URL="$RECOVERED"
+    PR_CREATE_STATUS=0
     break
   fi
   PR_CREATE_ATTEMPT=$((PR_CREATE_ATTEMPT + 1))
@@ -273,6 +286,7 @@ done
 if [ -n "$PR_URL" ]; then
   printf 'pr_url = %s\n' "$PR_URL"
 fi
+exit "$PR_CREATE_STATUS"
 ```
 
 Bounded retry policy:
@@ -280,15 +294,21 @@ Bounded retry policy:
 - Backoff sleeps of 1 second before attempt 2 and 2 seconds before attempt 3
 - Each attempt's stdout/stderr captured under `{{AUTOSKILLIT_TEMP}}/compose-pr/`
   so final diagnostics can print useful detail without contaminating the PR URL capture
-- Retry only transient or ambiguous response-loss failures (HTTP 5xx, secondary rate limit,
-  timeout, connection reset/refused, temporary DNS resolution, remote/internal server errors)
-- Do not retry terminal validation or usage failures (HTTP 4xx, validation errors, missing required fields)
+- Retry only transient or ambiguous response-loss failures (HTTP 5xx, HTTP 429 / secondary
+  rate limit, timeout, connection reset/refused, temporary DNS resolution, remote/internal
+  server errors)
+- Do not retry terminal validation or usage failures (HTTP 4xx, validation errors, missing
+  required fields, not-found errors)
 
 Response-loss recovery: when a create attempt fails with a transient/ambiguous status (or empty
 stderr that suggests the create succeeded but the response was lost), run a best-effort
 `gh pr view "$FEATURE_BRANCH" --json url -q .url` before sleeping and retrying. If it returns
 a URL, treat the create as recovered and emit that URL. The recovery path runs only for
 transient/ambiguous failures — never for terminal validation failures.
+
+Final status propagation: `PR_CREATE_STATUS` tracks the last `gh pr create` exit code (or 0 on
+successful URL capture or successful `gh pr view` recovery). The script ends with
+`exit "$PR_CREATE_STATUS"` so terminal failures surface as a non-zero shell status.
 
 ## Output
 

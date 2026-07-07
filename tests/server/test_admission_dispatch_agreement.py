@@ -41,6 +41,7 @@ _RECIPES: tuple[str, ...] = (
     "implementation",
     "implementation-groups",
     "remediation",
+    "merge-prs",
 )
 _BACKENDS: tuple[str, ...] = tuple(sorted(BACKEND_REGISTRY.keys()))
 _SKILL_RESOLVER = DefaultSkillResolver()

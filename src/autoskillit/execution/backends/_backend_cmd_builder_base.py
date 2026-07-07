@@ -163,6 +163,7 @@ class BackendCmdBuilderBase(ABC):
             "resume_checkpoint": config.resume_checkpoint,
             "resume_message": config.resume_message,
             "sandbox_mode": config.sandbox_mode,
+            "network_access": config.network_access,
         }
 
 

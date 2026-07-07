@@ -543,6 +543,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             resume_checkpoint = cfg["resume_checkpoint"]
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]  # noqa: F841
+            _net = cfg.get("network_access", False)  # noqa: F841
 
         _has_prefix = (
             bool(profile_name)

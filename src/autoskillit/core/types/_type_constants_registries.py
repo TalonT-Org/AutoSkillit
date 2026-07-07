@@ -302,6 +302,7 @@ class SkillCapabilityDef:
 
     description: str
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"]
+    required_sandbox_overrides: frozenset[str] = frozenset()
 
     @property
     def required_backends(self) -> frozenset[str]:
@@ -353,6 +354,15 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
             "git worktree add, git checkout -b)"
         ),
         codex_status="not-applicable",
+    ),
+    "github_api_write": SkillCapabilityDef(
+        description=(
+            "Skill makes outbound GitHub API write calls (gh pr review, gh api --method POST, "
+            "gh pr create, gh pr merge, gh issue create/edit/close, etc.) that require network "
+            "access. On Codex workers, enables network_access=true in the workspace-write sandbox."
+        ),
+        codex_status="fix-required",
+        required_sandbox_overrides=frozenset({"sandbox_workspace_write.network_access=true"}),
     ),
 }
 

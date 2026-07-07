@@ -520,3 +520,32 @@ def test_build_interactive_cmd_no_headless_hardening(monkeypatch: pytest.MonkeyP
     spec = ClaudeCodeBackend().build_interactive_cmd()
     assert spec.env.get("TERM") != "dumb"
     assert "NO_COLOR" not in spec.env
+
+
+@pytest.mark.anyio
+async def test_headless_executor_forwards_network_access(
+    minimal_ctx, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-A11: DefaultHeadlessExecutor.run(network_access=True) forwards to run_headless_core."""
+    from unittest.mock import AsyncMock, patch
+
+    from autoskillit.core import SkillResult
+    from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+    captured_kwargs: dict = {}
+
+    async def fake_run_headless_core(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return SkillResult.crashed(exception=RuntimeError("test"), skill_command="/test-skill")
+
+    with patch(
+        "autoskillit.execution.headless.run_headless_core",
+        new=AsyncMock(side_effect=fake_run_headless_core),
+    ):
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        await executor.run("/test-skill", cwd="", network_access=True)
+
+    assert captured_kwargs.get("network_access") is True, (
+        "DefaultHeadlessExecutor.run(network_access=True) must forward network_access=True "
+        f"to run_headless_core, got: {captured_kwargs.get('network_access')!r}"
+    )

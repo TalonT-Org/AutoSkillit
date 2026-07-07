@@ -15,6 +15,7 @@ from autoskillit.config import BACKEND_CAPABILITY_INGREDIENTS, ProvidersConfig
 from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     CAPABILITY_INGREDIENT_TO_SKIP_GUARD,
+    SKILL_CAPABILITY_REGISTRY,
     SKILL_TOOLS,
     CapabilityResolutionDetail,
     extract_skill_name,
@@ -100,8 +101,10 @@ def _provider_aware_capability_overrides(
             if not skill_name:
                 continue
             cap_resolved = skill_resolver.resolve(skill_name)
-            if cap_resolved and "git_metadata_write" in getattr(
-                cap_resolved, "uses_capabilities", frozenset()
+            if cap_resolved and any(
+                SKILL_CAPABILITY_REGISTRY.get(cap) is not None
+                and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
+                for cap in getattr(cap_resolved, "uses_capabilities", frozenset())
             ):
                 has_capability_requirement = True
                 break
@@ -251,15 +254,10 @@ def _compute_effective_backend_map(
             skill_name = extract_skill_name(skill_cmd) if skill_cmd else None
             if skill_name:
                 resolved = skill_resolver.resolve(skill_name)
-                _resolved_reqs: frozenset[str] = (
-                    getattr(resolved, "backend_requirements", frozenset())
-                    if resolved
-                    else frozenset()
-                )
-                if (
-                    resolved
-                    and "git_metadata_write" in getattr(resolved, "uses_capabilities", frozenset())
-                    and _resolved_reqs
+                if resolved and any(
+                    SKILL_CAPABILITY_REGISTRY.get(cap) is not None
+                    and bool(SKILL_CAPABILITY_REGISTRY[cap].required_backends)
+                    for cap in getattr(resolved, "uses_capabilities", frozenset())
                 ):
                     result[step_name] = AGENT_BACKEND_CLAUDE_CODE
                     continue

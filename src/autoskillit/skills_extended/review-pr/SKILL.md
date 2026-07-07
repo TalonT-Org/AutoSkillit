@@ -1,7 +1,7 @@
 ---
 name: review-pr
 categories: [github]
-uses_capabilities: [agent_model, cross_skill_ref, run_skill]
+uses_capabilities: [agent_model, cross_skill_ref, github_api_write, run_skill]
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
 hooks:
   PreToolUse:

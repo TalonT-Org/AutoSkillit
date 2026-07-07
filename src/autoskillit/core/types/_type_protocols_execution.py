@@ -73,6 +73,7 @@ class HeadlessExecutor(Protocol):
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,
         inspector_model: str = "",
+        network_access: bool = False,
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

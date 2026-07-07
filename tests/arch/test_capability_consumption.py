@@ -60,6 +60,14 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         rationale="patch path extraction routing — P2-A3-WP1 (#3787) co-lands consumer",
         added_date=date(2026, 6, 5),
     ),
+    "github_api_callable": ForwardDeclaredField(
+        issue=4204,
+        rationale=(
+            "Behavioral documentation field; production consumer added when "
+            "network-capability gate is wired to a BackendCapabilities check"
+        ),
+        added_date=date(2026, 7, 7),
+    ),
 }
 
 

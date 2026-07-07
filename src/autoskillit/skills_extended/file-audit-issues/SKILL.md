@@ -1,6 +1,7 @@
 ---
 name: file-audit-issues
 categories: [audit-pipeline]
+uses_capabilities: [github_api_write]
 description: >-
   Batch-create GitHub issues from validated audit ticket body files. Discovers
   ticket bodies from the audit run directory, deduplicates against existing open

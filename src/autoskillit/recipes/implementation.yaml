@@ -554,12 +554,38 @@ steps:
       counter_value: ''
     capture:
       test_fix_loop_count: ${{ result.value }}
-    on_success: remediate
-    on_failure: remediate
+    on_success: reset_merge_test_fix_counter
+    on_failure: reset_merge_test_fix_counter
     note: >-
       Resets test_fix_loop_count to 0 so each audit-remediation cycle gets a
       fresh pre-merge fix budget. The outer audit_remediation_count already
       bounds total cycles.
+
+  reset_merge_test_fix_counter:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      merge_test_fix_loop_count: ${{ result.value }}
+    on_success: reset_ref_push_counter
+    on_failure: reset_ref_push_counter
+    note: >-
+      Resets merge_test_fix_loop_count to 0 so each audit-remediation cycle
+      gets a fresh merge-gate fix budget.
+
+  reset_ref_push_counter:
+    tool: run_python
+    with:
+      callable: autoskillit.smoke_utils.init_counter
+      counter_value: ''
+    capture:
+      ref_push_count: ${{ result.value }}
+    on_success: remediate
+    on_failure: remediate
+    note: >-
+      Resets ref_push_count to 0 so each audit-remediation cycle gets a
+      fresh ref-push budget.
 
   commit_guard:
     tool: run_python

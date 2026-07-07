@@ -30,6 +30,7 @@ class TestRecipeIntegrationPredicateRouting:
     def _load_recipes(self, request) -> None:
         request.cls.if_recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
         request.cls.ip_recipe = load_recipe(builtin_recipes_dir() / "implementation.yaml")
+        request.cls.ig_recipe = load_recipe(builtin_recipes_dir() / "implementation-groups.yaml")
 
     def test_investigate_first_merge_step_has_predicate_on_result(self) -> None:
         """The merge step in remediation.yaml has predicate on_result."""
@@ -130,11 +131,12 @@ class TestRecipeIntegrationPredicateRouting:
         ip_errors = validate_recipe_structure(self.ip_recipe)
         assert ip_errors == [], f"implementation.yaml has validation errors: {ip_errors}"
 
-    def test_both_recipes_no_error_semantic_findings(self) -> None:
-        """Both recipes pass semantic rules with no ERROR-severity findings."""
+    def test_all_recipes_no_error_semantic_findings(self) -> None:
+        """All bundled implementation-family recipes have no ERROR-severity findings."""
         for recipe, name in [
             (self.if_recipe, "remediation"),
             (self.ip_recipe, "implementation"),
+            (self.ig_recipe, "implementation-groups"),
         ]:
             findings = run_semantic_rules(recipe)
             errors = [f for f in findings if f.severity == Severity.ERROR]

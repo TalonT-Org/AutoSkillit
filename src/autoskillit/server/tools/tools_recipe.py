@@ -369,11 +369,19 @@ async def validate_recipe(script_path: str) -> str:
                 _validate_recipe_steps,
                 skill_resolver=tool_ctx.skill_resolver,
             )
+            _validate_effective_backend_map = _compute_effective_backend_map(
+                _validate_recipe_steps,
+                tool_ctx.backend.name if tool_ctx.backend else None,
+                tool_ctx.config.providers,
+                _validate_recipe_name,
+                skill_resolver=tool_ctx.skill_resolver,
+            )
             result = tool_ctx.recipes.validate_from_path(
                 Path(script_path),
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                 ingredient_overrides=_cap_overrides,
+                effective_backend_map=_validate_effective_backend_map,
             )
             return json.dumps(result)
     except Exception as exc:

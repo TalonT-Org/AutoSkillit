@@ -192,6 +192,7 @@ async def execute_dispatch(
     caller_instructions: str | None = None,
     provider_capability_overrides: dict[str, str] | None = None,
     dispatch_backend: CodingAgentBackend | None = None,
+    effective_backend_map: dict[str, str] | None = None,
 ) -> DispatchResult:
     """Execute a single food truck dispatch.
 
@@ -260,6 +261,7 @@ async def execute_dispatch(
             caller_instructions=caller_instructions,
             provider_capability_overrides=provider_capability_overrides,
             dispatch_backend=dispatch_backend,
+            effective_backend_map=effective_backend_map,
         )
     except asyncio.CancelledError:
         raise
@@ -322,6 +324,7 @@ async def _run_dispatch(
     caller_instructions: str | None = None,
     provider_capability_overrides: dict[str, str] | None = None,
     dispatch_backend: CodingAgentBackend | None = None,
+    effective_backend_map: dict[str, str] | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — called after lock acquisition."""
     from autoskillit.fleet.state import (
@@ -367,6 +370,7 @@ async def _run_dispatch(
             ingredient_overrides=_merged_ingredients,
             temp_dir=tool_ctx.temp_dir,
             backend_name=_effective_backend.name if _effective_backend else None,
+            effective_backend_map=effective_backend_map,
         )
     except ProcessStaleError as exc:
         return DispatchResult(

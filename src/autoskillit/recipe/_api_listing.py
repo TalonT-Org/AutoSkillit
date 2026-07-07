@@ -78,6 +78,7 @@ def validate_from_path(
     lister: SkillLister | None = None,
     backend_name: str | None = None,
     ingredient_overrides: dict[str, str] | None = None,
+    effective_backend_map: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Validate a recipe YAML file at the given path.
 
@@ -132,6 +133,7 @@ def validate_from_path(
             available_skills=frozenset(s.name for s in lister.list_all()),
             skill_resolver=_skill_resolver,
             backend_name=backend_name,
+            effective_backend_map=effective_backend_map,
         )
         _pre_prune_findings = run_semantic_rules(pre_prune_ctx)
         recipe, _skip_resolutions = _prune_skipped_steps(
@@ -143,6 +145,7 @@ def validate_from_path(
         available_skills=known_skills,
         skill_resolver=_skill_resolver,
         backend_name=backend_name,
+        effective_backend_map=effective_backend_map,
     )
     report = ctx.dataflow
     semantic_findings = run_semantic_rules(ctx)

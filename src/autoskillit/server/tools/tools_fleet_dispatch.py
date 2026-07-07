@@ -341,6 +341,7 @@ async def dispatch_food_truck(
         _fleet_load_result: dict[str, Any] = {}
         _capability_overrides: dict[str, str] = {}
         _cap_detail: CapabilityResolutionDetail | None = None
+        _effective_backend_map: dict[str, str] | None = None
         if tool_ctx.recipes is not None:
             try:
                 _preflight_recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
@@ -471,6 +472,7 @@ async def dispatch_food_truck(
                     caller_instructions=caller_instructions,
                     provider_capability_overrides=_capability_overrides,
                     dispatch_backend=dispatch_backend,
+                    effective_backend_map=_effective_backend_map,
                 )
         except TimeoutError:
             logger.error(

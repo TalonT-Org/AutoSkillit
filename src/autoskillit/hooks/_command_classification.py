@@ -105,6 +105,7 @@ _GIT_DIFF_METADATA_FLAGS: frozenset[str] = frozenset(
 _SHELL_SUBSTITUTION_RE = re.compile(r"\$\(|`|[<>]\(")
 _SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
 _PROTECTED_READ_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
+_WC_FLAG_RE = re.compile(r"-l+|--lines$")
 
 
 class SearchPattern(Protocol):
@@ -299,6 +300,16 @@ def extract_git_subcommand_and_flags(
     return None
 
 
+def _is_allowed_wc_flag(token: str) -> bool:
+    """Return True when *token* is a wc flag that does not reveal file contents.
+
+    Allows ``-l``, repeated ``-l`` (e.g. ``-ll``), and the long form ``--lines``
+    only. Any value-bearing variant (``--lines=10``) or compound form
+    (``-lL``) is rejected because those are not used for metadata-only reads.
+    """
+    return bool(_WC_FLAG_RE.fullmatch(token))
+
+
 def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
     """Return True for protected-path commands that inspect metadata or VCS state.
 
@@ -320,9 +331,7 @@ def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
                 for flag in flags
             )
         if subcommand == "status":
-            return not any(
-                flag in _GIT_STATUS_CONTENT_FLAGS or flag.startswith("-v") for flag in flags
-            )
+            return not any(flag in _GIT_STATUS_CONTENT_FLAGS for flag in flags)
         if subcommand == "diff":
             if any(
                 flag in _GIT_DIFF_CONTENT_FLAGS
@@ -339,15 +348,12 @@ def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
                 flag in _GIT_DIFF_METADATA_FLAGS or flag.startswith("--stat=") for flag in flags
             )
         return False
-    if verb == "wc":
+    if verb == "wc" or verb.endswith("/wc"):
         start = _command_start_index(segment)
         if start is None:
             return False
         flags = [token for token in segment[start + 1 :] if token.startswith("-")]
-        return bool(flags) and all(
-            token == "--lines" or ("l" in token and not set(token.lstrip("-")) - {"l"})
-            for token in flags
-        )
+        return bool(flags) and all(_is_allowed_wc_flag(token) for token in flags)
     return False
 
 

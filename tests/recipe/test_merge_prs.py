@@ -574,10 +574,24 @@ def test_pmp_re_push_review_integration_uses_batch_branch(recipe) -> None:
     assert "context.batch_branch" in step.with_args.get("branch", "")
 
 
-def test_pmp_re_push_review_integration_routes_to_derive_batch_ci_event(recipe) -> None:
-    """B22: re_push_review_integration.on_success must route through derive_batch_ci_event."""
+def test_pmp_re_push_review_integration_routes_to_check_review_posted(recipe) -> None:
+    """B22b: re_push_review_integration must gate through check_review_posted, not
+    route directly to derive_batch_ci_event — enforces the review-effect gate on the
+    rebase-then-repush path."""
     step = recipe.steps["re_push_review_integration"]
-    assert step.on_success == "derive_batch_ci_event"
+    assert step.on_success == "check_review_posted"
+
+
+def test_pmp_check_review_posted_routes_to_derive_batch_ci_event_on_success(recipe) -> None:
+    """B22c: check_review_posted routes to derive_batch_ci_event when reviews_posted==true."""
+    step = recipe.steps["check_review_posted"]
+    assert step.on_result is not None
+    true_routes = [
+        c.route
+        for c in step.on_result.conditions
+        if c.when and "reviews_posted" in c.when and "'true'" in c.when
+    ]
+    assert "derive_batch_ci_event" in true_routes
 
 
 def test_pmp_setup_remote_uses_context_remote_url(recipe) -> None:

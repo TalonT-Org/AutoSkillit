@@ -1510,11 +1510,13 @@ steps:
       pr_number: ${{ context.review_pr_number }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/review-pr'
       mode: github
+      work_dir: ${{ context.work_dir }}
     on_result:
     - when: ${{ result.reviews_posted }} == 'false'
       route: register_clone_failure
     - when: ${{ result.reviews_posted }} == 'true'
       route: derive_batch_ci_event
+    - route: register_clone_failure
     on_failure: register_clone_failure
   resolve_review_integration:
     tool: run_skill
@@ -1589,11 +1591,12 @@ steps:
       remote_url: ${{ context.remote_url }}
       branch: ${{ context.batch_branch }}
       force: 'true'
-    on_success: derive_batch_ci_event
+    on_success: check_review_posted
     on_failure: register_clone_failure
     note: 'Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003).
-      Routes to derive_batch_ci_event for branch-specific CI event derivation before
-      final CI validation. On push failure, escalates to register_clone_failure.
+      Routes to check_review_posted (the effect-verification gate), which in turn
+      routes to derive_batch_ci_event when reviews_posted == ''true''. On push
+      failure, escalates to register_clone_failure.
 
       '
   derive_batch_ci_event:

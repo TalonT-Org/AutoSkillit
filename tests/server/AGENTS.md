@@ -93,6 +93,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_claim_liveness.py` | Tests for liveness-aware claiming — dead dispatch recovery, alive dispatch blocking, shared helper parity |
 | `test_tools_issue_lifecycle.py` | Tests for server/tools/tools_issue_headless.py and server/tools/tools_issue_labels.py |
 | `test_tools_kitchen_cache_poison.py` | Cross-tool cache-poison regression: open_kitchen(ingredients_only=True) must not corrupt subsequent load_recipe calls for the same recipe |
+| `test_serve_idempotence.py` | Serve-idempotence regression: load_recipe and deferred-recall open_kitchen must produce byte-identical content to the first open_kitchen serving |
 | `test_tools_kitchen_envelope.py` | Tests for tools_kitchen.py: hook drift warnings and failure envelopes |
 | `test_tools_kitchen_preflight.py` | Tests for dispatch-feasibility preflight in open_kitchen and shared _check_dispatch_feasibility function |
 | `test_tools_fleet_dispatch_preflight.py` | Tests for dispatch_food_truck preflight wiring — preflight before execute_dispatch |

@@ -171,6 +171,17 @@ class TestRunCmdBlocking:
                 "git add -- src/autoskillit/recipes/remediation.yaml"
                 "&&cat src/autoskillit/recipes/remediation.yaml"
             ),
+            # Input redirection: `<` is not in punctuation_chars; path is in
+            # the segment text, pattern matches, verb `cat` is not git/wc.
+            "cat < src/autoskillit/recipes/remediation.yaml",
+            # Content-reading git subcommands not in the metadata allowlist.
+            "git show HEAD:src/autoskillit/recipes/remediation.yaml",
+            "git log -p -- src/autoskillit/recipes/remediation.yaml",
+            "git blame src/autoskillit/recipes/remediation.yaml",
+            "git grep pattern -- src/autoskillit/recipes/remediation.yaml",
+            # -A/--all/--force stage content even when restricted to a path.
+            "git add -A -- src/autoskillit/recipes/remediation.yaml",
+            "git add --all -- src/autoskillit/recipes/remediation.yaml",
         ],
     )
     def test_denies_protected_path_content_bypasses(self, cmd):

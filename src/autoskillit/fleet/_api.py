@@ -28,6 +28,7 @@ from autoskillit.fleet._issue_url_helpers import extract_issue_urls
 from autoskillit.fleet._outcome import _checkpoint_to_dict, classify_dispatch_outcome
 from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
+from autoskillit.fleet.state_recovery import prepare_resume
 from autoskillit.fleet.state_types import (
     DispatchCompleted,
     DispatchRejected,
@@ -132,9 +133,26 @@ def _write_pid(
     dispatched_create_time: float = 0.0,
     identity_degraded: bool = False,
     issue_url: str = "",
-) -> None:
-    """on_spawn callback: atomically mark dispatch as running with dispatched_pid."""
+) -> str | None:
+    """on_spawn callback: atomically mark dispatch as running with dispatched_pid.
+
+    L2 — Fail-closed: if ``mark_dispatch_running`` raises (e.g. illegal state
+    transition), the spawned child is killed via ``kill_process_tree`` (the
+    canonical sync kill primitive used by ``_dispatch_reaper``) and the
+    exception's message string is returned to the caller via closure-scoped
+    state. Raising the exception from ``_on_spawn`` is NOT safe because
+    ``_execute_claude_headless`` catches runner exceptions and returns
+    ``SkillResult.crashed`` — the propagated exception would never reach the
+    outer ``execute_dispatch`` wrapper. The caller therefore inspects the
+    returned error string (or the closure-scoped ``_spawn_error`` list) and
+    translates it into a ``FLEET_L3_STARTUP_OR_CRASH`` envelope.
+
+    Returns:
+        None on success; the formatted error message string on failure (also
+        recorded via the side-effect of having killed the child).
+    """
     from autoskillit.core import read_boot_id
+    from autoskillit.execution import kill_process_tree
     from autoskillit.fleet import mark_dispatch_running
 
     try:
@@ -150,8 +168,19 @@ def _write_pid(
             identity_degraded=identity_degraded,
             issue_url=issue_url,
         )
-    except Exception:
-        logger.warning("_write_pid: failed to mark dispatch running", exc_info=True)
+        return None
+    except Exception as exc:
+        # Fail-closed: kill the child before the state record can diverge.
+        if pid:
+            try:
+                kill_process_tree(pid, timeout=2.0)
+            except Exception:
+                logger.warning(
+                    "_write_pid: kill_process_tree failed for pid=%d",
+                    pid,
+                    exc_info=True,
+                )
+        return f"_on_spawn transition failed: {type(exc).__name__}: {exc}"
 
 
 def _post_dispatch_cleanup(
@@ -483,19 +512,46 @@ async def _run_dispatch(
         try:
             handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
             prior_state = read_state(handle.state_path)
-            if prior_state:
-                for d in prior_state.dispatches:
-                    if d.name == effective_name:
-                        if d.status == DispatchStatus.SUCCESS:
-                            logger.info(
-                                "resume_skipped_prior_success",
-                                dispatch_name=effective_name,
-                                prior_dispatch_id=prior_dispatch_id,
-                            )
-                            return _build_success_short_circuit(d, handle)
-                        prior_session_chain = list(d.session_chain)
-                        prior_dispatched_session_id = d.dispatched_session_id
-                        break
+            if prior_state is None:
+                # Corrupt or missing prior state — degrade to fresh.
+                handle = DispatchStateHandle.create_fresh(
+                    dispatches_dir,
+                    campaign_id,
+                    effective_name,
+                    "",
+                    [DispatchRecord(name=effective_name, caller_session_id=caller_session_id)],
+                    recipe_snapshot,
+                )
+            else:
+                # L1 — Single precondition chokepoint. Funnels every resume
+                # entry point through one function (the bug class becomes
+                # structurally impossible — see plan rectify_fleet-resume-
+                # precondition-chokepoint_2026-07-08_143000.md).
+                preflight = prepare_resume(
+                    handle.state_path,
+                    effective_name,
+                    continue_on_failure=True,
+                )
+                if preflight is not None:
+                    if preflight.short_circuit is not None:
+                        logger.info(
+                            "resume_skipped_prior_success",
+                            dispatch_name=effective_name,
+                            prior_dispatch_id=prior_dispatch_id,
+                        )
+                        return _build_success_short_circuit(preflight.short_circuit, handle)
+                    if preflight.halt:
+                        return DispatchResult(
+                            outcome=DispatchRejected(
+                                error_code=FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                                message=preflight.halted_reason
+                                or "Resume refused by precondition chokepoint",
+                                dispatch_id=handle.identity.dispatch_id,
+                            ),
+                            per_dispatch_state_path=None,
+                        )
+                    prior_session_chain = preflight.prior_session_chain
+                    prior_dispatched_session_id = preflight.prior_dispatched_session_id
         except (OSError, ValueError, KeyError, TypeError):
             logger.warning("failed to read prior session chain from state", exc_info=True)
             handle = DispatchStateHandle.create_fresh(
@@ -668,6 +724,13 @@ async def _run_dispatch(
     _dispatched_create_time: list[float] = []
     _dispatched_boot_id: list[str] = []
     _dispatched_session_id: list[str] = []
+    # Closure-scoped spawn error state (layer L2). The executor's on_spawn callback
+    # is invoked inside _execute_claude_headless's runner call, where any
+    # exception is caught and converted to SkillResult.crashed — so raising
+    # from on_spawn would never propagate to the outer execute_dispatch
+    # wrapper. _write_pid records the error here; the caller inspects
+    # _spawn_error after dispatch_food_truck returns.
+    _spawn_error: list[str] = []
 
     # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
     prior_ids: list[str] = []
@@ -705,7 +768,12 @@ async def _run_dispatch(
         _dispatched_ticks.append(ticks)
         _dispatched_create_time.append(create_time)
         _dispatched_boot_id.append(boot_id)
-        _write_pid(
+        # _write_pid returns None on success or an error string on failure.
+        # We record the error in closure-scoped _spawn_error rather than
+        # raising — raising from on_spawn would be swallowed by the executor
+        # and converted to SkillResult.crashed, never reaching the outer
+        # execute_dispatch wrapper.
+        err = _write_pid(
             state_path,
             effective_name,
             dispatch_id,
@@ -716,6 +784,8 @@ async def _run_dispatch(
             identity_degraded=(ticks == 0),
             issue_url=_issue_urls_raw,
         )
+        if err is not None:
+            _spawn_error.append(err)
 
     def _on_session_id(session_id: str) -> None:
         from autoskillit.fleet.state import mark_dispatch_session_identity
@@ -776,6 +846,16 @@ async def _run_dispatch(
                     if dispatch_backend is not None
                     else None,
                 )
+
+        # L2 fail-closed spawn gate: check closure-scoped error state.
+        # If _on_spawn recorded a transition failure (and killed the child
+        # via kill_process_tree), translate it to a structured envelope
+        # instead of letting the dispatch proceed on a stale record.
+        if _spawn_error:
+            return _reject_with_state(
+                FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                _spawn_error[0],
+            )
 
         ended_at = max(time.time(), started_at + 1e-6)
         _dispatch_completed_normally = True

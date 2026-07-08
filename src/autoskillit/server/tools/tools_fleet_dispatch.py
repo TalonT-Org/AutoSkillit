@@ -41,10 +41,10 @@ from autoskillit.fleet import (
     execute_dispatch,
     find_completed_dispatch,
     has_blocking_dispatch,
+    prepare_resume,
     read_all_campaign_captures,
     read_state,
     record_gate_outcome,
-    reset_blocking_dispatch,
     upsert_dispatch_record_by_name,
 )
 from autoskillit.server import mcp
@@ -261,29 +261,36 @@ async def dispatch_food_truck(
         if campaign_state_path_str and not continue_on_failure:
             campaign_sp = Path(campaign_state_path_str)
             if dispatch_name:
-                if not reset_blocking_dispatch(campaign_sp, dispatch_name):
-                    still_blocked = has_blocking_dispatch(campaign_sp)
-                    logger.warning(
-                        "reset_blocking_dispatch: dispatch %r not found in a blocking state — %s",
-                        dispatch_name,
-                        "campaign is blocked by a different dispatch"
-                        if still_blocked
-                        else "no active campaign block detected",
+                # L1 — Funnel the campaign precondition gate through the
+                # single chokepoint (see plan rectify_fleet-resume-
+                # precondition-chokepoint_2026-07-08_143000.md).
+                preflight = prepare_resume(campaign_sp, dispatch_name, continue_on_failure=False)
+                if preflight is not None and preflight.halt:
+                    return fleet_error(
+                        FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                        preflight.halted_reason
+                        or "Campaign halted: a prior dispatch failed and "
+                        "continue_on_failure is false. "
+                        "No further dispatches permitted.",
                     )
-                    if still_blocked:
-                        return fleet_error(
-                            FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                            "Campaign halted: a prior dispatch failed and "
-                            "continue_on_failure is false. "
-                            "No further dispatches permitted.",
-                        )
-            if has_blocking_dispatch(campaign_sp):
-                return fleet_error(
-                    FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                    "Campaign halted: a prior dispatch failed and "
-                    "continue_on_failure is false. "
-                    "No further dispatches permitted.",
-                )
+                # Backward-compat with the legacy path: also probe the global
+                # blocking-dispatch set (handles campaigns where the named
+                # dispatch isn't the one in the blocking state).
+                if has_blocking_dispatch(campaign_sp):
+                    return fleet_error(
+                        FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                        "Campaign halted: a prior dispatch failed and "
+                        "continue_on_failure is false. "
+                        "No further dispatches permitted.",
+                    )
+            else:
+                if has_blocking_dispatch(campaign_sp):
+                    return fleet_error(
+                        FleetErrorCode.FLEET_CAMPAIGN_HALTED,
+                        "Campaign halted: a prior dispatch failed and "
+                        "continue_on_failure is false. "
+                        "No further dispatches permitted.",
+                    )
 
         from autoskillit.server import _get_ctx  # circular-break
         from autoskillit.server._misc import (  # circular-break

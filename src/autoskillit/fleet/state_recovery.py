@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from autoskillit.core import (
     FleetErrorCode,
@@ -31,7 +31,35 @@ MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 if TYPE_CHECKING:
     from autoskillit.fleet.state import CampaignStateMutator
 
+
+class ResumePreflight(NamedTuple):
+    """Result of the ``prepare_resume`` precondition chokepoint.
+
+    Fields:
+        prior_session_chain: Session chain read from the prior record (preserved
+            even when reset_performed is True).
+        prior_dispatched_session_id: Last-session-id for chain fallback lookups.
+        short_circuit: Populated when the prior dispatch is SUCCESS — caller
+            can short-circuit to ``_build_success_short_circuit``.
+        reset_performed: True when the chokepoint auto-reset a blocking status
+            (FAILURE/INTERRUPTED/REFUSED) to PENDING via ``reset_blocking_dispatch``.
+        halt: True when ``continue_on_failure=False`` and the prior status was
+            terminal — caller must refuse the resume.
+        halted_reason: Populated when halt=True; describes why the resume was
+            refused.
+    """
+
+    prior_session_chain: list[str]
+    prior_dispatched_session_id: str
+    short_circuit: DispatchRecord | None
+    reset_performed: bool
+    halt: bool
+    halted_reason: str | None
+
+
 __all__ = [
+    "MAX_CONSECUTIVE_RESUME_ATTEMPTS",
+    "ResumePreflight",
     "classify_stale_dispatch",
     "derive_orchestrator_resume_spec",
     "find_completed_dispatch",
@@ -39,9 +67,11 @@ __all__ = [
     "has_blocking_dispatch",
     "has_completed_dispatch",
     "has_failed_dispatch",
+    "prepare_resume",
     "resolve_stale_running",
     "resume_campaign_from_state",
 ]
+
 
 logger = get_logger(__name__)
 
@@ -78,6 +108,113 @@ def _count_consecutive_resumable_timeouts(history: list[dict[str, Any]]) -> int:
         else:
             break
     return count
+
+
+def prepare_resume(
+    state_path: Path,
+    dispatch_name: str,
+    *,
+    continue_on_failure: bool = True,
+) -> ResumePreflight | None:
+    """Single precondition chokepoint for every resume entry point.
+
+    Returns:
+        - ``None`` if the state file is missing or corrupt (caller treats as
+          a fail-open: fall through to fresh dispatch).
+        - ``ResumePreflight`` with ``short_circuit`` set when the prior dispatch
+          is SUCCESS (caller can return ``_build_success_short_circuit``).
+        - ``ResumePreflight`` with ``reset_performed=True`` when the prior
+          dispatch was in ``{FAILURE, INTERRUPTED, REFUSED}`` and was
+          auto-reset to PENDING via ``reset_blocking_dispatch``.
+        - ``ResumePreflight`` with ``halt=True`` when ``continue_on_failure``
+          is False and the prior dispatch was in a terminal status
+          (campaign-level halt semantic preserved).
+        - ``ResumePreflight`` with ``prior_session_chain`` populated when the
+          dispatch is in ``PENDING`` or ``RESUMABLE`` (caller proceeds with
+          existing resume flow; cap enforcement happens in
+          ``mark_dispatch_running``).
+
+    The cap check (``MAX_CONSECUTIVE_RESUME_ATTEMPTS``) is intentionally NOT
+    performed here — it's owned by ``mark_dispatch_running`` so the same
+    cap semantics apply regardless of the entry point that triggered the
+    transition.
+    """
+    from autoskillit.fleet.state import read_state, reset_blocking_dispatch
+
+    if not state_path.exists():
+        return None
+    state = read_state(state_path)
+    if state is None:
+        return None
+
+    target: DispatchRecord | None = None
+    for d in state.dispatches:
+        if d.name == dispatch_name:
+            target = d
+            break
+    if target is None:
+        # No matching dispatch — caller can treat as fresh.
+        return ResumePreflight(
+            prior_session_chain=[],
+            prior_dispatched_session_id="",
+            short_circuit=None,
+            reset_performed=False,
+            halt=False,
+            halted_reason=None,
+        )
+
+    prior_session_chain = list(target.session_chain)
+    prior_dispatched_session_id = target.dispatched_session_id
+
+    # Case 1: SUCCESS — short-circuit the resume (caller can reuse prior result).
+    if target.status == DispatchStatus.SUCCESS:
+        return ResumePreflight(
+            prior_session_chain=prior_session_chain,
+            prior_dispatched_session_id=prior_dispatched_session_id,
+            short_circuit=target,
+            reset_performed=False,
+            halt=False,
+            halted_reason=None,
+        )
+
+    # Case 2: Resettable terminal status — auto-reset OR halt.
+    # _RETRIABLE_NON_SUCCESS == {FAILURE, INTERRUPTED, REFUSED} matches the
+    # canonical _RESETTABLE_STATUSES set in fleet._reset without forcing a
+    # module-level import (which would re-trigger the cycle through state.py).
+    if target.status in _RETRIABLE_NON_SUCCESS:
+        if not continue_on_failure:
+            return ResumePreflight(
+                prior_session_chain=prior_session_chain,
+                prior_dispatched_session_id=prior_dispatched_session_id,
+                short_circuit=None,
+                reset_performed=False,
+                halt=True,
+                halted_reason=(
+                    f"Campaign halted: prior dispatch {dispatch_name!r} is in "
+                    f"{target.status.value!r} and continue_on_failure is false"
+                ),
+            )
+        # Auto-reset blocking status → PENDING via the canonical helper.
+        reset_blocking_dispatch(state_path, dispatch_name)
+        return ResumePreflight(
+            prior_session_chain=prior_session_chain,
+            prior_dispatched_session_id=prior_dispatched_session_id,
+            short_circuit=None,
+            reset_performed=True,
+            halt=False,
+            halted_reason=None,
+        )
+
+    # Case 3: PENDING / RESUMABLE / SKIPPED / RELEASED — pass through. Cap
+    # enforcement is delegated to mark_dispatch_running (layer L3).
+    return ResumePreflight(
+        prior_session_chain=prior_session_chain,
+        prior_dispatched_session_id=prior_dispatched_session_id,
+        short_circuit=None,
+        reset_performed=False,
+        halt=False,
+        halted_reason=None,
+    )
 
 
 def has_failed_dispatch(state_path: Path) -> bool:
@@ -261,6 +398,10 @@ def resume_campaign_from_state(
          with reason fleet_halted_on_failure (encoded via a sentinel).
          When reset_on_retry=True, reset all FAILURE dispatches to PENDING instead.
       5. Return ResumeDecision with next_dispatch_name and completed block.
+
+    The per-dispatch precondition gate is delegated to ``prepare_resume`` so
+    this function composes a campaign-level ``ResumeDecision`` from one or
+    more ``ResumePreflight`` results.
 
     Returns None if the state file is missing/corrupted. Returns a
     ResumeDecision with next_dispatch_name="" if all dispatches are

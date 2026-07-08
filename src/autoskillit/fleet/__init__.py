@@ -76,12 +76,19 @@ from .state import (
     write_initial_state,
 )
 from .state_recovery import (
+    MAX_CONSECUTIVE_RESUME_ATTEMPTS as MAX_CONSECUTIVE_RESUME_ATTEMPTS,
+)
+from .state_recovery import (
+    ResumePreflight as ResumePreflight,
+)
+from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
     find_completed_dispatch,
     find_dispatch_for_issue,
     has_blocking_dispatch,
     has_completed_dispatch,
+    prepare_resume,
     resolve_stale_running,
 )
 from .state_types import (
@@ -165,6 +172,9 @@ __all__ = [
     "normalize_dispatch_token_usage",
     "classify_stale_dispatch",
     "FLEET_STATE_SCHEMA_VERSION",
+    "MAX_CONSECUTIVE_RESUME_ATTEMPTS",
+    "prepare_resume",
+    "ResumePreflight",
     "derive_orchestrator_resume_spec",
     "find_dispatch_for_issue",
     "checkpoint_from_sidecar",

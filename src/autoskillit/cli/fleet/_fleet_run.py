@@ -19,8 +19,27 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _fleet_run_error(error: str, message: str, exit_code: int = 1) -> NoReturn:
-    envelope = {"success": False, "error": error, "user_visible_message": message}
+def _fleet_run_error(
+    error: str,
+    message: str,
+    exit_code: int = 1,
+    *,
+    dispatch_status: str | None = None,
+) -> NoReturn:
+    """Emit a CLI error envelope and exit.
+
+    Part A secondary fix (Bug B-5): every envelope emitted from the headless CLI
+    now carries a ``dispatch_status`` field so downstream consumers can
+    distinguish crash outcomes from real dispatch outcomes without parsing the
+    message string. When ``dispatch_status`` is omitted, the default ``"rejected"``
+    is used (no subprocess was launched).
+    """
+    envelope: dict[str, object] = {
+        "success": False,
+        "error": error,
+        "user_visible_message": message,
+        "dispatch_status": dispatch_status or "rejected",
+    }
     print(json.dumps(envelope))
     raise SystemExit(exit_code)
 

@@ -832,6 +832,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/backends/test_failure_predicate_spanning.py",
             # file-level: execution test that imports fleet.build_protected_campaign_ids
             "execution/test_session_log_retention.py",
+            # file-level: fleet tests that import server tool handlers directly
+            "fleet/test_resume_precondition.py",
+            "fleet/test_headless_resume_max_attempts.py",
         }
     ),
     # L3
@@ -848,6 +851,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "fleet/test_gate_state_persistence.py",
             "fleet/test_dispatch_identity_continuity.py",
             "fleet/test_dispatch_envelope_fields.py",
+            # file-level: fleet precondition-chokepoint test that imports server tool handlers
+            "fleet/test_resume_precondition.py",
             # file-level: cross-layer test that imports server TypedDict schemas
             "execution/backends/test_failure_predicate_spanning.py",
         }

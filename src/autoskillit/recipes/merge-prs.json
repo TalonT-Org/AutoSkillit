@@ -1520,19 +1520,43 @@
         },
         {
           "when": "${{ result.verdict }} == needs_human",
-          "route": "derive_batch_ci_event"
+          "route": "check_review_posted"
         },
         {
           "when": "${{ result.verdict }} == approved",
-          "route": "derive_batch_ci_event"
+          "route": "check_review_posted"
         },
         {
           "when": "true",
-          "route": "derive_batch_ci_event"
+          "route": "check_review_posted"
         }
       ],
       "on_failure": "resolve_review_integration",
-      "note": "Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr against context.batch_branch. All four verdicts have explicit routes: changes_requested → resolve_review_integration, approved_with_comments → resolve_review_integration, needs_human → derive_batch_ci_event (human reviews inline), approved → derive_batch_ci_event. On tool-level failure, routes to resolve_review_integration (matches implementation.yaml pattern). needs_human is explicitly routed to satisfy the unrouted-verdict-value semantic rule.\n"
+      "note": "Automated review of the integration PR (REQ-REVIEW-001). Invokes review-pr against context.batch_branch. All four verdicts have explicit routes: changes_requested → resolve_review_integration, approved_with_comments → resolve_review_integration, needs_human → check_review_posted (effect verification gate) → derive_batch_ci_event, approved → check_review_posted → derive_batch_ci_event. On tool-level failure, routes to resolve_review_integration. needs_human is explicitly routed to satisfy the unrouted-verdict-value semantic rule.\n"
+    },
+    "check_review_posted": {
+      "tool": "run_python",
+      "with": {
+        "callable": "autoskillit.smoke_utils.check_review_posted",
+        "pr_number": "${{ context.review_pr_number }}",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/review-pr",
+        "mode": "github",
+        "work_dir": "${{ context.work_dir }}"
+      },
+      "on_result": [
+        {
+          "when": "${{ result.reviews_posted }} == 'false'",
+          "route": "register_clone_failure"
+        },
+        {
+          "when": "${{ result.reviews_posted }} == 'true'",
+          "route": "derive_batch_ci_event"
+        },
+        {
+          "route": "register_clone_failure"
+        }
+      ],
+      "on_failure": "register_clone_failure"
     },
     "resolve_review_integration": {
       "tool": "run_skill",
@@ -1629,9 +1653,9 @@
         "branch": "${{ context.batch_branch }}",
         "force": "true"
       },
-      "on_success": "derive_batch_ci_event",
+      "on_success": "check_review_posted",
       "on_failure": "register_clone_failure",
-      "note": "Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003). Routes to derive_batch_ci_event for branch-specific CI event derivation before final CI validation. On push failure, escalates to register_clone_failure.\n"
+      "note": "Pushes the review-fixed integration branch to the remote (REQ-REVIEW-003). Routes to check_review_posted (the effect-verification gate), which in turn routes to derive_batch_ci_event when reviews_posted == 'true'. On push failure, escalates to register_clone_failure.\n"
     },
     "derive_batch_ci_event": {
       "tool": "check_repo_merge_state",

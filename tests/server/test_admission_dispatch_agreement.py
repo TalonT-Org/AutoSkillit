@@ -41,6 +41,7 @@ _RECIPES: tuple[str, ...] = (
     "implementation",
     "implementation-groups",
     "remediation",
+    "merge-prs",
 )
 _BACKENDS: tuple[str, ...] = tuple(sorted(BACKEND_REGISTRY.keys()))
 _SKILL_RESOLVER = DefaultSkillResolver()
@@ -192,6 +193,36 @@ def _mock_run_skill_step():
     step.with_args = {"skill_command": "/autoskillit:resolve-failures"}
     step.skip_when_false = "inputs.backend_supports_git_write"
     return step
+
+
+def _mock_open_kitchen_resolver():
+    """Resolver whose every skill carries open_kitchen (not-applicable, worker_routable=False)."""
+    from unittest.mock import MagicMock
+
+    info = MagicMock()
+    info.uses_capabilities = frozenset({"open_kitchen"})
+    info.backend_requirements = frozenset({"claude-code"})
+    resolver = MagicMock()
+    resolver.resolve.return_value = info
+    return resolver
+
+
+def test_open_kitchen_capability_not_routing_eligible_in_admission() -> None:
+    """T-N2: _compute_effective_backend_map must not route open_kitchen-capability
+    steps to claude-code — open_kitchen is not worker_routable."""
+    from autoskillit.config._config_dataclasses import ProvidersConfig
+
+    eff_map = _compute_effective_backend_map(
+        {"step": _mock_run_skill_step()},
+        "codex",
+        ProvidersConfig(),
+        "implementation",
+        skill_resolver=_mock_open_kitchen_resolver(),
+    )
+    assert eff_map is not None
+    assert eff_map.get("step") == "codex", (
+        f"open_kitchen must not trigger capability routing: got {eff_map.get('step')!r}"
+    )
 
 
 def test_effective_backend_map_capability_route_unit() -> None:

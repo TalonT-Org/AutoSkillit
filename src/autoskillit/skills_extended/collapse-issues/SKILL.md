@@ -1,7 +1,7 @@
 ---
 name: collapse-issues
 categories: [github]
-uses_capabilities: [cross_skill_ref]
+uses_capabilities: [cross_skill_ref, github_api_write]
 description: >
   Identify clusters of related triaged GitHub issues sharing the same recipe route
   and collapse them into a single combined issue with full content from all originals.

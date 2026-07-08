@@ -191,10 +191,13 @@ def test_matrix_collection_count() -> None:
 
 
 def test_recipe_backend_matrix_codex_with_provider_override() -> None:
-    """Codex with backend_supports_git_write=true (simulated via ingredient_overrides)
-    but no effective_backend_map: admission truth-telling flags merge-conflict steps
-    whose skill requires claude-code, because the rule evaluates per-step effective
-    backends and falls back to ctx.backend_name='codex' without a map."""
+    """Codex with backend_supports_git_write=true: recipe is valid and feasible.
+
+    After the worker_routable discriminator fix, git_metadata_write has
+    worker_routable=True and required_backends=frozenset(). Merge-conflict steps
+    (resolve-merge-conflicts declares git_metadata_write) are routable at dispatch
+    time and do NOT produce backend-incompatible-skill findings. The recipe is
+    valid=True and dispatch_feasible=True when backend_supports_git_write=true."""
     result = load_and_validate(
         "implementation",
         project_dir=_PROJECT_ROOT,
@@ -202,18 +205,19 @@ def test_recipe_backend_matrix_codex_with_provider_override() -> None:
         ingredient_overrides={"backend_supports_git_write": "true"},
         lister=_SKILL_RESOLVER,
     )
-    assert result["valid"] is False, (
-        "Expected valid=False: merge-conflict steps invoke resolve-merge-conflicts "
-        "(requires claude-code) and have no effective_backend_map entry to override "
-        "the raw backend_name='codex'. Got valid=True."
+    assert result["valid"] is True, (
+        "Expected valid=True: git_metadata_write skills are worker_routable=True "
+        "(required_backends=frozenset()) so no backend-incompatible-skill findings expected. "
+        f"Got valid={result['valid']}"
     )
     backend_compat_errors = [
         s
         for s in result.get("suggestions", [])
         if s.get("rule") == "backend-incompatible-skill" and s.get("severity") == Severity.ERROR
     ]
-    assert len(backend_compat_errors) >= 1, (
-        "Expected at least one backend-incompatible-skill ERROR for merge-conflict steps"
+    assert len(backend_compat_errors) == 0, (
+        f"Expected zero backend-incompatible-skill ERRORs: git_metadata_write is routable; "
+        f"got {len(backend_compat_errors)}"
     )
     assert result.get("dispatch_feasible") is True, (
         f"Expected dispatch_feasible=True (backend_supports_git_write=true prevents "

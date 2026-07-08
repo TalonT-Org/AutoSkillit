@@ -293,6 +293,23 @@ def _clear_features_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _clear_run_skill_env(monkeypatch):
+    """Clear ALL AUTOSKILLIT_RUN_SKILL__* env vars before every test.
+
+    Dynaconf reads env vars with prefix AUTOSKILLIT_ and injects them into the
+    config dict at the highest priority layer. RunSkillConfig env vars
+    (AUTOSKILLIT_RUN_SKILL__MAX_SUPPRESSION_SECONDS, etc.) override YAML/dataclass
+    defaults when set by the pipeline harness, breaking test isolation.
+
+    Uses prefix-based scanning so new run_skill env vars are automatically covered
+    without needing individual fixture additions.
+    """
+    for key in list(os.environ):
+        if key.startswith("AUTOSKILLIT_RUN_SKILL__"):
+            monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _clear_test_filter_env(monkeypatch):
     """Clear AUTOSKILLIT_TEST_FILTER and related env vars before every test.
 

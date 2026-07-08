@@ -1,7 +1,7 @@
 ---
 name: triage-issues
 categories: [github]
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model, cross_skill_ref, github_api_write]
 description: Analyze open GitHub issues and produce a sequenced implementation plan — grouping issues into parallel batches, ordering those batches, and tagging each issue with its recipe route. Use when user says "triage issues", "prioritize issues", or "plan issue order".
 hooks:
   PreToolUse:

@@ -30,11 +30,21 @@ _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
         re.compile(r"git\s+(?:-C\s+\S+\s+)?commit\s+-m"),
         re.compile(r'\bgit\s+(?:-C\s+\S+\s+)?rebase\s+(?:--\w|[$"\{])'),
     ],
+    "github_api_write": [
+        re.compile(
+            r"gh api[^\n]*(?:--method\s+(?:POST|PATCH|PUT|DELETE))"
+            r"|gh pr (?:review|create|merge)\b"
+            r"|gh issue (?:create|edit|close)\b"
+            r"|gh release create\b"
+        ),
+    ],
 }
 
 
 def _detect_capabilities(body: str, skill_name: str) -> set[str]:
     filtered = _strip_doc_fenced_blocks(body)
+    # Collapse shell line continuations so multi-line gh api calls are detected
+    filtered = re.sub(r"\\\n\s*", " ", filtered)
     detected: set[str] = set()
     for cap_name, patterns in _CAPABILITY_PATTERNS.items():
         for pat in patterns:
@@ -137,3 +147,58 @@ def test_derivation_backend_requirements_match_capabilities():
         f"{len(violations)} skill(s) still have backend_requirements in SKILL.md frontmatter "
         f"(should be derived at runtime):\n" + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_github_api_write_pattern_detected() -> None:
+    """_CAPABILITY_PATTERNS["github_api_write"] matches GitHub write CLI patterns."""
+    patterns = _CAPABILITY_PATTERNS["github_api_write"]
+    should_match = [
+        "gh pr review --approve",
+        "gh api /repos/foo/bar --method POST",
+        "gh pr create --title foo",
+        "gh pr merge --squash",
+        "gh issue create --title bar",
+    ]
+    should_not_match = [
+        "gh pr list",
+        "gh pr view 123",
+        "gh issue list",
+    ]
+    for text in should_match:
+        assert any(p.search(text) for p in patterns), (
+            f"github_api_write pattern should match: {text!r}"
+        )
+    for text in should_not_match:
+        assert not any(p.search(text) for p in patterns), (
+            f"github_api_write pattern should NOT match: {text!r}"
+        )
+
+
+def test_review_pr_declares_github_api_write() -> None:
+    """review-pr must declare github_api_write in uses_capabilities."""
+    from autoskillit.core import pkg_root
+
+    skill_md = pkg_root() / "skills_extended" / "review-pr" / "SKILL.md"
+    fm = _read_skill_frontmatter(skill_md)
+    assert "github_api_write" in set(fm.get("uses_capabilities", [])), (
+        "review-pr SKILL.md must declare uses_capabilities: [..., github_api_write, ...]"
+    )
+
+
+def test_capability_routing_uses_registry_not_hardcoded_name() -> None:
+    """run_skill routing must not hardcode 'git_metadata_write' — must be registry-driven."""
+    import ast
+
+    from autoskillit.core import pkg_root
+
+    tools_exec = pkg_root() / "server" / "tools" / "tools_execution.py"
+    source = tools_exec.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and node.value == "git_metadata_write":
+            lineno = node.lineno
+            context = source.splitlines()[lineno - 1].strip()
+            assert False, (
+                f"tools_execution.py line {lineno} still references literal 'git_metadata_write' "
+                f"in routing logic — must use registry-driven check: {context!r}"
+            )

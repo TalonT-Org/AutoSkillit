@@ -52,3 +52,25 @@ class TestClaudeCodeSandboxAbsence:
             output_format=OutputFormat.JSON,
         )
         assert "--sandbox" not in spec.cmd
+
+
+class TestNetworkAccessOverride:
+    """T-A5, T-A6: network_access in SkillSessionConfig drives Codex extra override."""
+
+    def test_skill_session_with_network_access_gets_override(self) -> None:
+        config = SkillSessionConfig(network_access=True)
+        spec: CmdSpec = CodexBackend().build_skill_session_cmd(
+            "/test-skill", cwd="", config=config
+        )
+        assert any("sandbox_workspace_write.network_access=true" in part for part in spec.cmd), (
+            f"Expected network_access override in cmd, got: {spec.cmd}"
+        )
+
+    def test_skill_session_without_network_access_no_override(self) -> None:
+        config = SkillSessionConfig()
+        spec: CmdSpec = CodexBackend().build_skill_session_cmd(
+            "/test-skill", cwd="", config=config
+        )
+        assert not any(
+            "sandbox_workspace_write.network_access=true" in part for part in spec.cmd
+        ), f"Unexpected network_access override in cmd: {spec.cmd}"

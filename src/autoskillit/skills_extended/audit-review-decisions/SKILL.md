@@ -1,7 +1,7 @@
 ---
 name: audit-review-decisions
 categories: [audit]
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model, cross_skill_ref, github_api_write]
 description: >
   Audit merged PR review threads for agreed-but-deferred suggestions (design decisions,
   future work, out-of-scope items) that were never implemented. Mines REVIEW-FLAG markers

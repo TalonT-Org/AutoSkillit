@@ -19,6 +19,7 @@ from autoskillit.core import (
     AGENT_BACKEND_CLAUDE_CODE,
     CODEX_SESSIONS_SUBDIR,
     DISPATCH_ID_ENV_VAR,
+    SKILL_CAPABILITY_REGISTRY,
     SKILL_COMMAND_DISPLAY_MAX,
     WORKTREE_SKILLS,
     ClaudeDirectoryConventions,
@@ -504,6 +505,35 @@ def _compute_write_prefixes(
     return base_prefixes[0] if base_prefixes else "", tuple(all_prefixes)
 
 
+def _aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
+    """Aggregate required_sandbox_overrides from all declared capabilities."""
+    return frozenset().union(
+        *(
+            SKILL_CAPABILITY_REGISTRY[cap].required_sandbox_overrides
+            for cap in skill_caps
+            if cap in SKILL_CAPABILITY_REGISTRY
+        )
+    )
+
+
+def _has_routing_capability(skill_caps: frozenset[str]) -> bool:
+    """Return True if any declared capability is worker_routable (triggers backend reroute)."""
+    return any(
+        SKILL_CAPABILITY_REGISTRY.get(cap) is not None
+        and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
+        for cap in skill_caps
+    )
+
+
+def _get_routing_caps(skill_caps: frozenset[str]) -> list[str]:
+    """Return sorted list of worker_routable capabilities that trigger backend reroute."""
+    return sorted(
+        cap
+        for cap in skill_caps
+        if SKILL_CAPABILITY_REGISTRY.get(cap) and SKILL_CAPABILITY_REGISTRY[cap].worker_routable
+    )
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("run_skill")
@@ -766,29 +796,27 @@ async def run_skill(
                 and not tool_ctx.backend.capabilities.anthropic_provider_capable
             )
 
-            _skill_reqs: frozenset[str] = (
-                getattr(_skill_info, "backend_requirements", frozenset())
-                if _skill_info
-                else frozenset()
-            )
             _skill_caps: frozenset[str] = (
                 getattr(_skill_info, "uses_capabilities", frozenset())
                 if _skill_info
                 else frozenset()
             )
+            _sandbox_overrides = _aggregate_sandbox_overrides(_skill_caps)
+            _network_access = "sandbox_workspace_write.network_access=true" in _sandbox_overrides
+            _has_routing_cap = _has_routing_capability(_skill_caps)
             _skill_requires_claude = bool(
-                _skill_reqs
-                and "git_metadata_write" in _skill_caps
+                _has_routing_cap
                 and tool_ctx.backend is not None
                 and not tool_ctx.backend.capabilities.anthropic_provider_capable
             )
 
             if _skill_requires_claude:
                 if shutil.which("claude") is None:
+                    _routing_caps = _get_routing_caps(_skill_caps)
                     return SkillResult.crashed(
                         exception=RuntimeError(
                             f"Skill {target_name!r} requires claude-code backend "
-                            f"(git_metadata_write capability) but 'claude' binary "
+                            f"({', '.join(_routing_caps)} capability) but 'claude' binary "
                             f"is not found on PATH. Install Claude Code CLI to "
                             f"enable capability-driven routing."
                         ),
@@ -1124,6 +1152,7 @@ async def run_skill(
                                 caller_session_id=_orchestrator_sid,
                                 inspector_eligible=_in_fleet_dispatch and bool(_inspector_model),
                                 inspector_model=_inspector_model,
+                                network_access=_network_access,
                             )
                 except TimeoutError as exc:
                     logger.error(

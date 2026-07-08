@@ -992,7 +992,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "docstring update for post_run_diagnostics demotion (+10 net lines)",
     ),
     "tools_execution.py": (
-        1260,
+        1295,
         "REQ-CNST-010-E8: execution tool handlers — run_cmd/run_python/run_skill are the "
         "three primary execution paths; fail-closed existence gate, empty-closure gate "
         "for fabricated skill name rejection, _check_backend_compat fail-closed gate "
@@ -1004,10 +1004,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "post-serialization validation gate at run_skill return site adds fail-closed "
         "ToolFailureEnvelope substitution for structurally degraded payloads (+13 net lines); "
         "R0 capability-driven routing: _skill_requires_claude computation, binary probe "
-        "for fail-closed behavior, and composite log reason emission (+40 net lines)",
+        "for fail-closed behavior, and composite log reason emission (+40 net lines); "
+        "github_api_write capability: _aggregate_sandbox_overrides, _has_routing_capability, "
+        "_get_routing_caps helpers extracted from run_skill handler body (+30 net lines)",
     ),
     "execution/backends/codex.py": (
-        1150,
+        1155,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1032,7 +1034,8 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; env-assembly consolidation via _assemble_shared_env_extras (T5-P4-A1-WP2)"
         "; explicit parameter dispositions for "
         "plugin_source/output_format/exit_after_stop_delay_ms "
-        "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1",
+        "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1"
+        "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)",
     ),
 }
 

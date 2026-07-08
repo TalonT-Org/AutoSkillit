@@ -142,6 +142,8 @@ class BackendCapabilities:
     has_unguarded_filesystem_access: bool = field(default=False)
     # True when backend's git metadata directories (.git/worktrees/) are writable
     git_metadata_writable: bool = field(default=True)
+    # True when the backend can make outbound GitHub API write calls without sandbox restriction
+    github_api_callable: bool = field(default=False)
     # Native skill invocation prefix character used by this backend's model/CLI.
     # Claude Code uses "/" (slash-commands via the Skill tool).
     # Codex uses "$" (dollar-mention via extract_tool_mentions).
@@ -262,6 +264,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     supports_context_window_suffix=True,
     has_unguarded_filesystem_access=False,
     git_metadata_writable=True,
+    github_api_callable=True,
     skill_sigil="/",
     session_dir_persistent=False,
     supports_model_invocation_gating=True,
@@ -313,6 +316,7 @@ class SkillSessionConfig:
     resume_message: str | None = None
     sandbox_mode: str = "workspace-write"
     backend_override: str | None = None
+    network_access: bool = False
 
 
 @dataclass(frozen=True, slots=True)

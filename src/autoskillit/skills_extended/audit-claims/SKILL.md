@@ -1,7 +1,7 @@
 ---
 name: audit-claims
 categories: [research]
-uses_capabilities: [agent_model]
+uses_capabilities: [agent_model, github_api_write]
 description: >
   Parallel subagent-driven claim extraction and citation integrity audit for
   research PRs. Extracts claims by section, matches against available evidence,

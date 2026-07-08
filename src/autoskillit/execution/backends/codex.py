@@ -592,6 +592,7 @@ class CodexBackend(BackendCmdBuilderBase):
             # field; rules_backend_compat.py emits ERROR for
             # git_metadata_write skills on backends where this is False.
             git_metadata_writable=False,  # sandbox excludes .git metadata path
+            github_api_callable=False,
             skill_sigil="$",
             session_dir_persistent=True,
             supports_model_invocation_gating=False,
@@ -692,6 +693,7 @@ class CodexBackend(BackendCmdBuilderBase):
         resume_checkpoint: SessionCheckpoint | None = None,
         resume_message: str | None = None,
         sandbox_mode: str = "workspace-write",
+        network_access: bool = False,
     ) -> CmdSpec:
         if config is not None:
             cfg = self._apply_config(config)
@@ -712,6 +714,7 @@ class CodexBackend(BackendCmdBuilderBase):
             resume_checkpoint = cfg["resume_checkpoint"]
             resume_message = cfg["resume_message"]
             sandbox_mode = cfg["sandbox_mode"]
+            network_access = cfg.get("network_access", False)
         if plugin_source is not None:
             logger.warning("codex_plugin_source_discarded", plugin_source=str(plugin_source))
         if output_format != OutputFormat.JSON:
@@ -790,9 +793,13 @@ class CodexBackend(BackendCmdBuilderBase):
             required=SKILL_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
         )
 
+        _net_overrides: list[str] = []
+        if network_access:
+            _net_overrides.append("sandbox_workspace_write.network_access=true")
         cmd = _codex_exec_base(
             sandbox=sandbox_mode,
             bypass_hook_trust=self.capabilities.mcp_config_capable,
+            extra_overrides=_net_overrides,
         )
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]

@@ -145,6 +145,7 @@ async def run_headless_core(
     caller_session_id: str | None = None,
     inspector_eligible: bool = False,
     inspector_model: str = "",
+    network_access: bool = False,
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -193,6 +194,7 @@ async def run_headless_core(
             sandbox_mode="read-only"
             if readonly_skill
             else ctx.backend.capabilities.default_skill_sandbox_mode,
+            network_access=network_access,
         )
         step_backend: CodingAgentBackend | None = None
         if backend_override is not None:
@@ -303,6 +305,7 @@ class DefaultHeadlessExecutor:
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,
         inspector_model: str = "",
+        network_access: bool = False,
     ) -> SkillResult:
         cfg = self._ctx.config.run_skill
         effective_timeout = timeout if timeout is not None else cfg.timeout
@@ -344,6 +347,7 @@ class DefaultHeadlessExecutor:
             caller_session_id=caller_session_id,
             inspector_eligible=inspector_eligible,
             inspector_model=inspector_model,
+            network_access=network_access,
         )
 
     async def dispatch_food_truck(

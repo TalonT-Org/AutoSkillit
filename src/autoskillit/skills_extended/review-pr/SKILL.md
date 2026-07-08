@@ -1,7 +1,7 @@
 ---
 name: review-pr
 categories: [github]
-uses_capabilities: [agent_model, cross_skill_ref, run_skill]
+uses_capabilities: [agent_model, cross_skill_ref, github_api_write, run_skill]
 description: Automated diff-scoped PR code review using parallel audit subagents. Posts inline GitHub review comments and submits a summary verdict. Use after a PR is opened to gate CI on review approval.
 hooks:
   PreToolUse:
@@ -623,6 +623,12 @@ jq -n \
   '{body: $body, event: $event, comments: $comments}' | \
 gh api /repos/{owner}/{repo}/pulls/{pr_number}/reviews \
   --method POST --input -
+
+# Write receipt file on success — checked by check_review_posted gate in the recipe
+if [ $? -eq 0 ]; then
+  printf '{"posted":true}' \
+    > "${REVIEW_OUTPUT_DIR}batch_review_response_${pr_number}.json"
+fi
 ```
 
 Event mapping:
@@ -884,6 +890,20 @@ Immediately after the verdict line, emit the review gate tag on a new line:
 
 Exit 0 in all normal cases (approved, needs_human, changes_requested).
 Exit 1 only for unrecoverable tool-level errors.
+
+**Network Failure Degradation (Codex sandbox):**
+
+When `gh api` exits non-zero and the error output contains a network/connection
+error (e.g., `curl: (7) Failed to connect`, `Could not resolve host`) rather
+than an API-level error (HTTP 4xx/5xx), the `gh` binary is present but the
+sandbox blocks outbound network access. In this case:
+
+- Set `verdict=needs_human` and emit `%%REVIEW_GATE::CLEAR%%`
+- Exit 0 — this is a sandbox constraint, not a skill failure
+- Log: `"gh api network error in sandbox — setting verdict=needs_human"`
+
+The `needs_human` verdict is in `_SAFE_DEGRADATION_VERDICTS`, so the
+`verdict-ungated-degradation` rule does not fire for this path.
 
 ## Output
 

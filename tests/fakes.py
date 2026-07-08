@@ -99,6 +99,7 @@ class ExecutorCall:
     caller_session_id: str | None = None
     inspector_eligible: bool = False
     inspector_model: str = ""
+    network_access: bool = False
 
 
 @dataclasses.dataclass
@@ -205,6 +206,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         caller_session_id: str | None = None,
         inspector_eligible: bool = False,
         inspector_model: str = "",
+        network_access: bool = False,
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -243,6 +245,7 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 caller_session_id=caller_session_id,
                 inspector_eligible=inspector_eligible,
                 inspector_model=inspector_model,
+                network_access=network_access,
             )
         )
         if self._queue:

@@ -2656,7 +2656,7 @@ def test_diagnose_merge_gate_rejects_empty_output_dir() -> None:
 
 
 def test_smoke_utils_all_exports_complete() -> None:
-    """smoke_utils.__all__ must list all 28 public names."""
+    """smoke_utils.__all__ must list all 29 public names."""
     import autoskillit.smoke_utils as su
 
     expected = {
@@ -2669,6 +2669,7 @@ def test_smoke_utils_all_exports_complete() -> None:
         "check_loop_iteration",
         "check_loop_with_progress",
         "check_review_loop",
+        "check_review_posted",
         "close_issue_already_done",
         "compile_eval_scorecard",
         "consolidate_health_reports",
@@ -3308,3 +3309,63 @@ def test_gate_backend_write_zero() -> None:
 def test_gate_backend_write_empty() -> None:
     """Returns {"backend_capable": "false"} for empty string."""
     assert gate_backend_write("") == {"backend_capable": "false"}
+
+
+# ---------------------------------------------------------------------------
+# T_CRP1–T_CRP5: check_review_posted
+# ---------------------------------------------------------------------------
+
+
+# T_CRP1
+def test_check_review_posted_no_receipt_returns_false(tmp_path):
+    """No receipt file → reviews_posted="false" with sentinel."""
+    from autoskillit.smoke_utils import check_review_posted
+
+    result = check_review_posted(pr_number=42, output_dir=str(tmp_path.resolve()), mode="github")
+    assert result["reviews_posted"] == "false"
+    assert result["sentinel"] == "no_reviews_posted"
+
+
+# T_CRP2
+def test_check_review_posted_with_receipt_returns_true(tmp_path):
+    """Receipt file present → reviews_posted="true" with no sentinel."""
+    from autoskillit.smoke_utils import check_review_posted
+
+    receipt = tmp_path / "batch_review_response_42.json"
+    receipt.write_text('{"id": 1}')
+    result = check_review_posted(pr_number=42, output_dir=str(tmp_path.resolve()), mode="github")
+    assert result["reviews_posted"] == "true"
+    assert result.get("sentinel", "") == ""
+
+
+# T_CRP3
+def test_check_review_posted_local_mode_always_true(tmp_path):
+    """local mode always returns reviews_posted="true" regardless of receipt file."""
+    from autoskillit.smoke_utils import check_review_posted
+
+    result = check_review_posted(pr_number=42, output_dir=str(tmp_path.resolve()), mode="local")
+    assert result["reviews_posted"] == "true"
+
+
+# T_CRP4
+def test_check_review_posted_has_no_subprocess_calls(tmp_path):
+    """check_review_posted must not invoke any subprocess."""
+    import subprocess
+    from unittest.mock import patch
+
+    from autoskillit.smoke_utils import check_review_posted
+
+    with patch.object(
+        subprocess, "run", side_effect=AssertionError("unexpected subprocess")
+    ) as mock_run:
+        check_review_posted(pr_number=1, output_dir=str(tmp_path.resolve()), mode="github")
+    mock_run.assert_not_called()
+
+
+# T_CRP5
+def test_check_review_posted_in_smoke_utils_all():
+    """check_review_posted must be exported from smoke_utils.__all__."""
+    import autoskillit.smoke_utils as sm
+
+    assert "check_review_posted" in sm.__all__
+    assert callable(sm.check_review_posted)

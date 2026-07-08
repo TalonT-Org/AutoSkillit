@@ -302,10 +302,14 @@ class SkillCapabilityDef:
 
     description: str
     codex_status: Literal["works-as-is", "degraded", "fix-required", "not-applicable"]
+    required_sandbox_overrides: frozenset[str] = frozenset()
+    worker_routable: bool = False
 
     @property
     def required_backends(self) -> frozenset[str]:
-        if self.codex_status == "not-applicable":
+        # worker_routable=True → reroute (REROUTE), not reject: required_backends must be empty
+        # so the compat gate doesn't fire for routable capabilities.
+        if self.codex_status == "not-applicable" and not self.worker_routable:
             return frozenset({AGENT_BACKEND_CLAUDE_CODE})
         return frozenset()
 
@@ -353,6 +357,16 @@ SKILL_CAPABILITY_REGISTRY: dict[str, SkillCapabilityDef] = {
             "git worktree add, git checkout -b)"
         ),
         codex_status="not-applicable",
+        worker_routable=True,
+    ),
+    "github_api_write": SkillCapabilityDef(
+        description=(
+            "Skill makes outbound GitHub API write calls (gh pr review, gh api --method POST, "
+            "gh pr create, gh pr merge, gh issue create/edit/close, etc.) that require network "
+            "access. On Codex workers, enables network_access=true in the workspace-write sandbox."
+        ),
+        codex_status="fix-required",
+        required_sandbox_overrides=frozenset({"sandbox_workspace_write.network_access=true"}),
     ),
 }
 

@@ -35,6 +35,7 @@ NOT_YET_LIVE: frozenset[str] = frozenset(
         "session_dir_symlinks",
         "supports_model_invocation_gating",
         "supports_thinking_blocks",
+        "github_api_callable",
     }
 )
 
@@ -48,6 +49,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "exit_code_is_terminal": "REQUIRED",
     "food_truck_capable": "OPTIONAL",
     "git_metadata_writable": "REQUIRED",
+    "github_api_callable": "OPTIONAL",
     "has_unguarded_filesystem_access": "REQUIRED",
     "hook_config_format": "REQUIRED",
     "inspector_capable": "OPTIONAL",

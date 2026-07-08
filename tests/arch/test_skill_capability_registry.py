@@ -74,17 +74,53 @@ def test_codex_status_consistent_with_required_backends():
 
     violations = []
     for key, cap in SKILL_CAPABILITY_REGISTRY.items():
-        if cap.codex_status == "not-applicable":
+        if cap.codex_status == "not-applicable" and not cap.worker_routable:
+            # REJECT semantics: not-applicable AND not worker_routable → must require claude-code
             if cap.required_backends != frozenset({AGENT_BACKEND_CLAUDE_CODE}):
                 violations.append(
-                    f"{key}: codex_status='not-applicable' but "
+                    f"{key}: codex_status='not-applicable', worker_routable=False but "
                     f"required_backends={cap.required_backends!r} (expected {{claude-code}})"
                 )
         else:
+            # REROUTE (worker_routable=True) or non-not-applicable: required_backends empty
             if cap.required_backends != frozenset():
                 violations.append(
-                    f"{key}: codex_status={cap.codex_status!r} but "
+                    f"{key}: codex_status={cap.codex_status!r}, "
+                    f"worker_routable={cap.worker_routable} but "
                     f"required_backends={cap.required_backends!r} (expected empty)"
+                )
+    assert not violations, "\n".join(f"  {v}" for v in violations)
+
+
+def test_worker_routable_implies_not_applicable_and_empty_required_backends():
+    """worker_routable=True requires codex_status='not-applicable' and empty required_backends."""
+    violations = []
+    for name, cap in SKILL_CAPABILITY_REGISTRY.items():
+        if cap.worker_routable:
+            if cap.codex_status != "not-applicable":
+                violations.append(
+                    f"{name}: worker_routable=True requires codex_status='not-applicable', "
+                    f"got {cap.codex_status!r}"
+                )
+            if cap.required_backends != frozenset():
+                violations.append(
+                    f"{name}: worker_routable=True must yield empty required_backends "
+                    f"(rerouted, not rejected), got {cap.required_backends!r}"
+                )
+    assert not violations, "\n".join(f"  {v}" for v in violations)
+
+
+def test_not_applicable_without_worker_routable_yields_claude_code_required():
+    """not-applicable AND worker_routable=False → required_backends = {claude-code}."""
+    from autoskillit.core.types._type_constants_env import AGENT_BACKEND_CLAUDE_CODE
+
+    violations = []
+    for name, cap in SKILL_CAPABILITY_REGISTRY.items():
+        if cap.codex_status == "not-applicable" and not cap.worker_routable:
+            if cap.required_backends != frozenset({AGENT_BACKEND_CLAUDE_CODE}):
+                violations.append(
+                    f"{name}: not-applicable AND not worker_routable must require claude-code, "
+                    f"got {cap.required_backends!r}"
                 )
     assert not violations, "\n".join(f"  {v}" for v in violations)
 

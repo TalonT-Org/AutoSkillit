@@ -33,9 +33,9 @@ __all__ = [
     "CORE_PACKS",
     "TOOL_SUBSET_TAGS",
     "ALL_VISIBILITY_TAGS",
+    "SERVE_SURFACES",
     "SkillCapabilityDef",
     "SKILL_CAPABILITY_REGISTRY",
-    "SERVE_SURFACES",
 ]
 
 # Native Claude Code tools that pipeline orchestrators must NEVER use directly.

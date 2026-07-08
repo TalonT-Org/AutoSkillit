@@ -46,6 +46,7 @@ def test_serve_surfaces_registry_is_exhaustive() -> None:
     call_files = _find_load_and_validate_call_files()
     # _serve_helpers.py is the canonical call site; tools_fleet_dispatch.py is a
     # known Part B gap (fleet dispatch resolved_defaults — excluded from Part A).
+    # TODO(#4208-B): remove tools_fleet_dispatch.py from allowed when Part B ships.
     allowed = {"_serve_helpers.py", "tools_fleet_dispatch.py"}
     violations = call_files - allowed
     assert not violations, (

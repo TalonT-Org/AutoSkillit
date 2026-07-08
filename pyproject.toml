@@ -365,6 +365,11 @@ ignore_imports = [
     # _dispatch_reaper calls kill_process_tree for orphan reaping; psutil is non-stdlib
     # so the reaper cannot live in core/. This mirrors the workspace path-utility exception.
     "autoskillit.fleet._dispatch_reaper -> autoskillit.execution",
+    # _write_pid (the _on_spawn callback) calls kill_process_tree to fail-closed-spawn
+    # when mark_dispatch_running raises an illegal transition. This is the IL-2 fleet-side
+    # counterpart to the reaper's kill primitive; the import is deferred (function-body)
+    # and deliberate. Do not expand _api's execution access beyond this single kill call.
+    "autoskillit.fleet._api -> autoskillit.execution",
     # _run_dispatch enforces config-authoritative ingredient injection at dispatch time.
     # apply_config_authoritative_overrides lives in config/ to share resolve_ingredient_defaults
     # without duplication. The import is deferred (function-body) and deliberate — it is the

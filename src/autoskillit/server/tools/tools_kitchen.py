@@ -866,7 +866,7 @@ async def open_kitchen(
                 # When overrides=None (replay previous context), leave the existing
                 # snapshot intact — the caller's intent is continuity, not reset.
                 if overrides is not None:
-                    tool_ctx.session_serve_overrides = dict(overrides) if overrides else {}
+                    tool_ctx.session_serve_overrides = dict(overrides)
                     tool_ctx.session_serve_defer_unresolved = not bool(overrides)
                 return json.dumps(result)
             try:

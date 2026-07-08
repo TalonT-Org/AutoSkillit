@@ -17,19 +17,24 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture(autouse=True)
-def _reset_server_state(monkeypatch):
-    """Reset module-level _ctx in server._state after each test.
+def _reset_server_state():
+    """Reset module-level server state around each server test.
 
     Tests that call _initialize() directly set _state._ctx to a mock without
     cleanup. Subsequent tests in the same xdist worker then find a stale mock
-    _ctx, causing _apply_triage_gate to await a regular MagicMock and fail.
+    _ctx. Bare FastMCP Client lifespans can then boot from that stale context
+    and pre-reveal session-scoped tags, making visibility tests order-dependent.
 
-    monkeypatch records the current value before yield and restores it after,
-    giving each test a clean slate regardless of what _initialize() sets.
+    Clear before and after each test instead of restoring the previous value,
+    because the previous value may itself be leaked state from an earlier test.
     """
     from autoskillit.server import _state
 
-    monkeypatch.setattr(_state, "_ctx", _state._ctx)
+    _state._ctx = None
+    _state._startup_ready = None
+    yield
+    _state._ctx = None
+    _state._startup_ready = None
 
 
 @pytest.fixture(autouse=True)

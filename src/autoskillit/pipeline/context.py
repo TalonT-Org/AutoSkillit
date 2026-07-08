@@ -174,6 +174,8 @@ class ToolContext:
     active_recipe_features: frozenset[str] | None = field(default_factory=lambda: None)
     active_recipe_steps: dict[str, Any] | None = field(default_factory=lambda: None)
     active_recipe_ingredients: frozenset[str] | None = field(default_factory=lambda: None)
+    session_serve_overrides: dict[str, str] | None = field(default_factory=lambda: None)
+    session_serve_defer_unresolved: bool = field(default=False)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
     fleet_lock: FleetLock | None = field(default=None)

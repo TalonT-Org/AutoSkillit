@@ -122,8 +122,8 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/tools_kitchen.py", 233),
     ("src/autoskillit/server/tools/tools_kitchen.py", 252),
     ("src/autoskillit/server/tools/tools_kitchen.py", 286),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 1124),
-    ("src/autoskillit/server/tools/tools_kitchen.py", 1184),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 1137),
+    ("src/autoskillit/server/tools/tools_kitchen.py", 1197),
     # tools_pipeline_tracker.py — tracker_data dict
     ("src/autoskillit/server/tools/tools_pipeline_tracker.py", 166),
     # tools_status.py — mcp_data dict

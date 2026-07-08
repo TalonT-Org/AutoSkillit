@@ -246,7 +246,7 @@ async def load_recipe(
             _snapshot = tool_ctx.session_serve_overrides
             _has_session_baseline = tool_ctx.recipe_name == name and _snapshot is not None
             if _snapshot is not None and tool_ctx.recipe_name == name:
-                _session_baseline: dict[str, str] = _snapshot
+                _session_baseline: dict[str, str] = dict(_snapshot)
             else:
                 _session_baseline = {}
             _defer_unresolved: bool = (

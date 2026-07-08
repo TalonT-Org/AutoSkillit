@@ -319,6 +319,7 @@ from .types import RecipeLoadError as RecipeLoadError
 from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
+from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import RecipeSource as RecipeSource
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser

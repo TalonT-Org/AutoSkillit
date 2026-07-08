@@ -402,6 +402,8 @@ def _close_kitchen_handler() -> None:
     ctx.active_recipe_features = None
     ctx.active_recipe_steps = None
     ctx.active_recipe_ingredients = None
+    ctx.session_serve_overrides = None
+    ctx.session_serve_defer_unresolved = False
     ctx.recipe_name = ""
     ctx.recipe_content_hash = ""
     ctx.recipe_composite_hash = ""
@@ -734,6 +736,11 @@ async def open_kitchen(
             _merged_overrides = {
                 **_config_default,
                 **_session_overrides,
+                **(
+                    dict(tool_ctx.session_serve_overrides)
+                    if tool_ctx.session_serve_overrides is not None
+                    else {}
+                ),
                 **(overrides or {}),
                 **_config_layer,
             }
@@ -765,7 +772,7 @@ async def open_kitchen(
                         suppressed=suppressed,
                         resolved_defaults=_defaults,
                         ingredient_overrides=_merged_overrides,
-                        defer_unresolved=False,
+                        defer_unresolved=tool_ctx.session_serve_defer_unresolved,
                         backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                         effective_backend_map=_effective_backend_map,
                     )
@@ -956,6 +963,12 @@ async def open_kitchen(
                     tool_ctx.gate_infrastructure_ready = False
                     await ctx.disable_components(tags={"kitchen"})
                     return _preflight_err
+
+            # Snapshot the caller-supplied values ONLY — NOT _merged_overrides.
+            # Storing _merged_overrides would inject stale kitchen_id/diagnostics_log_dir
+            # into subsequent load_recipe merges, silently overwriting fresh infra values.
+            tool_ctx.session_serve_overrides = dict(overrides) if overrides else {}
+            tool_ctx.session_serve_defer_unresolved = not _user_overrides_present
 
             result["success"] = True
             result["kitchen"] = "open"

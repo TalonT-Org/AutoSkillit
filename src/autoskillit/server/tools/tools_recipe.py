@@ -240,9 +240,22 @@ async def load_recipe(
             _config_layer = build_config_authoritative_layer(_defaults)
             _config_default = build_config_default_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
+            # Replay caller's original ingredient intent from open_kitchen when available.
+            # Placed at position 3 — after fresh _session_overrides (infra), before explicit
+            # load_recipe overrides, so this call's overrides layer on top of the baseline.
+            _snapshot = tool_ctx.session_serve_overrides
+            _has_session_baseline = tool_ctx.recipe_name == name and _snapshot is not None
+            if _snapshot is not None and tool_ctx.recipe_name == name:
+                _session_baseline: dict[str, str] = _snapshot
+            else:
+                _session_baseline = {}
+            _defer_unresolved: bool = (
+                tool_ctx.session_serve_defer_unresolved if _has_session_baseline else False
+            )
             _merged_overrides = {
                 **_config_default,
                 **_session_overrides,
+                **_session_baseline,
                 **(overrides or {}),
                 **_config_layer,
             }
@@ -261,6 +274,7 @@ async def load_recipe(
                 ingredient_overrides=_merged_overrides,
                 temp_dir=tool_ctx.temp_dir,
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
+                defer_unresolved=_defer_unresolved,
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                 effective_backend_map=_effective_backend_map,
             )

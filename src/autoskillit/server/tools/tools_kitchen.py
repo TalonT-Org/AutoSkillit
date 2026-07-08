@@ -499,7 +499,6 @@ def get_recipe(name: str) -> str:
             _raw_recipe.steps,
             skill_resolver=ctx.skill_resolver,
         )
-        _session_overrides.update(_backend_overrides)
         _effective_backend_map = _compute_effective_backend_map(
             _raw_recipe.steps,
             ctx.backend.name if ctx.backend else None,

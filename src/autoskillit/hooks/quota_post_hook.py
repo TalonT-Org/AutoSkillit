@@ -2,8 +2,8 @@
 """PostToolUse hook: quota warning after run_skill execution.
 
 Fires after run_skill completes and checks whether the cached binding marks
-``should_block=True``. When set, replaces the tool output with a compact
-result summary + quota warning + sleep instruction via updatedMCPToolOutput.
+``should_block=True``. When set, replaces the tool output with a quota warning
+and sleep instruction via updatedMCPToolOutput.
 
 This script is stdlib-only so it can run under any Python interpreter without
 requiring the autoskillit package to be importable.
@@ -37,29 +37,6 @@ QUOTA_POST_WARNING_TRIGGER: str = "--- QUOTA WARNING ---"
 QUOTA_POST_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
 
 
-def _extract_run_skill_result(tool_response: str | dict) -> str:
-    """Extract a compact summary from the run_skill double-wrapped JSON response."""
-    try:
-        outer = json.loads(tool_response) if isinstance(tool_response, str) else tool_response
-        if isinstance(outer, dict) and "result" in outer:
-            inner_str = outer["result"]
-            if isinstance(inner_str, str):
-                try:
-                    inner = json.loads(inner_str)
-                    if isinstance(inner, dict):
-                        success = inner.get("success", "unknown")
-                        result_text = inner.get("result", "")
-                        if isinstance(result_text, str) and len(result_text) > 500:
-                            result_text = result_text[:500] + "..."
-                        return f"success: {success}\nresult: {result_text}"
-                except (json.JSONDecodeError, ValueError):
-                    pass
-                return inner_str[:500] if len(inner_str) > 500 else inner_str
-        return str(outer)[:500]
-    except (json.JSONDecodeError, ValueError, TypeError):
-        return str(tool_response)[:500]
-
-
 def main(*, cache_path_override: str | None = None) -> None:
     try:
         raw = sys.stdin.read()
@@ -71,8 +48,6 @@ def main(*, cache_path_override: str | None = None) -> None:
         sys.exit(0)
 
     tool_name = event.get("tool_name", "")
-    tool_response = event.get("tool_response") or ""
-
     settings = resolve_quota_settings(cache_path_override=cache_path_override)
     if settings.disabled:
         sys.exit(0)  # quota guard disabled for this session
@@ -140,8 +115,6 @@ def main(*, cache_path_override: str | None = None) -> None:
     else:
         n = settings.buffer_seconds
 
-    result_summary = _extract_run_skill_result(tool_response)
-
     session_deadline_str = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
     budget_exceeded = False
     remaining_budget = float("inf")
@@ -157,7 +130,6 @@ def main(*, cache_path_override: str | None = None) -> None:
     if budget_exceeded:
         resets_at_display = resets_at_str or "unknown"
         warning_text = (
-            f"{result_summary}\n\n"
             f"{QUOTA_POST_BUDGET_EXCEEDED_TRIGGER}\n"
             f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
             f"(threshold: {effective_threshold:.0f}%)\n"
@@ -173,7 +145,6 @@ def main(*, cache_path_override: str | None = None) -> None:
         )
     else:
         warning_text = (
-            f"{result_summary}\n\n"
             f"{QUOTA_POST_WARNING_TRIGGER}\n"
             f"Post-execution utilization: {utilization:.0f}% on window '{window_name}' "
             f"(threshold: {effective_threshold:.0f}%)\n"

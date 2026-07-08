@@ -53,6 +53,17 @@ def _resolve_serve_defer_unresolved(
     return not bool(caller_overrides)
 
 
+def reset_session_serve_overrides(ctx: ToolContext) -> None:
+    """Clear the session serve-overrides snapshot on ctx.
+
+    Called by the test _reset_mcp_tags autouse fixture to prevent snapshot
+    state from leaking between tests on the same xdist worker.  In production,
+    _close_kitchen_handler performs the equivalent reset.
+    """
+    ctx.session_serve_overrides = None
+    ctx.session_serve_defer_unresolved = False
+
+
 def serve_recipe(
     ctx: ToolContext,
     name: str,

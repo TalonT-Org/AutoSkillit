@@ -52,10 +52,20 @@ def _reset_mcp_tags():
     mcp._transforms.clear()
     for tag in sorted(ALL_VISIBILITY_TAGS):
         mcp.disable(tags={tag})
+    from autoskillit.server import _state
+    from autoskillit.server.tools._serve_helpers import reset_session_serve_overrides
+
+    if _state._ctx is not None:
+        reset_session_serve_overrides(_state._ctx)
     yield
     mcp._transforms.clear()
     for tag in sorted(ALL_VISIBILITY_TAGS):
         mcp.disable(tags={tag})
+    from autoskillit.server import _state
+    from autoskillit.server.tools._serve_helpers import reset_session_serve_overrides
+
+    if _state._ctx is not None:
+        reset_session_serve_overrides(_state._ctx)
 
 
 @pytest.fixture()

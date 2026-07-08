@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import _RULE_REGISTRY, run_semantic_rules
+from autoskillit.recipe.rules.graph.rules_graph_review import _get_review_pr_steps
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
@@ -34,6 +36,11 @@ def test_effect_waypoint_rule_is_registered():
 def test_effect_waypoint_rule_silent_on_fixed_recipes(recipe_name):
     """After Part A fix, the rule must not fire on review-loop recipes."""
     recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    selected = _get_review_pr_steps(make_validation_context(recipe))
+    assert len(selected) >= 1, (
+        f"precondition: _get_review_pr_steps returned no steps for {recipe_name!r} — "
+        "rule would be vacuously silent (dead matcher?)"
+    )
     violations = run_semantic_rules(recipe)
     rule_violations = [v for v in violations if v.rule == RULE_ID]
     assert len(rule_violations) == 0, (
@@ -44,6 +51,11 @@ def test_effect_waypoint_rule_silent_on_fixed_recipes(recipe_name):
 def test_effect_waypoint_rule_silent_on_merge_prs():
     """After Part A fix, the rule must not fire on merge-prs.yaml."""
     recipe = load_recipe(builtin_recipes_dir() / "merge-prs.yaml")
+    selected = _get_review_pr_steps(make_validation_context(recipe))
+    assert len(selected) >= 1, (
+        "precondition: _get_review_pr_steps returned no steps for 'merge-prs' — "
+        "rule would be vacuously silent (dead matcher?)"
+    )
     violations = run_semantic_rules(recipe)
     rule_violations = [v for v in violations if v.rule == RULE_ID]
     assert len(rule_violations) == 0, f"[merge-prs] {RULE_ID} fired after fix: {rule_violations}"
@@ -125,6 +137,11 @@ def test_effect_waypoint_rule_silent_when_gate_present():
             "done": RecipeStep(action="stop", message="done"),
         }
     )
+    selected = _get_review_pr_steps(make_validation_context(recipe))
+    assert len(selected) >= 1, (
+        "precondition: _get_review_pr_steps returned no steps — "
+        "rule would be vacuously silent (dead matcher?)"
+    )
     violations = run_semantic_rules(recipe)
     rule_violations = [v for v in violations if v.rule == RULE_ID]
     assert len(rule_violations) == 0
@@ -161,3 +178,27 @@ def test_effect_waypoint_rule_covers_aliased_step_names():
     violations = run_semantic_rules(recipe)
     rule_violations = [v for v in violations if v.rule == RULE_ID]
     assert len(rule_violations) >= 1
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    [
+        "implementation",
+        "implementation-groups",
+        "remediation",
+        "merge-prs",
+    ],
+)
+def test_review_effect_waypoint_selects_steps_on_bundled_recipes(recipe_name):
+    """Step-selector must return >= 1 steps on each bundled recipe.
+
+    This test fails immediately if the rule's step-selection predicate
+    is wrong (dead matcher) — before any silence test can pass vacuously.
+    """
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    ctx = make_validation_context(recipe)
+    selected = _get_review_pr_steps(ctx)
+    assert len(selected) >= 1, (
+        f"_get_review_pr_steps returned no steps for {recipe_name!r} — "
+        "the rule is inactive on this recipe"
+    )

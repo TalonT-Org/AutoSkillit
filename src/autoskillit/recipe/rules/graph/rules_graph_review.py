@@ -166,6 +166,20 @@ def _check_run_skill_missing_context_limit(ctx: ValidationContext) -> list[RuleF
 _REVIEW_EFFECT_ADVANCE_GATES = frozenset({"check_review_loop", "derive_batch_ci_event"})
 
 
+def _get_review_pr_steps(ctx: ValidationContext) -> list[str]:
+    """Return step IDs that dispatch the review-pr skill (either prefix form).
+
+    Exposed as a module-level function (not inlined in the rule body) so that
+    silence tests can call it directly and assert the rule is triggered on the
+    recipe under test before asserting zero findings.
+    """
+    return [
+        step_id
+        for step_id, step in ctx.recipe.steps.items()
+        if step.tool == "run_skill" and step.skill_name == "review-pr"
+    ]
+
+
 @semantic_rule(
     name="review-effect-verification-waypoint",
     severity=Severity.ERROR,
@@ -177,15 +191,7 @@ _REVIEW_EFFECT_ADVANCE_GATES = frozenset({"check_review_loop", "derive_batch_ci_
     ),
 )
 def _review_effect_verification_waypoint(ctx: ValidationContext) -> list[RuleFinding]:
-    effect_steps = [
-        step_id
-        for step_id, step in ctx.recipe.steps.items()
-        if (
-            step.tool == "run_skill"
-            and resolve_skill_name(str((step.with_args or {}).get("skill_command", "")))
-            == "review-pr"
-        )
-    ]
+    effect_steps = _get_review_pr_steps(ctx)
     if not effect_steps:
         return []
     findings = []

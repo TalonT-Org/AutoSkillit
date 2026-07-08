@@ -96,6 +96,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_recipe_output_dir_resolvability.py` | Guard: recipe output_dir values must be server-resolvable (no ${{ }} templates) |
 | `test_report_frontmatter_schema.py` | Tests for report.md YAML frontmatter audit-trail schema |
 | `test_recipe_scripts.py` | Tests for recipe script callables |
+| `test_recipe_step_skill_name.py` | Tests for RecipeStep.skill_name property — canonical skill name resolution for both /name and /autoskillit:name forms |
 | `test_recipe_temp_substitution.py` | Tests for {{AUTOSKILLIT_TEMP}} substitution in recipe steps |
 | `test_remediation_depth_ingredient.py` | Tests for remediation depth ingredient configuration |
 | `test_remediation_pr_decomposition.py` | Tests for remediation PR decomposition recipe |

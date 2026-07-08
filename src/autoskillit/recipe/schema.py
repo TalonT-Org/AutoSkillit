@@ -17,6 +17,7 @@ from autoskillit.core import (
     CaptureEntrySpec,
     DispatchGateType,
     RecipeSource,
+    resolve_skill_name,
 )
 
 AUTOSKILLIT_VERSION_KEY: Final = "autoskillit_version"
@@ -154,6 +155,16 @@ class RecipeStep:
                 f"retries) but has retries: {self.retries}. Each retry re-initializes "
                 f"the list, producing duplicates. Set retries: 0."
             )
+
+    @property
+    def skill_name(self) -> str | None:
+        """Canonical skill name, resolving /name and /autoskillit:name forms.
+
+        Returns None if with_args has no skill_command or if resolve_skill_name
+        cannot extract a name (template-only, unrecognized format, etc.).
+        Use this in rule predicates instead of raw string operations on with_args.
+        """
+        return resolve_skill_name(str((self.with_args or {}).get("skill_command", "")))
 
 
 @dataclass(frozen=True, slots=True)

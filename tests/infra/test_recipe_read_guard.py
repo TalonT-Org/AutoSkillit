@@ -165,7 +165,7 @@ class TestRunCmdBlocking:
                 "git add -- src/autoskillit/recipes/remediation.yaml "
                 "& cat src/autoskillit/recipes/remediation.yaml"
             ),
-            "git add -- $(cat src/autoskillit/recipes/remediation.yaml)",
+            'git add -- "$(cat src/autoskillit/recipes/remediation.yaml)"',
             "git add -- src/autoskillit/recipes/remediation.yaml && cat $_",
             (
                 "git add -- src/autoskillit/recipes/remediation.yaml"

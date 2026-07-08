@@ -184,17 +184,18 @@ def test_qpc6_warning_contains_sleep_instruction(tmp_path):
     assert "time.sleep" in output
 
 
-# T7: Warning preserves run_skill result summary
-def test_qpc7_warning_preserves_result_summary(tmp_path):
-    """updatedMCPToolOutput includes the run_skill result (success/fail, key fields)."""
+# T7: Warning output is hook-generated only
+def test_qpc7_warning_does_not_forward_tool_response(tmp_path):
+    """updatedMCPToolOutput must not echo arbitrary raw tool_response content."""
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=90.0)
     event = _build_event(success=True, result_text="plan written")
     out, _ = _run_hook(event=event, cache_path=cache)
     data = json.loads(out)
     output = data["hookSpecificOutput"]["updatedMCPToolOutput"]
-    assert "success: True" in output
-    assert "plan written" in output
+    assert "QUOTA WARNING" in output
+    assert "success: True" not in output
+    assert "plan written" not in output
 
 
 # T8: JSONL event logging for post-check warning

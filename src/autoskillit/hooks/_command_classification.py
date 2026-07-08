@@ -77,7 +77,25 @@ _HEREDOC_BODY_RE = re.compile(
 
 _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
 _GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
-    {"-p", "--patch", "-e", "--edit", "-i", "--interactive", "--pathspec-from-file"}
+    {
+        "-p",
+        "--patch",
+        "-e",
+        "--edit",
+        "-i",
+        "--interactive",
+        "--pathspec-from-file",
+        # Content-staging flags: -A/--all stages all changes (incl. content);
+        # --force/--no-ignore-removal/--no-all are the no-restriction variants.
+        # Without these, `git add -A -- src/.../foo.yaml` is classified as
+        # metadata but actually stages content for indirect read via
+        # `git diff --staged`.
+        "-A",
+        "--all",
+        "--force",
+        "--no-ignore-removal",
+        "--no-all",
+    }
 )
 _GIT_STATUS_CONTENT_FLAGS: frozenset[str] = frozenset({"-v", "--verbose"})
 _GIT_DIFF_CONTENT_FLAGS: frozenset[str] = frozenset(

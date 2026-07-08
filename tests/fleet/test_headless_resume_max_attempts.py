@@ -49,7 +49,7 @@ class TestHeadlessResumeCount:
         """When attempt_history already contains MAX consecutive RESUMABLE entries,
         mark_dispatch_running(..., enforce_max_resume_attempts=True) must raise
         ResumeCountExceeded rather than performing the transition."""
-        from autoskillit.fleet.state import ResumeCountExceeded
+        from autoskillit.fleet import ResumeCountExceeded
 
         attempt_history: list[dict[str, Any]] = [
             {"status": str(DispatchStatus.RESUMABLE), "reason": FEC.FLEET_L3_TIMEOUT}

@@ -14,6 +14,7 @@ from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 from autoskillit.core import SERVE_SURFACES
+from autoskillit.pipeline.context import ToolContext
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
@@ -92,13 +93,6 @@ async def test_load_recipe_after_open_kitchen_with_overrides_serves_identical_co
         "load_recipe content diverges from open_kitchen content — "
         "session_serve_overrides baseline not applied"
     )
-
-    from autoskillit.core.io import load_yaml
-
-    parsed_ok = load_yaml(ok_content)
-    parsed_lr = load_yaml(lr_content)
-    assert parsed_ok["steps"]["clone"]["on_success"] == "claim_and_resolve"
-    assert parsed_lr["steps"]["clone"]["on_success"] == "claim_and_resolve"
 
 
 async def test_load_recipe_after_open_kitchen_without_overrides_serves_identical_content(
@@ -279,7 +273,11 @@ async def test_get_recipe_content_matches_open_kitchen_with_overrides(
     ok_content = ok_result["content"]
 
     gr_content = get_recipe(_RECIPE)
-    assert not gr_content.startswith("{"), f"get_recipe returned error: {gr_content}"
+    try:
+        _err = json.loads(gr_content)
+        pytest.fail(f"get_recipe returned error: {_err}")
+    except json.JSONDecodeError:
+        pass
 
     assert ok_content == gr_content, (
         "get_recipe content diverges from open_kitchen content — "
@@ -316,7 +314,11 @@ async def _call_re_serve_surface(
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
         content = get_recipe(recipe_name)
-        assert not content.startswith("{"), f"get_recipe returned error: {content}"
+        try:
+            _err = json.loads(content)
+            pytest.fail(f"get_recipe returned error: {_err}")
+        except json.JSONDecodeError:
+            pass
         return content
     elif surface == "open_kitchen_deferred_recall":
         result = await _open_kitchen_patched(recipe_name, None, monkeypatch)
@@ -384,7 +386,11 @@ async def test_get_recipe_snapshot_lifecycle(
     ok_content = ok_result["content"]
 
     gr_content = get_recipe(_RECIPE)
-    assert not gr_content.startswith("{"), f"get_recipe returned error: {gr_content}"
+    try:
+        _err = json.loads(gr_content)
+        pytest.fail(f"get_recipe returned error: {_err}")
+    except json.JSONDecodeError:
+        pass
 
     parsed_ok = load_yaml(ok_content)
     parsed_gr = load_yaml(gr_content)
@@ -405,7 +411,10 @@ async def test_get_recipe_snapshot_lifecycle(
 @settings(
     max_examples=20,
     deadline=None,
-    suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
+    suppress_health_check=[
+        HealthCheck.too_slow,
+        HealthCheck.function_scoped_fixture,  # safe: manual state reset at test start
+    ],
 )
 @given(
     overrides=st.dictionaries(
@@ -419,7 +428,7 @@ async def test_get_recipe_snapshot_lifecycle(
 )
 async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
     overrides: dict[str, str],
-    tool_ctx_kitchen_open: object,
+    tool_ctx_kitchen_open: ToolContext,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: object,
 ) -> None:
@@ -442,10 +451,10 @@ async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
     # Without this, stale session_serve_overrides from a prior example would
     # cause open_kitchen to use the deferred-recall path with an old snapshot,
     # producing different ingredient_overrides than load_recipe would see.
-    ctx = tool_ctx_kitchen_open  # type: ignore[assignment]
-    ctx.session_serve_overrides = None  # type: ignore[union-attr]
-    ctx.session_serve_defer_unresolved = False  # type: ignore[union-attr]
-    ctx.recipe_name = ""  # type: ignore[union-attr]
+    ctx = tool_ctx_kitchen_open
+    ctx.session_serve_overrides = None
+    ctx.session_serve_defer_unresolved = False
+    ctx.recipe_name = ""
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -391,6 +391,7 @@ def test_recipe_resource_returns_composed_content():
         "valid": True,
     }
     mock_ctx.backend = None
+    mock_ctx.session_serve_overrides = None
 
     with (
         patch("autoskillit.server._state._get_ctx_or_none", return_value=mock_ctx),
@@ -402,18 +403,27 @@ def test_recipe_resource_returns_composed_content():
             "autoskillit.server.tools.tools_kitchen.build_config_authoritative_layer",
             return_value={},
         ),
+        patch(
+            "autoskillit.server.tools.tools_kitchen.build_config_default_layer",
+            return_value={},
+        ),
     ):
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
         result = get_recipe("test-recipe")
 
+    # get_recipe now routes through serve_recipe(), which builds the full override stack
+    # and passes defer_unresolved. Use ANY for session-local values (kitchen_id, log dir).
     mock_ctx.recipes.load_and_validate.assert_called_once_with(
         "test-recipe",
         mock_ctx.project_dir,
+        ingredient_overrides={
+            "kitchen_id": ANY,
+            "diagnostics_log_dir": ANY,
+            "backend_supports_git_write": "true",
+        },
+        defer_unresolved=True,
         resolved_defaults={},
-        ingredient_overrides={"backend_supports_git_write": "true"},
-        backend_name=None,
-        effective_backend_map=None,
     )
     assert result == ("name: test-recipe\nsteps:\n  stop:\n    action: stop\n    message: done\n")
     assert "optional: true" not in result

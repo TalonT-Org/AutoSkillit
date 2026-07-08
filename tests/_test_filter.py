@@ -247,7 +247,16 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "config", "core", "fleet", "recipe", "server", "workspace"}
     ),
     "_type_constants_registries": frozenset(
-        {"cli", "config", "core", "pipeline", "recipe", "server", "workspace"}
+        {
+            "cli",
+            "config",
+            "core",
+            "pipeline",
+            "recipe",
+            "server",
+            "workspace",
+            "arch/test_serve_surface_registry.py",
+        }
     ),
     "_type_exceptions": frozenset({"core", "execution", "fleet", "recipe", "server"}),
     "_type_phoropter": frozenset({"core"}),

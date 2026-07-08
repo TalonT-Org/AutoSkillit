@@ -75,6 +75,7 @@ from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
     filter_steps_by_post_prune,
 )
+from autoskillit.server.tools._serve_helpers import serve_recipe
 from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
@@ -485,6 +486,10 @@ def get_recipe(name: str) -> str:
 
     _defaults = resolve_ingredient_defaults(ctx.project_dir)
     _config_layer = build_config_authoritative_layer(_defaults)
+    _session_overrides: dict[str, str] = {
+        "kitchen_id": ctx.kitchen_id,
+        "diagnostics_log_dir": str(resolve_log_dir(ctx.config.linux_tracing.log_dir)),
+    }
     try:
         _raw_recipe = ctx.recipes.load(match.path)
         _backend_overrides, _cap_detail = _provider_aware_capability_overrides(
@@ -494,6 +499,7 @@ def get_recipe(name: str) -> str:
             _raw_recipe.steps,
             skill_resolver=ctx.skill_resolver,
         )
+        _session_overrides.update(_backend_overrides)
         _effective_backend_map = _compute_effective_backend_map(
             _raw_recipe.steps,
             ctx.backend.name if ctx.backend else None,
@@ -502,17 +508,17 @@ def get_recipe(name: str) -> str:
             skill_resolver=ctx.skill_resolver,
         )
         _config_default = build_config_default_layer(_defaults)
-        result = ctx.recipes.load_and_validate(
+        result = serve_recipe(
+            ctx,
             name,
-            ctx.project_dir,
+            caller_overrides=None,
+            config_default=_config_default,
+            session_overrides=_session_overrides,
+            config_layer=_config_layer,
+            backend_overrides=_backend_overrides,
             resolved_defaults=_defaults,
-            ingredient_overrides={
-                **_config_default,
-                **_backend_overrides,
-                **_config_layer,
-            },
-            backend_name=ctx.backend.name if ctx.backend else None,
             effective_backend_map=_effective_backend_map,
+            backend_name=ctx.backend.name if ctx.backend else None,
         )
     except ProcessStaleError:
         logger.warning("get_recipe_failure", recipe=name, stage="process_stale", exc_info=True)
@@ -733,17 +739,6 @@ async def open_kitchen(
             _config_layer = build_config_authoritative_layer(_defaults)
             _config_default = build_config_default_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
-            _merged_overrides = {
-                **_config_default,
-                **_session_overrides,
-                **(
-                    dict(tool_ctx.session_serve_overrides)
-                    if tool_ctx.session_serve_overrides is not None
-                    else {}
-                ),
-                **(overrides or {}),
-                **_config_layer,
-            }
             _effective_backend_map = _compute_effective_backend_map(
                 _raw_recipe.steps if _raw_recipe is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
@@ -763,16 +758,17 @@ async def open_kitchen(
                             )
                         }
                     )
-            _user_overrides_present = overrides is not None and len(overrides) > 0
             if _is_deferred_recall:
                 try:
-                    result = tool_ctx.recipes.load_and_validate(
+                    result = serve_recipe(
+                        tool_ctx,
                         name,
-                        tool_ctx.project_dir,
-                        suppressed=suppressed,
+                        caller_overrides=overrides,
+                        config_default=_config_default,
+                        session_overrides=_session_overrides,
+                        config_layer=_config_layer,
                         resolved_defaults=_defaults,
-                        ingredient_overrides=_merged_overrides,
-                        defer_unresolved=tool_ctx.session_serve_defer_unresolved,
+                        suppressed=suppressed,
                         backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                         effective_backend_map=_effective_backend_map,
                     )
@@ -866,15 +862,24 @@ async def open_kitchen(
                         result["warnings"] = _override_warnings
                 if ingredients_only:
                     result = strip_ingredients_only_keys(result)
+                # When caller provides explicit overrides, update the snapshot so
+                # subsequent load_recipe/get_recipe calls see the new overrides.
+                # When overrides=None (replay previous context), leave the existing
+                # snapshot intact — the caller's intent is continuity, not reset.
+                if overrides is not None:
+                    tool_ctx.session_serve_overrides = dict(overrides) if overrides else {}
+                    tool_ctx.session_serve_defer_unresolved = not bool(overrides)
                 return json.dumps(result)
             try:
-                result = tool_ctx.recipes.load_and_validate(
+                result = serve_recipe(
+                    tool_ctx,
                     name,
-                    tool_ctx.project_dir,
-                    suppressed=suppressed,
+                    caller_overrides=overrides,
+                    config_default=_config_default,
+                    session_overrides=_session_overrides,
+                    config_layer=_config_layer,
                     resolved_defaults=_defaults,
-                    ingredient_overrides=_merged_overrides,
-                    defer_unresolved=not _user_overrides_present,
+                    suppressed=suppressed,
                     backend_name=tool_ctx.backend.name if tool_ctx.backend else None,
                     effective_backend_map=_effective_backend_map,
                 )
@@ -968,7 +973,7 @@ async def open_kitchen(
             # Storing _merged_overrides would inject stale kitchen_id/diagnostics_log_dir
             # into subsequent load_recipe merges, silently overwriting fresh infra values.
             tool_ctx.session_serve_overrides = dict(overrides) if overrides else {}
-            tool_ctx.session_serve_defer_unresolved = not _user_overrides_present
+            tool_ctx.session_serve_defer_unresolved = not bool(overrides)
 
             result["success"] = True
             result["kitchen"] = "open"

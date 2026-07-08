@@ -98,6 +98,6 @@ def serve_recipe(
         kwargs["temp_dir"] = temp_dir
     if temp_dir_relpath is not None:
         kwargs["temp_dir_relpath"] = temp_dir_relpath
-    # Callers must guard ctx.recipes is not None before calling serve_recipe().
-    assert ctx.recipes is not None, "serve_recipe() called with ctx.recipes=None"
+    if ctx.recipes is None:
+        raise RuntimeError("serve_recipe() called with ctx.recipes=None")
     return ctx.recipes.load_and_validate(name, ctx.project_dir, **kwargs)

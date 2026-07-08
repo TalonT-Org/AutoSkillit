@@ -84,6 +84,8 @@ class TestRecipeReadProhibitionCmd:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         result = json.loads(await run_cmd(cmd=cmd, cwd="/tmp"))
         assert result["success"] is True
+        assert "subtype" not in result
+        assert RECIPE_READ_DENY_TRIGGER not in result["result"]
 
     @pytest.mark.anyio
     async def test_allows_chain_of_safe_recipe_metadata_commands(self, tool_ctx_kitchen_open):
@@ -136,7 +138,11 @@ class TestRecipeReadProhibitionCmd:
                 "git add -- src/autoskillit/recipes/remediation.yaml "
                 "& cat src/autoskillit/recipes/remediation.yaml"
             ),
+            # Command substitution $(...) bypass — exercises the _SHELL_SUBSTITUTION_RE
+            # branch in command_has_blocked_protected_path_read.
             "git add -- $(cat src/autoskillit/recipes/remediation.yaml)",
+            # State-var-via-history $_ bypass — exercises the
+            # _SHELL_STATE_VAR_RE branch gated on len(segments) > 1.
             "git add -- src/autoskillit/recipes/remediation.yaml && cat $_",
             (
                 "git add -- src/autoskillit/recipes/remediation.yaml"

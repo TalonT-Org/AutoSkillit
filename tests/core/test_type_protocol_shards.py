@@ -56,6 +56,7 @@ def test_recipe_shard_all():
         "MigrationService",
         "DatabaseReader",
         "ReadOnlyResolver",
+        "ServeOverridesSnapshot",
     }
 
 

@@ -76,6 +76,17 @@ _HEREDOC_BODY_RE = re.compile(
 )
 
 _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
+# Command wrappers whose only effect is to invoke the next command with
+# adjusted environment/priority. The verb is the token after the wrapper.
+# 'xargs' is intentionally excluded: it dispatches a downstream reader and
+# adding it would let `xargs cat src/.../foo.yaml` reach the reader check,
+# weakening xargs-chain bypass detection (see D1 design decision).
+_COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo", "nohup"})
+# Wrappers that consume a mandatory DURATION as their first non-wrapper token.
+_WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
+# Wrappers that take a single short flag as their first non-wrapper token
+# (e.g. 'stdbuf -o0', 'stdbuf -i0', 'stdbuf -e0').
+_WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
 _GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
     {
         "-p",
@@ -254,10 +265,35 @@ def _command_start_index(segment: list[str]) -> int | None:
     if not segment:
         return None
     start = 0
-    if segment[0] == "env" and len(segment) > 1:
-        start = 1
-        while start < len(segment) and (segment[start].startswith("-") or "=" in segment[start]):
+    # Iteratively strip 'env', command wrappers, and any wrapper-required
+    # argument. This handles nested forms like
+    # 'env FOO=BAR command git diff' and 'command env FOO=BAR git diff'
+    # consistently — the real command verb is the first token that is not a
+    # known env/wrapper prefix. 'xargs' is intentionally not a wrapper
+    # (see _COMMAND_WRAPPERS docstring).
+    while start < len(segment):
+        token = segment[start]
+        if token == "env" and start + 1 < len(segment):
             start += 1
+            while start < len(segment) and (
+                segment[start].startswith("-") or "=" in segment[start]
+            ):
+                start += 1
+            continue
+        if token in _COMMAND_WRAPPERS:
+            start += 1
+            continue
+        if token in _WRAPPERS_WITH_DURATION and start + 1 < len(segment):
+            start += 2
+            continue
+        if (
+            token in _WRAPPERS_WITH_SHORT_FLAG
+            and start + 1 < len(segment)
+            and segment[start + 1].startswith("-")
+        ):
+            start += 2
+            continue
+        break
     return start if start < len(segment) else None
 
 

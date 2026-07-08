@@ -33,6 +33,7 @@ __all__ = [
     "CORE_PACKS",
     "TOOL_SUBSET_TAGS",
     "ALL_VISIBILITY_TAGS",
+    "SERVE_SURFACES",
     "SkillCapabilityDef",
     "SKILL_CAPABILITY_REGISTRY",
 ]
@@ -154,6 +155,15 @@ FREE_RANGE_TOOLS: frozenset[str] = frozenset(
 )
 
 UNGATED_TOOLS: frozenset[str] = FREE_RANGE_TOOLS
+
+SERVE_SURFACES: frozenset[str] = frozenset(
+    {
+        "open_kitchen",  # S1 — initial serve, sets session snapshot
+        "open_kitchen_deferred_recall",  # S2 — deferred-recall re-serve
+        "load_recipe",  # S3 — re-serve tool
+        "get_recipe",  # S4 — MCP resource handler
+    }
+)
 
 
 class PackDef(NamedTuple):

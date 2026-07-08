@@ -346,6 +346,7 @@ def make_context(
         skill_resolver=provider.resolver,
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
+        session_serve_overrides=None,
         fleet_lock=(
             fleet_lock
             if fleet_lock is not None

@@ -777,7 +777,7 @@ async def _run_dispatch(
                     else None,
                 )
 
-        ended_at = time.time()
+        ended_at = max(time.time(), started_at + 1e-6)
         _dispatch_completed_normally = True
     except asyncio.CancelledError:
         if _dispatched_pid:

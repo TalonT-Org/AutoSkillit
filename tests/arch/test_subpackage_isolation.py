@@ -880,7 +880,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "pipeline": 12,
         "fleet": 23,  # +_issue_url_helpers.py  # noqa: E501
         "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501
-        "server/tools": 28,  # +_preflight.py +_authority_feedback.py
+        "server/tools": 29,  # +_preflight.py +_authority_feedback.py +_serve_helpers.py
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
         "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
     }
@@ -967,7 +967,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "co-located with the execution engine that calls them",
     ),
     "tools_kitchen.py": (
-        1395,
+        1413,
         "REQ-CNST-010-E7: kitchen tool handlers — open_kitchen and lock_ingredients require "
         "inline validation helpers (_check_override_keys, _build_ingredient_key_suggestions) "
         "for ingredient key validation; splitting would cross import-layer boundaries; "
@@ -989,7 +989,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_dispatch_infeasible_response accepting capability_detail kwarg for none_pass "
         "diagnostic enrichment (+24 net lines)"
         "; config-default ingredient layer: build_config_default_layer call and "
-        "docstring update for post_run_diagnostics demotion (+10 net lines)",
+        "docstring update for post_run_diagnostics demotion (+10 net lines)"
+        "; get_recipe session_serve_overrides replay via serve_recipe; "
+        "deferred-recall snapshot update guard (+3 net lines)",
     ),
     "tools_execution.py": (
         1295,

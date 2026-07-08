@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterator, KeysView, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -13,7 +13,28 @@ if TYPE_CHECKING:
 
 from ._type_results import LoadResult
 
-__all__ = ["RecipeRepository", "MigrationService", "DatabaseReader", "ReadOnlyResolver"]
+__all__ = [
+    "RecipeRepository",
+    "MigrationService",
+    "DatabaseReader",
+    "ReadOnlyResolver",
+    "ServeOverridesSnapshot",
+]
+
+
+@runtime_checkable
+class ServeOverridesSnapshot(Protocol):
+    """Caller-supplied ingredient override values captured at open_kitchen time.
+
+    Always stored as a plain dict[str, str]. Protocol type enables the
+    test_toolcontext_optional_fields_all_have_protocol_annotations arch contract
+    while remaining compatible with dict[str, str] at all call sites.
+    """
+
+    def __getitem__(self, __key: str) -> str: ...
+    def keys(self) -> KeysView[str]: ...
+    def __iter__(self) -> Iterator[str]: ...
+    def __len__(self) -> int: ...
 
 
 @runtime_checkable

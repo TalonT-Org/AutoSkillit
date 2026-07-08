@@ -82,6 +82,7 @@ _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
         "MAX_MCP_OUTPUT_TOKENS",
         "AUTOSKILLIT_SESSION_DEADLINE",
         "CLAUDE_CODE_SUBAGENT_MODEL",
+        "CODEX_HOME",
         "SCENARIO_STEP_NAME",
     }
 )

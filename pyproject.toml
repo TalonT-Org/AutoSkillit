@@ -413,3 +413,8 @@ forbidden_modules = [
 
 [tool.uv.sources]
 api-simulator = { git = "https://github.com/TalonT-Org/api-simulator", rev = "8f711f958d4d93a8e53a3c3b51279fb420870f3a", subdirectory = "crates/api-simulator-py" }
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.156.2",
+]

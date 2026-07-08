@@ -247,7 +247,16 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "config", "core", "fleet", "recipe", "server", "workspace"}
     ),
     "_type_constants_registries": frozenset(
-        {"cli", "config", "core", "pipeline", "recipe", "server", "workspace"}
+        {
+            "cli",
+            "config",
+            "core",
+            "pipeline",
+            "recipe",
+            "server",
+            "workspace",
+            "arch/test_serve_surface_registry.py",
+        }
     ),
     "_type_exceptions": frozenset({"core", "execution", "fleet", "recipe", "server"}),
     "_type_phoropter": frozenset({"core"}),
@@ -744,7 +753,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "core",
             "hooks/test_recipe_contract_freshness.py",
             "migration",
-            # Server file-level entries (13 of 52 import autoskillit.recipe):
+            # Server file-level entries (14 of 52 import autoskillit.recipe):
+            "server/test_serve_idempotence.py",
             "server/test_backend_ingredient_injection.py",
             "server/test_factory.py",
             "server/test_tools_dispatch_validation.py",

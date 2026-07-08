@@ -209,7 +209,16 @@ class TestModuleCascadeCore:
 
     def test_type_constants_registries_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_constants_registries"] == frozenset(
-            {"cli", "config", "core", "pipeline", "recipe", "server", "workspace"}
+            {
+                "cli",
+                "config",
+                "core",
+                "pipeline",
+                "recipe",
+                "server",
+                "workspace",
+                "arch/test_serve_surface_registry.py",
+            }
         )
 
     def test_type_exceptions_cascade(self) -> None:

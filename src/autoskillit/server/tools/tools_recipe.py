@@ -33,6 +33,7 @@ from autoskillit.server.tools._auto_overrides import (
     _provider_aware_capability_overrides,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
+from autoskillit.server.tools._serve_helpers import serve_recipe
 from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
@@ -240,12 +241,6 @@ async def load_recipe(
             _config_layer = build_config_authoritative_layer(_defaults)
             _config_default = build_config_default_layer(_defaults)
             _promote_capability_keys(_config_layer, _session_overrides)
-            _merged_overrides = {
-                **_config_default,
-                **_session_overrides,
-                **(overrides or {}),
-                **_config_layer,
-            }
             _effective_backend_map = _compute_effective_backend_map(
                 _raw_recipe_obj.steps if _raw_recipe_obj is not None else None,
                 tool_ctx.backend.name if tool_ctx.backend else None,
@@ -253,12 +248,15 @@ async def load_recipe(
                 name,
                 skill_resolver=tool_ctx.skill_resolver,
             )
-            result = tool_ctx.recipes.load_and_validate(
+            result = serve_recipe(
+                tool_ctx,
                 name,
-                tool_ctx.project_dir,
-                suppressed=suppressed,
+                caller_overrides=overrides,
+                config_default=_config_default,
+                session_overrides=_session_overrides,
+                config_layer=_config_layer,
                 resolved_defaults=_defaults,
-                ingredient_overrides=_merged_overrides,
+                suppressed=suppressed,
                 temp_dir=tool_ctx.temp_dir,
                 temp_dir_relpath=temp_dir_display_str(tool_ctx.config.workspace.temp_dir),
                 backend_name=tool_ctx.backend.name if tool_ctx.backend else None,

@@ -410,89 +410,131 @@ def resume_campaign_from_state(
     from autoskillit.fleet.state import (  # noqa: PLC0415
         CampaignStateMutator,
         _clear_dispatch_for_retry,
+        read_state,
     )
 
+    # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
+    # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the
+    # mutator) before the composition pass re-reads state, so the compose pass
+    # sees the post-reset status. FAILURE/INTERRUPTED/REFUSED handling preserves
+    # the asymmetric semantics: FAILURE stays on continue_on_failure=True
+    # regardless of reset_on_retry; INTERRUPTED/REFUSED reset when
+    # reset_on_retry=True. prepare_resume is NOT used here because its reset
+    # semantics for continue_on_failure=True differ from the campaign-level
+    # requirements (it would reset FAILURE unconditionally on continue_on_failure
+    # =True, breaking test_failure_not_reset_under_continue_on_failure).
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             return None
-
         for d in m.state.dispatches:
             if d.status == DispatchStatus.RUNNING:
                 resolve_stale_running(d, m, reason="stale_running_on_resume")
-
-        if continue_on_failure and reset_on_retry:
-            for d in m.state.dispatches:
-                if d.status in _ALWAYS_BLOCKING_STATUSES:
+        for d in m.state.dispatches:
+            if d.status in _RETRIABLE_NON_SUCCESS:
+                if not continue_on_failure:
+                    if reset_on_retry:
+                        _clear_dispatch_for_retry(d)
+                        m.mark_dirty()
+                    else:
+                        return ResumeDecision(
+                            next_dispatch_name="",
+                            completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                        )
+                elif reset_on_retry and d.status != DispatchStatus.FAILURE:
+                    # INTERRUPTED / REFUSED reset on reset_on_retry=True.
+                    # FAILURE stays as FAILURE (continue_on_failure=True semantics).
                     _clear_dispatch_for_retry(d)
                     m.mark_dirty()
 
-        for d in m.state.dispatches:
-            if d.status in _RETRIABLE_NON_SUCCESS and not continue_on_failure:
-                if reset_on_retry:
-                    _clear_dispatch_for_retry(d)
-                    m.mark_dirty()
-                else:
-                    return ResumeDecision(
-                        next_dispatch_name="",
-                        completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                    )
+    # Re-open state via read_state for the composition pass; return None on fail-open.
+    state = read_state(state_path)
+    if state is None:
+        return None
 
-        completed_lines: list[str] = []
-        next_name = ""
-        is_resumable = False
-        resumable_dispatched_session_id = ""
-        resumable_dispatch_id = ""
-        resumable_retry_reason = ""
-        resumable_checkpoint: dict[str, Any] = {}
-        for d in m.state.dispatches:
-            if d.status in _VISIBLE_IN_BLOCK_STATUSES:
-                completed_lines.append(f"- {d.name}: {d.status}")
-            elif d.status == DispatchStatus.RESUMABLE and not next_name:
-                timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
-                if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
-                    d.status = DispatchStatus.FAILURE
-                    d.reason = (
-                        d.attempt_history[-1].get("reason", FleetErrorCode.FLEET_L3_TIMEOUT)
-                        if d.attempt_history
-                        else FleetErrorCode.FLEET_L3_TIMEOUT
-                    )
-                    m.mark_dirty()
-                    return ResumeDecision(
-                        next_dispatch_name="",
-                        completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                    )
-                else:
-                    next_name = d.name
-                    is_resumable = True
-                    resumable_dispatched_session_id = d.dispatched_session_id
-                    resumable_dispatch_id = d.dispatch_id
-                    resumable_retry_reason = d.retry_reason
-                    resumable_checkpoint = d.resume_checkpoint
-            elif (
-                d.status
-                not in {
-                    DispatchStatus.INTERRUPTED,
-                    DispatchStatus.REFUSED,
-                    DispatchStatus.RUNNING,
-                    DispatchStatus.RELEASED,
-                    DispatchStatus.FAILURE,
-                    DispatchStatus.RESUMABLE,
-                }
-                and not next_name
-            ):
-                next_name = d.name
+    completed_lines: list[str] = []
+    next_name = ""
+    is_resumable = False
+    resumable_dispatched_session_id = ""
+    resumable_dispatch_id = ""
+    resumable_retry_reason = ""
+    resumable_checkpoint: dict[str, Any] = {}
 
-        completed_block = "\n".join(completed_lines) if completed_lines else ""
-
-        return ResumeDecision(
-            next_dispatch_name=next_name,
-            completed_dispatches_block=completed_block,
-            is_resumable=is_resumable,
-            dispatched_session_id=resumable_dispatched_session_id,
-            dispatch_id=resumable_dispatch_id,
-            retry_reason=resumable_retry_reason,
-            resume_checkpoint=resumable_checkpoint,
+    for d in state.dispatches:
+        # FAILURE / INTERRUPTED / REFUSED not reset by the pass-1 reset pass
+        # are visible in the completed block (asymmetric semantics — see
+        # TestContinueOnFailureDoesNotResetFailureDispatches and
+        # TestRefusedDispatchVisibleInBlock). prepare_resume would reset
+        # FAILURE unconditionally on continue_on_failure=True, so it is NOT
+        # used for these statuses here.
+        if d.status in _RETRIABLE_NON_SUCCESS:
+            completed_lines.append(f"- {d.name}: {d.status}")
+            continue
+        # Delegate the canonical chokepoint for SUCCESS / PENDING / RESUMABLE /
+        # SKIPPED / RELEASED. For SUCCESS it yields a short-circuit; for the
+        # rest it returns a pass-through preflight.
+        preflight = prepare_resume(
+            state_path,
+            d.name,
+            continue_on_failure=continue_on_failure or reset_on_retry,
         )
+        if preflight is None:
+            continue
+        if preflight.short_circuit is not None:
+            # SUCCESS — render lowercase status via StrEnum.__format__.
+            completed_lines.append(f"- {d.name}: {preflight.short_circuit.status}")
+            continue
+        # PASS_THROUGH — PENDING / RESUMABLE / SKIPPED / RELEASED.
+        if d.status in _VISIBLE_IN_BLOCK_STATUSES:
+            # SKIPPED or RELEASED.
+            completed_lines.append(f"- {d.name}: {d.status}")
+            continue
+        if d.status == DispatchStatus.RESUMABLE and not next_name:
+            # Defense-in-depth cap-conversion block (alongside L3 cap in
+            # mark_dispatch_running). Required by TestMaxResumeAttemptsGuard
+            # to assert RESUMABLE→FAILURE conversion + halt at the campaign
+            # level. Mutates via a fresh CampaignStateMutator to persist.
+            timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
+            if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
+                with CampaignStateMutator(state_path) as cap_m:
+                    if cap_m.state is not None:
+                        for x in cap_m.state.dispatches:
+                            if x.name == d.name:
+                                x.status = DispatchStatus.FAILURE
+                                x.reason = (
+                                    d.attempt_history[-1].get(
+                                        "reason", FleetErrorCode.FLEET_L3_TIMEOUT
+                                    )
+                                    if d.attempt_history
+                                    else FleetErrorCode.FLEET_L3_TIMEOUT
+                                )
+                                cap_m.mark_dirty()
+                                break
+                return ResumeDecision(
+                    next_dispatch_name="",
+                    completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                )
+            next_name = d.name
+            is_resumable = True
+            resumable_dispatched_session_id = d.dispatched_session_id
+            resumable_dispatch_id = d.dispatch_id
+            resumable_retry_reason = d.retry_reason
+            resumable_checkpoint = d.resume_checkpoint
+            continue
+        if not next_name:
+            # PENDING or any other not-yet-resolved status.
+            next_name = d.name
+
+    completed_block = "\n".join(completed_lines) if completed_lines else ""
+
+    return ResumeDecision(
+        next_dispatch_name=next_name,
+        completed_dispatches_block=completed_block,
+        is_resumable=is_resumable,
+        dispatched_session_id=resumable_dispatched_session_id,
+        dispatch_id=resumable_dispatch_id,
+        retry_reason=resumable_retry_reason,
+        resume_checkpoint=resumable_checkpoint,
+    )
 
 
 def find_dispatch_for_issue(

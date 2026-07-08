@@ -28,7 +28,7 @@ from autoskillit.fleet._issue_url_helpers import extract_issue_urls
 from autoskillit.fleet._outcome import _checkpoint_to_dict, classify_dispatch_outcome
 from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.state import DispatchStatus
-from autoskillit.fleet.state_recovery import prepare_resume
+from autoskillit.fleet.state_recovery import ResumePreflight, prepare_resume
 from autoskillit.fleet.state_types import (
     DispatchCompleted,
     DispatchRejected,
@@ -44,6 +44,20 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 ENVELOPE_STDERR_MAX = 2000
+
+
+class DispatchSpawnFailed(RuntimeError):
+    """Spawn-time failure signal for the ``execute_dispatch`` callback path.
+
+    Attributes:
+        error_code: FleetErrorCode identifying the failure category.
+        message: Human-readable description of the spawn failure.
+    """
+
+    def __init__(self, error_code: FleetErrorCode, message: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.message = message
 
 
 @asynccontextmanager
@@ -133,6 +147,8 @@ def _write_pid(
     dispatched_create_time: float = 0.0,
     identity_degraded: bool = False,
     issue_url: str = "",
+    *,
+    enforce_max_resume_attempts: bool = False,
 ) -> str | None:
     """on_spawn callback: atomically mark dispatch as running with dispatched_pid.
 
@@ -167,6 +183,7 @@ def _write_pid(
             sidecar_path=sidecar_path,
             identity_degraded=identity_degraded,
             issue_url=issue_url,
+            enforce_max_resume_attempts=enforce_max_resume_attempts,
         )
         return None
     except Exception as exc:
@@ -508,6 +525,10 @@ async def _run_dispatch(
     }
     prior_session_chain: list[str] = []
     prior_dispatched_session_id = ""
+    # Hoisted: closure-captured by _on_spawn to derive is_resume_branch for
+    # the enforce_max_resume_attempts kwarg on _write_pid. A non-None value
+    # means the resume branch executed prepare_resume (vs. fresh dispatch path).
+    preflight: ResumePreflight | None = None
     if resume_session_id and prior_dispatch_id:
         try:
             handle = DispatchStateHandle.open_continued(dispatches_dir, prior_dispatch_id)
@@ -768,6 +789,13 @@ async def _run_dispatch(
         _dispatched_ticks.append(ticks)
         _dispatched_create_time.append(create_time)
         _dispatched_boot_id.append(boot_id)
+        # Derive resume branch from closure-captured preflight. The hoisted
+        # preflight variable is set to a ResumePreflight in the resume branch
+        # (where prepare_resume was called) and remains None on the fresh
+        # dispatch path. This is the structural enforcement of Bug B-3: on the
+        # resume path, mark_dispatch_running's MAX_CONSECUTIVE_RESUME_ATTEMPTS
+        # cap check fires; on the fresh path, the cap is skipped.
+        is_resume_branch = preflight is not None
         # _write_pid returns None on success or an error string on failure.
         # We record the error in closure-scoped _spawn_error rather than
         # raising — raising from on_spawn would be swallowed by the executor
@@ -783,6 +811,7 @@ async def _run_dispatch(
             create_time,
             identity_degraded=(ticks == 0),
             issue_url=_issue_urls_raw,
+            enforce_max_resume_attempts=is_resume_branch,
         )
         if err is not None:
             _spawn_error.append(err)

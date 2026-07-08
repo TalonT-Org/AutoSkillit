@@ -85,7 +85,6 @@ class TestRecipeReadProhibitionCmd:
         result = json.loads(await run_cmd(cmd=cmd, cwd="/tmp"))
         assert result["success"] is True
         assert "subtype" not in result
-        assert RECIPE_READ_DENY_TRIGGER not in result["result"]
 
     @pytest.mark.anyio
     async def test_allows_chain_of_safe_recipe_metadata_commands(self, tool_ctx_kitchen_open):

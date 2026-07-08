@@ -1005,13 +1005,25 @@ class TestInvestigateFirstStructure:
             f"{[(f.step_name, f.message) for f in add_dir_dead]}"
         )
 
-    def test_remediation_assess_step_on_context_limit_routes_to_failure(self, recipe) -> None:
-        """assess step must route on_context_limit to release_issue_failure (safe default)."""
+    def test_remediation_assess_step_on_context_limit_routes_to_test(self, recipe) -> None:
+        """assess context exhaustion must verify persisted partial fixes."""
         assess = recipe.steps["assess"]
-        assert assess.on_context_limit == "release_issue_failure", (
-            f"remediation.yaml assess step must declare on_context_limit: release_issue_failure, "
+        assert assess.on_context_limit == "test", (
+            f"remediation.yaml assess step must declare on_context_limit: test, "
             f"got: {assess.on_context_limit!r}"
         )
+        assert assess.on_rate_limit == assess.on_context_limit
+
+    def test_remediation_merge_gate_assess_context_limit_routes_to_merge_gate_test(
+        self, recipe
+    ) -> None:
+        """merge-gate assess context exhaustion must stay on the merge-gate loop."""
+        assess = recipe.steps["merge_gate_assess"]
+        assert assess.on_context_limit == "merge_gate_test", (
+            "remediation.yaml merge_gate_assess step must declare "
+            f"on_context_limit: merge_gate_test, got: {assess.on_context_limit!r}"
+        )
+        assert assess.on_rate_limit == assess.on_context_limit
 
 
 class TestDisplayConditionContract:

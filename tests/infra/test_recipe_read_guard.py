@@ -97,6 +97,102 @@ class TestRunCmdBlocking:
         )
         assert not out.strip()
 
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "git add -- src/autoskillit/recipes/remediation.yaml",
+            "git diff --stat -- src/autoskillit/recipes/remediation.yaml",
+            "git diff --name-only -- src/autoskillit/recipes/remediation.yaml",
+            "git status -- src/autoskillit/recipes/remediation.yaml",
+            "wc -l src/autoskillit/recipes/remediation.yaml",
+        ],
+    )
+    def test_allows_recipe_path_vcs_and_metadata_commands(self, cmd):
+        out = _run_guard(
+            {
+                "tool_name": "mcp__mcp-autoskillit__run_cmd",
+                "tool_input": {"cmd": cmd},
+            }
+        )
+        assert not out.strip()
+
+    def test_allows_chain_of_safe_recipe_metadata_commands(self):
+        out = _run_guard(
+            {
+                "tool_name": "mcp__mcp-autoskillit__run_cmd",
+                "tool_input": {
+                    "cmd": (
+                        "git add -- src/autoskillit/recipes/remediation.yaml "
+                        "&& git status --short -- src/autoskillit/recipes/remediation.yaml"
+                    )
+                },
+            }
+        )
+        assert not out.strip()
+
+    def test_denies_chained_recipe_read_after_allowed_git_add(self):
+        out = _run_guard(
+            {
+                "tool_name": "mcp__mcp-autoskillit__run_cmd",
+                "tool_input": {
+                    "cmd": (
+                        "git add -- src/autoskillit/recipes/remediation.yaml "
+                        "&& cat src/autoskillit/recipes/remediation.yaml"
+                    )
+                },
+            }
+        )
+        assert _is_denied(out)
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "git diff -- src/autoskillit/recipes/remediation.yaml",
+            "git status -v -- src/autoskillit/recipes/remediation.yaml",
+            "git add -p -- src/autoskillit/recipes/remediation.yaml",
+            "git add --pathspec-from-file=src/autoskillit/recipes/remediation.yaml",
+            "git add --pathspec-from-file src/autoskillit/recipes/remediation.yaml",
+            "git diff --stat --patch-with-stat -- src/autoskillit/recipes/remediation.yaml",
+            "git diff --stat --patch-with-raw -- src/autoskillit/recipes/remediation.yaml",
+            "git diff --stat --binary -- src/autoskillit/recipes/remediation.yaml",
+            "git diff --check -- src/autoskillit/recipes/remediation.yaml",
+            ("python3 <<'PY'\nprint(open('src/autoskillit/recipes/remediation.yaml').read())\nPY"),
+            (
+                "git add -- src/autoskillit/recipes/remediation.yaml\n"
+                "cat src/autoskillit/recipes/remediation.yaml"
+            ),
+            (
+                "git add -- src/autoskillit/recipes/remediation.yaml "
+                "& cat src/autoskillit/recipes/remediation.yaml"
+            ),
+            'git add -- "$(cat src/autoskillit/recipes/remediation.yaml)"',
+            "git add -- src/autoskillit/recipes/remediation.yaml && cat $_",
+            (
+                "git add -- src/autoskillit/recipes/remediation.yaml"
+                "&&cat src/autoskillit/recipes/remediation.yaml"
+            ),
+            # Input redirection: `<` is not in punctuation_chars; path is in
+            # the segment text, pattern matches, verb `cat` is not git/wc.
+            "cat < src/autoskillit/recipes/remediation.yaml",
+            # Content-reading git subcommands not in the metadata allowlist.
+            "git show HEAD:src/autoskillit/recipes/remediation.yaml",
+            "git log -p -- src/autoskillit/recipes/remediation.yaml",
+            "git blame src/autoskillit/recipes/remediation.yaml",
+            "git grep pattern -- src/autoskillit/recipes/remediation.yaml",
+            # -A/--all/--force stage content even when restricted to a path.
+            "git add -A -- src/autoskillit/recipes/remediation.yaml",
+            "git add --all -- src/autoskillit/recipes/remediation.yaml",
+        ],
+    )
+    def test_denies_protected_path_content_bypasses(self, cmd):
+        out = _run_guard(
+            {
+                "tool_name": "mcp__mcp-autoskillit__run_cmd",
+                "tool_input": {"cmd": cmd},
+            }
+        )
+        assert _is_denied(out)
+
 
 class TestRunPythonBlocking:
     """Verify run_python calls to recipe module are blocked."""
@@ -220,6 +316,17 @@ class TestBashToolCoverage:
             {
                 "tool_name": "Bash",
                 "tool_input": {"command": "ls -la"},
+            }
+        )
+        assert not out.strip()
+
+    def test_allows_bash_git_diff_recipe_path(self):
+        out = _run_guard(
+            {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "git diff --stat -- .autoskillit/recipes/remediation.yaml"
+                },
             }
         )
         assert not out.strip()

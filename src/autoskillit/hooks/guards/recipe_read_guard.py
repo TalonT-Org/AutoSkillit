@@ -13,6 +13,15 @@ import json
 import os
 import re
 import sys
+from importlib import import_module
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+command_has_blocked_protected_path_read = import_module(
+    "_command_classification"
+).command_has_blocked_protected_path_read
 
 RECIPE_READ_DENY_TRIGGER: str = "must not read recipe/skill/agent files directly"
 
@@ -43,13 +52,12 @@ def main() -> None:
     if tool == "run_cmd" or tool_name == "Bash":
         cmd_key = "command" if tool_name == "Bash" else "cmd"
         cmd: str = tool_input.get(cmd_key, "")
-        for pattern in _CMD_PATH_PATTERNS:
-            if pattern.search(cmd):
-                _deny(
-                    f"run_cmd/Bash {RECIPE_READ_DENY_TRIGGER}. "
-                    "Use load_recipe to recall step definitions or the Skill tool "
-                    "for skill instructions."
-                )
+        if command_has_blocked_protected_path_read(cmd, _CMD_PATH_PATTERNS):
+            _deny(
+                f"run_cmd/Bash {RECIPE_READ_DENY_TRIGGER}. "
+                "Use load_recipe to recall step definitions or the Skill tool "
+                "for skill instructions."
+            )
 
     if tool == "run_python":
         callable_name: str = tool_input.get("callable", "")

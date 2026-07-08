@@ -11,6 +11,7 @@ import os
 import re
 import shlex
 from collections.abc import Sequence
+from typing import Protocol
 
 _INTERPRETER_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?|perl|ruby|node)\s+"
@@ -73,6 +74,71 @@ _HEREDOC_BODY_RE = re.compile(
     r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
     re.DOTALL,
 )
+
+_PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
+# Command wrappers whose only effect is to invoke the next command with
+# adjusted environment/priority. The verb is the token after the wrapper.
+# 'xargs' is intentionally excluded: it dispatches a downstream reader and
+# adding it would let `xargs cat src/.../foo.yaml` reach the reader check,
+# weakening xargs-chain bypass detection (see D1 design decision).
+_COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo", "nohup"})
+# Wrappers that consume a mandatory DURATION as their first non-wrapper token.
+_WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
+# Wrappers that take a single short flag as their first non-wrapper token
+# (e.g. 'stdbuf -o0', 'stdbuf -i0', 'stdbuf -e0').
+_WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
+_GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
+    {
+        "-p",
+        "--patch",
+        "-e",
+        "--edit",
+        "-i",
+        "--interactive",
+        "--pathspec-from-file",
+        # Content-staging flags: -A/--all stages all changes (incl. content);
+        # --force/--no-ignore-removal/--no-all are the no-restriction variants.
+        # Without these, `git add -A -- src/.../foo.yaml` is classified as
+        # metadata but actually stages content for indirect read via
+        # `git diff --staged`.
+        "-A",
+        "--all",
+        "--force",
+        "--no-ignore-removal",
+        "--no-all",
+    }
+)
+_GIT_STATUS_CONTENT_FLAGS: frozenset[str] = frozenset({"-v", "--verbose"})
+_GIT_DIFF_CONTENT_FLAGS: frozenset[str] = frozenset(
+    {
+        "-p",
+        "--patch",
+        "--patch-with-stat",
+        "--patch-with-raw",
+        "--binary",
+        "--text",
+        "--word-diff",
+        "--color-words",
+    }
+)
+_GIT_DIFF_METADATA_FLAGS: frozenset[str] = frozenset(
+    {
+        "--name-only",
+        "--name-status",
+        "--stat",
+        "--shortstat",
+        "--numstat",
+        "--summary",
+    }
+)
+_SHELL_SUBSTITUTION_RE = re.compile(r"\$\(|`|[<>]\(")
+_SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
+_PROTECTED_READ_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
+_WC_FLAG_RE = re.compile(r"-l+|--lines$")
+
+
+class SearchPattern(Protocol):
+    def search(self, string: str, /): ...
 
 
 def strip_heredoc_bodies(command: str) -> str:
@@ -195,16 +261,46 @@ def extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
     return targets
 
 
+def _command_start_index(segment: list[str]) -> int | None:
+    if not segment:
+        return None
+    start = 0
+    # Iteratively strip 'env', command wrappers, and any wrapper-required
+    # argument. This handles nested forms like
+    # 'env FOO=BAR command git diff' and 'command env FOO=BAR git diff'
+    # consistently — the real command verb is the first token that is not a
+    # known env/wrapper prefix. 'xargs' is intentionally not a wrapper
+    # (see _COMMAND_WRAPPERS docstring).
+    while start < len(segment):
+        token = segment[start]
+        if token == "env" and start + 1 < len(segment):
+            start += 1
+            while start < len(segment) and (
+                segment[start].startswith("-") or "=" in segment[start]
+            ):
+                start += 1
+            continue
+        if token in _COMMAND_WRAPPERS:
+            start += 1
+            continue
+        if token in _WRAPPERS_WITH_DURATION and start + 1 < len(segment):
+            start += 2
+            continue
+        if (
+            token in _WRAPPERS_WITH_SHORT_FLAG
+            and start + 1 < len(segment)
+            and segment[start + 1].startswith("-")
+        ):
+            start += 2
+            continue
+        break
+    return start if start < len(segment) else None
+
+
 def command_verb(segment: list[str]) -> str:
     """Return the command verb from a segment, skipping 'env' prefix."""
-    if not segment:
-        return ""
-    start = 0
-    if segment[0] == "env" and len(segment) > 1:
-        start = 1
-        while start < len(segment) and (segment[start].startswith("-") or "=" in segment[start]):
-            start += 1
-    return segment[start] if start < len(segment) else ""
+    start = _command_start_index(segment)
+    return segment[start] if start is not None else ""
 
 
 def is_gh_command(segment: list[str]) -> bool:
@@ -233,12 +329,13 @@ def extract_git_subcommand_and_flags(
     then returns (subcommand, remaining_tokens). Returns None if the segment
     is not a git command or has no subcommand.
     """
-    if not segment:
+    start = _command_start_index(segment)
+    if start is None:
         return None
-    verb = segment[0]
+    verb = segment[start]
     if verb != "git" and not verb.endswith("/git"):
         return None
-    i = 1
+    i = start + 1
     while i < len(segment):
         token = segment[i]
         if token in _GIT_GLOBAL_FLAGS_WITH_VALUE:
@@ -255,6 +352,110 @@ def extract_git_subcommand_and_flags(
         remaining = segment[i + 1 :]
         return (subcommand, remaining)
     return None
+
+
+def _is_allowed_wc_flag(token: str) -> bool:
+    """Return True when *token* is a wc flag that does not reveal file contents.
+
+    Allows ``-l``, repeated ``-l`` (e.g. ``-ll``), and the long form ``--lines``
+    only. Any value-bearing variant (``--lines=10``) or compound form
+    (``-lL``) is rejected because those are not used for metadata-only reads.
+    """
+    return bool(_WC_FLAG_RE.fullmatch(token))
+
+
+def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
+    """Return True for protected-path commands that inspect metadata or VCS state.
+
+    Protected recipe/skill/agent paths are normally deny-by-default because most
+    commands that mention them are content reads. These narrow exceptions support
+    legitimate pipeline work on files already in scope.
+    """
+    verb = command_verb(segment)
+    if verb == "git" or verb.endswith("/git"):
+        git_parts = extract_git_subcommand_and_flags(segment)
+        if git_parts is None:
+            return False
+        subcommand, flags = git_parts
+        if subcommand not in _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS:
+            return False
+        if subcommand == "add":
+            return not any(
+                flag in _GIT_ADD_CONTENT_FLAGS or flag.startswith("--pathspec-from-file=")
+                for flag in flags
+            )
+        if subcommand == "status":
+            return not any(flag in _GIT_STATUS_CONTENT_FLAGS for flag in flags)
+        if subcommand == "diff":
+            if any(
+                flag in _GIT_DIFF_CONTENT_FLAGS
+                or flag.startswith("-U")
+                or flag.startswith("--unified")
+                or flag.startswith("--word-diff")
+                or flag.startswith("--color-words")
+                or flag.startswith("--patch-with-stat")
+                or flag.startswith("--patch-with-raw")
+                for flag in flags
+            ):
+                return False
+            return any(
+                flag in _GIT_DIFF_METADATA_FLAGS or flag.startswith("--stat=") for flag in flags
+            )
+        return False
+    if verb == "wc" or verb.endswith("/wc"):
+        start = _command_start_index(segment)
+        if start is None:
+            return False
+        flags = [token for token in segment[start + 1 :] if token.startswith("-")]
+        return bool(flags) and all(_is_allowed_wc_flag(token) for token in flags)
+    return False
+
+
+def _tokenize_protected_read_segments(command: str) -> list[list[str]]:
+    try:
+        lexer = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=";&|()")
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except (ValueError, TypeError):
+        return []
+
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token in _PROTECTED_READ_SHELL_OPS:
+            if current:
+                segments.append(current)
+                current = []
+        else:
+            current.append(token)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def command_has_blocked_protected_path_read(
+    command: str, protected_path_patterns: Sequence[SearchPattern]
+) -> bool:
+    """Return True when a command reads a protected recipe/skill/agent path."""
+    if not any(pattern.search(command) for pattern in protected_path_patterns):
+        return False
+
+    if "<<" in command or _SHELL_SUBSTITUTION_RE.search(command):
+        return True
+
+    segments = _tokenize_protected_read_segments(command)
+    if not segments:
+        return True
+
+    if len(segments) > 1 and _SHELL_STATE_VAR_RE.search(command):
+        return True
+
+    for segment in segments:
+        segment_text = " ".join(segment)
+        if any(pattern.search(segment_text) for pattern in protected_path_patterns):
+            if not is_allowed_protected_path_metadata_command(segment):
+                return True
+    return False
 
 
 def has_interpreter_write(command: str) -> bool:

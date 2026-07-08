@@ -19,6 +19,7 @@ from autoskillit.core import (
     is_path_like_token,
     session_type,
 )
+from autoskillit.hooks import command_has_blocked_protected_path_read
 from autoskillit.pipeline import gate_error_result, headless_error_result
 
 if TYPE_CHECKING:
@@ -157,13 +158,12 @@ def _check_recipe_read_prohibition(
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
     if cmd is not None:
-        for pattern in _RECIPE_READ_CMD_PATTERNS:
-            if pattern.search(cmd):
-                return gate_error_result(
-                    f"run_cmd {RECIPE_READ_DENY_TRIGGER}. "
-                    "Use load_recipe to recall step definitions or the Skill tool "
-                    "for skill instructions."
-                )
+        if command_has_blocked_protected_path_read(cmd, _RECIPE_READ_CMD_PATTERNS):
+            return gate_error_result(
+                f"run_cmd {RECIPE_READ_DENY_TRIGGER}. "
+                "Use load_recipe to recall step definitions or the Skill tool "
+                "for skill instructions."
+            )
     if callable_name is not None:
         if _RECIPE_READ_CALLABLE_PATTERN.match(callable_name):
             return gate_error_result(

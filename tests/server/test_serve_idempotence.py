@@ -10,7 +10,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 from autoskillit.core import SERVE_SURFACES
@@ -18,17 +18,20 @@ from autoskillit.core import SERVE_SURFACES
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
 
 # Re-serve surfaces: all surfaces except open_kitchen (which sets the snapshot).
-# Collection-time guard: this list must exactly match SERVE_SURFACES - {"open_kitchen"}.
 _RE_SERVE_SURFACES = ["load_recipe", "get_recipe", "open_kitchen_deferred_recall"]
-assert set(_RE_SERVE_SURFACES) == SERVE_SURFACES - {"open_kitchen"}, (
-    f"_RE_SERVE_SURFACES out of sync with SERVE_SURFACES. "
-    f"Missing: {(SERVE_SURFACES - {'open_kitchen'}) - set(_RE_SERVE_SURFACES)}. "
-    f"Extra: {set(_RE_SERVE_SURFACES) - (SERVE_SURFACES - {'open_kitchen'})}."
-)
 
 _ISSUE_URL = "https://github.com/TalonT-Org/AutoSkillit/issues/999"
 _TASK_DESC = "test task"
 _RECIPE = "remediation"
+
+
+def test_re_serve_surfaces_in_sync_with_serve_surfaces() -> None:
+    """_RE_SERVE_SURFACES must exactly match SERVE_SURFACES - {"open_kitchen"}."""
+    assert set(_RE_SERVE_SURFACES) == SERVE_SURFACES - {"open_kitchen"}, (
+        f"_RE_SERVE_SURFACES out of sync with SERVE_SURFACES. "
+        f"Missing: {(SERVE_SURFACES - {'open_kitchen'}) - set(_RE_SERVE_SURFACES)}. "
+        f"Extra: {set(_RE_SERVE_SURFACES) - (SERVE_SURFACES - {'open_kitchen'})}."
+    )
 
 
 def _mock_fmcp_ctx() -> MagicMock:
@@ -449,11 +452,11 @@ async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
     ok_overrides = overrides if overrides else None
     ok_result = await _open_kitchen_patched(_RECIPE, ok_overrides, monkeypatch)
     if not ok_result.get("success"):
-        return  # Skip examples where open_kitchen fails (e.g. invalid combos)
+        assume(False)  # discard: open_kitchen failed (e.g. invalid combos)
 
     lr_result = json.loads(await load_recipe(name=_RECIPE))
     if "content" not in lr_result:
-        return  # Skip if load_recipe fails
+        assume(False)  # discard: load_recipe failed
 
     assert lr_result["content"] == ok_result["content"], (
         f"Routing divergence for overrides={overrides!r}: "

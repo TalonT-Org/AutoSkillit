@@ -212,8 +212,7 @@ def check_review_posted(
     when the receipt file is absent, indicating the review POST did not complete.
     In local mode, always returns reviews_posted="true" (no API calls made).
 
-    output_dir must be an absolute path (enforced by is_absolute() guard required by
-    tests/arch/test_run_python_path_resolution.py for output_dir parameters).
+    output_dir must be an absolute path.
     """
     if not Path(output_dir).is_absolute():
         raise ValueError(f"output_dir must be an absolute path, got: {output_dir!r}")

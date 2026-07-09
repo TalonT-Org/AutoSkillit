@@ -123,11 +123,14 @@ from .types import AGENT_BACKEND_CLAUDE_CODE as AGENT_BACKEND_CLAUDE_CODE
 from .types import AGENT_BACKEND_CODEX as AGENT_BACKEND_CODEX
 from .types import AGENT_BACKEND_DYNACONF_ENV_VAR as AGENT_BACKEND_DYNACONF_ENV_VAR
 from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
+from .types import AttemptLivenessSpec as AttemptLivenessSpec
+from .types import AttemptSeed as AttemptSeed
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
 from .types import AUTOSKILLIT_APPLICABLE_GUARDS as AUTOSKILLIT_APPLICABLE_GUARDS
 from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSION
+from .types import ATTEMPT_ID_ENV_VAR as ATTEMPT_ID_ENV_VAR
 from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
 from .types import AUTOSKILLIT_SKILL_PREFIX as AUTOSKILLIT_SKILL_PREFIX
 from .types import AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES as AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES
@@ -143,6 +146,8 @@ from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_M
 from .types import CODEX_EFFORT_MAPPING as CODEX_EFFORT_MAPPING
 from .types import CODEX_INTERACTIVE_REQUIRED_ENV as CODEX_INTERACTIVE_REQUIRED_ENV
 from .types import CODEX_MCP_ENV_FORWARD_VARS as CODEX_MCP_ENV_FORWARD_VARS
+from .types import CODEX_MCP_OPTIONAL_ENV_FORWARD_VARS as CODEX_MCP_OPTIONAL_ENV_FORWARD_VARS
+from .types import CODEX_MCP_REQUIRED_ENV_FORWARD_VARS as CODEX_MCP_REQUIRED_ENV_FORWARD_VARS
 from .types import CODEX_MODEL_ALIASES as CODEX_MODEL_ALIASES
 from .types import CODEX_MODEL_ALIASES_LAST_VERIFIED as CODEX_MODEL_ALIASES_LAST_VERIFIED
 from .types import CODEX_SCHEMA_VERSION as CODEX_SCHEMA_VERSION
@@ -177,9 +182,14 @@ from .types import KNOWN_CI_EVENTS as KNOWN_CI_EVENTS
 from .types import LABEL_LIFECYCLE_REGISTRY as LABEL_LIFECYCLE_REGISTRY
 from .types import LABEL_TRANSITIONS as LABEL_TRANSITIONS
 from .types import LAUNCH_ID_ENV_VAR as LAUNCH_ID_ENV_VAR
+from .types import LivenessDecision as LivenessDecision
+from .types import LivenessDiagnostics as LivenessDiagnostics
+from .types import LivenessObservation as LivenessObservation
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
+from .types import NESTED_SESSION_SPEC_ENV_VAR as NESTED_SESSION_SPEC_ENV_VAR
 from .types import NON_VARIADIC_CLAUDE_FLAGS as NON_VARIADIC_CLAUDE_FLAGS
 from .types import ORCHESTRATOR_SESSION_REQUIRED_ENV as ORCHESTRATOR_SESSION_REQUIRED_ENV
+from .types import OperationObservation as OperationObservation
 from .types import PACK_REGISTRY as PACK_REGISTRY
 from .types import PIPELINE_FORBIDDEN_TOOLS as PIPELINE_FORBIDDEN_TOOLS
 from .types import PR_TELEMETRY_SECTIONS as PR_TELEMETRY_SECTIONS
@@ -203,6 +213,7 @@ from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
 from .types import RUN_PYTHON_SENTINEL_KEYS as RUN_PYTHON_SENTINEL_KEYS
 from .types import SCOPE_DIRECTION_SOURCE_TYPES as SCOPE_DIRECTION_SOURCE_TYPES
 from .types import SERVE_SURFACES as SERVE_SURFACES
+from .types import SESSION_DEADLINE_ENV_VAR as SESSION_DEADLINE_ENV_VAR
 from .types import SESSION_TYPE_ENV_VAR as SESSION_TYPE_ENV_VAR
 from .types import SESSION_TYPE_FLEET as SESSION_TYPE_FLEET
 from .types import SESSION_TYPE_ORCHESTRATOR as SESSION_TYPE_ORCHESTRATOR
@@ -226,6 +237,7 @@ from .types import AuditLog as AuditLog
 from .types import BackendCapabilities as BackendCapabilities
 from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
+from .types import BackendPreLaunchSpec as BackendPreLaunchSpec
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import CampaignProtector as CampaignProtector
@@ -242,6 +254,7 @@ from .types import CIWatcher as CIWatcher
 from .types import ClaudeContentBlockType as ClaudeContentBlockType
 from .types import ClaudeEventData as ClaudeEventData
 from .types import ClaudeFlags as ClaudeFlags
+from .types import ChildTransportSpec as ChildTransportSpec
 from .types import CleanupResult as CleanupResult
 from .types import CliSubtype as CliSubtype
 from .types import CloneGateUncommitted as CloneGateUncommitted
@@ -328,6 +341,7 @@ from .types import ResumeSpec as ResumeSpec
 from .types import RetryReason as RetryReason
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint
+from .types import SessionLivenessDiagnostics as SessionLivenessDiagnostics
 from .types import SessionEvent as SessionEvent
 from .types import SessionLocator as SessionLocator
 from .types import SessionOutcome as SessionOutcome

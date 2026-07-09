@@ -40,6 +40,11 @@ __all__ = [
     "RESUME_SESSION_BASELINE_KEYS",
     "CODEX_INTERACTIVE_REQUIRED_ENV",
     "CODEX_MCP_ENV_FORWARD_VARS",
+    "CODEX_MCP_REQUIRED_ENV_FORWARD_VARS",
+    "CODEX_MCP_OPTIONAL_ENV_FORWARD_VARS",
+    "NESTED_SESSION_SPEC_ENV_VAR",
+    "ATTEMPT_ID_ENV_VAR",
+    "SESSION_DEADLINE_ENV_VAR",
     "KNOWN_BACKEND_NAMES",
 ]
 
@@ -152,6 +157,35 @@ CODEX_MCP_ENV_FORWARD_VARS: frozenset[str] = frozenset(
         SESSION_TYPE_ENV_VAR,
         FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
         AGENT_BACKEND_DYNACONF_ENV_VAR,
+    }
+)
+
+
+# Slice A env var definitions (rectify_codex_l2_attempt_liveness plan):
+# required keys are always injected into every Codex builder environment;
+# optional keys are only overlaid when the post-builder child-environment
+# assembler supplies them. The legacy combined constant above remains
+# during the cross-slice migration.
+NESTED_SESSION_SPEC_ENV_VAR: str = "AUTOSKILLIT_NESTED_SESSION_SPEC"
+ATTEMPT_ID_ENV_VAR: str = "AUTOSKILLIT_ATTEMPT_ID"
+SESSION_DEADLINE_ENV_VAR: str = "AUTOSKILLIT_SESSION_DEADLINE"
+
+CODEX_MCP_REQUIRED_ENV_FORWARD_VARS: frozenset[str] = frozenset(
+    {
+        HEADLESS_ENV_VAR,
+        HEADLESS_AUTO_GATE_ENV_VAR,
+        MCP_CLIENT_BACKEND_ENV_VAR,
+        SESSION_TYPE_ENV_VAR,
+        FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
+        AGENT_BACKEND_DYNACONF_ENV_VAR,
+    }
+)
+
+CODEX_MCP_OPTIONAL_ENV_FORWARD_VARS: frozenset[str] = frozenset(
+    {
+        NESTED_SESSION_SPEC_ENV_VAR,
+        ATTEMPT_ID_ENV_VAR,
+        SESSION_DEADLINE_ENV_VAR,
     }
 )
 

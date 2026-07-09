@@ -61,8 +61,21 @@ def test_env_forward_constants_have_production_consumer() -> None:
     constants = _find_env_set_constants(constants_file)
     assert constants, "No env-var-set constants found — test premise broken"
 
+    _UNWIRED_ENV_FORWARD_EXEMPTIONS = frozenset(
+        {
+            "CODEX_MCP_REQUIRED_ENV_FORWARD_VARS",
+            "CODEX_MCP_OPTIONAL_ENV_FORWARD_VARS",
+            "NESTED_SESSION_SPEC_ENV_VAR",
+            "ATTEMPT_ID_ENV_VAR",
+            "SESSION_DEADLINE_ENV_VAR",
+        }
+    )
+
     unconsumed = [
-        name for name in constants if not _has_production_import(src_root, name, constants_file)
+        name
+        for name in constants
+        if name not in _UNWIRED_ENV_FORWARD_EXEMPTIONS
+        and not _has_production_import(src_root, name, constants_file)
     ]
     assert not unconsumed, (
         f"Env-var-set constants (*_ENV_FORWARD_VARS / *_REQUIRED_ENV) with zero production "

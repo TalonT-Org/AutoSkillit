@@ -813,7 +813,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _type_invariant_registry.py adds InvariantDef frozen dataclass and
             INVARIANT_REGISTRY mapping 13 prose prohibitions to runtime gate targets,
             bringing the core/types count to 31.
-            Exempt at 35 files (core/types: 31).
+            _type_liveness.py adds the frozen, slotted value types that codify the
+            Codex L2 attempt-liveness policy boundary (ChildTransportSpec,
+            NestedSessionSpec, AttemptLivenessSpec, AttemptSeed, OperationObservation,
+            LivenessObservation, LivenessDecision, BackendPreLaunchSpec,
+            LivenessDiagnostics, SessionLivenessDiagnostics), bringing the
+            core/types count to 32.
+            Exempt at 36 files (core/types: 32).
           cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state

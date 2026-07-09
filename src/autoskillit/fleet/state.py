@@ -350,6 +350,16 @@ def _write_state(state_path: Path, state: CampaignState) -> None:
     write_versioned_json(state_path, payload, schema_version=FLEET_STATE_SCHEMA_VERSION)
 
 
+class ResumeCountExceeded(ValueError):
+    """Raised when ``mark_dispatch_running`` is invoked with ``enforce_max_resume_attempts=True``
+    and the dispatch has already accumulated ``MAX_CONSECUTIVE_RESUME_ATTEMPTS``
+    consecutive RESUMABLE entries in its ``attempt_history``.
+
+    Distinct from the ValueError raised by ``_validate_transition`` so callers
+    can differentiate state-machine violations from cap exhaustion.
+    """
+
+
 def mark_dispatch_running(
     state_path: Path,
     dispatch_name: str,
@@ -362,8 +372,22 @@ def mark_dispatch_running(
     sidecar_path: str | None = None,
     identity_degraded: bool = False,
     issue_url: str = "",
+    enforce_max_resume_attempts: bool = False,
 ) -> None:
-    """Atomically mark a dispatch as running with its dispatch_id and dispatched_pid."""
+    """Atomically mark a dispatch as running with its dispatch_id and dispatched_pid.
+
+    L3 — Resume-count cap on the headless path: when ``enforce_max_resume_attempts``
+    is True, the transition is gated by ``_count_consecutive_resumable_timeouts``
+    over the dispatch's ``attempt_history``. The cap check is computed from the
+    history (preserved across FAILURE→PENDING auto-resets by ``_RETRY_IDENTITY_FIELDS``),
+    so the existing campaign-level cap semantics are extended to the headless
+    path without skipping the cap on a reset-rewriting-the-status path.
+    """
+    from autoskillit.fleet.state_recovery import (  # noqa: PLC0415
+        MAX_CONSECUTIVE_RESUME_ATTEMPTS,
+        _count_consecutive_resumable_timeouts,
+    )
+
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             raise FileNotFoundError(f"State file not found or corrupted: {state_path}")
@@ -372,6 +396,13 @@ def mark_dispatch_running(
                 d.retry_reason = ""
                 d.infra_exit_category = ""
                 _validate_transition(d.status, DispatchStatus.RUNNING, d.name)
+                if enforce_max_resume_attempts:
+                    consecutive_timeouts = _count_consecutive_resumable_timeouts(d.attempt_history)
+                    if consecutive_timeouts >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
+                        raise ResumeCountExceeded(
+                            f"Resume cap ({MAX_CONSECUTIVE_RESUME_ATTEMPTS}) "
+                            f"exhausted for {dispatch_name!r}"
+                        )
                 was_resumable = d.status == DispatchStatus.RESUMABLE
                 d.status = DispatchStatus.RUNNING
                 if was_resumable:

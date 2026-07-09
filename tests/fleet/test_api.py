@@ -8,7 +8,6 @@ from pathlib import Path
 
 import anyio
 import pytest
-import structlog.testing
 
 from autoskillit.fleet import (
     DispatchRecord,
@@ -28,18 +27,21 @@ def _make_dispatches(*names: str) -> list[DispatchRecord]:
     return [DispatchRecord(name=n) for n in names]
 
 
-class TestWritePidExceptionSwallow:
-    def test_nonexistent_state_logs_warning(self, tmp_path: Path) -> None:
-        bogus = tmp_path / "nope" / "state.json"
-        with structlog.testing.capture_logs() as logs:
-            _write_pid(bogus, "d1", "id1", 123, 0)
-        assert any(
-            "_write_pid" in entry.get("event", "")
-            for entry in logs
-            if entry.get("log_level") == "warning"
-        )
+class TestWritePidReturnsErrorOnFailure:
+    """The new fail-closed contract: ``_write_pid`` returns an error string on failure
+    rather than raising. Raising from ``on_spawn`` is unsafe because
+    ``_execute_claude_headless`` catches runner exceptions and returns
+    ``SkillResult.crashed`` — closure-scoped error state surfaces the failure
+    to the outer ``execute_dispatch`` wrapper instead.
+    """
 
-    def test_runtime_error_logs_warning(
+    def test_missing_state_returns_error_string(self, tmp_path: Path) -> None:
+        bogus = tmp_path / "nope" / "state.json"
+        result = _write_pid(bogus, "d1", "id1", 123, 0)
+        assert result is not None
+        assert "_on_spawn transition failed" in result
+
+    def test_mark_dispatch_running_exception_returns_error_string(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         sp = _state_path(tmp_path)
@@ -48,13 +50,10 @@ class TestWritePidExceptionSwallow:
             "autoskillit.fleet.mark_dispatch_running",
             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        with structlog.testing.capture_logs() as logs:
-            _write_pid(sp, "d1", "id1", 123, 0)
-        assert any(
-            "_write_pid" in entry.get("event", "")
-            for entry in logs
-            if entry.get("log_level") == "warning"
-        )
+        result = _write_pid(sp, "d1", "id1", 123, 0)
+        assert result is not None
+        assert "RuntimeError" in result
+        assert "boom" in result
 
 
 class TestWritePidIssueUrlForwarding:
@@ -67,6 +66,94 @@ class TestWritePidIssueUrlForwarding:
         state = read_state(sp)
         assert state is not None
         assert state.dispatches[0].issue_url == "https://github.com/o/r/issues/1"
+
+
+# --- Fail-closed spawn (L2) -----------------------------------------------------
+#
+# Inverts the contract codified by TestWritePidExceptionSwallow above: rather than
+# swallowing exceptions from mark_dispatch_running, the new fail-closed path must
+# (a) kill the spawned child via kill_process_tree, and (b) record the error
+# via closure-scoped error state so the caller can surface a structured
+# envelope. Raising from _on_spawn is unsafe because _execute_claude_headless
+# catches runner exceptions and returns SkillResult.crashed — the propagated
+# exception would never reach the outer execute_dispatch wrapper.
+
+
+class TestOnSpawnFailClosed:
+    def test_on_spawn_kills_child_via_kill_process_tree_when_mark_running_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When mark_dispatch_running raises, kill_process_tree is invoked on the spawned pid
+        and _write_pid returns the error string instead of raising (closure-scoped error state)."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+
+        killed: list[int] = []
+        # kill_process_tree is imported lazily inside _write_pid from
+        # autoskillit.execution — monkeypatch the actual symbol used.
+        monkeypatch.setattr(
+            "autoskillit.execution.kill_process_tree",
+            lambda pid, timeout=2.0: killed.append(pid),
+        )
+        # Force mark_dispatch_running to raise inside _write_pid.
+        monkeypatch.setattr(
+            "autoskillit.fleet.mark_dispatch_running",
+            lambda *a, **kw: (_ for _ in ()).throw(
+                ValueError("invalid transition FAILURE→RUNNING")
+            ),
+        )
+
+        result = _write_pid(sp, "d1", "id1", pid=4242, starttime_ticks=0)
+
+        assert result is not None
+        assert "transition failed" in result
+        assert killed == [4242]
+
+    def test_on_spawn_does_not_swallow_state_machine_exceptions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A ValueError from mark_dispatch_running surfaces as an error string from _write_pid.
+
+        The new fail-closed contract: kill the child AND return an error
+        string the caller can use to surface a structured envelope.
+        """
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        monkeypatch.setattr(
+            "autoskillit.execution.kill_process_tree",
+            lambda pid, timeout=2.0: None,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet.mark_dispatch_running",
+            lambda *a, **kw: (_ for _ in ()).throw(ValueError("boom")),
+        )
+
+        result = _write_pid(sp, "d1", "id1", pid=9999, starttime_ticks=0)
+
+        # The error message preserves the original failure context — the
+        # caller can use this to surface a structured envelope.
+        assert result is not None
+        assert "boom" in result
+
+    def test_on_spawn_propagates_error_for_unrecoverable_transition_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A transition failure surfaces as a returned error string — never silently swallowed."""
+        sp = _state_path(tmp_path)
+        write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
+        monkeypatch.setattr(
+            "autoskillit.execution.kill_process_tree",
+            lambda pid, timeout=2.0: None,
+        )
+        monkeypatch.setattr(
+            "autoskillit.fleet.mark_dispatch_running",
+            lambda *a, **kw: (_ for _ in ()).throw(ValueError("FAILURE → RUNNING illegal")),
+        )
+
+        result = _write_pid(sp, "d1", "id1", pid=7, starttime_ticks=0)
+        assert result is not None
+        # The wrapped message preserves the original failure context.
+        assert "FAILURE" in result and "RUNNING" in result and "illegal" in result
 
 
 class TestExecuteDispatchCancelledErrorLockRelease:

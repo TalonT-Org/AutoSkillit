@@ -961,10 +961,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "filter cascade",
     ),
     "_api.py": (
-        1100,
+        1200,
         "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
         "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
-        "co-located with the execution engine that calls them",
+        "co-located with the execution engine that calls them. Bumped to 1200 by the "
+        "fleet-resume-precondition-chokepoint plan: prepare_resume chokepoint, "
+        "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines",
     ),
     "tools_kitchen.py": (
         1413,

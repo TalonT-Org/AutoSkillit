@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from autoskillit.core import (
     FleetErrorCode,
@@ -31,7 +31,35 @@ MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 if TYPE_CHECKING:
     from autoskillit.fleet.state import CampaignStateMutator
 
+
+class ResumePreflight(NamedTuple):
+    """Result of the ``prepare_resume`` precondition chokepoint.
+
+    Fields:
+        prior_session_chain: Session chain read from the prior record (preserved
+            even when reset_performed is True).
+        prior_dispatched_session_id: Last-session-id for chain fallback lookups.
+        short_circuit: Populated when the prior dispatch is SUCCESS — caller
+            can short-circuit to ``_build_success_short_circuit``.
+        reset_performed: True when the chokepoint auto-reset a blocking status
+            (FAILURE/INTERRUPTED/REFUSED) to PENDING via ``reset_blocking_dispatch``.
+        halt: True when ``continue_on_failure=False`` and the prior status was
+            terminal — caller must refuse the resume.
+        halted_reason: Populated when halt=True; describes why the resume was
+            refused.
+    """
+
+    prior_session_chain: list[str]
+    prior_dispatched_session_id: str
+    short_circuit: DispatchRecord | None
+    reset_performed: bool
+    halt: bool
+    halted_reason: str | None
+
+
 __all__ = [
+    "MAX_CONSECUTIVE_RESUME_ATTEMPTS",
+    "ResumePreflight",
     "classify_stale_dispatch",
     "derive_orchestrator_resume_spec",
     "find_completed_dispatch",
@@ -39,9 +67,11 @@ __all__ = [
     "has_blocking_dispatch",
     "has_completed_dispatch",
     "has_failed_dispatch",
+    "prepare_resume",
     "resolve_stale_running",
     "resume_campaign_from_state",
 ]
+
 
 logger = get_logger(__name__)
 
@@ -78,6 +108,116 @@ def _count_consecutive_resumable_timeouts(history: list[dict[str, Any]]) -> int:
         else:
             break
     return count
+
+
+def prepare_resume(
+    state_path: Path,
+    dispatch_name: str,
+    *,
+    continue_on_failure: bool = True,
+) -> ResumePreflight | None:
+    """Single precondition chokepoint for every resume entry point.
+
+    Returns:
+        - ``None`` if the state file is missing or corrupt (caller treats as
+          a fail-open: fall through to fresh dispatch).
+        - ``ResumePreflight`` with ``short_circuit`` set when the prior dispatch
+          is SUCCESS (caller can return ``_build_success_short_circuit``).
+        - ``ResumePreflight`` with ``reset_performed=True`` when the prior
+          dispatch was in ``{FAILURE, INTERRUPTED, REFUSED}`` and was
+          auto-reset to PENDING via ``reset_blocking_dispatch``.
+        - ``ResumePreflight`` with ``halt=True`` when ``continue_on_failure``
+          is False and the prior dispatch was in a terminal status
+          (campaign-level halt semantic preserved).
+        - ``ResumePreflight`` with ``prior_session_chain`` populated when the
+          dispatch is in ``PENDING`` or ``RESUMABLE`` (caller proceeds with
+          existing resume flow; cap enforcement happens in
+          ``mark_dispatch_running``).
+        - ``ResumePreflight`` with all-empty fields when no dispatch matches
+          ``dispatch_name`` (caller treats as a fresh dispatch under the named
+          slot).
+
+    The cap check (``MAX_CONSECUTIVE_RESUME_ATTEMPTS``) is intentionally NOT
+    performed here — it's owned by ``mark_dispatch_running`` so the same
+    cap semantics apply regardless of the entry point that triggered the
+    transition.
+    """
+    from autoskillit.fleet.state import read_state, reset_blocking_dispatch
+
+    if not state_path.exists():
+        return None
+    state = read_state(state_path)
+    if state is None:
+        return None
+
+    target: DispatchRecord | None = None
+    for d in state.dispatches:
+        if d.name == dispatch_name:
+            target = d
+            break
+    if target is None:
+        # No matching dispatch — caller can treat as fresh.
+        return ResumePreflight(
+            prior_session_chain=[],
+            prior_dispatched_session_id="",
+            short_circuit=None,
+            reset_performed=False,
+            halt=False,
+            halted_reason=None,
+        )
+
+    prior_session_chain = list(target.session_chain)
+    prior_dispatched_session_id = target.dispatched_session_id
+
+    # Case 1: SUCCESS — short-circuit the resume (caller can reuse prior result).
+    if target.status == DispatchStatus.SUCCESS:
+        return ResumePreflight(
+            prior_session_chain=prior_session_chain,
+            prior_dispatched_session_id=prior_dispatched_session_id,
+            short_circuit=target,
+            reset_performed=False,
+            halt=False,
+            halted_reason=None,
+        )
+
+    # Case 2: Resettable terminal status — auto-reset OR halt.
+    # _RETRIABLE_NON_SUCCESS == {FAILURE, INTERRUPTED, REFUSED} matches the
+    # canonical _RESETTABLE_STATUSES set in fleet._reset without forcing a
+    # module-level import (which would re-trigger the cycle through state.py).
+    if target.status in _RETRIABLE_NON_SUCCESS:
+        if not continue_on_failure:
+            return ResumePreflight(
+                prior_session_chain=prior_session_chain,
+                prior_dispatched_session_id=prior_dispatched_session_id,
+                short_circuit=None,
+                reset_performed=False,
+                halt=True,
+                halted_reason=(
+                    f"Campaign halted: prior dispatch {dispatch_name!r} is in "
+                    f"{target.status.value!r} and continue_on_failure is false"
+                ),
+            )
+        # Auto-reset blocking status → PENDING via the canonical helper.
+        reset_blocking_dispatch(state_path, dispatch_name)
+        return ResumePreflight(
+            prior_session_chain=prior_session_chain,
+            prior_dispatched_session_id=prior_dispatched_session_id,
+            short_circuit=None,
+            reset_performed=True,
+            halt=False,
+            halted_reason=None,
+        )
+
+    # Case 3: PENDING / RESUMABLE / SKIPPED / RELEASED — pass through. Cap
+    # enforcement is delegated to mark_dispatch_running (layer L3).
+    return ResumePreflight(
+        prior_session_chain=prior_session_chain,
+        prior_dispatched_session_id=prior_dispatched_session_id,
+        short_circuit=None,
+        reset_performed=False,
+        halt=False,
+        halted_reason=None,
+    )
 
 
 def has_failed_dispatch(state_path: Path) -> bool:
@@ -262,6 +402,10 @@ def resume_campaign_from_state(
          When reset_on_retry=True, reset all FAILURE dispatches to PENDING instead.
       5. Return ResumeDecision with next_dispatch_name and completed block.
 
+    The per-dispatch precondition gate is delegated to ``prepare_resume`` so
+    this function composes a campaign-level ``ResumeDecision`` from one or
+    more ``ResumePreflight`` results.
+
     Returns None if the state file is missing/corrupted. Returns a
     ResumeDecision with next_dispatch_name="" if all dispatches are
     complete or the campaign is halted.
@@ -269,89 +413,127 @@ def resume_campaign_from_state(
     from autoskillit.fleet.state import (  # noqa: PLC0415
         CampaignStateMutator,
         _clear_dispatch_for_retry,
+        read_state,
     )
 
+    # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
+    # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the
+    # mutator) before the composition pass re-reads state, so the compose pass
+    # sees the post-reset status. prepare_resume is NOT used here because its
+    # reset semantics for continue_on_failure=True differ from the campaign-level
+    # requirements (it would reset FAILURE unconditionally on continue_on_failure
+    # =True).
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             return None
-
         for d in m.state.dispatches:
             if d.status == DispatchStatus.RUNNING:
                 resolve_stale_running(d, m, reason="stale_running_on_resume")
-
-        if continue_on_failure and reset_on_retry:
-            for d in m.state.dispatches:
-                if d.status in _ALWAYS_BLOCKING_STATUSES:
+        for d in m.state.dispatches:
+            if d.status in _RETRIABLE_NON_SUCCESS:
+                if not continue_on_failure:
+                    if reset_on_retry:
+                        _clear_dispatch_for_retry(d)
+                        m.mark_dirty()
+                    else:
+                        return ResumeDecision(
+                            next_dispatch_name="",
+                            completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                        )
+                elif reset_on_retry and d.status != DispatchStatus.FAILURE:
+                    # INTERRUPTED / REFUSED reset on reset_on_retry=True.
+                    # FAILURE stays as FAILURE (continue_on_failure=True semantics).
                     _clear_dispatch_for_retry(d)
                     m.mark_dirty()
 
-        for d in m.state.dispatches:
-            if d.status in _RETRIABLE_NON_SUCCESS and not continue_on_failure:
-                if reset_on_retry:
-                    _clear_dispatch_for_retry(d)
-                    m.mark_dirty()
-                else:
-                    return ResumeDecision(
-                        next_dispatch_name="",
-                        completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                    )
+    # Re-open state via read_state for the composition pass; return None on fail-open.
+    state = read_state(state_path)
+    if state is None:
+        return None
 
-        completed_lines: list[str] = []
-        next_name = ""
-        is_resumable = False
-        resumable_dispatched_session_id = ""
-        resumable_dispatch_id = ""
-        resumable_retry_reason = ""
-        resumable_checkpoint: dict[str, Any] = {}
-        for d in m.state.dispatches:
-            if d.status in _VISIBLE_IN_BLOCK_STATUSES:
-                completed_lines.append(f"- {d.name}: {d.status}")
-            elif d.status == DispatchStatus.RESUMABLE and not next_name:
-                timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
-                if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
-                    d.status = DispatchStatus.FAILURE
-                    d.reason = (
-                        d.attempt_history[-1].get("reason", FleetErrorCode.FLEET_L3_TIMEOUT)
-                        if d.attempt_history
-                        else FleetErrorCode.FLEET_L3_TIMEOUT
-                    )
-                    m.mark_dirty()
-                    return ResumeDecision(
-                        next_dispatch_name="",
-                        completed_dispatches_block=FLEET_HALTED_SENTINEL,
-                    )
-                else:
-                    next_name = d.name
-                    is_resumable = True
-                    resumable_dispatched_session_id = d.dispatched_session_id
-                    resumable_dispatch_id = d.dispatch_id
-                    resumable_retry_reason = d.retry_reason
-                    resumable_checkpoint = d.resume_checkpoint
-            elif (
-                d.status
-                not in {
-                    DispatchStatus.INTERRUPTED,
-                    DispatchStatus.REFUSED,
-                    DispatchStatus.RUNNING,
-                    DispatchStatus.RELEASED,
-                    DispatchStatus.FAILURE,
-                    DispatchStatus.RESUMABLE,
-                }
-                and not next_name
-            ):
-                next_name = d.name
+    completed_lines: list[str] = []
+    next_name = ""
+    is_resumable = False
+    resumable_dispatched_session_id = ""
+    resumable_dispatch_id = ""
+    resumable_retry_reason = ""
+    resumable_checkpoint: dict[str, Any] = {}
 
-        completed_block = "\n".join(completed_lines) if completed_lines else ""
-
-        return ResumeDecision(
-            next_dispatch_name=next_name,
-            completed_dispatches_block=completed_block,
-            is_resumable=is_resumable,
-            dispatched_session_id=resumable_dispatched_session_id,
-            dispatch_id=resumable_dispatch_id,
-            retry_reason=resumable_retry_reason,
-            resume_checkpoint=resumable_checkpoint,
+    for d in state.dispatches:
+        # FAILURE / INTERRUPTED / REFUSED not reset by the pass-1 reset pass
+        # are visible in the completed block (asymmetric semantics — see
+        # TestContinueOnFailureDoesNotResetFailureDispatches and
+        # TestRefusedDispatchVisibleInBlock). prepare_resume would reset
+        # FAILURE unconditionally on continue_on_failure=True, so it is NOT
+        # used for these statuses here.
+        if d.status in _RETRIABLE_NON_SUCCESS:
+            completed_lines.append(f"- {d.name}: {d.status}")
+            continue
+        # Delegate the canonical chokepoint for SUCCESS / PENDING / RESUMABLE /
+        # SKIPPED / RELEASED. For SUCCESS it yields a short-circuit; for the
+        # rest it returns a pass-through preflight.
+        preflight = prepare_resume(
+            state_path,
+            d.name,
+            continue_on_failure=continue_on_failure or reset_on_retry,
         )
+        if preflight is None:
+            continue
+        if preflight.short_circuit is not None:
+            # SUCCESS — render lowercase status via StrEnum.__format__.
+            completed_lines.append(f"- {d.name}: {preflight.short_circuit.status}")
+            continue
+        # PASS_THROUGH — PENDING / RESUMABLE / SKIPPED / RELEASED.
+        if d.status in _VISIBLE_IN_BLOCK_STATUSES:
+            # SKIPPED or RELEASED.
+            completed_lines.append(f"- {d.name}: {d.status}")
+            continue
+        if d.status == DispatchStatus.RESUMABLE and not next_name:
+            # Defense-in-depth cap-conversion block (alongside L3 cap in
+            # mark_dispatch_running). Mutates via a fresh CampaignStateMutator
+            # to persist.
+            timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
+            if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
+                with CampaignStateMutator(state_path) as cap_m:
+                    if cap_m.state is not None:
+                        for x in cap_m.state.dispatches:
+                            if x.name == d.name:
+                                x.status = DispatchStatus.FAILURE
+                                x.reason = (
+                                    d.attempt_history[-1].get(
+                                        "reason", FleetErrorCode.FLEET_L3_TIMEOUT
+                                    )
+                                    if d.attempt_history
+                                    else FleetErrorCode.FLEET_L3_TIMEOUT
+                                )
+                                cap_m.mark_dirty()
+                                break
+                return ResumeDecision(
+                    next_dispatch_name="",
+                    completed_dispatches_block=FLEET_HALTED_SENTINEL,
+                )
+            next_name = d.name
+            is_resumable = True
+            resumable_dispatched_session_id = d.dispatched_session_id
+            resumable_dispatch_id = d.dispatch_id
+            resumable_retry_reason = d.retry_reason
+            resumable_checkpoint = d.resume_checkpoint
+            continue
+        if not next_name:
+            # PENDING or any other not-yet-resolved status.
+            next_name = d.name
+
+    completed_block = "\n".join(completed_lines) if completed_lines else ""
+
+    return ResumeDecision(
+        next_dispatch_name=next_name,
+        completed_dispatches_block=completed_block,
+        is_resumable=is_resumable,
+        dispatched_session_id=resumable_dispatched_session_id,
+        dispatch_id=resumable_dispatch_id,
+        retry_reason=resumable_retry_reason,
+        resume_checkpoint=resumable_checkpoint,
+    )
 
 
 def find_dispatch_for_issue(

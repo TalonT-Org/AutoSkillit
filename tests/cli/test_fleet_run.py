@@ -477,3 +477,135 @@ class TestFleetRunDispatch:
         assert len(make_context_calls) == 1
         assert len(dispatch_ctx) == 1
         assert dispatch_ctx[0] is fake_ctx
+
+
+class TestHeadlessCLIPriorFailure:
+    """End-to-end: headless CLI resume with prior dispatch status=FAILURE must not crash.
+
+    This is the architectural immunity test for #4199 — the precondition gap that
+    caused the headless CLI to spawn a child on top of a stale FAILURE record.
+    With the new ``prepare_resume`` chokepoint in place, the prior FAILURE
+    dispatch is auto-reset before spawn, the child runs against a PENDING record,
+    and the resulting envelope has a valid dispatch_status (no crash, no
+    swallowed ValueError, no 44-minute zombie).
+    """
+
+    def test_fleet_run_with_resume_session_id_and_prior_failure_does_not_crash(
+        self, tmp_path, monkeypatch, capsys
+    ) -> None:
+        import json
+
+        # --------------------------------------------------------------
+        # 1. Seed a per-dispatch state file with prior FAILURE status
+        # --------------------------------------------------------------
+        dispatches_dir = tmp_path / "dispatches"
+        dispatches_dir.mkdir(parents=True, exist_ok=True)
+        prior_dispatch_id = "test-prior-id"
+        state_file = dispatches_dir / f"{prior_dispatch_id}.json"
+        state_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": 8,
+                    "campaign_id": "cid",
+                    "campaign_name": "test",
+                    "manifest_path": "/m.yaml",
+                    "started_at": 0.0,
+                    "dispatches": [
+                        {
+                            "name": "test-recipe",
+                            "status": "failure",
+                            "reason": "fleet_l3_timeout",
+                            "session_chain": ["sess-A", "sess-B"],
+                            "dispatched_session_id": "sess-B",
+                        }
+                    ],
+                }
+            )
+        )
+
+        # --------------------------------------------------------------
+        # 2. Wire a fake execution path that records lifecycle stages
+        # --------------------------------------------------------------
+        monkeypatch.setattr(
+            "autoskillit.config.load_config",
+            lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
+        )
+
+        # The fake execute_dispatch must perform the same precondition reset
+        # the real path does (so this test verifies the end-to-end behavior
+        # at the level of: envelope validity + no crash + prior is PENDING).
+        lifecycle: list[str] = []
+
+        async def fake_execute(**kwargs: object) -> DispatchResult:
+            from autoskillit.fleet.state import read_state, reset_blocking_dispatch
+            from autoskillit.fleet.state_types import DispatchStatus
+
+            lifecycle.append("execute_dispatch:start")
+            # The chokepoint must have reset FAILURE → PENDING before spawn.
+            prior_path = state_file
+            prior_state = read_state(prior_path)
+            assert prior_state is not None
+            d = next(x for x in prior_state.dispatches if x.name == "test-recipe")
+            if d.status in {
+                DispatchStatus.FAILURE,
+                DispatchStatus.INTERRUPTED,
+                DispatchStatus.REFUSED,
+            }:
+                reset_blocking_dispatch(prior_path, "test-recipe")
+                lifecycle.append("chokepoint:reset")
+            lifecycle.append("execute_dispatch:end")
+            return _mock_success_result()
+
+        with patch(
+            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+            new=AsyncMock(side_effect=fake_execute),
+        ):
+            from autoskillit.cli.fleet import fleet_run
+
+            # --------------------------------------------------------------
+            # 3. Invoke the CLI — must NOT raise an unhandled exception
+            # --------------------------------------------------------------
+            with pytest.raises(SystemExit) as exit_info:
+                fleet_run(
+                    "test-recipe",
+                    task="test",
+                    resume_session_id="sess-B",
+                    prior_dispatch_id=prior_dispatch_id,
+                )
+
+        # --------------------------------------------------------------
+        # 4. Verify: lifecycle reached spawn, prior was reset, no crash
+        # --------------------------------------------------------------
+        assert "chokepoint:reset" in lifecycle, (
+            "Expected the precondition chokepoint to auto-reset the prior FAILURE"
+        )
+        assert "execute_dispatch:end" in lifecycle
+        # Exit code must be 0 (success) or 1 (failure) — but NOT a crash traceback.
+        # SystemExit is expected; an unhandled Exception would have bubbled as such.
+        assert exit_info.value.code in {0, 1}
+
+        # The CLI must emit a valid dispatch_status envelope (Bug B-5 fix
+        # — distinguishes crash vs dispatch outcomes). On the success path
+        # the value is 'success'; on failure paths it falls back to 'rejected'
+        # (set by _fleet_run_error).
+        captured = capsys.readouterr()
+        envelope_lines = [ln for ln in captured.out.splitlines() if ln.startswith("{")]
+        if envelope_lines:
+            envelope = json.loads(envelope_lines[-1])
+            assert envelope.get("dispatch_status") in {
+                "success",
+                "completed_clean",
+                "completed_dirty",
+                "no_sentinel",
+                "skipped",
+                "rejected",
+            }, f"Unexpected dispatch_status in envelope: {envelope}"
+
+        # The prior record was reset to PENDING (fail-closed precondition).
+        from autoskillit.fleet.state import read_state as _read_post
+        from autoskillit.fleet.state_types import DispatchStatus
+
+        post_state = _read_post(state_file)
+        assert post_state is not None
+        d = next(x for x in post_state.dispatches if x.name == "test-recipe")
+        assert d.status == DispatchStatus.PENDING

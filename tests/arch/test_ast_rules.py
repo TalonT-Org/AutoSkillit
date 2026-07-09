@@ -637,6 +637,10 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
         SRC_ROOT / "execution" / "process" / "_process_kill.py",
         SRC_ROOT / "execution" / "process" / "__init__.py",
         SRC_ROOT / "fleet" / "_dispatch_reaper.py",
+        # _api.py's _write_pid callback (fail-closed layer IL-2) kills the spawned
+        # child via the canonical sync primitive when mark_dispatch_running
+        # raises (see plan rectify_fleet-resume-precondition-chokepoint_*).
+        SRC_ROOT / "fleet" / "_api.py",
     }
     violations: list[str] = []
 

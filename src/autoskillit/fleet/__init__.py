@@ -4,6 +4,7 @@ Gateway exports per REQ-IMP-001 — consumers import from
 ``autoskillit.fleet``, not from sub-modules.
 """
 
+from ._api import DispatchSpawnFailed as DispatchSpawnFailed
 from ._api import _build_capability_overrides as _build_capability_overrides
 from ._api import _write_pid as _write_pid
 from ._api import execute_dispatch
@@ -56,6 +57,7 @@ from .state import (
     DispatchStateHandle,
     DispatchStatus,
     GateRecordResult,
+    ResumeCountExceeded,
     ResumeDecision,
     append_dispatch_record,
     build_protected_campaign_ids,
@@ -76,12 +78,19 @@ from .state import (
     write_initial_state,
 )
 from .state_recovery import (
+    MAX_CONSECUTIVE_RESUME_ATTEMPTS as MAX_CONSECUTIVE_RESUME_ATTEMPTS,
+)
+from .state_recovery import (
+    ResumePreflight as ResumePreflight,
+)
+from .state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
     find_completed_dispatch,
     find_dispatch_for_issue,
     has_blocking_dispatch,
     has_completed_dispatch,
+    prepare_resume,
     resolve_stale_running,
 )
 from .state_types import (
@@ -138,9 +147,11 @@ __all__ = [
     "DispatchRecord",
     "DispatchRejected",
     "DispatchResult",
+    "DispatchSpawnFailed",
     "DispatchStateHandle",
     "DispatchStatus",
     "DispatchOutcome",
+    "ResumeCountExceeded",
     "ResumeDecision",
     "GateRecordResult",
     "append_dispatch_record",
@@ -165,6 +176,9 @@ __all__ = [
     "normalize_dispatch_token_usage",
     "classify_stale_dispatch",
     "FLEET_STATE_SCHEMA_VERSION",
+    "MAX_CONSECUTIVE_RESUME_ATTEMPTS",
+    "prepare_resume",
+    "ResumePreflight",
     "derive_orchestrator_resume_spec",
     "find_dispatch_for_issue",
     "checkpoint_from_sidecar",

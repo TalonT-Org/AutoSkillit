@@ -264,13 +264,20 @@ class TestDispatchFoodTruckRetryOnFailure:
     async def test_dispatch_resets_and_proceeds_when_retrying_failed_dispatch(
         self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
-        """dispatch_name matches failed dispatch → reset to PENDING, proceed."""
+        """dispatch_name matches failed dispatch + continue_on_failure=true → reset, proceed.
+
+        Under the new chokepoint (L1), a FAILURE dispatch with
+        continue_on_failure=true is auto-reset to PENDING via prepare_resume,
+        and the dispatch proceeds. With continue_on_failure=false the
+        chokepoint halts instead (see
+        test_dispatch_refuses_after_failure_when_halt_enabled).
+        """
         state_path = tmp_path / "state.json"
         _write_campaign_state(
             state_path, [{"name": "d1", "status": "failure", "reason": "task_failed"}]
         )
         monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_STATE_PATH", str(state_path))
-        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "false")
+        monkeypatch.setenv("AUTOSKILLIT_CONTINUE_ON_FAILURE", "true")
 
         self._setup_standard_dispatch(tool_ctx_kitchen_open, monkeypatch)
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
@@ -278,7 +285,7 @@ class TestDispatchFoodTruckRetryOnFailure:
         result = json.loads(
             await dispatch_food_truck(recipe="test-recipe", task="t", dispatch_name="d1")
         )
-        assert "dispatch_id" in result, "Expected dispatch to run, not be blocked by fleet halt"
+        assert "dispatch_id" in result, "Expected dispatch to run after reset"
 
     @pytest.mark.anyio
     async def test_dispatch_halts_when_different_dispatch_has_failure(

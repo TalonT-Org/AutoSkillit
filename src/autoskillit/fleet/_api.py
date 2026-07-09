@@ -197,7 +197,9 @@ def _write_pid(
                     pid,
                     exc_info=True,
                 )
-        return f"_on_spawn transition failed: {type(exc).__name__}: {exc}"
+        cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
+        cause_str = f" caused by {type(cause).__name__}: {cause}" if cause is not None else ""
+        return f"_on_spawn transition failed: {type(exc).__name__}: {exc}{cause_str}"
 
 
 def _post_dispatch_cleanup(
@@ -544,10 +546,9 @@ async def _run_dispatch(
                     recipe_snapshot,
                 )
             else:
-                # L1 — Single precondition chokepoint. Funnels every resume
-                # entry point through one function (the bug class becomes
-                # structurally impossible — see plan rectify_fleet-resume-
-                # precondition-chokepoint_2026-07-08_143000.md).
+                # Single precondition chokepoint. Funnels every resume entry
+                # point through one function so the bug class becomes
+                # structurally impossible.
                 preflight = prepare_resume(
                     handle.state_path,
                     effective_name,
@@ -573,7 +574,7 @@ async def _run_dispatch(
                         )
                     prior_session_chain = preflight.prior_session_chain
                     prior_dispatched_session_id = preflight.prior_dispatched_session_id
-        except (OSError, ValueError, KeyError, TypeError):
+        except (KeyError, TypeError):
             logger.warning("failed to read prior session chain from state", exc_info=True)
             handle = DispatchStateHandle.create_fresh(
                 dispatches_dir,
@@ -745,12 +746,8 @@ async def _run_dispatch(
     _dispatched_create_time: list[float] = []
     _dispatched_boot_id: list[str] = []
     _dispatched_session_id: list[str] = []
-    # Closure-scoped spawn error state (layer L2). The executor's on_spawn callback
-    # is invoked inside _execute_claude_headless's runner call, where any
-    # exception is caught and converted to SkillResult.crashed — so raising
-    # from on_spawn would never propagate to the outer execute_dispatch
-    # wrapper. _write_pid records the error here; the caller inspects
-    # _spawn_error after dispatch_food_truck returns.
+    # Closure-scoped spawn error state (layer L2). See _write_pid docstring
+    # for why raising from on_spawn would not propagate.
     _spawn_error: list[str] = []
 
     # Collect prior dispatch_ids from attempt_history for defense-in-depth parsing
@@ -789,12 +786,9 @@ async def _run_dispatch(
         _dispatched_ticks.append(ticks)
         _dispatched_create_time.append(create_time)
         _dispatched_boot_id.append(boot_id)
-        # Derive resume branch from closure-captured preflight. The hoisted
-        # preflight variable is set to a ResumePreflight in the resume branch
-        # (where prepare_resume was called) and remains None on the fresh
-        # dispatch path. This is the structural enforcement of Bug B-3: on the
-        # resume path, mark_dispatch_running's MAX_CONSECUTIVE_RESUME_ATTEMPTS
-        # cap check fires; on the fresh path, the cap is skipped.
+        # Resume branch iff preflight was returned by prepare_resume above.
+        # Cap enforcement (MAX_CONSECUTIVE_RESUME_ATTEMPTS) lives one layer down
+        # in mark_dispatch_running.
         is_resume_branch = preflight is not None
         # _write_pid returns None on success or an error string on failure.
         # We record the error in closure-scoped _spawn_error rather than

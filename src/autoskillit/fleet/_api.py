@@ -574,7 +574,13 @@ async def _run_dispatch(
                         )
                     prior_session_chain = preflight.prior_session_chain
                     prior_dispatched_session_id = preflight.prior_dispatched_session_id
-        except (KeyError, TypeError):
+        except (OSError, KeyError, TypeError):
+            # OSError covers FileNotFoundError from DispatchStateHandle.open_continued
+            # when the prior state file is missing (fail-open to fresh dispatch) and
+            # write failures from reset_blocking_dispatch. ValueError is intentionally
+            # NOT caught so ResumeCountExceeded (a ValueError subclass raised by the
+            # cap check in mark_dispatch_running) propagates instead of being silently
+            # degraded to a create_fresh path.
             logger.warning("failed to read prior session chain from state", exc_info=True)
             handle = DispatchStateHandle.create_fresh(
                 dispatches_dir,

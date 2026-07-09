@@ -112,7 +112,6 @@ async def _execute_claude_headless(
     inspector_eligible: bool = False,
     inspector_model: str = "",
     on_session_id_resolved: Callable[[str], None] | None = None,
-    _is_food_truck: bool = False,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -125,18 +124,27 @@ async def _execute_claude_headless(
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     cfg = ctx.config.run_skill
-    # Resolved liveness owns parent watchdogs and child idle hints.
-    from autoskillit.execution.headless import _headless_liveness as _liveness
-
-    _liveness_spec = _liveness.resolve_session_liveness_spec(
-        ctx.config,
-        is_food_truck=_is_food_truck,
-        caller_idle_output_timeout=idle_output_timeout,
-        caller_session_id=session_id or "",
-        enable_deadline_extension=enable_deadline_extension,
-    )
-    effective_idle: float | None = _liveness_spec.stdout_idle_timeout_sec
-    spec = _liveness.apply_resolved_child_idle_env(spec, _liveness_spec)
+    if idle_output_timeout is not None:
+        _raw_idle = idle_output_timeout
+    else:
+        env_idle = os.environ.get("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT")
+        if env_idle is not None:
+            try:
+                _raw_idle = float(env_idle)
+            except ValueError:
+                logger.warning(
+                    "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT: invalid float — falling back to config",
+                    env_value=env_idle,
+                    fallback=cfg.idle_output_timeout,
+                )
+                _raw_idle = float(cfg.idle_output_timeout)
+        else:
+            _raw_idle = float(cfg.idle_output_timeout)
+    effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
+    if spec.process_idle_timeout_ms > 0:
+        _spec_idle = spec.process_idle_timeout_ms / 1000.0
+        if effective_idle is None or _spec_idle < effective_idle:
+            effective_idle = _spec_idle
 
     current_provider_name: str = provider_name
     fallback_activated: bool = False
@@ -232,48 +240,36 @@ async def _execute_claude_headless(
     _result: SubprocessResult | None = None
     result: SubprocessResult
     skill_result: SkillResult
+    _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
     while True:
-        # Reset per-attempt liveness state. The supervisor must NOT carry
-        # in-flight operation state from attempt 1 into attempt 2 after
-        # provider fallback — backend operation lifecycle is per-attempt.
-        _attempt_stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
-        from autoskillit.execution.process import (
-            ProcessLivenessSupervisor,
-            process_liveness_context,
-        )
-
-        _attempt_supervisor = ProcessLivenessSupervisor(spec=_liveness_spec)
         try:
-            with process_liveness_context(_attempt_supervisor):
-                _result = await runner(
-                    list(spec.cmd),
-                    cwd=Path(cwd),
-                    timeout=timeout,
-                    env=spec.env,
-                    pty_mode=(
-                        pty_override
-                        if pty_override is not None
-                        else _resolve_pty_mode(_step_backend)
-                    ),
-                    session_log_dir=_resolve_session_log_dir(cwd, _step_backend),
-                    completion_marker=completion_marker,
-                    stale_threshold=stale_threshold,
-                    completion_drain_timeout=cfg.completion_drain_timeout,
-                    linux_tracing_config=linux_tracing_cfg,
-                    idle_output_timeout=effective_idle,
-                    max_suppression_seconds=cfg.max_suppression_seconds,
-                    on_pid_resolved=on_spawn,
-                    enable_deadline_extension=enable_deadline_extension,
-                    max_extension_seconds=max_extension_seconds,
-                    marker_dir=marker_dir,
-                    session_id=session_id,
-                    on_session_id_resolved=on_session_id_resolved,
-                    stream_parser=_attempt_stream_parser,
-                    completion_record_types=_step_backend.capabilities.completion_record_types,
-                    session_record_types=_step_backend.capabilities.session_record_types,
-                    inspector_callback=None,
-                    workload_basenames=_step_backend.capabilities.process_name_aliases or None,
-                )
+            _result = await runner(
+                list(spec.cmd),
+                cwd=Path(cwd),
+                timeout=timeout,
+                env=spec.env,
+                pty_mode=(
+                    pty_override if pty_override is not None else _resolve_pty_mode(_step_backend)
+                ),
+                session_log_dir=_resolve_session_log_dir(cwd, _step_backend),
+                completion_marker=completion_marker,
+                stale_threshold=stale_threshold,
+                completion_drain_timeout=cfg.completion_drain_timeout,
+                linux_tracing_config=linux_tracing_cfg,
+                idle_output_timeout=effective_idle,
+                max_suppression_seconds=cfg.max_suppression_seconds,
+                on_pid_resolved=on_spawn,
+                enable_deadline_extension=enable_deadline_extension,
+                max_extension_seconds=max_extension_seconds,
+                marker_dir=marker_dir,
+                session_id=session_id,
+                on_session_id_resolved=on_session_id_resolved,
+                stream_parser=_stream_parser,
+                completion_record_types=_step_backend.capabilities.completion_record_types,
+                session_record_types=_step_backend.capabilities.session_record_types,
+                inspector_callback=None,
+                workload_basenames=_step_backend.capabilities.process_name_aliases or None,
+            )
         except Exception as exc:
             logger.error("headless_runner_crashed", exc_info=True)
             _exc_text = traceback.format_exc()
@@ -478,10 +474,7 @@ async def _execute_claude_headless(
             and is_feature_enabled("providers", ctx.config.features)
         ):
             if not fallback_activated:
-                spec = _liveness.apply_resolved_child_idle_env(
-                    dataclasses.replace(spec, env={**spec.env, **provider_fallback_env}),
-                    _liveness_spec,
-                )
+                spec = dataclasses.replace(spec, env={**spec.env, **provider_fallback_env})
                 if provider_fallback_name:
                     current_provider_name = provider_fallback_name
             fallback_activated = True

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,28 +16,11 @@ from autoskillit.core import (
     CodexEventData,
     CodexEventType,
     CodexItemType,
-    OperationLiveness,
-    OperationStatus,
     SessionEvent,
     fast_loads,
     get_logger,
 )
 from autoskillit.execution.process import _marker_is_standalone
-
-# Item-type enum members whose lifecycle records are eligible for
-# OperationLiveness emission. Membership drives liveness, not result
-# extraction. Membership must include every Codex item type that can produce
-# a legitimately silent stdout period while in-flight (long-running tool calls
-# or subagent delegations).
-_LIVENESS_ITEM_TYPES: frozenset[str] = frozenset(
-    {
-        CodexItemType.MCP_TOOL_CALL.value,
-        CodexItemType.FUNCTION_CALL.value,
-        CodexItemType.COMMAND_EXECUTION.value,
-        CodexItemType.COLLAB_TOOL_CALL.value,
-        CodexItemType.WEB_SEARCH.value,
-    }
-)
 
 logger = get_logger(__name__)
 
@@ -231,80 +213,6 @@ class CodexStreamParser:
         if self.completion_marker and _marker_is_standalone(text, self.completion_marker):
             self._saw_marker = True
 
-    @staticmethod
-    def _extract_item_id(obj: Mapping[str, Any]) -> str:
-        """Return the stable ``item.id`` from a Codex NDJSON record, or ``""``.
-
-        The Codex NDJSON envelope places operation identity on ``item.id``
-        for ``item.started``/``item.updated``/``item.completed`` records.
-        Records without an id are skipped from OperationLiveness emission so
-        the supervisor never carries an invented correlation handle.
-        """
-        if not isinstance(obj, Mapping):
-            return ""
-        item = obj.get("item")
-        if isinstance(item, Mapping):
-            raw_id = item.get("id")
-            if isinstance(raw_id, str) and raw_id:
-                return raw_id
-        return ""
-
-    def _make_operation_liveness(
-        self,
-        obj: Mapping[str, Any],
-        *,
-        status: OperationStatus,
-    ) -> OperationLiveness | None:
-        """Build an ``OperationLiveness`` for long-running in-flight items.
-
-        Returns ``None`` when the record lacks a stable operation id or the
-        item type is not in ``_LIVENESS_ITEM_TYPES``. Callers MUST treat
-        ``None`` as "no liveness signal" — never invent an id to recover a
-        non-emission.
-        """
-        if not isinstance(obj, Mapping):
-            return None
-        op_id = self._extract_item_id(obj)
-        if not op_id:
-            return None
-        item = obj.get("item")
-        item_type: str = ""
-        if isinstance(item, Mapping):
-            raw_type = item.get("type")
-            if isinstance(raw_type, str):
-                item_type = raw_type
-        if item_type not in _LIVENESS_ITEM_TYPES:
-            return None
-        now = time.monotonic()
-        started = now if status == OperationStatus.STARTED else None
-        updated = now if status in (OperationStatus.PROGRESS, OperationStatus.COMPLETED) else None
-        return OperationLiveness(
-            operation_id=op_id,
-            item_type=item_type,
-            status=status,
-            started_monotonic=started,
-            updated_monotonic=updated,
-            raw=obj,
-        )
-
-    @staticmethod
-    def _make_item_event_data(
-        obj: Mapping[str, Any],
-        *,
-        record_type: str,
-    ) -> CodexEventData | None:
-        item = obj.get("item")
-        if not isinstance(item, Mapping):
-            return None
-        raw_type = item.get("type")
-        item_type = raw_type if isinstance(raw_type, str) else ""
-        return CodexEventData(
-            record_type=record_type,
-            thread_id="",
-            item_type=item_type,
-            raw=obj,
-        )
-
     def parse_line(self, line: str) -> SessionEvent | None:
         line = line.strip()
         if not line:
@@ -334,25 +242,11 @@ class CodexStreamParser:
                 session_id=obj.get("payload", {}).get("id", "") or None,
             )
 
-        if event_type == CodexEventType.TURN_STARTED:
+        if event_type in (CodexEventType.TURN_STARTED, CodexEventType.ITEM_STARTED):
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
                 has_marker=False,
-            )
-
-        if event_type == CodexEventType.ITEM_STARTED:
-            # ``item.started`` may also emit OperationLiveness for long-running
-            # item types. We only emit when ``item["id"]`` is a non-empty
-            # stable string — inventing an id would break supervisor
-            # correlation and double-count lifecycle records.
-            op_liveness = self._make_operation_liveness(obj, status=OperationStatus.STARTED)
-            return SessionEvent(
-                kind=BackendEventKind.IGNORED,
-                is_terminal=False,
-                has_marker=False,
-                backend_data=self._make_item_event_data(obj, record_type="item.started"),
-                operation_liveness=op_liveness,
             )
 
         if event_type == CodexEventType.ITEM_COMPLETED:
@@ -403,7 +297,6 @@ class CodexStreamParser:
                 CodexItemType.COLLAB_TOOL_CALL,
                 CodexItemType.WEB_SEARCH,
             ):
-                op_liveness = self._make_operation_liveness(obj, status=OperationStatus.COMPLETED)
                 return SessionEvent(
                     kind=BackendEventKind.TOOL_OUTPUT,
                     is_terminal=False,
@@ -414,7 +307,6 @@ class CodexStreamParser:
                         item_type=item_type.value,
                         raw=obj,
                     ),
-                    operation_liveness=op_liveness,
                 )
 
             if item_type in (CodexItemType.REASONING, CodexItemType.TODO_LIST):
@@ -473,13 +365,10 @@ class CodexStreamParser:
             )
 
         if event_type == CodexEventType.ITEM_UPDATED:
-            op_liveness = self._make_operation_liveness(obj, status=OperationStatus.PROGRESS)
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
                 has_marker=False,
-                backend_data=self._make_item_event_data(obj, record_type="item.updated"),
-                operation_liveness=op_liveness,
             )
 
         self.ndjson_unknown_event_count += 1

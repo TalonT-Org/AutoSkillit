@@ -18,7 +18,6 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.core import fast_loads as _fast_loads
-from autoskillit.execution.process._liveness_supervisor import ProcessLivenessSupervisor
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
     _has_active_child_processes,
@@ -159,7 +158,6 @@ async def _watch_heartbeat(
     trigger: anyio.Event,
     stream_parser: StreamParser | None = None,
     _poll_interval: float = 0.5,
-    liveness_supervisor: ProcessLivenessSupervisor | None = None,
 ) -> None:
     """Poll stdout NDJSON for a result record and deposit the Channel A signal."""
     await _heartbeat(
@@ -168,7 +166,6 @@ async def _watch_heartbeat(
         completion_marker=completion_marker,
         _poll_interval=_poll_interval,
         stream_parser=stream_parser,
-        liveness_supervisor=liveness_supervisor,
     )
     logger.debug(
         "channel_a_confirmed",
@@ -191,7 +188,6 @@ async def _watch_stdout_idle(
     max_suppression_seconds: float = 1800.0,
     inspector_callback: InspectorCallback | None = None,
     timeout_scope_ref: list[anyio.CancelScope | None] | None = None,
-    liveness_supervisor: ProcessLivenessSupervisor | None = None,
 ) -> None:
     """Kill the child if stdout stops growing for idle_output_timeout seconds.
 
@@ -221,23 +217,6 @@ async def _watch_stdout_idle(
             last_growth_time = _time.monotonic()
             suppression_start_marker = None
         elif _time.monotonic() - last_growth_time >= idle_output_timeout:
-            # Supervisor first: an in-flight operation under its deadline
-            # ALWAYS suppresses byte-idle kill, regardless of marker predicate.
-            if liveness_supervisor is not None and liveness_supervisor.in_flight_under_deadline():
-                now = _time.monotonic()
-                if suppression_start_marker is None:
-                    suppression_start_marker = now
-                elapsed = now - suppression_start_marker
-                if elapsed < max_suppression_seconds:
-                    logger.warning(
-                        "stdout_idle_stall_suppressed",
-                        marker_dir=str(marker_dir),
-                        session_id=session_id,
-                        suppression_elapsed=elapsed,
-                        max_suppression_seconds=max_suppression_seconds,
-                        source="operation_in_flight",
-                    )
-                    continue
             if marker_dir is not None and _has_active_execution_marker(
                 marker_dir, session_id=session_id
             ):
@@ -257,7 +236,6 @@ async def _watch_stdout_idle(
                         session_id=session_id,
                         suppression_elapsed=elapsed,
                         max_suppression_seconds=max_suppression_seconds,
-                        source="execution_marker",
                     )
                     continue
             logger.debug(
@@ -330,7 +308,6 @@ async def _watch_child_activity(
     *,
     marker_dir: Path | None = None,
     session_id: str | None = None,
-    liveness_supervisor: ProcessLivenessSupervisor | None = None,
 ) -> None:
     """Extend the wall-clock CancelScope.deadline when child processes are active.
 
@@ -343,8 +320,6 @@ async def _watch_child_activity(
     fail-closed — anyio propagates exceptions in the task group, cancelling
     siblings.
     """
-    import time as _time
-
     _first_observed_deadline: float | None = None
 
     while not trigger.is_set():
@@ -371,14 +346,6 @@ async def _watch_child_activity(
             continue
 
         cap = _first_observed_deadline + max_extension_seconds
-        if liveness_supervisor is not None:
-            op_floor = liveness_supervisor.operation_deadline_floor()
-            if op_floor != float("inf"):
-                monotonic_now = _time.monotonic()
-                anyio_now = anyio.current_time()
-                op_floor_dt = anyio_now + max(0.0, op_floor - monotonic_now)
-                if op_floor_dt < cap:
-                    cap = op_floor_dt
         desired = anyio.current_time() + _poll_interval * 2
         new_deadline = min(desired, cap)
         if new_deadline > scope.deadline:
@@ -476,7 +443,6 @@ async def _watch_session_log(
     max_suppression_seconds: float | None = None,
     marker_dir: Path | None = None,
     session_id: str | None = None,
-    liveness_supervisor: ProcessLivenessSupervisor | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -504,8 +470,6 @@ async def _watch_session_log(
         _monitor_kwargs["marker_dir"] = marker_dir
     if session_id is not None:
         _monitor_kwargs["caller_session_id"] = session_id
-    if liveness_supervisor is not None:
-        _monitor_kwargs["liveness_supervisor"] = liveness_supervisor
     monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,

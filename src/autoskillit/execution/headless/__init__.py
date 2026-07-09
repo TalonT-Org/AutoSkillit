@@ -510,5 +510,4 @@ class DefaultHeadlessExecutor:
             model_identity=model_identity,
             on_session_id_resolved=on_session_id_resolved,
             step_backend=dispatch_backend,
-            _is_food_truck=True,
         )

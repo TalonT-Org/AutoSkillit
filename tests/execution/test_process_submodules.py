@@ -147,20 +147,6 @@ def test_process_facade_reexports_all_public_symbols():
     )
 
 
-def test_process_facade_exposes_liveness_supervisor_context():
-    """Process liveness supervisor types are available from the process facade."""
-    from autoskillit.execution import process
-    from autoskillit.execution.process import ProcessLivenessSupervisor, process_liveness_context
-    from autoskillit.execution.process._liveness_supervisor import (
-        ProcessLivenessSupervisor as ProcessLivenessSupervisorImpl,
-    )
-
-    assert ProcessLivenessSupervisor is ProcessLivenessSupervisorImpl
-    assert process.ProcessLivenessSupervisor is ProcessLivenessSupervisorImpl
-    assert process.process_liveness_context is process_liveness_context
-    assert callable(process_liveness_context)
-
-
 def test_default_subprocess_runner_pty_mode_default_false():
 
     from autoskillit.execution.process import DefaultSubprocessRunner

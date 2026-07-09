@@ -6,7 +6,6 @@ no fallback_env suppresses retry, and empty provider (Anthropic) never falls bac
 
 from __future__ import annotations
 
-import json
 from collections import deque
 
 import pytest
@@ -163,104 +162,6 @@ class TestProviderFallbackLoop:
         assert call_count[0] == 2
         assert result.provider.fallback_activated is True
         assert result.provider.provider_used == "anthropic"
-
-    @pytest.mark.anyio
-    async def test_codex_fallback_resets_stream_parser_and_liveness_supervisor_per_attempt(
-        self,
-        minimal_ctx,
-        tmp_path,
-        monkeypatch,
-    ):
-        import autoskillit.execution.process as process_mod
-        from autoskillit.execution.backends import CodexBackend
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
-        from autoskillit.execution.headless import _execute_claude_headless
-        from autoskillit.execution.process import ProcessLivenessSupervisor
-        from tests.execution.conftest import _sr
-
-        self._patch_common(
-            monkeypatch,
-            tmp_path,
-            _make_queued_build_result(_STALE_RESULT, _SUCCESS_RESULT),
-            ctx=minimal_ctx,
-        )
-        attempt_records: list[dict[str, object]] = []
-        supervisors: list[ProcessLivenessSupervisor] = []
-        original_liveness_context = process_mod.process_liveness_context
-
-        def observed_liveness_context(supervisor: ProcessLivenessSupervisor):
-            supervisors.append(supervisor)
-            return original_liveness_context(supervisor)
-
-        monkeypatch.setattr(process_mod, "process_liveness_context", observed_liveness_context)
-
-        async def fake_runner(cmd, **kwargs):  # noqa: ARG001
-            parser = kwargs["stream_parser"]
-            supervisor = supervisors[-1]
-            assert supervisor is not None
-            record: dict[str, object] = {
-                "supervisor": supervisor,
-                "parser": parser,
-                "operations_before": set(supervisor.operations),
-                "in_flight_before": supervisor.in_flight_operation(),
-            }
-            attempt_records.append(record)
-
-            if len(attempt_records) == 1:
-                for payload in (
-                    {"type": "thread.started", "thread_id": "codex-attempt-1"},
-                    {
-                        "type": "item.started",
-                        "item": {
-                            "id": "mcp-1",
-                            "type": "mcp_tool_call",
-                            "name": "open_kitchen",
-                        },
-                    },
-                    {
-                        "type": "item.updated",
-                        "status": "in_progress",
-                        "item": {
-                            "id": "mcp-1",
-                            "type": "mcp_tool_call",
-                            "name": "open_kitchen",
-                            "status": "in_progress",
-                        },
-                    },
-                ):
-                    event = parser.parse_line(json.dumps(payload))
-                    assert event is not None
-                    supervisor.publish_event(event)
-                record["operations_after"] = set(supervisor.operations)
-                record["in_flight_after"] = supervisor.in_flight_operation()
-
-            return _sr()
-
-        minimal_ctx.runner = fake_runner
-        minimal_ctx.backend = CodexBackend()
-
-        result = await _execute_claude_headless(
-            ClaudeHeadlessCmd(cmd=("codex", "exec", "test"), env={}),
-            str(tmp_path),
-            minimal_ctx,
-            timeout=30.0,
-            stale_threshold=5.0,
-            provider_name="minimax",
-            provider_fallback_env={"ANTHROPIC_API_KEY": "sk-test"},
-            provider_fallback_name="anthropic",
-        )
-
-        assert result.provider.fallback_activated is True
-        assert result.provider.provider_used == "anthropic"
-        assert len(attempt_records) >= 2
-        first, second = attempt_records[0], attempt_records[1]
-        assert first["supervisor"] is not second["supervisor"]
-        assert first["parser"] is not second["parser"]
-        assert first["operations_before"] == set()
-        assert first["operations_after"] == {"mcp-1"}
-        assert first["in_flight_after"] is True
-        assert second["operations_before"] == set()
-        assert second["in_flight_before"] is False
 
     @pytest.mark.anyio
     async def test_no_fallback_env_suppresses_retry(self, minimal_ctx, tmp_path, monkeypatch):

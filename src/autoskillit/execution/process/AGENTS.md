@@ -10,7 +10,6 @@ Subprocess lifecycle management — spawn, monitor, race, kill.
 | `_process_io.py` | `create_temp_io()` context manager for temp file stdin/stdout/stderr |
 | `_process_jsonl.py` | JSONL parsing: `_jsonl_contains_marker`, `_jsonl_has_record_type` |
 | `_process_kill.py` | `kill_process_tree()` (sync) and `async_kill_process_tree()` (async): SIGTERM -> wait -> SIGKILL |
-| `_liveness_supervisor.py` | Shared process-liveness state for stdout idle, session-log stale, and deadline extension watchers |
 | `_process_monitor.py` | Async monitor coroutines: `_heartbeat()` (Channel A), `_session_log_monitor()` (Channel B) |
 | `_process_pty.py` | `pty_wrap_command()` — wraps command with `script(1)` for PTY allocation |
 | `_process_race.py` | `RaceAccumulator`, `RaceSignals`, watcher coroutines, `resolve_termination()` |

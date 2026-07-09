@@ -31,18 +31,6 @@ async def _noop_quota_refresher(config: Any, **kwargs) -> None:
     """Quota refresher stub: no-op."""
 
 
-def _patch_dispatch_quota_no_sleep(monkeypatch: Any) -> None:
-    """Patch dispatch_food_truck's quota dependencies for non-quota tests."""
-    monkeypatch.setattr(
-        "autoskillit.server._misc.check_and_sleep_if_needed",
-        _no_sleep_quota_checker,
-    )
-    monkeypatch.setattr(
-        "autoskillit.server._misc._refresh_quota_cache",
-        _noop_quota_refresher,
-    )
-
-
 def _make_recipe_info(name: str = "test-recipe"):
     return _fleet_make_recipe_info(name, path_prefix="/fake/recipes/")
 

@@ -55,15 +55,6 @@ def test_truncate_text_importable_from_core():
     assert truncate_text("short", 100) == "short"
 
 
-def test_liveness_contract_types_importable_from_core():
-    from autoskillit.core import (  # noqa: F401
-        LivenessSource,
-        OperationLiveness,
-        OperationStatus,
-        SessionLivenessSpec,
-    )
-
-
 # ── Runtime-checkable ──────────────────────────────────────────────────────────
 
 
@@ -445,19 +436,6 @@ class TestGroupDApiContractPreservation:
         assert p["completion_marker"].default == ""
         assert p["stale_threshold"].default == 1200
         assert p["completion_drain_timeout"].default == 5.0
-
-    def test_req_api_001_liveness_supervisor_uses_process_context(self):
-        """Liveness supervisor is installed via the process facade context, not a public kwarg."""
-        from autoskillit.execution.process import (
-            ProcessLivenessSupervisor,
-            process_liveness_context,
-        )
-
-        sig = inspect.signature(run_managed_async)
-        public_params = {k for k in sig.parameters if not k.startswith("_")}
-        assert "liveness_supervisor" not in public_params
-        assert inspect.isclass(ProcessLivenessSupervisor)
-        assert callable(process_liveness_context)
 
     # ------------------------------------------------------------------
     # REQ-API-002: DefaultSubprocessRunner satisfies SubprocessRunner protocol

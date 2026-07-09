@@ -815,7 +815,7 @@ class CodexBackend(BackendCmdBuilderBase):
             env=env,
             cwd=cwd,
             is_resume=bool(resume_session_id),
-            process_idle_timeout_ms=0,
+            process_idle_timeout_ms=stream_idle_timeout_ms,
         )
 
     def build_food_truck_cmd(
@@ -920,7 +920,7 @@ class CodexBackend(BackendCmdBuilderBase):
             env=env,
             cwd=cwd,
             is_resume=bool(resume_session_id),
-            process_idle_timeout_ms=0,
+            process_idle_timeout_ms=stream_idle_timeout_ms,
         )
 
     def build_interactive_cmd(

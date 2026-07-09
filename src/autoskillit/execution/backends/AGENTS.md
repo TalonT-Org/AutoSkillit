@@ -37,17 +37,3 @@ IL-1 backend abstraction layer — concrete `CodingAgentBackend` implementations
 6. **Add a `FeatureDef`** — add an entry to `FEATURE_REGISTRY` in `core/types/_type_constants_features.py` with `default_enabled=False` and `requires_backend_alignment=True`.
 
 7. **Extend test coverage** — add tests to `tests/execution/backends/test_backend_registry.py`, `tests/contracts/test_backend_compliance.py`, and `tests/contracts/test_backend_protocol.py`.
-
-## Backend liveness contract
-
-- Backend stream parsers emit raw observations only. They must not decide whether a
-  process is healthy, stale, or killable.
-- Codex lifecycle records for long-running tool items (`item.started`, `item.updated`,
-  `item.completed`) must preserve the raw backend record and emit `OperationLiveness`
-  when `item.id` is stable and `item.type` is one of the long-running operation types.
-- `item.started` and `item.updated` remain `BackendEventKind.IGNORED`; they are liveness
-  signals, not result evidence, write evidence, or command/MCP completion evidence.
-- Parent stdout-idle behavior is owned by the resolved `SessionLivenessSpec` in
-  `execution/headless/_headless_liveness.py`. Backend builders may set child env hints,
-  but `_execute_claude_headless()` must normalize `AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT`
-  from the resolved spec before invoking the runner.

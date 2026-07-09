@@ -28,12 +28,8 @@ def test_new_coding_agent_backend_names_importable() -> None:
         CmdSpec,
         CodingAgentBackend,
         EnvPolicy,
-        LivenessSource,
-        OperationLiveness,
-        OperationStatus,
         ResultParser,
         SessionEvent,
-        SessionLivenessSpec,
         SessionLocator,
         StreamParser,
     )
@@ -41,23 +37,7 @@ def test_new_coding_agent_backend_names_importable() -> None:
     assert inspect.isclass(CmdSpec)
     assert inspect.isclass(CodingAgentBackend)
     assert inspect.isclass(EnvPolicy)
-    assert inspect.isclass(LivenessSource)
-    assert inspect.isclass(OperationLiveness)
-    assert inspect.isclass(OperationStatus)
     assert inspect.isclass(ResultParser)
     assert inspect.isclass(SessionEvent)
     assert inspect.isclass(SessionLocator)
-    assert inspect.isclass(SessionLivenessSpec)
     assert inspect.isclass(StreamParser)
-
-
-def test_liveness_public_symbols_in_core_all() -> None:
-    import autoskillit.core as core_module
-
-    expected = {
-        "LivenessSource",
-        "OperationLiveness",
-        "OperationStatus",
-        "SessionLivenessSpec",
-    }
-    assert expected <= set(core_module.__all__)

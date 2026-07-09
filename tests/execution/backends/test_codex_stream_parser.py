@@ -11,7 +11,6 @@ from autoskillit.core import (
     CodexEventData,
     CodexEventType,
     CodexItemType,
-    OperationStatus,
     StreamParser,
 )
 from autoskillit.execution.backends._codex_parse import (
@@ -595,8 +594,6 @@ class TestCodexParserItemUpdated:
         assert event.kind == BackendEventKind.IGNORED
         assert event.is_terminal is False
         assert event.has_marker is False
-        assert event.backend_data is None
-        assert event.operation_liveness is None
         assert not any(log["event"] == "codex_ndjson_unknown_event_type" for log in cap)
 
     def test_unknown_event_type_still_warns_after_item_updated_guard(self) -> None:
@@ -608,71 +605,6 @@ class TestCodexParserItemUpdated:
             log["event"] == "codex_ndjson_unknown_event_type" and log["log_level"] == "warning"
             for log in cap
         )
-
-
-class TestCodexStreamParserOperationLiveness:
-    @pytest.mark.parametrize(
-        ("event_type", "expected_kind", "expected_status", "has_started", "has_updated"),
-        [
-            (
-                CodexEventType.ITEM_STARTED.value,
-                BackendEventKind.IGNORED,
-                OperationStatus.STARTED,
-                True,
-                False,
-            ),
-            (
-                CodexEventType.ITEM_UPDATED.value,
-                BackendEventKind.IGNORED,
-                OperationStatus.PROGRESS,
-                False,
-                True,
-            ),
-            (
-                CodexEventType.ITEM_COMPLETED.value,
-                BackendEventKind.TOOL_OUTPUT,
-                OperationStatus.COMPLETED,
-                False,
-                True,
-            ),
-        ],
-    )
-    def test_lifecycle_events_emit_operation_liveness(
-        self,
-        event_type: str,
-        expected_kind: BackendEventKind,
-        expected_status: OperationStatus,
-        *,
-        has_started: bool,
-        has_updated: bool,
-    ) -> None:
-        parser = CodexStreamParser()
-        line = json.dumps(
-            {
-                "type": event_type,
-                "item": {
-                    "id": "call_1",
-                    "type": CodexItemType.MCP_TOOL_CALL.value,
-                    "tool_name": "tool",
-                },
-            }
-        )
-
-        event = parser.parse_line(line)
-
-        assert event is not None
-        assert event.kind == expected_kind
-        assert isinstance(event.backend_data, CodexEventData)
-        assert event.backend_data.record_type == event_type
-        assert event.backend_data.item_type == CodexItemType.MCP_TOOL_CALL.value
-        assert event.backend_data.raw["item"]["id"] == "call_1"
-        assert event.operation_liveness is not None
-        assert event.operation_liveness.operation_id == "call_1"
-        assert event.operation_liveness.item_type == CodexItemType.MCP_TOOL_CALL.value
-        assert event.operation_liveness.status == expected_status
-        assert event.operation_liveness.raw["item"]["tool_name"] == "tool"
-        assert (event.operation_liveness.started_monotonic is not None) is has_started
-        assert (event.operation_liveness.updated_monotonic is not None) is has_updated
 
 
 class TestCodexUnknownCounters:

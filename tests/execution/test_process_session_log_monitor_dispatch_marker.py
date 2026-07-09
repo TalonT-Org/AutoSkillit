@@ -8,13 +8,8 @@ import time
 import anyio
 import pytest
 
-from autoskillit.core import OperationStatus
 from autoskillit.core.types import ChannelBStatus
-from autoskillit.execution.process import ProcessLivenessSupervisor, _session_log_monitor
-from tests.execution._liveness_supervisor_helpers import (
-    build_liveness_spec,
-    build_operation_event,
-)
+from autoskillit.execution.process import _session_log_monitor
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -151,50 +146,6 @@ class TestStaleSuppressionDispatchMarker:
                 caller_session_id="sessionB",
             )
         assert result.status == ChannelBStatus.STALE
-
-    @pytest.mark.anyio
-    async def test_supervisor_suppresses_stale_before_dispatch_marker_check(
-        self, tmp_path, monkeypatch
-    ):
-        session_file = tmp_path / "session.jsonl"
-        session_file.write_text("")
-        spawn_time = time.time() - 10
-
-        supervisor = ProcessLivenessSupervisor(spec=build_liveness_spec())
-        supervisor.publish_event(build_operation_event())
-        checks = {"marker": 0}
-
-        async def complete_operation() -> None:
-            await anyio.sleep(0.12)
-            supervisor.publish_event(build_operation_event(status=OperationStatus.COMPLETED))
-
-        def inactive_marker(marker_dir, session_id=None):
-            checks["marker"] += 1
-            return False
-
-        monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
-            inactive_marker,
-        )
-
-        with anyio.fail_after(2.0):
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(complete_operation)
-                result = await _session_log_monitor(
-                    tmp_path,
-                    "DONE",
-                    stale_threshold=0.05,
-                    spawn_time=spawn_time,
-                    _phase1_poll=0.01,
-                    _phase2_poll=0.05,
-                    marker_dir=tmp_path,
-                    caller_session_id="test-session",
-                    liveness_supervisor=supervisor,
-                )
-                tg.cancel_scope.cancel()
-
-        assert result.status == ChannelBStatus.STALE
-        assert checks["marker"] >= 1
 
 
 class TestDispatchMarkerSuppression:

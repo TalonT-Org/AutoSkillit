@@ -38,7 +38,6 @@ Protocol satisfaction, package gateway, and skill contract compliance tests.
 | `test_fleet_dispatch_bem_gate.py` | Contract: fleet dispatcher prompt contains BEM pre-step gate instructions |
 | `test_generate_report_contracts.py` | Contract tests for generate-report SKILL.md — data provenance lifecycle |
 | `test_github_ops.py` | Contract tests: GitHub operation semantics in SKILL.md files |
-| `test_headless_liveness_contracts.py` | Contracts for resolved headless liveness budgets — config defaults, explicit idle disablement, and operation in-flight source |
 | `test_hook_bridge_coverage.py` | REQ-BRIDGE-001: quota guard hook config bridge must produce exactly the keys that resolve_quota_settings() reads |
 | `test_implement_experiment_contracts.py` | Contract tests for implement-experiment SKILL.md — test infrastructure requirements |
 | `test_validation_error_envelope_coverage.py` | REQ-ENVELOPE-001: validation error envelope must surface all error channels from compute_recipe_validity |

@@ -8,7 +8,6 @@ Subprocess integration, headless session, process lifecycle, and session result 
 |------|---------|
 | `__init__.py` | empty |
 | `_merge_queue_helpers.py` | Merge-queue test helper factories — _make_watcher, _queue_state |
-| `_liveness_supervisor_helpers.py` | Shared liveness supervisor test helpers — build_liveness_spec, build_operation_event, supervisor_with_inflight_operation |
 | `conftest.py` | Shared fixtures and helpers for tests/execution/ |
 | `test_anomaly_detection.py` | Tests for post-hoc anomaly detection over ProcSnapshot data |
 | `test_model_alias_registry.py` | Shared alias registry consistency tests — key parity between anomaly_detection and backend alias maps |

@@ -491,7 +491,7 @@ class TestHeadlessCLIPriorFailure:
     """
 
     def test_fleet_run_with_resume_session_id_and_prior_failure_does_not_crash(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, capsys
     ) -> None:
         import json
 
@@ -583,6 +583,19 @@ class TestHeadlessCLIPriorFailure:
         # Exit code must be 0 (success) or 1 (failure) — but NOT a crash traceback.
         # SystemExit is expected; an unhandled Exception would have bubbled as such.
         assert exit_info.value.code in {0, 1}
+
+        # The success-path CLI must emit a valid dispatch_status envelope
+        # (Bug B-5 fix — distinguishes crash vs dispatch outcomes).
+        captured = capsys.readouterr()
+        envelope_lines = [ln for ln in captured.out.splitlines() if ln.startswith("{")]
+        if envelope_lines:
+            envelope = json.loads(envelope_lines[-1])
+            assert envelope.get("dispatch_status") in {
+                "completed_clean",
+                "completed_dirty",
+                "no_sentinel",
+                "skipped",
+            }, f"Unexpected dispatch_status in envelope: {envelope}"
 
         # The prior record was reset to PENDING (fail-closed precondition).
         from autoskillit.fleet.state import read_state as _read_post

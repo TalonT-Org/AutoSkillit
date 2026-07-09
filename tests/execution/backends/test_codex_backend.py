@@ -623,11 +623,11 @@ class TestCodexBuildSkillSessionCmd:
         assert "CLAUDE_CODE_EXIT_AFTER_STOP_DELAY" not in spec.env
         assert "CLAUDE_STREAM_IDLE_TIMEOUT_MS" not in spec.env
 
-    def test_stream_idle_timeout_routed_to_cmdspec(self) -> None:
+    def test_stream_idle_timeout_keeps_process_idle_uncoupled(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "stream_idle_timeout_ms": 30000}
         )
-        assert spec.process_idle_timeout_ms == 30000
+        assert spec.process_idle_timeout_ms == 0
 
     def test_cwd_set(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
@@ -1080,11 +1080,11 @@ class TestCodexBuildFoodTruckCmd:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "--dangerously-bypass-hook-trust" in spec.cmd
 
-    def test_stream_idle_timeout_routed_to_cmdspec(self) -> None:
+    def test_stream_idle_timeout_keeps_process_idle_uncoupled(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
             **{**self.BASE, "stream_idle_timeout_ms": 60000}
         )
-        assert spec.process_idle_timeout_ms == 60000
+        assert spec.process_idle_timeout_ms == 0
 
 
 class TestCodexEnsurePreLaunchConfigValidation:
@@ -1542,7 +1542,7 @@ class TestCodexDiscardDispositions:
     plugin_source -> logged warning when non-None.
     output_format -> logged warning when != JSON.
     exit_after_stop_delay_ms -> AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env injection via setdefault.
-    stream_idle_timeout_ms -> routed to CmdSpec.process_idle_timeout_ms + env injection.
+    stream_idle_timeout_ms -> child env hint only; parent idle comes from liveness spec.
     """
 
     SKILL_BASE: dict[str, object] = {
@@ -1614,7 +1614,7 @@ class TestCodexDiscardDispositions:
             stream_idle_timeout_ms=3000,
         )
         assert spec.env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "3.0"
-        assert spec.process_idle_timeout_ms == 3000
+        assert spec.process_idle_timeout_ms == 0
 
     def test_stream_idle_injects_idle_timeout_food_truck_builder(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
@@ -1622,21 +1622,21 @@ class TestCodexDiscardDispositions:
             stream_idle_timeout_ms=3000,
         )
         assert spec.env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "3.0"
-        assert spec.process_idle_timeout_ms == 3000
+        assert spec.process_idle_timeout_ms == 0
 
-    def test_stream_idle_routed_to_process_idle_skill_builder(self) -> None:
+    def test_stream_idle_not_routed_to_process_idle_skill_builder(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
             **self.SKILL_BASE,
             stream_idle_timeout_ms=10000,
         )
-        assert spec.process_idle_timeout_ms == 10000
+        assert spec.process_idle_timeout_ms == 0
 
-    def test_stream_idle_routed_to_process_idle_food_truck_builder(self) -> None:
+    def test_stream_idle_not_routed_to_process_idle_food_truck_builder(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
             **self.FOOD_TRUCK_BASE,
             stream_idle_timeout_ms=10000,
         )
-        assert spec.process_idle_timeout_ms == 10000
+        assert spec.process_idle_timeout_ms == 0
 
     def test_zero_ms_no_idle_timeout_skill_builder(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)

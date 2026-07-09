@@ -253,7 +253,7 @@ class CodexStreamParser:
         self,
         obj: Mapping[str, Any],
         *,
-        status: str,
+        status: OperationStatus,
     ) -> OperationLiveness | None:
         """Build an ``OperationLiveness`` for long-running in-flight items.
 

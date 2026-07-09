@@ -342,8 +342,6 @@ async def _session_log_monitor(
             last_size = current_size
             last_change = _time.monotonic()
             suppression_start = None
-            if liveness_supervisor is not None:
-                liveness_supervisor.record_channel_b_growth()
 
             # Check new content for completion marker (structured)
             try:

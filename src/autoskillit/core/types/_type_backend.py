@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
-from ._type_enums import BackendEventKind, LivenessSource, OutputFormat
+from ._type_enums import BackendEventKind, LivenessSource, OperationStatus, OutputFormat
 from ._type_plugin_source import PluginSource
 from ._type_results import ValidatedAddDir
 
@@ -365,7 +365,7 @@ class OperationLiveness:
 
     operation_id: str
     item_type: str
-    status: str
+    status: OperationStatus
     started_monotonic: float | None = None
     updated_monotonic: float | None = None
     raw: Mapping[str, Any] = field(default_factory=dict)

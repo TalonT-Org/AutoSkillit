@@ -220,8 +220,6 @@ async def _watch_stdout_idle(
             last_size = current_size
             last_growth_time = _time.monotonic()
             suppression_start_marker = None
-            if liveness_supervisor is not None:
-                liveness_supervisor.record_stdout_growth()
         elif _time.monotonic() - last_growth_time >= idle_output_timeout:
             # Supervisor first: an in-flight operation under its deadline
             # ALWAYS suppresses byte-idle kill, regardless of marker predicate.
@@ -345,6 +343,8 @@ async def _watch_child_activity(
     fail-closed — anyio propagates exceptions in the task group, cancelling
     siblings.
     """
+    import time as _time
+
     _first_observed_deadline: float | None = None
 
     while not trigger.is_set():
@@ -374,8 +374,9 @@ async def _watch_child_activity(
         if liveness_supervisor is not None:
             op_floor = liveness_supervisor.operation_deadline_floor()
             if op_floor != float("inf"):
-                _deadline_dt = anyio.current_time()
-                op_floor_dt = _deadline_dt + max(0.0, op_floor)
+                monotonic_now = _time.monotonic()
+                anyio_now = anyio.current_time()
+                op_floor_dt = anyio_now + max(0.0, op_floor - monotonic_now)
                 if op_floor_dt < cap:
                     cap = op_floor_dt
         desired = anyio.current_time() + _poll_interval * 2

@@ -47,7 +47,7 @@ class _OperationState:
     item_type: str
     started_monotonic: float
     updated_monotonic: float | None = None
-    last_status: str = OperationStatus.STARTED
+    last_status: OperationStatus = OperationStatus.STARTED
 
 
 @dataclass
@@ -63,8 +63,6 @@ class ProcessLivenessSupervisor:
 
     spec: SessionLivenessSpec
     operations: dict[str, _OperationState] = field(default_factory=dict)
-    last_stdout_growth_monotonic: float = field(default_factory=time.monotonic)
-    last_channel_b_growth_monotonic: float | None = None
 
     def publish_event(self, event: SessionEvent) -> None:
         """Publish a parsed ``SessionEvent`` to the supervisor.
@@ -78,13 +76,7 @@ class ProcessLivenessSupervisor:
         if op_liveness is None:
             return
         status = op_liveness.status
-        if status not in (
-            OperationStatus.STARTED,
-            OperationStatus.PROGRESS,
-            OperationStatus.COMPLETED,
-            OperationStatus.FAILED,
-            OperationStatus.CANCELLED,
-        ):
+        if not isinstance(status, OperationStatus):
             return
         if status in (
             OperationStatus.COMPLETED,
@@ -107,12 +99,6 @@ class ProcessLivenessSupervisor:
         else:
             state.updated_monotonic = op_liveness.updated_monotonic or now
             state.last_status = status
-
-    def record_stdout_growth(self) -> None:
-        self.last_stdout_growth_monotonic = time.monotonic()
-
-    def record_channel_b_growth(self) -> None:
-        self.last_channel_b_growth_monotonic = time.monotonic()
 
     def in_flight_operation(self) -> bool:
         return bool(self.operations)
@@ -183,22 +169,21 @@ class ProcessLivenessSupervisor:
         return True
 
     def operation_deadline_floor(self) -> float:
-        """Earliest wall-clock deadline an in-flight operation permits.
+        """Earliest monotonic deadline an in-flight operation permits.
 
-        Returns the wall-clock cap derived from any in-flight operation
-        that is still under its deadline. Callers use this to clamp
+        Returns the monotonic-time cap derived from any in-flight operation
+        that is still under its deadline. Callers convert this to their
+        native clock domain before using it to clamp
         ``_watch_child_activity``'s deadline extension so it cannot push
         ``scope.deadline`` past an operation's own legitimate ceiling.
         """
         if not self.operations:
             return float("inf")
-        now = time.monotonic()
         deadline = float("inf")
         for state in self.operations.values():
             op_deadline = state.started_monotonic + self.spec.operation_deadline_sec
-            remaining = op_deadline - now
-            if remaining < deadline:
-                deadline = remaining
+            if op_deadline < deadline:
+                deadline = op_deadline
         return deadline
 
     def authorized_sources(self) -> frozenset[LivenessSource]:

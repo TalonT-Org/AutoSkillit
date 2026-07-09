@@ -9,7 +9,7 @@ builder's hint — drives the outer stdout/idle watchdog.
 IL-1 module: imports ``autoskillit.core`` (IL-0) and ``autoskillit.config``
 (IL-1), but config never imports execution. The primitive budget
 computation is also exported as ``compute_legal_silence_window(...)`` for
-config-coherence gates that must not pull in any execution-layer modules.
+config-coherence gates that already import execution/headless policy.
 """
 
 from __future__ import annotations
@@ -45,7 +45,8 @@ class ResolverInputs:
     """Scalar inputs combined into the resolved liveness spec.
 
     All fields are positional / keyword. ``caller_idle_output_timeout``
-    is ``None`` or 0.0 means "explicitly disable the outer idle watchdog".
+    is ``None`` to use the session default, or 0.0 to explicitly disable
+    the outer idle watchdog.
     """
 
     run_skill_idle_output_timeout: float
@@ -81,13 +82,27 @@ def _legal_silence_for_food_truck(inp: ResolverInputs) -> float:
 def compute_legal_silence_window(inp: ResolverInputs) -> float:
     """Return the maximum legal silence window per session kind.
 
-    Exposed as an IL-0-safe primitive (no execution-layer imports) so
-    config-coherence gates can validate resolved specs without dragging
-    in any runtime dependencies.
+    Intended for config-coherence gates that already pull in execution/headless
+    policy; this module is IL-1 and is not safe to import from IL-0 code.
     """
     if inp.is_food_truck:
         return _legal_silence_for_food_truck(inp)
     return _legal_silence_for_skill(inp)
+
+
+def _normalize_caller_idle(
+    value: float | None,
+    default: float,
+) -> tuple[float | None, bool]:
+    """Resolve caller idle override and whether it explicitly disables idle kill."""
+    explicit_idle_disabled = value is not None and value == 0
+    if explicit_idle_disabled:
+        return None, True
+    if value is not None and value > 0:
+        return float(value), False
+    if default > 0.0:
+        return float(default), False
+    return None, False
 
 
 def resolve_session_liveness_spec(
@@ -124,23 +139,15 @@ def resolve_session_liveness_spec(
         caller_session_id=caller_session_id,
         is_food_truck=bool(is_food_truck),
     )
-    explicit_idle_disabled = (
-        caller_idle_output_timeout is not None and caller_idle_output_timeout == 0
-    )
-
     if is_food_truck:
         default_idle = inp.fleet_idle_output_timeout
     else:
         default_idle = inp.run_skill_idle_output_timeout
 
-    if explicit_idle_disabled:
-        stdout_idle_timeout_sec: float | None = None
-    elif caller_idle_output_timeout is not None and caller_idle_output_timeout > 0:
-        stdout_idle_timeout_sec = float(caller_idle_output_timeout)
-    elif default_idle > 0.0:
-        stdout_idle_timeout_sec = float(default_idle)
-    else:
-        stdout_idle_timeout_sec = None
+    stdout_idle_timeout_sec, explicit_idle_disabled = _normalize_caller_idle(
+        caller_idle_output_timeout,
+        default_idle,
+    )
 
     legal_silence = compute_legal_silence_window(inp)
     operation_deadline_sec = legal_silence + DEFAULT_LEGAL_SILENCE_FLOOR_SEC

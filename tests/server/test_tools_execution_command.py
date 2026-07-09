@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -13,7 +14,9 @@ from autoskillit.config import (
     RunSkillConfig,
 )
 from autoskillit.core.claude_conventions import ClaudeDirectoryConventions
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.commands import _inject_completion_directive
+from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
 from tests.server.conftest import _SUCCESS_JSON
@@ -354,3 +357,64 @@ class TestRunSkillMcpTimeout:
         result = json.loads(result_json)
         assert result["success"] is False
         assert result["subtype"] == "crashed"
+
+
+class TestRunSkillCodexIdleTimeout:
+    @pytest.mark.anyio
+    async def test_explicit_zero_idle_timeout_disables_codex_stream_idle_child_hint(
+        self, tool_ctx_kitchen_open
+    ) -> None:
+        class CapturingRunner:
+            def __init__(self) -> None:
+                self.call_args_list: list[tuple[list[str], Path, float, dict[str, object]]] = []
+
+            async def __call__(
+                self,
+                cmd: list[str],
+                *,
+                cwd: Path,
+                timeout: float,
+                **kwargs: object,
+            ) -> object:
+                self.call_args_list.append((cmd, cwd, timeout, kwargs))
+                if cmd and cmd[0] != "codex":
+                    return _make_result(returncode=1)
+                marker = str(kwargs.get("completion_marker", ""))
+                stdout = "\n".join(
+                    [
+                        json.dumps({"type": "thread.started", "thread_id": "thread-1"}),
+                        json.dumps(
+                            {
+                                "type": "item.completed",
+                                "item": {
+                                    "type": "agent_message",
+                                    "text": f"done\n\n{marker}",
+                                },
+                            }
+                        ),
+                        json.dumps({"type": "turn.completed", "usage": {}}),
+                    ]
+                )
+                return _make_result(0, stdout, "")
+
+        cfg = AutomationConfig()
+        cfg.run_skill = RunSkillConfig(
+            stream_idle_timeout_ms=3000,
+            idle_output_timeout=1000,
+        )
+        cfg.safety.require_dry_walkthrough = False
+        tool_ctx_kitchen_open.config = cfg
+        tool_ctx_kitchen_open.backend = CodexBackend()
+        runner = CapturingRunner()
+        tool_ctx_kitchen_open.runner = runner
+        tool_ctx_kitchen_open.executor = DefaultHeadlessExecutor(tool_ctx_kitchen_open)
+
+        await run_skill("/investigate something", "/tmp", idle_output_timeout=0)
+
+        codex_calls = [call for call in runner.call_args_list if call[0] and call[0][0] == "codex"]
+        assert codex_calls
+        _cmd, _cwd, _timeout, kwargs = codex_calls[-1]
+        env = kwargs["env"]
+        assert isinstance(env, dict)
+        assert kwargs["idle_output_timeout"] is None
+        assert "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT" not in env

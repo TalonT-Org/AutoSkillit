@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
-from ._type_enums import BackendEventKind, OutputFormat
+from ._type_enums import BackendEventKind, LivenessSource, OperationStatus, OutputFormat
 from ._type_plugin_source import PluginSource
 from ._type_results import ValidatedAddDir
 
@@ -25,6 +25,8 @@ __all__ = [
     "CmdOrigin",
     "CmdSpec",
     "ModelTranslation",
+    "OperationLiveness",
+    "SessionLivenessSpec",
     "SkillSessionConfig",
     "ClaudeEventData",
     "CodexEventData",
@@ -358,6 +360,46 @@ class CodexEventData:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationLiveness:
+    """Liveness signal for a single in-flight backend operation."""
+
+    operation_id: str
+    item_type: str
+    status: OperationStatus
+    started_monotonic: float | None = None
+    updated_monotonic: float | None = None
+    raw: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class SessionLivenessSpec:
+    """Resolved per-session liveness contract for process watchers."""
+
+    stdout_idle_timeout_sec: float | None
+    stale_threshold_sec: float
+    operation_deadline_sec: float
+    mcp_tool_timeout_sec: float
+    wall_timeout_sec: float
+    explicit_idle_disabled: bool
+    caller_session_id: str
+    authorized_sources: frozenset[LivenessSource] = field(
+        default_factory=lambda: frozenset(
+            {
+                LivenessSource.STDOUT_GROWTH,
+                LivenessSource.CHANNEL_B_GROWTH,
+                LivenessSource.EXECUTION_MARKER,
+                LivenessSource.OPERATION_IN_FLIGHT,
+            }
+        )
+    )
+
+    @property
+    def is_idle_disabled(self) -> bool:
+        """Whether the outer stdout-idle watchdog is disabled."""
+        return self.explicit_idle_disabled or self.stdout_idle_timeout_sec is None
+
+
+@dataclass(frozen=True, slots=True)
 class SessionEvent:
     """A single parsed event emitted by a running backend session."""
 
@@ -367,6 +409,7 @@ class SessionEvent:
     session_id: str | None = None
     exit_code: int | None = None
     backend_data: ClaudeEventData | CodexEventData | None = None
+    operation_liveness: OperationLiveness | None = None
 
 
 @dataclass(frozen=True, slots=True)

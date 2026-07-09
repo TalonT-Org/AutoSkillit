@@ -15,6 +15,8 @@ import functools
 import subprocess
 import time
 from collections.abc import Callable, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
@@ -31,6 +33,7 @@ from autoskillit.core import (
     get_logger,
     read_starttime_ticks,
 )
+from autoskillit.execution.process._liveness_supervisor import ProcessLivenessSupervisor
 from autoskillit.execution.process._process_io import create_temp_io, read_temp_output
 from autoskillit.execution.process._process_jsonl import (
     _jsonl_contains_marker,
@@ -71,6 +74,11 @@ if TYPE_CHECKING:
     from autoskillit.execution.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
+
+_CURRENT_LIVENESS_SUPERVISOR: ContextVar[ProcessLivenessSupervisor | None] = ContextVar(
+    "autoskillit_process_liveness_supervisor",
+    default=None,
+)
 
 # Aggregate __all__ collects all public symbols from the execution sub-modules
 # (_process_io, _process_jsonl, etc.) into a single facade. This keeps the
@@ -233,6 +241,7 @@ async def run_managed_async(
     6. read_temp_output for results
     7. cleanup temp files via context manager
     """
+    liveness_supervisor = _CURRENT_LIVENESS_SUPERVISOR.get()
     # Capture workload basename before PTY wrapping rewrites cmd (#806)
     _workload_basename = Path(cmd[0]).name if cmd else ""
 
@@ -341,6 +350,7 @@ async def run_managed_async(
                         _watch_heartbeat,
                         stream_parser=stream_parser,
                         _poll_interval=_heartbeat_poll,
+                        liveness_supervisor=liveness_supervisor,
                     ),
                     stdout_path,
                     completion_record_types,
@@ -379,6 +389,7 @@ async def run_managed_async(
                         max_suppression_seconds,
                         marker_dir,
                         session_id,
+                        liveness_supervisor,
                     )
                 if idle_output_timeout is not None and idle_output_timeout > 0:
                     tg.start_soon(
@@ -393,6 +404,7 @@ async def run_managed_async(
                             max_suppression_seconds=max_suppression_seconds or 1800.0,
                             inspector_callback=inspector_callback,
                             timeout_scope_ref=timeout_scope_ref,
+                            liveness_supervisor=liveness_supervisor,
                         ),
                     )
                 tracing_handle = None
@@ -414,6 +426,7 @@ async def run_managed_async(
                             trigger,
                             marker_dir=marker_dir,
                             session_id=session_id,
+                            liveness_supervisor=liveness_supervisor,
                         ),
                     )
                 timeout_scope: anyio.CancelScope | None
@@ -662,3 +675,13 @@ class DefaultSubprocessRunner:
             workload_basenames=workload_basenames,
             on_session_id_resolved=on_session_id_resolved,
         )
+
+
+@contextmanager
+def process_liveness_context(supervisor: ProcessLivenessSupervisor | None):
+    """Install a per-attempt liveness supervisor for managed subprocess watchers."""
+    token = _CURRENT_LIVENESS_SUPERVISOR.set(supervisor)
+    try:
+        yield
+    finally:
+        _CURRENT_LIVENESS_SUPERVISOR.reset(token)

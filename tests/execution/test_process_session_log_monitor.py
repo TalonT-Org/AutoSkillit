@@ -14,6 +14,7 @@ from autoskillit.execution.process import (
     _session_log_monitor,
     _watch_session_log,
 )
+from autoskillit.execution.process._liveness_supervisor import ProcessLivenessSupervisor
 from autoskillit.execution.process._process_monitor import SessionMonitorResult
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -29,6 +30,21 @@ PARTIAL_OUTPUT_THEN_HANG_SCRIPT = (
 
 class TestSessionLogMonitor:
     """Session log monitor detects completion and staleness."""
+
+    @staticmethod
+    def _supervisor_with_inflight_operation() -> ProcessLivenessSupervisor:
+        from tests.execution._liveness_supervisor_helpers import (
+            build_liveness_spec,
+            supervisor_with_inflight_operation,
+        )
+
+        return supervisor_with_inflight_operation(
+            spec=build_liveness_spec(
+                mcp_tool_timeout_sec=14364.0,
+                wall_timeout_sec=7200.0,
+                caller_session_id="caller-1",
+            )
+        )
 
     @pytest.mark.anyio
     async def test_session_log_monitor_detects_completion(self, tmp_path):
@@ -111,6 +127,98 @@ class TestSessionLogMonitor:
         assert result.status == ChannelBStatus.STALE
         assert result.session_id == "abc123"
         assert elapsed < 1.0, f"Staleness should fire after ~0.2s, took {elapsed:.1f}s"
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_suppresses_stale_for_inflight_operation(self, tmp_path):
+        """Operation liveness suppresses Channel-B stale until completion arrives."""
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+        marker = "%%AUTOSKILLIT_COMPLETE%%"
+
+        session_file = log_dir / "abc123.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "working"}}) + "\n"
+        )
+
+        async def append_marker_after_stale_window() -> None:
+            await anyio.sleep(0.15)
+            with session_file.open("a") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {"content": f"Done\n\n{marker}"},
+                        }
+                    )
+                    + "\n"
+                )
+
+        monitor_result: list[SessionMonitorResult] = []
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(append_marker_after_stale_window)
+            monitor_result.append(
+                await _session_log_monitor(
+                    log_dir,
+                    marker,
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.02,
+                    liveness_supervisor=self._supervisor_with_inflight_operation(),
+                    max_suppression_seconds=10.0,
+                )
+            )
+
+        assert monitor_result[0].status == ChannelBStatus.COMPLETION
+        assert monitor_result[0].session_id == "abc123"
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_stale_fires_without_supervisor(self, tmp_path):
+        """Paired negative: same scenario without a supervisor yields STALE before marker."""
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+        marker = "%%AUTOSKILLIT_COMPLETE%%"
+
+        session_file = log_dir / "abc123.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "working"}}) + "\n"
+        )
+
+        async def append_marker_after_stale_window() -> None:
+            await anyio.sleep(0.15)
+            with session_file.open("a") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {"content": f"Done\n\n{marker}"},
+                        }
+                    )
+                    + "\n"
+                )
+
+        monitor_result: list[SessionMonitorResult] = []
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(append_marker_after_stale_window)
+            monitor_result.append(
+                await _session_log_monitor(
+                    log_dir,
+                    marker,
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.02,
+                    liveness_supervisor=None,
+                    max_suppression_seconds=10.0,
+                )
+            )
+
+        assert monitor_result[0].status == ChannelBStatus.STALE
+        assert monitor_result[0].session_id == "abc123"
 
     @pytest.mark.anyio
     async def test_staleness_resets_on_activity(self, tmp_path):

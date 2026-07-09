@@ -9,7 +9,11 @@ import pytest
 
 from autoskillit.fleet import FleetSemaphore
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
-from tests.server._helpers import _make_recipe_info, _make_standard_recipe
+from tests.server._helpers import (
+    _make_recipe_info,
+    _make_standard_recipe,
+    _patch_dispatch_quota_no_sleep,
+)
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
@@ -195,6 +199,7 @@ class TestDispatchFoodTruckHaltEnforcement:
 
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
+        _patch_dispatch_quota_no_sleep(monkeypatch)
         tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
@@ -246,6 +251,7 @@ class TestPostDispatchHaltOnFailure:
 
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a standard dispatch."""
+        _patch_dispatch_quota_no_sleep(monkeypatch)
         tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
@@ -329,6 +335,7 @@ class TestDispatchFoodTruckRetryOnFailure:
 
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
+        _patch_dispatch_quota_no_sleep(monkeypatch)
         tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
@@ -436,6 +443,7 @@ class TestDispatchFoodTruckSkipWhen:
 
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
+        _patch_dispatch_quota_no_sleep(monkeypatch)
         tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")

@@ -43,8 +43,11 @@ _CODEX_SHIM_SCRIPT = '''\
 import json
 import os
 import sys
+import time
 
 dispatch_id = os.environ.get("AUTOSKILLIT_DISPATCH_ID", "unknown")
+mode = os.environ.get("CODEX_SHIM_MODE", "success")
+sleep_sec = float(os.environ.get("CODEX_SHIM_SLEEP_SEC", "0"))
 session_id = "test-codex-session-" + dispatch_id[:8]
 
 sentinel_body = json.dumps({"success": True, "reason": ""})
@@ -55,8 +58,45 @@ sentinel_text = (
     f"---end-l3-result::{dispatch_id}---"
 )
 
-events = [
-    {"type": "thread.started", "thread_id": session_id},
+def emit(event):
+    sys.stdout.write(json.dumps(event) + "\\n")
+    sys.stdout.flush()
+
+
+emit({"type": "thread.started", "thread_id": session_id})
+
+if mode == "mcp_silence":
+    emit(
+        {
+            "type": "item.started",
+            "item": {"id": "mcp-1", "type": "mcp_tool_call", "name": "open_kitchen"},
+        }
+    )
+    emit(
+        {
+            "type": "item.updated",
+            "status": "in_progress",
+            "item": {
+                "id": "mcp-1",
+                "type": "mcp_tool_call",
+                "name": "open_kitchen",
+                "status": "in_progress",
+            },
+        }
+    )
+    time.sleep(sleep_sec)
+    emit(
+        {
+            "type": "item.completed",
+            "item": {
+                "id": "mcp-1",
+                "type": "mcp_tool_call",
+                "name": "open_kitchen",
+                "result": "ok",
+            },
+        }
+    )
+for event in [
     {
         "type": "item.completed",
         "item": {"type": "agent_message", "text": sentinel_text},
@@ -65,11 +105,8 @@ events = [
         "type": "turn.completed",
         "usage": {"input_tokens": 100, "output_tokens": 50},
     },
-]
-
-for event in events:
-    sys.stdout.write(json.dumps(event) + "\\n")
-sys.stdout.flush()
+]:
+    emit(event)
 sys.exit(0)
 '''
 
@@ -200,3 +237,36 @@ class TestCodexFleetE2E:
 
         dispatch_id = envelope.get("dispatch_id", "")
         assert dispatch_id, "No dispatch_id in envelope"
+
+    @pytest.mark.anyio
+    async def test_codex_dispatch_survives_in_flight_mcp_silence_at_fleet_level(
+        self,
+        codex_runtime: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ctx = codex_runtime["tool_ctx"]
+        recipes = codex_runtime["recipes"]
+
+        # FleetTestRunner waits with subprocess.communicate(), so this covers the
+        # Codex food-truck flow and NDJSON shape without claiming process-watchdog
+        # coverage; process watchdog tests own idle suppression behavior.
+        monkeypatch.setenv("CODEX_SHIM_MODE", "mcp_silence")
+        monkeypatch.setenv("CODEX_SHIM_SLEEP_SEC", "0.15")
+        monkeypatch.setattr(ctx.config.fleet, "idle_output_timeout", 0.05)
+
+        _add_recipe(recipes, "test-codex-mcp-silence")
+        result = await execute_dispatch(
+            tool_ctx=ctx,
+            recipe="test-codex-mcp-silence",
+            task="Test codex dispatch with in-flight MCP silence",
+            ingredients=None,
+            dispatch_name=None,
+            timeout_sec=None,
+            prompt_builder=_simple_prompt_builder,
+            quota_checker=_no_sleep_quota_checker,
+            quota_refresher=_noop_quota_refresher,
+        )
+        envelope = cast(dict[str, Any], json.loads(result.outcome.to_envelope()))
+
+        assert envelope["success"] is True, f"Dispatch failed: {envelope}"
+        assert "idle_stall" not in json.dumps(envelope).lower()

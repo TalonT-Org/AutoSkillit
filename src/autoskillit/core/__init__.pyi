@@ -287,6 +287,7 @@ from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
 from .types import LensEntry as LensEntry
+from .types import LivenessSource as LivenessSource
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import MarketplaceInstall as MarketplaceInstall
@@ -301,6 +302,8 @@ from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
 from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
+from .types import OperationLiveness as OperationLiveness
+from .types import OperationStatus as OperationStatus
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
@@ -328,6 +331,7 @@ from .types import RetryReason as RetryReason
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
+from .types import SessionLivenessSpec as SessionLivenessSpec
 from .types import SessionLocator as SessionLocator
 from .types import SessionOutcome as SessionOutcome
 from .types import SessionSkillManager as SessionSkillManager

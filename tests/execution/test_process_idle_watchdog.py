@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import json
 import os
 import sys
 import textwrap
@@ -13,6 +14,9 @@ import anyio
 import pytest
 import structlog.testing
 
+from autoskillit.core import SessionLivenessSpec
+from autoskillit.execution.backends._codex_parse import CodexStreamParser
+from autoskillit.execution.process._liveness_supervisor import ProcessLivenessSupervisor
 from autoskillit.execution.process._process_race import (
     CLEANUP_BUDGET_SECONDS,
     RaceAccumulator,
@@ -315,6 +319,70 @@ async def test_watch_stdout_idle_suppressed_by_dispatch_marker(
                         0.05,  # _poll_interval
                         marker_dir=tmp_path,
                         session_id="test-sess",
+                        max_suppression_seconds=10.0,
+                    )
+                )
+                await trigger.wait()
+
+    assert acc.idle_stall is False
+
+
+@pytest.mark.anyio
+async def test_watch_stdout_idle_suppressed_by_codex_in_flight_mcp_call(
+    tmp_path: anyio.Path,
+) -> None:
+    stdout_file = tmp_path / "stdout.txt"
+    await anyio.Path(stdout_file).write_bytes(b"initial output\n")
+
+    parser = CodexStreamParser()
+    event = parser.parse_line(
+        json.dumps(
+            {
+                "type": "item.started",
+                "item": {"id": "call_1", "type": "mcp_tool_call", "tool_name": "tool"},
+            }
+        )
+    )
+    assert event is not None
+    supervisor = ProcessLivenessSupervisor(
+        spec=SessionLivenessSpec(
+            stdout_idle_timeout_sec=0.5,
+            stale_threshold_sec=1200.0,
+            operation_deadline_sec=10.0,
+            mcp_tool_timeout_sec=14364.0,
+            wall_timeout_sec=7200.0,
+            explicit_idle_disabled=False,
+            caller_session_id="caller-1",
+        )
+    )
+    supervisor.publish_event(event)
+
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    with structlog.testing.capture_logs() as cap:
+
+        async def cancel_when_suppressed() -> None:
+            while not any(
+                e.get("event") == "stdout_idle_stall_suppressed"
+                and e.get("source") == "operation_in_flight"
+                for e in cap
+            ):
+                await anyio.sleep(0.05)
+            trigger.set()
+
+        with anyio.fail_after(3.0):
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(cancel_when_suppressed)
+                tg.start_soon(
+                    functools.partial(
+                        _watch_stdout_idle,
+                        stdout_file,
+                        0.5,
+                        acc,
+                        trigger,
+                        0.05,
+                        liveness_supervisor=supervisor,
                         max_suppression_seconds=10.0,
                     )
                 )

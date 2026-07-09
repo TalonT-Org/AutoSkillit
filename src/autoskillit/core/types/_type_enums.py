@@ -37,6 +37,8 @@ __all__ = [
     "BackendEventKind",
     "CodexEventType",
     "CodexItemType",
+    "OperationStatus",
+    "LivenessSource",
     "SynthesisStrategy",
 ]
 
@@ -589,3 +591,34 @@ class SynthesisStrategy(StrEnum):
     ELECTRE_III = "electre_iii"
     DEX = "dex"
     CUSTOM = "custom"
+
+
+class OperationStatus(StrEnum):
+    """Lifecycle states for a backend operation (tool call, MCP call, etc.).
+
+    Emitted by backend stream parsers as first-class liveness signals. Used
+    by ``ProcessLivenessSupervisor`` to suppress byte-idle termination while
+    an in-flight operation is legitimately silent on stdout.
+    """
+
+    STARTED = "started"
+    PROGRESS = "progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class LivenessSource(StrEnum):
+    """Authorized sources that count as legitimate liveness for process supervision.
+
+    Centralizes the liveness taxonomy so that no watcher can invent its own
+    predicate. The supervisor owns the decision; watchers only report their
+    raw observations and consult the supervisor.
+    """
+
+    STDOUT_GROWTH = "stdout_growth"
+    CHANNEL_B_GROWTH = "channel_b_growth"
+    EXECUTION_MARKER = "execution_marker"
+    CHILD_PROCESS_ACTIVITY = "child_process_activity"
+    API_CONNECTION = "api_connection"
+    OPERATION_IN_FLIGHT = "operation_in_flight"

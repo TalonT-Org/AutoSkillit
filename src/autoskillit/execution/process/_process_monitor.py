@@ -11,6 +11,7 @@ import anyio
 import psutil
 
 from autoskillit.core import ChannelBStatus, get_logger
+from autoskillit.execution.process._liveness_supervisor import ProcessLivenessSupervisor
 from autoskillit.execution.process._process_jsonl import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
@@ -38,6 +39,7 @@ async def _heartbeat(
     stream_parser: StreamParser | None = None,
     _poll_interval: float = 0.5,
     _on_poll: Callable[[], None] | None = None,
+    liveness_supervisor: ProcessLivenessSupervisor | None = None,
 ) -> str:
     """Poll session NDJSON output for a result-type record with non-empty content.
 
@@ -49,6 +51,12 @@ async def _heartbeat(
     When *completion_marker* is non-empty, all matching record types additionally
     require the marker as a standalone line in their text content before Channel A
     fires — preventing premature confirmation on partial output.
+
+    Every non-None ``SessionEvent`` produced by the parser is published to
+    ``liveness_supervisor`` BEFORE checking terminal status so supervisor state
+    stays current even on the same tick that triggers completion. This is the
+    single chokepoint that ensures backend operation lifecycle records cannot
+    be silently dropped between parsing and kill decisions.
 
     *_on_poll* is a test-only callback invoked after each sleep iteration. Pass
     ``None`` (the default) in production — zero overhead.
@@ -73,7 +81,11 @@ async def _heartbeat(
         if stream_parser is not None:
             for line in new_content.splitlines():
                 event = stream_parser.parse_line(line)
-                if event is not None and event.is_terminal:
+                if event is None:
+                    continue
+                if liveness_supervisor is not None:
+                    liveness_supervisor.publish_event(event)
+                if event.is_terminal:
                     if not completion_marker or event.has_marker:
                         return "completion"
         elif _jsonl_has_record_type(
@@ -196,6 +208,7 @@ async def _session_log_monitor(
     max_suppression_seconds: float = 1800.0,
     marker_dir: Path | None = None,
     caller_session_id: str | None = None,
+    liveness_supervisor: ProcessLivenessSupervisor | None = None,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -352,7 +365,28 @@ async def _session_log_monitor(
             # Check staleness
             elapsed = _time.monotonic() - last_change
             if elapsed >= stale_threshold:
-                if pid is not None and _has_active_api_connection(pid):
+                if (
+                    liveness_supervisor is not None
+                    and liveness_supervisor.in_flight_under_deadline()
+                ):
+                    if suppression_start is None:
+                        suppression_start = _time.monotonic()
+                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
+                        logger.warning(
+                            "Suppression bounded: stale kill after operation_in_flight "
+                            "suppression exceeded max_suppression_seconds",
+                            suppression_elapsed=_time.monotonic() - suppression_start,
+                            caller_session_id=caller_session_id,
+                        )
+                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
+                    last_change = _time.monotonic()
+                    logger.warning(
+                        "JSONL silent but in-flight operation under deadline — "
+                        "suppressing stale kill",
+                        stale_elapsed=elapsed,
+                        caller_session_id=caller_session_id,
+                    )
+                elif pid is not None and _has_active_api_connection(pid):
                     if suppression_start is None:
                         suppression_start = _time.monotonic()
                     if _time.monotonic() - suppression_start >= max_suppression_seconds:

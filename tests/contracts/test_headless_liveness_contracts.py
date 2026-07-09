@@ -63,9 +63,12 @@ class TestResolvedLivenessBudgetCoherence:
         warning_events = [e for e in cap_logs if e.get("log_level") == "warning"]
         assert warning_events == []
 
-    @pytest.mark.parametrize("is_food_truck", [False, True])
+    @pytest.mark.parametrize(
+        ("is_food_truck", "enable_deadline_extension"),
+        [(False, False), (False, True), (True, False), (True, True)],
+    )
     def test_resolved_operation_deadline_uses_legal_silence_window(
-        self, is_food_truck: bool
+        self, is_food_truck: bool, enable_deadline_extension: bool
     ) -> None:
         cfg = AutomationConfig()
         spec = resolve_session_liveness_spec(
@@ -73,10 +76,14 @@ class TestResolvedLivenessBudgetCoherence:
             is_food_truck=is_food_truck,
             caller_idle_output_timeout=None,
             caller_session_id="caller-default",
-            enable_deadline_extension=cfg.fleet.enable_deadline_extension,
+            enable_deadline_extension=enable_deadline_extension,
         )
         legal_silence = compute_legal_silence_window(
-            _resolver_inputs_from_config(cfg, is_food_truck=is_food_truck)
+            _resolver_inputs_from_config(
+                cfg,
+                is_food_truck=is_food_truck,
+                enable_deadline_extension=enable_deadline_extension,
+            )
         )
 
         assert spec.operation_deadline_sec == (legal_silence + DEFAULT_LEGAL_SILENCE_FLOOR_SEC)

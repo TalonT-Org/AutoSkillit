@@ -6,6 +6,7 @@ import re as _re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
@@ -179,11 +180,13 @@ CLAUDE_MODEL_ALIASES: dict[str, str] = {
     "haiku": "haiku",
 }
 
-CODEX_MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "gpt-5.5",
-    "opus": "gpt-5.5",
-    "haiku": "gpt-5.5",
-}
+CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        "sonnet": "gpt-5.5",
+        "opus": "gpt-5.5",
+        "haiku": "gpt-5.5",
+    }
+)
 
 CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-07-09"
 
@@ -201,14 +204,15 @@ CODEX_EFFORT_MAPPING: dict[str, str] = {
 }
 
 
-def _codex_unique_model_reverse(aliases: Mapping[str, str]) -> dict[str, str]:
+def _codex_unique_model_reverse(aliases: Mapping[str, str]) -> Mapping[str, str]:
+    """Return native-model reverse aliases only for unambiguous model IDs."""
     values = tuple(aliases.values())
     return {model_id: alias for alias, model_id in aliases.items() if values.count(model_id) == 1}
 
 
 # Reverse lookup is valid only for one-to-one native IDs. When multiple local
 # classes share a Codex model, the class is carried by model_reasoning_effort.
-_CODEX_MODEL_REVERSE: dict[str, str] = _codex_unique_model_reverse(CODEX_MODEL_ALIASES)
+_CODEX_MODEL_REVERSE: Mapping[str, str] = _codex_unique_model_reverse(CODEX_MODEL_ALIASES)
 
 
 @dataclass(frozen=True, slots=True)

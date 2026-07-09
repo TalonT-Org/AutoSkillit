@@ -188,24 +188,26 @@ CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-07-09"
 
 CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5"})
 
+assert set(CODEX_MODEL_ALIASES.values()).issubset(CODEX_VALID_MODEL_IDS), (
+    "CODEX_MODEL_ALIASES values must all be members of CODEX_VALID_MODEL_IDS; "
+    f"got {sorted(set(CODEX_MODEL_ALIASES.values()) - CODEX_VALID_MODEL_IDS)}"
+)
+
 CODEX_EFFORT_MAPPING: dict[str, str] = {
     "sonnet": "high",
     "opus": "xhigh",
     "haiku": "medium",
 }
 
+
+def _codex_unique_model_reverse(aliases: Mapping[str, str]) -> dict[str, str]:
+    values = tuple(aliases.values())
+    return {model_id: alias for alias, model_id in aliases.items() if values.count(model_id) == 1}
+
+
 # Reverse lookup is valid only for one-to-one native IDs. When multiple local
 # classes share a Codex model, the class is carried by model_reasoning_effort.
-_CODEX_MODEL_REVERSE: dict[str, str] = {}
-_CODEX_MODEL_DUPLICATES: set[str] = set()
-for _codex_class, _codex_model_id in CODEX_MODEL_ALIASES.items():
-    if _codex_model_id in _CODEX_MODEL_REVERSE:
-        _CODEX_MODEL_DUPLICATES.add(_codex_model_id)
-    else:
-        _CODEX_MODEL_REVERSE[_codex_model_id] = _codex_class
-for _codex_model_id in _CODEX_MODEL_DUPLICATES:
-    _CODEX_MODEL_REVERSE.pop(_codex_model_id, None)
-del _codex_class, _codex_model_id, _CODEX_MODEL_DUPLICATES
+_CODEX_MODEL_REVERSE: dict[str, str] = _codex_unique_model_reverse(CODEX_MODEL_ALIASES)
 
 
 @dataclass(frozen=True, slots=True)

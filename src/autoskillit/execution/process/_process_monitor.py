@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import anyio
 import psutil
@@ -38,6 +38,7 @@ async def _heartbeat(
     stream_parser: StreamParser | None = None,
     _poll_interval: float = 0.5,
     _on_poll: Callable[[], None] | None = None,
+    operation_ledger: Any = None,
 ) -> str:
     """Poll session NDJSON output for a result-type record with non-empty content.
 
@@ -49,6 +50,12 @@ async def _heartbeat(
     When *completion_marker* is non-empty, all matching record types additionally
     require the marker as a standalone line in their text content before Channel A
     fires — preventing premature confirmation on partial output.
+
+    When *operation_ledger* is provided, parsed events that carry
+    ``operation_id`` / ``operation_kind`` / ``operation_transition`` hints are
+    routed to it so the idle watcher can consult the ledger before firing
+    IDLE_STALL. The ledger is the sole writer of its own state; this function
+    is a pass-through pump.
 
     *_on_poll* is a test-only callback invoked after each sleep iteration. Pass
     ``None`` (the default) in production — zero overhead.
@@ -73,7 +80,27 @@ async def _heartbeat(
         if stream_parser is not None:
             for line in new_content.splitlines():
                 event = stream_parser.parse_line(line)
-                if event is not None and event.is_terminal:
+                if event is None:
+                    continue
+                if (
+                    operation_ledger is not None
+                    and event.operation_id
+                    and event.operation_kind
+                    and event.operation_transition
+                ):
+                    from autoskillit.execution.process._process_liveness import (
+                        operation_observation_from_codex,
+                    )
+
+                    operation_ledger.apply(
+                        operation_observation_from_codex(
+                            operation_id=event.operation_id,
+                            kind=event.operation_kind,
+                            transition=event.operation_transition,
+                            raw={},
+                        )
+                    )
+                if event.is_terminal:
                     if not completion_marker or event.has_marker:
                         return "completion"
         elif _jsonl_has_record_type(

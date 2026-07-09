@@ -333,6 +333,12 @@ async def run_managed_async(
             channel_b_ready = anyio.Event()
             stdout_session_id_ready = anyio.Event()
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
+            # Slice C: per-attempt typed-operation ledger. The event pump
+            # (heartbeat) writes; the idle watcher consults via
+            # has_active_under_deadline. Cleared on session terminal.
+            from autoskillit.execution.process._process_liveness import OperationLedger
+
+            operation_ledger = OperationLedger()
 
             async with anyio.create_task_group() as tg:
                 tg.start_soon(_watch_process, proc, acc, trigger)
@@ -341,6 +347,7 @@ async def run_managed_async(
                         _watch_heartbeat,
                         stream_parser=stream_parser,
                         _poll_interval=_heartbeat_poll,
+                        operation_ledger=operation_ledger,
                     ),
                     stdout_path,
                     completion_record_types,
@@ -393,6 +400,7 @@ async def run_managed_async(
                             max_suppression_seconds=max_suppression_seconds or 1800.0,
                             inspector_callback=inspector_callback,
                             timeout_scope_ref=timeout_scope_ref,
+                            operation_ledger=operation_ledger,
                         ),
                     )
                 tracing_handle = None

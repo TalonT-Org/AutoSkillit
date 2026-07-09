@@ -80,6 +80,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_identity.py` | Tests for starttime_ticks=0 identity degradation warning in run_managed_async |
 | `test_process_idle_watchdog.py` | Tests for the stdout idle watchdog coroutine (_watch_stdout_idle) |
 | `test_process_jsonl.py` | Tests for JSONL marker detection utilities |
+| `test_process_liveness.py` | Tests for OperationLedger, LivenessCoordinator, AttemptRuntime — typed-operation FSM and snapshot invariants (rectify_codex_l2_attempt_liveness plan, Slices C/D) |
 | `test_process_kill.py` | Integration tests for process tree kill and async cancellation |
 | `test_process_pty.py` | Tests for PTY wrapping and pipeline adjudication boundary tests |
 | `test_process_race.py` | Unit tests for _process_race.py: resolve_termination and ChannelBStatus |

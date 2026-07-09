@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING, Any, assert_never
 
 import anyio
 import anyio.abc
@@ -158,6 +158,7 @@ async def _watch_heartbeat(
     trigger: anyio.Event,
     stream_parser: StreamParser | None = None,
     _poll_interval: float = 0.5,
+    operation_ledger: Any = None,
 ) -> None:
     """Poll stdout NDJSON for a result record and deposit the Channel A signal."""
     await _heartbeat(
@@ -166,6 +167,7 @@ async def _watch_heartbeat(
         completion_marker=completion_marker,
         _poll_interval=_poll_interval,
         stream_parser=stream_parser,
+        operation_ledger=operation_ledger,
     )
     logger.debug(
         "channel_a_confirmed",
@@ -188,6 +190,7 @@ async def _watch_stdout_idle(
     max_suppression_seconds: float = 1800.0,
     inspector_callback: InspectorCallback | None = None,
     timeout_scope_ref: list[anyio.CancelScope | None] | None = None,
+    operation_ledger: Any = None,
 ) -> None:
     """Kill the child if stdout stops growing for idle_output_timeout seconds.
 
@@ -198,6 +201,13 @@ async def _watch_stdout_idle(
     idle stall is suppressed for up to ``max_suppression_seconds`` to allow
     in-flight dispatches to complete. Growth in stdout resets the suppression
     timer, giving a fresh window for subsequent idle periods.
+
+    When ``operation_ledger`` is provided, the watcher consults the ledger
+    on every poll: a ledger with at least one in-flight typed operation
+    (under its operation hard cap) suppresses IDLE_STALL with no time bound
+    beyond the operation's own deadline. The plan's source-specific rules
+    (typed operation -> suppress) win over both stdout byte silence and
+    marker-based fallback suppression.
     """
     import time as _time
 
@@ -217,6 +227,17 @@ async def _watch_stdout_idle(
             last_growth_time = _time.monotonic()
             suppression_start_marker = None
         elif _time.monotonic() - last_growth_time >= idle_output_timeout:
+            if operation_ledger is not None:
+                try:
+                    if operation_ledger.has_active_under_deadline(_time.monotonic()):
+                        last_growth_time = _time.monotonic()
+                        logger.debug(
+                            "stdout_idle_stall_suppressed_by_typed_operation",
+                            session_id=session_id,
+                        )
+                        continue
+                except Exception:
+                    logger.debug("ledger_consult_failed", exc_info=True)
             if marker_dir is not None and _has_active_execution_marker(
                 marker_dir, session_id=session_id
             ):

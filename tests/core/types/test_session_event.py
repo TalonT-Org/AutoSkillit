@@ -25,6 +25,9 @@ def test_required_fields_present() -> None:
         "session_id",
         "exit_code",
         "backend_data",
+        "operation_id",
+        "operation_kind",
+        "operation_transition",
     }
 
 

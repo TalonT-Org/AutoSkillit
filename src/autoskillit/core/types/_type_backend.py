@@ -390,6 +390,15 @@ class SessionEvent:
     session_id: str | None = None
     exit_code: int | None = None
     backend_data: ClaudeEventData | CodexEventData | None = None
+    # Operation-lifecycle hint for the event pump (Slice C).
+    # ``operation_id`` is the stable ID from the backend's item.started
+    # record; ``operation_kind`` names the operation class (e.g. mcp_tool_call,
+    # command_execution, collab_tool_call, web_search); ``operation_transition``
+    # is "started" | "updated" | "completed" | "failed" | "declined". The
+    # event pump is the sole consumer — it routes these to the OperationLedger.
+    operation_id: str | None = None
+    operation_kind: str | None = None
+    operation_transition: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

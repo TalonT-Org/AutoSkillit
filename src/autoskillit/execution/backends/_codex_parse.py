@@ -25,6 +25,17 @@ from autoskillit.execution.process import _marker_is_standalone
 logger = get_logger(__name__)
 
 
+def _terminal_transition(inner_status: str) -> str:
+    """Map a Codex inner-status string to an OperationObservation transition."""
+    if inner_status in ("completed", "ok", "success"):
+        return "completed"
+    if inner_status in ("failed", "error"):
+        return "failed"
+    if inner_status in ("declined",):
+        return "declined"
+    return "terminal"
+
+
 @dataclass
 class _CodexParseAccumulator:
     session_id: str = ""
@@ -242,11 +253,25 @@ class CodexStreamParser:
                 session_id=obj.get("payload", {}).get("id", "") or None,
             )
 
-        if event_type in (CodexEventType.TURN_STARTED, CodexEventType.ITEM_STARTED):
+        if event_type in (CodexEventType.TURN_STARTED,):
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
                 has_marker=False,
+            )
+
+        if event_type == CodexEventType.ITEM_STARTED:
+            item = obj.get("item", {})
+            item_dict = item if isinstance(item, dict) else {}
+            op_id = item_dict.get("id") or ""
+            op_kind = item_dict.get("type") or ""
+            return SessionEvent(
+                kind=BackendEventKind.IGNORED,
+                is_terminal=False,
+                has_marker=False,
+                operation_id=op_id or None,
+                operation_kind=op_kind or None,
+                operation_transition="started" if op_id else None,
             )
 
         if event_type == CodexEventType.ITEM_COMPLETED:
@@ -297,6 +322,8 @@ class CodexStreamParser:
                 CodexItemType.COLLAB_TOOL_CALL,
                 CodexItemType.WEB_SEARCH,
             ):
+                op_id = item.get("id") or ""
+                inner_status = item.get("status") or ""
                 return SessionEvent(
                     kind=BackendEventKind.TOOL_OUTPUT,
                     is_terminal=False,
@@ -307,6 +334,9 @@ class CodexStreamParser:
                         item_type=item_type.value,
                         raw=obj,
                     ),
+                    operation_id=op_id or None,
+                    operation_kind=item_type.value,
+                    operation_transition=(_terminal_transition(inner_status) if op_id else None),
                 )
 
             if item_type in (CodexItemType.REASONING, CodexItemType.TODO_LIST):
@@ -365,10 +395,16 @@ class CodexStreamParser:
             )
 
         if event_type == CodexEventType.ITEM_UPDATED:
+            item = obj.get("item", {})
+            item_dict = item if isinstance(item, dict) else {}
+            op_id = item_dict.get("id") or ""
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
                 has_marker=False,
+                operation_id=op_id or None,
+                operation_kind=item_dict.get("type") or None,
+                operation_transition="updated" if op_id else None,
             )
 
         self.ndjson_unknown_event_count += 1

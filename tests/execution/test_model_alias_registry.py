@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.4", "gpt-5.4-mini", "gpt-5.5"})
+VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5"})
 
 VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"sonnet", "opus", "haiku"})
 
@@ -54,3 +54,11 @@ def test_codex_alias_values_differ_from_keys() -> None:
             f"CODEX_MODEL_ALIASES[{key!r}] == {value!r}: identity mapping passes raw Anthropic "
             "alias to Codex CLI. Codex requires real OpenAI model IDs."
         )
+
+
+def test_codex_alias_values_do_not_route_to_forbidden_models() -> None:
+    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
+
+    forbidden = {"gpt-5.4", "gpt-5.4-mini"}
+    offenders = {key: value for key, value in CODEX_MODEL_ALIASES.items() if value in forbidden}
+    assert offenders == {}, f"Codex aliases must not route to forbidden models: {offenders}"

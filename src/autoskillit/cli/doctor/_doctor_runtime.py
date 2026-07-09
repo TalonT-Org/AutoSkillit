@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 CODEX_MIN_VERSION: tuple[int, ...] = (0, 130, 0)
 
-VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.4", "gpt-5.4-mini", "gpt-5.5"})
+VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5"})
 
 _CODEX_ALIAS_STALENESS_DAYS: int = 90
 

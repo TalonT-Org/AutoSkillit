@@ -178,12 +178,12 @@ CLAUDE_MODEL_ALIASES: dict[str, str] = {
 }
 
 CODEX_MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "gpt-5.4",
+    "sonnet": "gpt-5.5",
     "opus": "gpt-5.5",
-    "haiku": "gpt-5.4-mini",
+    "haiku": "gpt-5.5",
 }
 
-CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-06-11"
+CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-07-09"
 
 CODEX_EFFORT_MAPPING: dict[str, str] = {
     "sonnet": "high",
@@ -191,13 +191,13 @@ CODEX_EFFORT_MAPPING: dict[str, str] = {
     "haiku": "medium",
 }
 
-_CODEX_MODEL_REVERSE: dict[str, str] = {v: k for k, v in CODEX_MODEL_ALIASES.items()}
-_codex_alias_values = list(CODEX_MODEL_ALIASES.values())
-assert len(_CODEX_MODEL_REVERSE) == len(CODEX_MODEL_ALIASES), (
-    "CODEX_MODEL_ALIASES values must be unique — duplicate makes an alias unreachable "
-    f"via model_class(). Duplicates: "
-    f"{[v for v in _codex_alias_values if _codex_alias_values.count(v) > 1]}"
-)
+_CODEX_MODEL_REVERSE: dict[str, str] = {}
+for _codex_class in ("haiku", "sonnet", "opus"):
+    if _codex_model_id := CODEX_MODEL_ALIASES.get(_codex_class):
+        # Multiple local classes may share the same Codex model ID when the
+        # distinction is carried by model_reasoning_effort.
+        _CODEX_MODEL_REVERSE[_codex_model_id] = _codex_class
+del _codex_class, _codex_model_id
 
 
 @dataclass(frozen=True, slots=True)

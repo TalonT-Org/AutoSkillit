@@ -96,6 +96,14 @@ tool **before** beginning any analysis. Use the returned `content` field as the 
 - Check for similar existing patterns in codebase
 - Ensure approaches, solutions, and fixes are the appropriate long-term solutions with proper architecture
 
+## Context Limit Behavior
+
+If context pressure interrupts the investigation before the final report token is emitted,
+resume from the partial notes and continue toward the same mandatory report. A successful
+invocation must still write exactly one markdown report under `{{AUTOSKILLIT_TEMP}}/investigate/`
+and emit `investigation_path = {absolute_path_to_investigation_report_file}` as the final
+plain-text line. Do not emit the token until the report exists.
+
 ## Standard Mode Workflow (Steps 1–4)
 
 **Path-existence guard:** Before issuing a `Read` call on a path that is not guaranteed to
@@ -375,7 +383,7 @@ Spawn one adversarial subagent via `Agent(model="sonnet")` whose role is to disc
 
 **If counterevidence is found:** Return to D3 for one additional deepening batch focused on reconciling the contradiction.
 
-**If no counterevidence is found:** The hypothesis stands. Proceed to D5.
+**When the challenge finds no counterevidence:** The hypothesis stands. Proceed to D5.
 
 ### Step D5: Solution Convergence
 

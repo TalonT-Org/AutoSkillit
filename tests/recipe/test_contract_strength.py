@@ -23,6 +23,7 @@ _KNOWN_UNGAPPED_WRITE_ALWAYS = frozenset(
         "dry-walkthrough",
         "file-audit-issues",
         "generate-report",
+        "investigate",
         "make-campaign",
         "make-groups",
         "phoropter-null-synthesis",

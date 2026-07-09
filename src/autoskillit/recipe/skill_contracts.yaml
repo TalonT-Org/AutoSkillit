@@ -244,10 +244,10 @@ skills:
     - name: investigation_path
       type: file_path
     expected_output_patterns:
-    - "investigation_path[ \\t]*=[ \\t]*/.+"
+    - "investigation_path[ \\t]*=[ \\t]*/.+/investigate/.+\\.md"
     pattern_examples:
-    - "investigation_path = /tmp/investigation.md\n%%ORDER_UP%%"
-    read_only: true
+    - "investigation_path = /tmp/project/run/investigate/investigation_bug_2026-07-08.md\n%%ORDER_UP%%"
+    write_behavior: always
   make-groups:
     inputs:
     - name: source_doc

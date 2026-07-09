@@ -200,12 +200,14 @@ class TestModelClass:
         assert model_class("sonnet[1m]") == "sonnet"
         assert model_class("haiku[1m]") == "haiku"
 
-    def test_codex_reverse_map_prefers_highest_class_for_shared_model_id(self) -> None:
+    def test_codex_shared_model_id_stays_native_when_class_is_ambiguous(self) -> None:
         from autoskillit.core import model_class
 
-        assert model_class(CODEX_MODEL_ALIASES["opus"]) == "opus"
-        assert model_class(CODEX_MODEL_ALIASES["sonnet"]) == "opus"
-        assert model_class(CODEX_MODEL_ALIASES["haiku"]) == "opus"
+        shared_model_id = CODEX_MODEL_ALIASES["opus"]
+        assert {CODEX_MODEL_ALIASES[key] for key in ("sonnet", "opus", "haiku")} == {
+            shared_model_id
+        }
+        assert model_class(shared_model_id) == shared_model_id
 
     def test_unknown_passthrough(self) -> None:
         from autoskillit.core import model_class

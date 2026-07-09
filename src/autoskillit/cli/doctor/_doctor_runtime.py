@@ -14,6 +14,7 @@ import regex as re
 from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_MODEL_ALIASES_LAST_VERIFIED,
+    CODEX_VALID_MODEL_IDS,
     CodingAgentBackend,
     Severity,
     atomic_write,
@@ -27,8 +28,6 @@ from ._doctor_types import DoctorResult
 logger = get_logger(__name__)
 
 CODEX_MIN_VERSION: tuple[int, ...] = (0, 130, 0)
-
-VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5"})
 
 _CODEX_ALIAS_STALENESS_DAYS: int = 90
 
@@ -390,14 +389,14 @@ def _check_codex_model_alias_staleness() -> DoctorResult:
             f" (threshold {_CODEX_ALIAS_STALENESS_DAYS}d);"
             f" re-verify alias targets and update CODEX_MODEL_ALIASES_LAST_VERIFIED",
         )
-    invalid = {k: v for k, v in CODEX_MODEL_ALIASES.items() if v not in VALID_CODEX_MODEL_IDS}
+    invalid = {k: v for k, v in CODEX_MODEL_ALIASES.items() if v not in CODEX_VALID_MODEL_IDS}
     if invalid:
         pairs = ", ".join(f"{k}={v!r}" for k, v in invalid.items())
         return DoctorResult(
             Severity.WARNING,
             check_name,
             f"CODEX_MODEL_ALIASES contains unrecognized model IDs: {pairs};"
-            f" update VALID_CODEX_MODEL_IDS or fix the alias",
+            f" update CODEX_VALID_MODEL_IDS or fix the alias",
         )
     return DoctorResult(
         Severity.OK,

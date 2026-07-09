@@ -22,6 +22,7 @@ __all__ = [
     "CODEX_EFFORT_MAPPING",
     "CODEX_MODEL_ALIASES",
     "CODEX_MODEL_ALIASES_LAST_VERIFIED",
+    "CODEX_VALID_MODEL_IDS",
     "CmdOrigin",
     "CmdSpec",
     "ModelTranslation",
@@ -185,19 +186,26 @@ CODEX_MODEL_ALIASES: dict[str, str] = {
 
 CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-07-09"
 
+CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5"})
+
 CODEX_EFFORT_MAPPING: dict[str, str] = {
     "sonnet": "high",
     "opus": "xhigh",
     "haiku": "medium",
 }
 
+# Reverse lookup is valid only for one-to-one native IDs. When multiple local
+# classes share a Codex model, the class is carried by model_reasoning_effort.
 _CODEX_MODEL_REVERSE: dict[str, str] = {}
-for _codex_class in ("haiku", "sonnet", "opus"):
-    if _codex_model_id := CODEX_MODEL_ALIASES.get(_codex_class):
-        # Multiple local classes may share the same Codex model ID when the
-        # distinction is carried by model_reasoning_effort.
+_CODEX_MODEL_DUPLICATES: set[str] = set()
+for _codex_class, _codex_model_id in CODEX_MODEL_ALIASES.items():
+    if _codex_model_id in _CODEX_MODEL_REVERSE:
+        _CODEX_MODEL_DUPLICATES.add(_codex_model_id)
+    else:
         _CODEX_MODEL_REVERSE[_codex_model_id] = _codex_class
-del _codex_class, _codex_model_id
+for _codex_model_id in _CODEX_MODEL_DUPLICATES:
+    _CODEX_MODEL_REVERSE.pop(_codex_model_id, None)
+del _codex_class, _codex_model_id, _CODEX_MODEL_DUPLICATES
 
 
 @dataclass(frozen=True, slots=True)

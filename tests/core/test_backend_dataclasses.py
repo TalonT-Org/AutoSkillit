@@ -197,6 +197,7 @@ def test_backend_module_all_exhaustive():
         "CODEX_EFFORT_MAPPING",
         "CODEX_MODEL_ALIASES",
         "CODEX_MODEL_ALIASES_LAST_VERIFIED",
+        "CODEX_VALID_MODEL_IDS",
         "CmdOrigin",
         "CmdSpec",
         "ModelTranslation",

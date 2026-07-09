@@ -8,8 +8,7 @@ import time
 import anyio
 import pytest
 
-from autoskillit.core import BackendEventKind, OperationLiveness, OperationStatus
-from autoskillit.core.types import ChannelBStatus, SessionEvent, SessionLivenessSpec
+from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import (
     RaceAccumulator,
     _session_log_monitor,
@@ -34,30 +33,18 @@ class TestSessionLogMonitor:
 
     @staticmethod
     def _supervisor_with_inflight_operation() -> ProcessLivenessSupervisor:
-        supervisor = ProcessLivenessSupervisor(
-            spec=SessionLivenessSpec(
-                stdout_idle_timeout_sec=0.05,
-                stale_threshold_sec=0.05,
-                operation_deadline_sec=10.0,
+        from tests.execution._liveness_supervisor_helpers import (
+            build_liveness_spec,
+            supervisor_with_inflight_operation,
+        )
+
+        return supervisor_with_inflight_operation(
+            spec=build_liveness_spec(
                 mcp_tool_timeout_sec=14364.0,
                 wall_timeout_sec=7200.0,
-                explicit_idle_disabled=False,
                 caller_session_id="caller-1",
             )
         )
-        supervisor.publish_event(
-            SessionEvent(
-                kind=BackendEventKind.IGNORED,
-                is_terminal=False,
-                has_marker=False,
-                operation_liveness=OperationLiveness(
-                    operation_id="call-1",
-                    item_type="mcp_tool_call",
-                    status=OperationStatus.STARTED,
-                ),
-            )
-        )
-        return supervisor
 
     @pytest.mark.anyio
     async def test_session_log_monitor_detects_completion(self, tmp_path):
@@ -185,6 +172,52 @@ class TestSessionLogMonitor:
             )
 
         assert monitor_result[0].status == ChannelBStatus.COMPLETION
+        assert monitor_result[0].session_id == "abc123"
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_stale_fires_without_supervisor(self, tmp_path):
+        """Paired negative: same scenario without a supervisor yields STALE before marker."""
+
+        log_dir = tmp_path / "session_logs"
+        log_dir.mkdir()
+        spawn_time = time.time() - 1
+        marker = "%%AUTOSKILLIT_COMPLETE%%"
+
+        session_file = log_dir / "abc123.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "working"}}) + "\n"
+        )
+
+        async def append_marker_after_stale_window() -> None:
+            await anyio.sleep(0.15)
+            with session_file.open("a") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {"content": f"Done\n\n{marker}"},
+                        }
+                    )
+                    + "\n"
+                )
+
+        monitor_result: list[SessionMonitorResult] = []
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(append_marker_after_stale_window)
+            monitor_result.append(
+                await _session_log_monitor(
+                    log_dir,
+                    marker,
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.02,
+                    liveness_supervisor=None,
+                    max_suppression_seconds=10.0,
+                )
+            )
+
+        assert monitor_result[0].status == ChannelBStatus.STALE
         assert monitor_result[0].session_id == "abc123"
 
     @pytest.mark.anyio

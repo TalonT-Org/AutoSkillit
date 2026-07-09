@@ -9,42 +9,15 @@ from unittest.mock import patch
 import anyio
 import pytest
 
-from autoskillit.core import (
-    BackendEventKind,
-    OperationLiveness,
-    OperationStatus,
-    SessionEvent,
-    SessionLivenessSpec,
-)
+from autoskillit.core import OperationStatus
 from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import ProcessLivenessSupervisor, _session_log_monitor
+from tests.execution._liveness_supervisor_helpers import (
+    build_liveness_spec,
+    build_operation_event,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
-
-
-def _liveness_spec() -> SessionLivenessSpec:
-    return SessionLivenessSpec(
-        stdout_idle_timeout_sec=0.05,
-        stale_threshold_sec=0.05,
-        operation_deadline_sec=10.0,
-        mcp_tool_timeout_sec=10.0,
-        wall_timeout_sec=30.0,
-        explicit_idle_disabled=False,
-        caller_session_id="caller-session",
-    )
-
-
-def _operation_event(status: OperationStatus = OperationStatus.STARTED) -> SessionEvent:
-    return SessionEvent(
-        kind=BackendEventKind.IGNORED,
-        is_terminal=False,
-        has_marker=False,
-        operation_liveness=OperationLiveness(
-            operation_id="call-1",
-            item_type="mcp_tool_call",
-            status=status,
-        ),
-    )
 
 
 class TestSessionLogMonitorStaleSuppressionGate:
@@ -210,13 +183,13 @@ class TestSessionLogMonitorStaleSuppressionGate:
         session_file.write_text("")
         spawn_time = time.time() - 10
 
-        supervisor = ProcessLivenessSupervisor(spec=_liveness_spec())
-        supervisor.publish_event(_operation_event())
+        supervisor = ProcessLivenessSupervisor(spec=build_liveness_spec())
+        supervisor.publish_event(build_operation_event())
         checks = {"api": 0, "cpu": 0}
 
         async def complete_operation() -> None:
             await anyio.sleep(0.12)
-            supervisor.publish_event(_operation_event(OperationStatus.COMPLETED))
+            supervisor.publish_event(build_operation_event(status=OperationStatus.COMPLETED))
 
         def fake_api_conn(pid):
             checks["api"] += 1

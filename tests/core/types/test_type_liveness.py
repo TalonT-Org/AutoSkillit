@@ -34,6 +34,18 @@ def test_operation_liveness_default_timing_fields_are_none() -> None:
     )
     assert op.started_monotonic is None
     assert op.updated_monotonic is None
+    assert op.raw == {}
+
+
+def test_operation_liveness_preserves_raw_backend_record() -> None:
+    raw = {"type": "item.started", "item": {"id": "op-1", "type": "mcp_tool_call"}}
+    op = OperationLiveness(
+        operation_id="op-1",
+        item_type="mcp_tool_call",
+        status=OperationStatus.STARTED,
+        raw=raw,
+    )
+    assert op.raw is raw
 
 
 def test_session_liveness_spec_is_idle_disabled_when_explicit() -> None:

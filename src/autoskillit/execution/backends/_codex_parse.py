@@ -284,6 +284,25 @@ class CodexStreamParser:
             status=status,
             started_monotonic=started,
             updated_monotonic=updated,
+            raw=obj,
+        )
+
+    @staticmethod
+    def _make_item_event_data(
+        obj: Mapping[str, Any],
+        *,
+        record_type: str,
+    ) -> CodexEventData | None:
+        item = obj.get("item")
+        if not isinstance(item, Mapping):
+            return None
+        raw_type = item.get("type")
+        item_type = raw_type if isinstance(raw_type, str) else ""
+        return CodexEventData(
+            record_type=record_type,
+            thread_id="",
+            item_type=item_type,
+            raw=obj,
         )
 
     def parse_line(self, line: str) -> SessionEvent | None:
@@ -315,7 +334,14 @@ class CodexStreamParser:
                 session_id=obj.get("payload", {}).get("id", "") or None,
             )
 
-        if event_type in (CodexEventType.TURN_STARTED, CodexEventType.ITEM_STARTED):
+        if event_type == CodexEventType.TURN_STARTED:
+            return SessionEvent(
+                kind=BackendEventKind.IGNORED,
+                is_terminal=False,
+                has_marker=False,
+            )
+
+        if event_type == CodexEventType.ITEM_STARTED:
             # ``item.started`` may also emit OperationLiveness for long-running
             # item types. We only emit when ``item["id"]`` is a non-empty
             # stable string — inventing an id would break supervisor
@@ -325,6 +351,7 @@ class CodexStreamParser:
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
                 has_marker=False,
+                backend_data=self._make_item_event_data(obj, record_type="item.started"),
                 operation_liveness=op_liveness,
             )
 
@@ -451,6 +478,7 @@ class CodexStreamParser:
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
                 has_marker=False,
+                backend_data=self._make_item_event_data(obj, record_type="item.updated"),
                 operation_liveness=op_liveness,
             )
 

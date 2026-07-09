@@ -125,14 +125,10 @@ async def _execute_claude_headless(
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     cfg = ctx.config.run_skill
-    # Resolve parent liveness once via the central resolver. Backend hints
-    # (CmdSpec.process_idle_timeout_ms, AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT) no
-    # longer lower the outer watchdog — the resolved spec is authoritative.
-    from autoskillit.execution.headless._headless_liveness import (
-        resolve_session_liveness_spec,
-    )
+    # Resolved liveness owns parent watchdogs and child idle hints.
+    from autoskillit.execution.headless import _headless_liveness as _liveness
 
-    _liveness_spec = resolve_session_liveness_spec(
+    _liveness_spec = _liveness.resolve_session_liveness_spec(
         ctx.config,
         is_food_truck=_is_food_truck,
         caller_idle_output_timeout=idle_output_timeout,
@@ -140,6 +136,7 @@ async def _execute_claude_headless(
         enable_deadline_extension=enable_deadline_extension,
     )
     effective_idle: float | None = _liveness_spec.stdout_idle_timeout_sec
+    spec = _liveness.apply_resolved_child_idle_env(spec, _liveness_spec)
 
     current_provider_name: str = provider_name
     fallback_activated: bool = False
@@ -481,7 +478,10 @@ async def _execute_claude_headless(
             and is_feature_enabled("providers", ctx.config.features)
         ):
             if not fallback_activated:
-                spec = dataclasses.replace(spec, env={**spec.env, **provider_fallback_env})
+                spec = _liveness.apply_resolved_child_idle_env(
+                    dataclasses.replace(spec, env={**spec.env, **provider_fallback_env}),
+                    _liveness_spec,
+                )
                 if provider_fallback_name:
                     current_provider_name = provider_fallback_name
             fallback_activated = True

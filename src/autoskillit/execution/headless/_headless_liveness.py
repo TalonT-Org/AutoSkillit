@@ -14,10 +14,10 @@ config-coherence gates that must not pull in any execution-layer modules.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from autoskillit.core import LivenessSource, SessionLivenessSpec, get_logger
+from autoskillit.core import CmdSpec, LivenessSource, SessionLivenessSpec, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -28,6 +28,16 @@ logger = get_logger(__name__)
 #: outer byte-growth watchdog. Provides breathing room for last-line
 #: scheduling jitter and a partial grace before a sub-deadline kill.
 DEFAULT_LEGAL_SILENCE_FLOOR_SEC: float = 100.0
+
+
+def apply_resolved_child_idle_env(cmd_spec: CmdSpec, spec: SessionLivenessSpec) -> CmdSpec:
+    """Mirror the resolved stdout-idle contract into the child env hint."""
+    resolved_env = dict(cmd_spec.env)
+    if spec.stdout_idle_timeout_sec is None:
+        resolved_env.pop("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", None)
+    else:
+        resolved_env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] = str(spec.stdout_idle_timeout_sec)
+    return replace(cmd_spec, env=resolved_env)
 
 
 @dataclass(frozen=True, slots=True)

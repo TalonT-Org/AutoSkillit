@@ -368,6 +368,7 @@ class OperationLiveness:
     status: str
     started_monotonic: float | None = None
     updated_monotonic: float | None = None
+    raw: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

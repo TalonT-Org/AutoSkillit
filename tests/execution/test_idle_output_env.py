@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from autoskillit.core import CmdSpec
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from tests.execution.conftest import _mock_backend
 from tests.fakes import MockSubprocessRunner
@@ -158,6 +159,62 @@ class TestExecuteClaudeHeadlessIdleEnv:
         )
         idle = runner.call_args_list[-1][3].get("idle_output_timeout")
         assert idle == 45.0
+
+    @pytest.mark.anyio
+    async def test_resolved_idle_output_timeout_rewrites_child_env(
+        self, minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.execution.headless import run_headless_core
+
+        monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)
+        minimal_ctx.config.run_skill.idle_output_timeout = 45
+        runner = MockSubprocessRunner()
+        runner.set_default(_success_result())
+        minimal_ctx.runner = runner
+        backend = _mock_backend(pty_required=True, channel_b_capable=True)
+        backend.build_skill_session_cmd.return_value = CmdSpec(
+            cmd=("claude", "--print", "test-skill"),
+            env={"AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": "3.0", "KEEP": "1"},
+        )
+        minimal_ctx.backend = backend
+
+        await run_headless_core("/investigate foo", str(tmp_path), minimal_ctx)
+
+        env = runner.call_args_list[-1][3].get("env")
+        assert isinstance(env, dict)
+        assert env["AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT"] == "45.0"
+        assert env["KEEP"] == "1"
+
+    @pytest.mark.anyio
+    async def test_explicit_zero_idle_output_timeout_removes_child_env(
+        self, minimal_ctx, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.execution.headless import run_headless_core
+
+        monkeypatch.delenv("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", raising=False)
+        minimal_ctx.config.run_skill.idle_output_timeout = 45
+        runner = MockSubprocessRunner()
+        runner.set_default(_success_result())
+        minimal_ctx.runner = runner
+        backend = _mock_backend(pty_required=True, channel_b_capable=True)
+        backend.build_skill_session_cmd.return_value = CmdSpec(
+            cmd=("claude", "--print", "test-skill"),
+            env={"AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": "3.0", "KEEP": "1"},
+        )
+        minimal_ctx.backend = backend
+
+        await run_headless_core(
+            "/investigate foo",
+            str(tmp_path),
+            minimal_ctx,
+            idle_output_timeout=0.0,
+        )
+
+        env = runner.call_args_list[-1][3].get("env")
+        assert isinstance(env, dict)
+        assert "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT" not in env
+        assert env["KEEP"] == "1"
+        assert runner.call_args_list[-1][3].get("idle_output_timeout") is None
 
 
 class TestDispatchFoodTruckIdleEnvInjection:

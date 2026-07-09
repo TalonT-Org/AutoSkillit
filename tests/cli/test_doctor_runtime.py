@@ -21,7 +21,11 @@ class TestCheckCodexModelAliasStaleness:
         monkeypatch.setattr(
             mod,
             "CODEX_MODEL_ALIASES",
-            {"sonnet": "gpt-5.5", "opus": "gpt-5.5", "haiku": "gpt-5.5"},
+            {
+                "sonnet": "gpt-5.6-sol",
+                "opus": "gpt-5.6-sol",
+                "haiku": "gpt-5.6-sol",
+            },
         )
         result = mod._check_codex_model_alias_staleness()
         assert result.severity == Severity.OK
@@ -45,7 +49,7 @@ class TestCheckCodexModelAliasStaleness:
         monkeypatch.setattr(
             mod,
             "CODEX_MODEL_ALIASES",
-            {"sonnet": "gpt-5.5", "opus": "BOGUS-MODEL"},
+            {"sonnet": "gpt-5.6-sol", "opus": "BOGUS-MODEL"},
         )
         result = mod._check_codex_model_alias_staleness()
         assert result.severity == Severity.WARNING

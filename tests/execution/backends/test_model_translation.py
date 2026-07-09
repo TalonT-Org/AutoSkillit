@@ -23,8 +23,9 @@ class TestCodexTranslateModel:
         assert "[1m]" not in result
         assert result == CODEX_MODEL_ALIASES["opus"]
 
-    def test_passthrough_native(self) -> None:
-        assert CodexBackend().translate_model("gpt-5.5") == "gpt-5.5"
+    @pytest.mark.parametrize("model_id", ["gpt-5.5", "gpt-5.6-sol"])
+    def test_passthrough_native(self, model_id: str) -> None:
+        assert CodexBackend().translate_model(model_id) == model_id
 
     def test_unknown_passthrough(self) -> None:
         assert CodexBackend().translate_model("custom-model-xyz") == "custom-model-xyz"
@@ -175,6 +176,22 @@ class TestCodexEffortInjectionInCmds:
             model="sonnet",
         )
         assert "model_reasoning_effort=high" in list(spec.cmd)
+
+    def test_food_truck_opus_suffix_uses_shared_model_with_xhigh_effort(self) -> None:
+        from autoskillit.core import DirectInstall
+
+        spec = CodexBackend().build_food_truck_cmd(
+            orchestrator_prompt="test",
+            plugin_source=DirectInstall(plugin_dir="/tmp/plugin"),
+            cwd="/repo",
+            completion_marker="%%DONE%%",
+            model="opus[1m]",
+        )
+        cmd = list(spec.cmd)
+        model_idx = cmd.index("--model")
+        assert cmd[model_idx + 1] == CODEX_MODEL_ALIASES["opus"]
+        assert "[1m]" not in cmd[model_idx + 1]
+        assert "model_reasoning_effort=xhigh" in cmd
 
     def test_interactive_cmd_has_effort(self) -> None:
         spec = CodexBackend().build_interactive_cmd(model="sonnet")

@@ -34,6 +34,22 @@ def test_codex_alias_values_in_allowlist() -> None:
         )
 
 
+def test_codex_aliases_use_sol() -> None:
+    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
+
+    assert set(CODEX_MODEL_ALIASES) == {"sonnet", "opus", "haiku"}
+    assert set(CODEX_MODEL_ALIASES.values()) == {"gpt-5.6-sol"}
+
+
+def test_codex_native_model_allowlist_preserves_compatibility() -> None:
+    from autoskillit.core.types._type_backend import is_valid_codex_model_id
+
+    assert is_valid_codex_model_id("gpt-5.6-sol")
+    assert is_valid_codex_model_id("gpt-5.5")
+    assert not is_valid_codex_model_id("gpt-5.4")
+    assert not is_valid_codex_model_id("gpt-5.4-mini")
+
+
 def test_claude_alias_values_in_allowlist() -> None:
     from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
 

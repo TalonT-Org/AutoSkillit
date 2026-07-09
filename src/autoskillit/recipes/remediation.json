@@ -225,6 +225,7 @@
       "with": {
         "skill_command": "/autoskillit:investigate ${{ '--depth deep ' if inputs.depth == 'deep' else '' }}${{ inputs.task }}",
         "cwd": "${{ context.work_dir }}",
+        "output_dir": "{{AUTOSKILLIT_TEMP}}/investigate",
         "step_name": "investigate",
         "issue_url": "${{ inputs.issue_url }}",
         "issue_title": "${{ context.issue_title }}"

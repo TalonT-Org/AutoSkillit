@@ -739,12 +739,17 @@ def test_write_behavior_conditional_loaded() -> None:
     assert any("conflict_report_path" in p for p in contract.write_expected_when)
 
 
-def test_write_behavior_defaults_to_none() -> None:
-    """investigate has no write_behavior — defaults to None."""
+def test_investigate_declares_report_write_contract() -> None:
+    """investigate writes a report artifact and must not run read-only."""
     manifest = load_bundled_manifest()
     contract = get_skill_contract("investigate", manifest)
     assert contract is not None
-    assert contract.write_behavior is None
+    assert contract.write_behavior == "always"
+    assert contract.read_only is False
+    assert contract.expected_output_patterns
+    assert any(
+        "/investigate/" in p and p.endswith(".md\n%%ORDER_UP%%") for p in contract.pattern_examples
+    )
 
 
 ALWAYS_WRITE_SKILLS = {
@@ -762,6 +767,7 @@ ALWAYS_WRITE_SKILLS = {
     "implement-experiment",
     "implement-worktree",
     "implement-worktree-no-merge",
+    "investigate",
     "make-campaign",
     "make-groups",
     "phoropter-null-synthesis",

@@ -45,3 +45,30 @@ async def test_allowed_write_prefix_uses_fallback_without_output_dir(
     expected = str(tmp_path / ".autoskillit" / "temp" / "test") + "/"
     assert executor.calls[0].allowed_write_prefix == expected
     assert executor.calls[0].allowed_write_prefixes == (expected,)
+
+
+@pytest.mark.anyio
+async def test_investigate_contract_runs_writable_with_report_watch_dir(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path
+) -> None:
+    """investigate must not be launched as a read-only skill because it writes a report."""
+    from pathlib import Path
+
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    await run_skill("/autoskillit:investigate regression", str(tmp_path))
+
+    assert len(executor.calls) == 1
+    call = executor.calls[0]
+    assert call.readonly_skill is False
+    assert call.write_behavior is not None
+    assert call.write_behavior.mode == "always"
+    assert call.expected_output_patterns
+
+    report_dir = tmp_path / ".autoskillit" / "temp" / "investigate"
+    assert Path(report_dir) in call.write_watch_dirs
+    assert call.allowed_write_prefix == str(report_dir) + "/"

@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from autoskillit.core import CmdSpec, LivenessSource, SessionLivenessSpec, get_logger
+from autoskillit.core import CmdSpec, SessionLivenessSpec, get_logger
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
@@ -152,15 +152,6 @@ def resolve_session_liveness_spec(
     legal_silence = compute_legal_silence_window(inp)
     operation_deadline_sec = legal_silence + DEFAULT_LEGAL_SILENCE_FLOOR_SEC
 
-    authorized_sources: frozenset[LivenessSource] = frozenset(
-        {
-            LivenessSource.STDOUT_GROWTH,
-            LivenessSource.CHANNEL_B_GROWTH,
-            LivenessSource.EXECUTION_MARKER,
-            LivenessSource.OPERATION_IN_FLIGHT,
-        }
-    )
-
     spec = SessionLivenessSpec(
         stdout_idle_timeout_sec=stdout_idle_timeout_sec,
         stale_threshold_sec=inp.run_skill_stale_threshold,
@@ -171,7 +162,6 @@ def resolve_session_liveness_spec(
         else inp.fleet_default_timeout_sec,
         explicit_idle_disabled=explicit_idle_disabled,
         caller_session_id=caller_session_id,
-        authorized_sources=authorized_sources,
     )
     logger.debug(
         "session_liveness_spec_resolved",

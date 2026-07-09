@@ -201,3 +201,53 @@ def test_skill_session_config_importable_from_protocols_backend() -> None:
     from autoskillit.core.types._type_protocols_backend import SkillSessionConfig
 
     assert SkillSessionConfig is SkillSessionConfigDirect
+
+
+def test_liveness_types_importable_from_core_gateway() -> None:
+    from autoskillit.core import (
+        LivenessSource,
+        OperationLiveness,
+        OperationStatus,
+        SessionLivenessSpec,
+    )
+
+    op = OperationLiveness(
+        operation_id="op-1",
+        item_type="mcp_tool_call",
+        status=OperationStatus.STARTED,
+    )
+    spec = SessionLivenessSpec(
+        stdout_idle_timeout_sec=600.0,
+        stale_threshold_sec=1200.0,
+        operation_deadline_sec=7300.0,
+        mcp_tool_timeout_sec=14364.0,
+        wall_timeout_sec=7200.0,
+        explicit_idle_disabled=False,
+        caller_session_id="caller-1",
+    )
+
+    assert op.status == OperationStatus.STARTED
+    assert LivenessSource.OPERATION_IN_FLIGHT in spec.authorized_sources
+
+
+def test_session_event_exposes_operation_liveness_field() -> None:
+    from autoskillit.core import (
+        BackendEventKind,
+        OperationLiveness,
+        OperationStatus,
+        SessionEvent,
+    )
+
+    op = OperationLiveness(
+        operation_id="op-1",
+        item_type="mcp_tool_call",
+        status=OperationStatus.PROGRESS,
+    )
+    event = SessionEvent(
+        kind=BackendEventKind.IGNORED,
+        is_terminal=False,
+        has_marker=False,
+        operation_liveness=op,
+    )
+
+    assert event.operation_liveness is op

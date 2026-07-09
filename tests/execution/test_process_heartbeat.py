@@ -14,7 +14,9 @@ import anyio
 import psutil
 import pytest
 
+from autoskillit.core import SessionLivenessSpec
 from autoskillit.core.types import ChannelBStatus, TerminationReason
+from autoskillit.execution.backends._codex_parse import CodexStreamParser
 from autoskillit.execution.process import (
     _has_active_api_connection,
     _has_active_child_processes,
@@ -23,6 +25,7 @@ from autoskillit.execution.process import (
     _session_log_monitor,
     run_managed_async,
 )
+from autoskillit.execution.process._liveness_supervisor import ProcessLivenessSupervisor
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -30,6 +33,40 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 class TestHeartbeatDetectsCompletion:
     """Stdout heartbeat detects completion and triggers kill."""
+
+    @pytest.mark.anyio
+    async def test_heartbeat_publishes_liveness_before_terminal_completion(self, tmp_path):
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text(
+            "\n".join(
+                [
+                    '{"type":"item.started","item":{"id":"call_1","type":"mcp_tool_call"}}',
+                    '{"type":"turn.completed","usage":{}}',
+                ]
+            )
+            + "\n"
+        )
+        supervisor = ProcessLivenessSupervisor(
+            spec=SessionLivenessSpec(
+                stdout_idle_timeout_sec=600.0,
+                stale_threshold_sec=1200.0,
+                operation_deadline_sec=10.0,
+                mcp_tool_timeout_sec=14364.0,
+                wall_timeout_sec=7200.0,
+                explicit_idle_disabled=False,
+                caller_session_id="caller-1",
+            )
+        )
+
+        result = await _heartbeat(
+            stdout_path,
+            stream_parser=CodexStreamParser(),
+            liveness_supervisor=supervisor,
+            _poll_interval=0.01,
+        )
+
+        assert result == "completion"
+        assert supervisor.in_flight_operation()
 
     @pytest.mark.anyio
     async def test_heartbeat_detects_completion_and_kills(self, tmp_path):

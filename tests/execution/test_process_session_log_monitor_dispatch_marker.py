@@ -8,10 +8,42 @@ import time
 import anyio
 import pytest
 
+from autoskillit.core import (
+    BackendEventKind,
+    OperationLiveness,
+    OperationStatus,
+    SessionEvent,
+    SessionLivenessSpec,
+)
 from autoskillit.core.types import ChannelBStatus
-from autoskillit.execution.process import _session_log_monitor
+from autoskillit.execution.process import ProcessLivenessSupervisor, _session_log_monitor
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def _liveness_spec() -> SessionLivenessSpec:
+    return SessionLivenessSpec(
+        stdout_idle_timeout_sec=0.05,
+        stale_threshold_sec=0.05,
+        operation_deadline_sec=10.0,
+        mcp_tool_timeout_sec=10.0,
+        wall_timeout_sec=30.0,
+        explicit_idle_disabled=False,
+        caller_session_id="caller-session",
+    )
+
+
+def _operation_event(status: str = OperationStatus.STARTED) -> SessionEvent:
+    return SessionEvent(
+        kind=BackendEventKind.IGNORED,
+        is_terminal=False,
+        has_marker=False,
+        operation_liveness=OperationLiveness(
+            operation_id="call-1",
+            item_type="mcp_tool_call",
+            status=status,
+        ),
+    )
 
 
 class TestStaleSuppressionDispatchMarker:
@@ -146,6 +178,57 @@ class TestStaleSuppressionDispatchMarker:
                 caller_session_id="sessionB",
             )
         assert result.status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_supervisor_suppresses_stale_before_dispatch_marker_check(
+        self, tmp_path, monkeypatch
+    ):
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text("")
+        spawn_time = time.time() - 10
+
+        supervisor = ProcessLivenessSupervisor(spec=_liveness_spec())
+        supervisor.publish_event(_operation_event())
+        original_in_flight = supervisor.in_flight_under_deadline
+        checks = {"supervisor": 0, "marker": 0}
+
+        def observed_in_flight_under_deadline() -> bool:
+            checks["supervisor"] += 1
+            if checks["supervisor"] == 1:
+                assert original_in_flight() is True
+                return True
+            supervisor.publish_event(_operation_event(OperationStatus.COMPLETED))
+            return original_in_flight()
+
+        def inactive_marker(marker_dir, session_id=None):
+            checks["marker"] += 1
+            return False
+
+        monkeypatch.setattr(
+            supervisor,
+            "in_flight_under_deadline",
+            observed_in_flight_under_deadline,
+        )
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
+            inactive_marker,
+        )
+
+        with anyio.fail_after(2.0):
+            result = await _session_log_monitor(
+                tmp_path,
+                "DONE",
+                stale_threshold=0.05,
+                spawn_time=spawn_time,
+                _phase1_poll=0.01,
+                _phase2_poll=0.05,
+                marker_dir=tmp_path,
+                caller_session_id="test-session",
+                liveness_supervisor=supervisor,
+            )
+
+        assert result.status == ChannelBStatus.STALE
+        assert checks == {"supervisor": 2, "marker": 1}
 
 
 class TestDispatchMarkerSuppression:

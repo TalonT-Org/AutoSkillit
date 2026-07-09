@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import functools
+import time
 
 import anyio
 import pytest
 
+from autoskillit.core import BackendEventKind, OperationLiveness, OperationStatus
+from autoskillit.core.types import SessionEvent, SessionLivenessSpec
+from autoskillit.execution.process._liveness_supervisor import ProcessLivenessSupervisor
 from autoskillit.execution.process._process_race import _watch_child_activity
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -98,6 +102,82 @@ async def test_max_extension_cap_enforced(monkeypatch) -> None:
 
     assert scope_ref[0] is not None
     assert scope_ref[0].deadline <= original_deadline_ref[0] + 0.2
+
+
+@pytest.mark.anyio
+async def test_operation_deadline_clamps_child_activity_extension(monkeypatch) -> None:
+    poll_interval = 0.02
+    operation_deadline = 0.08
+    probe_times: list[float] = []
+
+    def _active_child_processes(_pid: int) -> bool:
+        probe_times.append(anyio.current_time())
+        return True
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._has_active_child_processes",
+        _active_child_processes,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_race._has_active_api_connection",
+        lambda pid: False,
+    )
+    supervisor = ProcessLivenessSupervisor(
+        spec=SessionLivenessSpec(
+            stdout_idle_timeout_sec=600.0,
+            stale_threshold_sec=1200.0,
+            operation_deadline_sec=operation_deadline,
+            mcp_tool_timeout_sec=14364.0,
+            wall_timeout_sec=7200.0,
+            explicit_idle_disabled=False,
+            caller_session_id="caller-1",
+        )
+    )
+    started_anyio = anyio.current_time()
+    started_monotonic = time.monotonic()
+    supervisor.publish_event(
+        SessionEvent(
+            kind=BackendEventKind.IGNORED,
+            is_terminal=False,
+            has_marker=False,
+            operation_liveness=OperationLiveness(
+                operation_id="call-1",
+                item_type="mcp_tool_call",
+                status=OperationStatus.STARTED,
+                started_monotonic=started_monotonic,
+            ),
+        )
+    )
+    trigger = anyio.Event()
+    scope_ref: list[anyio.CancelScope | None] = [None]
+    original_deadline_ref: list[float] = []
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(
+            functools.partial(
+                _watch_child_activity,
+                1,
+                scope_ref,
+                7200.0,
+                trigger,
+                poll_interval,
+                liveness_supervisor=supervisor,
+            )
+        )
+        with anyio.move_on_after(0.03) as scope:
+            scope_ref[0] = scope
+            original_deadline_ref.append(scope.deadline)
+            await anyio.sleep(0.075)
+            trigger.set()
+        tg.cancel_scope.cancel()
+
+    assert scope_ref[0] is not None
+    assert len(probe_times) >= 3
+    unclamped_deadline = probe_times[-1] + poll_interval * 2
+    operation_cap = started_anyio + operation_deadline
+    assert scope_ref[0].deadline > original_deadline_ref[0]
+    assert scope_ref[0].deadline <= operation_cap + 0.01
+    assert scope_ref[0].deadline < unclamped_deadline - 0.01
 
 
 @pytest.mark.anyio

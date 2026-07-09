@@ -12,6 +12,7 @@ from tests.server._helpers import (
     _make_standard_recipe,
     _no_sleep_quota_checker,
     _noop_quota_refresher,
+    _patch_dispatch_quota_no_sleep,
     _simple_prompt_builder,
 )
 
@@ -26,6 +27,7 @@ async def test_dispatch_food_truck_tool_passes_resume_session_id_to_executor(
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    _patch_dispatch_quota_no_sleep(monkeypatch)
     tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
@@ -59,6 +61,7 @@ async def test_dispatch_food_truck_tool_passes_resume_message_to_executor(
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    _patch_dispatch_quota_no_sleep(monkeypatch)
     tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
@@ -93,6 +96,7 @@ async def test_dispatch_food_truck_tool_passes_caller_instructions_into_prompt(
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    _patch_dispatch_quota_no_sleep(monkeypatch)
     tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
@@ -121,6 +125,7 @@ async def test_dispatch_food_truck_no_caller_instructions_section_when_not_speci
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    _patch_dispatch_quota_no_sleep(monkeypatch)
     tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
@@ -146,8 +151,9 @@ class TestDispatchFoodTruckIdleTimeout:
     def _set_fleet_session(self, monkeypatch):
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
 
-    def _setup_dispatch(self, tool_ctx):
+    def _setup_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a standard dispatch with InMemoryHeadlessExecutor."""
+        _patch_dispatch_quota_no_sleep(monkeypatch)
         tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
@@ -163,7 +169,7 @@ class TestDispatchFoodTruckIdleTimeout:
         """dispatch_food_truck MCP tool forwards idle_output_timeout to executor."""
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
-        self._setup_dispatch(tool_ctx_kitchen_open)
+        self._setup_dispatch(tool_ctx_kitchen_open, monkeypatch)
 
         await dispatch_food_truck(
             recipe="test-recipe",
@@ -182,7 +188,7 @@ class TestDispatchFoodTruckIdleTimeout:
         """When idle_output_timeout is not specified, executor receives None."""
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
-        self._setup_dispatch(tool_ctx_kitchen_open)
+        self._setup_dispatch(tool_ctx_kitchen_open, monkeypatch)
 
         await dispatch_food_truck(
             recipe="test-recipe",
@@ -200,7 +206,7 @@ class TestDispatchFoodTruckIdleTimeout:
         """Explicit idle_output_timeout=0 overrides the config default of 1000."""
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
-        self._setup_dispatch(tool_ctx_kitchen_open)
+        self._setup_dispatch(tool_ctx_kitchen_open, monkeypatch)
         # Config idle_output_timeout is 1000 (default from RunSkillConfig)
         assert tool_ctx_kitchen_open.config.run_skill.idle_output_timeout == 1000
 
@@ -222,7 +228,7 @@ class TestDispatchFoodTruckIdleTimeout:
         """execute_dispatch forwards idle_output_timeout to executor.dispatch_food_truck."""
         from autoskillit.fleet._api import execute_dispatch
 
-        self._setup_dispatch(tool_ctx)
+        self._setup_dispatch(tool_ctx, monkeypatch)
 
         await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -252,6 +258,7 @@ async def test_dispatch_food_truck_returns_fleet_error_on_mcp_timeout(
     from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
+    _patch_dispatch_quota_no_sleep(monkeypatch)
     tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")

@@ -3753,6 +3753,9 @@
     "tests/server/test_tools_run_skill_retry.py",
     "tests/server/test_tools_status_kitchen.py"
   ],
+  "src/autoskillit/execution/headless/_headless_liveness.py": [
+    "tests/contracts/test_headless_liveness_contracts.py"
+  ],
   "src/autoskillit/execution/headless/_headless_path_tokens.py": [
     "tests/arch/test_pty_coherence.py",
     "tests/execution/test_api_error_signal_invariants.py",
@@ -3949,6 +3952,9 @@
     "tests/execution/test_session_log_integration.py",
     "tests/execution/test_termination_action.py",
     "tests/execution/test_termination_executor.py"
+  ],
+  "src/autoskillit/execution/process/_liveness_supervisor.py": [
+    "tests/execution/process/test_liveness_supervisor.py"
   ],
   "src/autoskillit/execution/process/_process_io.py": [
     "tests/execution/test_boundary_pty_dispatch.py",

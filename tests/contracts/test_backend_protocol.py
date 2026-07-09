@@ -18,7 +18,11 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 def test_backend_protocols_importable_from_core():
     from autoskillit.core import (  # noqa: F401
         CodingAgentBackend,
+        LivenessSource,
+        OperationLiveness,
+        OperationStatus,
         ResultParser,
+        SessionLivenessSpec,
         StreamParser,
     )
 

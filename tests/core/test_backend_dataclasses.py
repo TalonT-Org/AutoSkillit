@@ -206,6 +206,7 @@ def test_backend_module_all_exhaustive():
         "CodexEventData",
         "SessionEvent",
         "AgentSessionResult",
+        "is_valid_codex_model_id",
         "model_class",
         "strip_context_window_suffix",
     }

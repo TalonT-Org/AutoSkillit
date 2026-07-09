@@ -14,12 +14,12 @@ import regex as re
 from autoskillit.core import (
     CODEX_MODEL_ALIASES,
     CODEX_MODEL_ALIASES_LAST_VERIFIED,
-    CODEX_VALID_MODEL_IDS,
     CodingAgentBackend,
     Severity,
     atomic_write,
     default_log_dir,
     get_logger,
+    is_valid_codex_model_id,
 )
 from autoskillit.execution import QUOTA_CACHE_SCHEMA_VERSION
 
@@ -389,7 +389,7 @@ def _check_codex_model_alias_staleness() -> DoctorResult:
             f" (threshold {_CODEX_ALIAS_STALENESS_DAYS}d);"
             f" re-verify alias targets and update CODEX_MODEL_ALIASES_LAST_VERIFIED",
         )
-    invalid = {k: v for k, v in CODEX_MODEL_ALIASES.items() if v not in CODEX_VALID_MODEL_IDS}
+    invalid = {k: v for k, v in CODEX_MODEL_ALIASES.items() if not is_valid_codex_model_id(v)}
     if invalid:
         pairs = ", ".join(f"{k}={v!r}" for k, v in invalid.items())
         return DoctorResult(

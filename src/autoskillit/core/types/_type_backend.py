@@ -31,6 +31,7 @@ __all__ = [
     "CodexEventData",
     "SessionEvent",
     "AgentSessionResult",
+    "is_valid_codex_model_id",
     "model_class",
     "strip_context_window_suffix",
 ]
@@ -225,6 +226,10 @@ class ModelTranslation:
 
 def strip_context_window_suffix(model: str) -> str:
     return _CONTEXT_WINDOW_SUFFIX_RE.sub("", model)
+
+
+def is_valid_codex_model_id(model_id: str) -> bool:
+    return model_id in CODEX_VALID_MODEL_IDS
 
 
 def model_class(model: str) -> str:

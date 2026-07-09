@@ -25,11 +25,11 @@ def test_anomaly_detection_aliases_keys_match_shared() -> None:
 
 
 def test_codex_alias_values_in_allowlist() -> None:
-    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES, CODEX_VALID_MODEL_IDS
+    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES, is_valid_codex_model_id
 
     for key, value in CODEX_MODEL_ALIASES.items():
-        assert value in CODEX_VALID_MODEL_IDS, (
-            f"CODEX_MODEL_ALIASES[{key!r}] = {value!r} is not in CODEX_VALID_MODEL_IDS. "
+        assert is_valid_codex_model_id(value), (
+            f"CODEX_MODEL_ALIASES[{key!r}] = {value!r} is not a valid Codex model ID. "
             "Update CODEX_VALID_MODEL_IDS if the intended target model changed."
         )
 

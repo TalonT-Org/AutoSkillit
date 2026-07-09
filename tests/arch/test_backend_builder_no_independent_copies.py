@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import functools
 from pathlib import Path
 
 import pytest
@@ -116,6 +117,11 @@ def _constant_string(node: ast.AST) -> str | None:
     return None
 
 
+@functools.lru_cache(maxsize=1)
+def _autoskillit_python_trees() -> tuple[tuple[Path, ast.AST], ...]:
+    return tuple((path, ast.parse(path.read_text())) for path in _SRC_ROOT.rglob("*.py"))
+
+
 def test_shared_env_literals_absent_from_per_backend_files() -> None:
     for path in (_CLAUDE_PATH, _CODEX_PATH):
         found = _collect_env_key_string_literals(path) & SHARED_ENV_LITERAL_KEYS
@@ -227,8 +233,7 @@ def test_headless_execute_parent_idle_comes_from_resolved_liveness_spec() -> Non
 
 def test_idle_output_env_is_not_read_from_ambient_environment() -> None:
     violations: list[str] = []
-    for path in _SRC_ROOT.rglob("*.py"):
-        tree = ast.parse(path.read_text())
+    for path, tree in _autoskillit_python_trees():
         for node in ast.walk(tree):
             if isinstance(node, ast.Subscript) and _is_os_environ(node.value):
                 key = _constant_string(node.slice)

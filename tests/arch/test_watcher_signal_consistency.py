@@ -23,8 +23,8 @@ _WATCHERS_THAT_MUST_CHECK_EXECUTION_MARKER = frozenset(
 
 _WATCHERS_THAT_MUST_USE_SUPERVISOR: dict[str, frozenset[str]] = {
     "_heartbeat": frozenset({"publish_event"}),
-    "_watch_stdout_idle": frozenset({"record_stdout_growth", "in_flight_under_deadline"}),
-    "_session_log_monitor": frozenset({"record_channel_b_growth", "in_flight_under_deadline"}),
+    "_watch_stdout_idle": frozenset({"in_flight_under_deadline"}),
+    "_session_log_monitor": frozenset({"in_flight_under_deadline"}),
     "_watch_child_activity": frozenset({"operation_deadline_floor"}),
 }
 

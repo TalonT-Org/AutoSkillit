@@ -175,6 +175,7 @@ class TestProviderFallbackLoop:
         from autoskillit.execution.backends import CodexBackend
         from autoskillit.execution.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
+        from autoskillit.execution.process import ProcessLivenessSupervisor
         from tests.execution.conftest import _sr
 
         self._patch_common(
@@ -184,10 +185,18 @@ class TestProviderFallbackLoop:
             ctx=minimal_ctx,
         )
         attempt_records: list[dict[str, object]] = []
+        supervisors: list[ProcessLivenessSupervisor] = []
+        original_liveness_context = process_mod.process_liveness_context
+
+        def observed_liveness_context(supervisor: ProcessLivenessSupervisor):
+            supervisors.append(supervisor)
+            return original_liveness_context(supervisor)
+
+        monkeypatch.setattr(process_mod, "process_liveness_context", observed_liveness_context)
 
         async def fake_runner(cmd, **kwargs):  # noqa: ARG001
-            supervisor = process_mod._CURRENT_LIVENESS_SUPERVISOR.get()
             parser = kwargs["stream_parser"]
+            supervisor = supervisors[-1]
             assert supervisor is not None
             record: dict[str, object] = {
                 "supervisor": supervisor,

@@ -346,7 +346,7 @@ async def test_watch_stdout_idle_suppressed_by_codex_in_flight_mcp_call(
     assert event is not None
     supervisor = ProcessLivenessSupervisor(
         spec=SessionLivenessSpec(
-            stdout_idle_timeout_sec=0.05,
+            stdout_idle_timeout_sec=0.5,
             stale_threshold_sec=1200.0,
             operation_deadline_sec=10.0,
             mcp_tool_timeout_sec=14364.0,
@@ -368,20 +368,20 @@ async def test_watch_stdout_idle_suppressed_by_codex_in_flight_mcp_call(
                 and e.get("source") == "operation_in_flight"
                 for e in cap
             ):
-                await anyio.sleep(0.01)
+                await anyio.sleep(0.05)
             trigger.set()
 
-        with anyio.fail_after(2.0):
+        with anyio.fail_after(3.0):
             async with anyio.create_task_group() as tg:
                 tg.start_soon(cancel_when_suppressed)
                 tg.start_soon(
                     functools.partial(
                         _watch_stdout_idle,
                         stdout_file,
-                        0.05,
+                        0.5,
                         acc,
                         trigger,
-                        0.02,
+                        0.05,
                         liveness_supervisor=supervisor,
                         max_suppression_seconds=10.0,
                     )

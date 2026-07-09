@@ -96,7 +96,6 @@ if mode == "mcp_silence":
             },
         }
     )
-
 for event in [
     {
         "type": "item.completed",

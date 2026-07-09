@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import cast
 
 import pytest
 
@@ -32,7 +33,7 @@ def _spec(operation_deadline_sec: float = 14464.0) -> SessionLivenessSpec:
 
 def _liveness_event(
     op_id: str = "op-1",
-    status: str = OperationStatus.STARTED,
+    status: OperationStatus = OperationStatus.STARTED,
     item_type: str = "mcp_tool_call",
 ) -> SessionEvent:
     return SessionEvent(
@@ -71,7 +72,11 @@ def test_publish_event_idempotent_on_started_status() -> None:
 
 def test_publish_event_unknown_status_ignored() -> None:
     sup = ProcessLivenessSupervisor(spec=_spec())
-    op = OperationLiveness(operation_id="op-x", item_type="mcp_tool_call", status="bogus")
+    op = OperationLiveness(
+        operation_id="op-x",
+        item_type="mcp_tool_call",
+        status=cast(OperationStatus, "bogus"),
+    )
     event = SessionEvent(
         kind=BackendEventKind.IGNORED,
         is_terminal=False,
@@ -83,9 +88,9 @@ def test_publish_event_unknown_status_ignored() -> None:
 
 
 def test_in_flight_under_deadline_false_after_deadline() -> None:
-    sup = ProcessLivenessSupervisor(spec=_spec(operation_deadline_sec=0.001))
+    sup = ProcessLivenessSupervisor(spec=_spec(operation_deadline_sec=0.1))
     sup.publish_event(_liveness_event())
-    time.sleep(0.01)
+    time.sleep(0.2)
     assert sup.in_flight_operation()
     assert not sup.in_flight_under_deadline()
 
@@ -139,9 +144,3 @@ def test_should_kill_on_channel_b_stale_fires_when_no_signals() -> None:
 def test_operation_deadline_floor_returns_inf_when_no_operations() -> None:
     sup = ProcessLivenessSupervisor(spec=_spec())
     assert sup.operation_deadline_floor() == float("inf")
-
-
-def test_record_stdout_growth_does_not_raise() -> None:
-    sup = ProcessLivenessSupervisor(spec=_spec())
-    sup.record_stdout_growth()
-    sup.record_channel_b_growth()

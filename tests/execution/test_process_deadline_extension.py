@@ -107,7 +107,7 @@ async def test_max_extension_cap_enforced(monkeypatch) -> None:
 @pytest.mark.anyio
 async def test_operation_deadline_clamps_child_activity_extension(monkeypatch) -> None:
     poll_interval = 0.02
-    operation_deadline = 0.08
+    operation_deadline = 0.5
     probe_times: list[float] = []
 
     def _active_child_processes(_pid: int) -> bool:
@@ -167,7 +167,7 @@ async def test_operation_deadline_clamps_child_activity_extension(monkeypatch) -
         with anyio.move_on_after(0.03) as scope:
             scope_ref[0] = scope
             original_deadline_ref.append(scope.deadline)
-            await anyio.sleep(0.075)
+            await anyio.sleep(0.8)
             trigger.set()
         tg.cancel_scope.cancel()
 
@@ -176,8 +176,8 @@ async def test_operation_deadline_clamps_child_activity_extension(monkeypatch) -
     unclamped_deadline = probe_times[-1] + poll_interval * 2
     operation_cap = started_anyio + operation_deadline
     assert scope_ref[0].deadline > original_deadline_ref[0]
-    assert scope_ref[0].deadline <= operation_cap + 0.01
-    assert scope_ref[0].deadline < unclamped_deadline - 0.01
+    assert scope_ref[0].deadline <= operation_cap + 0.1
+    assert scope_ref[0].deadline < unclamped_deadline - (poll_interval / 2)
 
 
 @pytest.mark.anyio

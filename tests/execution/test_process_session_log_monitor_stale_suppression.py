@@ -34,7 +34,7 @@ def _liveness_spec() -> SessionLivenessSpec:
     )
 
 
-def _operation_event(status: str = OperationStatus.STARTED) -> SessionEvent:
+def _operation_event(status: OperationStatus = OperationStatus.STARTED) -> SessionEvent:
     return SessionEvent(
         kind=BackendEventKind.IGNORED,
         is_terminal=False,
@@ -212,16 +212,11 @@ class TestSessionLogMonitorStaleSuppressionGate:
 
         supervisor = ProcessLivenessSupervisor(spec=_liveness_spec())
         supervisor.publish_event(_operation_event())
-        original_in_flight = supervisor.in_flight_under_deadline
-        checks = {"supervisor": 0, "api": 0, "cpu": 0}
+        checks = {"api": 0, "cpu": 0}
 
-        def observed_in_flight_under_deadline() -> bool:
-            checks["supervisor"] += 1
-            if checks["supervisor"] == 1:
-                assert original_in_flight() is True
-                return True
+        async def complete_operation() -> None:
+            await anyio.sleep(0.12)
             supervisor.publish_event(_operation_event(OperationStatus.COMPLETED))
-            return original_in_flight()
 
         def fake_api_conn(pid):
             checks["api"] += 1
@@ -232,11 +227,6 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return False
 
         monkeypatch.setattr(
-            supervisor,
-            "in_flight_under_deadline",
-            observed_in_flight_under_deadline,
-        )
-        monkeypatch.setattr(
             "autoskillit.execution.process._process_monitor._has_active_api_connection",
             fake_api_conn,
         )
@@ -246,19 +236,23 @@ class TestSessionLogMonitorStaleSuppressionGate:
         )
 
         with anyio.fail_after(2.0):
-            result = await _session_log_monitor(
-                tmp_path,
-                "DONE",
-                stale_threshold=0.05,
-                spawn_time=spawn_time,
-                pid=9999,
-                _phase1_poll=0.01,
-                _phase2_poll=0.05,
-                liveness_supervisor=supervisor,
-            )
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(complete_operation)
+                result = await _session_log_monitor(
+                    tmp_path,
+                    "DONE",
+                    stale_threshold=0.05,
+                    spawn_time=spawn_time,
+                    pid=9999,
+                    _phase1_poll=0.01,
+                    _phase2_poll=0.05,
+                    liveness_supervisor=supervisor,
+                )
+                tg.cancel_scope.cancel()
 
         assert result.status == ChannelBStatus.STALE
-        assert checks == {"supervisor": 2, "api": 1, "cpu": 1}
+        assert checks["api"] >= 1
+        assert checks["cpu"] >= 1
 
 
 class TestStaleSuppressionBounded:

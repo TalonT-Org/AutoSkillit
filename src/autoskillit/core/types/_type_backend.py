@@ -182,15 +182,15 @@ CLAUDE_MODEL_ALIASES: dict[str, str] = {
 
 CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
     {
-        "sonnet": "gpt-5.5",
-        "opus": "gpt-5.5",
-        "haiku": "gpt-5.5",
+        "sonnet": "gpt-5.6-sol",
+        "opus": "gpt-5.6-sol",
+        "haiku": "gpt-5.6-sol",
     }
 )
 
 CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-07-09"
 
-CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5"})
+CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5", "gpt-5.6-sol"})
 
 assert set(CODEX_MODEL_ALIASES.values()).issubset(CODEX_VALID_MODEL_IDS), (
     "CODEX_MODEL_ALIASES values must all be members of CODEX_VALID_MODEL_IDS; "

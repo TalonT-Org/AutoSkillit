@@ -122,6 +122,7 @@ class TestExecutionSubpackages:
             "_process_io",
             "_process_jsonl",
             "_process_kill",
+            "_process_liveness",
             "_process_monitor",
             "_process_pty",
             "_process_race",

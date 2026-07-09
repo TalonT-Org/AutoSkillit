@@ -814,7 +814,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
             INVARIANT_REGISTRY mapping 13 prose prohibitions to runtime gate targets,
             bringing the core/types count to 31.
             _type_liveness.py adds the frozen, slotted value types that codify the
-            Codex L2 attempt-liveness policy boundary (ChildTransportSpec,
+            Codex IL-2 attempt-liveness policy boundary (ChildTransportSpec,
             NestedSessionSpec, AttemptLivenessSpec, AttemptSeed, OperationObservation,
             LivenessObservation, LivenessDecision, BackendPreLaunchSpec,
             LivenessDiagnostics, SessionLivenessDiagnostics), bringing the
@@ -880,7 +880,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 21,
-        "core/types": 31,  # +_type_invariant_registry.py (INVARIANT_REGISTRY)
+        "core/types": 32,  # +_type_invariant_registry.py (INVARIANT_REGISTRY), +_type_liveness.py
         "cli": 21,
         "hooks": 14,  # +recipe_confirmed_post_hook.py
         "pipeline": 12,

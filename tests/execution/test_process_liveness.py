@@ -25,6 +25,8 @@ from autoskillit.execution.process._process_liveness import (
     operation_observation_from_codex,
 )
 
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
 
 def _obs(op_id: str, kind: str, transition: str, start: float = 0.0) -> OperationObservation:
     return OperationObservation(

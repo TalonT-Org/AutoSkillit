@@ -262,7 +262,8 @@ async def dispatch_food_truck(
             campaign_sp = Path(campaign_state_path_str)
             if dispatch_name:
                 # L1 — Funnel the campaign precondition gate through the
-                # single chokepoint.
+                # single chokepoint (see plan rectify_fleet-resume-
+                # precondition-chokepoint_2026-07-08_143000.md).
                 preflight = prepare_resume(campaign_sp, dispatch_name, continue_on_failure=False)
                 if preflight is not None and preflight.halt:
                     return fleet_error(

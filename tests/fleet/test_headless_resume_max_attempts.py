@@ -152,9 +152,7 @@ class TestHeadlessResumeCount:
                 enforce_max_resume_attempts=True,
             )
 
-    def test_cap_exhaustion_message_contains_cap_value_and_dispatch_name(
-        self, tmp_path: Path
-    ) -> None:
+    def test_cap_exhaustion_emits_halt_decision(self, tmp_path: Path) -> None:
         """When the cap is exhausted, the exception carries context identifying the
         dispatch and the cap value. (The halt-decision string is owned by the
         campaign path's `ResumeDecision`; on the headless path we surface it via

@@ -133,9 +133,6 @@ def prepare_resume(
           dispatch is in ``PENDING`` or ``RESUMABLE`` (caller proceeds with
           existing resume flow; cap enforcement happens in
           ``mark_dispatch_running``).
-        - ``ResumePreflight`` with all-empty fields when no dispatch matches
-          ``dispatch_name`` (caller treats as a fresh dispatch under the named
-          slot).
 
     The cap check (``MAX_CONSECUTIVE_RESUME_ATTEMPTS``) is intentionally NOT
     performed here — it's owned by ``mark_dispatch_running`` so the same
@@ -419,10 +416,13 @@ def resume_campaign_from_state(
     # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
     # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the
     # mutator) before the composition pass re-reads state, so the compose pass
-    # sees the post-reset status. prepare_resume is NOT used here because its
-    # reset semantics for continue_on_failure=True differ from the campaign-level
+    # sees the post-reset status. FAILURE/INTERRUPTED/REFUSED handling preserves
+    # the asymmetric semantics: FAILURE stays on continue_on_failure=True
+    # regardless of reset_on_retry; INTERRUPTED/REFUSED reset when
+    # reset_on_retry=True. prepare_resume is NOT used here because its reset
+    # semantics for continue_on_failure=True differ from the campaign-level
     # requirements (it would reset FAILURE unconditionally on continue_on_failure
-    # =True).
+    # =True, breaking test_failure_not_reset_under_continue_on_failure).
     with CampaignStateMutator(state_path) as m:
         if m.state is None:
             return None
@@ -490,8 +490,9 @@ def resume_campaign_from_state(
             continue
         if d.status == DispatchStatus.RESUMABLE and not next_name:
             # Defense-in-depth cap-conversion block (alongside L3 cap in
-            # mark_dispatch_running). Mutates via a fresh CampaignStateMutator
-            # to persist.
+            # mark_dispatch_running). Required by TestMaxResumeAttemptsGuard
+            # to assert RESUMABLE→FAILURE conversion + halt at the campaign
+            # level. Mutates via a fresh CampaignStateMutator to persist.
             timeout_count = _count_consecutive_resumable_timeouts(d.attempt_history)
             if timeout_count >= MAX_CONSECUTIVE_RESUME_ATTEMPTS:
                 with CampaignStateMutator(state_path) as cap_m:

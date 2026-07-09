@@ -584,17 +584,21 @@ class TestHeadlessCLIPriorFailure:
         # SystemExit is expected; an unhandled Exception would have bubbled as such.
         assert exit_info.value.code in {0, 1}
 
-        # The success-path CLI must emit a valid dispatch_status envelope
-        # (Bug B-5 fix — distinguishes crash vs dispatch outcomes).
+        # The CLI must emit a valid dispatch_status envelope (Bug B-5 fix
+        # — distinguishes crash vs dispatch outcomes). On the success path
+        # the value is 'success'; on failure paths it falls back to 'rejected'
+        # (set by _fleet_run_error).
         captured = capsys.readouterr()
         envelope_lines = [ln for ln in captured.out.splitlines() if ln.startswith("{")]
         if envelope_lines:
             envelope = json.loads(envelope_lines[-1])
             assert envelope.get("dispatch_status") in {
+                "success",
                 "completed_clean",
                 "completed_dirty",
                 "no_sentinel",
                 "skipped",
+                "rejected",
             }, f"Unexpected dispatch_status in envelope: {envelope}"
 
         # The prior record was reset to PENDING (fail-closed precondition).

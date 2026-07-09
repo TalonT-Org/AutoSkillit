@@ -205,7 +205,11 @@ CODEX_EFFORT_MAPPING: dict[str, str] = {
 
 
 def _codex_unique_model_reverse(aliases: Mapping[str, str]) -> Mapping[str, str]:
-    """Return native-model reverse aliases only for unambiguous model IDs."""
+    """Return reverse aliases only for native model IDs used by one local class.
+
+    Shared native IDs are intentionally omitted so model_class() falls back to
+    the Codex model ID instead of projecting to an arbitrary local class.
+    """
     values = tuple(aliases.values())
     return {model_id: alias for alias, model_id in aliases.items() if values.count(model_id) == 1}
 

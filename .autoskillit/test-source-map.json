@@ -2515,6 +2515,7 @@
   ],
   "src/autoskillit/core/types/_type_backend.py": [
     "tests/arch/test_pty_coherence.py",
+    "tests/core/types/test_session_event.py",
     "tests/execution/backends/test_claude_backend.py",
     "tests/execution/backends/test_codex_backend.py",
     "tests/execution/backends/test_codex_interactive.py",
@@ -2528,8 +2529,10 @@
     "tests/execution/test_headless_env_scrub.py",
     "tests/execution/test_headless_path_validation.py",
     "tests/execution/test_headless_synthesis.py",
+    "tests/execution/test_process_liveness.py",
     "tests/execution/test_session_log_fields.py",
     "tests/fleet/test_fleet_e2e.py",
+    "tests/fleet/test_fleet_e2e_codex.py",
     "tests/server/test_factory_recording.py",
     "tests/server/test_run_skill_locks.py",
     "tests/server/test_run_skill_pipeline_deps.py",
@@ -2781,7 +2784,29 @@
     "tests/test_backend_gating_root.py",
     "tests/test_llm_triage.py"
   ],
+  "src/autoskillit/core/types/_type_liveness.py": [
+    "tests/core/types/test_type_liveness.py"
+  ],
   "src/autoskillit/core/types/_type_helpers.py": [
+    "tests/arch/test_env_symmetry.py",
+    "tests/arch/test_feature_markers.py",
+    "tests/arch/test_mcp_env_forward_coverage.py",
+    "tests/arch/test_pty_coherence.py",
+    "tests/cli/test_cook_order_picker.py",
+    "tests/cli/test_cook_order_prompt.py",
+    "tests/contracts/test_backend_protocol.py",
+    "tests/contracts/test_instruction_surface.py",
+    "tests/contracts/test_package_gateways.py",
+    "tests/contracts/test_protocol_satisfaction.py",
+    "tests/contracts/test_target_skill_invocability.py",
+    "tests/core/test_session_type.py",
+    "tests/core/test_skill_command_parsing.py",
+    "tests/core/test_type_helpers.py",
+    "tests/execution/backends/test_claude_backend.py",
+    "tests/execution/backends/test_claude_code_backend.py",
+    "tests/execution/backends/test_codex_backend.py",
+    "tests/execution/backends/test_model_translation.py",
+    "tests/execution/test_api_error_signal_invariants.py",
     "tests/arch/test_env_symmetry.py",
     "tests/arch/test_feature_markers.py",
     "tests/arch/test_mcp_env_forward_coverage.py",
@@ -3317,7 +3342,8 @@
     "tests/execution/backends/test_codex_result_parser.py",
     "tests/execution/backends/test_codex_stream_parser.py",
     "tests/execution/test_exit_classification.py",
-    "tests/execution/test_headless_result.py"
+    "tests/execution/test_headless_result.py",
+    "tests/execution/test_process_liveness.py"
   ],
   "src/autoskillit/execution/backends/claude.py": [
     "tests/arch/test_backend_coherence.py",
@@ -3943,6 +3969,7 @@
     "tests/execution/test_process_heartbeat.py",
     "tests/execution/test_process_identity.py",
     "tests/execution/test_process_kill.py",
+    "tests/execution/test_process_liveness.py",
     "tests/execution/test_process_pty.py",
     "tests/execution/test_process_race.py",
     "tests/execution/test_process_run.py",
@@ -3995,6 +4022,9 @@
     "tests/execution/test_process_run.py",
     "tests/fleet/test_fleet_e2e.py"
   ],
+  "src/autoskillit/execution/process/_process_liveness.py": [
+    "tests/execution/test_process_liveness.py"
+  ],
   "src/autoskillit/execution/process/_process_monitor.py": [
     "tests/execution/test_boundary_pty_dispatch.py",
     "tests/execution/test_linux_tracing_pty_integration.py",
@@ -4006,6 +4036,7 @@
     "tests/execution/test_process_identity.py",
     "tests/execution/test_process_idle_watchdog.py",
     "tests/execution/test_process_kill.py",
+    "tests/execution/test_process_liveness.py",
     "tests/execution/test_process_pty.py",
     "tests/execution/test_process_run.py",
     "tests/execution/test_process_session_log_monitor.py",
@@ -4031,6 +4062,7 @@
     "tests/execution/test_process_identity.py",
     "tests/execution/test_process_idle_watchdog.py",
     "tests/execution/test_process_kill.py",
+    "tests/execution/test_process_liveness.py",
     "tests/execution/test_process_pty.py",
     "tests/execution/test_process_race.py",
     "tests/execution/test_process_run.py",

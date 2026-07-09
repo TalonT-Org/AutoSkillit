@@ -6,6 +6,7 @@ import re as _re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
@@ -22,6 +23,7 @@ __all__ = [
     "CODEX_EFFORT_MAPPING",
     "CODEX_MODEL_ALIASES",
     "CODEX_MODEL_ALIASES_LAST_VERIFIED",
+    "CODEX_VALID_MODEL_IDS",
     "CmdOrigin",
     "CmdSpec",
     "ModelTranslation",
@@ -30,6 +32,7 @@ __all__ = [
     "CodexEventData",
     "SessionEvent",
     "AgentSessionResult",
+    "is_valid_codex_model_id",
     "model_class",
     "strip_context_window_suffix",
 ]
@@ -177,13 +180,22 @@ CLAUDE_MODEL_ALIASES: dict[str, str] = {
     "haiku": "haiku",
 }
 
-CODEX_MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "gpt-5.4",
-    "opus": "gpt-5.5",
-    "haiku": "gpt-5.4-mini",
-}
+CODEX_MODEL_ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        "sonnet": "gpt-5.5",
+        "opus": "gpt-5.5",
+        "haiku": "gpt-5.5",
+    }
+)
 
-CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-06-11"
+CODEX_MODEL_ALIASES_LAST_VERIFIED: str = "2026-07-09"
+
+CODEX_VALID_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.5"})
+
+assert set(CODEX_MODEL_ALIASES.values()).issubset(CODEX_VALID_MODEL_IDS), (
+    "CODEX_MODEL_ALIASES values must all be members of CODEX_VALID_MODEL_IDS; "
+    f"got {sorted(set(CODEX_MODEL_ALIASES.values()) - CODEX_VALID_MODEL_IDS)}"
+)
 
 CODEX_EFFORT_MAPPING: dict[str, str] = {
     "sonnet": "high",
@@ -191,13 +203,20 @@ CODEX_EFFORT_MAPPING: dict[str, str] = {
     "haiku": "medium",
 }
 
-_CODEX_MODEL_REVERSE: dict[str, str] = {v: k for k, v in CODEX_MODEL_ALIASES.items()}
-_codex_alias_values = list(CODEX_MODEL_ALIASES.values())
-assert len(_CODEX_MODEL_REVERSE) == len(CODEX_MODEL_ALIASES), (
-    "CODEX_MODEL_ALIASES values must be unique — duplicate makes an alias unreachable "
-    f"via model_class(). Duplicates: "
-    f"{[v for v in _codex_alias_values if _codex_alias_values.count(v) > 1]}"
-)
+
+def _codex_unique_model_reverse(aliases: Mapping[str, str]) -> Mapping[str, str]:
+    """Return reverse aliases only for native model IDs used by one local class.
+
+    Shared native IDs are intentionally omitted so model_class() falls back to
+    the Codex model ID instead of projecting to an arbitrary local class.
+    """
+    values = tuple(aliases.values())
+    return {model_id: alias for alias, model_id in aliases.items() if values.count(model_id) == 1}
+
+
+# Reverse lookup is valid only for one-to-one native IDs. When multiple local
+# classes share a Codex model, the class is carried by model_reasoning_effort.
+_CODEX_MODEL_REVERSE: Mapping[str, str] = _codex_unique_model_reverse(CODEX_MODEL_ALIASES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +234,10 @@ class ModelTranslation:
 
 def strip_context_window_suffix(model: str) -> str:
     return _CONTEXT_WINDOW_SUFFIX_RE.sub("", model)
+
+
+def is_valid_codex_model_id(model_id: str) -> bool:
+    return model_id in CODEX_VALID_MODEL_IDS
 
 
 def model_class(model: str) -> str:

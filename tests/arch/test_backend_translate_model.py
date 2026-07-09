@@ -68,7 +68,7 @@ def test_translate_model_called_at_terminal_model_sites() -> None:
             )
 
 
-def test_translate_model_distinct_per_alias_class() -> None:
+def test_translate_model_resolution_distinct_per_alias_class() -> None:
     from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
 
     alias_keys = list(CLAUDE_MODEL_ALIASES.keys())
@@ -77,8 +77,10 @@ def test_translate_model_distinct_per_alias_class() -> None:
             backend = cls()
         except TypeError:
             pytest.skip(f"{backend_name}: requires constructor args — cannot validate")
-        translated = [backend.translate_model(k) for k in alias_keys]
+        translated = [
+            (backend.translate_model(k), backend.model_config_overrides(k)) for k in alias_keys
+        ]
         assert len(translated) == len(set(translated)), (
-            f"{backend_name}: translate_model produced duplicate outputs for alias keys "
+            f"{backend_name}: model resolution produced duplicate outputs for alias keys "
             f"{alias_keys}: {translated}"
         )

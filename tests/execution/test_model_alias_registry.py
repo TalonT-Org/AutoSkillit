@@ -6,8 +6,6 @@ import pytest
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-VALID_CODEX_MODEL_IDS: frozenset[str] = frozenset({"gpt-5.4", "gpt-5.4-mini", "gpt-5.5"})
-
 VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"sonnet", "opus", "haiku"})
 
 
@@ -27,12 +25,12 @@ def test_anomaly_detection_aliases_keys_match_shared() -> None:
 
 
 def test_codex_alias_values_in_allowlist() -> None:
-    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES
+    from autoskillit.core.types._type_backend import CODEX_MODEL_ALIASES, is_valid_codex_model_id
 
     for key, value in CODEX_MODEL_ALIASES.items():
-        assert value in VALID_CODEX_MODEL_IDS, (
-            f"CODEX_MODEL_ALIASES[{key!r}] = {value!r} is not in VALID_CODEX_MODEL_IDS. "
-            "Update VALID_CODEX_MODEL_IDS if the intended target model changed."
+        assert is_valid_codex_model_id(value), (
+            f"CODEX_MODEL_ALIASES[{key!r}] = {value!r} is not a valid Codex model ID. "
+            "Update CODEX_VALID_MODEL_IDS if the intended target model changed."
         )
 
 

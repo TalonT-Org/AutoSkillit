@@ -499,10 +499,10 @@ class TestEnsureCodexMcpRegistered:
     def test_preserves_nested_sections_with_special_keys(self, tmp_path):
         p = tmp_path / "config.toml"
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text('[notice]\nmodel_migrations = {"gpt-5.3-codex" = "gpt-5.4"}\n')
+        p.write_text('[notice]\nmodel_migrations = {"gpt-5.3-codex" = "gpt-5.5"}\n')
         ensure_codex_mcp_registered(config_path=p)
         data = _read_codex_config(p).data
-        assert data["notice"]["model_migrations"]["gpt-5.3-codex"] == "gpt-5.4"
+        assert data["notice"]["model_migrations"]["gpt-5.3-codex"] == "gpt-5.5"
 
     def test_updates_stale_tool_timeout(self, tmp_path):
         p = tmp_path / "config.toml"
@@ -742,7 +742,7 @@ class TestSerializeTomlKeyQuoting:
         assert parsed == original
 
     def test_round_trip_key_with_multiple_dots(self):
-        original = {"notice": {"model_migrations": {"gpt-5.3-codex": "gpt-5.4"}}}
+        original = {"notice": {"model_migrations": {"gpt-5.3-codex": "gpt-5.5"}}}
         serialized = _serialize_toml(original)
         parsed = tomllib.loads(serialized)
         assert parsed == original

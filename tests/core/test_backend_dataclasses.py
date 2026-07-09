@@ -197,6 +197,7 @@ def test_backend_module_all_exhaustive():
         "CODEX_EFFORT_MAPPING",
         "CODEX_MODEL_ALIASES",
         "CODEX_MODEL_ALIASES_LAST_VERIFIED",
+        "CODEX_VALID_MODEL_IDS",
         "CmdOrigin",
         "CmdSpec",
         "ModelTranslation",
@@ -205,6 +206,7 @@ def test_backend_module_all_exhaustive():
         "CodexEventData",
         "SessionEvent",
         "AgentSessionResult",
+        "is_valid_codex_model_id",
         "model_class",
         "strip_context_window_suffix",
     }

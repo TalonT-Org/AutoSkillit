@@ -147,6 +147,7 @@ from .types import CODEX_MODEL_ALIASES as CODEX_MODEL_ALIASES
 from .types import CODEX_MODEL_ALIASES_LAST_VERIFIED as CODEX_MODEL_ALIASES_LAST_VERIFIED
 from .types import CODEX_SCHEMA_VERSION as CODEX_SCHEMA_VERSION
 from .types import CODEX_SESSIONS_SUBDIR as CODEX_SESSIONS_SUBDIR
+from .types import CODEX_VALID_MODEL_IDS as CODEX_VALID_MODEL_IDS
 from .types import CONFIG_AUTHORITY_KEYS as CONFIG_AUTHORITY_KEYS
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
@@ -368,6 +369,7 @@ from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
 from .types import fleet_error as fleet_error
 from .types import is_path_like_token as is_path_like_token
+from .types import is_valid_codex_model_id as is_valid_codex_model_id
 from .types import model_class as model_class
 from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name

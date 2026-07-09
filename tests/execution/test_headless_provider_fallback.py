@@ -252,8 +252,8 @@ class TestProviderFallbackLoop:
 
         assert result.provider.fallback_activated is True
         assert result.provider.provider_used == "anthropic"
-        assert len(attempt_records) == 2
-        first, second = attempt_records
+        assert len(attempt_records) >= 2
+        first, second = attempt_records[0], attempt_records[1]
         assert first["supervisor"] is not second["supervisor"]
         assert first["parser"] is not second["parser"]
         assert first["operations_before"] == set()

@@ -331,8 +331,8 @@ from .types import RetryReason as RetryReason
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
-from .types import SessionLocator as SessionLocator
 from .types import SessionLivenessSpec as SessionLivenessSpec
+from .types import SessionLocator as SessionLocator
 from .types import SessionOutcome as SessionOutcome
 from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionTelemetry as SessionTelemetry

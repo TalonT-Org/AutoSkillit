@@ -203,6 +203,8 @@ def test_backend_module_all_exhaustive():
         "SkillSessionConfig",
         "ClaudeEventData",
         "CodexEventData",
+        "OperationLiveness",
+        "SessionLivenessSpec",
         "SessionEvent",
         "AgentSessionResult",
         "model_class",

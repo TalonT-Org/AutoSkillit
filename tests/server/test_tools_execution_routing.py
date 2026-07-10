@@ -84,7 +84,13 @@ async def test_run_skill_calls_session_skill_manager_init_session(
 async def test_run_skill_activates_deps_for_tier3_target(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
-    """run_skill calls activate_skill_deps even when target is tier3 (not in tier2 list)."""
+    """run_skill calls activate_skill_deps even when target is tier3 (not in tier2 list).
+
+    Supplies every required ``open-pr`` input (plan_paths, feature_branch,
+    base_branch) so the contract-valid invocation reaches the activation
+    boundary — without these inputs the resolver denies before the activation
+    step and the test would silently prove nothing.
+    """
     from unittest.mock import MagicMock
 
     from autoskillit.core import ValidatedAddDir
@@ -109,8 +115,15 @@ async def test_run_skill_activates_deps_for_tier3_target(
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
-    # Use a tier3 skill name
-    await run_skill("/open-pr", "/tmp")
+    # Use a tier3 skill name with all required open-pr inputs supplied in
+    # absolute manifest order: plan_paths (string), feature_branch (string),
+    # base_branch (string). The order and identity of every supplied slot is
+    # intentionally explicit so any contract drift surfaces as a test failure.
+    plan_path = str(tmp_path / "plan.md")
+    await run_skill(
+        f"/open-pr plan_paths={plan_path} feature_branch=feat/test-branch base_branch=main",
+        "/tmp",
+    )
 
     # activate_skill_deps must have been called regardless of tier
     mock_ssm.activate_skill_deps.assert_called_once()

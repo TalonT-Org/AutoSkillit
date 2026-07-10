@@ -130,7 +130,9 @@ class TestBackendCompatGateFailClosed:
     ):
         """Provider override fires before compat check: a codex backend with
         ANTHROPIC_BASE_URL provider_extras is rerouted to claude-code, so a
-        claude-code-only skill passes the compat gate.
+        claude-code-only skill passes the compat gate. The contract-valid
+        invocation supplies the required ``investigate.topic`` input so the
+        resolver and activation paths are exercised end-to-end.
         """
         import json
         from unittest.mock import MagicMock
@@ -184,7 +186,7 @@ class TestBackendCompatGateFailClosed:
             lambda cmd, resolver: ("/autoskillit:investigate", "investigate"),
         )
 
-        result = json.loads(await run_skill("/autoskillit:investigate", str(tmp_path)))
+        result = json.loads(await run_skill("/autoskillit:investigate the topic", str(tmp_path)))
         assert (
             result.get("subtype") != "crashed"
             or "incompatible" not in result.get("error", "").lower()

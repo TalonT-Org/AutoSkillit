@@ -1144,10 +1144,9 @@ steps:
     model: ''
     with:
       skill_command: /autoskillit:resolve-failures ${{ context.worktree_path }} ${{
-        context.pr_plan_path }} ${{ context.batch_branch }}
+        context.pr_plan_path }} ${{ context.batch_branch }} ${{ inputs.base_branch }}
       cwd: ${{ context.worktree_path }}
       step_name: fix
-      base_branch: ${{ inputs.base_branch }}
       output_dir: '.'
     capture:
       verdict: ${{ result.verdict }}

@@ -376,13 +376,7 @@ skills:
     - name: plan_path
       type: file_path
       required: false
-    outputs:
-    - name: review_path
-      type: file_path
-    expected_output_patterns:
-    - "review_path[ \\t]*=[ \\t]*/.+"
-    pattern_examples:
-    - "review_path = /tmp/review.md\n%%ORDER_UP%%"
+    outputs: []
   audit-friction:
     inputs: []
     outputs: []

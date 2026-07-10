@@ -244,7 +244,19 @@ def _is_observability_capture(cap_key: str, step_name: str, step: RecipeStep) ->
 
 
 def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[DataFlowWarning]:
-    """Detect captured variables that are never consumed downstream."""
+    """Detect captured variables that are never consumed downstream.
+
+    Per the rectify plan, consumption includes effective delivery evidence:
+    references inside ``skill_command`` (worker-bound), references inside a
+    registered ``with:`` key (tool-bound), and references inside the typed
+    ``dispatch_items`` top-level control (orchestrator-bound). The detector
+    also unions whole-map references so non-standard ``with_args`` keys that
+    thread captures into callable args continue to count as consumption for
+    back-compat (the analyzer flags them as unsupported but the recipe still
+    works).
+    """
+    from autoskillit.recipe._delivery import analyze_step_delivery
+
     warnings: list[DataFlowWarning] = []
 
     for step_name, step in recipe.steps.items():
@@ -254,15 +266,31 @@ def _detect_dead_outputs(recipe: Recipe, graph: dict[str, set[str]]) -> list[Dat
         # BFS: collect all steps reachable from this step
         reachable = bfs_reachable(graph, step_name)
 
-        # Collect all context.X references in reachable steps' with_args and
-        # on_result condition when-expressions (route actions gate on context vars).
+        # Collect all context.X references in reachable steps' effective delivery
+        # evidence and on_result condition when-expressions (route actions gate
+        # on context vars).
         consumed: set[str] = set()
         for reachable_name in reachable:
             reachable_step = recipe.steps[reachable_name]
-            for arg_val in reachable_step.with_args.values():
-                if not isinstance(arg_val, str):
-                    continue
-                consumed.update(_CONTEXT_REF_RE.findall(arg_val))
+            evidence = analyze_step_delivery(
+                reachable_step,
+                optional_context_refs=getattr(reachable_step, "optional_context_refs", []),
+            )
+            consumed.update(evidence.worker_bound_refs)
+            consumed.update(evidence.tool_bound_refs)
+            consumed.update(evidence.orchestrator_control_refs)
+            # Whole-map fallback: scan every with_args value (regardless of key) so
+            # non-standard top-level keys that thread captures to callable args
+            # continue to count as consumption. The analyzer classifies these
+            # as unsupported siblings for stricter rules, but for dead-output
+            # the recipe still works.
+            for arg_val in (reachable_step.with_args or {}).values():
+                if isinstance(arg_val, str):
+                    consumed.update(_CONTEXT_REF_RE.findall(arg_val))
+                elif isinstance(arg_val, dict):
+                    for nested_val in arg_val.values():
+                        if isinstance(nested_val, str):
+                            consumed.update(_CONTEXT_REF_RE.findall(nested_val))
             # message fields are not recipe args; scanner must handle them separately.
             if reachable_step.message and isinstance(reachable_step.message, str):
                 consumed.update(_CONTEXT_REF_RE.findall(reachable_step.message))

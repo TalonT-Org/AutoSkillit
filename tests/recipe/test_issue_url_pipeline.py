@@ -67,11 +67,23 @@ class TestImplementationPipelineIssueUrl:
         assert step["tool"] == "create_and_publish_branch"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
-        """plan step must reference inputs.issue_url, not issue_content."""
+        """plan step's note must reference inputs.issue_url (per rectify plan Step 2.6).
+
+        Per the rectify plan, plan commands represent supported issue context
+        inside the declared free-text ``task`` slot via the step's note
+        rather than as inert ``with:`` siblings.
+        """
         data = load_yaml(_recipe_path("implementation"))
-        skill_step_with = data["steps"]["plan"].get("with", {})
-        assert any("issue_url" in str(v) for v in skill_step_with.values())
-        assert not any("issue_content" in str(v) for v in skill_step_with.values())
+        plan_step = data["steps"]["plan"]
+        skill_step_with = plan_step.get("with", {})
+        assert not any("issue_content" in str(v) for v in skill_step_with.values()), (
+            "issue_content must not appear in plan step's with: block"
+        )
+        plan_note = plan_step.get("note", "")
+        assert "issue_url" in plan_note, (
+            "plan step's note must mention inputs.issue_url so the orchestrator "
+            "threads it through the declared task slot"
+        )
 
     def test_issue_number_referenced_in_prepare_pr_step(self):
         """prepare_pr must reference context.issue_number in with: for dataflow tracking."""
@@ -155,11 +167,23 @@ class TestInvestigateFirstIssueUrl:
         assert step["tool"] == "create_and_publish_branch"
 
     def test_issue_url_referenced_in_downstream_skill_step(self):
-        """investigate step must reference inputs.issue_url, not issue_content."""
+        """investigate step's note must reference inputs.issue_url (per rectify plan Step 2.6).
+
+        Per the rectify plan, investigate commands represent supported issue
+        context inside the declared free-text ``task`` slot via the step's
+        note rather than as inert ``with:`` siblings.
+        """
         data = load_yaml(_recipe_path("remediation"))
-        skill_step_with = data["steps"]["investigate"].get("with", {})
-        assert any("issue_url" in str(v) for v in skill_step_with.values())
-        assert not any("issue_content" in str(v) for v in skill_step_with.values())
+        investigate_step = data["steps"]["investigate"]
+        skill_step_with = investigate_step.get("with", {})
+        assert not any("issue_content" in str(v) for v in skill_step_with.values()), (
+            "issue_content must not appear in investigate step's with: block"
+        )
+        investigate_note = investigate_step.get("note", "")
+        assert "issue_url" in investigate_note, (
+            "investigate step's note must mention inputs.issue_url so the "
+            "orchestrator threads it through the declared task slot"
+        )
 
     def test_issue_number_referenced_in_prepare_pr_step(self):
         data = load_yaml(_recipe_path("remediation"))

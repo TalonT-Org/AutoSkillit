@@ -115,13 +115,31 @@ def test_inventory_gate_bilateral_silent_when_no_audit_impl() -> None:
 
 
 def test_inventory_gate_bilateral_silent_when_properly_wired() -> None:
-    """dry-walkthrough receiving remediation_path must not fire."""
+    """dry-walkthrough receiving remediation_path inline in skill_command must not fire."""
+    findings = _findings(
+        _audit_impl_with_remediation_capture_steps(
+            dw_with_args={
+                "skill_command": (
+                    "/autoskillit:dry-walkthrough "
+                    "${{ context.plan_path }} ${{ context.remediation_path }}"
+                )
+            }
+        )
+    )
+    assert findings == []
+
+
+def test_inventory_gate_bilateral_fires_for_inert_remediation_path_sibling() -> None:
+    """An inert remediation_path sibling (not in skill_command) MUST fire."""
     findings = _findings(
         _audit_impl_with_remediation_capture_steps(
             dw_with_args={"remediation_path": "${{ context.remediation_path }}"}
         )
     )
-    assert findings == []
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert "remediation_path" in findings[0].message
+    assert "skill_command" in findings[0].message
 
 
 def test_inventory_gate_bilateral_silent_when_audit_impl_no_remediation_capture() -> None:

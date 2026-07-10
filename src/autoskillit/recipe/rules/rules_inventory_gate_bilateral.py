@@ -104,14 +104,14 @@ def _check_inventory_gate_bilateral(ctx: ValidationContext) -> list[RuleFinding]
                 step_name=dw_step_name,
                 message=(
                     f"Step '{dw_step_name}' invokes dry-walkthrough but does not "
-                    f"thread remediation_path via its with: block. The recipe "
+                    f"thread remediation_path via its skill_command. The recipe "
                     f"has an audit-impl step that captures remediation_path "
                     f"(step '{step_name}'), and dry-walkthrough is reachable from "
                     f"audit-impl via non-GO routes. Without remediation_path, "
                     f"dry-walkthrough Step 4.7 cannot distinguish satisfied from "
-                    f"unmapped requirements in the two-disposition gate. Add "
-                    f"'remediation_path: ${{{{ context.remediation_path }}}}' to "
-                    f"the step's with: block."
+                    f"unmapped requirements in the two-disposition gate. Place "
+                    f"'${{{{ context.remediation_path }}}}' at the correct "
+                    f"positional slot in the skill_command string."
                 ),
             )
         )

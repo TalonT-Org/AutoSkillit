@@ -254,8 +254,6 @@ steps:
       cwd: "${{ context.work_dir }}"
       step_name: "review_approach"
       output_dir: "{{AUTOSKILLIT_TEMP}}/review-approach"
-    capture:
-      review_path: "${{ result.review_path }}"
     retries: 1
     on_success: verify
     on_failure: release_issue_failure

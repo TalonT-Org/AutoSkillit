@@ -66,6 +66,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_io_parsing.py` | Tests for recipe YAML parsing and load_recipe |
 | `test_io_schema_fields.py` | Tests for recipe schema field validation in I/O layer |
 | `test_io_json_precompile.py` | Tests for JSON pre-compilation fast path in recipe I/O |
+| `test_delivery_evidence.py` | Tests for the DeliveryEvidence analyzer — worker-bound vs sibling-only, tokenizer/positional binding, omission sentinel alignment, and bundled recipe unsupported run_skill sibling invariants |
 | `test_issue_url_pipeline.py` | Tests for issue URL pipeline in recipe steps |
 | `test_loader.py` | Tests for path-based recipe metadata utilities |
 | `test_make_campaign_output_schema.py` | Tests for make-campaign recipe output schema |

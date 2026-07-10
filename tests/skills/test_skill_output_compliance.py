@@ -62,7 +62,7 @@ SHARED_SCRATCH_FILES = {
 # The correct format is: key = value (with spaces).
 UNSPACED_OUTPUT_TOKEN = re.compile(
     r"^(?:plan_path|investigation_path|diagnosis_path|report_path|"
-    r"review_path|worktree_path|branch_name|groups_path|manifest_path|"
+    r"worktree_path|branch_name|groups_path|manifest_path|"
     r"summary_path|analysis_path|config_path|recipe_path|triage_report|"
     r"triage_manifest|pr_order_file|analysis_file|conflict_report_path|"
     r"remediation_path|plan_parts|diagram_path|verdict|group_files|"
@@ -216,7 +216,6 @@ def test_output_path_tokens_synchronized() -> None:
             "plan_parts",
             "investigation_path",
             "diagnosis_path",
-            "review_path",
             "groups_path",
             "group_files",
             "manifest_path",
@@ -311,7 +310,7 @@ PATH_CAPTURE_SKILLS: dict[str, list[str]] = {
     "rectify": ["plan_path"],
     "investigate": ["investigation_path"],
     "make-groups": ["groups_path", "manifest_path", "group_files"],
-    "review-approach": ["review_path"],
+    "review-approach": [],
     "audit-impl": ["remediation_path"],
     "arch-lens-c4-container": ["diagram_path"],
     "arch-lens-process-flow": ["diagram_path"],

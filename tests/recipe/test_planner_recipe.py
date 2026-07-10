@@ -347,8 +347,8 @@ def test_no_step_references_inputs_task_file(planner_recipe):
 
 def test_refine_wps_recipe_step_uses_dispatch_items(planner_recipe):
     step = planner_recipe.steps["refine_wps"]
-    assert "dispatch_items" in step.with_args, (
-        "refine_wps must use dispatch_items for per-phase parallel dispatch"
+    assert step.dispatch_items, (
+        "refine_wps must use top-level dispatch_items for per-phase parallel dispatch"
     )
     assert step.capture_list is not None, (
         "refine_wps must use capture_list instead of capture for dispatch accumulation"
@@ -375,8 +375,8 @@ def test_merge_refined_wps_step_exists(planner_recipe):
 @pytest.mark.parametrize("step_name", ["refine_assignments", "refine_wps"])
 def test_refine_tier_steps_all_use_dispatch_items(planner_recipe, step_name):
     step = planner_recipe.steps[step_name]
-    assert "dispatch_items" in step.with_args, (
-        f"{step_name} must use dispatch_items for per-phase parallel dispatch. "
+    assert step.dispatch_items, (
+        f"{step_name} must use top-level dispatch_items for per-phase parallel dispatch. "
         "All refine_* steps at the assignment/WP tier must shard by phase."
     )
 

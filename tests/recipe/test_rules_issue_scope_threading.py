@@ -54,12 +54,30 @@ def _dry_walkthrough_steps(with_args: dict[str, str]) -> dict[str, RecipeStep]:
 
 
 def test_dry_walkthrough_with_issue_url_threaded_passes():
-    """dry-walkthrough receiving issue_url must not fire."""
+    """dry-walkthrough receiving issue_url inline in skill_command must not fire."""
+    findings = _findings(
+        _dry_walkthrough_steps(
+            {
+                "skill_command": (
+                    "/autoskillit:dry-walkthrough ${{ context.plan_path }} ${{ inputs.issue_url }}"
+                ),
+            }
+        ),
+        _issue_url_ingredient(),
+    )
+    assert findings == []
+
+
+def test_dry_walkthrough_with_inert_issue_url_sibling_fires():
+    """An inert issue_url sibling (not in skill_command) MUST fire."""
     findings = _findings(
         _dry_walkthrough_steps({"issue_url": "${{ inputs.issue_url }}"}),
         _issue_url_ingredient(),
     )
-    assert findings == []
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert "issue_url" in findings[0].message
+    assert "skill_command" in findings[0].message
 
 
 def test_dry_walkthrough_without_issue_url_fires():
@@ -78,12 +96,31 @@ def test_dry_walkthrough_without_issue_ingredient_passes():
 
 
 def test_dry_walkthrough_with_issue_number_threaded_passes():
-    """dry-walkthrough receiving issue_number (alternative) must not fire."""
+    """dry-walkthrough receiving issue_number inline in skill_command must not fire."""
+    findings = _findings(
+        _dry_walkthrough_steps(
+            {
+                "skill_command": (
+                    "/autoskillit:dry-walkthrough "
+                    "${{ context.plan_path }} ${{ inputs.issue_number }}"
+                ),
+            }
+        ),
+        {"issue_number": RecipeIngredient(description="GitHub issue number")},
+    )
+    assert findings == []
+
+
+def test_dry_walkthrough_with_inert_issue_number_sibling_fires():
+    """An inert issue_number sibling (not in skill_command) MUST fire."""
     findings = _findings(
         _dry_walkthrough_steps({"issue_number": "${{ inputs.issue_number }}"}),
         {"issue_number": RecipeIngredient(description="GitHub issue number")},
     )
-    assert findings == []
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+    assert "issue_number" in findings[0].message
+    assert "skill_command" in findings[0].message
 
 
 def test_non_dry_walkthrough_step_does_not_fire():

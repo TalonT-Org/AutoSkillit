@@ -287,9 +287,13 @@ class TestImplementationPipelineStructure:
     def recipe(self):
         return load_recipe(builtin_recipes_dir() / "implementation.yaml")
 
-    def test_ip2_review_approach_step_captures_review_path(self, recipe) -> None:
-        """T_IP2: review_approach step has capture containing key review_path."""
-        assert "review_path" in recipe.steps["review_approach"].capture
+    def test_ip2_review_approach_step_has_no_review_path_capture(self, recipe) -> None:
+        """T_IP2: review_approach step has NO capture for review_path (per rectify plan).
+
+        review_path was an inert sibling with no declared dry-walkthrough input; the
+        rectify plan removes the false handoff and oracle rather than transport it.
+        """
+        assert "review_path" not in recipe.steps["review_approach"].capture
 
     def test_ip3_audit_impl_has_verdict_and_remediation_capture_and_on_result(
         self,
@@ -310,10 +314,14 @@ class TestImplementationPipelineStructure:
             "audit_impl on_result must have a condition checking result.verdict"
         )
 
-    def test_ip4_verify_step_references_context_review_path(self, recipe) -> None:
-        """T_IP4: verify step with_args contains a reference to context.review_path."""
+    def test_ip4_verify_step_does_not_reference_context_review_path(self, recipe) -> None:
+        """T_IP4: verify step with_args contains NO reference to context.review_path.
+
+        review_path is not a declared dry-walkthrough input; the rectify plan removes
+        this false handoff entirely.
+        """
         verify_with = recipe.steps["verify"].with_args
-        assert any("context.review_path" in str(v) for v in verify_with.values())
+        assert all("context.review_path" not in str(v) for v in verify_with.values())
 
     def test_ip5_audit_impl_has_on_failure(self, recipe) -> None:
         """T_IP5: audit_impl declares on_failure for tool-level failure routing.

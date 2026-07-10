@@ -130,9 +130,9 @@
       "with": {
         "skill_command": "/autoskillit:planner-elaborate-phase ${{ context.plan_snapshot_path }} {phase_id} ${{ context.planner_dir }}/phases",
         "cwd": "${{ inputs.source_dir }}",
-        "output_dir": "${{ context.planner_dir }}",
-        "dispatch_items": "${{ context.phase_ids }}"
+        "output_dir": "${{ context.planner_dir }}"
       },
+      "dispatch_items": "${{ context.phase_ids }}",
       "capture_list": {
         "elab_result_path": "${{ result.elab_result_path }}"
       },
@@ -193,9 +193,9 @@
       "with": {
         "skill_command": "/autoskillit:planner-elaborate-assignments {context_path} ${{ context.planner_dir }}",
         "cwd": "${{ inputs.source_dir }}",
-        "output_dir": "${{ context.planner_dir }}/assignments",
-        "dispatch_items": "${{ context.assignment_context_paths }}"
+        "output_dir": "${{ context.planner_dir }}/assignments"
       },
+      "dispatch_items": "${{ context.assignment_context_paths }}",
       "capture_list": {
         "phase_assignments_result_dir": "${{ result.phase_assignments_result_dir }}"
       },
@@ -227,9 +227,9 @@
       "with": {
         "skill_command": "/autoskillit:planner-refine-assignments {context_path} ${{ context.refined_plan_path }} ${{ context.planner_dir }}",
         "cwd": "${{ inputs.source_dir }}",
-        "output_dir": "${{ context.planner_dir }}/refine_contexts",
-        "dispatch_items": "${{ context.refine_context_paths }}"
+        "output_dir": "${{ context.planner_dir }}/refine_contexts"
       },
+      "dispatch_items": "${{ context.refine_context_paths }}",
       "capture_list": {
         "phase_refined_path": "${{ result.phase_refined_path }}"
       },
@@ -271,9 +271,9 @@
       "with": {
         "skill_command": "/autoskillit:planner-elaborate-wps {context_path} ${{ context.planner_dir }}",
         "cwd": "${{ inputs.source_dir }}",
-        "output_dir": "${{ context.planner_dir }}/work_packages",
-        "dispatch_items": "${{ context.wp_context_paths }}"
+        "output_dir": "${{ context.planner_dir }}/work_packages"
       },
+      "dispatch_items": "${{ context.wp_context_paths }}",
       "capture_list": {
         "phase_wps_result_dir": "${{ result.phase_wps_result_dir }}"
       },
@@ -315,9 +315,9 @@
       "with": {
         "skill_command": "/autoskillit:planner-refine-wps {context_path} ${{ context.refined_plan_path }} ${{ context.planner_dir }}",
         "cwd": "${{ inputs.source_dir }}",
-        "output_dir": "${{ context.planner_dir }}/wp_refine_contexts",
-        "dispatch_items": "${{ context.wp_refine_context_paths }}"
+        "output_dir": "${{ context.planner_dir }}/wp_refine_contexts"
       },
+      "dispatch_items": "${{ context.wp_refine_context_paths }}",
       "capture_list": {
         "phase_wp_refined_path": "${{ result.phase_wp_refined_path }}"
       },
@@ -393,10 +393,9 @@
       "tool": "run_skill",
       "model": "",
       "with": {
-        "skill_command": "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }}",
+        "skill_command": "/autoskillit:planner-reconcile-deps ${{ context.planner_dir }} ${{ context.consolidated_wps_path }}",
         "cwd": "${{ inputs.source_dir }}",
-        "output_dir": "${{ context.planner_dir }}",
-        "consolidated_wps_path": "${{ context.consolidated_wps_path }}"
+        "output_dir": "${{ context.planner_dir }}"
       },
       "on_success": "planner_assess_review_approach",
       "on_failure": "escalate_stop",

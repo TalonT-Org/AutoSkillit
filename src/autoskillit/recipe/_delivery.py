@@ -160,8 +160,13 @@ def analyze_step_delivery(
     orch_control = _detect_orchestrator_control_keys(step)
 
     # Availability-only refs: declared in optional_context_refs but not bound anywhere.
-    declared_optional = set(optional_context_refs or [])
-    all_bound = worker_bound | tool_bound | orch_control
+    # Caller may pass a list explicitly; otherwise read from the step attribute.
+    declared_optional: set[str]
+    if optional_context_refs is None:
+        declared_optional = set(getattr(step, "optional_context_refs", []) or [])
+    else:
+        declared_optional = set(optional_context_refs)
+    all_bound = set(worker_bound) | set(tool_bound) | set(orch_control)
     availability = frozenset(declared_optional - all_bound)
 
     # Filter worker-bound and tool-bound to exclude orch_control (they're distinct views)
@@ -181,6 +186,9 @@ def analyze_step_delivery(
 
 def analyze_recipe_delivery(recipe: Any) -> DeliveryEvidenceMap:
     """Build a DeliveryEvidenceMap for every step in a recipe."""
+    from autoskillit.core import get_logger
+
+    logger = get_logger(__name__)
     steps_attr = getattr(recipe, "steps", {}) or {}
     out: dict[str, DeliveryEvidence] = {}
     for step_name, step in steps_attr.items():
@@ -189,7 +197,7 @@ def analyze_recipe_delivery(recipe: Any) -> DeliveryEvidenceMap:
             try:
                 object.__setattr__(step, "name", step_name)
             except Exception:
-                pass
+                logger.warning("Failed to set step name attribute", exc_info=True)
         optional_refs = list(getattr(step, "optional_context_refs", []) or [])
         out[step_name] = analyze_step_delivery(step, optional_context_refs=optional_refs)
     manifest_id = type(recipe).__name__ + ":" + str(getattr(recipe, "name", ""))

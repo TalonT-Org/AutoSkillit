@@ -103,16 +103,36 @@ def _make_recipe_with_args(tool: str, with_args: dict[str, str] | None = None) -
 
 
 def test_dead_with_param_detects_unknown_key() -> None:
-    """with key 'add_dir' on run_skill produces dead-with-param WARNING."""
+    """with key 'add_dir' on run_cmd produces dead-with-param WARNING.
+
+    ``run_skill`` is intentionally skipped by ``dead-with-param`` and is
+    covered by the dedicated ERROR rule ``unsupported-run-skill-param``;
+    see test_unsupported_run_skill_param below.
+    """
     recipe = _make_recipe_with_args(
-        "run_skill",
-        {"skill_command": "/autoskillit:investigate", "cwd": "/tmp", "add_dir": "/some/path"},
+        "run_cmd",
+        {"cmd": "echo hi", "cwd": "/tmp", "add_dir": "/some/path"},
     )
     findings = run_semantic_rules(recipe)
     dead = [f for f in findings if f.rule == "dead-with-param"]
     assert dead, "Expected dead-with-param finding for 'add_dir'"
     assert all(f.severity == Severity.WARNING for f in dead)
     assert any("add_dir" in f.message for f in dead)
+
+
+def test_unsupported_run_skill_param() -> None:
+    """Inert run_skill.with keys produce the dedicated ERROR rule, not dead-with-param WARNING."""
+    recipe = _make_recipe_with_args(
+        "run_skill",
+        {"skill_command": "/autoskillit:investigate", "cwd": "/tmp", "add_dir": "/some/path"},
+    )
+    findings = run_semantic_rules(recipe)
+    unsupported = [f for f in findings if f.rule == "unsupported-run-skill-param"]
+    assert unsupported, "Expected unsupported-run-skill-param finding for 'add_dir'"
+    assert all(f.severity == Severity.ERROR for f in unsupported)
+    assert any("add_dir" in f.message for f in unsupported)
+    dead = [f for f in findings if f.rule == "dead-with-param"]
+    assert not dead, "run_skill must be skipped by dead-with-param"
 
 
 def test_dead_with_param_allows_valid_keys() -> None:

@@ -539,6 +539,96 @@ class TestBuildSkillResultUnknownAndZeroOutputFallback:
         assert sr.subtype == "path_contamination"
         assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
 
+    def test_unknown_skill_text_only_succeeds(self):
+        """Unknown skill + external plan_path text + no writes at all → success.
+        Text alone is not contamination; proof (writes) is required."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:no-such-skill-anywhere x",
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_unknown_skill_external_write_contaminates(self):
+        """Unknown skill + external plan_path text + external Write → contamination.
+        Global fallback extracts the token; out-of-CWD write proves it."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        write_outside = _make_tool_use_line("Write", {"file_path": external_plan, "content": "x"})
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + write_outside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:no-such-skill-anywhere x",
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+
+    def test_zero_output_skill_text_only_succeeds(self):
+        """Known zero-output skill (implement-worktree-no-merge) + external plan_path text
+        + no writes → success. Text echo alone is not contamination."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_zero_output_skill_in_cwd_write_succeeds(self):
+        """Known zero-output skill + external plan_path text + in-CWD Write → success.
+        The text echo doesn't match the in-CWD write proof — no contamination."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        in_cwd_path = "/worktree/clone/.autoskillit/temp/make-plan/foo.md"
+        write_inside = _make_tool_use_line("Write", {"file_path": in_cwd_path, "content": "x"})
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + write_inside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+        assert sr.write_path_warnings == []
+
 
 class TestBuildSkillResultSlashFormClassifierBoundary:
     """Slash-form scoping must work end-to-end through _build_skill_result — proving that

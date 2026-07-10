@@ -39,7 +39,16 @@ __all__ = [
     "SkillFamilyDef",
     "GITHUB_API_SKILL_FAMILIES",
     "CODEX_SESSIONS_SUBDIR",
+    "OPTIONAL_ARG_OMISSION_SENTINEL",
 ]
+
+# Canonical literal for "this optional positional slot is intentionally omitted
+# (or supplied as the empty string for free-text slots)". A worker uses this to
+# preserve positional slot alignment across issue-backed and issue-free recurrence
+# variants without inventing a shifted argument. Recipe and SKILL.md literals
+# must remain aligned with this constant; see test in
+# tests/recipe/test_delivery_evidence.py::test_omission_sentinel_aligned.
+OPTIONAL_ARG_OMISSION_SENTINEL: str = "-"
 
 RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
     {

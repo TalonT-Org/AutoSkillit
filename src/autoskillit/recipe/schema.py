@@ -145,6 +145,9 @@ class RecipeStep:
     )  # Captured output names used for informational propagation, not flow control
     phoropter_family: str | None = None
     skip_when_true: str | None = None
+    dispatch_items: str | None = (
+        None  # Orchestrator fan-out source; NOT an MCP parameter, never delivered to the worker
+    )
 
     def __post_init__(self) -> None:
         self.capture = _coerce_capture_dict(self.capture)

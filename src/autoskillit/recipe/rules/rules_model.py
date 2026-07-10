@@ -31,7 +31,10 @@ def _check_model_empty_on_context_intensive(ctx: ValidationContext) -> list[Rule
             continue
         if step.action == "stop":
             continue
-        if "dispatch_items" not in step.with_args:
+        # dispatch_items is now a top-level typed field on RecipeStep; the
+        # legacy `with:` key still works for backward compatibility.
+        has_dispatch = bool(step.dispatch_items) or "dispatch_items" in step.with_args
+        if not has_dispatch:
             continue
         if step.model and step.model.strip():
             continue

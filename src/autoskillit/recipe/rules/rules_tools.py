@@ -15,6 +15,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._delivery import analyze_step_delivery
 from autoskillit.recipe._rule_helpers import _MAX_HOPS
 from autoskillit.recipe.contracts import (
     get_skill_contract,
@@ -22,6 +23,7 @@ from autoskillit.recipe.contracts import (
     resolve_skill_name,
 )
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.tool_registry import for_tool as _tool_def_for
 
 logger = get_logger(__name__)
 
@@ -32,7 +34,10 @@ _RUN_PYTHON_PATH_LIKE_ARGS: frozenset[str] = frozenset(
 )
 
 # Known parameter signatures for MCP tools that accept `with:` args in recipes.
-# Intentionally hardcoded — recipe validation runs without a live MCP server.
+# Source of truth: src/autoskillit/recipe/tool_registry.py. This dict is kept
+# populated via _tool_def_for() for backward compatibility (legacy imports
+# and parity tests); do NOT edit it directly — add new ToolDef entries in
+# tool_registry.py instead.
 _TOOL_PARAMS: dict[str, frozenset[str]] = {
     # --- Execution tools ---
     "run_skill": frozenset(
@@ -393,9 +398,15 @@ def _check_subset_disabled_tool(ctx: ValidationContext) -> list[RuleFinding]:
 def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     for step_name, step in ctx.recipe.steps.items():
-        if step.tool is None or step.tool not in _TOOL_PARAMS:
+        if step.tool is None or step.tool == "run_skill":
+            # run_skill unsupported siblings are flagged by the dedicated
+            # ERROR rule ``unsupported-run-skill-param``; skip here to avoid
+            # double-reporting.
             continue
-        known_params = _TOOL_PARAMS[step.tool]
+        tool_def = _tool_def_for(step.tool)
+        if tool_def is None:
+            continue
+        known_params = tool_def.param_set
         for key in step.with_args:
             if key not in known_params:
                 findings.append(
@@ -407,6 +418,42 @@ def _check_dead_with_params(ctx: ValidationContext) -> list[RuleFinding]:
                         f"Known parameters: {sorted(known_params)}",
                     )
                 )
+    return findings
+
+
+@semantic_rule(
+    name="unsupported-run-skill-param",
+    description=(
+        "run_skill step declares a with: key that is not a registered "
+        "run_skill parameter; the value cannot reach the worker through "
+        "run_skill and cannot satisfy delivery, bilateral, or issue-scope rules"
+    ),
+    severity=Severity.ERROR,
+)
+def _check_unsupported_run_skill_param(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, step in ctx.recipe.steps.items():
+        if step.tool != "run_skill":
+            continue
+        evidence = analyze_step_delivery(
+            step, optional_context_refs=getattr(step, "optional_context_refs", [])
+        )
+        if not evidence.unsupported_keys:
+            continue
+        for key in sorted(evidence.unsupported_keys):
+            findings.append(
+                make_finding(
+                    rule_name="unsupported-run-skill-param",
+                    step_name=step_name,
+                    message=(
+                        f"step '{step_name}': run_skill with: key '{key}' is not "
+                        f"a registered parameter of run_skill and cannot reach "
+                        f"the worker. Move the value into the skill_command "
+                        f"string at the correct positional slot, or remove the "
+                        f"sibling if it is not worker input."
+                    ),
+                )
+            )
     return findings
 
 

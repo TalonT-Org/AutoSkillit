@@ -2970,6 +2970,7 @@ def test_prompt_injector_registry():
 
 def test_inject_output_format_reinforcement_non_anthropic():
     from autoskillit.execution.backends._claude_prompt import _inject_output_format_reinforcement
+    from autoskillit.execution.headless._headless_path_tokens import _OUTPUT_PATH_TOKENS
 
     result = _inject_output_format_reinforcement("base prompt", profile_name="minimax")
     lower = result.lower()
@@ -2977,6 +2978,20 @@ def test_inject_output_format_reinforcement_non_anthropic():
     assert "OUTPUT FORMAT" in result, "Expected 'OUTPUT FORMAT' in injected directive"
     directive_part = result.partition("OUTPUT FORMAT")[2]
     assert "**" not in directive_part
+    # Issue #4150: directive must not prime any current global output-path token.
+    # plan_path is forbidden outright; the example key must NOT be a member of the registry.
+    assert "plan_path" not in directive_part
+    # Extract the example key (Correct: <key> = ...) and assert it is not a registered token.
+    import regex as _re
+
+    example_match = _re.search(r"Correct:\s*([A-Za-z_][\w]*)\s*=", directive_part)
+    if example_match is not None:
+        example_key = example_match.group(1)
+        assert example_key not in _OUTPUT_PATH_TOKENS, (
+            f"Non-Anthropic output directive example key {example_key!r} is a "
+            f"member of _OUTPUT_PATH_TOKENS — must be a neutral key to avoid prompt "
+            f"priming of the path-contamination classifier."
+        )
 
 
 def test_inject_output_format_reinforcement_anthropic_noop():

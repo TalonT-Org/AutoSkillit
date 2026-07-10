@@ -631,7 +631,7 @@ class TestOutputPathTokensDerivedFromContracts:
     def test_output_path_tokens_matches_expected_fixture(self) -> None:
         """_OUTPUT_PATH_TOKENS must exactly match the known fixture set.
 
-        This guards against bugs in the derivation formula: if _build_path_token_set()
+        This guards against bugs in the derivation formula: if _build_path_token_registry()
         is broken, both the production frozenset and a re-derived set would agree, but
         this hardcoded fixture would not.
         """
@@ -2137,7 +2137,9 @@ class TestWorktreePathPropagationWithEmptyMessages:
 
     def test_extract_output_paths_with_empty_messages_returns_empty(self):
         """_extract_output_paths([]) returns {} (documents the contract)."""
-        assert _extract_output_paths(NormalizedMessages([])) == {}
+        from autoskillit.execution.headless._headless_path_tokens import _OUTPUT_PATH_TOKENS
+
+        assert _extract_output_paths(NormalizedMessages([]), token_scope=_OUTPUT_PATH_TOKENS) == {}
 
 
 class TestExtractPathTokensWithMarkdownDecorators:
@@ -2156,7 +2158,7 @@ class TestExtractPathTokensWithMarkdownDecorators:
             pytest.skip("_OUTPUT_PATH_TOKENS is empty (contracts YAML not available)")
         token = next(iter(sorted(_OUTPUT_PATH_TOKENS)))
         msgs = [f"**{token}** = /tmp/plan.md"]
-        paths = _extract_output_paths(_normalize_messages(msgs))
+        paths = _extract_output_paths(_normalize_messages(msgs), token_scope=_OUTPUT_PATH_TOKENS)
         assert paths.get(token) == "/tmp/plan.md"
 
 
@@ -2183,7 +2185,7 @@ class TestNormalizeMessagesIntegration:
             pytest.skip("_OUTPUT_PATH_TOKENS is empty (contracts YAML not available)")
         token = next(iter(sorted(_OUTPUT_PATH_TOKENS)))
         msgs = [f"*{token}* = /tmp/plan.md"]
-        paths = _extract_output_paths(_normalize_messages(msgs))
+        paths = _extract_output_paths(_normalize_messages(msgs), token_scope=_OUTPUT_PATH_TOKENS)
         assert paths.get(token) == "/tmp/plan.md"
 
     def test_output_path_code_fenced(self):
@@ -2193,8 +2195,280 @@ class TestNormalizeMessagesIntegration:
             pytest.skip("_OUTPUT_PATH_TOKENS is empty (contracts YAML not available)")
         token = next(iter(sorted(_OUTPUT_PATH_TOKENS)))
         msgs = [f"```\n{token} = /tmp/plan-fenced.md\n```"]
-        paths = _extract_output_paths(_normalize_messages(msgs))
+        paths = _extract_output_paths(_normalize_messages(msgs), token_scope=_OUTPUT_PATH_TOKENS)
         assert paths.get(token) == "/tmp/plan-fenced.md"
+
+
+class TestOutputPathTokensScopedBySkillContract:
+    """Per-skill output-token selection and conservative fallback for unknown/zero-output skills.
+
+    Issue #4150: contract-scoped text candidate prevents the global union from triggering
+    contamination when a skill legitimately echoes its own input paths.
+    """
+
+    def test_make_plan_selects_only_its_own_declared_outputs(self):
+        """make-plan declares plan_path and plan_parts; selection must include only those
+        and never tokens owned by other skills (e.g., investigation_path)."""
+        from autoskillit.execution.headless._headless_path_tokens import _select_output_path_tokens
+
+        selected = _select_output_path_tokens("make-plan")
+        assert "plan_path" in selected
+        assert "plan_parts" in selected
+        # Tokens owned by other skills must NOT leak in.
+        assert "investigation_path" not in selected
+        assert "diagnosis_path" not in selected
+        assert "remediation_path" not in selected
+
+    def test_file_path_list_type_still_included(self):
+        """Selector uses type.startswith('file_path'), so file_path_list outputs stay in."""
+        from autoskillit.execution.headless._headless_path_tokens import _select_output_path_tokens
+
+        # diagnose-issue declares file_path_list output 'revision_guidance'
+        selected = _select_output_path_tokens("diagnose-issue")
+        assert "revision_guidance" in selected
+
+    def test_known_zero_output_skill_falls_back_to_global_set(self):
+        """implement-worktree-no-merge has no file_path* outputs → conservative global fallback."""
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS,
+            _select_output_path_tokens,
+        )
+
+        selected = _select_output_path_tokens("implement-worktree-no-merge")
+        assert selected == _OUTPUT_PATH_TOKENS
+
+    def test_unknown_skill_falls_back_to_global_set(self):
+        """Unknown skill name → conservative global fallback (same as zero-output)."""
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS,
+            _select_output_path_tokens,
+        )
+
+        selected = _select_output_path_tokens("no-such-skill-anywhere")
+        assert selected == _OUTPUT_PATH_TOKENS
+
+    def test_none_skill_falls_back_to_global_set(self):
+        """Unparseable/empty skill command (extract_skill_name returns None) → global fallback."""
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS,
+            _select_output_path_tokens,
+        )
+
+        assert _select_output_path_tokens(None) == _OUTPUT_PATH_TOKENS
+        assert _select_output_path_tokens("") == _OUTPUT_PATH_TOKENS
+
+    def test_registry_has_entry_for_every_skill_key(self):
+        """_OUTPUT_PATH_TOKENS_BY_SKILL must include an entry for every valid skill key,
+        including skills whose raw file_path* output set is empty — so known-empty and
+        unknown are distinguishable before both deliberately fall back to global."""
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS_BY_SKILL,
+        )
+        from autoskillit.recipe.contracts import load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        declared_skills = set(manifest.get("skills", {}).keys())
+        for skill_name in declared_skills:
+            assert skill_name in _OUTPUT_PATH_TOKENS_BY_SKILL, (
+                f"_OUTPUT_PATH_TOKENS_BY_SKILL missing entry for declared skill {skill_name!r}"
+            )
+
+    def test_registry_exact_match_with_derived_per_skill_map(self):
+        """_OUTPUT_PATH_TOKENS_BY_SKILL must exactly match an independent derivation from
+        the manifest: {skill_name: frozenset(file_path* output names)} — including empty sets.
+        Guards against a token assigned to the wrong skill or a dropped known-empty key."""
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS_BY_SKILL,
+        )
+        from autoskillit.recipe.contracts import load_bundled_manifest
+
+        manifest = load_bundled_manifest()
+        derived: dict[str, frozenset[str]] = {}
+        for skill_name, skill_data in manifest.get("skills", {}).items():
+            raw = frozenset(
+                out.get("name", "")
+                for out in skill_data.get("outputs", [])
+                if isinstance(out, dict)
+                and out.get("name", "")
+                and out.get("type", "").startswith("file_path")
+            )
+            derived[skill_name] = raw
+        assert dict(_OUTPUT_PATH_TOKENS_BY_SKILL) == derived
+
+    def test_intentionally_excluded_tokens_still_in_raw_registry(self):
+        """The raw per-skill registry preserves intentionally excluded names (worktree_path,
+        branch_name). Selector intersects with _OUTPUT_PATH_TOKENS so an excluded declared
+        output cannot accidentally trigger global fallback."""
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS,
+            _OUTPUT_PATH_TOKENS_BY_SKILL,
+            _select_output_path_tokens,
+        )
+
+        # Find a skill that declares worktree_path or branch_name as a file_path* output
+        target = None
+        for skill_name, raw in _OUTPUT_PATH_TOKENS_BY_SKILL.items():
+            if "worktree_path" in raw or "branch_name" in raw:
+                target = skill_name
+                break
+        if target is None:
+            pytest.skip("No skill declares worktree_path/branch_name as file_path* output")
+        selected = _select_output_path_tokens(target)
+        # Selected is the intersection with the active set — excluded tokens cannot appear.
+        for excluded in ("worktree_path", "branch_name"):
+            assert excluded not in selected
+            assert excluded not in _OUTPUT_PATH_TOKENS
+
+    def test_malformed_manifest_entry_falls_back_to_global(self, monkeypatch):
+        """Invalid skill entries must not crash selection — conservatively fall back."""
+        from autoskillit.execution.headless import _headless_path_tokens
+        from autoskillit.execution.headless._headless_path_tokens import _select_output_path_tokens
+
+        make_plan_tokens = _headless_path_tokens._OUTPUT_PATH_TOKENS_BY_SKILL.get(
+            "make-plan", frozenset()
+        )
+        patched_registry = {
+            "broken-skill": frozenset(),
+            "non-list-outputs": make_plan_tokens,
+        }
+        monkeypatch.setattr(
+            _headless_path_tokens,
+            "_OUTPUT_PATH_TOKENS_BY_SKILL",
+            patched_registry,
+        )
+        assert _select_output_path_tokens("broken-skill") == (
+            _headless_path_tokens._OUTPUT_PATH_TOKENS
+        )
+        assert _select_output_path_tokens("non-list-outputs") == make_plan_tokens
+
+
+class TestExtractOutputPathsWithTokenScope:
+    """_extract_output_paths must filter the matched token set against token_scope at
+    call sites, not at the regex level — so per-skill callers can scope the candidate
+    set while tests can still exercise global extraction."""
+
+    def test_extract_filters_to_supplied_scope(self):
+        from autoskillit.execution.headless._headless_path_tokens import _extract_output_paths
+
+        msgs = NormalizedMessages(
+            [
+                "plan_path = /clone/plan.md\n"
+                "investigation_path = /clone/inv.md\n"
+                "diagnosis_path = /clone/diag.md"
+            ]
+        )
+        # Only plan_path in scope → only plan_path returned.
+        paths = _extract_output_paths(msgs, token_scope=frozenset({"plan_path"}))
+        assert paths == {"plan_path": "/clone/plan.md"}
+
+    def test_extract_with_global_scope_returns_all_matching(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS,
+            _extract_output_paths,
+        )
+
+        if not _OUTPUT_PATH_TOKENS:
+            pytest.skip("_OUTPUT_PATH_TOKENS is empty")
+        msgs = NormalizedMessages(
+            ["plan_path = /clone/plan.md\ninvestigation_path = /clone/inv.md"]
+        )
+        paths = _extract_output_paths(msgs, token_scope=_OUTPUT_PATH_TOKENS)
+        assert "plan_path" in paths
+        assert "investigation_path" in paths
+
+    def test_extract_with_empty_scope_returns_nothing(self):
+        from autoskillit.execution.headless._headless_path_tokens import _extract_output_paths
+
+        msgs = NormalizedMessages(["plan_path = /clone/plan.md"])
+        paths = _extract_output_paths(msgs, token_scope=frozenset())
+        assert paths == {}
+
+
+class TestIsPathOutsideCwd:
+    """Shared lexical boundary helper used by validator, scanner, and Codex FILE_CHANGE
+    classification. Catches lexical `..` traversal and equal-to-cwd comparisons."""
+
+    def test_absolute_outside_cwd(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        assert _is_path_outside_cwd("/source/repo/file.md", "/clone/cwd")
+
+    def test_absolute_inside_cwd(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        assert not _is_path_outside_cwd("/clone/cwd/file.md", "/clone/cwd")
+
+    def test_equal_to_cwd(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        assert not _is_path_outside_cwd("/clone/cwd", "/clone/cwd")
+
+    def test_traversal_form_normalizes_outside_cwd(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        # /clone/cwd/../external/plan.md lexically normalizes to /clone/external/plan.md
+        # which is outside /clone/cwd.
+        assert _is_path_outside_cwd("/clone/cwd/../external/plan.md", "/clone/cwd")
+
+    def test_relative_target_joins_to_cwd(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        # allow_relative=False: bare relative path is invalid → no violation
+        assert not _is_path_outside_cwd("outside.txt", "/clone/cwd", allow_relative=False)
+        # allow_relative=True: relative target joins to cwd, then lexically normalizes
+        assert _is_path_outside_cwd("../outside.txt", "/clone/cwd", allow_relative=True)
+
+    def test_empty_or_root_cwd_never_violates(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        assert not _is_path_outside_cwd("/any/file.md", "")
+        assert not _is_path_outside_cwd("/any/file.md", "/")
+        assert not _is_path_outside_cwd("/any/file.md", "relative/cwd")
+
+
+class TestBuildSkillResultSlashFormScoping:
+    """Slash-form parsing of skill_command must work at the classifier boundary."""
+
+    def test_slash_make_plan_uses_make_plan_scope(self):
+        """Per-skill selection applies for both /make-plan and /autoskillit:make-plan forms."""
+        from autoskillit.execution.headless._headless_path_tokens import _select_output_path_tokens
+
+        for cmd in ("/make-plan x", "/autoskillit:make-plan x"):
+            skill_name = cmd.lstrip("/").split(" ")[0]
+            if skill_name.startswith("autoskillit:"):
+                skill_name = skill_name[len("autoskillit:") :]
+            selected = _select_output_path_tokens(skill_name)
+            assert "plan_path" in selected
+            # Other skills' outputs must NOT leak.
+            assert "investigation_path" not in selected
+
+    def test_slash_implement_worktree_no_merge_falls_back_to_global(self):
+        """Known-zero-output skills fall back to global for both slash forms."""
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS,
+            _select_output_path_tokens,
+        )
+
+        for cmd in (
+            "/implement-worktree-no-merge x",
+            "/autoskillit:implement-worktree-no-merge x",
+        ):
+            skill_name = cmd.lstrip("/").split(" ")[0]
+            if skill_name.startswith("autoskillit:"):
+                skill_name = skill_name[len("autoskillit:") :]
+            assert _select_output_path_tokens(skill_name) == _OUTPUT_PATH_TOKENS
 
 
 class TestExtractBranchName:

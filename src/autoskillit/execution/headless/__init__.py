@@ -64,7 +64,6 @@ from autoskillit.execution.headless._headless_path_tokens import (  # noqa: F401
     _RECOVERABLE_PATH_TOKENS,
     _WORKTREE_PATH_PATTERN,
     NormalizedMessages,
-    _build_path_token_set,
     _extract_branch_name,
     _extract_output_paths,
     _extract_worktree_path,

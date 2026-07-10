@@ -1681,3 +1681,161 @@ class TestFalseSuccessInfraWritesBypass:
         )
         assert sr.success is False
         assert sr.subtype == "zero_writes"
+
+
+class TestCodexPathContaminationParity:
+    """Issue #4150: Codex/file-change backend must require boundary-specific write proof,
+    not generic write counts. Out-of-CWD FILE_CHANGE + scoped text candidate → contamination.
+    External text echo + completed in-CWD FILE_CHANGE → success (Round-6 immunity)."""
+
+    @staticmethod
+    def _codex_ndjson(
+        agent_text: str,
+        file_changes: list[str],
+        *,
+        legacy_shape: bool = False,
+    ) -> str:
+        """Build a canonical Codex NDJSON stream with FILE_CHANGE items + agent message.
+
+        `file_changes` is the list of path strings emitted by the FILE_CHANGE event(s).
+        `legacy_shape=True` uses top-level item.path instead of nested changes[].path.
+        """
+        lines: list[str] = [
+            json.dumps({"type": "thread.started", "thread_id": "thread_test_4150"}),
+            json.dumps({"type": "turn.started"}),
+        ]
+        for idx, path in enumerate(file_changes):
+            fch_id = f"fch_{idx:03d}"
+            if legacy_shape:
+                item = {"type": "file_change", "id": fch_id, "path": path, "kind": "modify"}
+            else:
+                item = {
+                    "type": "file_change",
+                    "id": fch_id,
+                    "changes": [{"path": path, "kind": "modify"}],
+                }
+            lines.append(json.dumps({"type": "item.started", "item": item}))
+            lines.append(json.dumps({"type": "item.completed", "item": item}))
+        lines.append(
+            json.dumps(
+                {"type": "item.started", "item": {"type": "agent_message", "id": "msg_001"}}
+            )
+        )
+        lines.append(
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {"type": "agent_message", "id": "msg_001", "text": agent_text},
+                }
+            )
+        )
+        lines.append(
+            json.dumps(
+                {
+                    "type": "turn.completed",
+                    "usage": {
+                        "input_tokens": 200,
+                        "output_tokens": 90,
+                        "cached_input_tokens": 40,
+                        "reasoning_output_tokens": 0,
+                    },
+                }
+            )
+        )
+        return "\n".join(lines)
+
+    def test_external_text_echo_plus_out_of_cwd_file_change_contaminates(self):
+        """Nested changes[].path: external plan_path echo + out-of-CWD FILE_CHANGE → contamination.
+
+        CodexBackend has write_detection_strategy='file_changes', so the boundary proof
+        comes from a completed FILE_CHANGE outside CWD combined with implementation evidence.
+        """
+        worktree_cwd = "/worktree/clone"
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        stdout = self._codex_ndjson(
+            agent_text=f"plan_path = {external_plan}",
+            file_changes=[external_plan],
+        )
+        sr = _build_skill_result(
+            _codex_subprocess_result(stdout),
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd=worktree_cwd,
+            supports_claude_format_stdout=False,
+            backend=CodexBackend(),
+        )
+        assert sr.write_path_warnings == []
+        assert sr.evidence.has_implementation_evidence is True
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+
+    def test_external_text_echo_plus_legacy_top_level_item_path_contaminates(self):
+        """Legacy top-level item.path FILE_CHANGE shape still contaminates when out-of-CWD."""
+        worktree_cwd = "/worktree/clone"
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        stdout = self._codex_ndjson(
+            agent_text=f"plan_path = {external_plan}",
+            file_changes=[external_plan],
+            legacy_shape=True,
+        )
+        sr = _build_skill_result(
+            _codex_subprocess_result(stdout),
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd=worktree_cwd,
+            supports_claude_format_stdout=False,
+            backend=CodexBackend(),
+        )
+        assert sr.write_path_warnings == []
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+
+    def test_external_text_echo_plus_in_cwd_file_change_preserves_success(self):
+        """Round-6 immunity on Codex: external text echo + completed in-CWD FILE_CHANGE
+        remains successful. Boundary proof requires an out-of-CWD path."""
+        worktree_cwd = "/worktree/clone"
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        in_cwd_target = f"{worktree_cwd}/.autoskillit/temp/make-plan/foo.md"
+        stdout = self._codex_ndjson(
+            agent_text=f"plan_path = {external_plan}",
+            file_changes=[in_cwd_target],
+        )
+        sr = _build_skill_result(
+            _codex_subprocess_result(stdout),
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd=worktree_cwd,
+            supports_claude_format_stdout=False,
+            backend=CodexBackend(),
+        )
+        assert sr.success is True, f"Round-6 immunity on Codex violated: subtype={sr.subtype!r}"
+        assert sr.subtype != "path_contamination"
+        assert sr.retry_reason != RetryReason.PATH_CONTAMINATION
+        assert sr.evidence.has_implementation_evidence is True
+
+    def test_file_changes_count_provenance_is_recognized(self):
+        """Completed Codex changes populate write_call_count through synthetic tool uses;
+        has_implementation_evidence holds for either write_call_count OR file_changes_count."""
+        worktree_cwd = "/worktree/clone"
+        # No agent_text echoing plan_path: only the in-CWD FILE_CHANGE.
+        in_cwd_target = f"{worktree_cwd}/.autoskillit/temp/foo.md"
+        stdout = self._codex_ndjson(
+            agent_text="Done.",
+            file_changes=[in_cwd_target],
+        )
+        sr = _build_skill_result(
+            _codex_subprocess_result(stdout),
+            skill_command="/autoskillit:no-such-skill-anywhere x",
+            cwd=worktree_cwd,
+            supports_claude_format_stdout=False,
+            backend=CodexBackend(),
+        )
+        # Provenance counts are recorded; no scoped text candidate → preserve result.
+        assert sr.evidence.has_implementation_evidence is True
+        assert sr.subtype != "path_contamination"

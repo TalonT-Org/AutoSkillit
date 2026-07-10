@@ -22,6 +22,7 @@ from autoskillit.core import (
     TerminationReason,
     WriteBehaviorSpec,
     WriteEvidence,
+    extract_skill_name,
     get_logger,
     truncate_text,
     validate_worktree_path,
@@ -38,7 +39,9 @@ from autoskillit.execution.headless._headless_path_tokens import (
     _extract_branch_name,
     _extract_output_paths,
     _extract_worktree_path,
+    _is_path_outside_cwd,
     _normalize_messages,
+    _select_output_path_tokens,
     _validate_output_paths,
 )
 from autoskillit.execution.headless._headless_recovery import (
@@ -141,6 +144,20 @@ def _make_terminated_result(
             unknown_item_count=session.seen_ndjson_unknown_item_count,
         ),
     )
+
+
+def _has_out_of_cwd_file_change(file_changes: Sequence[str], cwd: str) -> bool:
+    """Return True iff any raw Codex FILE_CHANGE path lexically resolves outside cwd.
+
+    Empty/invalid entries are ignored. If cwd is missing, relative, or ``/``,
+    no boundary proof is produced — matching the validator's safety contract.
+    """
+    for path in file_changes:
+        if not isinstance(path, str) or not path:
+            continue
+        if _is_path_outside_cwd(path, cwd, allow_relative=True):
+            return True
+    return False
 
 
 def _build_skill_result(
@@ -681,34 +698,70 @@ def _build_skill_result(
     effective_worktree_path = validated_wt.path if validated_wt else None
     extracted_branch_name = _extract_branch_name(normalized_msgs)
 
-    # Path contamination detection
-    path_contamination: str | None = None
+    # Path contamination detection (two-factor contract — see plan #4150).
+    # Factor 1: contract-scoped text candidate (an assistant-text token path outside CWD,
+    #           selected from the running skill's own file_path* outputs).
+    # Factor 2: boundary-specific write proof (Claude write_path_warnings OR Codex
+    #           completed out-of-CWD FILE_CHANGE with implementation evidence).
+    # Both factors must hold for terminal classification; text alone is never proof.
+    text_path_violation: str | None = None
+    write_path_warnings: list[str] = []
+    skill_name = extract_skill_name(skill_command)
+
     if not cwd:
         logger.debug("path_contamination_check_skipped", reason="cwd not provided")
     else:
-        extracted_paths = _extract_output_paths(normalized_msgs)
-        path_contamination = _validate_output_paths(extracted_paths, cwd)
-        if path_contamination:
-            logger.warning("path_contamination_detected", detail=path_contamination, cwd=cwd)
-
-    write_path_warnings: list[str] = []
-    if cwd and supports_claude_format_stdout:
-        _wtn = backend.capabilities.write_guard_tool_names
-        if _wtn:
-            write_path_warnings = _scan_jsonl_write_paths(
-                result.stdout,
-                cwd,
-                write_tool_names=_wtn,
-            )
-        else:
-            write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
-        if write_path_warnings:
-            logger.warning(
-                "write_path_warnings_detected",
-                count=len(write_path_warnings),
+        selected_tokens = _select_output_path_tokens(skill_name)
+        extracted_paths = _extract_output_paths(normalized_msgs, token_scope=selected_tokens)
+        text_path_violation = _validate_output_paths(extracted_paths, cwd)
+        if text_path_violation:
+            logger.debug(
+                "text_path_candidate_detected",
+                detail=text_path_violation,
                 cwd=cwd,
-                warnings=write_path_warnings[:5],
+                skill_name=skill_name,
+                scope_size=len(selected_tokens),
             )
+
+        if supports_claude_format_stdout:
+            _wtn = backend.capabilities.write_guard_tool_names
+            if _wtn:
+                write_path_warnings = _scan_jsonl_write_paths(
+                    result.stdout,
+                    cwd,
+                    write_tool_names=_wtn,
+                )
+            else:
+                write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
+            if write_path_warnings:
+                logger.warning(
+                    "write_path_warnings_detected",
+                    count=len(write_path_warnings),
+                    cwd=cwd,
+                    warnings=write_path_warnings[:5],
+                )
+
+    # Factor 2: boundary-specific write proof (path-bearing, not just counts).
+    claude_boundary_proof = bool(write_path_warnings)
+    codex_boundary_proof = (
+        backend.capabilities.write_detection_strategy == "file_changes"
+        and _has_out_of_cwd_file_change(file_changes, cwd)
+        and evidence.has_implementation_evidence
+    )
+    is_path_contamination = bool(text_path_violation) and (
+        claude_boundary_proof or codex_boundary_proof
+    )
+
+    if text_path_violation and not is_path_contamination:
+        # Recurrence analysis signal: text alone is a hint, not a verdict.
+        logger.info(
+            "text_path_candidate_uncorroborated",
+            detail=text_path_violation,
+            cwd=cwd,
+            skill_name=skill_name,
+            claude_boundary_proof=claude_boundary_proof,
+            codex_boundary_proof=codex_boundary_proof,
+        )
 
     sr = SkillResult(
         success=success,
@@ -738,7 +791,7 @@ def _build_skill_result(
         ),
         completion_required=completion_required,
     )
-    if path_contamination:
+    if is_path_contamination:
         sr = dataclasses.replace(
             sr,
             success=False,

@@ -13,6 +13,7 @@ from typing import Any
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
+    ActiveRecipeRuntimeSnapshot,
     AuditLog,
     BackgroundSupervisor,
     CampaignProtector,
@@ -114,15 +115,26 @@ class ToolContext:
     skill_resolver:       SkillResolver — resolves skill names to source tier
     kitchen_id:           UUID string assigned when open_kitchen fires; scopes token telemetry
                           to the current kitchen session lifetime.
+    active_recipe_snapshot: ActiveRecipeRuntimeSnapshot | None — atomic, immutable runtime
+                          view of the active recipe. None when the kitchen is closed.
+                          Reads must go through this field; the legacy
+                          ``active_recipe_*`` attributes are derived from it for
+                          backward compatibility with existing tool handlers.
+                          Install or clear via :meth:`set_active_recipe_snapshot`.
     active_recipe_packs:  frozenset[str] | None — pack names declared by the loaded recipe
-                          (frozenset() when kitchen open but no recipe loaded; None when closed)
+                          (frozenset() when kitchen open but no recipe loaded; None when closed).
+                          Derived from ``active_recipe_snapshot``; mutable direct
+                          assignment is deprecated in favor of
+                          :meth:`set_active_recipe_snapshot`.
     active_recipe_features: frozenset[str] | None — feature names declared by the loaded recipe
-                          (frozenset() when kitchen open but no recipe loaded; None when closed)
+                          (frozenset() when kitchen open but no recipe loaded; None when closed).
+                          Derived from ``active_recipe_snapshot``.
     active_recipe_steps:  dict[str, Any] | None — step definitions cached from the loaded recipe
-                          ({} when kitchen open but no recipe loaded; None when closed)
+                          ({} when kitchen open but no recipe loaded; None when closed).
+                          Derived from ``active_recipe_snapshot``.
     active_recipe_ingredients: frozenset[str] | None — ingredient keys declared by the loaded
                           recipe (frozenset() when kitchen open but no recipe loaded; None when
-                          closed)
+                          closed). Derived from ``active_recipe_snapshot``.
     temp_dir:             Resolved temp directory for this project. Sentinel-guarded: raises
                           TypeError if not supplied explicitly. Use make_context() or pass
                           temp_dir=<path>.
@@ -171,6 +183,9 @@ class ToolContext:
     recipe_version: str = field(default="")
     gate_infrastructure_ready: bool = field(default=False)
     kitchen_id: str = field(default="")
+    active_recipe_snapshot: ActiveRecipeRuntimeSnapshot | None = field(
+        default_factory=lambda: None
+    )
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     active_recipe_features: frozenset[str] | None = field(default_factory=lambda: None)
     active_recipe_steps: dict[str, Any] | None = field(default_factory=lambda: None)
@@ -202,3 +217,40 @@ class ToolContext:
         """Build the default CI scope from config. Used by handlers as fallback when
         the caller does not supply a workflow argument."""
         return CIRunScope(workflow=self.config.ci.workflow, event=self.config.ci.event)
+
+    def set_active_recipe_snapshot(
+        self,
+        snapshot: ActiveRecipeRuntimeSnapshot | None,
+    ) -> None:
+        """Atomically install or clear the active-recipe runtime snapshot.
+
+        This is the single canonical transition API for the active recipe.
+        Passing ``None`` clears the state; passing a snapshot installs it and
+        synchronously refreshes the derived legacy fields so existing tool
+        handlers that read ``active_recipe_packs``/``active_recipe_features``/
+        ``active_recipe_steps``/``active_recipe_ingredients`` continue to work
+        without a second lookup. Direct attribute assignment to the legacy
+        fields is deprecated; new code must consume
+        ``self.active_recipe_snapshot`` directly.
+        """
+        self.active_recipe_snapshot = snapshot
+        if snapshot is None:
+            self.active_recipe_packs = None
+            self.active_recipe_features = None
+            self.active_recipe_steps = None
+            self.active_recipe_ingredients = None
+            self.recipe_name = ""
+            self.recipe_content_hash = ""
+            self.recipe_composite_hash = ""
+            self.recipe_version = ""
+            return
+        self.active_recipe_packs = frozenset(snapshot.required_packs)
+        self.active_recipe_features = frozenset(snapshot.required_features)
+        self.active_recipe_steps = {spec.step_key: spec for spec in snapshot.post_prune_steps}
+        self.active_recipe_ingredients = frozenset(
+            ing.name for ing in snapshot.normalized_ingredients
+        )
+        self.recipe_name = snapshot.recipe_kind or ""
+        self.recipe_content_hash = snapshot.content_hash
+        self.recipe_composite_hash = snapshot.composite_hash
+        self.recipe_version = snapshot.recipe_version

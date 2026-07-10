@@ -2447,6 +2447,45 @@ class TestIsPathOutsideCwd:
         assert not _is_path_outside_cwd("/any/file.md", "/")
         assert not _is_path_outside_cwd("/any/file.md", "relative/cwd")
 
+    def test_dot_suffix_cwd_classifies_inside_correctly(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        # /clone/repo/. normalizes to /clone/repo; the path /clone/repo/file.md is
+        # inside it. Without normpath, the CWD prefix would be "/clone/repo/./"
+        # and would not match the path's prefix.
+        assert not _is_path_outside_cwd("/clone/repo/file.md", "/clone/repo/.")
+
+    def test_dotdot_cwd_classifies_inside_correctly(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        # /clone/base/../repo normalizes to /clone/repo; the path
+        # /clone/repo/file.md is inside it. Without normpath, the raw CWD
+        # prefix "/clone/base/../repo/" would not match the normalized path.
+        assert not _is_path_outside_cwd("/clone/repo/file.md", "/clone/base/../repo")
+
+    def test_non_normalized_cwd_equal_check(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        # /clone/repo/. normalizes to /clone/repo, which equals the path.
+        # The post-normalization equality branch must classify this as inside.
+        assert not _is_path_outside_cwd("/clone/repo", "/clone/repo/.")
+
+    def test_root_equivalent_cwd_never_violates(self):
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _is_path_outside_cwd,
+        )
+
+        # /. and /a/.. both normalize to "/" — the root-equivalence guard must
+        # short-circuit and return False for any path under root CWD.
+        assert not _is_path_outside_cwd("/etc/passwd", "/.")
+        assert not _is_path_outside_cwd("/etc/passwd", "/a/..")
+
 
 class TestBuildSkillResultSlashFormScoping:
     """Slash-form parsing of skill_command must work at the classifier boundary."""

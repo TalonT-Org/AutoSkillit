@@ -2323,6 +2323,7 @@ class TestOutputPathTokensScopedBySkillContract:
         """Non-string name/type fields must not crash registry construction — conservatively
         fall back to empty per-skill set, then to the global set on selection."""
         from autoskillit.execution.headless._headless_path_tokens import (
+            _OUTPUT_PATH_TOKENS,
             _build_path_token_registry,
             _select_output_path_tokens,
         )
@@ -2343,8 +2344,12 @@ class TestOutputPathTokensScopedBySkillContract:
         assert by_skill["nonstring-name"] == frozenset()
         assert by_skill["valid-skill"] == frozenset({"plan_path"})
         assert "plan_path" in output_tokens
-        assert _select_output_path_tokens("nonstring-type") == output_tokens
-        assert _select_output_path_tokens("nonstring-name") == output_tokens
+        # The selector references module-level globals, so the conservative fallback
+        # resolves to the global set (which mirrors the caller's stubbed manifest only
+        # by containing "plan_path"). Compare against the module global to assert the
+        # fallback path is taken without requiring a private-API rewrite.
+        assert _select_output_path_tokens("nonstring-type") == _OUTPUT_PATH_TOKENS
+        assert _select_output_path_tokens("nonstring-name") == _OUTPUT_PATH_TOKENS
 
 
 class TestExtractOutputPathsWithTokenScope:

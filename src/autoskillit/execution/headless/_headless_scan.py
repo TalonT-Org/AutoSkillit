@@ -70,8 +70,9 @@ def _scan_jsonl_write_paths(
                     targets = extract_bash_write_targets(command, cwd)
                     for path in targets:
                         if _is_path_outside_cwd(path, cwd):
+                            normalized = os.path.normpath(path)
                             warnings.append(
-                                f"Bash command contained write target '{path}'"
+                                f"Bash command contained write target '{normalized}'"
                                 f" outside session cwd '{cwd}'"
                             )
             elif tool_name in write_tool_names:

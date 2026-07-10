@@ -372,6 +372,35 @@ class TestBuildSkillResultPathContaminationRound6Regression:
         assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
         assert any(external_plan in w for w in sr.write_path_warnings)
 
+    def test_traversal_token_with_real_external_write_contaminates(self):
+        """A plan_path in `..` traversal form paired with a real external Write
+        to the normalized target must trigger contamination — completing the
+        traversal quadrant: text+proof → contaminate."""
+        worktree_cwd = "/worktree/clone"
+        traversal_token = f"{worktree_cwd}/../external/plan.md"
+        external_target = "/worktree/external/plan.md"
+        write_external = _make_tool_use_line(
+            "Write",
+            {"file_path": external_target, "content": "leaked"},
+        )
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {traversal_token}")
+            + "\n"
+            + write_external
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=f"/autoskillit:implement-worktree-no-merge {external_target}",
+            cwd=worktree_cwd,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+        assert any(external_target in w for w in sr.write_path_warnings)
+
 
 class TestBuildSkillResultBashOutOfCwdBoundaryProof:
     """Bash targets outside CWD must reach _build_skill_result boundary proof even when

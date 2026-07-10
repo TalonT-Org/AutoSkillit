@@ -90,6 +90,8 @@ def _build_path_token_registry() -> tuple[
                 continue
             name = out.get("name", "")
             out_type = out.get("type", "")
+            if not isinstance(name, str) or not isinstance(out_type, str):
+                continue
             if not name:
                 continue
             if out_type.startswith("file_path"):
@@ -156,22 +158,25 @@ def _is_path_outside_cwd(
     allow_relative: bool = False,
 ) -> bool:
     """Return True iff ``path`` lexically normalizes outside ``cwd``."""
-    if not cwd or cwd == "/" or not os.path.isabs(cwd):
+    if not cwd or not os.path.isabs(cwd):
+        return False
+    norm_cwd = os.path.normpath(cwd)
+    if norm_cwd == "/":
         return False
     if not isinstance(path, str) or not path:
         return False
     if not os.path.isabs(path):
         if not allow_relative:
             return False
-        path = os.path.join(cwd, path)
+        path = os.path.join(norm_cwd, path)
     normalized = os.path.normpath(path)
-    cwd_prefix = cwd.rstrip("/") + "/"
-    return not normalized.startswith(cwd_prefix) and normalized != cwd.rstrip("/")
+    cwd_prefix = norm_cwd + "/"
+    return not normalized.startswith(cwd_prefix) and normalized != norm_cwd
 
 
 def _validate_output_paths(extracted_paths: dict[str, str], cwd: str) -> str | None:
     """Return a diagnostic string if any path is outside cwd, else None."""
-    if not os.path.isabs(cwd) or cwd == "/":
+    if not os.path.isabs(cwd) or os.path.normpath(cwd) == "/":
         return None
     violations = [
         f"{token} '{path}' is outside session cwd '{cwd}'"

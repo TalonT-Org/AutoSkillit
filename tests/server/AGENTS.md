@@ -48,6 +48,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_server_init_gate.py` | Tests for server init: gate access, visibility, subset management, wire format compliance |
 | `test_server_init_session_visibility_split.py` | Session visibility split structural guard |
 | `test_server_tool_registration.py` | Tests for MCP tool registration, config-driven behavior, and schema contracts |
+| `test_tool_registry_parity.py` | Tests for canonical ToolDef registry ↔ @mcp.tool() handler parity (server ↔ recipe tool_registry bidirectional coverage) |
 | `test_server_version_telemetry.py` | Tests for server version info, plugin metadata, lazy init, and telemetry |
 | `test_service_wrappers.py` | Behavior tests for DefaultRecipeRepository and DefaultMigrationService (REQ-ARCH-006, 007) |
 | `test_session_type_tags.py` | Tests for _collect_fleet_tool_tags in server._session_type (Finding 1) |

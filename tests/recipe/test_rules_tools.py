@@ -286,9 +286,11 @@ def test_wait_for_ci_rejects_poll_interval() -> None:
 
 def test_rules_tools_batch_cleanup_clones_accepts_all_owners_param() -> None:
     """T20 — batch_cleanup_clones with all_owners param must not trigger dead-with-param."""
-    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
+    from autoskillit.recipe.tool_registry import for_tool
 
-    assert "all_owners" in _TOOL_PARAMS["batch_cleanup_clones"]
+    td = for_tool("batch_cleanup_clones")
+    assert td is not None, "batch_cleanup_clones must be in canonical ToolDef registry"
+    assert "all_owners" in td.param_set
 
     recipe = _make_recipe_with_args(
         "batch_cleanup_clones",
@@ -352,7 +354,7 @@ def test_rebase_then_push_with_force_true_passes_validation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _TOOL_PARAMS sync test (T8)
+# ToolDef registry sync test (T8)
 # ---------------------------------------------------------------------------
 
 _SERVER_TOOL_MODULES = [
@@ -361,10 +363,13 @@ _SERVER_TOOL_MODULES = [
     "autoskillit.server.tools.tools_ci_merge_queue",
     "autoskillit.server.tools.tools_clone",
     "autoskillit.server.tools.tools_execution",
+    "autoskillit.server.tools.tools_fleet_dispatch",
+    "autoskillit.server.tools.tools_fleet_reset",
     "autoskillit.server.tools.tools_git",
     "autoskillit.server.tools.tools_recipe",
     "autoskillit.server.tools.tools_status",
     "autoskillit.server.tools.tools_github",
+    "autoskillit.server.tools.tools_issue_composite",
     "autoskillit.server.tools.tools_issue_headless",
     "autoskillit.server.tools.tools_issue_labels",
     "autoskillit.server.tools.tools_pr_ops",
@@ -388,31 +393,47 @@ def _build_handler_map() -> dict[str, object]:
     return handler_map
 
 
-def test_tool_params_matches_mcp_handler_signatures() -> None:
-    """T8: _TOOL_PARAMS keys match actual MCP handler signatures — drift fails CI."""
-    from autoskillit.recipe.rules.rules_tools import _TOOL_PARAMS
+def test_tool_registry_matches_mcp_handler_signatures() -> None:
+    """T8: ToolDef registry keys match actual MCP handler signatures — drift fails CI.
+
+    Mirrors the runtime import-layer invariant: IL-2 ``ToolDef`` is the
+    single source of truth for recipe-callable parameter sets, and the live
+    IL-3 ``@mcp.tool()`` handler signatures must agree bidirectionally.
+    """
+    from autoskillit.recipe.tool_registry import (
+        FRAMEWORK_ONLY_EXCLUSIONS,
+        all_recipe_tools,
+        for_tool,
+    )
 
     handler_map = _build_handler_map()
     mismatches: list[str] = []
 
-    for tool_name, expected_params in _TOOL_PARAMS.items():
+    for tool_name in sorted(all_recipe_tools()):
         if tool_name not in handler_map:
             mismatches.append(f"{tool_name}: handler not found in server modules")
             continue
+        td = for_tool(tool_name)
+        assert td is not None
         handler = handler_map[tool_name]
         sig = _inspect.signature(handler)
         actual_params = frozenset(name for name in sig.parameters if name not in _FRAMEWORK_PARAMS)
-        if actual_params != expected_params:
-            missing = expected_params - actual_params
-            extra = actual_params - expected_params
+        if actual_params != td.param_set:
+            missing = td.param_set - actual_params
+            extra = actual_params - td.param_set
             mismatches.append(
-                f"{tool_name}: _TOOL_PARAMS={sorted(expected_params)} "
+                f"{tool_name}: ToolDef={sorted(td.param_set)} "
                 f"handler={sorted(actual_params)} "
                 f"(missing={sorted(missing)}, extra={sorted(extra)})"
             )
 
+    for tool_name in sorted(FRAMEWORK_ONLY_EXCLUSIONS):
+        if tool_name in handler_map:
+            # framework-only tools still need a live handler — but no registry entry
+            continue
+
     assert not mismatches, (
-        "_TOOL_PARAMS is out of sync with MCP handler signatures:\n" + "\n".join(mismatches)
+        "ToolDef registry is out of sync with MCP handler signatures:\n" + "\n".join(mismatches)
     )
 
 

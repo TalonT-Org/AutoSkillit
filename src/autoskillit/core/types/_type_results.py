@@ -19,6 +19,10 @@ from ._type_enums import KillReason, RetryReason, SessionOutcome
 T = TypeVar("T")
 
 __all__ = [
+    "ActiveIngredientSpec",
+    "ActiveRecipeStepSpec",
+    "ActiveRecipeRuntimeSnapshot",
+    "ActiveRunSkillSpec",
     "CapabilityResolutionDetail",
     "ContaminationOutcome",
     "InputBinding",
@@ -216,6 +220,87 @@ class InputContractResolution:
     skill_name: str
     inputs: tuple[InputSpec, ...] = ()
     diagnostics: tuple[str, ...] = ()
+
+
+# ---------------------------------------------------------------------------
+# Sealed active-step runtime contract (Step 8)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveIngredientSpec:
+    """One declared recipe ingredient as resolved by validation.
+
+    ``authority`` is one of ``"user"`` (recipe caller overrides), ``"hidden"``
+    (server-side hidden ingredient, not user-overridable), or ``"default"``
+    (recipe-provided default). ``required`` distinguishes ingredients the
+    runtime refuses to proceed without.
+    """
+
+    name: str
+    default: str | None
+    required: bool
+    authority: str = "default"
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRecipeStepSpec:
+    """One declared recipe step as sealed for runtime admission.
+
+    ``tool`` is the canonical MCP tool name (e.g., ``run_skill``).
+    ``skip_when_false`` is the resolved ingredient guard (empty string when
+    absent). ``routes`` carries the declared on_success/on_failure/etc. edges.
+    """
+
+    step_key: str
+    tool: str
+    skip_when_false: str = ""
+    routes: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRunSkillSpec:
+    """Sealed expected shape for a ``run_skill`` step.
+
+    Holds the declared skill-command template, parsed expected bindings,
+    cwd template, declared model, declared step_provider, declared
+    output_dir, stale_threshold, idle_output_timeout, and immutable
+    lock/routing/tracking metadata.
+    """
+
+    step_key: str
+    expected_skill_command_template: str
+    expected_cwd_template: str = ""
+    declared_model: str | None = None
+    declared_step_provider: str | None = None
+    declared_output_dir: str | None = None
+    declared_stale_threshold: int | None = None
+    declared_idle_output_timeout: int | None = None
+    optional_context_refs: tuple[str, ...] = ()
+    expected_bindings: tuple[InputBinding, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRecipeRuntimeSnapshot:
+    """Atomic, immutable runtime view of the active recipe.
+
+    One snapshot is built per validation pass; the same identity is reused
+    across open-kitchen, fleet preflight, executor access, and shape
+    admission. No consumer may consult a second mutable step lookup.
+    """
+
+    recipe_kind: str
+    normalized_ingredients: tuple[ActiveIngredientSpec, ...]
+    required_packs: tuple[str, ...]
+    required_features: tuple[str, ...]
+    post_prune_steps: tuple[ActiveRecipeStepSpec, ...]
+    run_skill_specs: tuple[ActiveRunSkillSpec, ...]
+    recipe_version: str
+    recipe_invocation_fingerprint: str
+    manifest_fingerprint: str
+    content_hash: str
+    composite_hash: str
+    project_identity: str = ""
 
 
 @dataclass

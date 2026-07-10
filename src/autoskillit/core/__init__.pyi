@@ -222,6 +222,10 @@ from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
+from .types import ActiveIngredientSpec as ActiveIngredientSpec
+from .types import ActiveRecipeRuntimeSnapshot as ActiveRecipeRuntimeSnapshot
+from .types import ActiveRecipeStepSpec as ActiveRecipeStepSpec
+from .types import ActiveRunSkillSpec as ActiveRunSkillSpec
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import ApiRetryOutcome as ApiRetryOutcome

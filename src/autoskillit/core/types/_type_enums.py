@@ -38,6 +38,12 @@ __all__ = [
     "CodexEventType",
     "CodexItemType",
     "SynthesisStrategy",
+    "InputType",
+    "BindingForm",
+    "BindingState",
+    "ResolutionStatus",
+    "ValidationRecipeView",
+    "InvocationShapeDenialReason",
 ]
 
 
@@ -589,3 +595,95 @@ class SynthesisStrategy(StrEnum):
     ELECTRE_III = "electre_iii"
     DEX = "dex"
     CUSTOM = "custom"
+
+
+@unique
+class InputType(StrEnum):
+    """Canonical input contract type family.
+
+    Single source of truth for ``InputSpec.type`` and any consumer that
+    branches on input type. Members map 1:1 to ``SUPPORTED_INPUT_TYPES``
+    in ``_type_constants.py``; new types must be added to both.
+    """
+
+    STRING = "string"
+    INTEGER = "integer"
+    FILE_PATH = "file_path"
+    FILE_PATH_LIST = "file_path_list"
+    DIRECTORY_PATH = "directory_path"
+
+
+@unique
+class BindingForm(StrEnum):
+    """How an absolute input slot was filled."""
+
+    POSITIONAL = "positional"
+    NAMED = "named"
+    NAME_EQUALS = "name_equals"
+    DASH_NAME = "dash_name"
+    DISPATCH_SPLICE = "dispatch_splice"
+    EMPTY = "empty"
+
+
+@unique
+class BindingState(StrEnum):
+    """Resolution outcome for a single absolute input slot."""
+
+    BOUND = "bound"
+    OMITTED = "omitted"
+    UNBOUND = "unbound"
+    DISPATCH_OCCUPIED = "dispatch_occupied"
+
+
+@unique
+class ResolutionStatus(StrEnum):
+    """Discriminator for ``InputContractResolution.status``.
+
+    Distinguishes a known contract with no inputs from a missing skill
+    or a structural defect so admission gates can fail-closed correctly.
+    """
+
+    VALID = "valid"
+    KNOWN_ZERO_INPUT = "known_zero_input"
+    UNKNOWN_SKILL = "unknown_skill"
+    MALFORMED_CONTRACT = "malformed_contract"
+
+
+@unique
+class ValidationRecipeView(StrEnum):
+    """Declared (pre-prune) vs effective (post-prune) recipe view selector.
+
+    A snapshot owns both views paired with matching evidence; consumers
+    select the view via this enum rather than swapping recipes mid-pass.
+    """
+
+    DECLARED = "declared"
+    EFFECTIVE = "effective"
+
+
+@unique
+class InvocationShapeDenialReason(StrEnum):
+    """Stable denial reasons emitted by ``run_skill`` fresh-call admission.
+
+    Serialized verbatim via ``gate_error_result`` with a deterministic
+    ``{reason.value}: {detail}`` prefix. Adding a member is a contract
+    change — downstream consumers route on the string value.
+    """
+
+    UNKNOWN_STEP = "unknown_step"
+    AMBIGUOUS_STEP = "ambiguous_step"
+    NON_RUN_SKILL_STEP = "non_run_skill_step"
+    MALFORMED_COMMAND = "malformed_command"
+    MALFORMED_CONTRACT = "malformed_contract"
+    WRONG_SKILL = "wrong_skill"
+    ARITY_MISMATCH = "arity_mismatch"
+    SLOT_MISMATCH = "slot_mismatch"
+    SENTINEL_GAP = "sentinel_gap"
+    REQUIRED_OMISSION = "required_omission"
+    TYPE_MISMATCH = "type_mismatch"
+    MISSING_PATH = "missing_path"
+    WRONG_PATH_KIND = "wrong_path_kind"
+    ESCAPED_PATH = "escaped_path"
+    CWD_MISMATCH = "cwd_mismatch"
+    SETTING_MISMATCH = "setting_mismatch"
+    RESUME_STEP_MISMATCH = "resume_step_mismatch"

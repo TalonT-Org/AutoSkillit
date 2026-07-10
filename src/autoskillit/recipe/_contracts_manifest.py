@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from autoskillit.core import (
+    InputContractResolution,
     InputSpec,
+    InputType,
+    ResolutionStatus,
     get_logger,
     load_yaml,
     pkg_root,
@@ -95,27 +98,149 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
 
 def resolve_input_specs(skill_command: str) -> tuple[InputSpec, ...]:
     """Resolve InputSpec entries for file_path/directory_path inputs from a skill's contract."""
+    return _resolve(skill_command).inputs
+
+
+def resolve_input_contract(skill_command: str) -> InputContractResolution:
+    """Public entry point returning the discriminated :class:`InputContractResolution`.
+
+    Consumed by ``InputContractResolver`` wiring in the server factory. Static
+    validation passes the request-owned normalized manifest into
+    :func:`resolve_input_contract_with_manifest` instead, so the bundled
+    manifest is never reloaded.
+    """
+    return _resolve(skill_command)
+
+
+def resolve_input_contract_with_manifest(
+    skill_command: str,
+    manifest: dict[str, Any],
+) -> InputContractResolution:
+    """Resolver variant that accepts the request-owned normalized manifest.
+
+    Used by static validation so the same manifest that produced the validation
+    snapshot also resolves input contracts — no per-step reparse. The runtime
+    path (no active recipe) calls :func:`resolve_input_contract` which loads
+    the bundled manifest itself.
+    """
     name = resolve_skill_name(skill_command)
     if not name:
-        return ()
+        return InputContractResolution(
+            status=ResolutionStatus.UNKNOWN_SKILL,
+            skill_name="",
+            inputs=(),
+            diagnostics=("skill_command does not contain a slash-prefixed skill name",),
+        )
+    contract = get_skill_contract(name, manifest)
+    if contract is None:
+        return InputContractResolution(
+            status=ResolutionStatus.UNKNOWN_SKILL,
+            skill_name=name,
+            inputs=(),
+            diagnostics=(f"no contract for skill {name!r} in provided manifest",),
+        )
+    specs: list[InputSpec] = []
+    diagnostics: list[str] = []
+    for absolute_position, inp in enumerate(contract.inputs):
+        try:
+            input_type = InputType(inp.type)
+        except ValueError:
+            diagnostics.append(
+                f"input {inp.name!r} has unsupported type {inp.type!r}; "
+                f"expected one of {sorted(t.value for t in InputType)}"
+            )
+            continue
+        specs.append(
+            InputSpec(
+                name=inp.name,
+                type=input_type,
+                required=inp.required,
+                position=absolute_position,
+            )
+        )
+    if diagnostics:
+        return InputContractResolution(
+            status=ResolutionStatus.MALFORMED_CONTRACT,
+            skill_name=name,
+            inputs=tuple(specs),
+            diagnostics=tuple(diagnostics),
+        )
+    if not specs:
+        return InputContractResolution(
+            status=ResolutionStatus.KNOWN_ZERO_INPUT,
+            skill_name=name,
+            inputs=(),
+        )
+    return InputContractResolution(
+        status=ResolutionStatus.VALID,
+        skill_name=name,
+        inputs=tuple(specs),
+    )
+
+
+def _resolve(skill_command: str) -> InputContractResolution:
+    """Pure explicit-manifest resolver for one ``run_skill`` call.
+
+    Returns an :class:`InputContractResolution` carrying every manifest-ordered
+    input (not only path-like) plus a discriminated status. Callers consume
+    the resolution object directly so unknown/malformed/known-zero outcomes
+    reach guards and fail-closed correctly. A missing skill produces
+    ``UNKNOWN_SKILL`` (not an empty tuple), so static validation can distinguish
+    a contract defect from a legitimate zero-input skill.
+    """
+    name = resolve_skill_name(skill_command)
+    if not name:
+        return InputContractResolution(
+            status=ResolutionStatus.UNKNOWN_SKILL,
+            skill_name="",
+            inputs=(),
+            diagnostics=("skill_command does not contain a slash-prefixed skill name",),
+        )
     contract = get_skill_contract(name, load_bundled_manifest())
     if contract is None:
-        return ()
-    path_position = 0
+        return InputContractResolution(
+            status=ResolutionStatus.UNKNOWN_SKILL,
+            skill_name=name,
+            inputs=(),
+            diagnostics=(f"no contract for skill {name!r} in bundled manifest",),
+        )
     specs: list[InputSpec] = []
-    for inp in contract.inputs:
-        if inp.type in ("file_path", "directory_path"):
-            narrowed_type = cast(Literal["file_path", "directory_path"], inp.type)
-            specs.append(
-                InputSpec(
-                    name=inp.name,
-                    type=narrowed_type,
-                    required=inp.required,
-                    position=path_position,
-                )
+    diagnostics: list[str] = []
+    for absolute_position, inp in enumerate(contract.inputs):
+        try:
+            input_type = InputType(inp.type)
+        except ValueError:
+            diagnostics.append(
+                f"input {inp.name!r} has unsupported type {inp.type!r}; "
+                f"expected one of {sorted(t.value for t in InputType)}"
             )
-            path_position += 1
-    return tuple(specs)
+            continue
+        specs.append(
+            InputSpec(
+                name=inp.name,
+                type=input_type,
+                required=inp.required,
+                position=absolute_position,
+            )
+        )
+    if diagnostics:
+        return InputContractResolution(
+            status=ResolutionStatus.MALFORMED_CONTRACT,
+            skill_name=name,
+            inputs=tuple(specs),
+            diagnostics=tuple(diagnostics),
+        )
+    if not specs:
+        return InputContractResolution(
+            status=ResolutionStatus.KNOWN_ZERO_INPUT,
+            skill_name=name,
+            inputs=(),
+        )
+    return InputContractResolution(
+        status=ResolutionStatus.VALID,
+        skill_name=name,
+        inputs=tuple(specs),
+    )
 
 
 def get_callable_contract(

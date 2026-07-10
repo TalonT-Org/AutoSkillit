@@ -235,6 +235,8 @@ from .types import BackendConventions as BackendConventions
 from .types import BackendEventKind as BackendEventKind
 from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
+from .types import BindingForm as BindingForm
+from .types import BindingState as BindingState
 from .types import CampaignProtector as CampaignProtector
 from .types import CanonicalTokenUsage as CanonicalTokenUsage
 from .types import CapabilityNotSupportedError as CapabilityNotSupportedError
@@ -289,8 +291,10 @@ from .types import InputBinding as InputBinding
 from .types import InputContractResolution as InputContractResolution
 from .types import InputContractResolver as InputContractResolver
 from .types import InputSpec as InputSpec
+from .types import InputType as InputType
 from .types import InspectorCallback as InspectorCallback
 from .types import InspectorEvidence as InspectorEvidence
+from .types import InvocationShapeDenialReason as InvocationShapeDenialReason
 from .types import InspectorVerdict as InspectorVerdict
 from .types import InvariantDef as InvariantDef
 from .types import IssueLabelState as IssueLabelState
@@ -334,6 +338,7 @@ from .types import RecipeSource as RecipeSource
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
+from .types import ResolutionStatus as ResolutionStatus
 from .types import RetryReason as RetryReason
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint
@@ -367,6 +372,7 @@ from .types import TokenLog as TokenLog
 from .types import TraditionManifest as TraditionManifest
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath
+from .types import ValidationRecipeView as ValidationRecipeView
 from .types import WorkspaceManager as WorkspaceManager
 from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence

@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from ._type_checkpoint import SessionCheckpoint  # noqa: F401, TC001
-from ._type_results import InputSpec, SkillResult, TestResult, ValidatedAddDir, WriteBehaviorSpec
+from ._type_results import (
+    InputContractResolution,
+    SkillResult,
+    TestResult,
+    ValidatedAddDir,
+    WriteBehaviorSpec,
+)
 
 __all__ = [
     "CompletionRequiredResolver",
@@ -137,6 +143,13 @@ class CompletionRequiredResolver(Protocol):
 
 @runtime_checkable
 class InputContractResolver(Protocol):
-    """Protocol for resolving input contract specs from skill contracts."""
+    """Protocol for resolving input contract specs from skill contracts.
 
-    def __call__(self, skill_command: str) -> Sequence[InputSpec]: ...
+    Returns an :class:`InputContractResolution` carrying every manifest-ordered
+    input and a discriminated status. Callers must consume the resolution
+    object directly (never split it back into ``Sequence[InputSpec]``) so
+    unknown/malformed/known-zero outcomes reach guards and fail-closed
+    correctly.
+    """
+
+    def __call__(self, skill_command: str) -> InputContractResolution: ...

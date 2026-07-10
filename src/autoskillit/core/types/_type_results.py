@@ -14,7 +14,15 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
-from ._type_enums import KillReason, RetryReason, SessionOutcome
+from ._type_enums import (
+    BindingForm,
+    BindingState,
+    InputType,
+    KillReason,
+    ResolutionStatus,
+    RetryReason,
+    SessionOutcome,
+)
 
 T = TypeVar("T")
 
@@ -160,14 +168,13 @@ class WriteBehaviorSpec:
 class InputSpec:
     """Input contract specification for a single declared skill/worker input.
 
-    ``type`` covers the canonical ordered contract family: ``string`` (free-text
-    tail absorbed by the final string input only), ``integer``, ``file_path``,
-    ``file_path_list``, and ``directory_path``. ``position`` is the absolute
-    zero-based slot in the manifest's input order — never renumbered by type.
+    ``type`` covers the canonical ordered contract family — derived from
+    :class:`InputType`. ``position`` is the absolute zero-based slot in the
+    manifest's input order — never renumbered by type.
     """
 
     name: str
-    type: Literal["string", "integer", "file_path", "file_path_list", "directory_path"]
+    type: InputType
     required: bool
     position: int
 
@@ -185,15 +192,16 @@ class InputBinding:
     ``namespace``/``name`` of any ``${{ ... }}`` ref it carried, the binding
     form (positional vs named), and the bound/omitted/unbound state. ``-``
     (the ``OPTIONAL_ARG_OMISSION_SENTINEL``) occupies a slot but delivers
-    no value — its state is ``OMITTED``, never ``BOUND``.
+    no value — its state is :class:`BindingState.OMITTED`, never
+    :class:`BindingState.BOUND`.
     """
 
     position: int
     name: str
-    type: str
+    type: InputType
     required: bool
-    form: str  # "positional" | "named" | "name_equals" | "dash_name" | "dispatch_splice" | "empty"
-    state: str  # "bound" | "omitted" | "unbound" | "dispatch_occupied"
+    form: BindingForm
+    state: BindingState
     source_token: str | None = None
     ref_namespace: str | None = None  # "context" | "inputs" | None
     ref_name: str | None = None
@@ -204,19 +212,14 @@ class InputBinding:
 class InputContractResolution:
     """Discriminated result of resolving a skill's input contract.
 
-    Statuses:
-      - ``"valid"`` — known contract with at least one declared input.
-      - ``"known_zero_input"`` — known skill with zero declared inputs.
-      - ``"unknown_skill"`` — skill name not present in the manifest.
-      - ``"malformed_contract"`` — declared input uses an unsupported ``type``
-        value or other structural defect; ``diagnostics`` carries reason.
-
-    The runtime guards (``_check_input_contracts``, the implement gate parser)
-    consume this in place of the legacy ``tuple[InputSpec, ...]`` so they can
-    distinguish "skill not present" from "skill present with zero inputs".
+    ``status`` uses :class:`ResolutionStatus` discriminators so consumers can
+    distinguish "skill not present" from "skill present with zero inputs" and
+    from "structural defect". ``inputs`` carries every manifest-ordered input
+    when ``status == VALID`` or ``KNOWN_ZERO_INPUT``; ``diagnostics`` carries
+    detail when ``status == MALFORMED_CONTRACT``.
     """
 
-    status: str
+    status: ResolutionStatus
     skill_name: str
     inputs: tuple[InputSpec, ...] = ()
     diagnostics: tuple[str, ...] = ()

@@ -10,6 +10,8 @@ import regex as re
 
 from autoskillit.core import (
     InputContractResolver,
+    InputType,
+    ResolutionStatus,
     SessionType,
     extract_bash_write_targets,
     extract_path_arg,
@@ -259,17 +261,30 @@ def _check_input_contracts(
     """Validate skill_command arguments against input contracts.
 
     Returns gate_error_result JSON string on validation failure, None if OK.
-    Fails open if resolver is None or skill has no contracts.
+    Fails closed on resolver exceptions and malformed/unknown contracts; fails
+    open only when the resolver is None (test path) or the skill is known to
+    have zero declared inputs.
     """
     if resolver is None:
         return None
     try:
-        specs = resolver(skill_command)
+        resolution = resolver(skill_command)
     except Exception:
         logger.warning(
             "input_contract_resolver_failed", skill_command=skill_command, exc_info=True
         )
+        return gate_error_result(
+            f"input contract resolver raised for "
+            f"{extract_skill_name(skill_command) or skill_command!r}"
+        )
+    if resolution.status == ResolutionStatus.MALFORMED_CONTRACT:
+        detail = "; ".join(resolution.diagnostics) or "unspecified"
+        return gate_error_result(
+            f"Malformed input contract for {resolution.skill_name!r}: {detail}"
+        )
+    if resolution.status == ResolutionStatus.UNKNOWN_SKILL:
         return None
+    specs = resolution.inputs
     if not specs:
         return None
 
@@ -280,7 +295,7 @@ def _check_input_contracts(
         if spec.position >= len(path_args):
             if spec.required:
                 return gate_error_result(
-                    f"Missing required {spec.type} argument '{spec.name}' "
+                    f"Missing required {spec.type.value} argument '{spec.name}' "
                     f"for {extract_skill_name(skill_command) or skill_command}"
                 )
             continue
@@ -288,13 +303,13 @@ def _check_input_contracts(
         value = path_args[spec.position]
         resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
 
-        if spec.type == "file_path":
+        if spec.type == InputType.FILE_PATH:
             if not resolved.is_file():
                 return gate_error_result(
                     f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
                     f"expected a file, path does not exist or is a directory: {resolved}"
                 )
-        elif spec.type == "directory_path":
+        elif spec.type == InputType.DIRECTORY_PATH:
             if not resolved.is_dir():
                 return gate_error_result(
                     f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "

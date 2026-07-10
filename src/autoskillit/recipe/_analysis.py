@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
 
+from autoskillit.core import ValidationRecipeView
 from autoskillit.recipe._analysis_bfs import _bfs_with_facts, bfs_reachable
 from autoskillit.recipe._analysis_blocks import extract_blocks
 from autoskillit.recipe._analysis_detectors import (
@@ -81,9 +82,11 @@ def _normalize_manifest_for_fingerprint(
 
 @dataclass(frozen=True, slots=True)
 class ValidationSnapshot:
-    """One immutable validation pass: owned recipe view + manifest + evidence.
+    """One immutable validation pass: declared + effective views, evidence, fingerprints.
 
-    The fingerprint pair (``manifest_fingerprint``,
+    A snapshot owns both the pre-prune (declared) and post-prune (effective)
+    recipe views, each paired with matching evidence and graph/dataflow/blocks
+    data. The fingerprint pair (``manifest_fingerprint``,
     ``recipe_invocation_fingerprint``) is computed once when the snapshot is
     built; both fields together forbid cross-recipe evidence substitution —
     evidence from recipe A cannot be paired with recipe B even when both use
@@ -92,15 +95,71 @@ class ValidationSnapshot:
     authoritative for rerun detection on the raw YAML).
     """
 
-    owned_recipe: MappingProxyType[str, Any]
+    declared_recipe: MappingProxyType[str, Any]
+    effective_recipe: MappingProxyType[str, Any]
+    declared_evidence: DeliveryEvidenceMap
+    effective_evidence: DeliveryEvidenceMap
+    declared_graph: MappingProxyType[str, Any]
+    effective_graph: MappingProxyType[str, Any]
+    declared_dataflow: DataFlowReport
+    effective_dataflow: DataFlowReport
+    declared_blocks: tuple[RecipeBlock, ...]
+    effective_blocks: tuple[RecipeBlock, ...]
     normalized_manifest: MappingProxyType[str, Any]
-    delivery_evidence: DeliveryEvidenceMap
     manifest_fingerprint: str
     recipe_invocation_fingerprint: str
 
+    @property
+    def owned_recipe(self) -> MappingProxyType[str, Any]:
+        """Backward-compatible accessor — returns the effective (post-prune) view.
+
+        Existing code that consumed the single-view snapshot continues to read
+        the effective view. New code should select explicitly via ``view()``.
+        """
+        return self.effective_recipe
+
+    @property
+    def delivery_evidence(self) -> DeliveryEvidenceMap:
+        """Backward-compatible accessor — returns the effective (post-prune) evidence."""
+        return self.effective_evidence
+
+    def view(self, recipe_view: ValidationRecipeView) -> _ValidationView:
+        """Return the paired recipe + evidence + graph + dataflow + blocks for ``recipe_view``.
+
+        Selects either the pre-prune (``DECLARED``) or post-prune
+        (``EFFECTIVE``) view via the discriminator enum so consumers cannot
+        mix declared recipes with effective evidence (or vice versa).
+        """
+        if recipe_view == ValidationRecipeView.DECLARED:
+            return _ValidationView(
+                recipe=self.declared_recipe,
+                evidence=self.declared_evidence,
+                graph=self.declared_graph,
+                dataflow=self.declared_dataflow,
+                blocks=self.declared_blocks,
+            )
+        return _ValidationView(
+            recipe=self.effective_recipe,
+            evidence=self.effective_evidence,
+            graph=self.effective_graph,
+            dataflow=self.effective_dataflow,
+            blocks=self.effective_blocks,
+        )
+
     def to_step_evidence(self, step_name: str) -> Any:
-        """Convenience: return evidence for ``step_name`` or ``None``."""
-        return self.delivery_evidence.for_step(step_name)
+        """Backward-compatible: return effective-view evidence for ``step_name`` or None."""
+        return self.effective_evidence.for_step(step_name)
+
+
+@dataclass(frozen=True, slots=True)
+class _ValidationView:
+    """One declared-or-effective view: paired recipe, evidence, and analysis."""
+
+    recipe: MappingProxyType[str, Any]
+    evidence: DeliveryEvidenceMap
+    graph: MappingProxyType[str, Any]
+    dataflow: DataFlowReport
+    blocks: tuple[RecipeBlock, ...]
 
 
 def _compute_manifest_fingerprint(manifest: MappingProxyType[str, Any]) -> str:
@@ -162,6 +221,7 @@ def build_validation_snapshot(
     recipe: Recipe,
     *,
     manifest: dict[str, Any] | None = None,
+    effective_recipe: Recipe | None = None,
 ) -> ValidationSnapshot:
     """Build the canonical immutable validation snapshot for one pass.
 
@@ -170,18 +230,57 @@ def build_validation_snapshot(
     or the rules that consume it. The manifest is the bundled
     ``skill_contracts.yaml`` loaded once per snapshot — semantic rules must
     consume ``snapshot.normalized_manifest`` rather than re-loading it.
+
+    When ``effective_recipe`` is supplied (the post-prune recipe from
+    ``_prune_skipped_steps``), the snapshot owns both the declared and
+    effective views paired with matching evidence, graph, dataflow, and
+    blocks. When omitted, both views collapse to the declared recipe —
+    useful for tests that never exercise pruning.
     """
-    owned = copy.deepcopy(recipe)
-    owned_view = MappingProxyType(vars(owned))
+    declared_owned = copy.deepcopy(recipe)
+    declared_view = MappingProxyType(vars(declared_owned))
+    effective_owned = (
+        copy.deepcopy(effective_recipe) if effective_recipe is not None else declared_owned
+    )
+    effective_view = MappingProxyType(vars(effective_owned))
     loaded_manifest = manifest if manifest is not None else load_bundled_manifest()
     normalized = _normalize_manifest_for_fingerprint(loaded_manifest)
-    evidence = analyze_recipe_delivery(owned)
+    declared_evidence = analyze_recipe_delivery(declared_owned)
+    effective_evidence = analyze_recipe_delivery(effective_owned)
+    declared_step_graph = _build_step_graph(declared_owned)
+    effective_step_graph = _build_step_graph(effective_owned)
+    declared_graph = MappingProxyType({k: set(v) for k, v in declared_step_graph.items()})
+    effective_graph = MappingProxyType({k: set(v) for k, v in effective_step_graph.items()})
+    declared_dataflow = analyze_dataflow(declared_owned, step_graph=declared_step_graph)
+    effective_dataflow = analyze_dataflow(effective_owned, step_graph=effective_step_graph)
+    declared_predecessors: dict[str, set[str]] = {}
+    for src, successors in declared_step_graph.items():
+        for dst in successors:
+            declared_predecessors.setdefault(dst, set()).add(src)
+    effective_predecessors: dict[str, set[str]] = {}
+    for src, successors in effective_step_graph.items():
+        for dst in successors:
+            effective_predecessors.setdefault(dst, set()).add(src)
+    declared_blocks = extract_blocks(
+        declared_owned, declared_step_graph, predecessors=declared_predecessors
+    )
+    effective_blocks = extract_blocks(
+        effective_owned, effective_step_graph, predecessors=effective_predecessors
+    )
     manifest_fp = _compute_manifest_fingerprint(normalized)
-    invocation_fp = _compute_recipe_invocation_fingerprint(owned_view)
+    invocation_fp = _compute_recipe_invocation_fingerprint(effective_view)
     return ValidationSnapshot(
-        owned_recipe=owned_view,
+        declared_recipe=declared_view,
+        effective_recipe=effective_view,
+        declared_evidence=declared_evidence,
+        effective_evidence=effective_evidence,
+        declared_graph=declared_graph,
+        effective_graph=effective_graph,
+        declared_dataflow=declared_dataflow,
+        effective_dataflow=effective_dataflow,
+        declared_blocks=declared_blocks,
+        effective_blocks=effective_blocks,
         normalized_manifest=normalized,
-        delivery_evidence=evidence,
         manifest_fingerprint=manifest_fp,
         recipe_invocation_fingerprint=invocation_fp,
     )

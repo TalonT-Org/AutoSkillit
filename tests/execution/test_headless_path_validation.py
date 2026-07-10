@@ -2448,12 +2448,11 @@ class TestBuildSkillResultSlashFormScoping:
 
     def test_slash_make_plan_uses_make_plan_scope(self):
         """Per-skill selection applies for both /make-plan and /autoskillit:make-plan forms."""
+        from autoskillit.core import extract_skill_name
         from autoskillit.execution.headless._headless_path_tokens import _select_output_path_tokens
 
         for cmd in ("/make-plan x", "/autoskillit:make-plan x"):
-            skill_name = cmd.lstrip("/").split(" ")[0]
-            if skill_name.startswith("autoskillit:"):
-                skill_name = skill_name[len("autoskillit:") :]
+            skill_name = extract_skill_name(cmd)
             selected = _select_output_path_tokens(skill_name)
             assert "plan_path" in selected
             # Other skills' outputs must NOT leak.
@@ -2461,6 +2460,7 @@ class TestBuildSkillResultSlashFormScoping:
 
     def test_slash_implement_worktree_no_merge_falls_back_to_global(self):
         """Known-zero-output skills fall back to global for both slash forms."""
+        from autoskillit.core import extract_skill_name
         from autoskillit.execution.headless._headless_path_tokens import (
             _OUTPUT_PATH_TOKENS,
             _select_output_path_tokens,
@@ -2470,9 +2470,7 @@ class TestBuildSkillResultSlashFormScoping:
             "/implement-worktree-no-merge x",
             "/autoskillit:implement-worktree-no-merge x",
         ):
-            skill_name = cmd.lstrip("/").split(" ")[0]
-            if skill_name.startswith("autoskillit:"):
-                skill_name = skill_name[len("autoskillit:") :]
+            skill_name = extract_skill_name(cmd)
             assert _select_output_path_tokens(skill_name) == _OUTPUT_PATH_TOKENS
 
 

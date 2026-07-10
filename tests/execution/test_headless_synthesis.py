@@ -540,6 +540,76 @@ class TestBuildSkillResultUnknownAndZeroOutputFallback:
         assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
 
 
+class TestBuildSkillResultSlashFormClassifierBoundary:
+    """Slash-form scoping must work end-to-end through _build_skill_result — proving that
+    extract_skill_name() is correctly wired to _select_output_path_tokens() at the
+    production boundary. Each test emits an in-CWD plan_path token + matching in-CWD Write;
+    scoped skills use their own token set, global fallback skills use the full set."""
+
+    @staticmethod
+    def _assistant_ndjson(text: str) -> str:
+        return json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": text}]},
+            }
+        )
+
+    @staticmethod
+    def _success_clean(cwd: str, skill_command: str):
+        in_cwd_path = f"{cwd}/.autoskillit/temp/make-plan/foo.md"
+        write_inside = _make_tool_use_line(
+            "Write",
+            {"file_path": in_cwd_path, "content": "ok"},
+        )
+        stdout = (
+            TestBuildSkillResultSlashFormClassifierBoundary._assistant_ndjson(
+                f"plan_path = {in_cwd_path}"
+            )
+            + "\n"
+            + write_inside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        return _build_skill_result(
+            result,
+            skill_command=skill_command,
+            cwd=cwd,
+            backend=ClaudeCodeBackend(),
+        )
+
+    def test_short_form_make_plan(self):
+        sr = self._success_clean("/worktree/clone", "/make-plan x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_namespaced_make_plan(self):
+        sr = self._success_clean("/worktree/clone", "/autoskillit:make-plan x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_short_form_implement_worktree_no_merge(self):
+        sr = self._success_clean("/worktree/clone", "/implement-worktree-no-merge x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_namespaced_implement_worktree_no_merge(self):
+        sr = self._success_clean("/worktree/clone", "/autoskillit:implement-worktree-no-merge x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_short_form_unknown_skill(self):
+        sr = self._success_clean("/worktree/clone", "/unknown-skill-xyz x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_namespaced_unknown_skill(self):
+        sr = self._success_clean("/worktree/clone", "/autoskillit:unknown-skill-xyz x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+
 class TestRunHeadlessCorePassesCwd:
     @pytest.mark.anyio
     async def test_cwd_anchor_injected_into_prompt(self, tool_ctx):

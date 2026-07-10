@@ -33,6 +33,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_dispatch_identity.py` | `DispatchIdentity` frozen value object, `PromptContractError`, and `assert_prompt_sentinel` for sentinel contract enforcement |
 | `_type_helpers.py` | Text processing and skill-name extraction utilities |
 | `_type_inspector.py` | Health Inspector types: `InspectorEvidence`, `InspectorVerdict`, `InspectorCallback` (issue #3533) |
+| `_type_kitchen_lifecycle.py` | IL-0 kitchen lifecycle and identity separation types — `Closed`/`OpenEmpty`/`OpenRecipe` union, `LifecycleGeneration`, `CampaignId`/`DispatchId`/`PipelineScopeId`/`ExecutionLeaseId`, `RecipeStepKey`/`FreeFormSkillScope` (Step 3.2/3.7 of #4185) |
 | `_type_invariant_registry.py` | Invariant registry: `InvariantDef` dataclass and `INVARIANT_REGISTRY` mapping prose prohibitions to runtime gates |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |

@@ -239,6 +239,7 @@ from .types import BackgroundSupervisor as BackgroundSupervisor
 from .types import BareResume as BareResume
 from .types import BindingForm as BindingForm
 from .types import BindingState as BindingState
+from .types import CampaignId as CampaignId
 from .types import CampaignProtector as CampaignProtector
 from .types import CanonicalTokenUsage as CanonicalTokenUsage
 from .types import CapabilityNotSupportedError as CapabilityNotSupportedError
@@ -260,6 +261,7 @@ from .types import CloneGateUnpublished as CloneGateUnpublished
 from .types import CloneManager as CloneManager
 from .types import CloneResult as CloneResult
 from .types import CloneSuccessResult as CloneSuccessResult
+from .types import Closed as Closed
 from .types import CmdOrigin as CmdOrigin
 from .types import CmdSpec as CmdSpec
 from .types import CodexEventData as CodexEventData
@@ -274,8 +276,10 @@ from .types import DatabaseReader as DatabaseReader
 from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
+from .types import DispatchId as DispatchId
 from .types import DispatchIdentity as DispatchIdentity
 from .types import EnvPolicy as EnvPolicy
+from .types import ExecutionLeaseId as ExecutionLeaseId
 from .types import FailureRecord as FailureRecord
 from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
@@ -283,6 +287,7 @@ from .types import FigureSpec as FigureSpec
 from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetLock as FleetLock
 from .types import FleetSessionEnv as FleetSessionEnv
+from .types import FreeFormSkillScope as FreeFormSkillScope
 from .types import GateState as GateState
 from .types import GitHubApiLog as GitHubApiLog
 from .types import GitHubFetcher as GitHubFetcher
@@ -304,6 +309,7 @@ from .types import KillReason as KillReason
 from .types import KitchenInstanceId as KitchenInstanceId
 from .types import LabelDef as LabelDef
 from .types import LensEntry as LensEntry
+from .types import LifecycleGeneration as LifecycleGeneration
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import MarketplaceInstall as MarketplaceInstall
@@ -318,11 +324,14 @@ from .types import ModelTranslation as ModelTranslation
 from .types import NamedResume as NamedResume
 from .types import NdjsonDriftOutcome as NdjsonDriftOutcome
 from .types import NoResume as NoResume
+from .types import OpenEmpty as OpenEmpty
+from .types import OpenRecipe as OpenRecipe
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
 from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
+from .types import PipelineScopeId as PipelineScopeId
 from .types import PluginSource as PluginSource
 from .types import ProcessStaleError as ProcessStaleError
 from .types import PromptContractError as PromptContractError
@@ -341,6 +350,7 @@ from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
 from .types import RecipeSource as RecipeSource
+from .types import RecipeStepKey as RecipeStepKey
 from .types import ResolutionStatus as ResolutionStatus
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser

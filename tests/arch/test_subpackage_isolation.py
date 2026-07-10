@@ -102,6 +102,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "tool_registry",  # recipe/tool_registry.py: RECIPE_TOOL_MAP = _build_recipe_tool_map()
         "_type_selected_skill",  # core/types/_type_selected_skill.py: EMPTY_SELECTED_SKILL
         "_type_recipe_compilation",  # core/types/_type_recipe_compilation.py: pure types only
+        "_type_kitchen_lifecycle",  # core/types/_type_kitchen_lifecycle.py: pure types only
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -822,7 +823,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _type_recipe_compilation.py adds the IL-0 typed transport values for the
             sole compiler (RecipeCompilationKey/Result/Failure + KitchenInstanceId)
             (Step 2.2/2.5 of #4185), bringing the core/types count to 33.
-            Exempt at 36 files (core/types: 33).
+            _type_kitchen_lifecycle.py adds the Closed/OpenEmpty/OpenRecipe lifecycle
+            union, LifecycleGeneration, and the distinct campaign/dispatch/
+            pipeline-scope/lease identities (Step 3.2/3.7 of #4185), bringing the
+            core/types count to 34.
+            Exempt at 37 files (core/types: 34).
           cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -883,7 +888,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits; +1 from _binding.py
         "execution": 18,
         "core": 21,
-        "core/types": 33,  # +_type_recipe_compilation.py (RecipeCompilationKey)
+        "core/types": 34,  # +_type_kitchen_lifecycle.py (Closed/OpenEmpty/OpenRecipe)
         "cli": 21,
         "hooks": 14,  # +recipe_confirmed_post_hook.py
         "pipeline": 12,

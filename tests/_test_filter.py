@@ -209,6 +209,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_type_invariant_registry": frozenset({"core"}),
     "_type_selected_skill": frozenset({"core", "execution", "recipe", "server", "workspace"}),
     "_type_recipe_compilation": frozenset({"core", "recipe", "pipeline", "server"}),
+    "_type_kitchen_lifecycle": frozenset({"core", "server", "fleet", "pipeline"}),
     "_install_detect": frozenset({"core", "cli", "config"}),
     "_linux_proc": frozenset({"core", "execution", "fleet", "cli"}),
     "_type_plugin_source": frozenset({"core", "execution", "pipeline", "server", "cli"}),

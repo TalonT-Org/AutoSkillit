@@ -37,6 +37,7 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_session_env_specs.py` | Tests for FleetSessionEnv dataclass and its to_dict method |
 | `test_session_index_schema.py` | Tests for SessionIndexEntry TypedDict field completeness |
 | `test_recipe_compilation.py` | Tests for IL-0 RecipeCompilationKey/Result/Failure + KitchenInstanceId (Step 2.2/2.5 of #4185) |
+| `test_kitchen_lifecycle_types.py` | Tests for IL-0 Closed/OpenEmpty/OpenRecipe lifecycle union, LifecycleGeneration, and identity-separation types (Step 3.2/3.7 of #4185) |
 | `test_selected_skill.py` | Tests for the IL-0 SelectedSkill authority — normalization, immutability, hashability, denial-reason membership (Step 1.7 of #4185) |
 | `test_session_liveness.py` | Tests for is_session_alive generalized liveness triple-check |
 | `test_session_registry.py` | Tests for core/session_registry.py |

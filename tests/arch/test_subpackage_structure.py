@@ -29,6 +29,7 @@ class TestCoreSubpackages:
             "_type_helpers",
             "_type_inspector",
             "_type_invariant_registry",
+            "_type_kitchen_lifecycle",
             "_type_phoropter",
             "_type_plugin_source",
             "_type_protocols_backend",

@@ -104,6 +104,7 @@ class TestModuleCascadeCore:
             "_type_capture",
             "_type_inspector",
             "_type_invariant_registry",
+            "_type_kitchen_lifecycle",
             "_type_phoropter",
             "_type_selected_skill",
             "_type_recipe_compilation",

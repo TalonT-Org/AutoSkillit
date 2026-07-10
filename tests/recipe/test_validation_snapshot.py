@@ -45,11 +45,20 @@ def test_validation_snapshot_is_frozen_slotted() -> None:
 
     from autoskillit.recipe._analysis import ValidationSnapshot
     from autoskillit.recipe._delivery import DeliveryEvidenceMap
+    from autoskillit.recipe.schema import DataFlowReport
 
     snap = ValidationSnapshot(
-        owned_recipe=MappingProxyType({}),
+        declared_recipe=MappingProxyType({}),
+        effective_recipe=MappingProxyType({}),
+        declared_evidence=DeliveryEvidenceMap(steps={}, manifest_snapshot_id="x"),
+        effective_evidence=DeliveryEvidenceMap(steps={}, manifest_snapshot_id="x"),
+        declared_graph=MappingProxyType({}),
+        effective_graph=MappingProxyType({}),
+        declared_dataflow=DataFlowReport(),
+        effective_dataflow=DataFlowReport(),
+        declared_blocks=(),
+        effective_blocks=(),
         normalized_manifest=MappingProxyType({}),
-        delivery_evidence=DeliveryEvidenceMap(steps={}, manifest_snapshot_id="x"),
         manifest_fingerprint="sha256:abc",
         recipe_invocation_fingerprint="sha256:def",
     )

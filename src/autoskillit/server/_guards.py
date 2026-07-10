@@ -292,29 +292,43 @@ def _check_input_contracts(
     path_args = [a for a in args if is_path_like_token(a)]
 
     for spec in specs:
-        if spec.position >= len(path_args):
-            if spec.required:
-                return gate_error_result(
-                    f"Missing required {spec.type.value} argument '{spec.name}' "
-                    f"for {extract_skill_name(skill_command) or skill_command}"
-                )
-            continue
+        if spec.type in (InputType.FILE_PATH, InputType.DIRECTORY_PATH):
+            # Path-typed specs occupy an absolute position in the path_args tuple
+            # — strings and other non-path tokens do not consume that slot.
+            if spec.position >= len(path_args):
+                if spec.required:
+                    return gate_error_result(
+                        f"Missing required {spec.type.value} argument '{spec.name}' "
+                        f"for {extract_skill_name(skill_command) or skill_command}"
+                    )
+                continue
 
-        value = path_args[spec.position]
-        resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
+            value = path_args[spec.position]
+            resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
 
-        if spec.type == InputType.FILE_PATH:
-            if not resolved.is_file():
-                return gate_error_result(
-                    f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
-                    f"expected a file, path does not exist or is a directory: {resolved}"
-                )
-        elif spec.type == InputType.DIRECTORY_PATH:
-            if not resolved.is_dir():
-                return gate_error_result(
-                    f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
-                    f"expected a directory, path does not exist or is a file: {resolved}"
-                )
+            if spec.type == InputType.FILE_PATH:
+                if not resolved.is_file():
+                    return gate_error_result(
+                        f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                        f"expected a file, path does not exist or is a directory: {resolved}"
+                    )
+            elif spec.type == InputType.DIRECTORY_PATH:
+                if not resolved.is_dir():
+                    return gate_error_result(
+                        f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                        f"expected a directory, path does not exist or is a file: {resolved}"
+                    )
+        else:
+            # Scalar/value-typed specs (string, integer, file_path_list) bind
+            # against the absolute-position sequence of positional tokens, not
+            # the path-like subset.
+            if spec.position >= len(args):
+                if spec.required:
+                    return gate_error_result(
+                        f"Missing required {spec.type.value} argument '{spec.name}' "
+                        f"for {extract_skill_name(skill_command) or skill_command}"
+                    )
+                continue
 
     return None
 

@@ -459,30 +459,47 @@ class TestInputContractResolver:
     """InputContractResolver loads input specs from skill_contracts.yaml."""
 
     def test_input_contract_resolver_returns_specs_for_resolve_failures(self):
-        from autoskillit.core import InputSpec
+        from autoskillit.core import InputSpec, InputType
 
         resolver = _make_input_contract_resolver()
-        specs = resolver("/resolve-failures /worktrees/foo /plans/bar.md main")
-        assert len(specs) == 3
+        resolution = resolver("/resolve-failures /worktrees/foo /plans/bar.md main")
+        specs = list(resolution.inputs)
+        assert len(specs) == 4
         assert specs[0] == InputSpec(
-            name="worktree_path", type="directory_path", required=True, position=0
+            name="worktree_path", type=InputType.DIRECTORY_PATH, required=True, position=0
         )
-        assert specs[1] == InputSpec(name="plan_path", type="file_path", required=True, position=1)
+        assert specs[1] == InputSpec(
+            name="plan_path", type=InputType.FILE_PATH, required=True, position=1
+        )
         assert specs[2] == InputSpec(
-            name="diagnosis_path", type="file_path", required=False, position=2
+            name="base_branch", type=InputType.STRING, required=True, position=2
+        )
+        assert specs[3] == InputSpec(
+            name="diagnosis_path", type=InputType.FILE_PATH, required=False, position=3
         )
 
     def test_input_contract_resolver_returns_empty_for_unknown_skill(self):
         resolver = _make_input_contract_resolver()
-        specs = resolver("/unknown-skill-not-in-contracts /some/path")
-        assert list(specs) == []
+        resolution = resolver("/unknown-skill-not-in-contracts /some/path")
+        assert list(resolution.inputs) == []
 
 
 def _make_input_contract_resolver():
     """Create a concrete InputContractResolver using the bundled manifest."""
-    from autoskillit.recipe._contracts_manifest import resolve_input_specs
+    from autoskillit.recipe._contracts_manifest import resolve_input_contract
 
-    return resolve_input_specs
+    return resolve_input_contract
+
+
+def _make_valid_resolution(specs):
+    """Wrap a tuple of InputSpec in a VALID InputContractResolution."""
+    from autoskillit.core import InputContractResolution, ResolutionStatus
+
+    return InputContractResolution(
+        status=ResolutionStatus.VALID,
+        skill_name="synthetic",
+        inputs=tuple(specs),
+    )
 
 
 def _collect_all_path_input_specs() -> list[tuple[str, str, str]]:
@@ -513,7 +530,7 @@ class TestInputContractRealContracts:
         self, tmp_path, skill_name: str, input_name: str, declared_type: str
     ):
         """Gate must accept the correct filesystem entity for every declared path input."""
-        from autoskillit.core import InputSpec
+        from autoskillit.core import InputSpec, InputType
         from autoskillit.server._guards import _check_input_contracts
 
         narrowed: Literal["file_path", "directory_path"] = (
@@ -525,11 +542,16 @@ class TestInputContractRealContracts:
         else:
             target = tmp_path / "test_input_dir"
             target.mkdir()
-        spec = InputSpec(name=input_name, type=narrowed, required=True, position=0)
+        spec = InputSpec(
+            name=input_name,
+            type=InputType(narrowed),
+            required=True,
+            position=0,
+        )
         result = _check_input_contracts(
             f"/autoskillit:{skill_name} {target}",
             str(tmp_path),
-            resolver=lambda skill_command, _s=spec: (_s,),
+            resolver=lambda skill_command, _s=spec: _make_valid_resolution((_s,)),
         )
         assert result is None
 
@@ -542,7 +564,7 @@ class TestInputContractRealContracts:
         self, tmp_path, skill_name: str, input_name: str, declared_type: str
     ):
         """Gate must reject the WRONG filesystem entity for every declared path input."""
-        from autoskillit.core import InputSpec
+        from autoskillit.core import InputSpec, InputType
         from autoskillit.server._guards import _check_input_contracts
 
         narrowed: Literal["file_path", "directory_path"] = (
@@ -554,11 +576,16 @@ class TestInputContractRealContracts:
         else:
             wrong_target = tmp_path / "wrong_file.md"
             wrong_target.write_text("test")
-        spec = InputSpec(name=input_name, type=narrowed, required=True, position=0)
+        spec = InputSpec(
+            name=input_name,
+            type=InputType(narrowed),
+            required=True,
+            position=0,
+        )
         result = _check_input_contracts(
             f"/autoskillit:{skill_name} {wrong_target}",
             str(tmp_path),
-            resolver=lambda skill_command, _s=spec: (_s,),
+            resolver=lambda skill_command, _s=spec: _make_valid_resolution((_s,)),
         )
         assert result is not None
         parsed = json.loads(result)

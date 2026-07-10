@@ -99,6 +99,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
+        "tool_registry",  # recipe/tool_registry.py: RECIPE_TOOL_MAP = _build_recipe_tool_map()
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -1229,6 +1230,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
     EXEMPT = {
         "plugin_source",
         "config",
+        "active_recipe_snapshot",
         "active_recipe_packs",
         "active_recipe_features",
         "active_recipe_steps",

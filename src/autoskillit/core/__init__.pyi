@@ -294,9 +294,9 @@ from .types import InputSpec as InputSpec
 from .types import InputType as InputType
 from .types import InspectorCallback as InspectorCallback
 from .types import InspectorEvidence as InspectorEvidence
-from .types import InvocationShapeDenialReason as InvocationShapeDenialReason
 from .types import InspectorVerdict as InspectorVerdict
 from .types import InvariantDef as InvariantDef
+from .types import InvocationShapeDenialReason as InvocationShapeDenialReason
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
@@ -335,10 +335,10 @@ from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
 from .types import RecipeRepository as RecipeRepository
 from .types import RecipeSource as RecipeSource
+from .types import ResolutionStatus as ResolutionStatus
 from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
-from .types import ResolutionStatus as ResolutionStatus
 from .types import RetryReason as RetryReason
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint

@@ -222,6 +222,8 @@ def build_validation_snapshot(
     *,
     manifest: dict[str, Any] | None = None,
     effective_recipe: Recipe | None = None,
+    prebuilt_step_graph: dict[str, set[str]] | None = None,
+    prebuilt_dataflow: DataFlowReport | None = None,
 ) -> ValidationSnapshot:
     """Build the canonical immutable validation snapshot for one pass.
 
@@ -236,6 +238,12 @@ def build_validation_snapshot(
     effective views paired with matching evidence, graph, dataflow, and
     blocks. When omitted, both views collapse to the declared recipe —
     useful for tests that never exercise pruning.
+
+    When ``prebuilt_step_graph`` and ``prebuilt_dataflow`` are supplied
+    (typically from :func:`make_validation_context`'s top-level pass),
+    the snapshot reuses them for the declared view to avoid repeating
+    the step-graph BFS and dataflow analysis during the same validation
+    transaction.
     """
     declared_owned = copy.deepcopy(recipe)
     declared_view = MappingProxyType(vars(declared_owned))
@@ -247,12 +255,24 @@ def build_validation_snapshot(
     normalized = _normalize_manifest_for_fingerprint(loaded_manifest)
     declared_evidence = analyze_recipe_delivery(declared_owned)
     effective_evidence = analyze_recipe_delivery(effective_owned)
-    declared_step_graph = _build_step_graph(declared_owned)
-    effective_step_graph = _build_step_graph(effective_owned)
+    if prebuilt_step_graph is not None:
+        declared_step_graph = prebuilt_step_graph
+    else:
+        declared_step_graph = _build_step_graph(declared_owned)
+    if declared_owned is effective_owned:
+        effective_step_graph = declared_step_graph
+    else:
+        effective_step_graph = _build_step_graph(effective_owned)
     declared_graph = MappingProxyType({k: set(v) for k, v in declared_step_graph.items()})
     effective_graph = MappingProxyType({k: set(v) for k, v in effective_step_graph.items()})
-    declared_dataflow = analyze_dataflow(declared_owned, step_graph=declared_step_graph)
-    effective_dataflow = analyze_dataflow(effective_owned, step_graph=effective_step_graph)
+    if prebuilt_dataflow is not None:
+        declared_dataflow = prebuilt_dataflow
+    else:
+        declared_dataflow = analyze_dataflow(declared_owned, step_graph=declared_step_graph)
+    if declared_owned is effective_owned:
+        effective_dataflow = declared_dataflow
+    else:
+        effective_dataflow = analyze_dataflow(effective_owned, step_graph=effective_step_graph)
     declared_predecessors: dict[str, set[str]] = {}
     for src, successors in declared_step_graph.items():
         for dst in successors:
@@ -394,7 +414,13 @@ def make_validation_context(
         for dst in successors:
             predecessors.setdefault(dst, set()).add(src)
     snapshot = (
-        contract_snapshot if contract_snapshot is not None else build_validation_snapshot(recipe)
+        contract_snapshot
+        if contract_snapshot is not None
+        else build_validation_snapshot(
+            recipe,
+            prebuilt_step_graph=step_graph,
+            prebuilt_dataflow=dataflow,
+        )
     )
     return ValidationContext(
         recipe=recipe,

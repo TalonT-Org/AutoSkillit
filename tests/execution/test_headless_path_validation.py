@@ -2319,27 +2319,32 @@ class TestOutputPathTokensScopedBySkillContract:
             assert excluded not in selected
             assert excluded not in _OUTPUT_PATH_TOKENS
 
-    def test_malformed_manifest_entry_falls_back_to_global(self, monkeypatch):
-        """Invalid skill entries must not crash selection — conservatively fall back."""
-        from autoskillit.execution.headless import _headless_path_tokens
-        from autoskillit.execution.headless._headless_path_tokens import _select_output_path_tokens
-
-        make_plan_tokens = _headless_path_tokens._OUTPUT_PATH_TOKENS_BY_SKILL.get(
-            "make-plan", frozenset()
+    def test_malformed_manifest_nonstring_fields_conservatively_fall_back(self, monkeypatch):
+        """Non-string name/type fields must not crash registry construction — conservatively
+        fall back to empty per-skill set, then to the global set on selection."""
+        from autoskillit.execution.headless._headless_path_tokens import (
+            _build_path_token_registry,
+            _select_output_path_tokens,
         )
-        patched_registry = {
-            "broken-skill": frozenset(),
-            "non-list-outputs": make_plan_tokens,
+
+        manifest = {
+            "skills": {
+                "nonstring-type": {"outputs": [{"name": "plan_path", "type": 42}]},
+                "nonstring-name": {"outputs": [{"name": 123, "type": "file_path"}]},
+                "valid-skill": {"outputs": [{"name": "plan_path", "type": "file_path"}]},
+            }
         }
         monkeypatch.setattr(
-            _headless_path_tokens,
-            "_OUTPUT_PATH_TOKENS_BY_SKILL",
-            patched_registry,
+            "autoskillit.execution.headless._headless_path_tokens.load_yaml",
+            lambda _source: manifest,
         )
-        assert _select_output_path_tokens("broken-skill") == (
-            _headless_path_tokens._OUTPUT_PATH_TOKENS
-        )
-        assert _select_output_path_tokens("non-list-outputs") == make_plan_tokens
+        by_skill, output_tokens, _recoverable = _build_path_token_registry()
+        assert by_skill["nonstring-type"] == frozenset()
+        assert by_skill["nonstring-name"] == frozenset()
+        assert by_skill["valid-skill"] == frozenset({"plan_path"})
+        assert "plan_path" in output_tokens
+        assert _select_output_path_tokens("nonstring-type") == output_tokens
+        assert _select_output_path_tokens("nonstring-name") == output_tokens
 
 
 class TestExtractOutputPathsWithTokenScope:

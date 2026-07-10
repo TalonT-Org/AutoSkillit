@@ -35,9 +35,9 @@ Sub-package: rules/ (see rules/AGENTS.md).
 | `methodology_disambiguation.py` | `DisambiguationRuleDef`, `CrossTraditionOverlapDef`, `DisambiguationResult`, `disambiguate`, `load_disambiguation_rules` |
 | `registry.py` | `RuleFinding`, `RuleDef`, `BlockRuleDef`, `semantic_rule` decorator |
 | `repository.py` | `RecipeRepository` implementation |
-| `_analysis.py` | `ValidationContext` + `make_validation_context` |
-| `_delivery.py` | `DeliveryEvidence` analyzer — single source of truth for worker/tool/control/availability/unsupported refs |
-| `tool_registry.py` | Canonical `ToolDef` registry (MCP parameter source of truth) + `FRAMEWORK_ONLY_EXCLUSIONS` |
+| `_analysis.py` | `ValidationContext` + `make_validation_context` + `ValidationSnapshot` (immutable, owns deep-copy recipe view + normalized manifest + delivery evidence + paired fingerprints) + `build_validation_snapshot` |
+| `_delivery.py` | `DeliveryEvidence` analyzer — single source of truth for worker/tool/control/availability/unsupported refs. Adds `effective_consumption`, `input_receives_ref`, `binding_for_input` predicates, and `manifest_fingerprint` / `recipe_invocation_fingerprint` fields on `DeliveryEvidenceMap` |
+| `tool_registry.py` | Canonical `ToolDef` registry (MCP parameter source of truth) + `FRAMEWORK_ONLY_EXCLUSIONS` + `unsupported_params()` helper (single source for delivery-evidence unsupported set and rule severities) |
 | `_analysis_graph.py` | `RouteEdge` + `build_recipe_graph` + step graph primitives |
 | `_analysis_bfs.py` | `bfs_reachable` + symbolic BFS fact propagation |
 | `_analysis_blocks.py` | `extract_blocks` — group steps by block annotation |

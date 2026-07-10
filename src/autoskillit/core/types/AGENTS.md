@@ -10,7 +10,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_enums.py` | All `StrEnum` discriminators (`RetryReason`, `KillReason`, `Severity`, etc.) |
 | `_type_exceptions.py` | Exception hierarchy for recipe loading: `RecipeLoadError`, `ProcessStaleError`, `RecipeNotFoundError` |
 | `_type_figure_spec.py` | `FigureSpec` TypedDict and consumer/producer field sets for `yaml:figure-spec` contracts |
-| `_type_constants.py` | Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants |
+| `_type_constants.py` | Retired name registries, skill contracts, orchestration prompt sections, CI/domain constants, `OPTIONAL_ARG_OMISSION_SENTINEL`, `DISPATCH_ITEM_PLACEHOLDER` (`{selected_dispatch_item}`), `SUPPORTED_INPUT_TYPES` frozenset |
 | `_type_constants_env.py` | Environment variable names, session type aliases, context markers, logging keys |
 | `_type_constants_registries.py` | Tool registries, pack registries, tool-to-tag mappings, visibility tags |
 | `_type_constants_features.py` | Feature gates (FeatureDef, FEATURE_REGISTRY), label lifecycle state machine |
@@ -18,7 +18,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_subprocess.py` | `SubprocessResult` dataclass and `SubprocessRunner` protocol |
 | `_type_token.py` | `CanonicalTokenUsage` frozen dataclass with factory methods and merge |
 | `_type_results_execution.py` | Execution-scoped result dataclasses: `SessionTelemetry`, `RecipeIdentity`, `CIRunScope` |
-| `_type_results.py` | Core result dataclasses: `SkillResult`, `ProviderOutcome`, `LoadResult`, `FailureRecord`, `WriteBehaviorSpec` |
+| `_type_results.py` | Core result dataclasses: `SkillResult`, `ProviderOutcome`, `LoadResult`, `FailureRecord`, `WriteBehaviorSpec`, `InputSpec` (expanded family: string, integer, file_path, file_path_list, directory_path), `InputBinding`, `InputContractResolution`, and the Step 8 sealed active-step runtime types `ActiveIngredientSpec`, `ActiveRecipeStepSpec`, `ActiveRunSkillSpec`, `ActiveRecipeRuntimeSnapshot` |
 | `_type_protocols_logging.py` | Protocols: `AuditLog`, `TokenLog`, `TimingLog`, `McpResponseLog`, `GitHubApiLog`, `SupportsDebug`, `SupportsLogger` |
 | `_type_protocols_execution.py` | Protocols: `TestRunner`, `HeadlessExecutor`, `OutputPatternResolver`, `WriteExpectedResolver` |
 | `_type_protocols_github.py` | Protocols: `GitHubFetcher`, `CIWatcher`, `MergeQueueWatcher` |

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 
 
@@ -369,7 +370,33 @@ _RECIPE_TOOL_DEFS: tuple[ToolDef, ...] = (
     ToolDef(name="write_telemetry_files", params=("output_dir",)),
 )
 
-_RECIPE_TOOL_MAP: Mapping[str, ToolDef] = {td.name: td for td in _RECIPE_TOOL_DEFS}
+
+def _build_recipe_tool_map(
+    tool_defs: tuple[ToolDef, ...],
+) -> Mapping[str, ToolDef]:
+    """Build the canonical tool map, rejecting duplicate names and duplicate params.
+
+    The dict-comprehension form silently overwrites on duplicate names, so the
+    canonical map is built imperatively. ``RuntimeError`` is raised for either
+    duplicate-name or duplicate-param defects so the registry is fail-closed
+    at module load — a single duplicate slips past only if the production
+    code path is reachable (and the tests that asserted ``len(set) == len(list)``
+    could no longer pass).
+    """
+    seen_names: set[str] = set()
+    by_name: dict[str, ToolDef] = {}
+    for td in tool_defs:
+        if td.name in seen_names:
+            raise RuntimeError(f"Duplicate ToolDef name {td.name!r} in canonical registry")
+        if len(td.params) != len(set(td.params)):
+            duplicates = sorted({p for p in td.params if list(td.params).count(p) > 1})
+            raise RuntimeError(f"Duplicate params in ToolDef {td.name!r}: {duplicates}")
+        seen_names.add(td.name)
+        by_name[td.name] = td
+    return MappingProxyType(by_name)
+
+
+_RECIPE_TOOL_MAP: Mapping[str, ToolDef] = _build_recipe_tool_map(_RECIPE_TOOL_DEFS)
 
 
 # --- Framework-only MCP tools ---

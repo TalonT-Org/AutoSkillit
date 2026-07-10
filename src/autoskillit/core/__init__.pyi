@@ -155,6 +155,7 @@ from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DISPATCH_ITEM_PLACEHOLDER as DISPATCH_ITEM_PLACEHOLDER
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
+from .types import EMPTY_SELECTED_SKILL as EMPTY_SELECTED_SKILL
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
@@ -222,6 +223,7 @@ from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
+from .types import ZERO_INPUT_KEY as ZERO_INPUT_KEY
 from .types import ActiveIngredientSpec as ActiveIngredientSpec
 from .types import ActiveRecipeRuntimeSnapshot as ActiveRecipeRuntimeSnapshot
 from .types import ActiveRecipeStepSpec as ActiveRecipeStepSpec
@@ -340,6 +342,7 @@ from .types import RestartScope as RestartScope
 from .types import ResultParser as ResultParser
 from .types import ResumeSpec as ResumeSpec
 from .types import RetryReason as RetryReason
+from .types import SelectedSkill as SelectedSkill
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
@@ -378,7 +381,9 @@ from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
+from .types import build_selected_skill as build_selected_skill
 from .types import compute_remaining as compute_remaining
+from .types import compute_selected_skill_fingerprint as compute_selected_skill_fingerprint
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args
 from .types import extract_skill_name as extract_skill_name
@@ -386,6 +391,7 @@ from .types import fleet_error as fleet_error
 from .types import is_path_like_token as is_path_like_token
 from .types import is_valid_codex_model_id as is_valid_codex_model_id
 from .types import model_class as model_class
+from .types import normalize_skill_contract as normalize_skill_contract
 from .types import resolve_payload_field as resolve_payload_field
 from .types import resolve_skill_name as resolve_skill_name
 from .types import resolve_target_skill as resolve_target_skill

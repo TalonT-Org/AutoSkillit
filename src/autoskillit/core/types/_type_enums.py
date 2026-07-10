@@ -675,6 +675,8 @@ class InvocationShapeDenialReason(StrEnum):
     NON_RUN_SKILL_STEP = "non_run_skill_step"
     MALFORMED_COMMAND = "malformed_command"
     MALFORMED_CONTRACT = "malformed_contract"
+    UNKNOWN_SKILL = "unknown_skill"
+    RESOLVER_UNAVAILABLE = "resolver_unavailable"
     WRONG_SKILL = "wrong_skill"
     ARITY_MISMATCH = "arity_mismatch"
     SLOT_MISMATCH = "slot_mismatch"

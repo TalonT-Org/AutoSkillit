@@ -15,6 +15,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_constants_registries.py` | Tool registries, pack registries, tool-to-tag mappings, visibility tags |
 | `_type_constants_features.py` | Feature gates (FeatureDef, FEATURE_REGISTRY), label lifecycle state machine |
 | `_type_session_env.py` | Typed env spec dataclasses for session launch boundaries (`FleetSessionEnv`) |
+| `_type_selected_skill.py` | `SelectedSkill` frozen/slotted IL-0 contract authority — normalized payload + content/contract identity fingerprint, `normalize_skill_contract`, `compute_selected_skill_fingerprint`, `build_selected_skill`, `EMPTY_SELECTED_SKILL` |
 | `_type_subprocess.py` | `SubprocessResult` dataclass and `SubprocessRunner` protocol |
 | `_type_token.py` | `CanonicalTokenUsage` frozen dataclass with factory methods and merge |
 | `_type_results_execution.py` | Execution-scoped result dataclasses: `SessionTelemetry`, `RecipeIdentity`, `CIRunScope` |

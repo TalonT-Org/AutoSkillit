@@ -872,7 +872,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
     """
     EXEMPTIONS: dict[str, int] = {
         "server": 14,
-        "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
+        "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits; +1 from _binding.py
         "execution": 18,
         "core": 21,
         "core/types": 31,  # +_type_invariant_registry.py (INVARIANT_REGISTRY)

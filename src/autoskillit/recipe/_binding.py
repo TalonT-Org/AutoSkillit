@@ -18,15 +18,14 @@ occupies a slot with ``state=OMITTED`` — never ``state=BOUND``.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Final
+
+import regex as re
 
 from autoskillit.core import (
     DISPATCH_ITEM_PLACEHOLDER,
     OPTIONAL_ARG_OMISSION_SENTINEL,
-)
-from autoskillit.core.types import (
     BindingForm,
     BindingState,
     InputBinding,
@@ -333,7 +332,7 @@ def bind_run_skill_command(
 
 
 def _wire_to_input_type(wire_type: str):
-    from autoskillit.core.types import InputType
+    from autoskillit.core import InputType
 
     table = {
         "string": InputType.STRING,

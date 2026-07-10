@@ -456,7 +456,7 @@ class TestBuildSkillResultBashOutOfCwdBoundaryProof:
             backend=ClaudeCodeBackend(),
         )
         # /worktree/clone/../outside.txt normalizes to /worktree/outside.txt, outside CWD.
-        assert any("/worktree/outside.txt" in w or "outside" in w for w in sr.write_path_warnings)
+        assert any("/worktree/outside.txt" in w for w in sr.write_path_warnings)
 
     def test_proof_only_quadrant_preserves_success_with_diagnostic(self):
         """Out-of-CWD write with no scoped text candidate preserves success
@@ -744,6 +744,16 @@ class TestScanJsonlWritePaths:
     def test_bash_redirect_inside_cwd_clean(self):
         line = _make_tool_use_line("Bash", {"command": f"echo hello > {self.CWD}/out.txt"})
         assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_relative_bash_traversal_detected_directly(self):
+        """A Bash redirect to '../outside.txt' must be detected by _scan_jsonl_write_paths
+        directly — joined to cwd, lexically normalized, and reported with the normalized
+        absolute path. This exercises the scanner contract without going through
+        _build_skill_result."""
+        line = _make_tool_use_line("Bash", {"command": "echo x > ../outside.txt"})
+        warnings = _scan_jsonl_write_paths(line, "/clone/worktree")
+        assert len(warnings) == 1
+        assert "/clone/outside.txt" in warnings[0]
 
     def test_exact_warning_count_for_mixed_bash(self):
         line = _make_tool_use_line(

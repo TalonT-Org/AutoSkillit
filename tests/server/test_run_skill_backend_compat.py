@@ -164,6 +164,7 @@ class TestBackendCompatGateFailClosed:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = mock_skill_info
         tool_ctx_kitchen_open.skill_resolver = mock_resolver
+        tool_ctx_kitchen_open.input_contract_resolver = None
 
         monkeypatch.setattr(
             "autoskillit.server.tools.tools_execution.is_feature_enabled",

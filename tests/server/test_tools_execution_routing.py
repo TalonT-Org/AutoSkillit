@@ -103,6 +103,7 @@ async def test_run_skill_activates_deps_for_tier3_target(
         source=MagicMock(value="bundled_extended"), backend_requirements=frozenset()
     )
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
+    tool_ctx_kitchen_open.input_contract_resolver = None
 
     from tests.fakes import InMemoryHeadlessExecutor
 

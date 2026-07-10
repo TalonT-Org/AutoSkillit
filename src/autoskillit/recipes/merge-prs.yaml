@@ -837,8 +837,8 @@ steps:
       skill_command: /autoskillit:merge-pr {pr_number} {complexity}
       cwd: ${{ context.work_dir }}
       step_name: merge_pr
-      pr_order_file: ${{ context.pr_order_file }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/merge-pr'
+    dispatch_items: ${{ context.pr_order_file }}
     capture:
       needs_plan: ${{ result.needs_plan }}
       escalation_required: ${{ result.escalation_required }}
@@ -897,11 +897,10 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:dry-walkthrough ${{ context.pr_plan_path }}
+      skill_command: /autoskillit:dry-walkthrough ${{ context.pr_plan_path }} - ${{ context.remediation_path }}
       cwd: ${{ context.work_dir }}
       step_name: verify
       output_dir: '{{AUTOSKILLIT_TEMP}}'
-      remediation_path: ${{ context.remediation_path }}
     on_success: implement
     on_failure: register_clone_failure
     retries: 5
@@ -1341,6 +1340,7 @@ steps:
       cwd: ${{ context.work_dir }}
       step_name: open_integration_pr
       output_dir: '{{AUTOSKILLIT_TEMP}}/open-integration-pr'
+    dispatch_items: ${{ context.pr_order_file }}
     capture:
       pr_url: ${{ result.pr_url }}
     on_success: wait_for_review_pr_mergeability

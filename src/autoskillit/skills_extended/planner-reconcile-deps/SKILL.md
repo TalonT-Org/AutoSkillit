@@ -30,13 +30,14 @@ spawning parallel sessions.
 ## Arguments
 
 - **$1** — Absolute path to the run-scoped planner directory (e.g., `{{AUTOSKILLIT_TEMP}}/planner/run-YYYYMMDD-HHMMSS`)
+- **$2** — Absolute path to the consolidated work-packages file (e.g., `{$1}/work_packages/consolidated.json`)
 
 ## Critical Constraints
 
 **NEVER:**
 - Fabricate, invent, or embellish information not supported by the available evidence or code.
 
-- Load full WP result files — only `wp_index.json` (the compact array)
+- Load full WP result files — only the consolidated work-packages file at `$2`
 - Spawn additional sessions — this skill must run as a single session for holistic reasoning
 - Write output outside `{$1}/`
 - Add transitive deps without a concrete API or file relationship as evidence
@@ -44,7 +45,7 @@ spawning parallel sessions.
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
-- Read `wp_index.json` in full before analyzing
+- Read the consolidated WPs file at `$2` in full before analyzing
 - Populate `added_backward_deps` only when an `apis_consumed`/`apis_defined` or `files_touched` match justifies the dependency
 - Emit `dep_graph_path` as the output token
 

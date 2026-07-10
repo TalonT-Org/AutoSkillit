@@ -237,8 +237,6 @@ steps:
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/investigate'
       step_name: investigate
-      issue_url: ${{ inputs.issue_url }}
-      issue_title: ${{ context.issue_title }}
     capture:
       investigation_path: ${{ result.investigation_path }}
     on_success: bridge_investigation
@@ -326,12 +324,9 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:dry-walkthrough ${{ context.plan_path }}
+      skill_command: /autoskillit:dry-walkthrough ${{ context.plan_path }} ${{ inputs.issue_url }} ${{ context.remediation_path }}
       cwd: ${{ context.work_dir }}
       output_dir: '{{AUTOSKILLIT_TEMP}}'
-      review_path: ${{ context.review_path }}
-      issue_url: ${{ inputs.issue_url }}
-      remediation_path: ${{ context.remediation_path }}
       step_name: dry_walkthrough
     on_success: create_impl_worktree
     on_failure: release_issue_failure
@@ -869,10 +864,8 @@ steps:
     model: ''
     with:
       skill_command: /autoskillit:make-plan ${{ context.remediation_path }}
-      task: ${{ inputs.task }}
       cwd: ${{ context.work_dir }}
       step_name: make_plan
-      adversarial_review_level: ${{ inputs.adversarial_review_level }}
       output_dir: '.'
     capture:
       plan_path: ${{ result.plan_path }}
@@ -2231,11 +2224,10 @@ steps:
     tool: run_skill
     model: ''
     with:
-      skill_command: /autoskillit:diagnose-ci ${{ context.merge_target }} - - - ${{
+      skill_command: /autoskillit:diagnose-ci ${{ context.merge_target }} - ${{ context.ci_failed_jobs }} - ${{
         context.ci_event }}
       cwd: ${{ context.work_dir }}
       step_name: diagnose_ci
-      ci_failed_jobs: ${{ context.ci_failed_jobs }}
       output_dir: '{{AUTOSKILLIT_TEMP}}/diagnose-ci'
     capture:
       diagnosis_path: ${{ result.diagnosis_path }}

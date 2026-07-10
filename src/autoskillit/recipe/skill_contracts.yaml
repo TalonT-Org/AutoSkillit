@@ -2290,7 +2290,13 @@ skills:
       - "phase_wps_result_dir = /tmp/autoskillit/planner/run-20260101-120000/work_packages\n%%ORDER_UP%%"
     write_behavior: always
   planner-reconcile-deps:
-    inputs: []
+    inputs:
+      - name: planner_dir
+        type: directory_path
+        required: true
+      - name: consolidated_wps_path
+        type: file_path
+        required: true
     outputs: []
   planner-refine:
     inputs: []

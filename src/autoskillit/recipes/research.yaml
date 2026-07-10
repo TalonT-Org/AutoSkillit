@@ -498,7 +498,7 @@ steps:
       cwd: "${{ context.worktree_path }}"
       step_name: plan_phase
       output_dir: '.'
-      group_files: "${{ context.group_files }}"
+    dispatch_items: "${{ context.group_files }}"
     capture:
       phase_plan_path: "${{ result.plan_path }}"
       verdict: "${{ result.verdict }}"

@@ -36,6 +36,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_invariant_registry.py` | Invariant registry: `InvariantDef` dataclass and `INVARIANT_REGISTRY` mapping prose prohibitions to runtime gates |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |
+| `_type_recipe_compilation.py` | `RecipeCompilationKey`, `RecipeCompilationResult`, `RecipeCompilationFailure`, `KitchenInstanceId` — IL-0 typed transport for the sole compiler (Step 2.2/2.5 of #4185) |
 | `_type_plugin_source.py` | `PluginSource` discriminated union: `DirectInstall | MarketplaceInstall` |
 | `_type_tradition_manifest.py` | `TraditionManifest`, `LensEntry`, `DialingConfig` frozen dataclasses with `from_dict`/`from_yaml_path` loaders |
 

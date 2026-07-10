@@ -301,6 +301,7 @@ from .types import InvariantDef as InvariantDef
 from .types import InvocationShapeDenialReason as InvocationShapeDenialReason
 from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
+from .types import KitchenInstanceId as KitchenInstanceId
 from .types import LabelDef as LabelDef
 from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
@@ -331,6 +332,9 @@ from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
 from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver
+from .types import RecipeCompilationFailure as RecipeCompilationFailure
+from .types import RecipeCompilationKey as RecipeCompilationKey
+from .types import RecipeCompilationResult as RecipeCompilationResult
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError
 from .types import RecipeNotFoundError as RecipeNotFoundError
@@ -382,6 +386,7 @@ from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
 from .types import build_selected_skill as build_selected_skill
+from .types import compute_compilation_key_fingerprint as compute_compilation_key_fingerprint
 from .types import compute_remaining as compute_remaining
 from .types import compute_selected_skill_fingerprint as compute_selected_skill_fingerprint
 from .types import extract_path_arg as extract_path_arg

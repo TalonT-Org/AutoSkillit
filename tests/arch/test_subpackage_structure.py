@@ -41,6 +41,7 @@ class TestCoreSubpackages:
             "_type_results",
             "_type_results_execution",
             "_type_resume",
+            "_type_recipe_compilation",
             "_type_selected_skill",
             "_type_session_env",
             "_type_subprocess",

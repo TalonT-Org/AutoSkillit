@@ -441,6 +441,49 @@ if _PARSE_RECIPE_HANDLED_FIELDS | _RECIPE_COMPUTED_FIELDS != frozenset(
     )
 
 
+def _validate_dispatch_items(value: Any, *, step_name: str = "") -> str | None:
+    """Validate a ``dispatch_items`` field value at parse time.
+
+    Allowed forms:
+      - ``None`` — not declared; the field is omitted.
+      - A non-empty string containing EXACTLY one ``${{ inputs.X }}`` or
+        ``${{ context.X }}`` template expression (whitespace tolerated
+        inside the braces). The expression must reference a declared
+        namespace.
+
+    Rejects:
+      - non-string, non-None values (numbers, lists, dicts, bools)
+      - empty strings
+      - strings without exactly one valid template expression
+      - strings with template expressions in unsupported namespaces
+
+    Returning ``None`` for the absent case keeps the dataclass default;
+    raising ``ValueError`` for malformed cases surfaces the defect during
+    ``load_recipe`` rather than at runtime dispatch.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(
+            f"Step {step_name!r}: dispatch_items must be a string or null, "
+            f"got {type(value).__name__}"
+        )
+    if not value.strip():
+        raise ValueError(f"Step {step_name!r}: dispatch_items must not be empty")
+    from autoskillit.recipe._contracts_types import _CONTEXT_REF_RE, INPUT_REF_RE
+
+    ctx_refs = _CONTEXT_REF_RE.findall(value)
+    inp_refs = INPUT_REF_RE.findall(value)
+    total = len(ctx_refs) + len(inp_refs)
+    if total != 1:
+        raise ValueError(
+            f"Step {step_name!r}: dispatch_items must reference exactly one "
+            f"${{{{ inputs.X }}}} or ${{{{ context.X }}}} expression, "
+            f"got {total} matches in {value!r}"
+        )
+    return value
+
+
 def _parse_capture_spec(capture_raw: Any) -> dict[str, CaptureEntrySpec]:
     """Parse a YAML capture spec into ``dict[str, CaptureEntrySpec]``.
 
@@ -677,7 +720,9 @@ def _parse_step(data: dict[str, Any]) -> RecipeStep:
         pass_through=_ensure_list(data.get("pass_through", [])),
         phoropter_family=data.get("phoropter_family"),
         skip_when_true=data.get("skip_when_true"),
-        dispatch_items=data.get("dispatch_items"),
+        dispatch_items=_validate_dispatch_items(
+            data.get("dispatch_items"), step_name=data.get("name", "")
+        ),
     )
 
 

@@ -42,7 +42,8 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "execution/github.py": 750,
     "execution/session_log.py": 750,
     "fleet/state.py": 750,
-    "recipe/io.py": 750,
+    # +50 lines for _validate_dispatch_items (Step 6 dispatch_items enforcement)
+    "recipe/io.py": 800,
     "server/tools/tools_git.py": 750,
     "server/tools/tools_github.py": 750,
 }

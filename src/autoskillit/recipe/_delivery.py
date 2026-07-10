@@ -37,7 +37,7 @@ from autoskillit.recipe._contracts_manifest import (
     _CONTEXT_REF_RE,
     INPUT_REF_RE,
 )
-from autoskillit.recipe.tool_registry import for_tool
+from autoskillit.recipe.tool_registry import for_tool, unsupported_params
 
 __all__ = [
     "DeliveryEvidence",
@@ -45,6 +45,9 @@ __all__ = [
     "analyze_step_delivery",
     "analyze_recipe_delivery",
     "OPTIONAL_ARG_OMISSION_SENTINEL",
+    "effective_consumption",
+    "input_receives_ref",
+    "binding_for_input",
 ]
 
 
@@ -85,10 +88,21 @@ class DeliveryEvidence:
 
 @dataclass(frozen=True, slots=True)
 class DeliveryEvidenceMap:
-    """Immutable per-step evidence map keyed by step name."""
+    """Immutable per-step evidence map keyed by step name.
+
+    ``manifest_snapshot_id`` is the legacy cheap string derived from recipe
+    type/name. ``manifest_fingerprint`` and ``recipe_invocation_fingerprint``
+    are the canonical content-derived identifiers paired by the validation
+    snapshot — a per-pass pair that forbids cross-recipe evidence
+    substitution. They are distinct from the source ``content_hash`` /
+    ``composite_hash`` provenance identities (those remain authoritative for
+    rerun detection).
+    """
 
     steps: Mapping[str, DeliveryEvidence]
     manifest_snapshot_id: str
+    manifest_fingerprint: str = ""
+    recipe_invocation_fingerprint: str = ""
 
     def for_step(self, step_name: str) -> DeliveryEvidence | None:
         return self.steps.get(step_name)
@@ -139,12 +153,16 @@ def analyze_step_delivery(
 
     # Tool-bound refs: refs in with_args values where the key is a registered tool param
     # AND the value is not itself the skill_command token (which is the command, not
-    # a context-carrying param).
-    tool_def = for_tool(tool) if tool else None
-    tool_param_set: frozenset[str] = tool_def.param_set if tool_def is not None else frozenset()
+    # a context-carrying param). The unsupported set is computed via the canonical
+    # ``unsupported_params`` helper so the registry parity tests and the
+    # delivery-evidence parser cannot drift apart.
+    tool_param_set: frozenset[str] = frozenset()
+    if tool:
+        td = for_tool(tool)
+        if td is not None:
+            tool_param_set = td.param_set
 
     tool_bound: set[str] = set()
-    unsupported: set[str] = set()
     if isinstance(with_args, dict):
         for key, value in with_args.items():
             if key == "skill_command":
@@ -153,8 +171,12 @@ def analyze_step_delivery(
                 ctx_refs = set(_CONTEXT_REF_RE.findall(str(value)))
                 inp_refs = set(INPUT_REF_RE.findall(str(value)))
                 tool_bound.update(ctx_refs | inp_refs)
-            else:
-                unsupported.add(key)
+
+    unsupported: frozenset[str]
+    if isinstance(with_args, dict):
+        unsupported = unsupported_params(tool or "", frozenset(with_args.keys()))
+    else:
+        unsupported = frozenset()
 
     # Orchestrator-control refs: top-level dispatch_items, etc.
     orch_control = _detect_orchestrator_control_keys(step)
@@ -202,6 +224,67 @@ def analyze_recipe_delivery(recipe: Any) -> DeliveryEvidenceMap:
         out[step_name] = analyze_step_delivery(step, optional_context_refs=optional_refs)
     manifest_id = type(recipe).__name__ + ":" + str(getattr(recipe, "name", ""))
     return DeliveryEvidenceMap(steps=out, manifest_snapshot_id=manifest_id)
+
+
+def effective_consumption(evidence: DeliveryEvidence) -> frozenset[str]:
+    """Return the canonical effective-consumption set for a single step.
+
+    Effective consumption is the union of:
+      - worker-bound refs (refs inside the skill_command)
+      - tool-bound refs (refs that feed a registered MCP parameter)
+      - orchestrator-control refs (typed dispatch_items sources)
+
+    Availability-only refs (declared in optional_context_refs but unbound)
+    and unsupported sibling keys never enter this set. A correctly named ref
+    that appears only as an inert with: sibling is therefore not consumed,
+    proving it cannot satisfy a bilateral/inventory rule or invalidate a
+    captured downstream state.
+    """
+    return (
+        evidence.worker_bound_refs | evidence.tool_bound_refs | evidence.orchestrator_control_refs
+    )
+
+
+def input_receives_ref(
+    evidence: DeliveryEvidence,
+    *,
+    namespace: str,
+    name: str,
+) -> bool:
+    """Return True iff ``evidence`` shows the named ref reached an absolute input slot.
+
+    Namespace is preserved: ``inputs.foo`` cannot satisfy a check for
+    ``context.foo`` and vice versa. Both worker-bound (inside
+    ``skill_command``) and tool-bound (registered MCP parameter) refs count
+    as "received" — but only when the namespace matches exactly.
+    """
+    if namespace == "context" and name in evidence.worker_bound_refs:
+        return True
+    if namespace == "context" and name in evidence.tool_bound_refs:
+        return True
+    if namespace == "inputs" and name in evidence.worker_bound_refs:
+        return True
+    if namespace == "inputs" and name in evidence.tool_bound_refs:
+        return True
+    return False
+
+
+def binding_for_input(
+    evidence: DeliveryEvidence,
+    *,
+    name: str,
+) -> bool:
+    """Return True iff ``evidence`` shows the named input was bound to anything.
+
+    Namespace-agnostic convenience predicate. Use ``input_receives_ref``
+    when the namespace matters.
+    when the namespace matters.
+    """
+    return (
+        name in evidence.worker_bound_refs
+        or name in evidence.tool_bound_refs
+        or name in evidence.orchestrator_control_refs
+    )
 
 
 def is_invalid_run_skill_sibling(step: Any) -> bool:

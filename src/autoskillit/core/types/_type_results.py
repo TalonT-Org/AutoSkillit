@@ -21,6 +21,8 @@ T = TypeVar("T")
 __all__ = [
     "CapabilityResolutionDetail",
     "ContaminationOutcome",
+    "InputBinding",
+    "InputContractResolution",
     "InputSpec",
     "LoadReport",
     "LoadResult",
@@ -152,16 +154,68 @@ class WriteBehaviorSpec:
 
 @dataclass(frozen=True, slots=True)
 class InputSpec:
-    """Input contract specification for a single file_path or directory_path argument."""
+    """Input contract specification for a single declared skill/worker input.
+
+    ``type`` covers the canonical ordered contract family: ``string`` (free-text
+    tail absorbed by the final string input only), ``integer``, ``file_path``,
+    ``file_path_list``, and ``directory_path``. ``position`` is the absolute
+    zero-based slot in the manifest's input order — never renumbered by type.
+    """
 
     name: str
-    type: Literal["file_path", "directory_path"]
+    type: Literal["string", "integer", "file_path", "file_path_list", "directory_path"]
     required: bool
     position: int
 
     def __post_init__(self) -> None:
         if self.position < 0:
             raise ValueError(f"InputSpec.position must be >= 0, got {self.position}")
+
+
+@dataclass(frozen=True, slots=True)
+class InputBinding:
+    """Canonical binding record for a single absolute input slot.
+
+    Captures the ordered, namespace-preserving binding that proves worker
+    delivery: the absolute position, the source token occupying it, the
+    ``namespace``/``name`` of any ``${{ ... }}`` ref it carried, the binding
+    form (positional vs named), and the bound/omitted/unbound state. ``-``
+    (the ``OPTIONAL_ARG_OMISSION_SENTINEL``) occupies a slot but delivers
+    no value — its state is ``OMITTED``, never ``BOUND``.
+    """
+
+    position: int
+    name: str
+    type: str
+    required: bool
+    form: str  # "positional" | "named" | "name_equals" | "dash_name" | "dispatch_splice" | "empty"
+    state: str  # "bound" | "omitted" | "unbound" | "dispatch_occupied"
+    source_token: str | None = None
+    ref_namespace: str | None = None  # "context" | "inputs" | None
+    ref_name: str | None = None
+    diagnostics: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class InputContractResolution:
+    """Discriminated result of resolving a skill's input contract.
+
+    Statuses:
+      - ``"valid"`` — known contract with at least one declared input.
+      - ``"known_zero_input"`` — known skill with zero declared inputs.
+      - ``"unknown_skill"`` — skill name not present in the manifest.
+      - ``"malformed_contract"`` — declared input uses an unsupported ``type``
+        value or other structural defect; ``diagnostics`` carries reason.
+
+    The runtime guards (``_check_input_contracts``, the implement gate parser)
+    consume this in place of the legacy ``tuple[InputSpec, ...]`` so they can
+    distinguish "skill not present" from "skill present with zero inputs".
+    """
+
+    status: str
+    skill_name: str
+    inputs: tuple[InputSpec, ...] = ()
+    diagnostics: tuple[str, ...] = ()
 
 
 @dataclass

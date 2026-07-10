@@ -153,6 +153,7 @@ from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
 from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
+from .types import DISPATCH_ITEM_PLACEHOLDER as DISPATCH_ITEM_PLACEHOLDER
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
@@ -216,6 +217,7 @@ from .types import SKILL_FILE_ADVISORY_MAP as SKILL_FILE_ADVISORY_MAP
 from .types import SKILL_SESSION_REQUIRED_ENV as SKILL_SESSION_REQUIRED_ENV
 from .types import SKILL_TOOLS as SKILL_TOOLS
 from .types import SOUS_CHEF_MANDATORY_SECTIONS as SOUS_CHEF_MANDATORY_SECTIONS
+from .types import SUPPORTED_INPUT_TYPES as SUPPORTED_INPUT_TYPES
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
@@ -279,6 +281,8 @@ from .types import GitHubFetcher as GitHubFetcher
 from .types import HeadlessExecutor as HeadlessExecutor
 from .types import InfraExitCategory as InfraExitCategory
 from .types import InfraOutcome as InfraOutcome
+from .types import InputBinding as InputBinding
+from .types import InputContractResolution as InputContractResolution
 from .types import InputContractResolver as InputContractResolver
 from .types import InputSpec as InputSpec
 from .types import InspectorCallback as InspectorCallback

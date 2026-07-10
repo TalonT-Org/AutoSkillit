@@ -40,6 +40,8 @@ __all__ = [
     "GITHUB_API_SKILL_FAMILIES",
     "CODEX_SESSIONS_SUBDIR",
     "OPTIONAL_ARG_OMISSION_SENTINEL",
+    "DISPATCH_ITEM_PLACEHOLDER",
+    "SUPPORTED_INPUT_TYPES",
 ]
 
 # Canonical literal for "this optional positional slot is intentionally omitted
@@ -49,6 +51,25 @@ __all__ = [
 # must remain aligned with this constant; see test in
 # tests/recipe/test_delivery_evidence.py::test_omission_sentinel_aligned.
 OPTIONAL_ARG_OMISSION_SENTINEL: str = "-"
+
+# Canonical single-brace placeholder marking the dispatch splice position inside
+# a step's ``skill_command``. Binding, validation, and prompt layers all share
+# this constant — recipes and SKILL.md literals must align. The marker is
+# reserved: literal use in any context is unsupported.
+DISPATCH_ITEM_PLACEHOLDER: str = "{selected_dispatch_item}"
+
+# Supported values for ``SkillInput.type`` and ``InputSpec.type``. The canonical
+# ordered contract uses these strings everywhere — adding a new type requires
+# updating both layers and the contract resolution discriminator in lock-step.
+SUPPORTED_INPUT_TYPES: frozenset[str] = frozenset(
+    {
+        "string",
+        "integer",
+        "file_path",
+        "file_path_list",
+        "directory_path",
+    }
+)
 
 RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
     {

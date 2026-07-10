@@ -136,10 +136,33 @@ def all_recipe_tools() -> frozenset[str]:
     return frozenset(_RECIPE_TOOL_MAP)
 
 
+def unsupported_params(tool_name: str, keys: frozenset[str] | set[str]) -> frozenset[str]:
+    """Return the subset of ``keys`` not declared in the canonical ``ToolDef`` for ``tool_name``.
+
+    The single helper consumed by delivery evidence, the dedicated ERROR-level
+    ``unsupported-run-skill-param`` rule, and the WARNING-level
+    ``dead-with-param`` rule — replacing the legacy duplicate
+    ``rules_tools._TOOL_PARAMS`` lookup with the canonical registry.
+
+    A tool unknown to the registry returns the entire ``keys`` set as
+    unsupported; framework-only exclusions are always unsupported from a
+    recipe step. Both branches are fail-closed by design — a missing registry
+    entry never silently passes.
+    """
+    key_set = frozenset(keys)
+    if tool_name in FRAMEWORK_ONLY_EXCLUSIONS:
+        return key_set
+    td = _RECIPE_TOOL_MAP.get(tool_name)
+    if td is None:
+        return key_set
+    return frozenset(k for k in key_set if k not in td.param_set)
+
+
 __all__ = [
     "FRAMEWORK_ONLY_EXCLUSIONS",
     "ToolDef",
     "all_recipe_tools",
     "for_tool",
     "is_framework_only",
+    "unsupported_params",
 ]

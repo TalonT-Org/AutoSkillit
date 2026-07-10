@@ -24,22 +24,92 @@ from typing import Final
 
 
 @dataclass(frozen=True, slots=True)
+class ToolParamDef:
+    """Canonical ordered parameter contract for a single MCP-tool argument.
+
+    ``required`` distinguishes positional/keyword required params from
+    optional ones. ``injected`` flags parameters the handler receives
+    implicitly (e.g. ``ctx``) — these are framework-internal and not
+    authorable from recipe ``with:`` blocks. ``wire_type`` carries the
+    normalized JSON-Schema type the binder must enforce
+    (``"string" | "integer" | "boolean" | "object" | "array" | "path"``).
+    ``authorable`` is the AND of ``not injected`` and not framework-only;
+    binders and recipe validation consume only ``authorable`` parameters.
+    ``default`` is the recipe-side default; the binder uses it to populate
+    optional slots that the recipe omits.
+    """
+
+    name: str
+    required: bool = False
+    injected: bool = False
+    wire_type: str = "string"
+    authorable: bool = True
+    default: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ToolDef:
     """Canonical parameter set for a single MCP tool.
 
     ``params`` is the ordered tuple of accepted parameter names — order matters
     for tools that take positional args, although all current MCP tools are
     keyword-only. ``kind`` distinguishes recipe-callable tools from framework
-    primitives (gated, ungated, headless).
+    primitives (gated, ungated, headless). ``param_defs`` carries the rich
+    per-argument contract (:class:`ToolParamDef`) keyed by name. When omitted
+    (the common case during the migration), every name in ``params`` is
+    treated as authorable, non-injected, ``wire_type="string"`` with no
+    default. Binders and recipe validation consume only the authorable subset.
     """
 
     name: str
     params: tuple[str, ...]
     kind: str = "recipe_callable"
+    param_defs: tuple[ToolParamDef, ...] = ()
+
+    def __post_init__(self) -> None:
+        if len(self.params) != len(set(self.params)):
+            duplicates = sorted({p for p in self.params if list(self.params).count(p) > 1})
+            raise RuntimeError(f"Duplicate params in ToolDef {self.name!r}: {duplicates}")
+        if self.param_defs:
+            def_names = tuple(pd.name for pd in self.param_defs)
+            if len(def_names) != len(set(def_names)):
+                raise RuntimeError(f"Duplicate ToolParamDef names in ToolDef {self.name!r}")
+            if def_names != self.params:
+                raise RuntimeError(
+                    f"ToolDef {self.name!r}: param_defs order {def_names!r} "
+                    f"must match params order {self.params!r}"
+                )
 
     @property
     def param_set(self) -> frozenset[str]:
         return frozenset(self.params)
+
+    @property
+    def resolved_param_defs(self) -> tuple[ToolParamDef, ...]:
+        """Effective per-parameter contract: explicit entries when supplied,
+        otherwise authorable string defaults derived from ``params``."""
+        if self.param_defs:
+            return self.param_defs
+        return tuple(
+            ToolParamDef(
+                name=p, required=False, injected=False, wire_type="string", authorable=True
+            )
+            for p in self.params
+        )
+
+    @property
+    def authorable_params(self) -> tuple[str, ...]:
+        return tuple(pd.name for pd in self.resolved_param_defs if pd.authorable)
+
+    @property
+    def injected_params(self) -> frozenset[str]:
+        return frozenset(pd.name for pd in self.resolved_param_defs if pd.injected)
+
+    def param_def(self, name: str) -> ToolParamDef | None:
+        for pd in self.resolved_param_defs:
+            if pd.name == name:
+                return pd
+        return None
 
 
 # --- Recipe-callable MCP tools ---
@@ -308,6 +378,18 @@ _RECIPE_TOOL_DEFS: tuple[ToolDef, ...] = (
             "output_dir",
             "resume_session_id",
         ),
+        param_defs=(
+            ToolParamDef(name="skill_command", required=True, wire_type="string"),
+            ToolParamDef(name="cwd", required=True, wire_type="path"),
+            ToolParamDef(name="model", required=False, wire_type="string"),
+            ToolParamDef(name="step_name", required=False, wire_type="string"),
+            ToolParamDef(name="step_provider", required=False, wire_type="string"),
+            ToolParamDef(name="order_id", required=False, wire_type="string"),
+            ToolParamDef(name="stale_threshold", required=False, wire_type="integer"),
+            ToolParamDef(name="idle_output_timeout", required=False, wire_type="integer"),
+            ToolParamDef(name="output_dir", required=False, wire_type="path"),
+            ToolParamDef(name="resume_session_id", required=False, wire_type="string"),
+        ),
     ),
     ToolDef(
         name="set_commit_status",
@@ -461,6 +543,7 @@ def unsupported_params(tool_name: str, keys: frozenset[str] | set[str]) -> froze
 __all__ = [
     "FRAMEWORK_ONLY_EXCLUSIONS",
     "ToolDef",
+    "ToolParamDef",
     "all_recipe_tools",
     "for_tool",
     "is_framework_only",

@@ -227,6 +227,7 @@ Recipe I/O, validation, semantic rules, schema, and bundled recipe tests.
 | `test_sub_recipe_validation.py` | Tests for sub-recipe validation |
 | `test_dispatch_items_validation.py` | Tests for _validate_dispatch_items and DISPATCH_ITEM_PLACEHOLDER enforcement |
 | `test_validation_snapshot.py` | Tests for the ValidationSnapshot and the validation context wiring |
+| `test_runtime_snapshot.py` | Tests for sealed active-recipe runtime snapshot construction |
 | `test_validator_dataflow.py` | Tests for recipe validator dataflow analysis |
 | `test_validator_graph_and_actions.py` | Tests for recipe validator graph and actions analysis |
 | `test_validator_skill_hints.py` | Tests for recipe validator skill hints |

@@ -32,10 +32,20 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from autoskillit.core import OPTIONAL_ARG_OMISSION_SENTINEL, resolve_skill_name
+from autoskillit.core import (
+    DISPATCH_ITEM_PLACEHOLDER,
+    OPTIONAL_ARG_OMISSION_SENTINEL,
+    BindingForm,
+    BindingState,
+    InputBinding,
+    ResolutionStatus,
+    extract_positional_args,
+    resolve_skill_name,
+)
 from autoskillit.recipe._contracts_manifest import (
     _CONTEXT_REF_RE,
     INPUT_REF_RE,
+    resolve_input_contract,
 )
 from autoskillit.recipe.tool_registry import for_tool, unsupported_params
 
@@ -70,6 +80,12 @@ class DeliveryEvidence:
     orchestrator_control_refs: frozenset[str] = field(default_factory=frozenset)
     availability_only_refs: frozenset[str] = field(default_factory=frozenset)
     unsupported_keys: frozenset[str] = field(default_factory=frozenset)
+    worker_bound_qualified_refs: frozenset[tuple[str, str]] = field(default_factory=frozenset)
+    tool_bound_qualified_refs: frozenset[tuple[str, str]] = field(default_factory=frozenset)
+    orchestrator_control_qualified_refs: frozenset[tuple[str, str]] = field(
+        default_factory=frozenset
+    )
+    input_bindings: tuple[InputBinding, ...] = ()
 
     @property
     def delivered_refs(self) -> frozenset[str]:
@@ -113,22 +129,84 @@ class DeliveryEvidenceMap:
         }
 
 
-def _extract_refs_from_command(skill_command: str | None) -> frozenset[str]:
-    """Extract ${{ context.X }} and ${{ inputs.X }} references from a skill_command string."""
-    if not skill_command:
+def _extract_qualified_refs(value: str | None) -> frozenset[tuple[str, str]]:
+    """Extract namespace-preserving template references from ``value``."""
+    if not value:
         return frozenset()
-    ctx = set(_CONTEXT_REF_RE.findall(skill_command))
-    inp = set(INPUT_REF_RE.findall(skill_command))
-    return frozenset(ctx | inp)
+    refs = {("context", name) for name in _CONTEXT_REF_RE.findall(value)}
+    refs.update(("inputs", name) for name in INPUT_REF_RE.findall(value))
+    return frozenset(refs)
 
 
-def _detect_orchestrator_control_keys(step: Any) -> frozenset[str]:
-    """Read orchestrator-only fields off a step and project them to ref names."""
-    refs: set[str] = set()
+def _flat_ref_names(refs: frozenset[tuple[str, str]]) -> frozenset[str]:
+    """Project qualified refs to the legacy name-only compatibility view."""
+    return frozenset(name for _, name in refs)
+
+
+def _resolve_input_bindings(skill_command: str) -> tuple[InputBinding, ...]:
+    """Resolve manifest inputs to their absolute positional command tokens."""
+    resolution = resolve_input_contract(skill_command)
+    if resolution.status not in {
+        ResolutionStatus.VALID,
+        ResolutionStatus.KNOWN_ZERO_INPUT,
+    }:
+        return ()
+    args = extract_positional_args(skill_command)
+    bindings: list[InputBinding] = []
+    for spec in resolution.inputs:
+        if spec.position >= len(args):
+            bindings.append(
+                InputBinding(
+                    position=spec.position,
+                    name=spec.name,
+                    type=spec.type,
+                    required=spec.required,
+                    form=BindingForm.EMPTY,
+                    state=BindingState.UNBOUND,
+                )
+            )
+            continue
+        token = args[spec.position]
+        if token == OPTIONAL_ARG_OMISSION_SENTINEL:
+            state = BindingState.OMITTED
+            form = BindingForm.POSITIONAL
+        elif token == DISPATCH_ITEM_PLACEHOLDER:
+            state = BindingState.DISPATCH_OCCUPIED
+            form = BindingForm.DISPATCH_SPLICE
+        else:
+            state = BindingState.BOUND
+            form = BindingForm.POSITIONAL
+        refs = _extract_qualified_refs(token)
+        ref_namespace: str | None = None
+        ref_name: str | None = None
+        diagnostics: tuple[str, ...] = ()
+        if len(refs) == 1:
+            ref_namespace, ref_name = next(iter(refs))
+        elif len(refs) > 1:
+            diagnostics = ("input slot contains multiple template references",)
+        bindings.append(
+            InputBinding(
+                position=spec.position,
+                name=spec.name,
+                type=spec.type,
+                required=spec.required,
+                form=form,
+                state=state,
+                source_token=token,
+                ref_namespace=ref_namespace,
+                ref_name=ref_name,
+                diagnostics=diagnostics,
+            )
+        )
+    return tuple(bindings)
+
+
+def _detect_orchestrator_control_keys(step: Any) -> frozenset[tuple[str, str]]:
+    """Read orchestrator-only fields off a step as qualified refs."""
+    refs: set[tuple[str, str]] = set()
     dispatch_items = getattr(step, "dispatch_items", None)
     if isinstance(dispatch_items, str) and dispatch_items:
-        refs.update(_CONTEXT_REF_RE.findall(dispatch_items))
-        refs.update(INPUT_REF_RE.findall(dispatch_items))
+        refs.update(_extract_qualified_refs(dispatch_items))
     return frozenset(refs)
 
 
@@ -149,7 +227,9 @@ def analyze_step_delivery(
     skill_name = resolve_skill_name(skill_command) if skill_command else None
 
     # Worker-bound refs: refs whose template appears inside the skill_command string.
-    worker_bound = _extract_refs_from_command(skill_command)
+    worker_qualified = _extract_qualified_refs(skill_command)
+    worker_bound = _flat_ref_names(worker_qualified)
+    input_bindings = _resolve_input_bindings(skill_command) if skill_command else ()
 
     # Tool-bound refs: refs in with_args values where the key is a registered tool param
     # AND the value is not itself the skill_command token (which is the command, not
@@ -162,15 +242,14 @@ def analyze_step_delivery(
         if td is not None:
             tool_param_set = td.param_set
 
-    tool_bound: set[str] = set()
+    tool_qualified: set[tuple[str, str]] = set()
     if isinstance(with_args, dict):
         for key, value in with_args.items():
             if key == "skill_command":
                 continue
             if key in tool_param_set:
-                ctx_refs = set(_CONTEXT_REF_RE.findall(str(value)))
-                inp_refs = set(INPUT_REF_RE.findall(str(value)))
-                tool_bound.update(ctx_refs | inp_refs)
+                tool_qualified.update(_extract_qualified_refs(str(value)))
+    tool_bound = _flat_ref_names(frozenset(tool_qualified))
 
     unsupported: frozenset[str]
     if isinstance(with_args, dict):
@@ -179,7 +258,8 @@ def analyze_step_delivery(
         unsupported = frozenset()
 
     # Orchestrator-control refs: top-level dispatch_items, etc.
-    orch_control = _detect_orchestrator_control_keys(step)
+    orch_qualified = _detect_orchestrator_control_keys(step)
+    orch_control = _flat_ref_names(orch_qualified)
 
     # Availability-only refs: declared in optional_context_refs but not bound anywhere.
     # Caller may pass a list explicitly; otherwise read from the step attribute.
@@ -203,6 +283,10 @@ def analyze_step_delivery(
         orchestrator_control_refs=orch_control,
         availability_only_refs=availability,
         unsupported_keys=frozenset(unsupported),
+        worker_bound_qualified_refs=worker_qualified,
+        tool_bound_qualified_refs=frozenset(tool_qualified),
+        orchestrator_control_qualified_refs=orch_qualified,
+        input_bindings=input_bindings,
     )
 
 
@@ -250,6 +334,7 @@ def input_receives_ref(
     *,
     namespace: str,
     name: str,
+    input_name: str | None = None,
 ) -> bool:
     """Return True iff ``evidence`` shows the named ref reached an absolute input slot.
 
@@ -258,15 +343,13 @@ def input_receives_ref(
     ``skill_command``) and tool-bound (registered MCP parameter) refs count
     as "received" — but only when the namespace matches exactly.
     """
-    if namespace == "context" and name in evidence.worker_bound_refs:
-        return True
-    if namespace == "context" and name in evidence.tool_bound_refs:
-        return True
-    if namespace == "inputs" and name in evidence.worker_bound_refs:
-        return True
-    if namespace == "inputs" and name in evidence.tool_bound_refs:
-        return True
-    return False
+    return any(
+        binding.state == BindingState.BOUND
+        and binding.ref_namespace == namespace
+        and binding.ref_name == name
+        and (input_name is None or binding.name == input_name)
+        for binding in evidence.input_bindings
+    )
 
 
 def binding_for_input(
@@ -280,10 +363,10 @@ def binding_for_input(
     when the namespace matters.
     when the namespace matters.
     """
-    return (
-        name in evidence.worker_bound_refs
-        or name in evidence.tool_bound_refs
-        or name in evidence.orchestrator_control_refs
+    return any(
+        binding.name == name
+        and binding.state in {BindingState.BOUND, BindingState.DISPATCH_OCCUPIED}
+        for binding in evidence.input_bindings
     )
 
 

@@ -121,12 +121,27 @@ def test_inventory_gate_bilateral_silent_when_properly_wired() -> None:
             dw_with_args={
                 "skill_command": (
                     "/autoskillit:dry-walkthrough "
-                    "${{ context.plan_path }} ${{ context.remediation_path }}"
+                    "${{ context.plan_path }} - ${{ context.remediation_path }}"
                 )
             }
         )
     )
     assert findings == []
+
+
+def test_inventory_gate_bilateral_fires_when_ref_is_in_wrong_slot() -> None:
+    findings = _findings(
+        _audit_impl_with_remediation_capture_steps(
+            dw_with_args={
+                "skill_command": (
+                    "/autoskillit:dry-walkthrough "
+                    "${{ context.plan_path }} ${{ context.remediation_path }} -"
+                )
+            }
+        )
+    )
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
 
 
 def test_inventory_gate_bilateral_fires_for_inert_remediation_path_sibling() -> None:

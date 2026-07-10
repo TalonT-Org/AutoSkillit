@@ -6,13 +6,116 @@ import asyncio
 import json
 import types
 import typing
+from collections.abc import Mapping
 from pathlib import Path
 
-from autoskillit.core import RUN_PYTHON_SENTINEL_KEYS, get_logger
+from autoskillit.core import (
+    RUN_PYTHON_SENTINEL_KEYS,
+    ActiveRunSkillSpec,
+    BindingState,
+    extract_positional_args,
+    extract_skill_name,
+    get_logger,
+)
+from autoskillit.pipeline import gate_error_result
 
 logger = get_logger(__name__)
 
 _PATH_LIKE_ARGS: frozenset[str] = frozenset({"output_dir", "workspace", "diagnostics_log_dir"})
+
+
+def resolve_step_name_from_recipe(
+    skill_command: str,
+    active_recipe_steps: Mapping[str, object],
+) -> tuple[str, bool]:
+    """Resolve a unique step key by matching the sealed or legacy skill prefix."""
+    cmd_prefix = skill_command.split()[0] if skill_command.strip() else ""
+    if not cmd_prefix:
+        return ("", False)
+    matches: list[str] = []
+    for step_key, step_obj in active_recipe_steps.items():
+        if isinstance(step_obj, ActiveRunSkillSpec):
+            step_sc = step_obj.expected_skill_command_template
+        else:
+            with_args = getattr(step_obj, "with_args", None)
+            if not isinstance(with_args, dict):
+                continue
+            step_sc = with_args.get("skill_command", "")
+        if step_sc and step_sc.split()[0] == cmd_prefix:
+            matches.append(step_key)
+    if len(matches) == 1:
+        return (matches[0], False)
+    return ("", len(matches) > 1)
+
+
+def sealed_run_skill_specs(tool_ctx: object) -> dict[str, ActiveRunSkillSpec]:
+    snapshot = getattr(tool_ctx, "active_recipe_snapshot", None)
+    if snapshot is None:
+        return {}
+    return {spec.step_key: spec for spec in snapshot.run_skill_specs}
+
+
+def active_step_defaults(
+    tool_ctx: object,
+    sealed_specs: dict[str, ActiveRunSkillSpec],
+    step_name: str,
+) -> tuple[str | None, str | None, int | None, int | None]:
+    """Return provider/output/stale/idle defaults from sealed state, with legacy fallback."""
+    sealed = sealed_specs.get(step_name)
+    active_steps = getattr(tool_ctx, "active_recipe_steps", None)
+    legacy = active_steps.get(step_name) if isinstance(active_steps, dict) else None
+    if sealed is not None:
+        return (
+            sealed.declared_step_provider,
+            sealed.declared_output_dir,
+            sealed.declared_stale_threshold,
+            sealed.declared_idle_output_timeout,
+        )
+    with_args = getattr(legacy, "with_args", None)
+    output_dir = with_args.get("output_dir") if isinstance(with_args, dict) else None
+    return (
+        getattr(legacy, "provider", None),
+        output_dir,
+        getattr(legacy, "stale_threshold", None),
+        getattr(legacy, "idle_output_timeout", None),
+    )
+
+
+def check_sealed_invocation_shape(
+    skill_command: str,
+    step_name: str,
+    sealed_specs: dict[str, ActiveRunSkillSpec],
+) -> str | None:
+    """Reject a run_skill call that diverges from the sealed active-step shape."""
+    if not step_name or not sealed_specs:
+        return None
+    spec = sealed_specs.get(step_name)
+    if spec is None:
+        return gate_error_result(
+            f"Step {step_name!r} is not a sealed run_skill step in the active recipe"
+        )
+    expected_skill = extract_skill_name(spec.expected_skill_command_template)
+    actual_skill = extract_skill_name(skill_command)
+    if expected_skill != actual_skill:
+        return gate_error_result(
+            f"Step {step_name!r} expected skill {expected_skill!r}, got {actual_skill!r}"
+        )
+    actual_args = extract_positional_args(skill_command)
+    for binding in spec.expected_bindings:
+        actual = actual_args[binding.position] if binding.position < len(actual_args) else None
+        if binding.state == BindingState.OMITTED and actual != "-":
+            return gate_error_result(
+                f"Step {step_name!r} input {binding.name!r} must preserve its omitted slot"
+            )
+        if binding.state == BindingState.BOUND and (actual is None or actual == "-"):
+            return gate_error_result(
+                f"Step {step_name!r} input {binding.name!r} is missing from its sealed slot"
+            )
+        if binding.state == BindingState.UNBOUND and actual is not None:
+            return gate_error_result(
+                f"Step {step_name!r} input {binding.name!r} was not declared in the sealed shape"
+            )
+    return None
 
 
 def validate_path_arg_anchoring(args: dict[str, object] | None, work_dir: str) -> str | None:

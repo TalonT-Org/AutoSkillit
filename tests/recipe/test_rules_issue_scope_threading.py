@@ -80,6 +80,21 @@ def test_dry_walkthrough_with_inert_issue_url_sibling_fires():
     assert "skill_command" in findings[0].message
 
 
+def test_dry_walkthrough_with_issue_url_in_wrong_slot_fires():
+    findings = _findings(
+        _dry_walkthrough_steps(
+            {
+                "skill_command": (
+                    "/autoskillit:dry-walkthrough ${{ inputs.issue_url }} ${{ context.plan_path }}"
+                )
+            }
+        ),
+        _issue_url_ingredient(),
+    )
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.ERROR
+
+
 def test_dry_walkthrough_without_issue_url_fires():
     """dry-walkthrough missing issue_url in a recipe with issue_url ingredient must fire."""
     findings = _findings(_dry_walkthrough_steps({}), _issue_url_ingredient())

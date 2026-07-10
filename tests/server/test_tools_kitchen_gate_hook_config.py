@@ -272,6 +272,7 @@ async def test_update_hook_config_with_recipe_includes_recipe_allows_pr_create(
                 )
 
                 await _open_kitchen_handler()
+                mock_ctx.recipe_name = "merge-prs"
                 _update_hook_config_with_recipe()
 
     hook_cfg = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)

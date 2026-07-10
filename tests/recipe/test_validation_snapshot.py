@@ -125,6 +125,32 @@ def test_build_validation_snapshot_fingerprints_change_with_invocations() -> Non
     assert snap_base.recipe_invocation_fingerprint != snap_diff.recipe_invocation_fingerprint
 
 
+def test_invocation_fingerprint_changes_for_same_key_command_change() -> None:
+    from autoskillit.recipe._analysis import build_validation_snapshot
+
+    first = _make_recipe("same")
+    second = _make_recipe("same")
+    second.steps["step_a"].with_args["skill_command"] = (
+        "/autoskillit:dry-walkthrough ${{ inputs.other_path }}"
+    )
+    assert (
+        build_validation_snapshot(first).recipe_invocation_fingerprint
+        != build_validation_snapshot(second).recipe_invocation_fingerprint
+    )
+
+
+def test_invocation_fingerprint_changes_for_same_key_tool_change() -> None:
+    from autoskillit.recipe._analysis import build_validation_snapshot
+
+    first = _make_recipe("same")
+    second = _make_recipe("same")
+    second.steps["step_a"].tool = "run_cmd"
+    assert (
+        build_validation_snapshot(first).recipe_invocation_fingerprint
+        != build_validation_snapshot(second).recipe_invocation_fingerprint
+    )
+
+
 def test_make_validation_context_carries_snapshot() -> None:
     """ValidationContext now carries contract_snapshot + delivery evidence + fingerprints."""
     from autoskillit.recipe._analysis import make_validation_context

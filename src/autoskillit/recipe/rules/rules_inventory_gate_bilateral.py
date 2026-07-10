@@ -6,7 +6,7 @@ from __future__ import annotations
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable
-from autoskillit.recipe._delivery import analyze_step_delivery
+from autoskillit.recipe._delivery import analyze_step_delivery, input_receives_ref
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
@@ -49,18 +49,24 @@ def _dry_walkthrough_reachable_from_audit(
     return None
 
 
-def _threads_remediation_path(step: object) -> bool:
+def _threads_remediation_path(ctx: ValidationContext, step_name: str, step: object) -> bool:
     """True iff remediation_path appears in the step's worker-bound evidence.
 
     Sibling ``with:`` keys do NOT count — only references inside the
     ``skill_command`` string qualify as worker delivery.
     """
-    evidence = analyze_step_delivery(
-        step, optional_context_refs=getattr(step, "optional_context_refs", [])
+    evidence = (
+        ctx.delivery_evidence.for_step(step_name) if ctx.delivery_evidence is not None else None
     )
-    return (
-        "remediation_path" in evidence.worker_bound_refs
-        or "remediation_path" in evidence.tool_bound_refs
+    if evidence is None:
+        evidence = analyze_step_delivery(
+            step, optional_context_refs=getattr(step, "optional_context_refs", [])
+        )
+    return input_receives_ref(
+        evidence,
+        input_name="remediation_path",
+        namespace="context",
+        name="remediation_path",
     )
 
 
@@ -95,7 +101,7 @@ def _check_inventory_gate_bilateral(ctx: ValidationContext) -> list[RuleFinding]
             continue
 
         dw_step = ctx.recipe.steps[dw_step_name]
-        if _threads_remediation_path(dw_step):
+        if _threads_remediation_path(ctx, dw_step_name, dw_step):
             continue
 
         findings.append(

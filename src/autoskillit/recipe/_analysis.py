@@ -11,7 +11,8 @@ Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass, field
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -19,7 +20,13 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from autoskillit.core import SkillResolver
 
-from autoskillit.core import ValidationRecipeView
+from autoskillit.core import (
+    ActiveIngredientSpec,
+    ActiveRecipeRuntimeSnapshot,
+    ActiveRecipeStepSpec,
+    ActiveRunSkillSpec,
+    ValidationRecipeView,
+)
 from autoskillit.recipe._analysis_bfs import _bfs_with_facts, bfs_reachable
 from autoskillit.recipe._analysis_blocks import extract_blocks
 from autoskillit.recipe._analysis_detectors import (
@@ -46,6 +53,7 @@ from autoskillit.recipe.schema import (
     DataFlowWarning,
     Recipe,
     RecipeBlock,
+    RecipeStep,
 )
 
 __all__ = [
@@ -62,6 +70,7 @@ __all__ = [
     "_detect_implicit_handoffs",
     "ValidationContext",
     "ValidationSnapshot",
+    "build_active_recipe_runtime_snapshot",
     "analyze_dataflow",
     "make_validation_context",
     "iter_steps_with_context",
@@ -192,23 +201,48 @@ def _compute_recipe_invocation_fingerprint(
 
     recipe_dict = dict(owned_view)
     raw_steps = recipe_dict.get("steps", {}) or {}
-    # MappingProxyType iterates as (key, value) where value is whatever the
-    # underlying dict held — typically a MappingProxyType itself when the
-    # recipe was constructed via the dataclass. Cast to plain dicts to make
-    # the ``.get`` calls type-safe.
+    invocation_fields = (
+        "tool",
+        "action",
+        "python",
+        "constant",
+        "with_args",
+        "on_success",
+        "on_failure",
+        "on_context_limit",
+        "on_rate_limit",
+        "on_result",
+        "retries",
+        "on_exhausted",
+        "capture",
+        "capture_list",
+        "optional",
+        "skip_when_false",
+        "skip_when_true",
+        "model",
+        "provider",
+        "sub_recipe",
+        "gate",
+        "optional_context_refs",
+        "stale_threshold",
+        "idle_output_timeout",
+        "block",
+        "pass_through",
+        "dispatch_items",
+    )
     digest_tools: list[dict[str, Any]] = []
     for k, v in dict(raw_steps).items():
-        step_dict = dict(v) if hasattr(v, "items") else {}
-        with_args = step_dict.get("with_args", {}) or {}
+        step_dict: dict[str, Any]
+        if is_dataclass(v) and not isinstance(v, type):
+            step_dict = asdict(v)
+        elif hasattr(v, "items"):
+            step_dict = dict(v)
+        elif hasattr(v, "__dict__"):
+            step_dict = dict(vars(v))
+        else:
+            step_dict = {}
         digest_tools.append(
-            {
-                "name": str(k),
-                "tool": step_dict.get("tool"),
-                "skill_command": (
-                    dict(with_args).get("skill_command") if hasattr(with_args, "items") else None
-                ),
-                "dispatch_items": step_dict.get("dispatch_items"),
-            }
+            {"name": str(k), **{field: step_dict.get(field) for field in invocation_fields}}
         )
     digest_fields: dict[str, Any] = {
         "step_keys": sorted(digest_tools, key=lambda d: d["name"]),
@@ -303,6 +337,117 @@ def build_validation_snapshot(
         normalized_manifest=normalized,
         manifest_fingerprint=manifest_fp,
         recipe_invocation_fingerprint=invocation_fp,
+    )
+
+
+def _runtime_step_routes(step: RecipeStep) -> tuple[tuple[str, str], ...]:
+    routes: list[tuple[str, str]] = []
+    for edge_kind in (
+        "on_success",
+        "on_failure",
+        "on_context_limit",
+        "on_rate_limit",
+        "on_exhausted",
+    ):
+        target = getattr(step, edge_kind, None)
+        if target:
+            routes.append((edge_kind, target))
+    if step.on_result is not None:
+        for value, target in step.on_result.routes.items():
+            routes.append((f"on_result:{value}", target))
+        for condition in step.on_result.conditions:
+            routes.append(("on_result", condition.route))
+    return tuple(routes)
+
+
+def _runtime_ingredient_authority(
+    *, hidden: bool, authority: str | None, default: str | None
+) -> str:
+    if hidden or authority == "config":
+        return "hidden"
+    if default is None:
+        return "user"
+    return "default"
+
+
+def build_active_recipe_runtime_snapshot(
+    recipe: Recipe,
+    *,
+    post_prune_step_names: Iterable[str],
+    required_packs: Iterable[str] | None = None,
+    required_features: Iterable[str] | None = None,
+    content_hash: str | None = None,
+    composite_hash: str | None = None,
+    recipe_version: str | None = None,
+    project_identity: str = "",
+) -> ActiveRecipeRuntimeSnapshot:
+    """Seal one validated post-prune recipe view for runtime consumers."""
+    live_names = tuple(post_prune_step_names)
+    live_name_set = frozenset(live_names)
+    effective_recipe = copy.deepcopy(recipe)
+    effective_recipe.steps = {
+        name: step for name, step in effective_recipe.steps.items() if name in live_name_set
+    }
+    validation = build_validation_snapshot(recipe, effective_recipe=effective_recipe)
+
+    step_specs: list[ActiveRecipeStepSpec] = []
+    run_specs: list[ActiveRunSkillSpec] = []
+    for step_key, step in effective_recipe.steps.items():
+        step_specs.append(
+            ActiveRecipeStepSpec(
+                step_key=step_key,
+                tool=step.tool or step.action or "",
+                skip_when_false=step.skip_when_false or "",
+                routes=_runtime_step_routes(step),
+            )
+        )
+        if step.tool != "run_skill":
+            continue
+        evidence = validation.effective_evidence.for_step(step_key)
+        with_args = step.with_args or {}
+        run_specs.append(
+            ActiveRunSkillSpec(
+                step_key=step_key,
+                expected_skill_command_template=str(with_args.get("skill_command", "")),
+                expected_cwd_template=str(with_args.get("cwd", "")),
+                declared_model=step.model,
+                declared_step_provider=step.provider,
+                declared_output_dir=(
+                    str(with_args["output_dir"]) if "output_dir" in with_args else None
+                ),
+                declared_stale_threshold=step.stale_threshold,
+                declared_idle_output_timeout=step.idle_output_timeout,
+                optional_context_refs=tuple(step.optional_context_refs),
+                expected_bindings=evidence.input_bindings if evidence is not None else (),
+            )
+        )
+
+    ingredients = tuple(
+        ActiveIngredientSpec(
+            name=name,
+            default=ingredient.default,
+            required=ingredient.required,
+            authority=_runtime_ingredient_authority(
+                hidden=ingredient.hidden,
+                authority=ingredient.authority,
+                default=ingredient.default,
+            ),
+        )
+        for name, ingredient in recipe.ingredients.items()
+    )
+    return ActiveRecipeRuntimeSnapshot(
+        recipe_kind=recipe.name,
+        normalized_ingredients=ingredients,
+        required_packs=tuple(required_packs or recipe.requires_packs),
+        required_features=tuple(required_features or recipe.requires_features),
+        post_prune_steps=tuple(step_specs),
+        run_skill_specs=tuple(run_specs),
+        recipe_version=recipe_version or recipe.recipe_version or recipe.version or "",
+        recipe_invocation_fingerprint=validation.recipe_invocation_fingerprint,
+        manifest_fingerprint=validation.manifest_fingerprint,
+        content_hash=content_hash if content_hash is not None else recipe.content_hash,
+        composite_hash=composite_hash if composite_hash is not None else recipe.composite_hash,
+        project_identity=project_identity,
     )
 
 

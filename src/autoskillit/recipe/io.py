@@ -654,6 +654,14 @@ def _parse_recipe(data: dict[str, Any]) -> Recipe:
     )
 
 
+def parse_recipe_text(content: str) -> Recipe:
+    """Parse an already-loaded YAML recipe document into the canonical schema."""
+    data = load_yaml(content)
+    if not isinstance(data, dict):
+        raise ValueError("recipe content must decode to a mapping")
+    return _parse_recipe(data)
+
+
 def _ensure_list(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]

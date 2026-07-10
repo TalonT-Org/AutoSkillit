@@ -473,3 +473,43 @@ def test_toolcontext_protocol_fields_documented_in_docstring() -> None:
 
     missing = sorted(set(protocol_fields) - documented)
     assert not missing, f"Protocol-typed fields missing from ToolContext docstring: {missing}"
+
+
+def test_set_active_recipe_snapshot_installs_atomic_state(minimal_ctx) -> None:
+    from autoskillit.core import (
+        ActiveIngredientSpec,
+        ActiveRecipeRuntimeSnapshot,
+        ActiveRecipeStepSpec,
+    )
+
+    snapshot = ActiveRecipeRuntimeSnapshot(
+        recipe_kind="demo",
+        normalized_ingredients=(ActiveIngredientSpec(name="task", default=None, required=True),),
+        required_packs=("github",),
+        required_features=("providers",),
+        post_prune_steps=(ActiveRecipeStepSpec(step_key="run", tool="run_skill"),),
+        run_skill_specs=(),
+        recipe_version="1.0.0",
+        recipe_invocation_fingerprint="sha256:invocation",
+        manifest_fingerprint="sha256:manifest",
+        content_hash="sha256:content",
+        composite_hash="sha256:composite",
+    )
+    legacy_step = object()
+    minimal_ctx.set_active_recipe_snapshot(snapshot, legacy_steps={"run": legacy_step})
+    assert minimal_ctx.active_recipe_snapshot is snapshot
+    assert minimal_ctx.active_recipe_steps == {"run": legacy_step}
+    assert minimal_ctx.active_recipe_packs == frozenset({"github"})
+    assert minimal_ctx.recipe_name == "demo"
+    assert minimal_ctx.recipe_content_hash == "sha256:content"
+
+
+def test_set_active_recipe_snapshot_distinguishes_open_empty_and_closed(minimal_ctx) -> None:
+    minimal_ctx.set_active_recipe_snapshot(None, kitchen_open=True)
+    assert minimal_ctx.active_recipe_snapshot is None
+    assert minimal_ctx.active_recipe_steps == {}
+    assert minimal_ctx.active_recipe_packs == frozenset()
+
+    minimal_ctx.set_active_recipe_snapshot(None)
+    assert minimal_ctx.active_recipe_steps is None
+    assert minimal_ctx.active_recipe_packs is None

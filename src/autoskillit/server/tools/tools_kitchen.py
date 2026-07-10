@@ -46,7 +46,7 @@ from autoskillit.fleet import (
     discover_campaign_state_files,
     reap_stale_dispatches_async,
 )
-from autoskillit.pipeline import create_background_task
+from autoskillit.pipeline import ToolContext, create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._guards import _backend_supports_quota, _require_orchestrator_exact
 from autoskillit.server._misc import (
@@ -73,7 +73,7 @@ from autoskillit.server.tools._auto_overrides import (
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._preflight import (
     _check_dispatch_feasibility,
-    filter_steps_by_post_prune,
+    install_active_recipe_snapshot,
 )
 from autoskillit.server.tools._serve_helpers import serve_recipe
 from autoskillit.server.tools._types import _validate_result
@@ -299,10 +299,7 @@ async def _open_kitchen_handler() -> str | None:
     ctx = _get_ctx()
     ctx.gate.enable()
     ctx.kitchen_id = resolve_kitchen_id()
-    ctx.active_recipe_packs = frozenset()
-    ctx.active_recipe_features = frozenset()
-    ctx.active_recipe_steps = {}
-    ctx.active_recipe_ingredients = frozenset()
+    ToolContext.set_active_recipe_snapshot(ctx, None, kitchen_open=True)
     logger.info("open_kitchen", gate_state="open", kitchen_id=ctx.kitchen_id)
     _supports_quota = _backend_supports_quota(ctx)
 
@@ -399,16 +396,9 @@ def _close_kitchen_handler() -> None:
         unregister_active_kitchen(ctx.kitchen_id)
     except Exception:
         logger.warning("close_kitchen_registry_failed", exc_info=True)
-    ctx.active_recipe_packs = None
-    ctx.active_recipe_features = None
-    ctx.active_recipe_steps = None
-    ctx.active_recipe_ingredients = None
+    ToolContext.set_active_recipe_snapshot(ctx, None)
     ctx.session_serve_overrides = None
     ctx.session_serve_defer_unresolved = False
-    ctx.recipe_name = ""
-    ctx.recipe_content_hash = ""
-    ctx.recipe_composite_hash = ""
-    ctx.recipe_version = ""
     ctx.gate_infrastructure_ready = False
     logger.info("close_kitchen", gate_state="closed")
     if (log := ctx.github_api_log) is not None:
@@ -779,41 +769,27 @@ async def open_kitchen(
                         "open_kitchen_failure", stage="load_and_validate", exc_info=True
                     )
                     return _kitchen_failure_envelope(exc, stage="load_and_validate")
-                tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
-                tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
-                tool_ctx.recipe_content_hash = result.get("content_hash", "")
-                tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
-                tool_ctx.recipe_version = result.get("recipe_version") or ""
                 recipe_info = None
                 _deferred_recipe_obj = None
+                _deferred_legacy_steps: dict[str, Any] | None = None
                 try:
                     recipe_info = tool_ctx.recipes.find(name, tool_ctx.project_dir)
                 except Exception:
                     logger.warning("open_kitchen_failure", stage="recipe_find", exc_info=True)
-                    tool_ctx.active_recipe_steps = None
-                    tool_ctx.active_recipe_ingredients = None
                 else:
                     if recipe_info is not None:
                         try:
                             recipe_obj = tool_ctx.recipes.load(recipe_info.path)
                             _deferred_recipe_obj = recipe_obj
-                            tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
-                                recipe_obj.steps, result.get("post_prune_step_names", [])
-                            )
-                            tool_ctx.active_recipe_ingredients = frozenset(
-                                recipe_obj.ingredients.keys()
-                            )
+                            if isinstance(getattr(recipe_obj, "steps", None), dict):
+                                _deferred_legacy_steps = dict(recipe_obj.steps)
                         except Exception:
                             logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
-                            tool_ctx.active_recipe_steps = None
-                            tool_ctx.active_recipe_ingredients = None
-                    else:
-                        tool_ctx.active_recipe_steps = None
-                        tool_ctx.active_recipe_ingredients = None
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
+                    ToolContext.set_active_recipe_snapshot(tool_ctx, None)
                     return _recipe_validation_error_response(name, result)
                 if not result.get("dispatch_feasible", True):
                     return await _dispatch_infeasible_response(
@@ -823,6 +799,19 @@ async def open_kitchen(
                         ctx,
                         capability_detail=_cap_detail,
                     )
+                try:
+                    _deferred_recipe_obj = install_active_recipe_snapshot(
+                        tool_ctx,
+                        _deferred_recipe_obj,
+                        result,
+                        legacy_steps=_deferred_legacy_steps,
+                    )
+                except Exception as exc:
+                    tool_ctx.gate.disable()
+                    tool_ctx.gate_infrastructure_ready = False
+                    ToolContext.set_active_recipe_snapshot(tool_ctx, None)
+                    logger.warning("open_kitchen_failure", stage="runtime_snapshot", exc_info=True)
+                    return _kitchen_failure_envelope(exc, stage="runtime_snapshot")
                 # Dispatch-feasibility preflight: verify the backend can enforce
                 # all fix-required hooks for the recipe's run_skill steps.
                 if tool_ctx.active_recipe_steps is not None:
@@ -889,19 +878,6 @@ async def open_kitchen(
                 logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
 
-            tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
-            tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
-            tool_ctx.recipe_name = name
-            tool_ctx.recipe_content_hash = result.get("content_hash", "")
-            tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
-            tool_ctx.recipe_version = result.get("recipe_version") or ""
-
-            try:
-                _update_hook_config_with_recipe()
-                _update_hook_config_with_git_ops_policy()
-            except Exception:
-                logger.warning("open_kitchen_failure", stage="update_hook_config", exc_info=True)
-
             composite = result.get("composite_hash", "")
             from autoskillit.server._state import _check_rerun  # circular-break
 
@@ -916,21 +892,15 @@ async def open_kitchen(
                 return _kitchen_failure_envelope(exc, stage="recipe_find")
 
             _normal_recipe_obj = None
+            _normal_legacy_steps: dict[str, Any] | None = None
             if recipe_info is not None:
                 try:
                     recipe_obj = tool_ctx.recipes.load(recipe_info.path)
                     _normal_recipe_obj = recipe_obj
-                    tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
-                        recipe_obj.steps, result.get("post_prune_step_names", [])
-                    )
-                    tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
+                    if isinstance(getattr(recipe_obj, "steps", None), dict):
+                        _normal_legacy_steps = dict(recipe_obj.steps)
                 except Exception:
                     logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
-                    tool_ctx.active_recipe_steps = None
-                    tool_ctx.active_recipe_ingredients = None
-            else:
-                tool_ctx.active_recipe_steps = None
-                tool_ctx.active_recipe_ingredients = None
 
             try:
                 result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
@@ -941,6 +911,7 @@ async def open_kitchen(
             if not result.get("valid", False) or not result.get("content", ""):
                 tool_ctx.gate.disable()
                 tool_ctx.gate_infrastructure_ready = False
+                ToolContext.set_active_recipe_snapshot(tool_ctx, None)
                 return _recipe_validation_error_response(name, result)
 
             if not result.get("dispatch_feasible", True):
@@ -951,6 +922,26 @@ async def open_kitchen(
                     ctx,
                     capability_detail=_cap_detail,
                 )
+
+            try:
+                _normal_recipe_obj = install_active_recipe_snapshot(
+                    tool_ctx,
+                    _normal_recipe_obj,
+                    result,
+                    legacy_steps=_normal_legacy_steps,
+                )
+            except Exception as exc:
+                tool_ctx.gate.disable()
+                tool_ctx.gate_infrastructure_ready = False
+                ToolContext.set_active_recipe_snapshot(tool_ctx, None)
+                logger.warning("open_kitchen_failure", stage="runtime_snapshot", exc_info=True)
+                return _kitchen_failure_envelope(exc, stage="runtime_snapshot")
+
+            try:
+                _update_hook_config_with_recipe()
+                _update_hook_config_with_git_ops_policy()
+            except Exception:
+                logger.warning("open_kitchen_failure", stage="update_hook_config", exc_info=True)
 
             # Dispatch-feasibility preflight: verify the backend can enforce
             # all fix-required hooks for the recipe's run_skill steps.

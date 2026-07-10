@@ -60,8 +60,8 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
 
 
 @pytest.mark.anyio
-async def test_deferred_recall_sets_active_recipe_steps_none_when_find_raises():
-    """When recipes.find raises, active_recipe_steps is set to None and the call still succeeds."""
+async def test_deferred_recall_seals_result_content_when_find_raises():
+    """When find raises, the validated content still produces a sealed empty step view."""
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
@@ -83,12 +83,13 @@ async def test_deferred_recall_sets_active_recipe_steps_none_when_find_raises():
 
     parsed = json.loads(result)
     assert parsed["success"] is True
-    assert mock_ctx.active_recipe_steps is None
+    assert set(mock_ctx.active_recipe_steps) == {"build"}
+    assert mock_ctx.active_recipe_snapshot is not None
 
 
 @pytest.mark.anyio
-async def test_deferred_recall_sets_active_recipe_steps_none_when_find_returns_none():
-    """When recipes.find returns None (recipe not on disk), active_recipe_steps is None."""
+async def test_deferred_recall_seals_result_content_when_find_returns_none():
+    """When find returns None, the validated content still produces a sealed step view."""
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
@@ -110,7 +111,8 @@ async def test_deferred_recall_sets_active_recipe_steps_none_when_find_returns_n
 
     parsed = json.loads(result)
     assert parsed["success"] is True
-    assert mock_ctx.active_recipe_steps is None
+    assert set(mock_ctx.active_recipe_steps) == {"build"}
+    assert mock_ctx.active_recipe_snapshot is not None
 
 
 @pytest.mark.anyio

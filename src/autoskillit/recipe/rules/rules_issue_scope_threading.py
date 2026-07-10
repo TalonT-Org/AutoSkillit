@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._delivery import analyze_step_delivery
+from autoskillit.recipe._delivery import analyze_step_delivery, input_receives_ref
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
@@ -13,20 +13,32 @@ def _has_issue_ingredient(ctx: ValidationContext) -> bool:
     return "issue_url" in ctx.recipe.ingredients or "issue_number" in ctx.recipe.ingredients
 
 
-def _threads_issue_context(step: object) -> bool:
+def _threads_issue_context(ctx: ValidationContext, step_name: str, step: object) -> bool:
     """True iff issue_url or issue_number appears in the step's worker-bound evidence.
 
     Sibling ``with:`` keys do NOT count — only references inside the
     ``skill_command`` string qualify as worker delivery.
     """
-    evidence = analyze_step_delivery(
-        step, optional_context_refs=getattr(step, "optional_context_refs", [])
+    evidence = (
+        ctx.delivery_evidence.for_step(step_name) if ctx.delivery_evidence is not None else None
     )
-    return bool(
-        "issue_url" in evidence.worker_bound_refs
-        or "issue_url" in evidence.tool_bound_refs
-        or "issue_number" in evidence.worker_bound_refs
-        or "issue_number" in evidence.tool_bound_refs
+    if evidence is None:
+        evidence = analyze_step_delivery(
+            step, optional_context_refs=getattr(step, "optional_context_refs", [])
+        )
+    return any(
+        input_receives_ref(
+            evidence,
+            input_name="issue_url",
+            namespace=namespace,
+            name=name,
+        )
+        for namespace, name in (
+            ("inputs", "issue_url"),
+            ("context", "issue_url"),
+            ("inputs", "issue_number"),
+            ("context", "issue_number"),
+        )
     )
 
 
@@ -51,7 +63,7 @@ def _check_issue_scope_threading(ctx: ValidationContext) -> list[RuleFinding]:
         skill = resolve_skill_name(step.with_args.get("skill_command", ""))
         if skill != "dry-walkthrough":
             continue
-        if _threads_issue_context(step):
+        if _threads_issue_context(ctx, step_name, step):
             continue
         findings.append(
             make_finding(

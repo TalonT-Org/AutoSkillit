@@ -18,7 +18,6 @@ from autoskillit.core import (
     extract_positional_args,
     extract_skill_name,
     get_logger,
-    is_path_like_token,
     session_type,
 )
 from autoskillit.hooks import command_has_blocked_protected_path_read
@@ -289,21 +288,26 @@ def _check_input_contracts(
         return None
 
     args = extract_positional_args(skill_command)
-    path_args = [a for a in args if is_path_like_token(a)]
 
     for spec in specs:
-        if spec.type in (InputType.FILE_PATH, InputType.DIRECTORY_PATH):
-            # Path-typed specs occupy an absolute position in the path_args tuple
-            # — strings and other non-path tokens do not consume that slot.
-            if spec.position >= len(path_args):
-                if spec.required:
-                    return gate_error_result(
-                        f"Missing required {spec.type.value} argument '{spec.name}' "
-                        f"for {extract_skill_name(skill_command) or skill_command}"
-                    )
-                continue
+        if spec.position >= len(args):
+            if spec.required:
+                return gate_error_result(
+                    f"Missing required {spec.type.value} argument '{spec.name}' "
+                    f"for {extract_skill_name(skill_command) or skill_command}"
+                )
+            continue
 
-            value = path_args[spec.position]
+        value = args[spec.position]
+        if value == "-":
+            if spec.required:
+                return gate_error_result(
+                    f"Required {spec.type.value} argument '{spec.name}' was omitted "
+                    f"for {extract_skill_name(skill_command) or skill_command}"
+                )
+            continue
+
+        if spec.type in (InputType.FILE_PATH, InputType.DIRECTORY_PATH):
             resolved = Path(cwd) / value if not Path(value).is_absolute() else Path(value)
 
             if spec.type == InputType.FILE_PATH:
@@ -318,17 +322,29 @@ def _check_input_contracts(
                         f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
                         f"expected a directory, path does not exist or is a file: {resolved}"
                     )
-        else:
-            # Scalar/value-typed specs (string, integer, file_path_list) bind
-            # against the absolute-position sequence of positional tokens, not
-            # the path-like subset.
-            if spec.position >= len(args):
-                if spec.required:
+        elif spec.type == InputType.INTEGER:
+            try:
+                int(value)
+            except ValueError:
+                return gate_error_result(
+                    f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                    f"expected an integer, got {value!r}"
+                )
+        elif spec.type == InputType.FILE_PATH_LIST:
+            values = [item for item in value.split(",") if item]
+            if not values and spec.required:
+                return gate_error_result(
+                    f"Missing required file_path_list argument '{spec.name}' "
+                    f"for {extract_skill_name(skill_command) or skill_command}"
+                )
+            for item in values:
+                resolved = Path(cwd) / item if not Path(item).is_absolute() else Path(item)
+                if not resolved.is_file():
                     return gate_error_result(
-                        f"Missing required {spec.type.value} argument '{spec.name}' "
-                        f"for {extract_skill_name(skill_command) or skill_command}"
+                        f"Input '{spec.name}' for {extract_skill_name(skill_command)}: "
+                        f"expected a comma-separated file list; path does not exist or "
+                        f"is a directory: {resolved}"
                     )
-                continue
 
     return None
 

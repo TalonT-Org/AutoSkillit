@@ -7,6 +7,7 @@ Replaces two mutable module-level singletons in server.py:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -221,24 +222,30 @@ class ToolContext:
     def set_active_recipe_snapshot(
         self,
         snapshot: ActiveRecipeRuntimeSnapshot | None,
+        *,
+        legacy_steps: Mapping[str, Any] | None = None,
+        kitchen_open: bool = False,
     ) -> None:
         """Atomically install or clear the active-recipe runtime snapshot.
 
         This is the single canonical transition API for the active recipe.
-        Passing ``None`` clears the state; passing a snapshot installs it and
-        synchronously refreshes the derived legacy fields so existing tool
+        Passing ``None`` clears the state; ``kitchen_open=True`` preserves the
+        historical empty-collection sentinel for an open kitchen with no
+        loaded recipe. Passing a snapshot installs it and synchronously
+        refreshes the derived legacy fields so existing tool
         handlers that read ``active_recipe_packs``/``active_recipe_features``/
         ``active_recipe_steps``/``active_recipe_ingredients`` continue to work
-        without a second lookup. Direct attribute assignment to the legacy
-        fields is deprecated; new code must consume
-        ``self.active_recipe_snapshot`` directly.
+        without a second lookup. ``legacy_steps`` carries parsed ``RecipeStep``
+        objects only for handlers not yet migrated to sealed specs; runtime
+        admission consumes ``self.active_recipe_snapshot`` directly.
         """
         self.active_recipe_snapshot = snapshot
         if snapshot is None:
-            self.active_recipe_packs = None
-            self.active_recipe_features = None
-            self.active_recipe_steps = None
-            self.active_recipe_ingredients = None
+            empty: frozenset[str] | None = frozenset() if kitchen_open else None
+            self.active_recipe_packs = empty
+            self.active_recipe_features = empty
+            self.active_recipe_steps = {} if kitchen_open else None
+            self.active_recipe_ingredients = empty
             self.recipe_name = ""
             self.recipe_content_hash = ""
             self.recipe_composite_hash = ""
@@ -246,7 +253,11 @@ class ToolContext:
             return
         self.active_recipe_packs = frozenset(snapshot.required_packs)
         self.active_recipe_features = frozenset(snapshot.required_features)
-        self.active_recipe_steps = {spec.step_key: spec for spec in snapshot.post_prune_steps}
+        self.active_recipe_steps = (
+            dict(legacy_steps)
+            if legacy_steps is not None
+            else {spec.step_key: spec for spec in snapshot.post_prune_steps}
+        )
         self.active_recipe_ingredients = frozenset(
             ing.name for ing in snapshot.normalized_ingredients
         )

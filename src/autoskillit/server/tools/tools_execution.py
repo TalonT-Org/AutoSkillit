@@ -63,9 +63,19 @@ from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     _import_and_call,
+    active_step_defaults,
     maybe_promote_work_dir,
     resolve_relative_path_args,
     validate_path_arg_anchoring,
+)
+from autoskillit.server.tools._execution_helpers import (
+    check_sealed_invocation_shape as _check_sealed_invocation_shape,
+)
+from autoskillit.server.tools._execution_helpers import (
+    resolve_step_name_from_recipe as _resolve_step_name_from_recipe,
+)
+from autoskillit.server.tools._execution_helpers import (
+    sealed_run_skill_specs as _sealed_run_skill_specs,
 )
 from autoskillit.server.tools._preflight import _get_fix_required_hook_matchers
 from autoskillit.server.tools._types import ToolFailureEnvelope
@@ -237,33 +247,6 @@ def _check_pipeline_deps(step_name: str, order_id: str) -> str | None:
             ),
         }
     )
-
-
-def _resolve_step_name_from_recipe(
-    skill_command: str,
-    active_recipe_steps: dict[str, object],
-) -> tuple[str, bool]:
-    """Resolve step_name from active_recipe_steps by matching skill_command prefix.
-
-    Returns (step_name, is_ambiguous):
-    - (name, False) when exactly one recipe step matches
-    - ("", True) when multiple steps match (ambiguous)
-    - ("", False) when no steps match
-    """
-    cmd_prefix = skill_command.split()[0] if skill_command.strip() else ""
-    if not cmd_prefix:
-        return ("", False)
-    matches: list[str] = []
-    for step_key, step_obj in active_recipe_steps.items():
-        with_args = getattr(step_obj, "with_args", None)
-        if not isinstance(with_args, dict):
-            continue
-        step_sc = with_args.get("skill_command", "")
-        if step_sc and step_sc.split()[0] == cmd_prefix:
-            matches.append(step_key)
-    if len(matches) == 1:
-        return (matches[0], False)
-    return ("", len(matches) > 1)
 
 
 def _has_active_locks(order_id: str) -> bool:
@@ -646,10 +629,14 @@ async def run_skill(
 
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
+        sealed_run_skill_specs = _sealed_run_skill_specs(tool_ctx)
+        step_resolution_source = (
+            sealed_run_skill_specs if sealed_run_skill_specs else tool_ctx.active_recipe_steps
+        )
 
-        if not step_name and not resume_session_id and tool_ctx.active_recipe_steps:
+        if not step_name and not resume_session_id and step_resolution_source:
             _resolved, _ambiguous = _resolve_step_name_from_recipe(
-                skill_command, tool_ctx.active_recipe_steps
+                skill_command, step_resolution_source
             )
             if _resolved:
                 step_name = _resolved
@@ -702,6 +689,12 @@ async def run_skill(
                     )
                 ) is not None:
                     return input_error
+                if (
+                    shape_error := _check_sealed_invocation_shape(
+                        skill_command, step_name, sealed_run_skill_specs
+                    )
+                ) is not None:
+                    return shape_error
 
             if _get_config().safety.require_dry_walkthrough:
                 if (gate_error := _check_dry_walkthrough(skill_command, cwd)) is not None:
@@ -717,16 +710,20 @@ async def run_skill(
             _cfg = _get_config()
             _in_fleet_dispatch = bool(os.environ.get(DISPATCH_ID_ENV_VAR))
             _inspector_model = _cfg.fleet.inspector_model if _in_fleet_dispatch else ""
+            (
+                _declared_provider,
+                _recipe_output_dir,
+                _recipe_stale_threshold,
+                _recipe_idle_output_timeout,
+            ) = active_step_defaults(tool_ctx, sealed_run_skill_specs, step_name)
 
-            if not step_provider and step_name and tool_ctx.active_recipe_steps is not None:
-                _recipe_step_pre = tool_ctx.active_recipe_steps.get(step_name)
-                if _recipe_step_pre is not None and _recipe_step_pre.provider:
-                    step_provider = _recipe_step_pre.provider
-                    logger.warning(
-                        "step_provider_resolved_from_recipe",
-                        step=step_name,
-                        provider=step_provider,
-                    )
+            if not step_provider and _declared_provider:
+                step_provider = _declared_provider
+                logger.warning(
+                    "step_provider_resolved_from_recipe",
+                    step=step_name,
+                    provider=step_provider,
+                )
 
             if is_feature_enabled(
                 "providers", _cfg.features, experimental_enabled=_cfg.experimental_enabled
@@ -880,40 +877,27 @@ async def run_skill(
             # Server-side recipe step parameter resolution.
             # When a step_name is provided and the recipe's step definition is cached,
             # auto-fill parameters the LLM may have omitted.
-            if step_name and tool_ctx.active_recipe_steps is not None:
-                _recipe_step = tool_ctx.active_recipe_steps.get(step_name)
-                if _recipe_step is not None:
-                    if not output_dir and "output_dir" in _recipe_step.with_args:
-                        _recipe_output_dir = _recipe_step.with_args["output_dir"]
-                        # Skip values containing unresolved template references —
-                        # load() returns raw YAML without ingredient resolution,
-                        # so ${{ context.* }} placeholders may survive.
-                        if "${{" not in _recipe_output_dir:
-                            output_dir = _recipe_output_dir
-                            logger.warning(
-                                "output_dir_resolved_from_recipe",
-                                step=step_name,
-                                output_dir=output_dir,
-                            )
-
-                    if stale_threshold is None and _recipe_step.stale_threshold is not None:
-                        stale_threshold = _recipe_step.stale_threshold
-                        logger.warning(
-                            "stale_threshold_resolved_from_recipe",
-                            step=step_name,
-                            value=stale_threshold,
-                        )
-
-                    if (
-                        idle_output_timeout is None
-                        and _recipe_step.idle_output_timeout is not None
-                    ):
-                        idle_output_timeout = _recipe_step.idle_output_timeout
-                        logger.warning(
-                            "idle_output_timeout_resolved_from_recipe",
-                            step=step_name,
-                            value=idle_output_timeout,
-                        )
+            if not output_dir and _recipe_output_dir and "${{" not in _recipe_output_dir:
+                output_dir = _recipe_output_dir
+                logger.warning(
+                    "output_dir_resolved_from_recipe",
+                    step=step_name,
+                    output_dir=output_dir,
+                )
+            if stale_threshold is None and _recipe_stale_threshold is not None:
+                stale_threshold = _recipe_stale_threshold
+                logger.warning(
+                    "stale_threshold_resolved_from_recipe",
+                    step=step_name,
+                    value=stale_threshold,
+                )
+            if idle_output_timeout is None and _recipe_idle_output_timeout is not None:
+                idle_output_timeout = _recipe_idle_output_timeout
+                logger.warning(
+                    "idle_output_timeout_resolved_from_recipe",
+                    step=step_name,
+                    value=idle_output_timeout,
+                )
 
             write_watch_dirs: list[Path] = []
             if output_dir:

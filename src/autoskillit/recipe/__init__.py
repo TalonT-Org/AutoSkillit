@@ -8,6 +8,7 @@ logger = get_logger(__name__)
 
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import registry as _reg  # noqa: E402, PLC0415
+from autoskillit.recipe._analysis import build_active_recipe_runtime_snapshot  # noqa: E402
 from autoskillit.recipe._api import (  # noqa: E402
     format_recipe_list_response,
     list_all,
@@ -68,6 +69,7 @@ from autoskillit.recipe.io import (  # noqa: E402
     list_recipes,
     load_campaign_recipes_in_packs,
     load_recipe,
+    parse_recipe_text,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
 from autoskillit.recipe.methodology_disambiguation import (  # noqa: E402
@@ -369,4 +371,6 @@ __all__ = [
     "find_campaign_by_name",
     "list_campaign_recipes",
     "load_campaign_recipes_in_packs",
+    "build_active_recipe_runtime_snapshot",
+    "parse_recipe_text",
 ]

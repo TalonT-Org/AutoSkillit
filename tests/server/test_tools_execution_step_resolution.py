@@ -9,6 +9,71 @@ from autoskillit.server.tools.tools_execution import run_skill
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
+def test_sealed_step_name_resolution_uses_run_skill_specs() -> None:
+    from autoskillit.core import ActiveRunSkillSpec
+    from autoskillit.server.tools.tools_execution import _resolve_step_name_from_recipe
+
+    spec = ActiveRunSkillSpec(
+        step_key="verify",
+        expected_skill_command_template="/autoskillit:dry-walkthrough ${{ context.plan }}",
+    )
+    assert _resolve_step_name_from_recipe(
+        "/autoskillit:dry-walkthrough /tmp/plan.md", {"verify": spec}
+    ) == ("verify", False)
+
+
+def test_sealed_invocation_shape_rejects_wrong_skill_and_omission_shape() -> None:
+    from autoskillit.core import (
+        ActiveRunSkillSpec,
+        BindingForm,
+        BindingState,
+        InputBinding,
+        InputType,
+    )
+    from autoskillit.server.tools.tools_execution import _check_sealed_invocation_shape
+
+    bindings = (
+        InputBinding(
+            position=0,
+            name="plan_path",
+            type=InputType.FILE_PATH,
+            required=True,
+            form=BindingForm.POSITIONAL,
+            state=BindingState.BOUND,
+        ),
+        InputBinding(
+            position=1,
+            name="issue_url",
+            type=InputType.STRING,
+            required=False,
+            form=BindingForm.POSITIONAL,
+            state=BindingState.OMITTED,
+        ),
+    )
+    spec = ActiveRunSkillSpec(
+        step_key="verify",
+        expected_skill_command_template="/autoskillit:dry-walkthrough plan -",
+        expected_bindings=bindings,
+    )
+    sealed = {"verify": spec}
+    assert (
+        _check_sealed_invocation_shape(
+            "/autoskillit:dry-walkthrough /tmp/plan.md -", "verify", sealed
+        )
+        is None
+    )
+    assert (
+        _check_sealed_invocation_shape("/autoskillit:investigate /tmp/plan.md -", "verify", sealed)
+        is not None
+    )
+    assert (
+        _check_sealed_invocation_shape(
+            "/autoskillit:dry-walkthrough /tmp/plan.md issue", "verify", sealed
+        )
+        is not None
+    )
+
+
 @pytest.mark.anyio
 async def test_run_skill_resolves_output_dir_from_recipe_step(
     tool_ctx_kitchen_open, monkeypatch, tmp_path

@@ -47,16 +47,54 @@ def is_path_like_token(token: str) -> bool:
 def extract_positional_args(skill_command: str) -> list[str]:
     """Extract all positional tokens from a skill_command string.
 
-    Returns tokens after the skill name, split on whitespace, with
-    enclosing quotes stripped. Path-like and non-path tokens are both
-    included, preserving positional order.
+    Returns tokens after the skill name with enclosing quotes stripped.
+    Path-like and non-path tokens are both included, preserving positional
+    order. Whitespace inside quotes or ``${{ ... }}`` template expressions
+    stays inside the surrounding token so manifest slot positions remain
+    stable before recipe templates are resolved.
     """
     stripped = skill_command.strip()
     m = _SKILL_CMD_RE.match(stripped)
     if m is None:
         return []
-    tokens = stripped[m.end() :].split()
-    return [t.strip('"').strip("'") for t in tokens]
+    raw = stripped[m.end() :]
+    tokens: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    template_depth = 0
+    index = 0
+    while index < len(raw):
+        char = raw[index]
+        if quote is None and raw.startswith("${{", index):
+            template_depth += 1
+            current.extend("${{")
+            index += 3
+            continue
+        if quote is None and template_depth and raw.startswith("}}", index):
+            template_depth -= 1
+            current.extend("}}")
+            index += 2
+            continue
+        if template_depth == 0 and char in {'"', "'"}:
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+            else:
+                current.append(char)
+            index += 1
+            continue
+        if char.isspace() and quote is None and template_depth == 0:
+            if current:
+                tokens.append("".join(current))
+                current = []
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    if current:
+        tokens.append("".join(current))
+    return tokens
 
 
 def extract_path_arg(skill_command: str) -> str | None:

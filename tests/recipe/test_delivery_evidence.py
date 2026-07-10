@@ -243,20 +243,55 @@ def test_effective_consumption_unions_worker_tool_and_control() -> None:
 
 
 def test_input_receives_ref_respects_namespace() -> None:
-    """input_receives_ref preserves namespace when the typed extractor is used.
-
-    The flat worker_bound_refs / tool_bound_refs sets on DeliveryEvidence
-    intentionally collapse ``context.X`` and ``inputs.X`` into a single
-    name. Full namespace preservation requires threading typed refs through
-    the analyzer (Step 2's typed extractor); this test pins the current
-    semantics of the public helper.
-    """
+    """A context binding cannot be substituted by the inputs namespace."""
     step = _make_step(
         "any",
         {"skill_command": "/autoskillit:dry-walkthrough ${{ context.plan_path }}"},
     )
     ev = analyze_step_delivery(step)
     assert input_receives_ref(ev, namespace="context", name="plan_path") is True
+    assert input_receives_ref(ev, namespace="inputs", name="plan_path") is False
+
+
+def test_input_receives_ref_rejects_same_name_from_wrong_namespace() -> None:
+    step = _make_step(
+        "any",
+        {"skill_command": "/autoskillit:dry-walkthrough ${{ inputs.same }}"},
+    )
+    ev = analyze_step_delivery(step)
+    assert input_receives_ref(ev, namespace="inputs", name="same") is True
+    assert input_receives_ref(ev, namespace="context", name="same") is False
+
+
+def test_input_receives_ref_requires_the_declared_absolute_slot() -> None:
+    step = _make_step(
+        "any",
+        {
+            "skill_command": (
+                "/autoskillit:dry-walkthrough ${{ context.plan_path }} "
+                "${{ context.remediation_path }} -"
+            )
+        },
+    )
+    ev = analyze_step_delivery(step)
+    assert (
+        input_receives_ref(
+            ev,
+            input_name="remediation_path",
+            namespace="context",
+            name="remediation_path",
+        )
+        is False
+    )
+    assert (
+        input_receives_ref(
+            ev,
+            input_name="issue_url",
+            namespace="context",
+            name="remediation_path",
+        )
+        is True
+    )
 
 
 def test_input_receives_ref_returns_false_for_absent_name() -> None:

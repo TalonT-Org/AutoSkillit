@@ -454,6 +454,51 @@ class TestInputContractValidation:
         )
         assert result is None
 
+    def test_mixed_scalar_and_path_specs_use_absolute_manifest_positions(self, tmp_path):
+        from autoskillit.core import InputSpec, InputType
+        from autoskillit.server._guards import _check_input_contracts
+
+        target = tmp_path / "input.md"
+        target.write_text("ok")
+        specs = (
+            InputSpec(name="label", type=InputType.STRING, required=True, position=0),
+            InputSpec(name="path", type=InputType.FILE_PATH, required=True, position=1),
+        )
+        result = _check_input_contracts(
+            f"/synthetic label {target}",
+            str(tmp_path),
+            resolver=lambda command: _make_valid_resolution(specs),
+        )
+        assert result is None
+
+    def test_optional_path_omission_sentinel_occupies_absolute_slot(self, tmp_path):
+        from autoskillit.core import InputSpec, InputType
+        from autoskillit.server._guards import _check_input_contracts
+
+        specs = (
+            InputSpec(name="label", type=InputType.STRING, required=True, position=0),
+            InputSpec(name="path", type=InputType.FILE_PATH, required=False, position=1),
+        )
+        result = _check_input_contracts(
+            "/synthetic label -",
+            str(tmp_path),
+            resolver=lambda command: _make_valid_resolution(specs),
+        )
+        assert result is None
+
+    def test_integer_input_rejects_non_integer_value(self, tmp_path):
+        from autoskillit.core import InputSpec, InputType
+        from autoskillit.server._guards import _check_input_contracts
+
+        spec = InputSpec(name="count", type=InputType.INTEGER, required=True, position=0)
+        result = _check_input_contracts(
+            "/synthetic nope",
+            str(tmp_path),
+            resolver=lambda command: _make_valid_resolution((spec,)),
+        )
+        assert result is not None
+        assert "expected an integer" in json.loads(result)["result"]
+
 
 class TestInputContractResolver:
     """InputContractResolver loads input specs from skill_contracts.yaml."""

@@ -35,6 +35,22 @@ def test_extract_positional_args_strips_quotes():
     assert result == ["/path/quoted", "plain"]
 
 
+def test_extract_positional_args_preserves_unquoted_template_expression():
+    from autoskillit.core import extract_positional_args
+
+    result = extract_positional_args(
+        "/skill ${{ context.plan_path }} ${{ inputs.issue_url }} plain"
+    )
+    assert result == ["${{ context.plan_path }}", "${{ inputs.issue_url }}", "plain"]
+
+
+def test_extract_positional_args_preserves_spaces_inside_quotes():
+    from autoskillit.core import extract_positional_args
+
+    result = extract_positional_args('/skill "two words ${{ context.value }}" tail')
+    assert result == ["two words ${{ context.value }}", "tail"]
+
+
 def test_extract_positional_args_returns_non_path_only():
     from autoskillit.core import extract_positional_args
 

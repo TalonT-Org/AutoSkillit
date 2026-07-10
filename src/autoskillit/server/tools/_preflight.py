@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.hook_registry import HOOK_REGISTRY
+from autoskillit.pipeline import ToolContext
+from autoskillit.recipe import (
+    Recipe,
+    build_active_recipe_runtime_snapshot,
+    parse_recipe_text,
+)
 
 
 def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[str]:
@@ -29,6 +35,40 @@ def filter_steps_by_post_prune(
     """Return only the steps whose names survived skip_when_false pruning."""
     keep = set(post_prune_step_names)
     return {k: v for k, v in raw_steps.items() if k in keep}
+
+
+def install_active_recipe_snapshot(
+    tool_ctx: Any,
+    recipe_candidate: object | None,
+    result: dict[str, Any],
+    *,
+    legacy_steps: dict[str, Any] | None = None,
+) -> Recipe:
+    """Parse, seal, and atomically install one active recipe runtime view."""
+    recipe_obj = (
+        recipe_candidate
+        if isinstance(recipe_candidate, Recipe)
+        else parse_recipe_text(str(result.get("content", "")))
+    )
+    post_prune_step_names = result.get("post_prune_step_names")
+    if not isinstance(post_prune_step_names, list):
+        post_prune_step_names = list(recipe_obj.steps)
+    filtered_steps = filter_steps_by_post_prune(
+        legacy_steps if legacy_steps is not None else recipe_obj.steps,
+        post_prune_step_names,
+    )
+    snapshot = build_active_recipe_runtime_snapshot(
+        recipe_obj,
+        post_prune_step_names=post_prune_step_names,
+        required_packs=result.get("requires_packs", []),
+        required_features=result.get("requires_features", []),
+        content_hash=result.get("content_hash", ""),
+        composite_hash=result.get("composite_hash", ""),
+        recipe_version=result.get("recipe_version") or "",
+        project_identity=str(tool_ctx.project_dir),
+    )
+    ToolContext.set_active_recipe_snapshot(tool_ctx, snapshot, legacy_steps=filtered_steps)
+    return recipe_obj
 
 
 def _check_dispatch_feasibility(

@@ -2985,13 +2985,15 @@ def test_inject_output_format_reinforcement_non_anthropic():
     import regex as _re
 
     example_match = _re.search(r"Correct:\s*([A-Za-z_][\w]*)\s*=", directive_part)
-    if example_match is not None:
-        example_key = example_match.group(1)
-        assert example_key not in _OUTPUT_PATH_TOKENS, (
-            f"Non-Anthropic output directive example key {example_key!r} is a "
-            f"member of _OUTPUT_PATH_TOKENS — must be a neutral key to avoid prompt "
-            f"priming of the path-contamination classifier."
-        )
+    assert example_match is not None, (
+        "Expected a 'Correct: <key> =' neutral example in the injected directive"
+    )
+    example_key = example_match.group(1)
+    assert example_key not in _OUTPUT_PATH_TOKENS, (
+        f"Non-Anthropic output directive example key {example_key!r} is a "
+        f"member of _OUTPUT_PATH_TOKENS — must be a neutral key to avoid prompt "
+        f"priming of the path-contamination classifier."
+    )
 
 
 def test_inject_output_format_reinforcement_anthropic_noop():

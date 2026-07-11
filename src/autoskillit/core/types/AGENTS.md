@@ -33,7 +33,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_helpers.py` | Text processing and skill-name extraction utilities |
 | `_type_inspector.py` | Health Inspector types: `InspectorEvidence`, `InspectorVerdict`, `InspectorCallback` (issue #3533) |
 | `_type_invariant_registry.py` | Invariant registry: `InvariantDef` dataclass and `INVARIANT_REGISTRY` mapping prose prohibitions to runtime gates |
-| `_type_lifecycle.py` | Async-child-aware completion lifecycle types (issue #4233): `ChildLifecycleObservation`, `ChildLifecycleSnapshot`, `CompletionCandidateState/Source`, `ProcessIdentity`, `CleanupOutcome`, `DEFAULT_CLEANUP_BUDGET_SECONDS`, `StreamParserFactory` |
+| `_type_lifecycle.py` | Async-child-aware completion lifecycle types (issue #4233): `ChildLifecycleObservation`, `ChildLifecycleSnapshot`, `CompletionCandidate`, `CompletionCandidateState/Source`, `LifecycleDecision`, `LifecycleActorRequest`, `LifecycleActorResponse`, `ParentAssistantMarker`, `ProcessIdentity`, `CleanupOutcome`, `DEFAULT_CLEANUP_BUDGET_SECONDS`, `StreamParserFactory`, `build_lifecycle_snapshot_from_attempts` |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |
 | `_type_plugin_source.py` | `PluginSource` discriminated union: `DirectInstall | MarketplaceInstall` |

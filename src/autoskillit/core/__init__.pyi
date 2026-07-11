@@ -241,7 +241,6 @@ from .types import CaptureValueTypeError as CaptureValueTypeError
 from .types import ChannelBStatus as ChannelBStatus
 from .types import ChannelConfirmation as ChannelConfirmation
 from .types import ChildAttemptState as ChildAttemptState
-from .types import ChildLifecycleCoordinatorFactory as ChildLifecycleCoordinatorFactory
 from .types import ChildLifecycleObservation as ChildLifecycleObservation
 from .types import ChildLifecycleSnapshot as ChildLifecycleSnapshot
 from .types import ChildObligationState as ChildObligationState
@@ -264,6 +263,7 @@ from .types import CodexEventData as CodexEventData
 from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
 from .types import CodingAgentBackend as CodingAgentBackend
+from .types import CompletionCandidate as CompletionCandidate
 from .types import CompletionCandidateSource as CompletionCandidateSource
 from .types import CompletionCandidateState as CompletionCandidateState
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
@@ -299,6 +299,9 @@ from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
 from .types import LensEntry as LensEntry
+from .types import LifecycleActorRequest as LifecycleActorRequest
+from .types import LifecycleActorResponse as LifecycleActorResponse
+from .types import LifecycleDecision as LifecycleDecision
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import MarketplaceInstall as MarketplaceInstall
@@ -316,6 +319,7 @@ from .types import NoResume as NoResume
 from .types import OutputFormat as OutputFormat
 from .types import OutputPatternResolver as OutputPatternResolver
 from .types import PackDef as PackDef
+from .types import ParentAssistantMarker as ParentAssistantMarker
 from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PluginSource as PluginSource
@@ -376,6 +380,7 @@ from .types import WriteBehaviorSpec as WriteBehaviorSpec
 from .types import WriteEvidence as WriteEvidence
 from .types import WriteExpectedResolver as WriteExpectedResolver
 from .types import assert_prompt_sentinel as assert_prompt_sentinel
+from .types import build_lifecycle_snapshot_from_attempts as build_lifecycle_snapshot_from_attempts
 from .types import compute_remaining as compute_remaining
 from .types import extract_path_arg as extract_path_arg
 from .types import extract_positional_args as extract_positional_args

@@ -10,6 +10,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `_merge_queue_helpers.py` | Merge-queue test helper factories — _make_watcher, _queue_state |
 | `conftest.py` | Shared fixtures and helpers for tests/execution/ |
 | `test_anomaly_detection.py` | Tests for post-hoc anomaly detection over ProcSnapshot data |
+| `test_child_lifecycle_coordinator.py` | Tests for `ChildLifecycleCoordinator` reducer: same-kind aliases, blank-ID isolation, UUID deduplication, terminal-before-declaration, successful delivery, unresolved failure/cancellation/timeout, Agent/Bash collision negatives, replacement generations, candidate identity/provenance, DEFERRED->SUPERSEDED, ELIGIBLE gating, CHILD_WORK_FAILED (issue #4233) |
 | `test_model_alias_registry.py` | Shared alias registry consistency tests — key parity between anomaly_detection and backend alias maps |
 | `test_boundary_pty_dispatch.py` | Layer-boundary integration tests for DefaultSubprocessRunner + PTY wrapping + Python shims |
 | `test_check_repo_merge_state.py` | Round-trip budget tests for fetch_repo_merge_state |
@@ -144,6 +145,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_claude_result_parser.py` | Tests for ClaudeResultParser |
 | `test_claude_session_locator.py` | Tests for ClaudeSessionLocator |
 | `test_claude_stream_parser.py` | Tests for ClaudeStreamParser |
+| `test_claude_lifecycle_normalization.py` | Tests for pure Channel A lifecycle / candidate normalization helpers (`_claude_lifecycle.py`): system task_started/progress/notification, user tool_result, replaces/replaced_by, blank/malformed UUID fail-closed, marker-bearing parent-assistant candidates, non-assistant record negatives (issue #4233) |
 | `test_backend_registry.py` | Tests for backend registry |
 | `test_codex_backend.py` | Tests for CodexFlags, CodexBackend protocol conformance, headless/resume command builders, skill session cmd config adapter, food truck cmd builder |
 | `test_codex_interactive.py` | Parametrized structural validation of CodexBackend.build_interactive_cmd — resume variants, model, system_prompt suppression, add_dirs |

@@ -887,7 +887,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe/rules": 54,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context  # noqa: E501
         "server/tools": 29,  # +_preflight.py +_authority_feedback.py +_serve_helpers.py
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
-        "execution/backends": 12,  # +_composite_locator.py, +_probe_cache.py
+        "execution/backends": 13,  # +_claude_lifecycle.py (issue #4233)
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

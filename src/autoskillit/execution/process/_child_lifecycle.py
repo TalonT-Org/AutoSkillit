@@ -62,7 +62,7 @@ def _alias_keys(obs: ChildLifecycleObservation) -> tuple[tuple[str, ...], ...]:
         for value in (obs.tool_use_id, obs.task_id, obs.agent_id):
             if value:
                 candidates.append((obs.task_kind, "alias", value))
-        if not candidates:
+        if not candidates and obs.source_event_id:
             candidates.append((obs.task_kind, "source", obs.source_event_id))
         return tuple(candidates)
     if obs.task_kind == "Bash":
@@ -70,12 +70,59 @@ def _alias_keys(obs: ChildLifecycleObservation) -> tuple[tuple[str, ...], ...]:
         for value in (obs.tool_use_id, obs.task_id, obs.background_task_id):
             if value:
                 candidates.append((obs.task_kind, "alias", value))
-        if not candidates:
+        if not candidates and obs.source_event_id:
             candidates.append((obs.task_kind, "source", obs.source_event_id))
         return tuple(candidates)
     if obs.source_event_id:
         return ((obs.task_kind, "source", obs.source_event_id),)
     return ()
+
+
+def _persistent_identity_keys(obs: ChildLifecycleObservation) -> tuple[str, ...]:
+    """Return the persistent-identity key set used to correlate observations.
+
+    Persistent identities survive tool_use_id reuse / loss on the same
+    long-lived attempt: ``agent_id`` for Agent, ``background_task_id`` for
+    Bash, and ``task_id`` for either when the kind-specific identity is
+    blank. They are returned as bare strings (not tuples) so the
+    coordinator can index by them independently of alias keys.
+    """
+    if obs.task_kind == "Agent":
+        keys = []
+        if obs.agent_id:
+            keys.append(f"agent:{obs.agent_id}")
+        if obs.task_id:
+            keys.append(f"task:{obs.task_id}")
+        return tuple(keys)
+    if obs.task_kind == "Bash":
+        keys = []
+        if obs.background_task_id:
+            keys.append(f"bg:{obs.background_task_id}")
+        if obs.task_id:
+            keys.append(f"task:{obs.task_id}")
+        return tuple(keys)
+    return ()
+
+
+def _is_stale_for_existing(
+    existing: _AttemptRecord, observation: ChildLifecycleObservation
+) -> bool:
+    """Return True when ``observation`` refers to a superseded generation of ``existing``.
+
+    Detection is heuristic-only: when the live record has been replaced
+    (``record.replaced`` set, typically via a prior ``replaces`` edge) AND
+    both the live record and the incoming observation carry a non-blank
+    ``tool_use_id`` AND those tool_use_ids differ, the new evidence is for
+    the prior attempt generation. Routing it through normal collapse would
+    collapse the live replacement; discarding it preserves the live state.
+    """
+    if not existing.replaced:
+        return False
+    live_id = existing.observation.tool_use_id
+    incoming_id = observation.tool_use_id
+    if not live_id or not incoming_id:
+        return False
+    return live_id != incoming_id
 
 
 @dataclass
@@ -107,6 +154,55 @@ class ChildLifecycleCoordinator:
     _parent_turn_counter: dict[str, int] = field(default_factory=dict)
     _last_deferred_parent_generation: dict[str, int] = field(default_factory=dict)
     _global_next_attempt_generation: int = 0
+    _identity_index: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """Maps each persistent identity (``agent:<id>``, ``bg:<id>``,
+    ``task:<id>``) to the alias key currently bound to the active record
+    observation, so subsequent observations that lose their explicit alias
+    can still correlate via a shared persistent identity."""
+
+    def _find_existing(
+        self, observation: ChildLifecycleObservation
+    ) -> tuple[str, tuple[str, ...]] | None:
+        """Return ``(bucket_name, aliases)`` matching this observation, if any.
+
+        Scans every bucket (active/completed/unresolved) for an attempt
+        that shares at least one alias key OR is the target of the
+        observation's native ``replaces`` edge. Returns a tuple identifying
+        which bucket to mutate plus the canonical alias tuple to use as
+        the lookup key on the destination bucket.
+        """
+        for key in _alias_keys(observation):
+            if key in self._attempts:
+                return ("active", key)
+            if key in self._completed:
+                return ("completed", key)
+            if key in self._unresolved_terminal:
+                return ("unresolved_terminal", key)
+        for identity in _persistent_identity_keys(observation):
+            candidate_key = self._identity_index.get(identity)
+            if candidate_key is not None:
+                if candidate_key in self._attempts:
+                    return ("active", candidate_key)
+                if candidate_key in self._completed:
+                    return ("completed", candidate_key)
+                if candidate_key in self._unresolved_terminal:
+                    return ("unresolved_terminal", candidate_key)
+        if observation.replaces_native_uuid:
+            for bucket in (self._attempts, self._completed, self._unresolved_terminal):
+                for key, record in bucket.items():
+                    if (
+                        record.observation.replaced_by_native_uuid
+                        == observation.replaces_native_uuid
+                    ):
+                        name = (
+                            "active"
+                            if bucket is self._attempts
+                            else (
+                                "completed" if bucket is self._completed else "unresolved_terminal"
+                            )
+                        )
+                        return (name, key)
+        return None
 
     def observe(self, observation: ChildLifecycleObservation) -> None:
         """Record one immutable observation in the appropriate bucket.
@@ -122,44 +218,97 @@ class ChildLifecycleCoordinator:
         if primary is None:
             return
 
+        existing_match = self._find_existing(observation)
+        existing_key = existing_match[1] if existing_match else primary
+        source_bucket = (
+            self._attempts
+            if existing_match is None or existing_match[0] == "active"
+            else (
+                self._completed if existing_match[0] == "completed" else self._unresolved_terminal
+            )
+        )
+        existing_record = source_bucket.pop(existing_key, None)
+
         if observation.is_user_result:
-            existing = self._attempts.pop(primary, None)
-            if existing is not None:
-                if observation.attempt_state in ATTEMPT_TERMINAL_STATES:
-                    self._unresolved_terminal[primary] = existing
-                else:
-                    self._completed[primary] = existing
+            if existing_record is not None and _is_stale_for_existing(
+                existing_record, observation
+            ):
+                # Late evidence for a superseded generation must not
+                # resurrect / collapse the live replacement record.
+                source_bucket[existing_key] = existing_record
+                return
+            if existing_record is None:
+                # Late user_result arrives before any declaration. There
+                # is no declared attempt to deliver against — record
+                # the evidence as an unresolved obligation so the audit
+                # trail surfaces why completion cannot be authorised.
+                self._global_next_attempt_generation += 1
+                attempt_generation = (
+                    observation.attempt_generation or self._global_next_attempt_generation
+                )
+                late_record = _AttemptRecord(
+                    observation=observation,
+                    attempt_generation=attempt_generation,
+                    replaced=bool(observation.replaced_by_native_uuid),
+                )
+                self._unresolved_terminal[existing_key] = late_record
+                return
+            existing_record.observation = observation
+            existing_record.replaced = bool(observation.replaced_by_native_uuid)
+            if observation.attempt_state == ChildAttemptState.COMPLETED:
+                self._completed[existing_key] = existing_record
+            elif observation.attempt_state in ATTEMPT_TERMINAL_STATES:
+                self._unresolved_terminal[existing_key] = existing_record
             return
 
         if observation.attempt_state in ATTEMPT_TERMINAL_STATES:
-            existing = self._attempts.pop(primary, None)
-            if existing is None:
-                # Late terminal evidence without an open attempt: ignore
-                # rather than creating a phantom attempt.
+            if existing_record is not None and _is_stale_for_existing(
+                existing_record, observation
+            ):
+                source_bucket[existing_key] = existing_record
                 return
-            existing.observation = observation
-            existing.replaced = bool(observation.replaced_by_native_uuid)
+            if existing_record is None:
+                # Late terminal evidence without an open attempt: still
+                # recorded as an outstanding obligation rather than
+                # silently dropped, since the audit trail must show why
+                # an obligation surfaced post-quiescence.
+                self._global_next_attempt_generation += 1
+                attempt_generation = (
+                    observation.attempt_generation or self._global_next_attempt_generation
+                )
+                late_record = _AttemptRecord(
+                    observation=observation,
+                    attempt_generation=attempt_generation,
+                    replaced=bool(observation.replaced_by_native_uuid),
+                )
+                self._unresolved_terminal[existing_key] = late_record
+                return
+            existing_record.observation = observation
+            existing_record.replaced = bool(observation.replaced_by_native_uuid)
             if observation.attempt_state == ChildAttemptState.COMPLETED:
-                self._completed[primary] = existing
+                self._completed[existing_key] = existing_record
             else:
-                self._unresolved_terminal[primary] = existing
+                self._unresolved_terminal[existing_key] = existing_record
             return
 
-        record = self._attempts.get(primary)
-        if record is None:
+        if existing_record is None:
             self._global_next_attempt_generation += 1
             attempt_generation = (
                 observation.attempt_generation or self._global_next_attempt_generation
             )
-            record = _AttemptRecord(
+            existing_record = _AttemptRecord(
                 observation=observation,
                 attempt_generation=attempt_generation,
                 replaced=bool(observation.replaced_by_native_uuid),
             )
         else:
-            record.observation = observation
-            record.replaced = bool(observation.replaced_by_native_uuid)
-        self._attempts[primary] = record
+            existing_record.observation = observation
+            existing_record.replaced = existing_record.replaced or bool(
+                observation.replaced_by_native_uuid
+            )
+        self._attempts[existing_key] = existing_record
+        for identity in _persistent_identity_keys(observation):
+            self._identity_index[identity] = existing_key
 
     def register_parent_marker(self, marker: ParentAssistantMarker) -> CompletionCandidate:
         """Record one parent-assistant marker and synthesize its candidate.
@@ -192,7 +341,7 @@ class ChildLifecycleCoordinator:
             merged_sources = tuple({*existing.sources, *candidate.sources})
             self._candidates[uuid] = CompletionCandidate(
                 candidate_id=existing.candidate_id,
-                parent_turn_generation=existing.parent_turn_generation,
+                parent_turn_generation=generation,
                 sources=merged_sources,
                 native_message_id=existing.native_message_id or candidate.native_message_id,
                 byte_offset=existing.byte_offset or candidate.byte_offset,

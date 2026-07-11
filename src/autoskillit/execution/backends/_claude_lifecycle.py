@@ -187,8 +187,12 @@ def extract_lifecycle_observations(
                 state = ChildAttemptState.ACTIVE
             elif status == "completed":
                 state = ChildAttemptState.COMPLETED
-            else:
+            elif status == "failed":
                 state = ChildAttemptState.FAILED
+            elif status == "cancelled":
+                state = ChildAttemptState.CANCELLED
+            else:
+                continue
             task_kind = _task_kind_from_tool_use_id(tool_use_id)
             if not task_kind:
                 # Correlate by backgroundTaskId even when tool_use_id
@@ -239,8 +243,11 @@ def extract_parent_assistant_marker(
     """
     if obj.get("type") != "assistant":
         return ParentAssistantCandidate(marker=None)
-    native_uuid = _coerce_str(obj.get("uuid"))
-    if not native_uuid or native_uuid.lower() == "unknown":
+    raw_uuid = obj.get("uuid")
+    if not isinstance(raw_uuid, str) or not raw_uuid:
+        return ParentAssistantCandidate(marker=None)
+    native_uuid = raw_uuid
+    if native_uuid.lower() == "unknown" or native_uuid.isdigit():
         return ParentAssistantCandidate(marker=None)
     message = obj.get("message")
     message_id = _coerce_str(message.get("id")) if isinstance(message, dict) else ""

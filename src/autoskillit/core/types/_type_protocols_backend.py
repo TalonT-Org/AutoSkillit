@@ -107,6 +107,16 @@ class CodingAgentBackend(Protocol):
 
     def stream_parser(self, completion_marker: str = "") -> StreamParser: ...
 
+    def stream_parser_factory(self, completion_marker: str = "") -> Any:
+        """Return a fresh-parser factory (issue #4233).
+
+        Each call to the factory (``factory()``) yields a distinct parser
+        instance so concurrent watchers/calls cannot share lifecycle
+        reducer state. Backends that do not participate in async-child
+        lifecycle tracking may return ``Any()``.
+        """
+        ...
+
     def result_parser(self) -> ResultParser: ...
 
     def env_policy(self) -> EnvPolicy: ...

@@ -813,7 +813,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _type_invariant_registry.py adds InvariantDef frozen dataclass and
             INVARIANT_REGISTRY mapping 13 prose prohibitions to runtime gate targets,
             bringing the core/types count to 31.
-            Exempt at 35 files (core/types: 31).
+            _type_lifecycle.py adds ChildLifecycleObservation, ChildLifecycleSnapshot,
+            ChildAttemptState, CompletionCandidateState/Source, ProcessIdentity,
+            CleanupOutcome, DEFAULT_CLEANUP_BUDGET_SECONDS, StreamParserFactory for
+            the async-child-aware completion gate (issue #4233), bringing the
+            core/types count to 32.
+            Exempt at 36 files (core/types: 32).
           cli/ — REQ-CNST-003-E5: cli/ retains _terminal_table.py as a re-export shim
             for backward-compatible cli/ imports; canonical implementation lives in
             core/_terminal_table.py. Also contains _terminal.py — the terminal state
@@ -874,7 +879,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "recipe": 42,  # was 33; +9 from CI/graph/dataflow splits
         "execution": 18,
         "core": 21,
-        "core/types": 31,  # +_type_invariant_registry.py (INVARIANT_REGISTRY)
+        "core/types": 32,  # +_type_lifecycle.py (issue #4233)
         "cli": 21,
         "hooks": 14,  # +recipe_confirmed_post_hook.py
         "pipeline": 12,
@@ -1013,7 +1018,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_get_routing_caps helpers extracted from run_skill handler body (+30 net lines)",
     ),
     "execution/backends/codex.py": (
-        1155,
+        1200,
         "REQ-CNST-010-E9: Codex backend — skill_sigil capability threading adds multi-line "
         "keyword args to _ensure_skill_prefix call sites and _has_prefix guard; "
         "write_guard_tool_names env injection adds 7 lines to _codex_exec_extras; "
@@ -1039,7 +1044,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "; explicit parameter dispositions for "
         "plugin_source/output_format/exit_after_stop_delay_ms "
         "replacing noqa:F841 silent discards (+18 net lines) for T5-P4-A2-WP1"
-        "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)",
+        "; github_api_callable field + evidence comment in BackendCapabilities (+2 net lines)"
+        "; stream_parser_factory method on CodexBackend returning a fresh-parser "
+        "factory (issue #4233) — inline _Factory subclass closure (+13 net lines)",
     ),
 }
 

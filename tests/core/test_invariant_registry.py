@@ -152,7 +152,7 @@ def test_registry_keys_are_lowercase_kebab() -> None:
 
 
 def test_expected_entry_ids() -> None:
-    """Registry must contain exactly the 13 specified entries."""
+    """Registry must contain exactly the 14 specified entries."""
     from autoskillit.core import INVARIANT_REGISTRY
 
     expected = {
@@ -169,5 +169,6 @@ def test_expected_entry_ids() -> None:
         "env-key-in-with-args",
         "generated-file-write",
         "bre-grep-pattern",
+        "schedule-wakeup-skill",
     }
     assert set(INVARIANT_REGISTRY.keys()) == expected

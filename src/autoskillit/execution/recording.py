@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
+    DEFAULT_CLEANUP_BUDGET_SECONDS,
     BackendCapabilities,
     InspectorCallback,
     SubprocessResult,
@@ -142,6 +143,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        cleanup_budget_seconds: float = DEFAULT_CLEANUP_BUDGET_SECONDS,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
@@ -433,6 +435,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        cleanup_budget_seconds: float = DEFAULT_CLEANUP_BUDGET_SECONDS,
     ) -> SubprocessResult:
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 

@@ -612,6 +612,20 @@ class CodexBackend(BackendCmdBuilderBase):
     def stream_parser(self, completion_marker: str = "") -> CodexStreamParser:
         return CodexStreamParser(completion_marker=completion_marker)
 
+    def stream_parser_factory(self, completion_marker: str = "") -> Any:
+        """Return a fresh-parser factory — codex path is single-shot (issue #4233).
+
+        Each ``factory()`` call yields a distinct ``CodexStreamParser`` instance
+        so watcher coroutines cannot share reduced state.
+        """
+        factory_self = self
+
+        class _Factory:
+            def __call__(self_inner: object) -> CodexStreamParser:
+                return factory_self.stream_parser(completion_marker=completion_marker)
+
+        return _Factory()
+
     def result_parser(self) -> CodexResultParser:
         return CodexResultParser()
 

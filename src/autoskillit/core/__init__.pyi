@@ -126,6 +126,8 @@ from .types import AGENT_BACKEND_ENV_VAR as AGENT_BACKEND_ENV_VAR
 from .types import AGENT_PACK_REGISTRY as AGENT_PACK_REGISTRY
 from .types import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS as ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from .types import ALL_VISIBILITY_TAGS as ALL_VISIBILITY_TAGS
+from .types import ATTEMPT_ACTIVE_STATES as ATTEMPT_ACTIVE_STATES
+from .types import ATTEMPT_TERMINAL_STATES as ATTEMPT_TERMINAL_STATES
 from .types import AUTOSKILLIT_APPLICABLE_GUARDS as AUTOSKILLIT_APPLICABLE_GUARDS
 from .types import AUTOSKILLIT_INSTALLED_VERSION as AUTOSKILLIT_INSTALLED_VERSION
 from .types import AUTOSKILLIT_PRIVATE_ENV_VARS as AUTOSKILLIT_PRIVATE_ENV_VARS
@@ -152,6 +154,7 @@ from .types import CONFIG_AUTHORITY_KEYS as CONFIG_AUTHORITY_KEYS
 from .types import CONTEXT_EXHAUSTION_MARKER as CONTEXT_EXHAUSTION_MARKER
 from .types import CORE_PACKS as CORE_PACKS
 from .types import DATA_MANIFEST_SOURCE_TYPES as DATA_MANIFEST_SOURCE_TYPES
+from .types import DEFAULT_CLEANUP_BUDGET_SECONDS as DEFAULT_CLEANUP_BUDGET_SECONDS
 from .types import DISPATCH_ID_ENV_VAR as DISPATCH_ID_ENV_VAR
 from .types import DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
@@ -237,11 +240,17 @@ from .types import CaptureValueType as CaptureValueType
 from .types import CaptureValueTypeError as CaptureValueTypeError
 from .types import ChannelBStatus as ChannelBStatus
 from .types import ChannelConfirmation as ChannelConfirmation
+from .types import ChildAttemptState as ChildAttemptState
+from .types import ChildLifecycleCoordinatorFactory as ChildLifecycleCoordinatorFactory
+from .types import ChildLifecycleObservation as ChildLifecycleObservation
+from .types import ChildLifecycleSnapshot as ChildLifecycleSnapshot
+from .types import ChildObligationState as ChildObligationState
 from .types import CIRunScope as CIRunScope
 from .types import CIWatcher as CIWatcher
 from .types import ClaudeContentBlockType as ClaudeContentBlockType
 from .types import ClaudeEventData as ClaudeEventData
 from .types import ClaudeFlags as ClaudeFlags
+from .types import CleanupOutcome as CleanupOutcome
 from .types import CleanupResult as CleanupResult
 from .types import CliSubtype as CliSubtype
 from .types import CloneGateUncommitted as CloneGateUncommitted
@@ -255,6 +264,8 @@ from .types import CodexEventData as CodexEventData
 from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
 from .types import CodingAgentBackend as CodingAgentBackend
+from .types import CompletionCandidateSource as CompletionCandidateSource
+from .types import CompletionCandidateState as CompletionCandidateState
 from .types import CompletionRequiredResolver as CompletionRequiredResolver
 from .types import ContaminationOutcome as ContaminationOutcome
 from .types import CrossDomainAssessment as CrossDomainAssessment
@@ -308,6 +319,7 @@ from .types import PackDef as PackDef
 from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PluginSource as PluginSource
+from .types import ProcessIdentity as ProcessIdentity
 from .types import ProcessStaleError as ProcessStaleError
 from .types import PromptContractError as PromptContractError
 from .types import ProviderOutcome as ProviderOutcome
@@ -343,6 +355,7 @@ from .types import SkillResult as SkillResult
 from .types import SkillSessionConfig as SkillSessionConfig
 from .types import SkillSource as SkillSource
 from .types import StreamParser as StreamParser
+from .types import StreamParserFactory as StreamParserFactory
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner
 from .types import SupportsDebug as SupportsDebug

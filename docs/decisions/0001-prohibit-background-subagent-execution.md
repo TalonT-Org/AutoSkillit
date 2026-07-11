@@ -34,6 +34,13 @@ This rule does NOT prohibit parallel execution. Multiple foreground subagents la
 in a single message execute concurrently — the parent blocks until all complete, then
 synthesizes their combined results.
 
+This rule ALSO prohibits `ScheduleWakeup` from being used inside skill sessions.
+`ScheduleWakeup` schedules an asynchronous, deferred wake-up that defeats the
+foreground-only completion contract — the parent cannot observe completion of work
+it never knew was queued. The PreToolUse hook (`background_exec_guard.py`) denies
+`ScheduleWakeup` in the skill/unknown headless tiers with the rationale
+"async wake-ups defeat foreground-only completion".
+
 ## Rationale
 
 The foreground-parallel pattern (multiple Agent calls in one message, no

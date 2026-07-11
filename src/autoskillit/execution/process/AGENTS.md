@@ -13,6 +13,7 @@ Subprocess lifecycle management — spawn, monitor, race, kill.
 | `_process_monitor.py` | Async monitor coroutines: `_heartbeat()` (Channel A), `_session_log_monitor()` (Channel B) |
 | `_process_pty.py` | `pty_wrap_command()` — wraps command with `script(1)` for PTY allocation |
 | `_process_race.py` | `RaceAccumulator`, `RaceSignals`, watcher coroutines, `resolve_termination()` |
+| `_child_lifecycle.py` | `ChildLifecycleCoordinator` — single-owner reducer of immutable child-lifecycle observations consumed by the completion gate (issue #4233) |
 
 ## Architecture Notes
 

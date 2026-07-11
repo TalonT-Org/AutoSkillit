@@ -13,6 +13,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 from ._type_inspector import InspectorCallback, InspectorVerdict
+from ._type_lifecycle import DEFAULT_CLEANUP_BUDGET_SECONDS, CleanupOutcome
 
 __all__ = [
     "SubprocessResult",
@@ -129,6 +130,14 @@ class SubprocessResult:
     ``SubprocessRunner.__call__`` and the callback completes before process exit.
     Consumed downstream to annotate termination provenance.
     """
+    cleanup_outcome: CleanupOutcome | None = None
+    """Outcome of the shielded cleanup pass (issue #4233).
+
+    Records ``succeeded``, ``budget_exhausted``, and any retained identities
+    that could not be removed inside the configured cleanup budget. Consuming
+    layers map ``cleanup_exhausted=True`` to ``RetryReason.RESUME``. The
+    record is ``None`` when cleanup never ran (e.g. NATURAL_EXIT fast path).
+    """
 
 
 @runtime_checkable
@@ -176,4 +185,5 @@ class SubprocessRunner(Protocol):
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        cleanup_budget_seconds: float = DEFAULT_CLEANUP_BUDGET_SECONDS,
     ) -> Awaitable[SubprocessResult]: ...

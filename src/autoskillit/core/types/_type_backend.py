@@ -11,6 +11,7 @@ from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import BackendEventKind, OutputFormat
+from ._type_lifecycle import ChildLifecycleObservation
 from ._type_plugin_source import PluginSource
 from ._type_results import ValidatedAddDir
 
@@ -382,7 +383,13 @@ class CodexEventData:
 
 @dataclass(frozen=True, slots=True)
 class SessionEvent:
-    """A single parsed event emitted by a running backend session."""
+    """A single parsed event emitted by a running backend session.
+
+    ``observations`` carries the immutable ``ChildLifecycleObservation``
+    tuple produced by the per-line parser; the invocation-scoped
+    coordinator owns the reducer state that joins them. The field is a
+    tuple (never a list) so that the event remains frozen and hashable.
+    """
 
     kind: BackendEventKind
     is_terminal: bool
@@ -390,6 +397,7 @@ class SessionEvent:
     session_id: str | None = None
     exit_code: int | None = None
     backend_data: ClaudeEventData | CodexEventData | None = None
+    observations: tuple[ChildLifecycleObservation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

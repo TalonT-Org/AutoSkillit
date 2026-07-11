@@ -250,6 +250,7 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "completion_required",
         "ndjson_unknown_event_count",
         "ndjson_unknown_item_count",
+        "branch_name",
     }
 )
 

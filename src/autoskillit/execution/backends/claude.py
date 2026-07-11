@@ -28,6 +28,8 @@ from autoskillit.core import (
     BackendEventKind,
     BareResume,
     CapabilityNotSupportedError,
+    ChildAttemptState,
+    ChildLifecycleObservation,
     ClaudeDirectoryConventions,
     ClaudeEventData,
     ClaudeFlags,
@@ -83,6 +85,7 @@ __all__ = [
     "ClaudeResultParser",
     "ClaudeSessionLocator",
     "ClaudeStreamParser",
+    "ClaudeStreamParserFactory",
 ]
 
 
@@ -121,6 +124,154 @@ class ClaudeSessionLocator(SessionLocator):
         return claude_code_log_path(cwd, session_id)
 
 
+def _extract_lifecycle_observations(
+    obj: dict[str, object],
+    record_type: str,
+) -> tuple[ChildLifecycleObservation, ...]:
+    """Translate one Channel A record into its immutable lifecycle observations.
+
+    The parser never owns reducer state — it emits at most one observation
+    per detected lifecycle signal. The coordinator in
+    ``execution.process._child_lifecycle`` is the sole owner of the
+    mutable correlation map.
+
+    Records handled:
+    - ``system`` with ``subtype in {task_started, task_progress}`` — ACTIVE
+    - ``system`` with ``subtype == task_notification`` — terminal (per status)
+    - ``user`` tool_result carrying structured async_launched/isAsync — ACTIVE
+    """
+    observations: list[ChildLifecycleObservation] = []
+
+    if record_type == "system":
+        subtype = obj.get("subtype", "")
+        if subtype not in {"task_started", "task_progress", "task_notification"}:
+            return ()
+        task_id = str(obj.get("task_id", "")) if isinstance(obj.get("task_id"), str) else ""
+        tool_use_id = (
+            str(obj.get("tool_use_id", "")) if isinstance(obj.get("tool_use_id"), str) else ""
+        )
+        agent_id = str(obj.get("agent_id", "")) if isinstance(obj.get("agent_id"), str) else ""
+        background_task_id = (
+            str(obj.get("background_task_id", ""))
+            if isinstance(obj.get("background_task_id"), str)
+            else ""
+        )
+        task_kind = _task_kind_from_system(obj)
+        if not task_kind:
+            return ()
+        if subtype == "task_started":
+            state: ChildAttemptState = ChildAttemptState.ACTIVE
+        elif subtype == "task_notification":
+            state = _state_from_notification(obj)
+        else:  # task_progress
+            state = ChildAttemptState.ACTIVE
+        observations.append(
+            ChildLifecycleObservation(
+                task_kind=task_kind,
+                task_id=task_id,
+                tool_use_id=tool_use_id,
+                agent_id=agent_id,
+                background_task_id=background_task_id,
+                attempt_state=state,
+                source_event_id=str(obj.get("uuid", "")),
+                parent_turn_id=str(obj.get("parent_message_id", "")),
+            )
+        )
+        return tuple(observations)
+
+    if record_type == "user":
+        message = obj.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            return ()
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") != "tool_result":
+                continue
+            tool_use_id = str(block.get("tool_use_id", ""))
+            tool_use_result = block.get("content")
+            content_obj = tool_use_result if isinstance(tool_use_result, dict) else {}
+            if not tool_use_result:
+                continue
+            is_async = (
+                content_obj.get("async_launched") is True or content_obj.get("isAsync") is True
+            )
+            status = content_obj.get("status")
+            if not is_async and status not in {"completed", "failed", "cancelled"}:
+                continue
+            if is_async:
+                state = ChildAttemptState.ACTIVE
+            elif status == "completed":
+                state = ChildAttemptState.COMPLETED
+            else:
+                state = ChildAttemptState.FAILED
+            observations.append(
+                ChildLifecycleObservation(
+                    task_kind=_task_kind_from_tool_use_id(tool_use_id),
+                    tool_use_id=tool_use_id,
+                    agent_id=str(content_obj.get("agentId", "")),
+                    background_task_id=str(content_obj.get("backgroundTaskId", "")),
+                    attempt_state=state,
+                    source_event_id=str(obj.get("uuid", "")),
+                    is_user_result=True,
+                )
+            )
+        return tuple(observations)
+
+    return ()
+
+
+def _task_kind_from_system(obj: dict[str, object]) -> str:
+    """Map a Claude ``system`` task record to its task_kind."""
+    if obj.get("agent_id"):
+        return "Agent"
+    if obj.get("background_task_id"):
+        return "Bash"
+    return ""
+
+
+def _state_from_notification(obj: dict[str, object]) -> ChildAttemptState:
+    """Map a Claude ``task_notification`` ``status`` field to the attempt state."""
+    status = obj.get("status")
+    if status == "completed":
+        return ChildAttemptState.COMPLETED
+    if status == "failed":
+        return ChildAttemptState.FAILED
+    if status == "cancelled":
+        return ChildAttemptState.CANCELLED
+    if status == "timed_out":
+        return ChildAttemptState.TIMED_OUT
+    return ChildAttemptState.ACTIVE
+
+
+def _task_kind_from_tool_use_id(tool_use_id: str) -> str:
+    """Infer task_kind from a Claude tool_use_id string prefix.
+
+    Accepts tool_use_id strings like ``toolu_...`` (Agent). Returns
+    ``""`` for unrecognized prefixes — the coordinator must reject
+    matches against unrelated tool_use_ids.
+    """
+    if tool_use_id.startswith("toolu_"):
+        return "Agent"
+    return ""
+
+
+@dataclass(frozen=True, slots=True)
+class ClaudeStreamParserFactory:
+    """Fresh-parser factory — one call per attempt (issue #4233).
+
+    Replaces direct ``stream_parser(...)`` returns so each attempt gets
+    a distinct parser instance and lifecycle reducer state is never
+    shared between watchers/attempts.
+    """
+
+    completion_marker: str = ""
+
+    def __call__(self) -> ClaudeStreamParser:
+        return ClaudeStreamParser(completion_marker=self.completion_marker)
+
+
 @dataclass(frozen=True, slots=True)
 class ClaudeStreamParser:
     completion_marker: str = ""
@@ -137,6 +288,7 @@ class ClaudeStreamParser:
             return None
 
         record_type = obj.get("type", "")
+        observations = _extract_lifecycle_observations(obj, record_type)
 
         if record_type == "system":
             subtype = obj.get("subtype", "")
@@ -152,12 +304,14 @@ class ClaudeStreamParser:
                         session_id=session_id,
                         raw=obj,
                     ),
+                    observations=observations,
                 )
             return SessionEvent(
                 kind=BackendEventKind.SESSION_META,
                 is_terminal=False,
                 has_marker=False,
                 session_id=session_id if subtype == "init" else None,
+                observations=observations,
             )
 
         if record_type == "result":
@@ -167,6 +321,7 @@ class ClaudeStreamParser:
                     kind=BackendEventKind.IGNORED,
                     is_terminal=False,
                     has_marker=False,
+                    observations=observations,
                 )
             has_marker = bool(
                 self.completion_marker
@@ -182,6 +337,7 @@ class ClaudeStreamParser:
                     session_id=obj.get("session_id", ""),
                     raw=obj,
                 ),
+                observations=observations,
             )
 
         if record_type == "assistant":
@@ -203,17 +359,20 @@ class ClaudeStreamParser:
                             session_id="",
                             raw=obj,
                         ),
+                        observations=observations,
                     )
             return SessionEvent(
                 kind=BackendEventKind.IGNORED,
                 is_terminal=False,
                 has_marker=False,
+                observations=observations,
             )
 
         return SessionEvent(
             kind=BackendEventKind.IGNORED,
             is_terminal=False,
             has_marker=False,
+            observations=observations,
         )
 
 
@@ -321,6 +480,15 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
 
     def stream_parser(self, completion_marker: str = "") -> ClaudeStreamParser:
         return ClaudeStreamParser(completion_marker=completion_marker)
+
+    def stream_parser_factory(self, completion_marker: str = "") -> ClaudeStreamParserFactory:
+        """Return a fresh-parser factory (issue #4233).
+
+        Each call to the factory (``factory()``) returns a new parser
+        instance, so concurrent watcher attempts cannot share lifecycle
+        state.
+        """
+        return ClaudeStreamParserFactory(completion_marker=completion_marker)
 
     def result_parser(self) -> ClaudeResultParser:
         return ClaudeResultParser()

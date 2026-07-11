@@ -143,6 +143,14 @@ INVARIANT_REGISTRY: Final[dict[str, InvariantDef]] = {
         enforcement_layer="hook-deny",
         backends=_CLAUDE_ONLY,
     ),
+    "schedule-wakeup-skill": InvariantDef(
+        id="schedule-wakeup-skill",
+        prohibition="ScheduleWakeup is prohibited in skill sessions (ADR-0001)",
+        source_doc="docs/decisions/0001-prohibit-background-subagent-execution.md",
+        gate_target="guards/background_exec_guard.py",
+        enforcement_layer="hook-deny",
+        backends=_CLAUDE_ONLY,
+    ),
 }
 
 _BAD_KEY_SHAPE = [

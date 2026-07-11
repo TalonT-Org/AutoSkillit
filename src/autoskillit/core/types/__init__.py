@@ -34,6 +34,8 @@ from ._type_inspector import *  # noqa: F401, F403
 from ._type_inspector import __all__ as _inspector_all
 from ._type_invariant_registry import *  # noqa: F401, F403
 from ._type_invariant_registry import __all__ as _invariant_registry_all
+from ._type_lifecycle import *  # noqa: F401, F403
+from ._type_lifecycle import __all__ as _lifecycle_all
 from ._type_phoropter import *  # noqa: F401, F403
 from ._type_phoropter import __all__ as _phoropter_all
 from ._type_plugin_source import *  # noqa: F401, F403
@@ -67,35 +69,36 @@ from ._type_token import __all__ as _token_all
 from ._type_tradition_manifest import *  # noqa: F401, F403
 from ._type_tradition_manifest import __all__ as _tradition_manifest_all
 
-__all__ = (
-    _backend_all
-    + _capture_all
-    + _checkpoint_all
-    + _constants_all
-    + _constants_env_all
-    + _constants_features_all
-    + _constants_registries_all
-    + _dispatch_identity_all
-    + _enums_all
-    + _exceptions_all
-    + _figure_spec_all
-    + _helpers_all
-    + _inspector_all
-    + _invariant_registry_all
-    + _phoropter_all
-    + _plugin_source_all
-    + _protocols_logging_all
-    + _protocols_execution_all
-    + _protocols_github_all
-    + _protocols_workspace_all
-    + _protocols_recipe_all
-    + _protocols_infra_all
-    + _protocols_backend_all
-    + _results_all
-    + _results_execution_all
-    + _resume_all
-    + _session_env_all
-    + _subprocess_all
-    + _token_all
-    + _tradition_manifest_all
+__all__: tuple[str, ...] = (
+    *_backend_all,
+    *_capture_all,
+    *_checkpoint_all,
+    *_constants_all,
+    *_constants_env_all,
+    *_constants_features_all,
+    *_constants_registries_all,
+    *_dispatch_identity_all,
+    *_enums_all,
+    *_exceptions_all,
+    *_figure_spec_all,
+    *_helpers_all,
+    *_inspector_all,
+    *_invariant_registry_all,
+    *_lifecycle_all,
+    *_phoropter_all,
+    *_plugin_source_all,
+    *_protocols_logging_all,
+    *_protocols_execution_all,
+    *_protocols_github_all,
+    *_protocols_workspace_all,
+    *_protocols_recipe_all,
+    *_protocols_infra_all,
+    *_protocols_backend_all,
+    *_results_all,
+    *_results_execution_all,
+    *_resume_all,
+    *_session_env_all,
+    *_subprocess_all,
+    *_token_all,
+    *_tradition_manifest_all,
 )

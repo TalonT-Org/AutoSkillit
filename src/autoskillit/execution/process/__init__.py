@@ -23,6 +23,7 @@ import anyio
 import anyio.abc
 
 from autoskillit.core import (
+    DEFAULT_CLEANUP_BUDGET_SECONDS,
     ChannelConfirmation,
     KillReason,
     SubprocessResult,
@@ -221,6 +222,7 @@ async def run_managed_async(
     inspector_callback: InspectorCallback | None = None,
     workload_basenames: frozenset[str] | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
+    cleanup_budget_seconds: float = DEFAULT_CLEANUP_BUDGET_SECONDS,
 ) -> SubprocessResult:
     """Async subprocess execution with temp file I/O and process tree cleanup.
 
@@ -635,6 +637,7 @@ class DefaultSubprocessRunner:
         inspector_callback: InspectorCallback | None = None,
         workload_basenames: frozenset[str] | None = None,
         on_session_id_resolved: Callable[[str], None] | None = None,
+        cleanup_budget_seconds: float = DEFAULT_CLEANUP_BUDGET_SECONDS,
     ) -> SubprocessResult:
         return await run_managed_async(
             cmd,

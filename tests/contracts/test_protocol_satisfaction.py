@@ -411,6 +411,7 @@ class TestGroupDApiContractPreservation:
             "inspector_callback",
             "workload_basenames",
             "on_session_id_resolved",
+            "cleanup_budget_seconds",
         }
         assert expected == public_params, (
             f"run_managed_async public params changed.\n"
@@ -483,6 +484,7 @@ class TestGroupDApiContractPreservation:
             "inspector_callback",
             "workload_basenames",
             "on_session_id_resolved",
+            "cleanup_budget_seconds",
         }
         assert expected == actual, (
             f"DefaultSubprocessRunner.__call__ params changed.\n"
@@ -619,7 +621,7 @@ class TestGroupDApiContractPreservation:
     # ------------------------------------------------------------------
 
     def test_req_api_005_subprocess_result_field_names(self):
-        """SubprocessResult must have exactly the 16 canonical fields."""
+        """SubprocessResult must have exactly the 17 canonical fields."""
         from autoskillit.core.types import SubprocessResult
 
         fields = {f.name for f in dataclasses.fields(SubprocessResult)}
@@ -640,6 +642,7 @@ class TestGroupDApiContractPreservation:
             "tracked_comm",
             "orphaned_tool_result",
             "inspector_verdict",
+            "cleanup_outcome",
         }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"

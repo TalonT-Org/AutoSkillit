@@ -201,8 +201,8 @@ def _inject_output_format_reinforcement(prompt: str, *, profile_name: str = "") 
         "completion markers, delimiter tokens) MUST be emitted as plain text with NO "
         "markdown formatting. Do NOT wrap token names in bold, italic, or backticks. "
         "Do NOT wrap output blocks in code fences. "
-        "Correct: plan_path = /path/file.md  "
-        "Incorrect: wrapping plan_path in asterisks or backticks"
+        "Correct: artifact_file = /path/file.md  "
+        "Incorrect: wrapping artifact_file in asterisks or backticks"
     )
     return prompt + directive
 

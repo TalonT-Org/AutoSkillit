@@ -1,4 +1,12 @@
-"""Path-token extraction and validation for headless Claude session output."""
+"""Path-token extraction and validation for headless Claude session output.
+
+Single manifest load derives three registries: ``_OUTPUT_PATH_TOKENS_BY_SKILL``
+(raw per-skill ``file_path*`` output sets), ``_OUTPUT_PATH_TOKENS`` (global
+union), and ``_RECOVERABLE_PATH_TOKENS`` (broader union including
+``directory_path``). Known skills scope their token candidate set to their own
+outputs while unknown and zero-output skills conservatively fall back to the
+global set.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +19,6 @@ from autoskillit.core import get_logger, load_yaml, pkg_root
 from autoskillit.execution.session._session_content import _normalize_model_output
 
 logger = get_logger(__name__)
-
 NormalizedMessages = NewType("NormalizedMessages", list[str])
 
 
@@ -28,10 +35,8 @@ def _extract_worktree_path(assistant_messages: NormalizedMessages) -> str | None
     last: str | None = None
     for msg in assistant_messages:
         m = _WORKTREE_PATH_PATTERN.search(msg)
-        if m:
-            candidate = m.group(1).strip()
-            if os.path.isabs(candidate):
-                last = candidate
+        if m and os.path.isabs(candidate := m.group(1).strip()):
+            last = candidate
     return last
 
 
@@ -40,111 +45,84 @@ def _extract_branch_name(assistant_messages: NormalizedMessages) -> str | None:
     last: str | None = None
     for msg in assistant_messages:
         m = _BRANCH_NAME_PATTERN.search(msg)
-        if m:
-            candidate = m.group(1).strip()
-            if candidate:
-                last = candidate
+        if m and (candidate := m.group(1).strip()):
+            last = candidate
     return last
 
 
-# Intentionally excluded: these tokens are handled by dedicated extractors
-# (_WORKTREE_PATH_PATTERN for worktree_path; branch_name is used as a string,
-# not for path-contamination checks).
-_INTENTIONALLY_EXCLUDED_PATH_TOKENS: frozenset[str] = frozenset(
-    {
-        "worktree_path",
-        "branch_name",
-    }
+_INTENTIONALLY_EXCLUDED_PATH_TOKENS: frozenset[str] = frozenset({"worktree_path", "branch_name"})
+
+
+def _build_path_token_registry() -> tuple[
+    dict[str, frozenset[str]], frozenset[str], frozenset[str]
+]:
+    """Single-load derivation of (per-skill, output, recoverable) registries."""
+    empty: tuple[dict[str, frozenset[str]], frozenset[str], frozenset[str]] = (
+        {},
+        frozenset(),
+        frozenset(),
+    )
+    try:
+        manifest = load_yaml(pkg_root() / "recipe" / "skill_contracts.yaml")
+    except FileNotFoundError:
+        logger.debug("skill_contracts.yaml not found; path-token registries will be empty")
+        return empty
+    except Exception:
+        logger.warning("Failed to derive path-token registries from contracts YAML", exc_info=True)
+        return empty
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("skills"), dict):
+        logger.debug("skill_contracts.yaml is empty or non-dict; registries will be empty")
+        return empty
+    by_skill: dict[str, frozenset[str]] = {}
+    output_tokens: set[str] = set()
+    recoverable_tokens: set[str] = set()
+    for skill_name, skill_data in manifest["skills"].items():
+        if not isinstance(skill_data, dict):
+            by_skill[skill_name] = frozenset()
+            continue
+        outputs = skill_data.get("outputs", [])
+        if not isinstance(outputs, list):
+            by_skill[skill_name] = frozenset()
+            continue
+        raw_outputs: set[str] = set()
+        for out in outputs:
+            if not isinstance(out, dict):
+                continue
+            name = out.get("name", "")
+            out_type = out.get("type", "")
+            if not isinstance(name, str) or not isinstance(out_type, str):
+                continue
+            if not name:
+                continue
+            if out_type.startswith("file_path"):
+                raw_outputs.add(name)
+                output_tokens.add(name)
+                recoverable_tokens.add(name)
+            elif out_type == "directory_path":
+                recoverable_tokens.add(name)
+        by_skill[skill_name] = frozenset(raw_outputs)
+    excluded = _INTENTIONALLY_EXCLUDED_PATH_TOKENS
+    return (
+        by_skill,
+        frozenset(output_tokens - excluded),
+        frozenset(recoverable_tokens - excluded),
+    )
+
+
+_OUTPUT_PATH_TOKENS_BY_SKILL, _OUTPUT_PATH_TOKENS, _RECOVERABLE_PATH_TOKENS = (
+    _build_path_token_registry()
 )
 
 
-def _build_path_token_set() -> frozenset[str]:
-    """Derive the set of file-path output token names from skill_contracts.yaml.
+def _select_output_path_tokens(skill_name: str | None) -> frozenset[str]:
+    """Return token candidate set for the running skill."""
+    if not skill_name:
+        return _OUTPUT_PATH_TOKENS
+    raw = _OUTPUT_PATH_TOKENS_BY_SKILL.get(skill_name)
+    if raw is None or not raw:
+        return _OUTPUT_PATH_TOKENS
+    return raw & _OUTPUT_PATH_TOKENS
 
-    This replaces the manually-maintained frozenset and ensures new skills added
-    to the contracts file are automatically included in path-contamination checks.
-    Falls back to an empty frozenset if the manifest is unavailable (e.g., in
-    test environments where the package is not installed).
-
-    Filters outputs where type starts with "file_path" (covers both "file_path"
-    and "file_path_list"). The outputs section in skill_contracts.yaml is a list
-    of dicts with "name" and "type" keys — not a mapping.
-
-    Loads the YAML directly via IL-0 core utilities to avoid an upward IL-1→IL-2 import.
-    """
-    try:
-        manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
-        manifest = load_yaml(manifest_path)
-        if not isinstance(manifest, dict):
-            logger.debug(
-                "skill_contracts.yaml is empty or non-dict; _OUTPUT_PATH_TOKENS will be empty"
-            )
-            return frozenset()
-        result = (
-            frozenset(
-                out.get("name", "")
-                for skill_data in manifest.get("skills", {}).values()
-                for out in skill_data.get("outputs", [])
-                if isinstance(out, dict)
-                and out.get("name", "")
-                and out.get("type", "").startswith("file_path")
-            )
-            - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
-        )
-        logger.debug("_OUTPUT_PATH_TOKENS derived from contracts", count=len(result))
-        return result
-    except FileNotFoundError:
-        logger.debug("skill_contracts.yaml not found; _OUTPUT_PATH_TOKENS will be empty")
-        return frozenset()
-    except Exception:
-        logger.warning("Failed to derive _OUTPUT_PATH_TOKENS from contracts YAML", exc_info=True)
-        return frozenset()
-
-
-_OUTPUT_PATH_TOKENS: frozenset[str] = _build_path_token_set()
-
-
-def _build_recoverable_path_tokens() -> frozenset[str]:
-    """Derive token names eligible for write-artifact recovery from skill_contracts.yaml.
-
-    Includes outputs where type starts with "file_path" OR equals "directory_path".
-    Broader than _OUTPUT_PATH_TOKENS (which excludes directory_path). Used by
-    _headless_recovery.py for synthesis and nudge classification.
-
-    Loads the YAML directly via IL-0 core utilities to avoid an upward IL-1→IL-2 import.
-    """
-    try:
-        manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
-        manifest = load_yaml(manifest_path)
-        if not isinstance(manifest, dict):
-            return frozenset()
-        result = (
-            frozenset(
-                out.get("name", "")
-                for skill_data in manifest.get("skills", {}).values()
-                for out in skill_data.get("outputs", [])
-                if isinstance(out, dict)
-                and out.get("name", "")
-                and (
-                    out.get("type", "").startswith("file_path")
-                    or out.get("type") == "directory_path"
-                )
-            )
-            - _INTENTIONALLY_EXCLUDED_PATH_TOKENS
-        )
-        logger.debug("_RECOVERABLE_PATH_TOKENS derived from contracts", count=len(result))
-        return result
-    except FileNotFoundError:
-        logger.debug("skill_contracts.yaml not found; _RECOVERABLE_PATH_TOKENS will be empty")
-        return frozenset()
-    except Exception:
-        logger.warning(
-            "Failed to derive _RECOVERABLE_PATH_TOKENS from contracts YAML", exc_info=True
-        )
-        return frozenset()
-
-
-_RECOVERABLE_PATH_TOKENS: frozenset[str] = _build_recoverable_path_tokens()
 
 _OUTPUT_PATH_PATTERN: re.Pattern[str] = (
     re.compile(
@@ -152,33 +130,57 @@ _OUTPUT_PATH_PATTERN: re.Pattern[str] = (
         re.MULTILINE,
     )
     if _OUTPUT_PATH_TOKENS
-    else re.compile(r"(?!)")  # never-matches sentinel when token set is empty
+    else re.compile(r"(?!)")
 )
 
 
-def _extract_output_paths(assistant_messages: NormalizedMessages) -> dict[str, str]:
-    """Extract structured output path tokens from session output."""
-    if not assistant_messages:
-        logger.debug("_extract_output_paths called with empty assistant_messages")
+def _extract_output_paths(
+    assistant_messages: NormalizedMessages,
+    *,
+    token_scope: frozenset[str],
+) -> dict[str, str]:
+    """Extract structured output path tokens, filtered against ``token_scope``."""
     paths: dict[str, str] = {}
     for msg in assistant_messages:
         for m in _OUTPUT_PATH_PATTERN.finditer(msg):
             token, value = m.group(1), m.group(2).strip()
+            if token not in token_scope:
+                continue
             if os.path.isabs(value):
                 paths[token] = value
     return paths
 
 
-def _validate_output_paths(
-    extracted_paths: dict[str, str],
+def _is_path_outside_cwd(
+    path: str,
     cwd: str,
-) -> str | None:
+    *,
+    allow_relative: bool = False,
+) -> bool:
+    """Return True iff ``path`` lexically normalizes outside ``cwd``."""
+    if not cwd or not os.path.isabs(cwd):
+        return False
+    norm_cwd = os.path.normpath(cwd)
+    if norm_cwd == "/":
+        return False
+    if not isinstance(path, str) or not path:
+        return False
+    if not os.path.isabs(path):
+        if not allow_relative:
+            return False
+        path = os.path.join(norm_cwd, path)
+    normalized = os.path.normpath(path)
+    cwd_prefix = norm_cwd + "/"
+    return not normalized.startswith(cwd_prefix) and normalized != norm_cwd
+
+
+def _validate_output_paths(extracted_paths: dict[str, str], cwd: str) -> str | None:
     """Return a diagnostic string if any path is outside cwd, else None."""
-    if not os.path.isabs(cwd) or cwd == "/":
+    if not os.path.isabs(cwd) or os.path.normpath(cwd) == "/":
         return None
-    cwd_prefix = cwd.rstrip("/") + "/"
-    violations = []
-    for token, path in extracted_paths.items():
-        if not path.startswith(cwd_prefix) and path != cwd.rstrip("/"):
-            violations.append(f"{token} '{path}' is outside session cwd '{cwd}'")
+    violations = [
+        f"{token} '{path}' is outside session cwd '{cwd}'"
+        for token, path in extracted_paths.items()
+        if _is_path_outside_cwd(path, cwd, allow_relative=False)
+    ]
     return "; ".join(violations) if violations else None

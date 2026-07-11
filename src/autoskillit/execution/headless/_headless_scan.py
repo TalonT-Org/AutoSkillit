@@ -12,6 +12,7 @@ import json
 import os
 
 from autoskillit.core import extract_bash_write_targets
+from autoskillit.execution.headless._headless_path_tokens import _is_path_outside_cwd
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
 
@@ -34,7 +35,6 @@ def _scan_jsonl_write_paths(
     if not stdout.strip() or not cwd or not os.path.isabs(cwd):
         return []
 
-    cwd_prefix = cwd.rstrip("/") + "/"
     warnings: list[str] = []
 
     for raw_line in stdout.strip().splitlines():
@@ -61,27 +61,25 @@ def _scan_jsonl_write_paths(
             if not isinstance(inputs, dict):
                 continue
 
-            if tool_name in write_tool_names:
-                file_path = inputs.get("file_path", "")
-                if (
-                    isinstance(file_path, str)
-                    and os.path.isabs(file_path)
-                    and not file_path.startswith(cwd_prefix)
-                    and file_path != cwd.rstrip("/")
-                ):
-                    warnings.append(
-                        f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
-                    )
-
-            elif tool_name == bash_tool_name:
+            # Bash-specific branch must take precedence over the generic file_path
+            # branch: write_guard_tool_names may include Bash, but Bash writes are
+            # extracted from the command string, not from input.file_path.
+            if tool_name == bash_tool_name:
                 command = inputs.get("command", "")
                 if isinstance(command, str):
                     targets = extract_bash_write_targets(command, cwd)
                     for path in targets:
-                        if not path.startswith(cwd_prefix) and path != cwd.rstrip("/"):
+                        if _is_path_outside_cwd(path, cwd):
+                            normalized = os.path.normpath(path)
                             warnings.append(
-                                f"Bash command contained write target '{path}'"
+                                f"Bash command contained write target '{normalized}'"
                                 f" outside session cwd '{cwd}'"
                             )
+            elif tool_name in write_tool_names:
+                file_path = inputs.get("file_path", "")
+                if isinstance(file_path, str) and _is_path_outside_cwd(file_path, cwd):
+                    warnings.append(
+                        f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
+                    )
 
     return warnings

@@ -58,7 +58,9 @@ def test_headless_facade_does_not_define_recovery_functions():
 def test_headless_facade_does_not_define_path_token_functions():
     src = (SRC_EXECUTION / "headless" / "__init__.py").read_text()
     for fn in (
-        "_build_path_token_set",
+        "_build_path_token_registry",
+        "_select_output_path_tokens",
+        "_is_path_outside_cwd",
         "_extract_output_paths",
         "_validate_output_paths",
         "_extract_worktree_path",

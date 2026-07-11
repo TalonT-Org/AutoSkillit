@@ -23,21 +23,27 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 class TestExtractOutputPaths:
     def test_extracts_single_path(self):
-        from autoskillit.execution.headless import _extract_output_paths
+        from autoskillit.execution.headless import (
+            _OUTPUT_PATH_TOKENS,
+            _extract_output_paths,
+        )
 
         msgs = NormalizedMessages(["plan_path = /correct/path/.autoskillit/temp/make-plan/foo.md"])
-        result = _extract_output_paths(msgs)
+        result = _extract_output_paths(msgs, token_scope=_OUTPUT_PATH_TOKENS)
         assert result == {"plan_path": "/correct/path/.autoskillit/temp/make-plan/foo.md"}
 
     def test_extracts_multiple_tokens(self):
-        from autoskillit.execution.headless import _extract_output_paths
+        from autoskillit.execution.headless import (
+            _OUTPUT_PATH_TOKENS,
+            _extract_output_paths,
+        )
 
         msg = (
             "plan_path = /clone/.autoskillit/temp/make-plan/plan.md\n"
             "summary_path = /clone/.autoskillit/temp/report/summary.md\n"
             "investigation_path = /clone/.autoskillit/temp/investigate/inv.md"
         )
-        result = _extract_output_paths(NormalizedMessages([msg]))
+        result = _extract_output_paths(NormalizedMessages([msg]), token_scope=_OUTPUT_PATH_TOKENS)
         assert result == {
             "plan_path": "/clone/.autoskillit/temp/make-plan/plan.md",
             "summary_path": "/clone/.autoskillit/temp/report/summary.md",
@@ -45,21 +51,34 @@ class TestExtractOutputPaths:
         }
 
     def test_returns_empty_when_no_tokens(self):
-        from autoskillit.execution.headless import _extract_output_paths
+        from autoskillit.execution.headless import (
+            _OUTPUT_PATH_TOKENS,
+            _extract_output_paths,
+        )
 
-        result = _extract_output_paths(NormalizedMessages(["no tokens here", "just regular text"]))
+        result = _extract_output_paths(
+            NormalizedMessages(["no tokens here", "just regular text"]),
+            token_scope=_OUTPUT_PATH_TOKENS,
+        )
         assert result == {}
 
     def test_ignores_non_absolute_paths(self):
-        from autoskillit.execution.headless import _extract_output_paths
+        from autoskillit.execution.headless import (
+            _OUTPUT_PATH_TOKENS,
+            _extract_output_paths,
+        )
 
         result = _extract_output_paths(
-            NormalizedMessages(["plan_path = .autoskillit/temp/make-plan/foo.md"])
+            NormalizedMessages(["plan_path = .autoskillit/temp/make-plan/foo.md"]),
+            token_scope=_OUTPUT_PATH_TOKENS,
         )
         assert result == {}
 
     def test_extracts_from_multiple_messages(self):
-        from autoskillit.execution.headless import _extract_output_paths
+        from autoskillit.execution.headless import (
+            _OUTPUT_PATH_TOKENS,
+            _extract_output_paths,
+        )
 
         msgs = NormalizedMessages(
             [
@@ -67,14 +86,17 @@ class TestExtractOutputPaths:
                 "investigation_path = /second/path",
             ]
         )
-        result = _extract_output_paths(msgs)
+        result = _extract_output_paths(msgs, token_scope=_OUTPUT_PATH_TOKENS)
         assert result == {
             "plan_path": "/first/path",
             "investigation_path": "/second/path",
         }
 
     def test_last_occurrence_wins(self):
-        from autoskillit.execution.headless import _extract_output_paths
+        from autoskillit.execution.headless import (
+            _OUTPUT_PATH_TOKENS,
+            _extract_output_paths,
+        )
 
         msgs = NormalizedMessages(
             [
@@ -82,7 +104,7 @@ class TestExtractOutputPaths:
                 "plan_path = /second/path",
             ]
         )
-        result = _extract_output_paths(msgs)
+        result = _extract_output_paths(msgs, token_scope=_OUTPUT_PATH_TOKENS)
         assert result == {"plan_path": "/second/path"}
 
 
@@ -147,10 +169,17 @@ class TestBuildSkillResultPathContamination:
         )
 
     def test_path_contamination_detected(self):
-        """Output paths outside cwd override success to False."""
+        """Output paths outside cwd combined with a real out-of-CWD Claude Write
+        override success to False with PATH_CONTAMINATION routing."""
         path = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        write_outside = _make_tool_use_line(
+            "Write",
+            {"file_path": "/wrong/source/repo/.autoskillit/temp/stolen.md", "content": "x"},
+        )
         stdout = (
             self._assistant_ndjson(f"plan_path = {path}")
+            + "\n"
+            + write_outside
             + "\n"
             + _success_session_json("Plan created.")
         )
@@ -168,8 +197,14 @@ class TestBuildSkillResultPathContamination:
         The orchestrator must route to on_failure, not on_context_limit.
         """
         path = "/wrong/source/repo/.autoskillit/temp/make-plan/bar.md"
+        write_outside = _make_tool_use_line(
+            "Write",
+            {"file_path": "/wrong/source/repo/.autoskillit/temp/stolen.md", "content": "x"},
+        )
         stdout = (
             self._assistant_ndjson(f"plan_path = {path}")
+            + "\n"
+            + write_outside
             + "\n"
             + _success_session_json("Plan created.")
         )
@@ -181,8 +216,14 @@ class TestBuildSkillResultPathContamination:
     def test_no_contamination_when_paths_under_cwd(self):
         """All output paths under cwd yields normal result."""
         path = "/correct/clone/.autoskillit/temp/make-plan/foo.md"
+        write_inside = _make_tool_use_line(
+            "Write",
+            {"file_path": "/correct/clone/.autoskillit/temp/make-plan/foo.md", "content": "x"},
+        )
         stdout = (
             self._assistant_ndjson(f"plan_path = {path}")
+            + "\n"
+            + write_inside
             + "\n"
             + _success_session_json("Plan created.")
         )
@@ -207,6 +248,456 @@ class TestBuildSkillResultPathContamination:
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
         sr = _build_skill_result(result, cwd="/clone/path", backend=ClaudeCodeBackend())
         assert sr.success is True
+
+
+class TestBuildSkillResultPathContaminationRound6Regression:
+    """Issue #4150: external plan_path echoed in assistant text + only in-CWD writes
+    must NOT trigger contamination when the running skill is implement-worktree-no-merge
+    (zero-output skill that legitimately echoes plan_path)."""
+
+    @staticmethod
+    def _assistant_ndjson(text: str) -> str:
+        return json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": text}]},
+            }
+        )
+
+    def test_round_6_recurrence_external_plan_path_plus_in_cwd_writes(self):
+        """The exact Round-6 shape: external plan_path echoed + many valid in-CWD writes.
+
+        The session echos plan_path=<external-plan> in parent text, but every Write
+        targets an in-CWD path. WriteEvidence.write_call_count > 0, but
+        write_path_warnings == []. This must remain successful."""
+        worktree_cwd = "/worktree/clone"
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        plan_token_line = self._assistant_ndjson(f"plan_path = {external_plan}")
+        write_inside = _make_tool_use_line(
+            "Write",
+            {
+                "file_path": f"{worktree_cwd}/.autoskillit/temp/foo.md",
+                "content": "in-cwd write",
+            },
+        )
+        edit_inside = _make_tool_use_line(
+            "Edit",
+            {
+                "file_path": f"{worktree_cwd}/src/foo.py",
+                "old_string": "a",
+                "new_string": "b",
+            },
+        )
+        stdout = (
+            plan_token_line
+            + "\n"
+            + write_inside
+            + "\n"
+            + edit_inside
+            + "\n"
+            + _success_session_json("Implementation complete.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd=worktree_cwd,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is True, (
+            f"Round-6 recurrence: contamination wrongly triggered. subtype={sr.subtype!r}"
+        )
+        assert sr.subtype != "path_contamination"
+        assert sr.retry_reason != RetryReason.PATH_CONTAMINATION
+        assert sr.write_path_warnings == []
+        assert sr.evidence.write_call_count == 2
+
+    def test_round_6_lexical_traversal_token_outside_cwd(self):
+        """A plan_path in `..` traversal form lexically normalizes outside CWD —
+        but with no actual write to the external target, success must hold."""
+        worktree_cwd = "/worktree/clone"
+        traversal_token = f"{worktree_cwd}/../external/plan.md"
+        write_inside = _make_tool_use_line(
+            "Write",
+            {"file_path": f"{worktree_cwd}/.autoskillit/temp/inside.md", "content": "x"},
+        )
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {traversal_token}")
+            + "\n"
+            + write_inside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:implement-worktree-no-merge /external/plan.md",
+            cwd=worktree_cwd,
+            backend=ClaudeCodeBackend(),
+        )
+        # Traversal echo + in-CWD write: text_path_violation YES, boundary_proof NO → preserve.
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_external_plan_path_token_with_real_out_of_cwd_write_still_contaminates(self):
+        """An external plan_path echo PLUS a real Claude Write to that external path
+        must still produce path_contamination (broad input exclusion is rejected)."""
+        worktree_cwd = "/worktree/clone"
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        write_outside = _make_tool_use_line(
+            "Write",
+            {"file_path": external_plan, "content": "leaked"},
+        )
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + write_outside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd=worktree_cwd,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+        assert any(external_plan in w for w in sr.write_path_warnings)
+
+    def test_traversal_token_with_real_external_write_contaminates(self):
+        """A plan_path in `..` traversal form paired with a real external Write
+        to the normalized target must trigger contamination — completing the
+        traversal quadrant: text+proof → contaminate."""
+        worktree_cwd = "/worktree/clone"
+        traversal_token = f"{worktree_cwd}/../external/plan.md"
+        external_target = "/worktree/external/plan.md"
+        write_external = _make_tool_use_line(
+            "Write",
+            {"file_path": external_target, "content": "leaked"},
+        )
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {traversal_token}")
+            + "\n"
+            + write_external
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=f"/autoskillit:implement-worktree-no-merge {external_target}",
+            cwd=worktree_cwd,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+        assert any(external_target in w for w in sr.write_path_warnings)
+
+
+class TestBuildSkillResultBashOutOfCwdBoundaryProof:
+    """Bash targets outside CWD must reach _build_skill_result boundary proof even when
+    write_call_count is zero (Bash is not Write/Edit)."""
+
+    @staticmethod
+    def _assistant_ndjson(text: str) -> str:
+        return json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": text}]},
+            }
+        )
+
+    def test_bash_redirect_outside_cwd_with_text_candidate_contaminates(self):
+        """Bash redirect to external target + scoped plan_path echo → contamination.
+        This proves the Bash branch in _scan_jsonl_write_paths is reachable from the
+        production _build_skill_result wiring (Bash is in write_guard_tool_names)."""
+        worktree_cwd = "/worktree/clone"
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        bash_outside = _make_tool_use_line(
+            "Bash", {"command": "echo leaked > /wrong/source/repo/leaked.txt"}
+        )
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + bash_outside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            cwd=worktree_cwd,
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+        # Bash warnings surface even when no Write/Edit happened.
+        assert any("/wrong/source/repo/leaked.txt" in w for w in sr.write_path_warnings)
+        assert sr.evidence.write_call_count == 0
+
+    def test_relative_bash_target_joins_to_cwd_then_lexically_normalizes(self):
+        """A Bash redirect to '../outside.txt' must be joined to cwd and recognized as
+        outside CWD after lexical normalization — not silently passed by prefix check."""
+        worktree_cwd = "/worktree/clone"
+        bash_relative = _make_tool_use_line("Bash", {"command": "echo x > ../outside.txt"})
+        stdout = bash_relative + "\n" + _success_session_json("Done.")
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            cwd=worktree_cwd,
+            backend=ClaudeCodeBackend(),
+        )
+        # /worktree/clone/../outside.txt normalizes to /worktree/outside.txt, outside CWD.
+        assert any("/worktree/outside.txt" in w for w in sr.write_path_warnings)
+
+    def test_proof_only_quadrant_preserves_success_with_diagnostic(self):
+        """Out-of-CWD write with no scoped text candidate preserves success
+        and the write_path_warnings diagnostic remains available."""
+        worktree_cwd = "/worktree/clone"
+        write_outside = _make_tool_use_line(
+            "Write",
+            {"file_path": "/wrong/source/repo/leaked.md", "content": "x"},
+        )
+        # No assistant text emits plan_path or any other output-path token.
+        stdout = write_outside + "\n" + _success_session_json("Done.")
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            cwd=worktree_cwd,
+            backend=ClaudeCodeBackend(),
+        )
+        # No text candidate → not contamination, but warning surfaces.
+        assert sr.subtype != "path_contamination"
+        assert sr.write_path_warnings  # diagnostic preserved
+        assert any("/wrong/source/repo/leaked.md" in w for w in sr.write_path_warnings)
+
+
+class TestBuildSkillResultUnknownAndZeroOutputFallback:
+    """Unknown skill and known zero-output skill: global fallback extracts a token, but
+    with only in-CWD writes the result remains successful."""
+
+    @staticmethod
+    def _assistant_ndjson(text: str) -> str:
+        return json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": text}]},
+            }
+        )
+
+    def test_unknown_skill_global_fallback_in_cwd_writes_succeeds(self):
+        """Unknown skill falls back to global set; in-CWD writes keep the result successful."""
+        external_plan = "/worktree/clone/.autoskillit/temp/make-plan/foo.md"
+        write_inside = _make_tool_use_line("Write", {"file_path": external_plan, "content": "x"})
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + write_inside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:no-such-skill-anywhere x",
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_zero_output_skill_global_fallback_out_of_cwd_write_contaminates(self):
+        """Known zero-output skill (implement-worktree-no-merge) falls back to global;
+        external text echo + real out-of-CWD write still produces contamination."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        write_outside = _make_tool_use_line("Write", {"file_path": external_plan, "content": "x"})
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + write_outside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+
+    def test_unknown_skill_text_only_succeeds(self):
+        """Unknown skill + external plan_path text + no writes at all → success.
+        Text alone is not contamination; proof (writes) is required."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:no-such-skill-anywhere x",
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_unknown_skill_external_write_contaminates(self):
+        """Unknown skill + external plan_path text + external Write → contamination.
+        Global fallback extracts the token; out-of-CWD write proves it."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        write_outside = _make_tool_use_line("Write", {"file_path": external_plan, "content": "x"})
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + write_outside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command="/autoskillit:no-such-skill-anywhere x",
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.subtype == "path_contamination"
+        assert sr.retry_reason == RetryReason.PATH_CONTAMINATION
+
+    def test_zero_output_skill_text_only_succeeds(self):
+        """Known zero-output skill (implement-worktree-no-merge) + external plan_path text
+        + no writes → success. Text echo alone is not contamination."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_zero_output_skill_in_cwd_write_succeeds(self):
+        """Known zero-output skill + external plan_path text + in-CWD Write → success.
+        The text echo doesn't match the in-CWD write proof — no contamination."""
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        in_cwd_path = "/worktree/clone/.autoskillit/temp/make-plan/foo.md"
+        write_inside = _make_tool_use_line("Write", {"file_path": in_cwd_path, "content": "x"})
+        stdout = (
+            self._assistant_ndjson(f"plan_path = {external_plan}")
+            + "\n"
+            + write_inside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        sr = _build_skill_result(
+            result,
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd="/worktree/clone",
+            backend=ClaudeCodeBackend(),
+        )
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+        assert sr.write_path_warnings == []
+
+
+class TestBuildSkillResultSlashFormClassifierBoundary:
+    """Slash-form scoping must work end-to-end through _build_skill_result — proving that
+    extract_skill_name() is correctly wired to _select_output_path_tokens() at the
+    production boundary. Each test emits an in-CWD plan_path token + matching in-CWD Write;
+    scoped skills use their own token set, global fallback skills use the full set."""
+
+    @staticmethod
+    def _assistant_ndjson(text: str) -> str:
+        return json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": text}]},
+            }
+        )
+
+    @staticmethod
+    def _success_clean(cwd: str, skill_command: str):
+        in_cwd_path = f"{cwd}/.autoskillit/temp/make-plan/foo.md"
+        write_inside = _make_tool_use_line(
+            "Write",
+            {"file_path": in_cwd_path, "content": "ok"},
+        )
+        stdout = (
+            TestBuildSkillResultSlashFormClassifierBoundary._assistant_ndjson(
+                f"plan_path = {in_cwd_path}"
+            )
+            + "\n"
+            + write_inside
+            + "\n"
+            + _success_session_json("Done.")
+        )
+        result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        return _build_skill_result(
+            result,
+            skill_command=skill_command,
+            cwd=cwd,
+            backend=ClaudeCodeBackend(),
+        )
+
+    def test_short_form_make_plan(self):
+        sr = self._success_clean("/worktree/clone", "/make-plan x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_namespaced_make_plan(self):
+        sr = self._success_clean("/worktree/clone", "/autoskillit:make-plan x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_short_form_implement_worktree_no_merge(self):
+        sr = self._success_clean("/worktree/clone", "/implement-worktree-no-merge x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_namespaced_implement_worktree_no_merge(self):
+        sr = self._success_clean("/worktree/clone", "/autoskillit:implement-worktree-no-merge x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_short_form_unknown_skill(self):
+        sr = self._success_clean("/worktree/clone", "/unknown-skill-xyz x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
+
+    def test_namespaced_unknown_skill(self):
+        sr = self._success_clean("/worktree/clone", "/autoskillit:unknown-skill-xyz x")
+        assert sr.success is True
+        assert sr.subtype != "path_contamination"
 
 
 class TestRunHeadlessCorePassesCwd:
@@ -343,6 +834,16 @@ class TestScanJsonlWritePaths:
     def test_bash_redirect_inside_cwd_clean(self):
         line = _make_tool_use_line("Bash", {"command": f"echo hello > {self.CWD}/out.txt"})
         assert _scan_jsonl_write_paths(line, self.CWD) == []
+
+    def test_relative_bash_traversal_detected_directly(self):
+        """A Bash redirect to '../outside.txt' must be detected by _scan_jsonl_write_paths
+        directly — joined to cwd, lexically normalized, and reported with the normalized
+        absolute path. This exercises the scanner contract without going through
+        _build_skill_result."""
+        line = _make_tool_use_line("Bash", {"command": "echo x > ../outside.txt"})
+        warnings = _scan_jsonl_write_paths(line, "/clone/worktree")
+        assert len(warnings) == 1
+        assert "/clone/outside.txt" in warnings[0]
 
     def test_exact_warning_count_for_mixed_bash(self):
         line = _make_tool_use_line(

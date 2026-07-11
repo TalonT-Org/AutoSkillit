@@ -53,6 +53,11 @@ _SOURCE_DEPENDENCIES: dict[str, frozenset[str]] = {
             "src/autoskillit/hooks/registry.sha256",
         }
     ),
+    "execution": frozenset(
+        {
+            "tests/execution/backends/fixtures/*.jsonl",
+        }
+    ),
 }
 
 

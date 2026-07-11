@@ -99,6 +99,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
+        "_channel_a_pump",  # _PUMP_READY/_PUMP_CLOSED sentinels (issue #4233)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -888,6 +889,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "server/tools": 29,  # +_preflight.py +_authority_feedback.py +_serve_helpers.py
         "hooks/guards": 32,  # +fleet_claim_guard, +reset_resume_gate, +recipe_read_guard
         "execution/backends": 13,  # +_claude_lifecycle.py (issue #4233)
+        "execution/process": 11,  # +pump +actor +ownership (issue #4233)
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []

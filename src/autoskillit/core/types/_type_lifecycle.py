@@ -99,11 +99,16 @@ class LifecycleDecision(Enum):
     ``CHILD_WORK_FAILED`` is distinct from ``CLEANUP_FAILED``: it signals that a
     fresh post-quiescence parent candidate arrived while the previous turn's
     obligations remain unresolved. The two decisions must never collapse.
+
+    ``CATCH_UP_FAILED`` is distinct from ``CHILD_WORK_FAILED``: it signals that
+    a Channel B proposal or process-exit requested watermark catch-up but the
+    required Channel A offset was never reached before the deadline.
     """
 
     CONTINUE = "continue"
     ELIGIBLE = "eligible"
     CHILD_WORK_FAILED = "child_work_failed"
+    CATCH_UP_FAILED = "catch_up_failed"
 
 
 ATTEMPT_ACTIVE_STATES: frozenset[ChildAttemptState] = frozenset({ChildAttemptState.ACTIVE})

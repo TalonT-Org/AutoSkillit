@@ -9,11 +9,14 @@ Subprocess lifecycle management — spawn, monitor, race, kill.
 | `__init__.py` | Main module: `run_managed_async()`, `run_managed_sync()`, `DefaultSubprocessRunner` |
 | `_process_io.py` | `create_temp_io()` context manager for temp file stdin/stdout/stderr |
 | `_process_jsonl.py` | JSONL parsing: `_jsonl_contains_marker`, `_jsonl_has_record_type` |
-| `_process_kill.py` | `kill_process_tree()` (sync) and `async_kill_process_tree()` (async): SIGTERM -> wait -> SIGKILL |
+| `_process_kill.py` | `kill_process_tree()` (sync) and `async_kill_process_tree()` (async): SIGTERM -> wait -> SIGKILL — sole authorized caller lives in `execute_termination_action` |
 | `_process_monitor.py` | Async monitor coroutines: `_heartbeat()` (Channel A), `_session_log_monitor()` (Channel B) |
 | `_process_pty.py` | `pty_wrap_command()` — wraps command with `script(1)` for PTY allocation |
 | `_process_race.py` | `RaceAccumulator`, `RaceSignals`, watcher coroutines, `resolve_termination()` |
 | `_child_lifecycle.py` | `ChildLifecycleCoordinator`, `ChildLifecycleCoordinatorHandle`, `make_coordinator_handle` — single-owner reducer of immutable child-lifecycle observations; tracks `attempt_generation` (replaces/replaced_by) and `parent_turn_generation` (marker-bearing parent-assistant UUIDs) consumed by the completion gate (issue #4233) |
+| `_channel_a_pump.py` | One persistent binary Channel A pump per invocation: owns the bound `StreamParser`, byte cursor, split-UTF-8 carry, and emits ordered `ChannelABatch` facts with exclusive-end watermarks (issue #4233) |
+| `_lifecycle_actor.py` | One actor per invocation: sole mutable reducer and completion authority; consumes Channel A/B/process-exit facts, dispatches watermark catch-up commands, emits `LifecycleDecision` (CONTINUE / ELIGIBLE / CHILD_WORK_FAILED / CATCH_UP_FAILED) (issue #4233) |
+| `_process_ownership.py` | Per-invocation owned process identity tracker: canonical root + retained descendant PID/create-time identities, post-reap process-group enumeration, PID-reuse protection (issue #4233) |
 
 ## Architecture Notes
 

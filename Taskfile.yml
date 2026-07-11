@@ -263,6 +263,72 @@ tasks:
         echo ""
         autoskillit order smoke-test
 
+  update-codex-fixtures:
+    desc: Regenerate Codex deterministic conformance fixtures via --update-fixtures
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    cmds:
+      - |
+        mkdir -p .autoskillit/temp
+        TEST_OUTPUT=".autoskillit/temp/update-codex-fixtures-$(date +%Y-%m-%d_%H%M%S).txt"
+        echo "Updating Codex deterministic conformance fixtures"
+        echo "Output: $TEST_OUTPUT"
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        set -o pipefail
+        set +e
+        $PYTEST_CMD tests/execution/backends/test_codex_deterministic_conformance.py --update-fixtures -n0 -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        echo ""
+        echo "Codex fixture update output saved to: $TEST_OUTPUT"
+        exit $PYTEST_EXIT
+
+  test-smoke-claude:
+    desc: Run Claude CLI live smoke tests (requires installed/authenticated Claude CLI)
+    deps: [_tmpdir-setup]
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      CLAUDE_CODE_SMOKE_TEST: "1"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+    preconditions:
+      - sh: command -v claude
+        msg: "Claude CLI required: install the claude CLI and authenticate"
+    cmds:
+      - |
+        mkdir -p .autoskillit/temp
+        TEST_OUTPUT=".autoskillit/temp/smoke-claude-$(date +%Y-%m-%d_%H%M%S).txt"
+        echo "Running Claude CLI smoke tests"
+        echo "Output: $TEST_OUTPUT"
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        set -o pipefail
+        set +e
+        $PYTEST_CMD tests/execution/backends/test_cli_conformance_probes.py -m canary -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        echo ""
+        echo "Claude smoke test output saved to: $TEST_OUTPUT"
+        exit $PYTEST_EXIT
+
   check-docs:
     desc: Verify documentation counts match source code
     cmds:

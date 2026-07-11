@@ -11,6 +11,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `conftest.py` | Shared fixtures and helpers for tests/execution/ |
 | `test_anomaly_detection.py` | Tests for post-hoc anomaly detection over ProcSnapshot data |
 | `test_child_lifecycle_coordinator.py` | Tests for `ChildLifecycleCoordinator` reducer: same-kind aliases, blank-ID isolation, UUID deduplication, terminal-before-declaration, successful delivery, unresolved failure/cancellation/timeout, Agent/Bash collision negatives, replacement generations, candidate identity/provenance, DEFERRED->SUPERSEDED, ELIGIBLE gating, CHILD_WORK_FAILED (issue #4233) |
+| `test_lifecycle_actor.py` | Tests for the Channel A pump and lifecycle actor: binary split / multibyte carry handling, exclusive-end watermarks, exactly-once parsing, ordered whole-read reduction, typed decisions (CONTINUE/ELIGIBLE/CHILD_WORK_FAILED/CATCH_UP_FAILED), saturated command stream typed fail-closed (issue #4233) |
+| `test_process_child_lifecycle_integration.py` | Five-child real-process replay: fixture structure, parent markers (early + later), terminal/delivery evidence, NDJSON parse gate (issue #4233) |
 | `test_model_alias_registry.py` | Shared alias registry consistency tests — key parity between anomaly_detection and backend alias maps |
 | `test_boundary_pty_dispatch.py` | Layer-boundary integration tests for DefaultSubprocessRunner + PTY wrapping + Python shims |
 | `test_check_repo_merge_state.py` | Round-trip budget tests for fetch_repo_merge_state |

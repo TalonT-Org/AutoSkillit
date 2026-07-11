@@ -123,6 +123,7 @@ class TestExecutionSubpackages:
             "_process_jsonl",
             "_process_kill",
             "_process_monitor",
+            "_process_ownership",
             "_process_pty",
             "_process_race",
         }

@@ -1845,4 +1845,4 @@ class TestCodexPathContaminationParity:
             backend=CodexBackend(),
         )
         assert sr.evidence.has_implementation_evidence is False
-        assert sr.subtype != "path_contamination"
+        assert sr.subtype == "zero_writes"

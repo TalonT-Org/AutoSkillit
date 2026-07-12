@@ -804,6 +804,7 @@ async def run_skill(
             _sandbox_overrides = _aggregate_sandbox_overrides(_skill_caps)
             _network_access = "sandbox_workspace_write.network_access=true" in _sandbox_overrides
             _has_routing_cap = _has_routing_capability(_skill_caps)
+            _routing_caps = _get_routing_caps(_skill_caps) if _has_routing_cap else []
             _skill_requires_claude = bool(
                 _has_routing_cap
                 and tool_ctx.backend is not None
@@ -812,7 +813,6 @@ async def run_skill(
 
             if _skill_requires_claude:
                 if shutil.which("claude") is None:
-                    _routing_caps = _get_routing_caps(_skill_caps)
                     return SkillResult.crashed(
                         exception=RuntimeError(
                             f"Skill {target_name!r} requires claude-code backend "
@@ -850,6 +850,7 @@ async def run_skill(
                     skill=skill_command,
                     original_backend=tool_ctx.backend.name if tool_ctx.backend else "none",
                     target_backend=backend_override,
+                    routing_capabilities=_routing_caps,
                 )
 
             # Look up artifact validation patterns from skill contract

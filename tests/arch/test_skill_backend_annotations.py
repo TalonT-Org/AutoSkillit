@@ -41,6 +41,250 @@ _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
 }
 
 
+_EXCLUDED_SECTION_HEADINGS = (
+    "Related Skills",
+    "See also",
+    "See Also",
+)
+
+_EXCLUDED_PROSE_PHRASES = (
+    "consider running",
+    "you may want to",
+    "you could run",
+    "produced by",
+    "consumed by",
+    "called by",
+    "written by",
+)
+
+
+_NAMING_EXCLUSION_WORDS: frozenset[str] = frozenset(
+    {"prefix", "convention", "when", "format", "syntax", "naming"}
+)
+
+_IMPERATIVE_VERBS = (
+    "use",
+    "run",
+    "invoke",
+    "load",
+    "spawn",
+    "call",
+    "dispatch",
+    "execute",
+    "launch",
+    "trigger",
+)
+
+
+def _has_imperative_cross_skill_invocation(stripped: str) -> bool:
+    """Return True if stripped line begins with an imperative verb + `/autoskillit:`.
+
+    Matches instruction-style lines like:
+      - "Use `/autoskillit:mermaid` skill ..."
+      - "Run `/autoskillit:dry-walkthrough` on the file ..."
+      - "Invoke the /autoskillit:rectify skill to repair ..."
+      - "Spawn all subagents via `/autoskillit:foo`"
+      - "- Use `/autoskillit:retry-worktree` ..."
+
+    Excludes Agent() subagent dispatch (subagent_type:) and prose-only mentions
+    of siblings that do not require skill-tool invocation.
+    """
+    if "subagent_type:" in stripped:
+        return False
+    core = stripped.lstrip("-* ").strip()
+    lower = core.lower()
+    if "skill tool" in lower:
+        return False  # handled by the explicit "skill tool" detector
+    has_skill_word = (
+        " skill " in lower
+        or lower.endswith(" skill")
+        or " skill." in lower
+        or " skill," in lower
+        or " skill;" in lower
+        or " skill:" in lower
+        or " skill/" in lower
+        or " skill (" in lower
+        or "/skill" in lower
+        or "skill `" in lower
+    )
+    has_run_skill_invocation = "run_skill" in lower and "/autoskillit:" in lower
+    for verb in _IMPERATIVE_VERBS:
+        if (
+            lower.startswith(verb + " ")
+            or lower.startswith(verb + " the ")
+            or lower.startswith(verb + " all ")
+        ):
+            if "/autoskillit:" in lower and (has_skill_word or has_run_skill_invocation):
+                after_verb = lower.split(verb + " ", 1)[1] if verb + " " in lower else ""
+                if after_verb.startswith("`/autoskillit:"):
+                    rest = (
+                        after_verb.split("`/autoskillit:", 1)[1]
+                        if "`/autoskillit:" in after_verb
+                        else ""
+                    )
+                    if not rest or rest.startswith("open-") or rest.startswith("close-"):
+                        pass  # fall through
+                    else:
+                        first_word = (
+                            rest.lstrip("` ").split()[0].rstrip(",.;:`'\"") if rest.split() else ""
+                        )
+                        if first_word in _NAMING_EXCLUSION_WORDS:
+                            return False
+                return True
+            if "/autoskillit:" in lower and verb in {
+                "use",
+                "run",
+                "invoke",
+                "spawn",
+                "call",
+                "execute",
+            }:
+                after_prefix = lower.split(verb + " ", 1)[1] if verb + " " in lower else ""
+                if after_prefix.startswith("`/autoskillit:") or after_prefix.startswith(
+                    "the `/autoskillit:"
+                ):
+                    rest = (
+                        after_prefix.split("`/autoskillit:", 1)[1]
+                        if "`/autoskillit:" in after_prefix
+                        else ""
+                    )
+                    if not rest:
+                        return True
+                    if rest.startswith("open-") or rest.startswith("close-"):
+                        return False
+                    first_word = (
+                        rest.lstrip("` ").split()[0].rstrip(",.;:`'\"") if rest.split() else ""
+                    )
+                    if first_word in _NAMING_EXCLUSION_WORDS:
+                        return False
+                    return True
+    return False
+
+
+def _has_slash_command_invocation(stripped: str) -> bool:
+    """Detect pure `/autoskillit:<name>` slash-command invocation patterns.
+
+    Matches directive lines like:
+      - "/autoskillit:vis-lens-{slug1} {source_dir} {ctx_path}"
+      - "/autoskillit:issue-splitter --issue {N} --repo {owner}"
+      - "/autoskillit:build-execution-map --assess-review-approach"
+
+    Excludes example/wrong/related contexts and parenthetical references.
+    """
+    if not stripped.startswith("/autoskillit:"):
+        return False
+    if stripped.startswith("/autoskillit:{"):
+        return False
+    lower = stripped.lower()
+    if " e.g." in lower or lower.startswith("e.g.") or "(e.g." in lower:
+        return False
+    if "wrong" in lower and (
+        "**wrong" in lower or "wrong:**" in lower or "wrong example" in lower
+    ):
+        return False
+    if "right" in lower and ("**right" in lower or "right:**" in lower or "correct:" in lower):
+        return False
+    if stripped.startswith("`") and (
+        stripped.endswith("`)")
+        or stripped.endswith("`)")
+        or stripped.endswith("`,")
+        or stripped.endswith("`).")
+        or stripped.endswith("`;")
+    ):
+        return False
+    if stripped.startswith("`") and stripped.endswith("`"):
+        return False
+    return True
+
+
+def _is_genuine_cross_skill_ref_line(line: str, skill_name: str) -> bool:
+    """Return True if a line contains a genuine Skill-tool invocation of a sibling skill.
+
+    Excludes self-references, advisory prose, pipeline lineage, See-Also footers,
+    and Agent() subagent dispatch (which is covered by agent_subagent).
+    """
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    if "autoskillit:" not in stripped:
+        return False
+    if f"autoskillit:{skill_name}" in stripped:
+        return False
+    if "Agent(subagent_type=" in stripped:
+        return False
+    lower = stripped.lower()
+    for phrase in _EXCLUDED_PROSE_PHRASES:
+        if phrase in lower:
+            return False
+    if "load" in lower and "skill tool" in lower:
+        return True
+    if "invoke" in lower and "skill tool" in lower:
+        return True
+    if 'run_skill("/autoskillit:' in stripped or "run_skill('/autoskillit:" in stripped:
+        return True
+    if 'Skill("/autoskillit:' in stripped or "Skill('/autoskillit:" in stripped:
+        return True
+    if _has_imperative_cross_skill_invocation(stripped):
+        return True
+    if _has_slash_command_invocation(stripped):
+        return True
+    if "run_skill" in lower and "/autoskillit:" in lower:
+        return True
+    return False
+
+
+def _detect_cross_skill_ref(filtered: str, skill_name: str) -> bool:
+    """Detect genuine cross_skill_ref by scanning lines with heading context.
+
+    Returns True if at least one line under a non-excluded heading contains a
+    genuine Skill-tool invocation pattern AND the line is not under a heading
+    that is a See-Also / Related-Skills footer.
+    """
+    current_section_is_excluded = False
+    in_skill_table_header = False
+    lines = filtered.splitlines()
+    for idx, raw_line in enumerate(lines):
+        stripped = raw_line.strip()
+        if stripped.startswith("#"):
+            heading_text = stripped.lstrip("#").strip()
+            current_section_is_excluded = any(
+                h.lower() == heading_text.lower() for h in _EXCLUDED_SECTION_HEADINGS
+            )
+            in_skill_table_header = False
+            continue
+        if stripped.startswith("|"):
+            if "skill" in stripped.lower():
+                in_skill_table_header = True
+            continue
+        if current_section_is_excluded:
+            continue
+        if stripped.startswith("|") and not in_skill_table_header:
+            continue
+        lower = stripped.lower()
+        if (
+            "skill tool" in lower
+            and ("load" in lower or "call" in lower or "use" in lower or "invoke" in lower)
+            and "/autoskillit:" not in stripped
+        ):
+            for jdx in range(idx + 1, min(idx + 4, len(lines))):
+                next_stripped = lines[jdx].strip()
+                if not next_stripped:
+                    continue
+                if next_stripped.startswith("#"):
+                    break
+                if (
+                    "/autoskillit:" in next_stripped
+                    and f"autoskillit:{skill_name}" not in next_stripped
+                ):
+                    return True
+                if "skill tool" in next_stripped.lower():
+                    break
+                break
+        if _is_genuine_cross_skill_ref_line(raw_line, skill_name):
+            return True
+    return False
+
+
 def _detect_capabilities(body: str, skill_name: str) -> set[str]:
     filtered = _strip_doc_fenced_blocks(body)
     # Collapse shell line continuations so multi-line gh api calls are detected
@@ -51,14 +295,8 @@ def _detect_capabilities(body: str, skill_name: str) -> set[str]:
             if pat.search(filtered):
                 detected.add(cap_name)
                 break
-    for line in filtered.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if "autoskillit:" in stripped:
-            if f"autoskillit:{skill_name}" not in stripped:
-                detected.add("cross_skill_ref")
-                break
+    if _detect_cross_skill_ref(filtered, skill_name):
+        detected.add("cross_skill_ref")
     return detected
 
 
@@ -202,3 +440,26 @@ def test_capability_routing_uses_registry_not_hardcoded_name() -> None:
                 f"tools_execution.py line {lineno} still references literal 'git_metadata_write' "
                 f"in routing logic — must use registry-driven check: {context!r}"
             )
+
+
+_CROSS_SKILL_REF_ALLOWLIST: dict[str, str] = {}
+
+
+def test_cross_skill_ref_declarations_are_genuine():
+    """Skills declaring cross_skill_ref must have a genuine Skill-tool invocation."""
+    violations: list[str] = []
+    for name, skill_md in _iter_skill_dirs():
+        fm = _read_skill_frontmatter(skill_md)
+        declared = set(fm.get("uses_capabilities", []))
+        if "cross_skill_ref" not in declared:
+            continue
+        if name in _CROSS_SKILL_REF_ALLOWLIST:
+            continue
+        content = skill_md.read_text(encoding="utf-8")
+        body = _strip_frontmatter(content)
+        if not _detect_cross_skill_ref(_strip_doc_fenced_blocks(body), name):
+            violations.append(name)
+    assert not violations, (
+        f"{len(violations)} skill(s) declare cross_skill_ref without genuine "
+        f"Skill-tool invocation:\n" + "\n".join(f"  {v}" for v in violations)
+    )

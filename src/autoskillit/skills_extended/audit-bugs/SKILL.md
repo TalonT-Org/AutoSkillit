@@ -1,7 +1,7 @@
 ---
 name: audit-bugs
 categories: [audit]
-uses_capabilities: [claude_dir, cross_skill_ref]
+uses_capabilities: [claude_dir]
 description: Analyze historical bug patterns by mining Claude Code project logs for /autoskillit:investigate skill invocations since a specified date. Identifies recurring root causes, architectural gaps, and proactive detection strategies. Use when user says "audit bugs", "bug patterns", "analyze investigations", or "bug audit".
 hooks:
   PreToolUse:

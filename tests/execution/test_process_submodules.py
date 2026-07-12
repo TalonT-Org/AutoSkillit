@@ -6,6 +6,7 @@ process.py remains a re-export facade for all public symbols.
 
 from __future__ import annotations
 
+import importlib
 import inspect
 
 import pytest
@@ -42,6 +43,17 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "run_managed_async",
         "run_managed_sync",
     }
+)
+
+_PRIVATE_PROCESS_SYMBOL_ORIGINS: tuple[tuple[str, str], ...] = (
+    ("autoskillit.execution.process._lifecycle_actor", "ActorIngress"),
+    ("autoskillit.execution.process._lifecycle_actor", "LifecycleActorReply"),
+    ("autoskillit.execution.process._process_monitor", "SessionMonitorResult"),
+    (
+        "autoskillit.execution.process._process_ownership",
+        "OwnedProcessIdentityTracker",
+    ),
+    ("autoskillit.execution.process._process_kill", "_OwnedProcessFinalizer"),
 )
 
 
@@ -132,6 +144,29 @@ def test_process_race_exports():
     assert resolve_termination.__module__ == "autoskillit.execution.process._process_race"
     assert callable(_watch_heartbeat)
     assert _watch_heartbeat.__module__ == "autoskillit.execution.process._process_race"
+
+
+@pytest.mark.parametrize(("module_name", "symbol_name"), _PRIVATE_PROCESS_SYMBOL_ORIGINS)
+def test_private_process_symbol_origins(module_name: str, symbol_name: str):
+    """Private lifecycle types remain owned by their focused submodules."""
+    module = importlib.import_module(module_name)
+
+    assert getattr(module, symbol_name).__module__ == module_name
+
+
+def test_actor_transport_symbols_are_absent_from_process_facade():
+    """Actor request/reply transport stays behind the process facade."""
+    from autoskillit.execution import process
+
+    assert not hasattr(process, "ActorIngress")
+    assert not hasattr(process, "LifecycleActorReply")
+
+
+def test_private_finalizer_is_not_a_public_process_facade_export():
+    """The facade may use its finalizer internally without exporting it publicly."""
+    from autoskillit.execution import process
+
+    assert "_OwnedProcessFinalizer" not in process.__all__
 
 
 def test_process_facade_reexports_all_public_symbols():

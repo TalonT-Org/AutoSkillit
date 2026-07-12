@@ -42,7 +42,7 @@ Server tool handler unit tests — kitchen, execution, CI, clone, workspace tool
 | `test_resolve_model_as_profile.py` | Tests for _resolve_model_as_profile — model-value-as-provider-profile resolution in _guards.py |
 | `test_resolve_provider_profile.py` | Tests for _resolve_provider_profile six-tier provider resolution in _guards.py |
 | `test_run_skill_add_dirs.py` | Contract tests: run_skill passes correct add_dirs to executor (T-OVR-014) |
-| `test_run_skill_async_child_lifecycle.py` | Real run_skill async-child lifecycle, tracked-write, and cleanup integration (issue #4233) |
+| `test_run_skill_async_child_lifecycle.py` | Real-stack `run_skill` proof using a linked implementation worktree, tracked Write evidence, actor-authorized completion, and identity-safe cleanup (issue #4233) |
 | `test_run_skill_backend_compat.py` | Tests for dispatch-time backend compatibility gate in run_skill |
 | `test_run_skill_resume.py` | Tests for resume_session_id threading from run_skill through executor |
 | `test_run_skill_stale_path.py` | Tests for the stale-path guard in run_skill — init_session returning a nonexistent /dev/shm path must crash-close before the executor |

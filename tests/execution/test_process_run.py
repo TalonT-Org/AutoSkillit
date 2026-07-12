@@ -21,6 +21,7 @@ import psutil
 import pytest
 
 from autoskillit.core.types import KillReason, TerminationReason
+from autoskillit.execution.linux_tracing import read_starttime_ticks
 from autoskillit.execution.process import (
     read_temp_output,
     run_managed_async,
@@ -73,6 +74,58 @@ ECHO_STDIN_SCRIPT = textwrap.dedent("""\
     sys.stdout.write(f"echo: {data}")
     sys.stdout.flush()
 """)
+
+SpawnedIdentity = tuple[int, int, float]
+
+
+def _capture_identity(pid: int, starttime_ticks: int | None = None) -> SpawnedIdentity:
+    ticks = starttime_ticks if starttime_ticks is not None else read_starttime_ticks(pid)
+    return (pid, ticks or 0, psutil.Process(pid).create_time())
+
+
+def _identity_is_alive(identity: SpawnedIdentity) -> bool:
+    pid, starttime_ticks, fallback_create_time = identity
+    if not psutil.pid_exists(pid):
+        return False
+    if starttime_ticks > 0:
+        return read_starttime_ticks(pid) == starttime_ticks
+    try:
+        return psutil.Process(pid).create_time() == fallback_create_time
+    except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+        return False
+
+
+async def _cleanup_identity(identity: SpawnedIdentity) -> None:
+    """Terminate only the exact captured process identity."""
+    if not _identity_is_alive(identity):
+        return
+    try:
+        process = psutil.Process(identity[0])
+        if identity[1] > 0:
+            if read_starttime_ticks(identity[0]) != identity[1]:
+                return
+        elif process.create_time() != identity[2]:
+            return
+        process.terminate()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return
+    try:
+        await anyio.to_thread.run_sync(lambda: process.wait(timeout=2))
+    except psutil.TimeoutExpired:
+        if _identity_is_alive(identity):
+            try:
+                process.kill()
+                await anyio.to_thread.run_sync(lambda: process.wait(timeout=2))
+            except psutil.NoSuchProcess:
+                pass
+
+
+class _ParserConstructionFailure(RuntimeError):
+    pass
+
+
+class _ResultConstructionFailure(RuntimeError):
+    pass
 
 
 class TestNormalCompletion:
@@ -306,6 +359,124 @@ class TestSubprocessResultAndRunnerTypes:
             f"Current default: {default!r}. Only callers that need PTY (Claude CLI) "
             f"should pass pty_mode=True explicitly."
         )
+
+
+class TestPostSpawnFailureFinalization:
+    @pytest.mark.anyio
+    async def test_parser_factory_failure_preserves_error_and_finalizes_once(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import autoskillit.execution.process as process_module
+
+        captured: list[SpawnedIdentity] = []
+        cleanup_executions: list[int] = []
+        factory_calls = 0
+        injected_error = _ParserConstructionFailure("parser construction failed")
+        original_post_init = process_module._OwnedProcessFinalizer.__post_init__
+        original_run_once = process_module._OwnedProcessFinalizer._run_once
+
+        def capture_spawned_identity(finalizer: Any) -> None:
+            original_post_init(finalizer)
+            captured.append(_capture_identity(finalizer.owned_root_pid))
+
+        async def observe_cleanup_execution(finalizer: Any) -> Any:
+            cleanup_executions.append(finalizer.owned_root_pid)
+            return await original_run_once(finalizer)
+
+        def failing_parser_factory() -> Any:
+            nonlocal factory_calls
+            factory_calls += 1
+            raise injected_error
+
+        monkeypatch.setattr(
+            process_module._OwnedProcessFinalizer,
+            "__post_init__",
+            capture_spawned_identity,
+        )
+        monkeypatch.setattr(
+            process_module._OwnedProcessFinalizer,
+            "_run_once",
+            observe_cleanup_execution,
+        )
+
+        try:
+            with pytest.raises(_ParserConstructionFailure) as exc_info:
+                await run_managed_async(
+                    [sys.executable, "-c", "import time; time.sleep(60)"],
+                    cwd=tmp_path,
+                    timeout=5,
+                    completion_marker="DONE",
+                    stream_parser_factory=failing_parser_factory,
+                    parent_candidate_normalizer=lambda _record, _offset: None,
+                    cleanup_budget_seconds=3,
+                )
+
+            assert exc_info.value is injected_error
+            assert factory_calls == 1
+            assert len(captured) == 1
+            assert captured[0][0] > 0
+            assert captured[0][1] > 0 or captured[0][2] > 0
+            assert cleanup_executions == [captured[0][0]]
+            assert not _identity_is_alive(captured[0])
+        finally:
+            for identity in captured:
+                await _cleanup_identity(identity)
+
+    @pytest.mark.anyio
+    async def test_result_construction_failure_preserves_error_and_finalizes_once(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import autoskillit.execution.process as process_module
+
+        captured: list[SpawnedIdentity] = []
+        cleanup_executions: list[int] = []
+        result_constructions = 0
+        injected_error = _ResultConstructionFailure("result construction failed")
+        original_run_once = process_module._OwnedProcessFinalizer._run_once
+
+        def capture_spawned_identity(pid: int, starttime_ticks: int) -> None:
+            captured.append(_capture_identity(pid, starttime_ticks))
+
+        async def observe_cleanup_execution(finalizer: Any) -> Any:
+            cleanup_executions.append(finalizer.owned_root_pid)
+            return await original_run_once(finalizer)
+
+        def failing_result_construction(*_args: Any, **_kwargs: Any) -> Any:
+            nonlocal result_constructions
+            result_constructions += 1
+            raise injected_error
+
+        monkeypatch.setattr(
+            process_module._OwnedProcessFinalizer,
+            "_run_once",
+            observe_cleanup_execution,
+        )
+        monkeypatch.setattr(
+            process_module,
+            "SubprocessResult",
+            failing_result_construction,
+        )
+
+        try:
+            with pytest.raises(_ResultConstructionFailure) as exc_info:
+                await run_managed_async(
+                    [sys.executable, "-c", "import time; time.sleep(0.2)"],
+                    cwd=tmp_path,
+                    timeout=5,
+                    on_pid_resolved=capture_spawned_identity,
+                    cleanup_budget_seconds=3,
+                )
+
+            assert exc_info.value is injected_error
+            assert result_constructions == 1
+            assert len(captured) == 1
+            assert captured[0][0] > 0
+            assert captured[0][1] > 0 or captured[0][2] > 0
+            assert cleanup_executions == [captured[0][0]]
+            assert not _identity_is_alive(captured[0])
+        finally:
+            for identity in captured:
+                await _cleanup_identity(identity)
 
 
 class TestTracingStopOnException:

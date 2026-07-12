@@ -71,7 +71,7 @@ def _identity_is_alive(identity: SpawnedIdentity) -> bool:
 
 
 async def _cleanup_matching_identities(identities: dict[int, SpawnedIdentity]) -> None:
-    """Best-effort cleanup that never signals a reused PID."""
+    """Terminate and wait for captured identities without signaling a reused PID."""
     ordered = tuple(reversed(tuple(identities.values())))
     for sig in (signal.SIGTERM, signal.SIGKILL):
         for identity in ordered:
@@ -86,6 +86,16 @@ async def _cleanup_matching_identities(identities: dict[int, SpawnedIdentity]) -
                 await anyio.sleep(0.01)
         if not any(_identity_is_alive(identity) for identity in ordered):
             return
+    survivors = [identity[0] for identity in ordered if _identity_is_alive(identity)]
+    assert not survivors, f"captured process identities survived cleanup: {survivors}"
+
+
+def _read_persisted_identities(path: Path) -> tuple[SpawnedIdentity, ...]:
+    records = json.loads(path.read_text(encoding="utf-8"))
+    return tuple(
+        (int(pid), int(starttime_ticks), float(fallback_create_time))
+        for pid, starttime_ticks, fallback_create_time in records
+    )
 
 
 @pytest.fixture(scope="module")
@@ -200,113 +210,14 @@ async def test_production_runner_proves_five_child_progress_and_terminal_deliver
     """Five identity-tracked descendants progress, close, and are cleaned safely."""
     marker = "%autoskillit:fresh-parent-marker:abc12345%"
     release_fifo = tmp_path / "release.fifo"
-    release_fifo.unlink(missing_ok=True)
-    release_fifo.parent.mkdir(parents=True, exist_ok=True)
-
-    os.mkfifo(release_fifo)
+    child_hold_fifo = tmp_path / "child-hold.fifo"
+    parent_hold_fifo = tmp_path / "parent-hold.fifo"
     pid_file = tmp_path / "children.json"
     early_ready = tmp_path / "early-ready"
     child_release = tmp_path / "release-children"
     progress_dir = tmp_path / "child-progress"
-    progress_dir.mkdir()
     child_script = tmp_path / "progress_child.py"
-    child_script.write_text(
-        textwrap.dedent(
-            """
-            import signal
-            import sys
-            import time
-            from pathlib import Path
-
-            release = Path(sys.argv[1])
-            progress = Path(sys.argv[2])
-            deadline = time.monotonic() + 10
-            while not release.exists():
-                if time.monotonic() >= deadline:
-                    raise RuntimeError("child progress release timed out")
-                time.sleep(0.01)
-            progress.write_text("progressed")
-            signal.pause()
-            """
-        ),
-        encoding="utf-8",
-    )
     script = tmp_path / "shim.py"
-    script.write_text(
-        textwrap.dedent(
-            f"""
-            import json
-            import signal
-            import subprocess
-            import sys
-            from pathlib import Path
-
-            release_fifo = Path({str(release_fifo)!r})
-            pid_file = Path({str(pid_file)!r})
-            early_ready = Path({str(early_ready)!r})
-            child_release = Path({str(child_release)!r})
-            progress_dir = Path({str(progress_dir)!r})
-            child_script = Path({str(child_script)!r})
-            marker = {marker!r}
-
-            children = [
-                subprocess.Popen([
-                    sys.executable,
-                    str(child_script),
-                    str(child_release),
-                    str(progress_dir / f"child_{{index}}"),
-                ])
-                for index in range(5)
-            ]
-            pid_file.write_text(json.dumps([child.pid for child in children]))
-
-            for index in range(5):
-                print(json.dumps({{
-                    "type": "system", "subtype": "task_started",
-                    "agent_id": f"agent_{{index}}", "task_id": f"task_{{index}}",
-                    "tool_use_id": f"toolu_{{index}}", "uuid": f"start_{{index}}"
-                }}), flush=True)
-            print(json.dumps({{
-                "type": "assistant", "uuid": "parent-early", "session_id": "sid",
-                "message": {{"id": "message-early", "content": [
-                    {{"type": "text", "text": marker}}
-                ]}}
-            }}), flush=True)
-            early_ready.write_text("ready")
-
-            with release_fifo.open("rb", buffering=0) as stream:
-                stream.read(1)
-
-            for index in range(5):
-                print(json.dumps({{
-                    "type": "system", "subtype": "task_notification",
-                    "status": "completed", "agent_id": f"agent_{{index}}",
-                    "task_id": f"task_{{index}}", "tool_use_id": f"toolu_{{index}}",
-                    "uuid": f"notification_{{index}}"
-                }}), flush=True)
-                print(json.dumps({{
-                    "type": "user", "uuid": f"delivery_{{index}}",
-                    "message": {{"id": f"delivery-message-{{index}}", "content": [{{
-                        "type": "tool_result", "tool_use_id": f"toolu_{{index}}",
-                        "content": {{"status": "completed", "agentId": f"agent_{{index}}"}}
-                    }}]}}
-                }}), flush=True)
-            print(json.dumps({{
-                "type": "assistant", "uuid": "parent-fresh", "session_id": "sid",
-                "message": {{"id": "message-fresh", "content": [
-                    {{"type": "text", "text": marker}}
-                ]}}
-            }}), flush=True)
-            print(json.dumps({{
-                "type": "result", "subtype": "success", "is_error": False,
-                "session_id": "sid", "result": marker
-            }}), flush=True)
-            signal.pause()
-            """
-        ),
-        encoding="utf-8",
-    )
-
     result_box: dict[str, object] = {}
     completed = anyio.Event()
     spawned_identities: dict[int, SpawnedIdentity] = {}
@@ -315,41 +226,204 @@ async def test_production_runner_proves_five_child_progress_and_terminal_deliver
     def capture_root_identity(pid: int, starttime_ticks: int) -> None:
         spawned_identities[pid] = _capture_identity(pid, starttime_ticks)
 
-    async def _run() -> None:
-        result_box["result"] = await run_managed_async(
-            [sys.executable, str(script)],
-            cwd=tmp_path,
-            timeout=20,
-            completion_marker=marker,
-            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
-            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(marker),
-            completion_drain_timeout=1.0,
-            natural_exit_grace_seconds=0.05,
-            cleanup_budget_seconds=5.0,
-            _heartbeat_poll=0.01,
-            on_pid_resolved=capture_root_identity,
-        )
-        completed.set()
-
     try:
+        for fifo in (release_fifo, child_hold_fifo, parent_hold_fifo):
+            fifo.unlink(missing_ok=True)
+            os.mkfifo(fifo)
+        progress_dir.mkdir()
+        child_script.write_text(
+            textwrap.dedent(
+                """
+                import json
+                import os
+                import sys
+                import time
+                from pathlib import Path
+
+                release = Path(sys.argv[1])
+                progress = Path(sys.argv[2])
+                hold_fifo = Path(sys.argv[3])
+                deadline = time.monotonic() + 10
+                while not release.exists():
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("child progress release timed out")
+                    time.sleep(0.01)
+                pending = progress.with_suffix(".pending")
+                pending.write_text(json.dumps({
+                    "pid": os.getpid(), "stage": "post-early-marker"
+                }))
+                pending.replace(progress)
+                with hold_fifo.open("rb", buffering=0) as stream:
+                    stream.read(1)
+                """
+            ),
+            encoding="utf-8",
+        )
+        script.write_text(
+            textwrap.dedent(
+                f"""
+                import json
+                import signal
+                import subprocess
+                import sys
+                from pathlib import Path
+
+                import psutil
+
+                release_fifo = Path({str(release_fifo)!r})
+                child_hold_fifo = Path({str(child_hold_fifo)!r})
+                parent_hold_fifo = Path({str(parent_hold_fifo)!r})
+                pid_file = Path({str(pid_file)!r})
+                early_ready = Path({str(early_ready)!r})
+                child_release = Path({str(child_release)!r})
+                progress_dir = Path({str(progress_dir)!r})
+                child_script = Path({str(child_script)!r})
+                marker = {marker!r}
+
+                children = [
+                    subprocess.Popen([
+                        sys.executable,
+                        str(child_script),
+                        str(child_release),
+                        str(progress_dir / f"child_{{index}}"),
+                        str(child_hold_fifo),
+                    ])
+                    for index in range(5)
+                ]
+
+                def reap_children(_signum, _frame):
+                    for child in children:
+                        if child.poll() is None:
+                            child.terminate()
+                    for child in children:
+                        try:
+                            child.wait(timeout=1)
+                        except subprocess.TimeoutExpired:
+                            child.kill()
+                    for child in children:
+                        try:
+                            child.wait(timeout=1)
+                        except subprocess.TimeoutExpired:
+                            pass
+                    raise SystemExit(0)
+
+                signal.signal(signal.SIGTERM, reap_children)
+
+                def starttime_ticks(pid):
+                    stat_path = Path(f"/proc/{{pid}}/stat")
+                    if not stat_path.is_file():
+                        return 0
+                    stat = stat_path.read_text(encoding="utf-8")
+                    return int(stat.rsplit(")", 1)[1].split()[19])
+
+                identities = [
+                    [
+                        child.pid,
+                        starttime_ticks(child.pid),
+                        psutil.Process(child.pid).create_time(),
+                    ]
+                    for child in children
+                ]
+                pending_pid_file = pid_file.with_suffix(".pending")
+                pending_pid_file.write_text(json.dumps(identities))
+                pending_pid_file.replace(pid_file)
+
+                for index in range(5):
+                    print(json.dumps({{
+                        "type": "system", "subtype": "task_started",
+                        "agent_id": f"agent_{{index}}", "task_id": f"task_{{index}}",
+                        "tool_use_id": f"toolu_{{index}}", "uuid": f"start_{{index}}"
+                    }}), flush=True)
+                print(json.dumps({{
+                    "type": "assistant", "uuid": "parent-early", "session_id": "sid",
+                    "message": {{"id": "message-early", "content": [
+                        {{"type": "text", "text": marker}}
+                    ]}}
+                }}), flush=True)
+                early_ready.write_text("ready")
+
+                with release_fifo.open("rb", buffering=0) as stream:
+                    stream.read(1)
+
+                for index in range(5):
+                    print(json.dumps({{
+                        "type": "system", "subtype": "task_notification",
+                        "status": "completed", "agent_id": f"agent_{{index}}",
+                        "task_id": f"task_{{index}}", "tool_use_id": f"toolu_{{index}}",
+                        "uuid": f"notification_{{index}}"
+                    }}), flush=True)
+                    print(json.dumps({{
+                        "type": "user", "uuid": f"delivery_{{index}}",
+                        "message": {{"id": f"delivery-message-{{index}}", "content": [{{
+                            "type": "tool_result", "tool_use_id": f"toolu_{{index}}",
+                            "content": {{"status": "completed", "agentId": f"agent_{{index}}"}}
+                        }}]}}
+                    }}), flush=True)
+                print(json.dumps({{
+                    "type": "assistant", "uuid": "parent-fresh", "session_id": "sid",
+                    "message": {{"id": "message-fresh", "content": [
+                        {{"type": "text", "text": marker}}
+                    ]}}
+                }}), flush=True)
+                print(json.dumps({{
+                    "type": "result", "subtype": "success", "is_error": False,
+                    "session_id": "sid", "result": marker
+                }}), flush=True)
+                with parent_hold_fifo.open("rb", buffering=0) as stream:
+                    stream.read(1)
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        async def _run() -> None:
+            result_box["result"] = await run_managed_async(
+                [sys.executable, str(script)],
+                cwd=tmp_path,
+                timeout=20,
+                completion_marker=marker,
+                stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
+                parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
+                    marker
+                ),
+                completion_drain_timeout=1.0,
+                natural_exit_grace_seconds=0.05,
+                cleanup_budget_seconds=5.0,
+                _heartbeat_poll=0.01,
+                on_pid_resolved=capture_root_identity,
+            )
+            completed.set()
+
         async with anyio.create_task_group() as tg:
             tg.start_soon(_run)
             with anyio.fail_after(5):
                 while not early_ready.exists():
                     await anyio.sleep(0.01)
-            child_pids = json.loads(pid_file.read_text(encoding="utf-8"))
+            child_identities = _read_persisted_identities(pid_file)
+            child_pids = [identity[0] for identity in child_identities]
             assert len(child_pids) == 5
-            for pid in child_pids:
-                spawned_identities[pid] = _capture_identity(pid)
-            child_identities = tuple(spawned_identities[pid] for pid in child_pids)
+            for identity in child_identities:
+                spawned_identities[identity[0]] = identity
             assert all(_identity_is_alive(identity) for identity in child_identities)
             assert not completed.is_set(), "early marker must not authorize teardown"
+            assert not tuple(progress_dir.iterdir())
             child_release.write_text("release", encoding="utf-8")
             with anyio.fail_after(5):
                 while {path.name for path in progress_dir.iterdir()} != {
                     f"child_{index}" for index in range(5)
                 }:
                     await anyio.sleep(0.01)
+            progress = {
+                path.name: json.loads(path.read_text(encoding="utf-8"))
+                for path in progress_dir.iterdir()
+            }
+            assert progress == {
+                f"child_{index}": {
+                    "pid": child_pids[index],
+                    "stage": "post-early-marker",
+                }
+                for index in range(5)
+            }
             assert all(_identity_is_alive(identity) for identity in child_identities)
             assert not completed.is_set(), "child progress alone must not authorize teardown"
             await anyio.to_thread.run_sync(release_fifo.write_bytes, b"x")
@@ -395,9 +469,16 @@ async def test_production_runner_proves_five_child_progress_and_terminal_deliver
             CompletionCandidateSource.CHANNEL_A,
             CompletionCandidateSource.CHANNEL_A,
         )
-        assert result.cleanup_outcome is not None and result.cleanup_outcome.succeeded
+        assert result.cleanup_outcome is not None
+        assert result.cleanup_outcome.succeeded
+        assert result.cleanup_outcome.budget_exhausted is False
+        assert result.cleanup_outcome.retained_identities == ()
+        assert result.cleanup_outcome.unknown_identities == ()
         assert all(not _identity_is_alive(identity) for identity in spawned_identities.values())
     finally:
+        if pid_file.exists():
+            for identity in _read_persisted_identities(pid_file):
+                spawned_identities.setdefault(identity[0], identity)
         await _cleanup_matching_identities(spawned_identities)
 
 

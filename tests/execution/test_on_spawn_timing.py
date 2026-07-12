@@ -6,10 +6,50 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import anyio
 import psutil
 import pytest
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+from autoskillit.execution.linux_tracing import read_starttime_ticks
+
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+SpawnedIdentity = tuple[int, int, float]
+
+
+def _identity_is_alive(identity: SpawnedIdentity) -> bool:
+    pid, starttime_ticks, fallback_create_time = identity
+    if not psutil.pid_exists(pid):
+        return False
+    if starttime_ticks > 0:
+        return read_starttime_ticks(pid) == starttime_ticks
+    try:
+        return psutil.Process(pid).create_time() == fallback_create_time
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return False
+
+
+async def _cleanup_identity(identity: SpawnedIdentity) -> None:
+    if not _identity_is_alive(identity):
+        return
+    try:
+        process = psutil.Process(identity[0])
+        process.terminate()
+    except psutil.NoSuchProcess:
+        return
+    try:
+        await anyio.to_thread.run_sync(lambda: process.wait(timeout=2))
+    except psutil.TimeoutExpired:
+        if _identity_is_alive(identity):
+            try:
+                process.kill()
+                await anyio.to_thread.run_sync(lambda: process.wait(timeout=2))
+            except psutil.NoSuchProcess:
+                pass
+
+
+class _SpawnCallbackFailure(RuntimeError):
+    pass
 
 
 class TestOnPidResolvedTiming:
@@ -79,3 +119,31 @@ class TestOnPidResolvedTiming:
                 pass  # Mock artifacts expected — only the callback check matters
 
         assert called_with == [], "on_pid_resolved must NOT be called when pid == 0"
+
+    async def test_callback_failure_preserves_error_and_finalizes_spawned_process(
+        self, tmp_path: Path
+    ) -> None:
+        """The no-I/O finalizer already owns the process when the callback fails."""
+        from autoskillit.execution.process import run_managed_async
+
+        captured: list[SpawnedIdentity] = []
+
+        def failing_callback(pid: int, ticks: int) -> None:
+            captured.append((pid, ticks, psutil.Process(pid).create_time()))
+            raise _SpawnCallbackFailure("spawn callback failed")
+
+        try:
+            with pytest.raises(_SpawnCallbackFailure, match="spawn callback failed"):
+                await run_managed_async(
+                    [sys.executable, "-c", "import time; time.sleep(60)"],
+                    cwd=tmp_path,
+                    timeout=5.0,
+                    cleanup_budget_seconds=3.0,
+                    on_pid_resolved=failing_callback,
+                )
+
+            assert len(captured) == 1
+            assert not _identity_is_alive(captured[0])
+        finally:
+            for identity in captured:
+                await _cleanup_identity(identity)

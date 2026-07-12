@@ -18,6 +18,7 @@ import pytest
 
 from autoskillit.core import (
     BackendCapabilities,
+    CleanupOutcome,
     InspectorCallback,
     InspectorEvidence,
     InspectorVerdict,
@@ -122,9 +123,11 @@ class TestSubprocessResultInspectorVerdict:
             stdout="",
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
-            pid=1,
+            pid=0,
+            cleanup_outcome=CleanupOutcome(succeeded=True, budget_exhausted=False),
         )
         assert r.inspector_verdict is None
+        assert r.cleanup_outcome is not None and r.cleanup_outcome.succeeded
 
     def test_set_verdict(self):
         v = InspectorVerdict(
@@ -138,10 +141,12 @@ class TestSubprocessResultInspectorVerdict:
             stdout="",
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
-            pid=1,
+            pid=0,
             inspector_verdict=v,
+            cleanup_outcome=CleanupOutcome(succeeded=True, budget_exhausted=False),
         )
         assert r.inspector_verdict is v
+        assert r.cleanup_outcome is not None and r.cleanup_outcome.succeeded
 
 
 class TestBackendCapabilitiesInspectorCapable:

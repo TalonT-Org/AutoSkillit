@@ -33,7 +33,14 @@ class TestOnSessionIdResolvedCallback:
             "subtype": "init",
             "session_id": session_id,
         }
-        stdout_path.write_text(json.dumps(init_record) + "\n")
+        later_record = {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "sess-must-not-replace-first",
+        }
+        stdout_path.write_text(
+            "\n".join((json.dumps(init_record), json.dumps(later_record))) + "\n"
+        )
 
         acc = RaceAccumulator()
         ready = anyio.Event()

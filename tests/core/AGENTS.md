@@ -46,11 +46,11 @@ Core layer (IL-0) unit tests — paths, IO, types, feature flags.
 | `test_backend_event_kind.py` | Tests for BackendEventKind StrEnum — member exhaustiveness, values, importability |
 | `test_backend_dataclasses.py` | Tests for CmdSpec, SkillSessionConfig, ClaudeEventData, CodexEventData, SessionEvent, AgentSessionResult — frozen invariants, field types, defaults |
 | `test_backend_protocols.py` | Tests for StreamParser, ResultParser, EnvPolicy, SessionLocator, CodingAgentBackend — @runtime_checkable, isinstance conformance, IL-0 compliance |
-| `test_inspector_types.py` | Tests for Health Inspector IL-0 types: `InspectorEvidence`, `InspectorVerdict`, `make_stub_inspector`, `inspector_verdict`/`inspector_capable` fields (issue #3533) |
+| `test_inspector_types.py` | Tests for Health Inspector IL-0 types and managed-result construction with explicit no-owned-process cleanup evidence |
 | `test_invariant_registry.py` | Tests for InvariantDef and INVARIANT_REGISTRY — frozen dataclass, Literal enforcement_layer, 13 entries, key shape, backend coverage |
 | `test_type_constants.py` | Tests for PACK_REGISTRY and related constants in core._type_constants |
 | `test_type_protocol_shards.py` | Type protocol shards guard |
-| `test_types.py` | Tests for shared type contracts — enum exhaustiveness |
+| `test_types.py` | Tests for shared type contracts, enum exhaustiveness, and `SubprocessResult` lifecycle-carrier defaults |
 | `test_types_structure.py` | Tests for core/types.py split into focused sub-modules (P8-F2) |
 | `test_type_results_execution.py` | Tests for _type_results_execution.py — execution-scoped types |
 | `test_types_phoropter.py` | Authoritative phoropter type tests — frozen invariants, `__all__` guard, gateway accessibility for all `_type_phoropter` and `SynthesisStrategy` types |

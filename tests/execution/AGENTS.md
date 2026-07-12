@@ -70,16 +70,16 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_merge_queue_polling.py` | Tests for DefaultMergeQueueWatcher polling state machine |
 | `test_merge_token_usage.py` | Tests for _merge_token_usage canonical field name migration |
 | `test_normalize_subtype.py` | Unit tests for ClaudeSessionResult.normalize_subtype() normalization gate |
-| `test_on_spawn_timing.py` | Tests for on_pid_resolved callback timing in run_managed_async (Group J) |
+| `test_on_spawn_timing.py` | Tests spawn-time PID identity callbacks and finalization when callback registration fails |
 | `test_output_format_contract.py` | Contract tests binding output format to data availability |
 | `test_parent_record_predicate.py` | Unit tests for _is_parent_assistant_record predicate — subagent/synthetic exclusion |
 | `test_planner_write_isolation.py` | Integration tests for planner session write isolation via clone guard |
 | `test_pr_analysis.py` | Tests for execution/pr_analysis.py |
-| `test_process_channel_b.py` | Integration tests for Channel B drain-race and COMPLETED pipeline adjudication |
+| `test_process_channel_b.py` | Persistent binary Channel B tail, actor proposal/reply carriers, provenance, deferral, supersession, and completion adjudication |
 | `test_process_debug_logging.py` | Tests for debug logging instrumentation in process.py |
 | `test_process_env_boundary.py` | Boundary contract tests: MappingProxyType env coercion through subprocess execution |
 | `test_process_deadline_extension.py` | Tests for _watch_child_activity coroutine and deadline extension behavior |
-| `test_process_heartbeat.py` | Unit tests for _heartbeat, _has_active_api_connection, _has_active_child_processes, orphaned tool result detection |
+| `test_process_heartbeat.py` | Unit tests for heartbeat completion, active API connections, and orphaned tool-result detection |
 | `test_process_identity.py` | Process identity tests: tracker group refresh, PID-reuse checks, cleanup deadline math, and starttime_ticks degradation warning |
 | `test_process_idle_watchdog.py` | Tests for the stdout idle watchdog coroutine (_watch_stdout_idle) |
 | `test_process_jsonl.py` | Tests for JSONL marker detection utilities |
@@ -90,8 +90,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_session_log_monitor.py` | Unit tests for legacy `_session_log_monitor` and the persistent binary Channel B tail, including final producer-stop barriers, full actor replies, session ID, and wiring |
 | `test_process_session_log_monitor_dispatch_marker.py` | Dispatch marker suppression gate tests for _session_log_monitor |
 | `test_process_session_log_monitor_stale_suppression.py` | TCP/CPU stale suppression gate and bounded suppression tests |
-| `test_process_session_id_callback.py` | Tests for the on_session_id_resolved callback fired from inside the task group |
-| `test_process_submodules.py` | Tests verifying process.py decomposition into focused sub-modules (P8-2) |
+| `test_process_session_id_callback.py` | Tests that in-task-group session resolution publishes the first canonical ID exactly once |
+| `test_process_submodules.py` | Process-facade decomposition plus private actor, monitor, ownership, and finalizer origin contracts |
 | `test_provider_outcome_container.py` | Tests for ProviderOutcome typed container construction — required fields and TypeError on omission |
 | `test_push_trigger_applies.py` | Unit tests for _push_trigger_applies_to_branch and _has_merge_group_trigger |
 | `test_quota_binding.py` | Tests for execution/quota.py — multi-window selection, per-window thresholds, cache refresh |

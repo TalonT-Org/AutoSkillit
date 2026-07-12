@@ -13,10 +13,12 @@ from unittest.mock import Mock
 import pytest
 
 from autoskillit.core import BackendCapabilities, CmdSpec
-from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.core.types import CleanupOutcome, SubprocessResult, TerminationReason
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
 from tests._helpers import make_tracing_config
+
+_NO_OWNED_PROCESS_CLEANUP = CleanupOutcome(succeeded=True, budget_exhausted=False)
 
 # Strip regex metacharacters (e.g. \b word boundaries) to yield plain test signal strings.
 CODEX_API_ERROR_SIGNAL_STRINGS: tuple[str, ...] = tuple(
@@ -73,16 +75,18 @@ def _sr(
     termination=TerminationReason.NATURAL_EXIT,
     session_id: str = "",
     channel_b_session_id: str = "",
-):
-    """Build a minimal SubprocessResult for _build_skill_result tests."""
+    cleanup_outcome: CleanupOutcome = _NO_OWNED_PROCESS_CLEANUP,
+) -> SubprocessResult:
+    """Build a PID-zero result for a synthetic process with no owned process."""
     return SubprocessResult(
         returncode,
         stdout,
         stderr,
         termination,
-        pid=12345,
+        pid=0,
         session_id=session_id,
         channel_b_session_id=channel_b_session_id,
+        cleanup_outcome=cleanup_outcome,
     )
 
 

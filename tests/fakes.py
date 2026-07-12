@@ -17,6 +17,7 @@ from typing import Any
 from autoskillit.core.types import (
     CIRunScope,
     CIWatcher,
+    CleanupOutcome,
     DatabaseReader,
     HeadlessExecutor,
     MergeQueueWatcher,
@@ -33,6 +34,8 @@ from autoskillit.core.types import (
     TestRunner,
     WriteBehaviorSpec,
 )
+
+_NO_OWNED_PROCESS_CLEANUP = CleanupOutcome(succeeded=True, budget_exhausted=False)
 
 # ---------------------------------------------------------------------------
 # Shared side-effect resolution helper
@@ -810,7 +813,7 @@ class InMemoryGitHubApiLog:
 
 
 class MockSubprocessRunner(SubprocessRunner):
-    """Test double for SubprocessRunner. Queues predetermined results.
+    """PID-zero test double for SubprocessRunner. Queues predetermined results.
 
     Inherits from SubprocessRunner (Protocol) so mypy verifies the __call__
     signature matches the protocol at class definition, not just at call sites.
@@ -826,7 +829,8 @@ class MockSubprocessRunner(SubprocessRunner):
             stdout="",
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
-            pid=99999,
+            pid=0,
+            cleanup_outcome=_NO_OWNED_PROCESS_CLEANUP,
         )
         self.call_args_list: list[tuple] = []  # type: ignore[type-arg]
         self.last_pty_mode: bool | None = None

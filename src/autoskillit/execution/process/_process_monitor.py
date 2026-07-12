@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -18,12 +18,12 @@ from autoskillit.core import (
     CompletionCandidate,
     CompletionCandidateSource,
     LifecycleDecision,
+    fast_loads,
     get_logger,
 )
 from autoskillit.execution.process._process_jsonl import (
     _jsonl_contains_marker,
     _jsonl_has_record_type,
-    _jsonl_last_record_type,
 )
 
 if TYPE_CHECKING:
@@ -44,6 +44,47 @@ class SessionMonitorResult:
     eligible_candidate: CompletionCandidate | None = None
     eligible_source: CompletionCandidateSource | None = None
     sightings: tuple[CandidateSighting, ...] = ()
+
+
+@dataclass(slots=True)
+class _SessionLogTailState:
+    """Mutable state for one persistent binary session-log tail."""
+
+    path: Path
+    session_id: str
+    cursor: int
+    carry: bytes
+    observed_size: int
+    last_change: float
+    suppression_start: float | None = None
+    last_record_type: str | None = None
+    error_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class _ParsedSessionLogRecord:
+    """One complete parsed record with its native binary provenance."""
+
+    value: dict[str, Any]
+    raw: bytes
+    exclusive_byte_offset: int
+    session_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class _SessionLogScanComplete:
+    """Barrier emitted after a scan, including a failed terminal drain."""
+
+    cursor: int
+    observed_size: int
+    session_id: str
+    changed: bool
+    scan_succeeded: bool = True
+    producer_stopped: bool = False
+    incomplete_carry: bool = False
+
+
+_SessionLogTailEvent = _ParsedSessionLogRecord | _SessionLogScanComplete
 
 
 async def _heartbeat(
@@ -208,6 +249,260 @@ def _has_active_execution_marker(
     return False
 
 
+async def _discover_session_log_file(
+    session_log_dir: Path,
+    spawn_time: float,
+    *,
+    expected_session_id: str | None,
+    poll_interval: float,
+    timeout: float,
+) -> tuple[Path | None, ChannelBStatus | None]:
+    """Find the post-spawn JSONL using the legacy identity/recency rules."""
+    phase1_start = time.monotonic()
+    error_count = 0
+    while True:
+        if time.monotonic() - phase1_start >= timeout:
+            logger.warning(
+                "Session log file not found within phase1_timeout (%.1fs); treating as stale",
+                timeout,
+            )
+            return None, ChannelBStatus.STALE
+        await anyio.sleep(poll_interval)
+        try:
+            candidates: list[tuple[Path, float]] = []
+            for path in session_log_dir.iterdir():
+                if path.suffix != ".jsonl":
+                    continue
+                try:
+                    ctime = path.stat().st_ctime
+                except FileNotFoundError:
+                    continue
+                if ctime > spawn_time:
+                    candidates.append((path, ctime))
+            if not candidates:
+                error_count = 0
+                continue
+
+            session_file = None
+            if expected_session_id:
+                session_file = next(
+                    (path for path, _ in candidates if path.stem == expected_session_id),
+                    None,
+                )
+                if session_file is None:
+                    logger.warning(
+                        "session_id_match_not_found",
+                        expected_session_id=expected_session_id,
+                        candidate_count=len(candidates),
+                        candidate_stems=[path.stem for path, _ in candidates],
+                    )
+            if session_file is None:
+                session_file, chosen_ctime = max(candidates, key=lambda candidate: candidate[1])
+            else:
+                chosen_ctime = next(ctime for path, ctime in candidates if path == session_file)
+
+            logger.debug(
+                "session_log_phase1_discovered",
+                candidate_count=len(candidates),
+                chosen_file=str(session_file),
+                ctime=chosen_ctime,
+                spawn_time=spawn_time,
+                ctime_delta=chosen_ctime - spawn_time,
+                selection_method=(
+                    "session_id"
+                    if expected_session_id and session_file.stem == expected_session_id
+                    else "recency"
+                ),
+            )
+            return session_file, None
+        except FileNotFoundError:
+            logger.warning("session_log_dir_absent", path=str(session_log_dir))
+            return None, ChannelBStatus.DIR_MISSING
+        except OSError:
+            error_count += 1
+            if error_count == 10:
+                logger.warning(
+                    "Session monitor: 10 consecutive failures reading %s",
+                    session_log_dir,
+                )
+
+
+def _initialize_session_log_tail(path: Path) -> _SessionLogTailState:
+    """Start a monitoring epoch at the file's current physical EOF."""
+    try:
+        initial_size = path.stat().st_size
+    except OSError:
+        logger.warning(
+            "session_log_phase2_init_read_failed",
+            file=str(path),
+            fallback_scan_pos=0,
+            exc_info=True,
+        )
+        initial_size = 0
+    state = _SessionLogTailState(
+        path=path,
+        session_id=path.stem,
+        cursor=initial_size,
+        carry=b"",
+        observed_size=initial_size,
+        last_change=time.monotonic(),
+    )
+    logger.debug(
+        "session_log_phase2_init",
+        file=str(path),
+        initial_scan_pos=state.cursor,
+        initial_last_size=state.observed_size,
+    )
+    return state
+
+
+def _scan_session_log(
+    state: _SessionLogTailState,
+    *,
+    producer_stopped: bool,
+) -> tuple[tuple[_ParsedSessionLogRecord, ...], _SessionLogScanComplete] | None:
+    """Read and commit every newly available newline-terminated record."""
+    try:
+        current_size = state.path.stat().st_size
+    except OSError:
+        state.error_count += 1
+        if state.error_count == 10:
+            logger.warning(
+                "Session monitor: 10 consecutive stat failures on %s",
+                state.path,
+            )
+        return None
+
+    read_offset = state.cursor + len(state.carry)
+    reset = current_size < state.observed_size or current_size < read_offset
+    changed = reset or current_size > state.observed_size
+    if reset:
+        state.cursor = 0
+        state.carry = b""
+        state.observed_size = current_size
+        state.last_change = time.monotonic()
+        state.suppression_start = None
+        state.last_record_type = None
+        read_offset = 0
+    elif changed:
+        state.observed_size = current_size
+        state.last_change = time.monotonic()
+        state.suppression_start = None
+
+    try:
+        with state.path.open("rb") as stream:
+            stream.seek(read_offset)
+            new_raw = stream.read()
+    except OSError:
+        state.error_count += 1
+        if state.error_count == 10:
+            logger.warning(
+                "Session monitor: 10 consecutive read failures on %s",
+                state.path,
+            )
+        return None
+    state.error_count = 0
+
+    merged = state.carry + new_raw
+    last_newline = merged.rfind(b"\n")
+    if last_newline < 0:
+        state.carry = merged
+        complete = b""
+    else:
+        complete = merged[: last_newline + 1]
+        state.carry = merged[last_newline + 1 :]
+
+    records: list[_ParsedSessionLogRecord] = []
+    line_cursor = state.cursor
+    if complete:
+        for line_without_newline in complete[:-1].split(b"\n"):
+            raw_line = line_without_newline + b"\n"
+            line_cursor += len(raw_line)
+            if not raw_line.strip():
+                continue
+            try:
+                value = fast_loads(raw_line)
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if not isinstance(value, dict):
+                continue
+            record_type = value.get("type")
+            if isinstance(record_type, str):
+                state.last_record_type = record_type
+            records.append(
+                _ParsedSessionLogRecord(
+                    value=value,
+                    raw=raw_line,
+                    exclusive_byte_offset=line_cursor,
+                    session_id=state.session_id,
+                )
+            )
+        state.cursor = line_cursor
+
+    return tuple(records), _SessionLogScanComplete(
+        cursor=state.cursor,
+        observed_size=state.observed_size,
+        session_id=state.session_id,
+        changed=changed,
+        producer_stopped=producer_stopped,
+        incomplete_carry=bool(state.carry),
+    )
+
+
+async def _wait_for_tail_scan(
+    poll_interval: float,
+    producer_stop: anyio.Event | None,
+) -> bool:
+    """Wait for the next poll or a cooperative final-drain request."""
+    if producer_stop is None:
+        await anyio.sleep(poll_interval)
+        return False
+    if not producer_stop.is_set():
+        with anyio.move_on_after(poll_interval):
+            await producer_stop.wait()
+    return producer_stop.is_set()
+
+
+async def _tail_session_log_events(
+    state: _SessionLogTailState,
+    *,
+    poll_interval: float = 2.0,
+    producer_stop: anyio.Event | None = None,
+    on_poll: Callable[[], None] | None = None,
+) -> AsyncIterator[_SessionLogTailEvent]:
+    """Yield parsed binary records and scan barriers until cooperatively stopped.
+
+    A stop request triggers one final scan. Complete records from that drain are
+    yielded before a final ``producer_stopped`` barrier; unresolved carry remains
+    in *state* and is never decoded as a record. A failed final scan emits a
+    barrier with ``scan_succeeded=False`` before the iterator terminates.
+    """
+    while True:
+        stopping = await _wait_for_tail_scan(poll_interval, producer_stop)
+        if on_poll is not None:
+            on_poll()
+        scanned = _scan_session_log(state, producer_stopped=stopping)
+        if scanned is None:
+            if stopping:
+                yield _SessionLogScanComplete(
+                    cursor=state.cursor,
+                    observed_size=state.observed_size,
+                    session_id=state.session_id,
+                    changed=False,
+                    scan_succeeded=False,
+                    producer_stopped=True,
+                    incomplete_carry=bool(state.carry),
+                )
+                return
+            continue
+        records, barrier = scanned
+        for record in records:
+            yield record
+        yield barrier
+        if stopping:
+            return
+
+
 async def _session_log_monitor(
     session_log_dir: Path,
     completion_marker: str,
@@ -250,227 +545,126 @@ async def _session_log_monitor(
     with that record's exclusive binary file offset. Returning ``False`` rejects
     the record and keeps the monitor running.
     """
-    import time as _time
-
-    # Phase 1: Find the session log file
-    session_file = None
-    os_error_count = 0
-    phase1_start = _time.monotonic()
-    while session_file is None:
-        if _time.monotonic() - phase1_start >= _phase1_timeout:
-            logger.warning(
-                "Session log file not found within phase1_timeout (%.1fs); treating as stale",
-                _phase1_timeout,
-            )
-            return SessionMonitorResult(ChannelBStatus.STALE, "")
-        await anyio.sleep(_phase1_poll)
-        try:
-            candidates = [
-                f
-                for f in session_log_dir.iterdir()
-                if f.suffix == ".jsonl" and f.stat().st_ctime > spawn_time
-            ]
-            if candidates:
-                if expected_session_id:
-                    # Identity-based selection: match filename stem to session ID
-                    for f in candidates:
-                        if f.stem == expected_session_id:
-                            session_file = f
-                            break
-                    if session_file is None:
-                        logger.warning(
-                            "session_id_match_not_found",
-                            expected_session_id=expected_session_id,
-                            candidate_count=len(candidates),
-                            candidate_stems=[f.stem for f in candidates],
-                        )
-                        session_file = max(candidates, key=lambda f: f.stat().st_ctime)
-                else:
-                    session_file = max(candidates, key=lambda f: f.stat().st_ctime)
-                _chosen_ctime = session_file.stat().st_ctime
-                logger.debug(
-                    "session_log_phase1_discovered",
-                    candidate_count=len(candidates),
-                    chosen_file=str(session_file),
-                    ctime=_chosen_ctime,
-                    spawn_time=spawn_time,
-                    ctime_delta=_chosen_ctime - spawn_time,
-                    selection_method="session_id"
-                    if expected_session_id and session_file.stem == expected_session_id
-                    else "recency",
-                )
-            os_error_count = 0
-        except FileNotFoundError:
-            # Directory missing is structural — it won't self-heal during a
-            # poll loop.  Return immediately so downstream gates can
-            # distinguish "could not monitor" from "monitored but timed out".
-            logger.warning("session_log_dir_absent", path=str(session_log_dir))
-            return SessionMonitorResult(ChannelBStatus.DIR_MISSING, "")
-        except OSError:
-            os_error_count += 1
-            if os_error_count == 10:
-                logger.warning(
-                    "Session monitor: 10 consecutive failures reading %s", session_log_dir
-                )
-            continue
-
-    # Extract session ID from the discovered JSONL filename stem
-    _session_id = session_file.stem
-
-    # Phase 2: Monitor the session log
-    # Initialize scan offset from file state at discovery. On resumed sessions,
-    # the JSONL already contains records (including completion markers) from the
-    # prior session. Starting at the current file boundary ensures Phase 2 only
-    # scans content written AFTER monitoring began.
-    try:
-        _initial_content = session_file.read_bytes()
-        scan_pos = len(_initial_content)
-        last_size = len(_initial_content)
-    except OSError:
-        logger.warning(
-            "session_log_phase2_init_read_failed",
-            file=str(session_file),
-            fallback_scan_pos=0,
-            exc_info=True,
-        )
-        scan_pos = 0
-        last_size = 0
-    last_change = _time.monotonic()
-    logger.debug(
-        "session_log_phase2_init",
-        file=str(session_file),
-        initial_scan_pos=scan_pos,
-        initial_last_size=last_size,
+    session_file, discovery_status = await _discover_session_log_file(
+        session_log_dir,
+        spawn_time,
+        expected_session_id=expected_session_id,
+        poll_interval=_phase1_poll,
+        timeout=_phase1_timeout,
     )
-    os_error_count = 0
-    suppression_start: float | None = None
-    _last_record_type: str | None = None
+    if session_file is None:
+        assert discovery_status is not None
+        return SessionMonitorResult(discovery_status, "")
 
-    while True:
-        await anyio.sleep(_phase2_poll)
-        if _on_poll is not None:
-            _on_poll()
-        try:
-            current_size = session_file.stat().st_size
-            os_error_count = 0
-        except OSError:
-            os_error_count += 1
-            if os_error_count == 10:
-                logger.warning("Session monitor: 10 consecutive stat failures on %s", session_file)
+    state = _initialize_session_log_tail(session_file)
+    async for event in _tail_session_log_events(
+        state,
+        poll_interval=_phase2_poll,
+        on_poll=_on_poll,
+    ):
+        if isinstance(event, _ParsedSessionLogRecord):
+            if _jsonl_contains_marker(
+                event.raw,
+                completion_marker,
+                record_types,
+                base_byte_offset=event.exclusive_byte_offset - len(event.raw),
+                completion_record_callback=completion_record_callback,
+            ):
+                logger.debug(
+                    "session_log_phase2_marker_found",
+                    file=str(state.path),
+                    file_size=state.observed_size,
+                    scan_pos=state.cursor,
+                )
+                return SessionMonitorResult(
+                    ChannelBStatus.COMPLETION,
+                    state.session_id,
+                    decision=(
+                        LifecycleDecision.ELIGIBLE
+                        if eligible_source_on_completion is not None
+                        else LifecycleDecision.CONTINUE
+                    ),
+                    eligible_source=eligible_source_on_completion,
+                )
             continue
 
-        if current_size > last_size:
-            last_size = current_size
-            last_change = _time.monotonic()
-            suppression_start = None
+        if event.changed:
+            continue
+        elapsed = time.monotonic() - state.last_change
+        if elapsed < stale_threshold:
+            continue
 
-            # Check new content for completion marker (structured)
-            try:
-                content = session_file.read_bytes()
-                new_content = content[scan_pos:]
-                chunk_start = scan_pos
-                scan_pos = len(content)
-                if _jsonl_contains_marker(
-                    new_content,
-                    completion_marker,
-                    record_types,
-                    base_byte_offset=chunk_start,
-                    completion_record_callback=completion_record_callback,
-                ):
-                    logger.debug(
-                        "session_log_phase2_marker_found",
-                        file=str(session_file),
-                        file_size=current_size,
-                        scan_pos=scan_pos,
-                    )
-                    return SessionMonitorResult(
-                        ChannelBStatus.COMPLETION,
-                        _session_id,
-                        decision=(
-                            LifecycleDecision.ELIGIBLE
-                            if eligible_source_on_completion is not None
-                            else LifecycleDecision.CONTINUE
-                        ),
-                        eligible_source=eligible_source_on_completion,
-                    )
-                last_type_in_chunk = _jsonl_last_record_type(
-                    new_content.decode("utf-8", errors="replace")
+        if pid is not None and _has_active_api_connection(pid):
+            if state.suppression_start is None:
+                state.suppression_start = time.monotonic()
+            suppression_elapsed = time.monotonic() - state.suppression_start
+            if suppression_elapsed >= max_suppression_seconds:
+                logger.warning(
+                    "Suppression bounded: stale kill after %.0fs consecutive "
+                    "suppression (max_suppression_seconds=%.0f, pid=%d)",
+                    suppression_elapsed,
+                    max_suppression_seconds,
+                    pid,
                 )
-                if last_type_in_chunk is not None:
-                    _last_record_type = last_type_in_chunk
-            except OSError:
-                pass
+                return SessionMonitorResult(ChannelBStatus.STALE, state.session_id)
+            state.last_change = time.monotonic()
+            logger.warning(
+                "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
+                "suppressing stale kill (pid=%d)",
+                elapsed,
+                pid,
+            )
+        elif (
+            pid is not None
+            and activity_tracker is not None
+            and activity_tracker.has_active_children(pid)
+        ):
+            if state.suppression_start is None:
+                state.suppression_start = time.monotonic()
+            suppression_elapsed = time.monotonic() - state.suppression_start
+            if suppression_elapsed >= max_suppression_seconds:
+                logger.warning(
+                    "Suppression bounded: stale kill after %.0fs consecutive "
+                    "suppression (max_suppression_seconds=%.0f, pid=%d)",
+                    suppression_elapsed,
+                    max_suppression_seconds,
+                    pid,
+                )
+                return SessionMonitorResult(ChannelBStatus.STALE, state.session_id)
+            state.last_change = time.monotonic()
+            logger.warning(
+                "JSONL silent for %.0fs but child processes are CPU-active — "
+                "suppressing stale kill (pid=%d)",
+                elapsed,
+                pid,
+            )
+        elif marker_dir is not None and _has_active_execution_marker(
+            marker_dir, session_id=caller_session_id
+        ):
+            if state.suppression_start is None:
+                state.suppression_start = time.monotonic()
+            suppression_elapsed = time.monotonic() - state.suppression_start
+            if suppression_elapsed >= max_suppression_seconds:
+                logger.warning(
+                    "Suppression bounded: stale kill after dispatch marker "
+                    "suppression exceeded max_suppression_seconds",
+                    suppression_elapsed=suppression_elapsed,
+                    caller_session_id=caller_session_id,
+                    marker_dir=str(marker_dir),
+                )
+                return SessionMonitorResult(ChannelBStatus.STALE, state.session_id)
+            state.last_change = time.monotonic()
+            logger.warning(
+                "JSONL silent but active dispatch marker found — suppressing stale kill",
+                stale_elapsed=elapsed,
+                caller_session_id=caller_session_id,
+                marker_dir=str(marker_dir),
+            )
         else:
-            # Check staleness
-            elapsed = _time.monotonic() - last_change
-            if elapsed >= stale_threshold:
-                if pid is not None and _has_active_api_connection(pid):
-                    if suppression_start is None:
-                        suppression_start = _time.monotonic()
-                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
-                        logger.warning(
-                            "Suppression bounded: stale kill after %.0fs consecutive "
-                            "suppression (max_suppression_seconds=%.0f, pid=%d)",
-                            _time.monotonic() - suppression_start,
-                            max_suppression_seconds,
-                            pid,
-                        )
-                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
-                    last_change = _time.monotonic()
-                    logger.warning(
-                        "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
-                        "suppressing stale kill (pid=%d)",
-                        elapsed,
-                        pid,
-                    )
-                elif (
-                    pid is not None
-                    and activity_tracker is not None
-                    and activity_tracker.has_active_children(pid)
-                ):
-                    if suppression_start is None:
-                        suppression_start = _time.monotonic()
-                    if _time.monotonic() - suppression_start >= max_suppression_seconds:
-                        logger.warning(
-                            "Suppression bounded: stale kill after %.0fs consecutive "
-                            "suppression (max_suppression_seconds=%.0f, pid=%d)",
-                            _time.monotonic() - suppression_start,
-                            max_suppression_seconds,
-                            pid,
-                        )
-                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
-                    last_change = _time.monotonic()
-                    logger.warning(
-                        "JSONL silent for %.0fs but child processes are CPU-active — "
-                        "suppressing stale kill (pid=%d)",
-                        elapsed,
-                        pid,
-                    )
-                elif marker_dir is not None and _has_active_execution_marker(
-                    marker_dir, session_id=caller_session_id
-                ):
-                    if suppression_start is None:
-                        suppression_start = _time.monotonic()
-                    suppression_elapsed = _time.monotonic() - suppression_start
-                    if suppression_elapsed >= max_suppression_seconds:
-                        logger.warning(
-                            "Suppression bounded: stale kill after dispatch marker "
-                            "suppression exceeded max_suppression_seconds",
-                            suppression_elapsed=suppression_elapsed,
-                            caller_session_id=caller_session_id,
-                            marker_dir=str(marker_dir),
-                        )
-                        return SessionMonitorResult(ChannelBStatus.STALE, _session_id)
-                    last_change = _time.monotonic()
-                    logger.warning(
-                        "JSONL silent but active dispatch marker found — suppressing stale kill",
-                        stale_elapsed=elapsed,
-                        caller_session_id=caller_session_id,
-                        marker_dir=str(marker_dir),
-                    )
-                else:
-                    return SessionMonitorResult(
-                        ChannelBStatus.STALE,
-                        _session_id,
-                        orphaned_tool_result=(_last_record_type == "user"),
-                    )
+            return SessionMonitorResult(
+                ChannelBStatus.STALE,
+                state.session_id,
+                orphaned_tool_result=(state.last_record_type == "user"),
+            )
+
+    raise RuntimeError("session log tail stopped without a producer_stop signal")

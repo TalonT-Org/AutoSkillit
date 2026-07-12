@@ -30,8 +30,7 @@ from autoskillit.core import (
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _adjudicate_optional_completion,
-    _apply_budget_guard,
-    _capture_failure,
+    _apply_final_result_precedence,
     _compute_write_evidence,
     _extract_file_changes,
     _stdout_mentions_write_tools,
@@ -264,7 +263,13 @@ def _build_skill_result(
                             needs_retry=True,
                             retry_reason=RetryReason.ZERO_WRITES,
                         )
-                return _stale_success_sr
+                return _apply_final_result_precedence(
+                    result,
+                    _stale_success_sr,
+                    skill_command,
+                    audit,
+                    max_consecutive_retries,
+                )
         # No valid result in stdout — fall through to original stale response
         _stale_is_rate_limited = has_rate_limit_signal(stale_session, result)
         _stale_is_api_error = stale_session.api_retry_exhausted or (
@@ -272,15 +277,6 @@ def _build_skill_result(
         )
         _stale_retry_reason = (
             RetryReason.RATE_LIMITED if _stale_is_rate_limited else RetryReason.STALE
-        )
-        _capture_failure(
-            skill_command,
-            exit_code=result.returncode if result.returncode is not None else -1,
-            subtype="stale",
-            needs_retry=True,
-            retry_reason=_stale_retry_reason,
-            stderr=result.stderr if result.stderr else "",
-            audit=audit,
         )
         if _stale_is_rate_limited:
             stale_infra = InfraOutcome(exit_category=InfraExitCategory.RATE_LIMITED.value)
@@ -304,7 +300,13 @@ def _build_skill_result(
             infra=stale_infra,
             api_retry=stale_api_retry,
         )
-        return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
+        return _apply_final_result_precedence(
+            result,
+            stale_sr,
+            skill_command,
+            audit,
+            max_consecutive_retries,
+        )
 
     if result.termination == TerminationReason.IDLE_STALL:
         idle_session = _parse_stdout(result.stdout, backend=backend)
@@ -368,22 +370,19 @@ def _build_skill_result(
                             needs_retry=True,
                             retry_reason=RetryReason.ZERO_WRITES,
                         )
-                return _idle_success_sr
+                return _apply_final_result_precedence(
+                    result,
+                    _idle_success_sr,
+                    skill_command,
+                    audit,
+                    max_consecutive_retries,
+                )
         _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
         _idle_is_api_error = idle_session.api_retry_exhausted or (
             idle_session.api_error_status is not None and idle_session.api_error_status >= 400
         )
         _idle_retry_reason = (
             RetryReason.RATE_LIMITED if _idle_is_rate_limited else RetryReason.IDLE_STALL
-        )
-        _capture_failure(
-            skill_command,
-            exit_code=result.returncode if result.returncode is not None else -1,
-            subtype="idle_stall",
-            needs_retry=True,
-            retry_reason=_idle_retry_reason,
-            stderr=result.stderr if result.stderr else "",
-            audit=audit,
         )
         logger.warning(
             "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
@@ -410,7 +409,13 @@ def _build_skill_result(
             infra=idle_infra,
             api_retry=idle_api_retry,
         )
-        return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
+        return _apply_final_result_precedence(
+            result,
+            idle_sr,
+            skill_command,
+            audit,
+            max_consecutive_retries,
+        )
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
@@ -617,7 +622,6 @@ def _build_skill_result(
 
     outcome, retry_reason, success, needs_retry, normalized_subtype = (
         _adjudicate_optional_completion(
-            result,
             session,
             outcome,
             retry_reason,
@@ -650,33 +654,6 @@ def _build_skill_result(
         expected = CliSubtype.TIMEOUT.value
         raise RuntimeError(
             f"TIMED_OUT session produced subtype={normalized_subtype!r}, expected {expected!r}"
-        )
-
-    # For adjudicated_failure + write evidence: record as retriable so the consecutive
-    # chain is intact for the CONTRACT_RECOVERY budget guard (genuinely retriable).
-    _audit_needs_retry = needs_retry
-    _audit_retry_reason = retry_reason
-    if (
-        not success
-        and not needs_retry
-        and normalized_subtype == "adjudicated_failure"
-        and _has_write_evidence
-        and not readonly_skill
-    ):
-        _audit_needs_retry = True
-        _audit_retry_reason = RetryReason.CONTRACT_RECOVERY
-    if retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
-        _audit_retry_reason = RetryReason.COMPLETED_NO_FLUSH
-
-    if not success or needs_retry:
-        _capture_failure(
-            skill_command,
-            exit_code=returncode,
-            subtype=normalized_subtype,
-            needs_retry=_audit_needs_retry,
-            retry_reason=_audit_retry_reason.value,
-            stderr=result.stderr if result.stderr else "",
-            audit=audit,
         )
 
     result_text = _truncate(session.agent_result)
@@ -798,13 +775,10 @@ def _build_skill_result(
             needs_retry=True,
             retry_reason=RetryReason.PATH_CONTAMINATION,
         )
-    sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
-
     # CONTRACT_RECOVERY gate: when the session was classified as adjudicated_failure but
     # write evidence exists, the model wrote the artifact but omitted the structured output
-    # token — promote to RETRIABLE(CONTRACT_RECOVERY). Re-apply budget_guard after
-    # promoting so budget exhaustion can still cap CONTRACT_RECOVERY retries.
-    # The first _apply_budget_guard skips this case because needs_retry is False then.
+    # token — promote to RETRIABLE(CONTRACT_RECOVERY). Final precedence applies the
+    # retry-budget guard after all result transformations are complete.
     if (
         not sr.success
         and not sr.needs_retry
@@ -817,7 +791,6 @@ def _build_skill_result(
             needs_retry=True,
             retry_reason=RetryReason.CONTRACT_RECOVERY,
         )
-        sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
     # Zero-write gate: demote success to retriable failure when a write-expected
     # skill produced zero Edit/Write calls (silent degradation detection).
@@ -846,8 +819,14 @@ def _build_skill_result(
             subtype="completed_no_flush",
             retry_reason=RetryReason.COMPLETED_NO_FLUSH,
         )
-        sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
+    sr = _apply_final_result_precedence(
+        result,
+        sr,
+        skill_command,
+        audit,
+        max_consecutive_retries,
+    )
     logger.debug(
         "build_skill_result_exit",
         success=sr.success,

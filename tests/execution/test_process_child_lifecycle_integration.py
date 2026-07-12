@@ -1,4 +1,4 @@
-"""Five-child real-process replay — production incident proof (issue #4233).
+"""Five-child progress and terminal-delivery proof (issue #4233).
 
 Five real descendants survive an early marker and progress; terminal plus
 parent-delivery evidence closes obligations; only a fresh later marker
@@ -14,6 +14,8 @@ than invoking the reducer, pump, or actor directly.
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 import textwrap
@@ -40,6 +42,7 @@ from autoskillit.execution.backends._claude_lifecycle import (
     extract_parent_assistant_marker,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.linux_tracing import read_starttime_ticks
 from autoskillit.execution.process import run_managed_async
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -48,6 +51,41 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 FIXTURE_PATH = (
     Path(__file__).parent / "backends" / "fixtures" / "claude_child_lifecycle_2_1_197.jsonl"
 )
+
+SpawnedIdentity = tuple[int, int, float]
+
+
+def _capture_identity(pid: int, starttime_ticks: int | None = None) -> SpawnedIdentity:
+    ticks = starttime_ticks if starttime_ticks is not None else read_starttime_ticks(pid)
+    return (pid, ticks or 0, psutil.Process(pid).create_time())
+
+
+def _identity_is_alive(identity: SpawnedIdentity) -> bool:
+    pid, starttime_ticks, fallback_create_time = identity
+    if starttime_ticks > 0:
+        return read_starttime_ticks(pid) == starttime_ticks
+    try:
+        return psutil.Process(pid).create_time() == fallback_create_time
+    except (psutil.NoSuchProcess, psutil.ZombieProcess):
+        return False
+
+
+async def _cleanup_matching_identities(identities: dict[int, SpawnedIdentity]) -> None:
+    """Best-effort cleanup that never signals a reused PID."""
+    ordered = tuple(reversed(tuple(identities.values())))
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for identity in ordered:
+            if not _identity_is_alive(identity):
+                continue
+            try:
+                os.kill(identity[0], sig)
+            except ProcessLookupError:
+                pass
+        with anyio.move_on_after(1.0):
+            while any(_identity_is_alive(identity) for identity in ordered):
+                await anyio.sleep(0.01)
+        if not any(_identity_is_alive(identity) for identity in ordered):
+            return
 
 
 @pytest.fixture(scope="module")
@@ -156,18 +194,43 @@ def test_fixture_python_parse_succeeds() -> None:
 
 
 @pytest.mark.anyio
-async def test_production_runner_defers_early_marker_until_five_children_finish(
+async def test_production_runner_proves_five_child_progress_and_terminal_delivery(
     tmp_path: Path,
 ) -> None:
+    """Five identity-tracked descendants progress, close, and are cleaned safely."""
     marker = "%autoskillit:fresh-parent-marker:abc12345%"
     release_fifo = tmp_path / "release.fifo"
     release_fifo.unlink(missing_ok=True)
     release_fifo.parent.mkdir(parents=True, exist_ok=True)
-    import os
 
     os.mkfifo(release_fifo)
     pid_file = tmp_path / "children.json"
     early_ready = tmp_path / "early-ready"
+    child_release = tmp_path / "release-children"
+    progress_dir = tmp_path / "child-progress"
+    progress_dir.mkdir()
+    child_script = tmp_path / "progress_child.py"
+    child_script.write_text(
+        textwrap.dedent(
+            """
+            import signal
+            import sys
+            import time
+            from pathlib import Path
+
+            release = Path(sys.argv[1])
+            progress = Path(sys.argv[2])
+            deadline = time.monotonic() + 10
+            while not release.exists():
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("child progress release timed out")
+                time.sleep(0.01)
+            progress.write_text("progressed")
+            signal.pause()
+            """
+        ),
+        encoding="utf-8",
+    )
     script = tmp_path / "shim.py"
     script.write_text(
         textwrap.dedent(
@@ -181,11 +244,19 @@ async def test_production_runner_defers_early_marker_until_five_children_finish(
             release_fifo = Path({str(release_fifo)!r})
             pid_file = Path({str(pid_file)!r})
             early_ready = Path({str(early_ready)!r})
+            child_release = Path({str(child_release)!r})
+            progress_dir = Path({str(progress_dir)!r})
+            child_script = Path({str(child_script)!r})
             marker = {marker!r}
 
             children = [
-                subprocess.Popen([sys.executable, "-c", "import signal; signal.pause()"])
-                for _ in range(5)
+                subprocess.Popen([
+                    sys.executable,
+                    str(child_script),
+                    str(child_release),
+                    str(progress_dir / f"child_{{index}}"),
+                ])
+                for index in range(5)
             ]
             pid_file.write_text(json.dumps([child.pid for child in children]))
 
@@ -238,6 +309,11 @@ async def test_production_runner_defers_early_marker_until_five_children_finish(
 
     result_box: dict[str, object] = {}
     completed = anyio.Event()
+    spawned_identities: dict[int, SpawnedIdentity] = {}
+    child_pids: list[int] = []
+
+    def capture_root_identity(pid: int, starttime_ticks: int) -> None:
+        spawned_identities[pid] = _capture_identity(pid, starttime_ticks)
 
     async def _run() -> None:
         result_box["result"] = await run_managed_async(
@@ -251,46 +327,78 @@ async def test_production_runner_defers_early_marker_until_five_children_finish(
             natural_exit_grace_seconds=0.05,
             cleanup_budget_seconds=5.0,
             _heartbeat_poll=0.01,
+            on_pid_resolved=capture_root_identity,
         )
         completed.set()
 
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(_run)
-        with anyio.fail_after(5):
-            while not early_ready.exists():
-                await anyio.sleep(0.01)
-        child_pids = json.loads(pid_file.read_text(encoding="utf-8"))
-        assert len(child_pids) == 5
-        assert all(psutil.pid_exists(pid) for pid in child_pids)
-        assert not completed.is_set(), "early marker must not authorize teardown"
-        await anyio.to_thread.run_sync(release_fifo.write_bytes, b"x")
-        with anyio.fail_after(10):
-            await completed.wait()
+    try:
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_run)
+            with anyio.fail_after(5):
+                while not early_ready.exists():
+                    await anyio.sleep(0.01)
+            child_pids = json.loads(pid_file.read_text(encoding="utf-8"))
+            assert len(child_pids) == 5
+            for pid in child_pids:
+                spawned_identities[pid] = _capture_identity(pid)
+            child_identities = tuple(spawned_identities[pid] for pid in child_pids)
+            assert all(_identity_is_alive(identity) for identity in child_identities)
+            assert not completed.is_set(), "early marker must not authorize teardown"
+            child_release.write_text("release", encoding="utf-8")
+            with anyio.fail_after(5):
+                while {path.name for path in progress_dir.iterdir()} != {
+                    f"child_{index}" for index in range(5)
+                }:
+                    await anyio.sleep(0.01)
+            assert all(_identity_is_alive(identity) for identity in child_identities)
+            assert not completed.is_set(), "child progress alone must not authorize teardown"
+            await anyio.to_thread.run_sync(release_fifo.write_bytes, b"x")
+            with anyio.fail_after(10):
+                await completed.wait()
 
-    result = result_box["result"]
-    assert isinstance(result, SubprocessResult)
-    assert result.termination is TerminationReason.COMPLETED
-    assert result.channel_confirmation is ChannelConfirmation.CHANNEL_A
-    assert result.kill_reason is KillReason.KILL_AFTER_COMPLETION
-    assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
-    assert result.lifecycle_snapshot is not None
-    assert result.lifecycle_candidate is not None
-    assert result.lifecycle_snapshot.eligible_candidate is result.lifecycle_candidate
-    assert result.lifecycle_candidate.candidate_id == "parent-fresh"
-    assert result.eligible_source is CompletionCandidateSource.CHANNEL_A
-    assert result.sightings[-len(result.lifecycle_candidate.sightings) :] == (
-        result.lifecycle_candidate.sightings
-    )
-    assert tuple(sighting.native_uuid for sighting in result.sightings) == (
-        "parent-early",
-        "parent-fresh",
-    )
-    assert tuple(sighting.source for sighting in result.sightings) == (
-        CompletionCandidateSource.CHANNEL_A,
-        CompletionCandidateSource.CHANNEL_A,
-    )
-    assert result.cleanup_outcome is not None and result.cleanup_outcome.succeeded
-    assert all(not psutil.pid_exists(pid) for pid in child_pids)
+        result = result_box["result"]
+        assert isinstance(result, SubprocessResult)
+        assert set(spawned_identities) == {result.pid, *child_pids}
+        assert len(spawned_identities) == 6
+        assert all(
+            starttime_ticks > 0 or fallback_create_time > 0
+            for _pid, starttime_ticks, fallback_create_time in spawned_identities.values()
+        )
+        assert result.termination is TerminationReason.COMPLETED
+        assert result.channel_confirmation is ChannelConfirmation.CHANNEL_A
+        assert result.kill_reason is KillReason.KILL_AFTER_COMPLETION
+        assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
+        assert result.lifecycle_snapshot is not None
+        snapshot = result.lifecycle_snapshot
+        assert snapshot.active_children == ()
+        assert snapshot.awaiting_delivery == ()
+        assert snapshot.unresolved_terminal == ()
+        assert snapshot.has_active_children is False
+        assert snapshot.has_unresolved_terminal is False
+        assert len(snapshot.completed_children) == 5
+        assert {
+            (child.task_id, child.agent_id, child.tool_use_id)
+            for child in snapshot.completed_children
+        } == {(f"task_{index}", f"agent_{index}", f"toolu_{index}") for index in range(5)}
+        assert result.lifecycle_candidate is not None
+        assert snapshot.eligible_candidate is result.lifecycle_candidate
+        assert result.lifecycle_candidate.candidate_id == "parent-fresh"
+        assert result.eligible_source is CompletionCandidateSource.CHANNEL_A
+        assert result.sightings[-len(result.lifecycle_candidate.sightings) :] == (
+            result.lifecycle_candidate.sightings
+        )
+        assert tuple(sighting.native_uuid for sighting in result.sightings) == (
+            "parent-early",
+            "parent-fresh",
+        )
+        assert tuple(sighting.source for sighting in result.sightings) == (
+            CompletionCandidateSource.CHANNEL_A,
+            CompletionCandidateSource.CHANNEL_A,
+        )
+        assert result.cleanup_outcome is not None and result.cleanup_outcome.succeeded
+        assert all(not _identity_is_alive(identity) for identity in spawned_identities.values())
+    finally:
+        await _cleanup_matching_identities(spawned_identities)
 
 
 @pytest.mark.anyio

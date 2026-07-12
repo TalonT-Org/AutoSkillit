@@ -13,7 +13,7 @@ Headless Claude session orchestration — command prep, subprocess invocation, r
 | `_headless_path_tokens.py` | Path-token extraction and output-path validation from assistant messages |
 | `_headless_recovery.py` | Session recovery: `_recover_from_separate_marker`, `_synthesize_from_write_artifacts` |
 | `_headless_result.py` | `SkillResult` construction: `_build_skill_result` (evidence/telemetry moved to `_headless_evidence.py`) |
-| `_headless_evidence.py` | Evidence computation (`_compute_write_evidence`, `_adapt_agent_result`), lifecycle/cleanup retry precedence (`_retry_precedence`), audit recording, and telemetry builders |
+| `_headless_evidence.py` | Evidence computation (`_compute_write_evidence`, `_adapt_agent_result`), final cleanup/lifecycle result precedence (`_apply_final_result_precedence`), audit recording, and telemetry builders |
 | `_headless_scan.py` | `_scan_jsonl_write_paths()` — scans stdout JSONL for Write/Edit/Bash tool calls; uses `core/bash_write_targets` for precise write-target extraction |
 
 ## Architecture Notes

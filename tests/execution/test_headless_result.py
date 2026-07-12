@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import unittest.mock
 from unittest.mock import Mock
@@ -17,7 +18,6 @@ from autoskillit.core.types import (
     KillReason,
     LifecycleDecision,
     RetryReason,
-    SessionOutcome,
     SkillResult,
     SubprocessResult,
     TerminationReason,
@@ -34,12 +34,19 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _compute_write_evidence,
-    _retry_precedence,
     _stdout_mentions_write_tools,
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._session_outcome import _compute_outcome
-from tests.execution.conftest import _make_tool_use_line, _sr, _success_session_json
+from autoskillit.pipeline.audit import DefaultAuditLog
+from tests.execution.conftest import (
+    _NO_OWNED_PROCESS_CLEANUP,
+    EMPTY_OUTPUT_RESULT_LINE,
+    WRITE_TOOL_LINE,
+    _make_tool_use_line,
+    _sr,
+    _success_session_json,
+)
 from tests.fixtures.codex import (
     HAPPY_PATH_SINGLE_TURN,
     HAPPY_PATH_V0136,
@@ -50,47 +57,20 @@ from tests.fixtures.codex import (
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
-@pytest.mark.parametrize(
-    "result",
-    [
-        SubprocessResult(
-            returncode=0,
-            stdout="",
-            stderr="",
-            termination=TerminationReason.NATURAL_EXIT,
-            pid=1,
-            cleanup_outcome=CleanupOutcome(succeeded=False, budget_exhausted=True),
-        ),
-        SubprocessResult(
-            returncode=0,
-            stdout="",
-            stderr="",
-            termination=TerminationReason.NATURAL_EXIT,
-            pid=1,
-            lifecycle_decision=LifecycleDecision.CHILD_WORK_FAILED,
-        ),
-    ],
-)
-def test_retry_precedence_overrides_success(result: SubprocessResult) -> None:
-    outcome, retry_reason = _retry_precedence(
-        result,
-        SessionOutcome.SUCCEEDED,
-        RetryReason.NONE,
-    )
-    assert outcome is SessionOutcome.RETRIABLE
-    assert retry_reason is RetryReason.RESUME
-
-
-def _idle_stall_result(stdout: str) -> SubprocessResult:
+def _idle_stall_result(
+    stdout: str,
+    cleanup_outcome: CleanupOutcome = _NO_OWNED_PROCESS_CLEANUP,
+) -> SubprocessResult:
     """Build a SubprocessResult with IDLE_STALL termination."""
     return SubprocessResult(
         returncode=-1,
         stdout=stdout,
         stderr="",
         termination=TerminationReason.IDLE_STALL,
-        pid=12345,
+        pid=0,
         session_id="sess-idle-1",
         channel_b_session_id="",
+        cleanup_outcome=cleanup_outcome,
     )
 
 
@@ -126,7 +106,9 @@ def _success_result_json(result_text: str = "done", session_id: str = "test-sess
 
 
 def _stale_result(
-    kill_reason: KillReason = KillReason.NATURAL_EXIT, stdout: str = ""
+    kill_reason: KillReason = KillReason.NATURAL_EXIT,
+    stdout: str = "",
+    cleanup_outcome: CleanupOutcome = _NO_OWNED_PROCESS_CLEANUP,
 ) -> SubprocessResult:
     """Build a SubprocessResult with STALE termination and explicit kill_reason."""
     return SubprocessResult(
@@ -135,15 +117,17 @@ def _stale_result(
         stderr="",
         termination=TerminationReason.STALE,
         kill_reason=kill_reason,
-        pid=12345,
+        pid=0,
         session_id="sess-stale-1",
         channel_b_session_id="",
+        cleanup_outcome=cleanup_outcome,
     )
 
 
 def _idle_stall_result_with_kill(
     kill_reason: KillReason = KillReason.NATURAL_EXIT,
     stdout: str = "",
+    cleanup_outcome: CleanupOutcome = _NO_OWNED_PROCESS_CLEANUP,
 ) -> SubprocessResult:
     """Build a SubprocessResult with IDLE_STALL termination and explicit kill_reason."""
     return SubprocessResult(
@@ -152,15 +136,17 @@ def _idle_stall_result_with_kill(
         stderr="",
         termination=TerminationReason.IDLE_STALL,
         kill_reason=kill_reason,
-        pid=12345,
+        pid=0,
         session_id="sess-idle-1",
         channel_b_session_id="",
+        cleanup_outcome=cleanup_outcome,
     )
 
 
 def _stale_result_with_token_usage(
     usage: dict[str, int],
     kill_reason: KillReason = KillReason.INFRA_KILL,
+    cleanup_outcome: CleanupOutcome = _NO_OWNED_PROCESS_CLEANUP,
 ) -> SubprocessResult:
     """Build a stale SubprocessResult whose stdout contains token usage."""
     result_json = json.dumps(
@@ -179,9 +165,10 @@ def _stale_result_with_token_usage(
         stderr="",
         termination=TerminationReason.STALE,
         kill_reason=kill_reason,
-        pid=12345,
+        pid=0,
         session_id="sess-stale-token",
         channel_b_session_id="",
+        cleanup_outcome=cleanup_outcome,
     )
 
 
@@ -206,6 +193,7 @@ def _codex_subprocess_result(
     stderr: str = "",
     termination: TerminationReason = TerminationReason.NATURAL_EXIT,
     kill_reason: KillReason = KillReason.NATURAL_EXIT,
+    cleanup_outcome: CleanupOutcome = _NO_OWNED_PROCESS_CLEANUP,
 ) -> SubprocessResult:
     return SubprocessResult(
         returncode=returncode,
@@ -213,9 +201,10 @@ def _codex_subprocess_result(
         stderr=stderr,
         termination=termination,
         kill_reason=kill_reason,
-        pid=12345,
+        pid=0,
         session_id="",
         channel_b_session_id="",
+        cleanup_outcome=cleanup_outcome,
     )
 
 
@@ -1874,3 +1863,281 @@ class TestCodexPathContaminationParity:
         # Provenance counts are recorded; no scoped text candidate → preserve result.
         assert sr.evidence.has_implementation_evidence is True
         assert sr.subtype != "path_contamination"
+
+
+_FAILED_CLEANUP = CleanupOutcome(succeeded=False, budget_exhausted=True)
+
+
+def _assert_resume_precedence(sr: SkillResult, subtype: str) -> None:
+    assert sr.success is False
+    assert sr.subtype == subtype
+    assert sr.needs_retry is True
+    assert sr.retry_reason is RetryReason.RESUME
+
+
+class TestFinalHeadlessResultPrecedence:
+    @pytest.mark.parametrize(
+        ("cleanup_outcome", "lifecycle_decision", "expected_subtype"),
+        [
+            (_FAILED_CLEANUP, LifecycleDecision.CONTINUE, "cleanup_failed"),
+            (None, LifecycleDecision.CHILD_WORK_FAILED, "child_work_failed"),
+            (None, LifecycleDecision.CATCH_UP_FAILED, "child_work_failed"),
+        ],
+    )
+    def test_each_terminal_failure_overrides_normal_success(
+        self,
+        cleanup_outcome: CleanupOutcome | None,
+        lifecycle_decision: LifecycleDecision,
+        expected_subtype: str,
+    ) -> None:
+        result = dataclasses.replace(
+            _sr(stdout=_success_result_json()),
+            cleanup_outcome=cleanup_outcome,
+            lifecycle_decision=lifecycle_decision,
+        )
+
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
+
+        _assert_resume_precedence(sr, expected_subtype)
+
+    def test_cleanup_wins_when_cleanup_and_lifecycle_both_fail_and_audit_is_final(self) -> None:
+        audit = DefaultAuditLog()
+        result = dataclasses.replace(
+            _sr(stdout=_success_result_json()),
+            cleanup_outcome=_FAILED_CLEANUP,
+            lifecycle_decision=LifecycleDecision.CHILD_WORK_FAILED,
+        )
+
+        sr = _build_skill_result(
+            result,
+            skill_command="/test:precedence",
+            audit=audit,
+            backend=ClaudeCodeBackend(),
+        )
+
+        _assert_resume_precedence(sr, "cleanup_failed")
+        report = audit.get_report()
+        assert len(report) == 1
+        assert report[0].subtype == "cleanup_failed"
+        assert report[0].needs_retry is True
+        assert report[0].retry_reason == RetryReason.RESUME.value
+
+    @pytest.mark.parametrize(
+        ("termination", "cleanup_outcome", "lifecycle_decision", "expected_subtype"),
+        [
+            (
+                TerminationReason.STALE,
+                _FAILED_CLEANUP,
+                LifecycleDecision.CONTINUE,
+                "cleanup_failed",
+            ),
+            (
+                TerminationReason.IDLE_STALL,
+                None,
+                LifecycleDecision.CHILD_WORK_FAILED,
+                "child_work_failed",
+            ),
+        ],
+    )
+    def test_precedence_over_recovered_stale_and_idle_success(
+        self,
+        termination: TerminationReason,
+        cleanup_outcome: CleanupOutcome | None,
+        lifecycle_decision: LifecycleDecision,
+        expected_subtype: str,
+    ) -> None:
+        result = SubprocessResult(
+            returncode=-1,
+            stdout=_success_result_json("done"),
+            stderr="",
+            termination=termination,
+            pid=12345,
+            cleanup_outcome=cleanup_outcome,
+            lifecycle_decision=lifecycle_decision,
+        )
+
+        sr = _build_skill_result(
+            result,
+            completion_marker="done",
+            backend=ClaudeCodeBackend(),
+        )
+
+        _assert_resume_precedence(sr, expected_subtype)
+
+    @pytest.mark.parametrize(
+        ("termination", "cleanup_outcome", "lifecycle_decision", "expected_subtype"),
+        [
+            (
+                TerminationReason.STALE,
+                None,
+                LifecycleDecision.CATCH_UP_FAILED,
+                "child_work_failed",
+            ),
+            (
+                TerminationReason.IDLE_STALL,
+                _FAILED_CLEANUP,
+                LifecycleDecision.CONTINUE,
+                "cleanup_failed",
+            ),
+        ],
+    )
+    def test_precedence_over_failed_stale_and_idle(
+        self,
+        termination: TerminationReason,
+        cleanup_outcome: CleanupOutcome | None,
+        lifecycle_decision: LifecycleDecision,
+        expected_subtype: str,
+    ) -> None:
+        result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=termination,
+            pid=12345,
+            cleanup_outcome=cleanup_outcome,
+            lifecycle_decision=lifecycle_decision,
+        )
+
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
+
+        _assert_resume_precedence(sr, expected_subtype)
+
+    @pytest.mark.parametrize(
+        ("stdout", "build_kwargs", "lifecycle_decision", "expected_subtype"),
+        [
+            (
+                _success_result_json("done"),
+                {"write_behavior": WriteBehaviorSpec(mode="always")},
+                LifecycleDecision.CATCH_UP_FAILED,
+                "child_work_failed",
+            ),
+            (
+                "\n".join([WRITE_TOOL_LINE, EMPTY_OUTPUT_RESULT_LINE]),
+                {},
+                LifecycleDecision.CHILD_WORK_FAILED,
+                "child_work_failed",
+            ),
+            (
+                "\n".join(
+                    [
+                        WRITE_TOOL_LINE,
+                        _success_result_json("plan summary\n%%ORDER_UP%%"),
+                    ]
+                ),
+                {
+                    "completion_marker": "%%ORDER_UP%%",
+                    "expected_output_patterns": [r"plan_path\s*=\s*/.+"],
+                },
+                LifecycleDecision.CONTINUE,
+                "cleanup_failed",
+            ),
+        ],
+        ids=["zero-writes", "completed-no-flush", "contract-recovery"],
+    )
+    def test_precedence_over_normal_result_transformations(
+        self,
+        stdout: str,
+        build_kwargs: dict[str, object],
+        lifecycle_decision: LifecycleDecision,
+        expected_subtype: str,
+    ) -> None:
+        cleanup_outcome = _FAILED_CLEANUP if expected_subtype == "cleanup_failed" else None
+        result = dataclasses.replace(
+            _sr(stdout=stdout),
+            cleanup_outcome=cleanup_outcome,
+            lifecycle_decision=lifecycle_decision,
+        )
+
+        sr = _build_skill_result(
+            result,
+            backend=ClaudeCodeBackend(),
+            **build_kwargs,  # type: ignore[arg-type]
+        )
+
+        _assert_resume_precedence(sr, expected_subtype)
+
+    def test_lifecycle_failure_overrides_path_contamination(self) -> None:
+        worktree_cwd = "/worktree/clone"
+        external_plan = "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+        stdout = TestCodexPathContaminationParity._codex_ndjson(
+            agent_text=f"plan_path = {external_plan}",
+            file_changes=[external_plan],
+        )
+        result = dataclasses.replace(
+            _codex_subprocess_result(stdout),
+            lifecycle_decision=LifecycleDecision.CHILD_WORK_FAILED,
+        )
+
+        sr = _build_skill_result(
+            result,
+            skill_command=(
+                "/autoskillit:implement-worktree-no-merge "
+                "/wrong/source/repo/.autoskillit/temp/make-plan/foo.md"
+            ),
+            cwd=worktree_cwd,
+            supports_claude_format_stdout=False,
+            backend=CodexBackend(),
+        )
+
+        _assert_resume_precedence(sr, "child_work_failed")
+
+    def test_cleanup_failure_overrides_timeout(self) -> None:
+        result = SubprocessResult(
+            returncode=None,
+            stdout="",
+            stderr="timed out",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+            cleanup_outcome=_FAILED_CLEANUP,
+        )
+
+        sr = _build_skill_result(result, backend=ClaudeCodeBackend())
+
+        _assert_resume_precedence(sr, "cleanup_failed")
+
+    def test_retry_budget_transformation_is_recorded_as_returned(self) -> None:
+        audit = DefaultAuditLog()
+        skill_command = "/test:budget-audit"
+        for _ in range(4):
+            sr = _build_skill_result(
+                _stale_result(),
+                skill_command=skill_command,
+                audit=audit,
+                backend=ClaudeCodeBackend(),
+            )
+
+        assert sr.needs_retry is False
+        assert sr.retry_reason is RetryReason.BUDGET_EXHAUSTED
+        report = audit.get_report()
+        assert len(report) == 4
+        assert report[-1].subtype == sr.subtype
+        assert report[-1].needs_retry is sr.needs_retry
+        assert report[-1].retry_reason == sr.retry_reason.value
+
+    def test_terminal_failure_overrides_retry_budget_exhaustion(self) -> None:
+        audit = DefaultAuditLog()
+        skill_command = "/test:budget-precedence"
+        for _ in range(3):
+            _build_skill_result(
+                _stale_result(),
+                skill_command=skill_command,
+                audit=audit,
+                backend=ClaudeCodeBackend(),
+            )
+        result = dataclasses.replace(
+            _sr(stdout=_success_result_json()),
+            lifecycle_decision=LifecycleDecision.CHILD_WORK_FAILED,
+        )
+
+        sr = _build_skill_result(
+            result,
+            skill_command=skill_command,
+            audit=audit,
+            backend=ClaudeCodeBackend(),
+        )
+
+        _assert_resume_precedence(sr, "child_work_failed")
+        report = audit.get_report()
+        assert len(report) == 4
+        assert report[-1].subtype == "child_work_failed"
+        assert report[-1].retry_reason == RetryReason.RESUME.value

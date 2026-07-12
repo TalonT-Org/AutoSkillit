@@ -63,12 +63,13 @@ def _apply_budget_guard(
     skill_command: str,
     audit: AuditLog | None,
     max_consecutive_retries: int,
+    *,
+    pending_failure: bool = False,
 ) -> SkillResult:
     """Override needs_retry to False when the consecutive-failure budget is exhausted."""
     if not sr.needs_retry or audit is None or not skill_command:
         return sr
-    consecutive = audit.consecutive_failures(skill_command)
-    # current failure already recorded; consecutive count includes this attempt
+    consecutive = audit.consecutive_failures(skill_command) + int(pending_failure)
     if consecutive > max_consecutive_retries:
         logger.warning(
             "retry_budget_exhausted",
@@ -84,23 +85,59 @@ def _apply_budget_guard(
     return sr
 
 
-def _retry_precedence(
+def _apply_final_result_precedence(
     result: SubprocessResult,
-    outcome: SessionOutcome,
-    retry_reason: RetryReason,
-) -> tuple[SessionOutcome, RetryReason]:
+    sr: SkillResult,
+    skill_command: str,
+    audit: AuditLog | None,
+    max_consecutive_retries: int,
+) -> SkillResult:
+    """Apply terminal carrier precedence, retry budget, and final failure audit."""
     cleanup_failed = result.cleanup_outcome is not None and not result.cleanup_outcome.succeeded
     lifecycle_failed = result.lifecycle_decision in {
         LifecycleDecision.CHILD_WORK_FAILED,
         LifecycleDecision.CATCH_UP_FAILED,
     }
-    if cleanup_failed or lifecycle_failed:
-        return SessionOutcome.RETRIABLE, RetryReason.RESUME
-    return outcome, retry_reason
+
+    if cleanup_failed:
+        sr = dataclasses.replace(
+            sr,
+            success=False,
+            subtype="cleanup_failed",
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+        )
+    elif lifecycle_failed:
+        sr = dataclasses.replace(
+            sr,
+            success=False,
+            subtype="child_work_failed",
+            needs_retry=True,
+            retry_reason=RetryReason.RESUME,
+        )
+    else:
+        sr = _apply_budget_guard(
+            sr,
+            skill_command,
+            audit,
+            max_consecutive_retries,
+            pending_failure=not sr.success or sr.needs_retry,
+        )
+
+    if not sr.success or sr.needs_retry:
+        _capture_failure(
+            skill_command,
+            exit_code=sr.exit_code,
+            subtype=sr.subtype,
+            needs_retry=sr.needs_retry,
+            retry_reason=sr.retry_reason.value,
+            stderr=sr.stderr,
+            audit=audit,
+        )
+    return sr
 
 
 def _adjudicate_optional_completion(
-    result: SubprocessResult,
     session: ClaudeSessionResult,
     outcome: SessionOutcome,
     retry_reason: RetryReason,
@@ -111,7 +148,7 @@ def _adjudicate_optional_completion(
     expected_output_patterns: Sequence[str],
     infra_completed: bool,
 ) -> tuple[SessionOutcome, RetryReason, bool, bool, str]:
-    """Apply optional marker recovery before terminal retry precedence."""
+    """Apply optional marker recovery before final result precedence."""
     normalized_subtype = session.normalize_subtype(
         outcome, completion_marker, prior_completion_markers
     )
@@ -126,10 +163,6 @@ def _adjudicate_optional_completion(
         retry_reason = RetryReason.NONE
         needs_retry = False
 
-    precedence = _retry_precedence(result, outcome, retry_reason)
-    if precedence != (outcome, retry_reason):
-        outcome, retry_reason = precedence
-        needs_retry = outcome == SessionOutcome.RETRIABLE
     success = outcome == SessionOutcome.SUCCEEDED
     normalized_subtype = session.normalize_subtype(
         outcome, completion_marker, prior_completion_markers

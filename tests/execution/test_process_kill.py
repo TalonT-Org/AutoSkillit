@@ -214,46 +214,79 @@ class TestDualWinnerRace:
 
 
 class TestRunManagedAsyncPassesPidToMonitor:
-    """Verify that run_managed_async passes proc.pid to _session_log_monitor."""
+    """Verify that run_managed_async passes proc.pid to the persistent B tailer."""
 
     @pytest.mark.anyio
-    async def test_pid_passed_to_session_monitor(self, tmp_path):
-        """
-        Spawn a real subprocess. Patch _session_log_monitor to capture args.
-        Verify the pid kwarg matches the real subprocess PID.
-        """
-        from unittest.mock import patch
-
+    async def test_pid_passed_to_session_monitor(self, tmp_path, monkeypatch):
+        import autoskillit.execution.process as process_module
         from autoskillit.core.types import ChannelBStatus
+        from autoskillit.execution.process._process_monitor import SessionMonitorResult
 
         captured = {}
 
-        async def capturing_monitor(*args, **kwargs):
-            from autoskillit.execution.process._process_monitor import SessionMonitorResult
-
+        async def capturing_monitor(**kwargs):
             captured["pid"] = kwargs.get("pid")
-            captured["positional_pid"] = args[5] if len(args) > 5 else None
-            return SessionMonitorResult(ChannelBStatus.STALE, "")
+            kwargs["channel_b_ready"].set()
+            kwargs["post_exit_scan"].set()
+            kwargs["on_result"](SessionMonitorResult(ChannelBStatus.STALE, ""))
+            kwargs["trigger"].set()
+            await kwargs["endpoint"].aclose()
 
         session_file = tmp_path / "fake_session.jsonl"
         session_file.write_text("")
 
-        with patch("autoskillit.execution.process._session_log_monitor", capturing_monitor):
-            result = await run_managed_async(
-                ["sleep", "5"],
-                cwd=tmp_path,
-                timeout=3.0,
-                session_log_dir=tmp_path,
-                stale_threshold=0.1,
-                completion_marker="DONE",
-                stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("DONE"),
-                parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer(
-                    "DONE"
-                ),
-            )
+        monkeypatch.setattr(process_module, "_watch_session_log_with_lifecycle", capturing_monitor)
+        result = await run_managed_async(
+            ["sleep", "5"],
+            cwd=tmp_path,
+            timeout=3.0,
+            session_log_dir=tmp_path,
+            stale_threshold=0.1,
+            completion_marker="DONE",
+            stream_parser_factory=ClaudeCodeBackend().stream_parser_factory("DONE"),
+            parent_candidate_normalizer=ClaudeCodeBackend().parent_candidate_normalizer("DONE"),
+        )
 
         assert result.termination == TerminationReason.STALE
-        pid_received = captured.get("pid") or captured.get("positional_pid")
+        pid_received = captured.get("pid")
         assert pid_received is not None
         assert isinstance(pid_received, int)
         assert pid_received > 0
+
+
+class TestLifecycleExternalCancellation:
+    @pytest.mark.anyio
+    async def test_external_cancel_still_drains_actor(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.execution.process as process_module
+
+        actor_finished = anyio.Event()
+        original_actor = process_module.run_lifecycle_actor
+
+        async def observed_actor(*args, **kwargs):
+            try:
+                await original_actor(*args, **kwargs)
+            finally:
+                actor_finished.set()
+
+        monkeypatch.setattr(process_module, "run_lifecycle_actor", observed_actor)
+        backend = ClaudeCodeBackend()
+
+        async def run_lifecycle_process() -> None:
+            await run_managed_async(
+                [sys.executable, "-c", "import time; time.sleep(30)"],
+                cwd=tmp_path,
+                timeout=60,
+                completion_marker="DONE",
+                completion_drain_timeout=0.1,
+                stream_parser_factory=backend.stream_parser_factory("DONE"),
+                parent_candidate_normalizer=backend.parent_candidate_normalizer("DONE"),
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_lifecycle_process)
+            await anyio.sleep(0.1)
+            tg.cancel_scope.cancel()
+
+        assert actor_finished.is_set()

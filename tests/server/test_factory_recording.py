@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from unittest.mock import Mock
 
 import pytest
 
+from autoskillit.core import CleanupOutcome, KillReason, TerminationReason
 from autoskillit.execution.recording import RecordingSubprocessRunner, ReplayingSubprocessRunner
 from tests.conftest import _make_result
 from tests.fakes import MockSubprocessRunner
@@ -21,6 +22,12 @@ class FakeStepResult:
     cassette_exit_code: int
     cassette_path: str
     cassette_duration_ms: int
+    pid: int = 0
+    termination: TerminationReason = TerminationReason.NATURAL_EXIT
+    kill_reason: KillReason = KillReason.NATURAL_EXIT
+    cleanup_outcome: CleanupOutcome = field(
+        default_factory=lambda: CleanupOutcome(succeeded=True, budget_exhausted=False)
+    )
 
 
 # --- T9: run_headless_core passes scenario_step_name through ---

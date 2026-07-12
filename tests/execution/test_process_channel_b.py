@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import textwrap
+from pathlib import Path
+from typing import Any
 
+import anyio
 import pytest
 
 from autoskillit.core.types import (
     ChannelConfirmation,
     CompletionCandidateSource,
+    CompletionCandidateState,
     LifecycleDecision,
     SubprocessResult,
     TerminationReason,
@@ -800,3 +805,729 @@ class TestChannelBSubSkillCollision:
 
         assert result.termination == TerminationReason.COMPLETED
         assert result.channel_confirmation == ChannelConfirmation.CHANNEL_B
+
+
+def _jsonl(record: dict[str, Any]) -> bytes:
+    return (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+
+
+@pytest.mark.timeout(90)
+@pytest.mark.anyio
+async def test_lifecycle_channel_b_persists_with_exact_offsets_and_distinct_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Three actor-correlated B replies preserve tailing, generations, and offsets."""
+    import autoskillit.execution.process._lifecycle_actor as lifecycle_actor
+    from autoskillit.execution.process._lifecycle_actor import (
+        ChannelBProposal,
+        LifecycleActorReply,
+        LifecycleReplyDisposition,
+    )
+    from autoskillit.execution.process._process_monitor import _SessionLogScanComplete
+
+    marker = "%%PERSISTENT_CHANNEL_B%%"
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    probe_seen = tmp_path / "probe-seen"
+    partial_ready = tmp_path / "partial-ready"
+    release_partial = tmp_path / "release-partial"
+    old_reply_seen = tmp_path / "old-reply-seen"
+    middle_reply_seen = tmp_path / "middle-reply-seen"
+    release_final = tmp_path / "release-final"
+    partial_scan_seen = anyio.Event()
+    replies: dict[str, LifecycleActorReply] = {}
+
+    real_tail = lifecycle_actor._tail_session_log_events
+
+    async def observed_tail(*args: Any, **kwargs: Any):
+        async for event in real_tail(*args, **kwargs):
+            if isinstance(event, _SessionLogScanComplete) and event.incomplete_carry:
+                partial_scan_seen.set()
+            yield event
+
+    monkeypatch.setattr(lifecycle_actor, "_tail_session_log_events", observed_tail)
+
+    real_submit = lifecycle_actor.submit_actor_request_nowait
+
+    class RecordingReplySend:
+        def __init__(self, delegate: Any, candidate_id: str) -> None:
+            self._delegate = delegate
+            self._candidate_id = candidate_id
+
+        def send_nowait(self, reply: LifecycleActorReply) -> None:
+            self._delegate.send_nowait(reply)
+            replies[self._candidate_id] = reply
+            if self._candidate_id == "parent-old":
+                old_reply_seen.write_text("replied", encoding="utf-8")
+            if self._candidate_id == "parent-middle":
+                middle_reply_seen.write_text("replied", encoding="utf-8")
+
+        def close(self) -> None:
+            self._delegate.close()
+
+    def observed_submit(
+        endpoint: Any,
+        semaphore: Any,
+        proposal: Any,
+        reply_send: Any,
+        deadline: float,
+    ) -> Any:
+        if isinstance(proposal, ChannelBProposal) and proposal.candidate_sighting is not None:
+            reply_send = RecordingReplySend(
+                reply_send,
+                proposal.candidate_sighting.native_uuid,
+            )
+        return real_submit(endpoint, semaphore, proposal, reply_send, deadline)
+
+    monkeypatch.setattr(lifecycle_actor, "submit_actor_request_nowait", observed_submit)
+
+    script = tmp_path / "persistent_channel_b.py"
+    script.write_text(
+        textwrap.dedent(
+            f"""
+            import json
+            import signal
+            import sys
+            import time
+            from pathlib import Path
+
+            session_dir = Path(sys.argv[1])
+            probe_seen = Path(sys.argv[2])
+            partial_ready = Path(sys.argv[3])
+            release_partial = Path(sys.argv[4])
+            old_reply_seen = Path(sys.argv[5])
+            middle_reply_seen = Path(sys.argv[6])
+            release_final = Path(sys.argv[7])
+            marker = {marker!r}
+            log = session_dir / "channel-b-log-session.jsonl"
+            log.write_bytes(b"")
+
+            def emit_stdout(record):
+                print(json.dumps(record, separators=(",", ":")), flush=True)
+
+            def append_log(record):
+                raw = (json.dumps(record, ensure_ascii=False,
+                                  separators=(",", ":")) + "\\n").encode()
+                with log.open("ab", buffering=0) as stream:
+                    stream.write(raw)
+                return raw
+
+            def wait_for(path):
+                deadline = time.monotonic() + 10
+                while not path.exists():
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError(f"timed out waiting for {{path}}")
+                    time.sleep(0.01)
+
+            emit_stdout({{
+                "type": "system", "subtype": "init",
+                "session_id": "stdout-transport-session"
+            }})
+            emit_stdout({{
+                "type": "system", "subtype": "task_started",
+                "agent_id": "agent-1", "task_id": "task-1",
+                "tool_use_id": "toolu-1", "uuid": "start-1"
+            }})
+
+            time.sleep(0.5)
+            append_log({{
+                "type": "assistant", "uuid": "probe",
+                "message": {{"content": "working"}}
+            }})
+            wait_for(probe_seen)
+
+            split_record = {{
+                "type": "assistant", "uuid": "split-non-marker",
+                "session_id": "non-marker-candidate-session",
+                "message": {{"content": "still working"}}
+            }}
+            split_raw = (json.dumps(split_record, separators=(",", ":")) + "\\n").encode()
+            split_at = len(split_raw) // 2
+            with log.open("ab", buffering=0) as stream:
+                stream.write(split_raw[:split_at])
+            partial_ready.write_text("ready")
+            wait_for(release_partial)
+            with log.open("ab", buffering=0) as stream:
+                stream.write(split_raw[split_at:])
+
+            append_log({{
+                "type": "user", "uuid": "non-marker-user",
+                "message": {{"content": "diagnostic"}}
+            }})
+            append_log({{
+                "type": "assistant", "uuid": "parent-old",
+                "session_id": "old-b-candidate-session",
+                "message": {{"id": "message-old", "content": [
+                    {{"type": "text", "text": marker}}
+                ]}}
+            }})
+            wait_for(old_reply_seen)
+
+            emit_stdout({{
+                "type": "assistant", "uuid": "parent-middle",
+                "session_id": "middle-a-candidate-session",
+                "message": {{"id": "message-middle-a", "content": [
+                    {{"type": "text", "text": marker}}
+                ]}}
+            }})
+            append_log({{
+                "type": "assistant", "uuid": "parent-middle",
+                "session_id": "middle-b-candidate-session",
+                "message": {{"id": "message-middle-b", "content": [
+                    {{"type": "text", "text": marker}}
+                ]}}
+            }})
+            wait_for(middle_reply_seen)
+            wait_for(release_final)
+
+            emit_stdout({{
+                "type": "system", "subtype": "task_notification",
+                "status": "completed", "agent_id": "agent-1",
+                "task_id": "task-1", "tool_use_id": "toolu-1",
+                "uuid": "notification-1"
+            }})
+            emit_stdout({{
+                "type": "user", "uuid": "delivery-1",
+                "message": {{"id": "delivery-message-1", "content": [{{
+                    "type": "tool_result", "tool_use_id": "toolu-1",
+                    "content": {{"status": "completed", "agentId": "agent-1"}}
+                }}]}}
+            }})
+            emit_stdout({{
+                "type": "result", "subtype": "success", "is_error": False,
+                "session_id": "result-envelope-session", "result": marker
+            }})
+            append_log({{
+                "type": "assistant", "uuid": "parent-final",
+                "session_id": "final-b-candidate-session",
+                "message": {{"id": "message-final-b", "content": [
+                    {{"type": "text", "text": marker}}
+                ]}}
+            }})
+            signal.pause()
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    backend_normalizer = ClaudeCodeBackend().parent_candidate_normalizer(marker)
+    calls: list[tuple[dict[str, Any], int]] = []
+
+    def recording_normalizer(record: dict[str, Any], offset: int) -> Any:
+        calls.append((record, offset))
+        if record.get("uuid") == "probe":
+            probe_seen.write_text("seen", encoding="utf-8")
+        return backend_normalizer(record, offset)
+
+    result_box: list[SubprocessResult] = []
+
+    async def run_process() -> None:
+        result_box.append(
+            await run_managed_async(
+                [
+                    sys.executable,
+                    str(script),
+                    str(session_dir),
+                    str(probe_seen),
+                    str(partial_ready),
+                    str(release_partial),
+                    str(old_reply_seen),
+                    str(middle_reply_seen),
+                    str(release_final),
+                ],
+                cwd=tmp_path,
+                timeout=60,
+                session_log_dir=session_dir,
+                completion_marker=marker,
+                stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
+                parent_candidate_normalizer=recording_normalizer,
+                marker_scope_session_id="marker-scope-session",
+                completion_drain_timeout=2.0,
+                natural_exit_grace_seconds=0.05,
+                cleanup_budget_seconds=3.0,
+                _phase1_timeout=120,
+                _phase1_poll=0.005,
+                _phase2_poll=0.005,
+                _heartbeat_poll=0.005,
+                _session_id_timeout=1.0,
+            )
+        )
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(run_process)
+        with anyio.fail_after(10):
+            while not partial_ready.exists():
+                await anyio.sleep(0.01)
+        with anyio.fail_after(10):
+            await partial_scan_seen.wait()
+        assert [record["uuid"] for record, _offset in calls] == ["probe"]
+        release_partial.write_text("release", encoding="utf-8")
+        with anyio.fail_after(10):
+            while not middle_reply_seen.exists():
+                await anyio.sleep(0.01)
+        middle_snapshot = replies["parent-middle"].snapshot
+        assert middle_snapshot is not None
+        assert dict(middle_snapshot.candidate_states) == {
+            "parent-old": CompletionCandidateState.SUPERSEDED,
+            "parent-middle": CompletionCandidateState.DEFERRED,
+        }
+        release_final.write_text("release", encoding="utf-8")
+
+    result = result_box[0]
+    records = [
+        {"type": "assistant", "uuid": "probe", "message": {"content": "working"}},
+        {
+            "type": "assistant",
+            "uuid": "split-non-marker",
+            "session_id": "non-marker-candidate-session",
+            "message": {"content": "still working"},
+        },
+        {"type": "user", "uuid": "non-marker-user", "message": {"content": "diagnostic"}},
+        {
+            "type": "assistant",
+            "uuid": "parent-old",
+            "session_id": "old-b-candidate-session",
+            "message": {
+                "id": "message-old",
+                "content": [{"type": "text", "text": marker}],
+            },
+        },
+        {
+            "type": "assistant",
+            "uuid": "parent-middle",
+            "session_id": "middle-b-candidate-session",
+            "message": {
+                "id": "message-middle-b",
+                "content": [{"type": "text", "text": marker}],
+            },
+        },
+        {
+            "type": "assistant",
+            "uuid": "parent-final",
+            "session_id": "final-b-candidate-session",
+            "message": {
+                "id": "message-final-b",
+                "content": [{"type": "text", "text": marker}],
+            },
+        },
+    ]
+    expected_offsets: list[int] = []
+    cursor = 0
+    for record in records:
+        cursor += len(_jsonl(record))
+        expected_offsets.append(cursor)
+
+    assert [record for record, _offset in calls] == records
+    assert [offset for _record, offset in calls] == expected_offsets
+    assert result.termination is TerminationReason.COMPLETED, result.lifecycle_snapshot
+    assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
+    assert result.eligible_source is CompletionCandidateSource.CHANNEL_B
+    assert result.channel_confirmation is ChannelConfirmation.CHANNEL_B
+    assert result.lifecycle_candidate is not None
+    assert result.lifecycle_candidate.candidate_id == "parent-final"
+    assert result.session_id == "stdout-transport-session"
+    assert result.channel_b_session_id == "channel-b-log-session"
+    assert result.lifecycle_snapshot is not None
+    assert dict(result.lifecycle_snapshot.candidate_states) == {
+        "parent-old": CompletionCandidateState.SUPERSEDED,
+        "parent-middle": CompletionCandidateState.SUPERSEDED,
+        "parent-final": CompletionCandidateState.ELIGIBLE,
+    }
+    assert {candidate_id: reply.disposition for candidate_id, reply in replies.items()} == {
+        "parent-old": LifecycleReplyDisposition.DEFERRED,
+        "parent-middle": LifecycleReplyDisposition.DEFERRED,
+        "parent-final": LifecycleReplyDisposition.ELIGIBLE,
+    }
+    assert all(candidate_id in replies for candidate_id in ("parent-old", "parent-middle"))
+
+    middle_sightings = {
+        sighting.source: sighting
+        for sighting in result.sightings
+        if sighting.native_uuid == "parent-middle"
+    }
+    assert set(middle_sightings) == {
+        CompletionCandidateSource.CHANNEL_A,
+        CompletionCandidateSource.CHANNEL_B,
+    }
+    b_sighting = middle_sightings[CompletionCandidateSource.CHANNEL_B]
+    a_sighting = middle_sightings[CompletionCandidateSource.CHANNEL_A]
+    assert b_sighting.channel_relative_byte_offset == expected_offsets[-2]
+    assert b_sighting.backend_session_id == "middle-b-candidate-session"
+
+    stdout_cursor = 0
+    expected_a_offset = None
+    for raw_line in result.stdout.encode().splitlines(keepends=True):
+        stdout_cursor += len(raw_line)
+        parsed = json.loads(raw_line)
+        if parsed.get("uuid") == "parent-middle":
+            expected_a_offset = stdout_cursor
+            break
+    assert expected_a_offset is not None
+    assert a_sighting.channel_relative_byte_offset == expected_a_offset
+    assert a_sighting.backend_session_id == "middle-a-candidate-session"
+    assert a_sighting.channel_relative_byte_offset != b_sighting.channel_relative_byte_offset
+    assert (
+        len(
+            {
+                "marker-scope-session",
+                result.session_id,
+                result.channel_b_session_id,
+                a_sighting.backend_session_id,
+                b_sighting.backend_session_id,
+                "result-envelope-session",
+            }
+        )
+        == 6
+    )
+
+
+@pytest.mark.timeout(90)
+@pytest.mark.anyio
+async def test_first_post_exit_scan_detects_channel_b_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The marker normalizer runs only after the real process-exit callback."""
+    import autoskillit.execution.process._lifecycle_actor as lifecycle_actor
+    from autoskillit.execution.process._process_monitor import _ParsedSessionLogRecord
+
+    marker = "%%POST_EXIT_CHANNEL_B%%"
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    probe_seen = tmp_path / "probe-seen"
+    process_exit_seen = anyio.Event()
+    marker_exit_observations: list[bool] = []
+
+    real_watch_process = lifecycle_actor._watch_process
+
+    async def observed_watch_process(*args: Any, **kwargs: Any) -> None:
+        await real_watch_process(*args, **kwargs)
+        process_exit_seen.set()
+
+    monkeypatch.setattr(lifecycle_actor, "_watch_process", observed_watch_process)
+
+    real_tail = lifecycle_actor._tail_session_log_events
+
+    async def exit_ordered_tail(*args: Any, **kwargs: Any):
+        async for event in real_tail(*args, **kwargs):
+            if (
+                isinstance(event, _ParsedSessionLogRecord)
+                and event.value.get("uuid") == "parent-after-exit"
+            ):
+                with anyio.fail_after(10):
+                    await process_exit_seen.wait()
+            yield event
+
+    monkeypatch.setattr(lifecycle_actor, "_tail_session_log_events", exit_ordered_tail)
+
+    script = tmp_path / "post_exit_channel_b.py"
+    script.write_text(
+        textwrap.dedent(
+            f"""
+            import json
+            import sys
+            import time
+            from pathlib import Path
+
+            log = Path(sys.argv[1]) / "post-exit-log-session.jsonl"
+            probe_seen = Path(sys.argv[2])
+            log.write_bytes(b"")
+            print(json.dumps({{
+                "type": "system", "subtype": "init", "session_id": "stdout-post-exit"
+            }}), flush=True)
+            time.sleep(0.5)
+            with log.open("ab", buffering=0) as stream:
+                stream.write((json.dumps({{
+                    "type": "assistant", "uuid": "probe",
+                    "message": {{"content": "working"}}
+                }}) + "\\n").encode())
+            deadline = time.monotonic() + 10
+            while not probe_seen.exists():
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("normalizer did not observe probe")
+                time.sleep(0.01)
+            record = {{
+                "type": "assistant", "uuid": "parent-after-exit",
+                "session_id": "candidate-after-exit",
+                "message": {{"id": "message-after-exit", "content": [
+                    {{"type": "text", "text": {marker!r}}}
+                ]}}
+            }}
+            with log.open("ab", buffering=0) as stream:
+                stream.write((json.dumps(record, separators=(",", ":")) + "\\n").encode())
+            sys.exit(0)
+            """
+        ),
+        encoding="utf-8",
+    )
+    normalizer = ClaudeCodeBackend().parent_candidate_normalizer(marker)
+
+    def observe_probe(record: dict[str, Any], offset: int) -> Any:
+        if record.get("uuid") == "probe":
+            probe_seen.write_text("seen", encoding="utf-8")
+        if record.get("uuid") == "parent-after-exit":
+            marker_exit_observations.append(process_exit_seen.is_set())
+        return normalizer(record, offset)
+
+    result = await run_managed_async(
+        [sys.executable, str(script), str(session_dir), str(probe_seen)],
+        cwd=tmp_path,
+        timeout=60,
+        session_log_dir=session_dir,
+        completion_marker=marker,
+        stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
+        parent_candidate_normalizer=observe_probe,
+        completion_drain_timeout=2.0,
+        _phase1_timeout=120,
+        _phase1_poll=0.005,
+        _phase2_poll=0.5,
+        _heartbeat_poll=0.005,
+        _session_id_timeout=1.0,
+    )
+
+    assert result.termination is TerminationReason.COMPLETED
+    assert result.lifecycle_decision is LifecycleDecision.ELIGIBLE
+    assert result.eligible_source is CompletionCandidateSource.CHANNEL_B
+    assert result.channel_confirmation is ChannelConfirmation.CHANNEL_B
+    assert tuple(s.native_uuid for s in result.sightings) == ("parent-after-exit",)
+    assert marker_exit_observations == [True]
+
+
+@pytest.mark.timeout(90)
+@pytest.mark.anyio
+async def test_overlapping_channel_b_and_exit_requests_are_correlated_and_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B and exit requests coexist with distinct IDs and receive correlated replies."""
+    import autoskillit.execution.process._lifecycle_actor as lifecycle_actor
+    from autoskillit.execution.process._lifecycle_actor import (
+        ChannelBProposal,
+        LifecycleActorReply,
+        ProcessExitFact,
+    )
+
+    marker = "%%INCOMPLETE_STDOUT_CHANNEL_B%%"
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    probe_seen = tmp_path / "probe-seen"
+    requests: dict[str, Any] = {}
+    replies: dict[str, LifecycleActorReply] = {}
+    coexistence: list[tuple[str, str, int, int]] = []
+    real_submit = lifecycle_actor.submit_actor_request_nowait
+
+    class CorrelatedReplySend:
+        def __init__(self, delegate: Any, producer: str) -> None:
+            self._delegate = delegate
+            self._producer = producer
+
+        def send_nowait(self, reply: LifecycleActorReply) -> None:
+            self._delegate.send_nowait(reply)
+            replies[self._producer] = reply
+
+        def close(self) -> None:
+            self._delegate.close()
+
+    def tracked_submit(
+        producer: str,
+        endpoint: Any,
+        semaphore: Any,
+        proposal: Any,
+        reply_send: Any,
+        deadline: float,
+    ) -> Any:
+        request = real_submit(
+            endpoint,
+            semaphore,
+            proposal,
+            CorrelatedReplySend(reply_send, producer),
+            deadline,
+        )
+        requests[producer] = request
+        if producer == "process_exit":
+            channel_b_request = requests["channel_b"]
+            assert channel_b_request.lease is not None
+            assert request.lease is not None
+            coexistence.append(
+                (
+                    channel_b_request.request_id,
+                    request.request_id,
+                    channel_b_request.required_byte_offset,
+                    request.required_byte_offset,
+                )
+            )
+            assert channel_b_request.lease.owner == "actor"
+            assert request.lease.owner == "actor"
+            assert not channel_b_request.lease.released
+            assert not request.lease.released
+            assert "channel_b" not in replies
+            assert "process_exit" not in replies
+        return request
+
+    def observed_submit(
+        endpoint: Any,
+        semaphore: Any,
+        proposal: Any,
+        reply_send: Any,
+        deadline: float,
+    ) -> Any:
+        if isinstance(proposal, ChannelBProposal):
+            producer = "channel_b"
+        elif isinstance(proposal, ProcessExitFact):
+            producer = "process_exit"
+        else:
+            return real_submit(endpoint, semaphore, proposal, reply_send, deadline)
+        return tracked_submit(producer, endpoint, semaphore, proposal, reply_send, deadline)
+
+    monkeypatch.setattr(lifecycle_actor, "submit_actor_request_nowait", observed_submit)
+
+    script = tmp_path / "incomplete_stdout.py"
+    script.write_text(
+        textwrap.dedent(
+            f"""
+            import json
+            import os
+            import sys
+            import time
+            from pathlib import Path
+
+            log = Path(sys.argv[1]) / "incomplete-log-session.jsonl"
+            probe_seen = Path(sys.argv[2])
+            log.write_bytes(b"")
+            print(json.dumps({{
+                "type": "system", "subtype": "init", "session_id": "stdout-incomplete"
+            }}), flush=True)
+            time.sleep(0.5)
+            with log.open("ab", buffering=0) as stream:
+                stream.write((json.dumps({{
+                    "type": "assistant", "uuid": "probe",
+                    "message": {{"content": "working"}}
+                }}) + "\\n").encode())
+            deadline = time.monotonic() + 10
+            while not probe_seen.exists():
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("normalizer did not observe probe")
+                time.sleep(0.01)
+            os.write(sys.stdout.fileno(), b'{{"type":"assistant"')
+            record = {{
+                "type": "assistant", "uuid": "parent-incomplete",
+                "session_id": "candidate-incomplete",
+                "message": {{"id": "message-incomplete", "content": [
+                    {{"type": "text", "text": {marker!r}}}
+                ]}}
+            }}
+            with log.open("ab", buffering=0) as stream:
+                stream.write((json.dumps(record, separators=(",", ":")) + "\\n").encode())
+            sys.exit(0)
+            """
+        ),
+        encoding="utf-8",
+    )
+    normalizer = ClaudeCodeBackend().parent_candidate_normalizer(marker)
+
+    def observe_probe(record: dict[str, Any], offset: int) -> Any:
+        if record.get("uuid") == "probe":
+            probe_seen.write_text("seen", encoding="utf-8")
+        return normalizer(record, offset)
+
+    result = await run_managed_async(
+        [sys.executable, str(script), str(session_dir), str(probe_seen)],
+        cwd=tmp_path,
+        timeout=60,
+        session_log_dir=session_dir,
+        completion_marker=marker,
+        stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
+        parent_candidate_normalizer=observe_probe,
+        completion_drain_timeout=1.0,
+        _phase1_timeout=120,
+        _phase1_poll=0.005,
+        _phase2_poll=0.05,
+        _heartbeat_poll=0.005,
+        _session_id_timeout=1.0,
+    )
+
+    assert result.termination is TerminationReason.HEALTH_INSPECTOR
+    assert result.lifecycle_decision is LifecycleDecision.CATCH_UP_FAILED
+    assert result.eligible_source is None
+    assert result.channel_confirmation is ChannelConfirmation.UNMONITORED
+    assert result.lifecycle_candidate is None
+    assert len(coexistence) == 1
+    channel_b_id, exit_id, channel_b_watermark, exit_watermark = coexistence[0]
+    assert channel_b_id != exit_id
+    assert channel_b_watermark == exit_watermark
+    assert set(requests) == {"channel_b", "process_exit"}
+    assert set(replies) == {"channel_b", "process_exit"}
+    assert replies["channel_b"].request_id == channel_b_id
+    assert replies["process_exit"].request_id == exit_id
+    assert replies["channel_b"].decision is LifecycleDecision.CATCH_UP_FAILED
+    assert replies["process_exit"].decision is LifecycleDecision.CATCH_UP_FAILED
+
+
+@pytest.mark.timeout(90)
+@pytest.mark.anyio
+async def test_deleted_channel_b_log_fails_final_scan_closed(tmp_path: Path) -> None:
+    """A failed cooperative final B scan becomes CATCH_UP_FAILED, never natural success."""
+    marker = "%%MISSING_FINAL_SCAN%%"
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    probe_seen = tmp_path / "probe-seen"
+    script = tmp_path / "deleted_channel_b.py"
+    script.write_text(
+        textwrap.dedent(
+            """
+            import json
+            import sys
+            import time
+            from pathlib import Path
+
+            log = Path(sys.argv[1]) / "deleted-log-session.jsonl"
+            probe_seen = Path(sys.argv[2])
+            log.write_bytes(b"")
+            print(json.dumps({
+                "type": "system", "subtype": "init", "session_id": "stdout-deleted"
+            }), flush=True)
+            time.sleep(0.5)
+            with log.open("ab", buffering=0) as stream:
+                stream.write((json.dumps({
+                    "type": "assistant", "uuid": "probe",
+                    "message": {"content": "working"}
+                }) + "\\n").encode())
+            deadline = time.monotonic() + 10
+            while not probe_seen.exists():
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("normalizer did not observe probe")
+                time.sleep(0.01)
+            log.unlink()
+            sys.exit(0)
+            """
+        ),
+        encoding="utf-8",
+    )
+    normalizer = ClaudeCodeBackend().parent_candidate_normalizer(marker)
+
+    def observe_probe(record: dict[str, Any], offset: int) -> Any:
+        if record.get("uuid") == "probe":
+            probe_seen.write_text("seen", encoding="utf-8")
+        return normalizer(record, offset)
+
+    result = await run_managed_async(
+        [sys.executable, str(script), str(session_dir), str(probe_seen)],
+        cwd=tmp_path,
+        timeout=60,
+        session_log_dir=session_dir,
+        completion_marker=marker,
+        stream_parser_factory=ClaudeCodeBackend().stream_parser_factory(marker),
+        parent_candidate_normalizer=observe_probe,
+        completion_drain_timeout=1.0,
+        _phase1_timeout=120,
+        _phase1_poll=0.005,
+        _phase2_poll=0.05,
+        _heartbeat_poll=0.005,
+        _session_id_timeout=1.0,
+    )
+
+    assert result.termination is TerminationReason.HEALTH_INSPECTOR
+    assert result.lifecycle_decision is LifecycleDecision.CATCH_UP_FAILED
+    assert result.eligible_source is None
+    assert result.channel_confirmation is ChannelConfirmation.UNMONITORED

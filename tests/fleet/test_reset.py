@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from autoskillit.core import IssueLabelState
+from autoskillit.core import CleanupOutcome, IssueLabelState
 from autoskillit.fleet import (
     DispatchRecord,
     DispatchStatus,
@@ -29,7 +29,8 @@ def _make_subprocess_result(returncode: int = 0, stdout: str = "", stderr: str =
         stdout=stdout,
         stderr=stderr,
         termination=TerminationReason.NATURAL_EXIT,
-        pid=12345,
+        pid=0,
+        cleanup_outcome=CleanupOutcome(succeeded=True, budget_exhausted=False),
     )
 
 

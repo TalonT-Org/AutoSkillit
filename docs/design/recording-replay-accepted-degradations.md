@@ -33,22 +33,27 @@ correct player.
 - `src/autoskillit/execution/recording.py` — `_detect_backend_format()` (format gate), `RecordingSubprocessRunner` (dispatch paths 1-3)
 - `src/autoskillit/execution/backends/codex_scenario_player.py` — `CodexScenarioPlayer`, `CodexStepRecord`
 
-## CLAUDE SESSION RECORDING UNCHANGED
+## CLAUDE CASSETTE FORMAT PRESERVED
 
 `ScenarioRecorder.record_step()` (from the external `api_simulator.claude` package)
-and the `pty_mode=True` guard in `RecordingSubprocessRunner.__call__()` are
-unmodified by P8. The Claude PTY recording path continues to function identically
-to its pre-P8 behavior.
+still owns Claude cassette capture and the `pty_mode=True` guard remains the
+backend boundary. AutoSkillit now wraps the recorded command in a private
+supervisor because the external recorder waits only its direct PTY child and
+does not expose process identity or descendant-cleanup evidence. The supervisor
+inherits the recorder PTY, starts the real command in a new session, and emits a
+typed receipt from AutoSkillit's identity-validating cleanup helper.
 
-**Consequence:** No new capabilities are added to Claude session recording. Claude
-sessions are recorded using the same PTY capture mechanism and produce the same
-`stdout.jsonl` cassette format as before P8.
+**Consequence:** Claude sessions keep the same `stdout.jsonl` cassette format and
+replay compatibility. The cassette's `input.json` is restored to the original
+command rather than the internal supervisor command. A recording result now
+contains the real command PID and verified `CleanupOutcome`; cancellation writes
+an invocation-scoped cooperative stop request and waits for the recorder to reap
+the supervisor.
 
-**Acceptability:** P8's scope is adding Codex backend support. Modifying the
-proven Claude recording path would introduce unnecessary risk. The `pty_mode`
-dispatch guard (`if pty_mode:` at `recording.py` line 132) cleanly separates the
-two paths — Claude sessions take the PTY branch, Codex sessions fall through to
-the non-PTY branch.
+**Acceptability:** The wrapper changes process ownership, not cassette schema.
+It closes the universal managed-cleanup contract while preserving the backend
+format split: Claude sessions take the supervised PTY branch and Codex sessions
+take the non-PTY managed-runner branch.
 
 **Key references:**
 - `src/autoskillit/execution/recording.py` — `RecordingSubprocessRunner.__call__()` line 132 (`if pty_mode:`)

@@ -1,93 +1,194 @@
-"""Unit tests for decide_termination_action — pure decision function (1a).
-
-Tests the decision table that replaces the if/elif/else dispatch in process.py.
-All tests here must FAIL before Phase 2 implementation introduces
-decide_termination_action, TerminationAction, and KillReason.
-"""
+"""Pure termination-action decision table tests."""
 
 from __future__ import annotations
 
+from itertools import product
+
 import pytest
 
-from autoskillit.core.types import TerminationAction, TerminationReason
+from autoskillit.core.types import LifecycleDecision, TerminationAction, TerminationReason
 from autoskillit.execution.process import decide_termination_action
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 @pytest.mark.parametrize(
-    "termination,timeout_fired,process_exited,expected",
+    "termination,timeout_fired,process_exited,owned,decision,expected",
     [
-        # (COMPLETED, timeout=False, exited=True) → NO_KILL
-        (TerminationReason.COMPLETED, False, True, TerminationAction.NO_KILL),
-        # (COMPLETED, timeout=False, exited=False) → DRAIN_THEN_KILL_IF_ALIVE ← the -9 bug row
-        (TerminationReason.COMPLETED, False, False, TerminationAction.DRAIN_THEN_KILL_IF_ALIVE),
-        # (NATURAL_EXIT, timeout=False, exited=True) → NO_KILL
-        (TerminationReason.NATURAL_EXIT, False, True, TerminationAction.NO_KILL),
-        # (NATURAL_EXIT, timeout=False, exited=False) → NO_KILL
-        (TerminationReason.NATURAL_EXIT, False, False, TerminationAction.NO_KILL),
-        # (TIMED_OUT, timeout=True, exited=True) → IMMEDIATE_KILL
-        (TerminationReason.TIMED_OUT, True, True, TerminationAction.IMMEDIATE_KILL),
-        # (TIMED_OUT, timeout=True, exited=False) → IMMEDIATE_KILL
-        (TerminationReason.TIMED_OUT, True, False, TerminationAction.IMMEDIATE_KILL),
-        # (IDLE_STALL, timeout=False, exited=False) → IMMEDIATE_KILL
-        (TerminationReason.IDLE_STALL, False, False, TerminationAction.IMMEDIATE_KILL),
-        # (STALE, timeout=False, exited=False) → IMMEDIATE_KILL
-        (TerminationReason.STALE, False, False, TerminationAction.IMMEDIATE_KILL),
-        # timeout_fired beats process_exited
-        (TerminationReason.COMPLETED, True, True, TerminationAction.IMMEDIATE_KILL),
-        # IDLE_STALL with process_exited=True, no timeout → NO_KILL (process exit wins)
-        (TerminationReason.IDLE_STALL, False, True, TerminationAction.NO_KILL),
-        # STALE with process already exited → NO_KILL (process exit wins)
-        (TerminationReason.STALE, False, True, TerminationAction.NO_KILL),
+        (
+            TerminationReason.COMPLETED,
+            False,
+            True,
+            False,
+            LifecycleDecision.ELIGIBLE,
+            TerminationAction.NO_KILL,
+        ),
+        (
+            TerminationReason.COMPLETED,
+            False,
+            True,
+            True,
+            LifecycleDecision.ELIGIBLE,
+            TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+        ),
+        (
+            TerminationReason.COMPLETED,
+            False,
+            False,
+            True,
+            LifecycleDecision.ELIGIBLE,
+            TerminationAction.DRAIN_THEN_KILL_IF_ALIVE,
+        ),
+        (
+            TerminationReason.NATURAL_EXIT,
+            False,
+            True,
+            False,
+            LifecycleDecision.CONTINUE,
+            TerminationAction.NO_KILL,
+        ),
+        (
+            TerminationReason.SIGNAL_DEATH,
+            False,
+            True,
+            False,
+            LifecycleDecision.CONTINUE,
+            TerminationAction.NO_KILL,
+        ),
+        (
+            TerminationReason.NATURAL_EXIT,
+            False,
+            True,
+            True,
+            LifecycleDecision.CONTINUE,
+            TerminationAction.IMMEDIATE_KILL,
+        ),
+        (
+            TerminationReason.NATURAL_EXIT,
+            False,
+            False,
+            False,
+            LifecycleDecision.CONTINUE,
+            TerminationAction.IMMEDIATE_KILL,
+        ),
+        (
+            TerminationReason.TIMED_OUT,
+            True,
+            True,
+            False,
+            LifecycleDecision.CONTINUE,
+            TerminationAction.IMMEDIATE_KILL,
+        ),
+        (
+            TerminationReason.STALE,
+            False,
+            True,
+            True,
+            LifecycleDecision.CONTINUE,
+            TerminationAction.IMMEDIATE_KILL,
+        ),
+        (
+            TerminationReason.NATURAL_EXIT,
+            False,
+            True,
+            False,
+            LifecycleDecision.CHILD_WORK_FAILED,
+            TerminationAction.IMMEDIATE_KILL,
+        ),
+        (
+            TerminationReason.NATURAL_EXIT,
+            False,
+            True,
+            False,
+            LifecycleDecision.CATCH_UP_FAILED,
+            TerminationAction.IMMEDIATE_KILL,
+        ),
     ],
     ids=[
-        "completed_exited_no_kill",
-        "completed_alive_drain_kill",
-        "natural_exit_exited_no_kill",
-        "natural_exit_alive_no_kill",
-        "timed_out_exited_immediate_kill",
-        "timed_out_alive_immediate_kill",
-        "idle_stall_alive_immediate_kill",
-        "stale_alive_immediate_kill",
-        "timeout_beats_exited",
-        "idle_stall_exited_no_kill",
-        "stale_exited_no_kill",
+        "completed-exited-clear",
+        "completed-exited-retained-descendant",
+        "completed-root-alive",
+        "natural-exited-clear",
+        "signal-death-clear",
+        "natural-exited-retained-descendant",
+        "natural-not-exited",
+        "timeout-overrides-exit",
+        "failure-retained-descendant",
+        "child-work-failed",
+        "catch-up-failed",
     ],
 )
 def test_decide_termination_action_matrix(
     termination: TerminationReason,
     timeout_fired: bool,
     process_exited: bool,
+    owned: bool,
+    decision: LifecycleDecision,
     expected: TerminationAction,
 ) -> None:
-    """Decision table covers all meaningful (termination, timeout_fired, process_exited) combos."""
-    result = decide_termination_action(
-        termination, timeout_fired=timeout_fired, process_exited=process_exited
+    assert (
+        decide_termination_action(
+            termination,
+            timeout_fired=timeout_fired,
+            process_exited=process_exited,
+            owned_processes=owned,
+            lifecycle_decision=decision,
+        )
+        is expected
     )
-    assert result == expected
 
 
-@pytest.mark.parametrize("termination", list(TerminationReason))
-def test_decide_termination_action_exhaustive_no_raise(termination: TerminationReason) -> None:
-    """Exhaustiveness guard: must return a valid TerminationAction for every TerminationReason."""
-    result = decide_termination_action(termination, timeout_fired=False, process_exited=False)
-    assert isinstance(result, TerminationAction)
+def test_no_kill_requires_exited_root_and_clear_ownership() -> None:
+    for termination, process_exited, owned in product(
+        TerminationReason,
+        (False, True),
+        (False, True),
+    ):
+        action = decide_termination_action(
+            termination,
+            timeout_fired=False,
+            process_exited=process_exited,
+            owned_processes=owned,
+            lifecycle_decision=LifecycleDecision.CONTINUE,
+        )
+        if action is TerminationAction.NO_KILL:
+            assert process_exited
+            assert not owned
 
 
-@pytest.mark.parametrize("termination", list(TerminationReason))
-def test_decide_termination_action_timeout_always_immediate_kill(
-    termination: TerminationReason,
+@pytest.mark.parametrize(
+    "state,decision",
+    [
+        ("active", LifecycleDecision.CHILD_WORK_FAILED),
+        ("awaiting_delivery", LifecycleDecision.CHILD_WORK_FAILED),
+        ("deferred", LifecycleDecision.CHILD_WORK_FAILED),
+        ("unresolved_terminal", LifecycleDecision.CHILD_WORK_FAILED),
+        ("catch_up_failed", LifecycleDecision.CATCH_UP_FAILED),
+    ],
+)
+def test_blocked_lifecycle_exit_never_uses_no_kill(
+    state: str,
+    decision: LifecycleDecision,
 ) -> None:
-    """timeout_fired=True always yields IMMEDIATE_KILL regardless of termination reason."""
-    result = decide_termination_action(termination, timeout_fired=True, process_exited=False)
-    assert result == TerminationAction.IMMEDIATE_KILL
+    action = decide_termination_action(
+        TerminationReason.HEALTH_INSPECTOR,
+        timeout_fired=False,
+        process_exited=True,
+        owned_processes=state == "active",
+        lifecycle_decision=decision,
+    )
+    assert action is TerminationAction.IMMEDIATE_KILL
 
 
 @pytest.mark.parametrize("termination", list(TerminationReason))
-def test_decide_termination_action_process_exited_yields_no_kill_when_no_timeout(
-    termination: TerminationReason,
-) -> None:
-    """process_exited=True with no timeout yields NO_KILL for any termination reason."""
-    result = decide_termination_action(termination, timeout_fired=False, process_exited=True)
-    assert result == TerminationAction.NO_KILL
+def test_timeout_always_immediate(termination: TerminationReason) -> None:
+    assert (
+        decide_termination_action(
+            termination,
+            timeout_fired=True,
+            process_exited=True,
+            owned_processes=False,
+            lifecycle_decision=LifecycleDecision.ELIGIBLE,
+        )
+        is TerminationAction.IMMEDIATE_KILL
+    )

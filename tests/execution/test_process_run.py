@@ -14,12 +14,13 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+from typing import Any
 
 import anyio
 import psutil
 import pytest
 
-from autoskillit.core.types import TerminationReason
+from autoskillit.core.types import KillReason, TerminationReason
 from autoskillit.execution.process import (
     read_temp_output,
     run_managed_async,
@@ -43,6 +44,7 @@ PARENT_EXITS_CHILD_HOLDS_FD = textwrap.dedent("""\
         sys.exit(0)
     else:
         # Parent: write output and exit
+        sys.stdout.write(f"child_pid:{pid}\\n")
         sys.stdout.write("parent output line\\n")
         sys.stdout.flush()
         sys.exit(0)
@@ -90,6 +92,8 @@ class TestNormalCompletion:
 
         assert result.termination != TerminationReason.TIMED_OUT
         assert result.returncode == 0
+        assert result.cleanup_outcome is not None
+        assert result.cleanup_outcome.succeeded
         for i in range(10):
             assert f"line {i}" in result.stdout
 
@@ -106,8 +110,25 @@ class TestNormalCompletion:
 
         assert result.termination != TerminationReason.TIMED_OUT
         assert result.returncode == 0
+        assert result.cleanup_outcome is not None
+        assert result.cleanup_outcome.succeeded
         for i in range(10):
             assert f"line {i}" in result.stdout
+
+    def test_sync_root_exit_with_live_descendant_is_not_natural(self, tmp_path) -> None:
+        script = tmp_path / "root_exit.py"
+        script.write_text(PARENT_EXITS_CHILD_HOLDS_FD)
+
+        result = run_managed_sync(
+            [sys.executable, str(script)],
+            cwd=tmp_path,
+            timeout=10,
+        )
+
+        assert result.termination is TerminationReason.NATURAL_EXIT
+        assert result.kill_reason is KillReason.INFRA_KILL
+        assert result.cleanup_outcome is not None
+        assert result.cleanup_outcome.succeeded
 
 
 class TestStdinInput:
@@ -331,6 +352,48 @@ class TestTracingStopOnException:
         # stop() should have been called (via happy path or exception path)
         assert len(stop_called) >= 1
 
+    @pytest.mark.anyio
+    @pytest.mark.skipif(sys.platform != "linux", reason="Linux-only tracing")
+    async def test_stop_failure_preserves_application_error_and_runs_finalizer(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import autoskillit.execution.process as process_module
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+        from autoskillit.execution.linux_tracing import LinuxTracingHandle
+        from tests._helpers import make_tracing_config
+
+        finalizer_called = anyio.Event()
+        original_finalizer_run = process_module._OwnedProcessFinalizer.run
+
+        async def observed_finalizer(finalizer) -> Any:
+            finalizer_called.set()
+            return await original_finalizer_run(finalizer)
+
+        async def failing_pump(*_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("application-failed")
+
+        def failing_stop(_handle: LinuxTracingHandle) -> list[Any]:
+            raise RuntimeError("tracing-stop-failed")
+
+        monkeypatch.setattr(process_module, "run_channel_a_pump", failing_pump)
+        monkeypatch.setattr(process_module._OwnedProcessFinalizer, "run", observed_finalizer)
+        monkeypatch.setattr(LinuxTracingHandle, "stop", failing_stop)
+        backend = ClaudeCodeBackend()
+        cfg = make_tracing_config(enabled=True, proc_interval=0.05, tmpfs_path=str(tmp_path))
+
+        with pytest.raises(RuntimeError, match="application-failed"):
+            await run_managed_async(
+                [sys.executable, "-c", "import time; time.sleep(30)"],
+                cwd=tmp_path,
+                timeout=10,
+                completion_marker="DONE",
+                stream_parser_factory=backend.stream_parser_factory("DONE"),
+                parent_candidate_normalizer=backend.parent_candidate_normalizer("DONE"),
+                linux_tracing_config=cfg,
+            )
+
+        assert finalizer_called.is_set()
+
 
 class TestOuterCancelRaceGuard:
     """timeout_scope None-guard prevents AttributeError when outer cancel fires
@@ -401,3 +464,68 @@ class TestIdleStallWatchdog:
         elapsed = time.monotonic() - start
         assert result.termination == TerminationReason.IDLE_STALL
         assert elapsed < 12.0
+
+
+class TestLifecycleProducerSupervisor:
+    @pytest.mark.anyio
+    async def test_producer_exception_is_raised_only_after_actor_done(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.execution.process as process_module
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+        actor_finished = anyio.Event()
+        original_actor = process_module.run_lifecycle_actor
+
+        async def observed_actor(*args: Any, **kwargs: Any) -> None:
+            try:
+                await original_actor(*args, **kwargs)
+            finally:
+                actor_finished.set()
+
+        async def failing_pump(*_args: Any, **_kwargs: Any) -> None:
+            raise RuntimeError("producer-failed")
+
+        monkeypatch.setattr(process_module, "run_lifecycle_actor", observed_actor)
+        monkeypatch.setattr(process_module, "run_channel_a_pump", failing_pump)
+        backend = ClaudeCodeBackend()
+
+        with pytest.raises(RuntimeError, match="producer-failed"):
+            await run_managed_async(
+                [sys.executable, "-c", "import time; time.sleep(30)"],
+                cwd=tmp_path,
+                timeout=10,
+                completion_marker="DONE",
+                completion_drain_timeout=0.05,
+                stream_parser_factory=backend.stream_parser_factory("DONE"),
+                parent_candidate_normalizer=backend.parent_candidate_normalizer("DONE"),
+            )
+
+        assert actor_finished.is_set()
+
+    @pytest.mark.anyio
+    async def test_stuck_actor_uses_bounded_emergency_scope(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import autoskillit.execution.process as process_module
+        from autoskillit.execution.backends.claude import ClaudeCodeBackend
+
+        async def stuck_actor(*_args: Any, **_kwargs: Any) -> None:
+            await anyio.sleep_forever()
+
+        monkeypatch.setattr(process_module, "run_lifecycle_actor", stuck_actor)
+        backend = ClaudeCodeBackend()
+        started = time.monotonic()
+
+        with pytest.raises(RuntimeError, match="lifecycle_actor_drain_incomplete"):
+            await run_managed_async(
+                [sys.executable, "-c", "print('done')"],
+                cwd=tmp_path,
+                timeout=0.05,
+                completion_marker="DONE",
+                completion_drain_timeout=0.05,
+                stream_parser_factory=backend.stream_parser_factory("DONE"),
+                parent_candidate_normalizer=backend.parent_candidate_normalizer("DONE"),
+            )
+
+        assert time.monotonic() - started < 2.0

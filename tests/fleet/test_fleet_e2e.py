@@ -170,53 +170,104 @@ class FleetTestRunner:
         on_pid_resolved: Any = None,
         **kwargs: Any,
     ) -> Any:
-        from autoskillit.core.runtime._linux_proc import read_starttime_ticks
         from autoskillit.core.types._type_enums import (
             ChannelConfirmation,
             KillReason,
             TerminationReason,
         )
-        from autoskillit.core.types._type_subprocess import SubprocessResult
-        from autoskillit.execution import kill_process_tree
+        from autoskillit.core.types._type_subprocess import (
+            DEFAULT_CLEANUP_BUDGET_SECONDS,
+            SubprocessResult,
+        )
+        from autoskillit.execution.process._process_kill import (
+            _finalize_owned_process_sync,
+            _TerminationSignalState,
+        )
+        from autoskillit.execution.process._process_ownership import make_tracker
 
         self.call_count += 1
         self.last_stream_parser_factory = kwargs.get("stream_parser_factory")
         self.last_parent_candidate_normalizer = kwargs.get("parent_candidate_normalizer")
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env,
-            cwd=str(cwd),
+        ownership_tracker = make_tracker()
+        signal_state = _TerminationSignalState()
+        cleanup_budget_seconds = float(
+            kwargs.get("cleanup_budget_seconds", DEFAULT_CLEANUP_BUDGET_SECONDS)
         )
-        self.last_pid = proc.pid
-        if on_pid_resolved is not None:
-            ticks = read_starttime_ticks(proc.pid) or 0
-            on_pid_resolved(proc.pid, ticks)
-
+        proc: subprocess.Popen[bytes] | None = None
+        cleanup_outcome = None
+        original_error: BaseException | None = None
+        original_traceback = None
+        cleanup_error: BaseException | None = None
+        cleanup_traceback = None
+        termination = TerminationReason.NATURAL_EXIT
         try:
-            stdout_b, stderr_b = await asyncio.to_thread(lambda: proc.communicate(timeout=timeout))
-        except subprocess.TimeoutExpired:
-            await asyncio.to_thread(kill_process_tree, proc.pid)
-            await asyncio.to_thread(proc.wait)
-            return SubprocessResult(
-                returncode=-9,
-                stdout="",
-                stderr="",
-                termination=TerminationReason.TIMED_OUT,
-                pid=proc.pid,
-                channel_confirmation=ChannelConfirmation.UNMONITORED,
-                kill_reason=KillReason.INFRA_KILL,
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                cwd=str(cwd),
+                start_new_session=True,
             )
+            ownership_tracker.seed_root(
+                proc.pid,
+                process_group_id=proc.pid,
+                session_id=proc.pid,
+            )
+            ownership_tracker.enrich_root_identity()
+            self.last_pid = proc.pid
+            if on_pid_resolved is not None:
+                on_pid_resolved(proc.pid, ownership_tracker.root_starttime_ticks)
+
+            try:
+                stdout_b, stderr_b = await asyncio.to_thread(
+                    lambda: proc.communicate(timeout=timeout)
+                )
+            except subprocess.TimeoutExpired as exc:
+                termination = TerminationReason.TIMED_OUT
+                stdout_b = exc.output or b""
+                stderr_b = exc.stderr or b""
+        except BaseException as exc:
+            original_error = exc
+            original_traceback = exc.__traceback__
+        finally:
+            if proc is not None:
+                try:
+                    cleanup_outcome = await asyncio.to_thread(
+                        _finalize_owned_process_sync,
+                        process=proc,
+                        tracker=ownership_tracker,
+                        budget_seconds=cleanup_budget_seconds,
+                        signal_state=signal_state,
+                    )
+                except BaseException as exc:
+                    cleanup_error = exc
+                    cleanup_traceback = exc.__traceback__
+
+        if original_error is not None:
+            raise original_error.with_traceback(original_traceback)
+        if cleanup_error is not None:
+            raise cleanup_error.with_traceback(cleanup_traceback)
+        assert proc is not None
+        assert cleanup_outcome is not None
+        if termination is TerminationReason.TIMED_OUT:
+            kill_reason = KillReason.INFRA_KILL
+        elif signal_state.signaled:
+            kill_reason = KillReason.KILL_AFTER_COMPLETION
+        elif not cleanup_outcome.succeeded:
+            kill_reason = KillReason.INFRA_KILL
+        else:
+            kill_reason = KillReason.NATURAL_EXIT
 
         return SubprocessResult(
-            returncode=proc.returncode,
+            returncode=proc.returncode if proc.returncode is not None else -9,
             stdout=stdout_b.decode("utf-8", errors="replace"),
             stderr=stderr_b.decode("utf-8", errors="replace"),
-            termination=TerminationReason.NATURAL_EXIT,
+            termination=termination,
             pid=proc.pid,
             channel_confirmation=ChannelConfirmation.UNMONITORED,
-            kill_reason=KillReason.NATURAL_EXIT,
+            kill_reason=kill_reason,
+            cleanup_outcome=cleanup_outcome,
         )
 
 
@@ -461,11 +512,13 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
 
 @pytest.mark.anyio
 async def test_fleet_runner_preserves_lifecycle_callable_identity(tmp_path: Path) -> None:
+    from autoskillit.core.types import KillReason
+
     runner = FleetTestRunner()
     factory = Mock()
     normalizer = Mock()
 
-    await runner(
+    result = await runner(
         [sys.executable, "-c", "print('done')"],
         cwd=tmp_path,
         timeout=5.0,
@@ -475,6 +528,124 @@ async def test_fleet_runner_preserves_lifecycle_callable_identity(tmp_path: Path
 
     assert runner.last_stream_parser_factory is factory
     assert runner.last_parent_candidate_normalizer is normalizer
+    assert result.cleanup_outcome is not None
+    assert result.cleanup_outcome.succeeded
+    assert result.kill_reason is KillReason.NATURAL_EXIT
+
+
+@pytest.mark.anyio
+async def test_fleet_runner_timeout_attaches_cleanup_outcome(tmp_path: Path) -> None:
+    from autoskillit.core.types import KillReason, TerminationReason
+
+    result = await FleetTestRunner()(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        cwd=tmp_path,
+        timeout=0.05,
+        cleanup_budget_seconds=2.0,
+    )
+
+    assert result.termination is TerminationReason.TIMED_OUT
+    assert result.kill_reason is KillReason.INFRA_KILL
+    assert result.cleanup_outcome is not None
+    assert result.cleanup_outcome.succeeded
+
+
+@pytest.mark.anyio
+async def test_fleet_runner_finalizes_once_after_post_spawn_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.execution.process._process_kill as process_kill_module
+
+    finalize = Mock(wraps=process_kill_module._finalize_owned_process_sync)
+    monkeypatch.setattr(process_kill_module, "_finalize_owned_process_sync", finalize)
+    runner = FleetTestRunner()
+    injected_error = RuntimeError("post-spawn callback failed")
+
+    def _raise_after_spawn(_pid: int, _ticks: int) -> None:
+        raise injected_error
+
+    with pytest.raises(RuntimeError) as raised:
+        await runner(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            cwd=tmp_path,
+            timeout=5.0,
+            on_pid_resolved=_raise_after_spawn,
+            cleanup_budget_seconds=2.0,
+        )
+
+    assert raised.value is injected_error
+    assert finalize.call_count == 1
+    assert runner.last_pid > 0
+    assert not psutil.pid_exists(runner.last_pid)
+
+
+@pytest.mark.anyio
+async def test_fleet_runner_reports_post_completion_cleanup_signal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.execution.process._process_kill as process_kill_module
+    from autoskillit.core.types import CleanupOutcome, KillReason
+
+    actual_popen = subprocess.Popen
+    popen_kwargs: dict[str, Any] = {}
+    finalized: dict[str, Any] = {}
+    cleanup_outcome = CleanupOutcome(succeeded=True, budget_exhausted=False)
+
+    def _recording_popen(*args: Any, **kwargs: Any) -> Any:
+        popen_kwargs.update(kwargs)
+        return actual_popen(*args, **kwargs)
+
+    def _finalize(**kwargs: Any) -> CleanupOutcome:
+        finalized.update(kwargs)
+        kwargs["signal_state"].signaled = True
+        return cleanup_outcome
+
+    monkeypatch.setattr(subprocess, "Popen", _recording_popen)
+    monkeypatch.setattr(process_kill_module, "_finalize_owned_process_sync", _finalize)
+
+    result = await FleetTestRunner()(
+        [sys.executable, "-c", "pass"],
+        cwd=tmp_path,
+        timeout=5.0,
+        cleanup_budget_seconds=1.25,
+    )
+
+    process = finalized["process"]
+    tracker = finalized["tracker"]
+    assert popen_kwargs["start_new_session"] is True
+    assert tracker.root_pid == process.pid
+    assert tracker.process_group_id == process.pid
+    assert tracker.session_id == process.pid
+    assert finalized["budget_seconds"] == 1.25
+    assert result.cleanup_outcome is cleanup_outcome
+    assert result.kill_reason is KillReason.KILL_AFTER_COMPLETION
+
+
+@pytest.mark.anyio
+async def test_fleet_runner_reports_unsuccessful_cleanup_without_signal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.execution.process._process_kill as process_kill_module
+    from autoskillit.core.types import CleanupOutcome, KillReason
+
+    cleanup_outcome = CleanupOutcome(succeeded=False, budget_exhausted=True)
+
+    def _finalize(**_kwargs: Any) -> CleanupOutcome:
+        return cleanup_outcome
+
+    monkeypatch.setattr(process_kill_module, "_finalize_owned_process_sync", _finalize)
+
+    result = await FleetTestRunner()(
+        [sys.executable, "-c", "pass"],
+        cwd=tmp_path,
+        timeout=5.0,
+    )
+
+    assert result.cleanup_outcome is cleanup_outcome
+    assert result.kill_reason is KillReason.INFRA_KILL
 
 
 @pytest.mark.anyio

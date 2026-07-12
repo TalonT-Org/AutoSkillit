@@ -387,6 +387,19 @@ async def test_mock_subprocess_runner_preserves_lifecycle_callable_identity(tmp_
 
 
 @pytest.mark.anyio
+async def test_mock_subprocess_runner_default_has_truthful_no_process_cleanup(tmp_path):
+    runner = MockSubprocessRunner()
+
+    result = await runner(["command"], cwd=tmp_path, timeout=1.0)
+
+    assert result.pid == 0
+    assert result.cleanup_outcome is not None
+    assert result.cleanup_outcome.succeeded
+    assert result.cleanup_outcome.retained_identities == ()
+    assert result.cleanup_outcome.unknown_identities == ()
+
+
+@pytest.mark.anyio
 async def test_in_memory_executor_accepts_provider_name():
     """InMemoryHeadlessExecutor.run() must accept provider_name kwarg."""
     executor = InMemoryHeadlessExecutor()

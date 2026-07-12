@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import AsyncIterator
+from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import anyio
@@ -25,9 +28,35 @@ from autoskillit.execution.process import (
     _watch_session_log,
     _watch_session_log_with_lifecycle,
 )
-from autoskillit.execution.process._process_monitor import SessionMonitorResult
+from autoskillit.execution.process._lifecycle_actor import (
+    REQUEST_CAPACITY,
+    make_actor_ingress,
+    run_lifecycle_actor,
+)
+from autoskillit.execution.process._process_monitor import (
+    ProcessActivityTracker,
+    SessionMonitorResult,
+    _discover_session_log_file,
+    _initialize_session_log_tail,
+    _ParsedSessionLogRecord,
+    _SessionLogScanComplete,
+    _SessionLogTailEvent,
+    _tail_session_log_events,
+)
+from autoskillit.execution.process._process_race import _apply_session_monitor_result
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+async def _next_tail_scan(
+    events: AsyncIterator[_SessionLogTailEvent],
+) -> list[_SessionLogTailEvent]:
+    scan: list[_SessionLogTailEvent] = []
+    while True:
+        event = await anext(events)
+        scan.append(event)
+        if isinstance(event, _SessionLogScanComplete):
+            return scan
 
 
 def _channel_b_state() -> tuple[
@@ -76,6 +105,331 @@ class TestSessionMonitorResultCarrier:
         assert result.snapshot is snapshot
         assert result.eligible_candidate is candidate
         assert result.sightings is sightings
+
+    def test_actor_failure_overrides_prior_channel_a_eligibility(self) -> None:
+        acc = RaceAccumulator(
+            decision=LifecycleDecision.ELIGIBLE,
+            eligible_source=CompletionCandidateSource.CHANNEL_A,
+        )
+
+        _apply_session_monitor_result(
+            acc,
+            SessionMonitorResult(
+                status=ChannelBStatus.COMPLETION,
+                session_id="channel-b-log-session",
+                decision=LifecycleDecision.CATCH_UP_FAILED,
+            ),
+        )
+
+        assert acc.decision is LifecycleDecision.CATCH_UP_FAILED
+        assert acc.eligible_source is None
+        assert acc.channel_b_session_id == "channel-b-log-session"
+
+
+class TestPersistentBinarySessionTail:
+    def test_initial_state_starts_at_current_binary_eof(self, tmp_path) -> None:
+        path = tmp_path / "resume-session.jsonl"
+        prior = '{"type":"assistant","message":{"content":"prior é"}}\n'.encode()
+        path.write_bytes(prior)
+
+        state = _initialize_session_log_tail(path)
+
+        assert state.path == path
+        assert state.session_id == "resume-session"
+        assert state.cursor == len(prior)
+        assert state.carry == b""
+        assert state.observed_size == len(prior)
+        assert state.suppression_start is None
+        assert state.last_record_type is None
+        assert state.error_count == 0
+
+    @pytest.mark.anyio
+    async def test_final_stop_drain_skips_prior_bytes_and_emits_barrier(self, tmp_path) -> None:
+        path = tmp_path / "final-drain.jsonl"
+        prior = b'{"type":"assistant","message":{"content":"prior"}}\n'
+        appended_value = {"type": "assistant", "message": {"content": "new"}}
+        appended = (json.dumps(appended_value) + "\n").encode()
+        path.write_bytes(prior)
+        state = _initialize_session_log_tail(path)
+        with path.open("ab") as stream:
+            stream.write(appended)
+        producer_stop = anyio.Event()
+        producer_stop.set()
+
+        events = [
+            event
+            async for event in _tail_session_log_events(
+                state,
+                poll_interval=10.0,
+                producer_stop=producer_stop,
+            )
+        ]
+
+        assert len(events) == 2
+        record, barrier = events
+        assert isinstance(record, _ParsedSessionLogRecord)
+        assert record.value == appended_value
+        assert record.raw == appended
+        assert record.exclusive_byte_offset == len(prior) + len(appended)
+        assert record.session_id == "final-drain"
+        assert isinstance(barrier, _SessionLogScanComplete)
+        assert barrier.cursor == len(prior) + len(appended)
+        assert barrier.observed_size == len(prior) + len(appended)
+        assert barrier.changed is True
+        assert barrier.producer_stopped is True
+        assert barrier.incomplete_carry is False
+        assert state.cursor == barrier.cursor
+        assert state.carry == b""
+
+    @pytest.mark.anyio
+    async def test_blank_invalid_and_split_utf8_json_advance_exactly_once(self, tmp_path) -> None:
+        path = tmp_path / "split-session.jsonl"
+        path.write_bytes(b"")
+        state = _initialize_session_log_tail(path)
+        events = _tail_session_log_events(state, poll_interval=0)
+        preamble = b"\nnot-json\n[1]\n"
+        value = {"type": "user", "message": {"content": "café"}}
+        raw_record = (json.dumps(value, ensure_ascii=False) + "\n").encode()
+        split_at = raw_record.index("é".encode()) + 1
+        path.write_bytes(preamble + raw_record[:split_at])
+
+        first_scan = await _next_tail_scan(events)
+
+        assert first_scan == [
+            _SessionLogScanComplete(
+                cursor=len(preamble),
+                observed_size=len(preamble) + split_at,
+                session_id="split-session",
+                changed=True,
+                incomplete_carry=True,
+            )
+        ]
+        first_barrier = first_scan[-1]
+        assert isinstance(first_barrier, _SessionLogScanComplete)
+        assert first_barrier.scan_succeeded is True
+        assert first_barrier.producer_stopped is False
+        assert state.cursor == len(preamble)
+        assert state.carry == raw_record[:split_at]
+        assert state.last_record_type is None
+
+        with path.open("ab") as stream:
+            stream.write(raw_record[split_at:])
+        second_scan = await _next_tail_scan(events)
+        await events.aclose()
+
+        assert len(second_scan) == 2
+        record, barrier = second_scan
+        assert isinstance(record, _ParsedSessionLogRecord)
+        assert record.value == value
+        assert record.raw == raw_record
+        assert record.exclusive_byte_offset == len(preamble) + len(raw_record)
+        assert isinstance(barrier, _SessionLogScanComplete)
+        assert barrier.cursor == record.exclusive_byte_offset
+        assert barrier.incomplete_carry is False
+        assert state.cursor == record.exclusive_byte_offset
+        assert state.carry == b""
+        assert state.last_record_type == "user"
+
+    @pytest.mark.anyio
+    async def test_truncation_discards_stale_carry_and_restarts_offsets(self, tmp_path) -> None:
+        path = tmp_path / "truncated-session.jsonl"
+        path.write_bytes(b"")
+        state = _initialize_session_log_tail(path)
+        events = _tail_session_log_events(state, poll_interval=0)
+        old_line = b'{"type":"assistant","message":{"content":"old"}}\n'
+        stale_partial = b'{"type":"assistant","message":{"content":"' + b"x" * 200
+        path.write_bytes(old_line + stale_partial)
+
+        first_scan = await _next_tail_scan(events)
+
+        assert isinstance(first_scan[-1], _SessionLogScanComplete)
+        assert state.cursor == len(old_line)
+        assert state.carry == stale_partial
+        replacement_value = {"type": "user", "message": {"content": "replacement"}}
+        replacement = (json.dumps(replacement_value) + "\n").encode()
+        assert len(replacement) < len(old_line) + len(stale_partial)
+        path.write_bytes(replacement)
+
+        second_scan = await _next_tail_scan(events)
+        await events.aclose()
+
+        assert len(second_scan) == 2
+        record, barrier = second_scan
+        assert isinstance(record, _ParsedSessionLogRecord)
+        assert record.value == replacement_value
+        assert record.raw == replacement
+        assert record.exclusive_byte_offset == len(replacement)
+        assert isinstance(barrier, _SessionLogScanComplete)
+        assert barrier.cursor == len(replacement)
+        assert barrier.observed_size == len(replacement)
+        assert barrier.changed is True
+        assert barrier.scan_succeeded is True
+        assert state.cursor == len(replacement)
+        assert state.carry == b""
+        assert state.last_record_type == "user"
+
+    @pytest.mark.anyio
+    async def test_stop_with_unterminated_json_retains_carry(self, tmp_path) -> None:
+        path = tmp_path / "partial-stop.jsonl"
+        path.write_bytes(b"")
+        state = _initialize_session_log_tail(path)
+        partial = b'{"type":"assistant","message":{"content":"partial"}}'
+        path.write_bytes(partial)
+        producer_stop = anyio.Event()
+        producer_stop.set()
+
+        events = [
+            event
+            async for event in _tail_session_log_events(
+                state,
+                poll_interval=10.0,
+                producer_stop=producer_stop,
+            )
+        ]
+
+        assert events == [
+            _SessionLogScanComplete(
+                cursor=0,
+                observed_size=len(partial),
+                session_id="partial-stop",
+                changed=True,
+                scan_succeeded=True,
+                producer_stopped=True,
+                incomplete_carry=True,
+            )
+        ]
+        assert state.cursor == 0
+        assert state.carry == partial
+
+    @pytest.mark.anyio
+    async def test_stop_after_file_deleted_emits_terminal_barrier(self, tmp_path) -> None:
+        path = tmp_path / "deleted-before-stop.jsonl"
+        prior = b'{"type":"assistant","message":{"content":"prior"}}\n'
+        path.write_bytes(prior)
+        state = _initialize_session_log_tail(path)
+        path.unlink()
+        producer_stop = anyio.Event()
+        producer_stop.set()
+
+        with anyio.fail_after(0.5):
+            events = [
+                event
+                async for event in _tail_session_log_events(
+                    state,
+                    poll_interval=10.0,
+                    producer_stop=producer_stop,
+                )
+            ]
+
+        assert events == [
+            _SessionLogScanComplete(
+                cursor=len(prior),
+                observed_size=len(prior),
+                session_id="deleted-before-stop",
+                changed=False,
+                scan_succeeded=False,
+                producer_stopped=True,
+                incomplete_carry=False,
+            )
+        ]
+        assert state.error_count == 1
+
+    @pytest.mark.anyio
+    async def test_transient_missing_file_retries_then_recovers(self, tmp_path) -> None:
+        path = tmp_path / "transient-missing.jsonl"
+        path.write_bytes(b"")
+        state = _initialize_session_log_tail(path)
+        path.unlink()
+        recovered_value = {"type": "assistant", "message": {"content": "recovered"}}
+        recovered = (json.dumps(recovered_value) + "\n").encode()
+        events = _tail_session_log_events(state, poll_interval=0.005)
+        scan_box: list[_SessionLogTailEvent] = []
+        observed_errors: list[int] = []
+
+        async def restore_after_error() -> None:
+            with anyio.fail_after(0.5):
+                while state.error_count == 0:
+                    await anyio.sleep(0.001)
+            observed_errors.append(state.error_count)
+            path.write_bytes(recovered)
+
+        async def collect_recovered_scan() -> None:
+            scan_box.extend(await _next_tail_scan(events))
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(restore_after_error)
+            tg.start_soon(collect_recovered_scan)
+
+        await events.aclose()
+        assert observed_errors[0] >= 1
+        assert state.error_count == 0
+        assert len(scan_box) == 2
+        record, barrier = scan_box
+        assert isinstance(record, _ParsedSessionLogRecord)
+        assert record.value == recovered_value
+        assert record.exclusive_byte_offset == len(recovered)
+        assert isinstance(barrier, _SessionLogScanComplete)
+        assert barrier.scan_succeeded is True
+        assert barrier.producer_stopped is False
+
+    @pytest.mark.anyio
+    async def test_discovery_prefers_expected_id_then_falls_back_to_recency(
+        self, tmp_path
+    ) -> None:
+        spawn_time = time.time() - 1
+        expected = tmp_path / "expected.jsonl"
+        expected.write_bytes(b"")
+        await anyio.sleep(0.02)
+        newest = tmp_path / "newest.jsonl"
+        newest.write_bytes(b"")
+
+        selected, status = await _discover_session_log_file(
+            tmp_path,
+            spawn_time,
+            expected_session_id="expected",
+            poll_interval=0,
+            timeout=1,
+        )
+        fallback, fallback_status = await _discover_session_log_file(
+            tmp_path,
+            spawn_time,
+            expected_session_id="missing",
+            poll_interval=0,
+            timeout=1,
+        )
+
+        assert (selected, status) == (expected, None)
+        assert (fallback, fallback_status) == (newest, None)
+
+    @pytest.mark.anyio
+    async def test_discovery_skips_candidate_that_disappears_during_stat(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        spawn_time = time.time() - 1
+        vanishing = tmp_path / "vanishing.jsonl"
+        stable = tmp_path / "stable.jsonl"
+        vanishing.write_bytes(b"")
+        stable.write_bytes(b"")
+        original_stat = Path.stat
+
+        def stat_with_candidate_race(path: Path, *args, **kwargs):
+            if path == vanishing:
+                vanishing.unlink(missing_ok=True)
+                raise FileNotFoundError(vanishing)
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", stat_with_candidate_race)
+
+        selected, status = await _discover_session_log_file(
+            tmp_path,
+            spawn_time,
+            expected_session_id=None,
+            poll_interval=0,
+            timeout=1,
+        )
+
+        assert (selected, status) == (stable, None)
+        assert tmp_path.is_dir()
 
 
 class TestParserlessCarrierSemantics:
@@ -222,6 +576,88 @@ class TestSessionLogMonitor:
         assert callback_calls == [(marker_record, len(initial_line) + len(marker_line))]
 
     @pytest.mark.anyio
+    async def test_split_utf8_marker_record_is_retained_until_newline(self, tmp_path) -> None:
+        session_file = tmp_path / "split-marker.jsonl"
+        initial_line = b'{"type":"assistant","message":{"content":"working"}}\n'
+        marker_record = {
+            "type": "assistant",
+            "uuid": "split-parent",
+            "message": {"content": "terminé\n\n%%SPLIT_DONE%%"},
+        }
+        marker_line = (json.dumps(marker_record, ensure_ascii=False) + "\n").encode()
+        split_at = marker_line.index("é".encode()) + 1
+        session_file.write_bytes(initial_line)
+        callback_calls: list[tuple[dict[str, object], int]] = []
+
+        def callback(record: dict[str, object], offset: int) -> bool:
+            callback_calls.append((record, offset))
+            return True
+
+        async def append_split_record() -> None:
+            await anyio.sleep(0.03)
+            with session_file.open("ab") as stream:
+                stream.write(marker_line[:split_at])
+                stream.flush()
+            await anyio.sleep(0.03)
+            with session_file.open("ab") as stream:
+                stream.write(marker_line[split_at:])
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor() -> None:
+            result_box.append(
+                await _session_log_monitor(
+                    tmp_path,
+                    "%%SPLIT_DONE%%",
+                    stale_threshold=1,
+                    spawn_time=time.time() - 1,
+                    _phase1_poll=0.005,
+                    _phase2_poll=0.01,
+                    completion_record_callback=callback,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_split_record)
+
+        assert result_box[0].status is ChannelBStatus.COMPLETION
+        assert callback_calls == [(marker_record, len(initial_line) + len(marker_line))]
+
+    @pytest.mark.anyio
+    async def test_incomplete_tail_preserves_last_complete_user_orphan(self, tmp_path) -> None:
+        session_file = tmp_path / "orphan-split.jsonl"
+        session_file.write_bytes(b"")
+        user_line = b'{"type":"user","message":{"content":"tool result"}}\n'
+        partial_assistant = b'{"type":"assistant","message":{"content":"pending"}}'
+
+        async def append_user_and_partial_assistant() -> None:
+            await anyio.sleep(0.03)
+            with session_file.open("ab") as stream:
+                stream.write(user_line + partial_assistant)
+
+        result_box: list[SessionMonitorResult] = []
+
+        async def run_monitor() -> None:
+            result_box.append(
+                await _session_log_monitor(
+                    tmp_path,
+                    "NEVER",
+                    stale_threshold=0.1,
+                    spawn_time=time.time() - 1,
+                    _phase1_poll=0.005,
+                    _phase2_poll=0.01,
+                )
+            )
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(run_monitor)
+            tg.start_soon(append_user_and_partial_assistant)
+
+        assert result_box[0].status is ChannelBStatus.STALE
+        assert result_box[0].orphaned_tool_result is True
+
+    @pytest.mark.anyio
     async def test_lifecycle_monitor_rejects_invalid_normalized_marker(self, tmp_path):
         log_dir = tmp_path / "session_logs"
         log_dir.mkdir()
@@ -241,11 +677,25 @@ class TestSessionLogMonitor:
         acc = RaceAccumulator()
         trigger = anyio.Event()
         channel_b_ready = anyio.Event()
+        post_exit_scan = anyio.Event()
+        process_exited = anyio.Event()
         stdout_session_id_ready = anyio.Event()
         stdout_session_id_ready.set()
-        fact_send, fact_receive = anyio.create_memory_object_stream[object](1)
         stdout_path = tmp_path / "stdout.ndjson"
         stdout_path.write_bytes(b"")
+        ingress = make_actor_ingress(REQUEST_CAPACITY)
+        semaphore = anyio.Semaphore(REQUEST_CAPACITY)
+        producer_stop = anyio.Event()
+        actor_done = anyio.Event()
+        pump_command_send, pump_command_receive = anyio.create_memory_object_stream[Any](
+            REQUEST_CAPACITY
+        )
+        actor_states: list[object] = []
+        monitor_results: list[SessionMonitorResult] = []
+
+        def record_result(result: SessionMonitorResult) -> None:
+            monitor_results.append(result)
+            _apply_session_monitor_result(acc, result)
 
         async def append_marker() -> None:
             await anyio.sleep(0.05)
@@ -259,34 +709,60 @@ class TestSessionLogMonitor:
                 stale_threshold=0.15,
                 spawn_time=time.time() - 1,
                 session_record_types=frozenset({"assistant"}),
-                pid=0,
+                pid=999_999,
+                activity_tracker=ProcessActivityTracker(),
                 completion_drain_timeout=0.01,
-                acc=acc,
-                trigger=trigger,
                 channel_b_ready=channel_b_ready,
+                post_exit_scan=post_exit_scan,
+                process_exited=process_exited,
                 phase1_poll=0.01,
                 phase2_poll=0.01,
                 phase1_timeout=1.0,
                 session_id_timeout=0.01,
                 stdout_session_id_ready=stdout_session_id_ready,
-                max_suppression_seconds=None,
+                expected_session_id=lambda: acc.stdout_session_id,
+                max_suppression_seconds=1.0,
                 marker_dir=None,
                 marker_scope_session_id=None,
-                stdout_path=stdout_path,
-                fact_send=fact_send,
-                reply_sends={},
+                stdout_size=lambda: stdout_path.stat().st_size,
+                endpoint=ingress.channel_b,
+                semaphore=semaphore,
+                producer_stop=producer_stop,
                 parent_candidate_normalizer=normalizer,
+                on_result=record_result,
+                trigger=trigger,
             )
 
         try:
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(append_marker)
-                tg.start_soon(run_lifecycle_monitor)
+            await ingress.channel_a.aclose()
+            await ingress.process_exit.aclose()
+            with anyio.fail_after(2.0):
+                async with anyio.create_task_group() as tg:
+                    tg.start_soon(
+                        run_lifecycle_actor,
+                        ingress,
+                        pump_command_send,
+                        actor_states.append,
+                        actor_done,
+                    )
+                    tg.start_soon(append_marker)
+                    tg.start_soon(run_lifecycle_monitor)
         finally:
-            await fact_send.aclose()
-            await fact_receive.aclose()
+            producer_stop.set()
+            await ingress.channel_b.aclose()
+            await pump_command_receive.aclose()
 
+        assert actor_done.is_set()
+        assert channel_b_ready.is_set()
+        assert not post_exit_scan.is_set()
+        assert semaphore.value == REQUEST_CAPACITY
+        assert actor_states == []
+        assert len(monitor_results) == 1
+        assert monitor_results[0].status is ChannelBStatus.STALE
+        assert monitor_results[0].decision is LifecycleDecision.CONTINUE
+        assert monitor_results[0].eligible_candidate is None
         assert acc.channel_b_status is ChannelBStatus.STALE
+        assert acc.decision is LifecycleDecision.CONTINUE
         assert trigger.is_set()
         normalizer.assert_called_once_with(marker_record, len(initial_line) + len(marker_line))
 
@@ -371,6 +847,67 @@ class TestSessionLogMonitor:
 
         # Staleness should have fired AFTER the writing stopped, not during
         assert monitor_result[0].status == ChannelBStatus.STALE
+
+    @pytest.mark.anyio
+    async def test_supplied_activity_tracker_preserves_cpu_suppression(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        session_file = tmp_path / "cpu-active.jsonl"
+        session_file.write_bytes(b"")
+        calls = 0
+
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            lambda pid: False,
+        )
+
+        def has_active_children(self: ProcessActivityTracker, pid: int) -> bool:
+            nonlocal calls
+            calls += 1
+            return calls == 1
+
+        monkeypatch.setattr(ProcessActivityTracker, "has_active_children", has_active_children)
+        tracker = ProcessActivityTracker()
+
+        result = await _session_log_monitor(
+            tmp_path,
+            "NEVER",
+            stale_threshold=0.03,
+            spawn_time=time.time() - 1,
+            pid=12345,
+            _phase1_poll=0.005,
+            _phase2_poll=0.03,
+            activity_tracker=tracker,
+        )
+
+        assert result.status is ChannelBStatus.STALE
+        assert calls == 2
+
+    @pytest.mark.anyio
+    async def test_api_suppression_remains_bounded(self, tmp_path, monkeypatch) -> None:
+        session_file = tmp_path / "api-active.jsonl"
+        session_file.write_bytes(b"")
+        monkeypatch.setattr(
+            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            lambda pid: True,
+        )
+        started = time.monotonic()
+
+        result = await _session_log_monitor(
+            tmp_path,
+            "NEVER",
+            stale_threshold=0.02,
+            spawn_time=time.time() - 1,
+            pid=12345,
+            _phase1_poll=0.005,
+            _phase2_poll=0.02,
+            max_suppression_seconds=0.08,
+        )
+
+        elapsed = time.monotonic() - started
+        assert result.status is ChannelBStatus.STALE
+        assert elapsed >= 0.08
+        assert result.orphaned_tool_result is False
 
     @pytest.mark.anyio
     async def test_monitor_ignores_marker_in_non_assistant_records(self, tmp_path):

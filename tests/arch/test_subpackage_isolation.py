@@ -99,8 +99,6 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
-        "_channel_a_pump",  # _PUMP_READY/_PUMP_CLOSED sentinels (issue #4233)
-        "_process_monitor",  # _default_activity_tracker = ProcessActivityTracker() (issue #4233)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(
@@ -1471,9 +1469,66 @@ class TestGroupCMigration:
         source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
-    def test_cancel_scope_cancel_present(self):
+    def test_lifecycle_shutdown_is_cooperative_and_actor_drains_to_eof(self):
         source = Path("src/autoskillit/execution/process/__init__.py").read_text()
-        assert "cancel_scope.cancel()" in source  # REQ-SIG-004
+        actor_source = Path("src/autoskillit/execution/process/_lifecycle_actor.py").read_text()
+        assert "producer_stop.set()" in source  # REQ-SIG-004
+        assert "await producers_done.wait()" in source
+        assert "producer_tg.cancel_scope.cancel()" in source
+        assert "actor_tg.cancel_scope.cancel()" not in source
+        assert "if ingress.eof:" in actor_source
+        assert "actor_done.set()" in actor_source
+
+    def test_lifecycle_ingress_and_command_capacity_parity(self):
+        from autoskillit.execution.process._lifecycle_actor import (
+            CONTROL_CAPACITY,
+            REQUEST_CAPACITY,
+            make_actor_ingress,
+        )
+
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        ingress = make_actor_ingress()
+        assert REQUEST_CAPACITY == CONTROL_CAPACITY == 64
+        assert ingress.capacities == (64, 64, 64)
+        assert (
+            "pump_command_send, pump_command_receive = anyio.create_memory_object_stream(\n"
+            "                    REQUEST_CAPACITY\n" in source
+        )
+
+    def test_lifecycle_protocol_has_persistent_owned_channels_and_full_replies(self):
+        pump_source = Path("src/autoskillit/execution/process/_channel_a_pump.py").read_text()
+        actor_source = Path("src/autoskillit/execution/process/_lifecycle_actor.py").read_text()
+        assert "pending: dict[str, ChannelACatchUpCommand]" in pump_source
+        assert "pending[command.request_id] = command" in pump_source
+        assert "class ActorIngress:" in actor_source
+        assert "Persistently tail Channel B" in actor_source
+        assert "async for event in _tail_session_log_events(" in actor_source
+        assert "class LifecycleActorReply:" in actor_source
+        for field in (
+            "processed_channel_a_byte_offset",
+            "snapshot",
+            "issues",
+            "decision",
+            "eligible_candidate",
+            "eligible_source",
+            "sightings",
+            "disposition",
+        ):
+            assert f"    {field}:" in actor_source
+
+    def test_process_finalizer_is_immediate_and_activity_tracker_is_invocation_local(self):
+        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        spawn_end = source.index(
+            "            )\n", source.index("proc = await anyio.open_process(")
+        )
+        finalizer = source.index("_finalizer = _OwnedProcessFinalizer(", spawn_end)
+        parser = source.index("lifecycle_parser = stream_parser_factory()", spawn_end)
+        enrichment = source.index("_ownership_tracker.enrich_root_identity()", spawn_end)
+
+        assert finalizer < enrichment < parser
+        assert source.count("ProcessActivityTracker()") == 1
+        assert "await async_kill_process_tree(" not in source
+        assert "kill_process_tree(process.pid" not in source
 
     def test_resolve_termination_preserved(self):
         source = Path("src/autoskillit/execution/process/_process_race.py").read_text()

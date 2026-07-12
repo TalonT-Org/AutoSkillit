@@ -22,6 +22,13 @@ from autoskillit.execution.process import (
     _apply_lifecycle_completion_authority,
     _watch_process_with_lifecycle,
 )
+from autoskillit.execution.process._lifecycle_actor import (
+    REQUEST_CAPACITY,
+    make_actor_ingress,
+    run_lifecycle_actor,
+)
+from autoskillit.execution.process._process_monitor import SessionMonitorResult
+from autoskillit.execution.process._process_ownership import make_tracker
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
@@ -33,7 +40,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
 @pytest.mark.anyio
-async def test_process_exit_drain_expiry_fails_closed(tmp_path: Path) -> None:
+async def test_process_exit_awaits_request_specific_actor_reply(tmp_path: Path) -> None:
     class _ExitedProcess:
         pid = 999_999
         returncode = 0
@@ -43,31 +50,156 @@ async def test_process_exit_drain_expiry_fails_closed(tmp_path: Path) -> None:
 
     stdout_path = tmp_path / "stdout.ndjson"
     stdout_path.write_text("")
-    acc = RaceAccumulator(channel_b_status=ChannelBStatus.COMPLETION)
-    actor_decision_event = anyio.Event()
+    acc = RaceAccumulator()
     trigger = anyio.Event()
-    decisions: list[LifecycleDecision] = []
+    actor_done = anyio.Event()
+    results: list[SessionMonitorResult] = []
+    ingress = make_actor_ingress()
+    semaphore = anyio.Semaphore(REQUEST_CAPACITY)
+    pump_send, pump_receive = anyio.create_memory_object_stream[Any](REQUEST_CAPACITY)
+    producer_stop = anyio.Event()
+    post_exit_scan = anyio.Event()
 
-    def _record_decision(state: Any) -> None:
-        decisions.append(state.decision)
-        actor_decision_event.set()
+    await ingress.channel_a.aclose()
+    await ingress.channel_b.aclose()
 
-    fact_send, fact_receive = anyio.create_memory_object_stream[object](1)
-    async with fact_send, fact_receive:
-        await _watch_process_with_lifecycle(
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(
+            run_lifecycle_actor,
+            ingress,
+            pump_send,
+            lambda _state: None,
+            actor_done,
+        )
+        tg.start_soon(
+            _watch_process_with_lifecycle,
             _ExitedProcess(),  # type: ignore[arg-type]
             acc,
-            fact_send,
+            make_tracker(),
+            ingress.process_exit,
+            semaphore,
             stdout_path,
-            actor_decision_event,
+            post_exit_scan,
+            False,
+            producer_stop,
+            trigger,
+            0.1,
+            results.append,
+        )
+        await trigger.wait()
+        assert results
+        assert results[0].decision is LifecycleDecision.CONTINUE
+        assert acc.process_exited
+        await actor_done.wait()
+
+    assert trigger.is_set()
+    assert semaphore.value == REQUEST_CAPACITY
+    await pump_receive.aclose()
+
+
+@pytest.mark.anyio
+async def test_process_exit_without_post_exit_scan_fails_closed(tmp_path: Path) -> None:
+    class _ExitedProcess:
+        pid = 999_998
+        returncode = 0
+
+        async def wait(self) -> int:
+            return self.returncode
+
+    stdout_path = tmp_path / "stdout.ndjson"
+    stdout_path.write_text("")
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+    actor_done = anyio.Event()
+    results: list[SessionMonitorResult] = []
+    ingress = make_actor_ingress()
+    semaphore = anyio.Semaphore(REQUEST_CAPACITY)
+    pump_send, pump_receive = anyio.create_memory_object_stream[Any](REQUEST_CAPACITY)
+    producer_stop = anyio.Event()
+    await ingress.channel_a.aclose()
+    await ingress.channel_b.aclose()
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(
+            run_lifecycle_actor,
+            ingress,
+            pump_send,
+            lambda _state: None,
+            actor_done,
+        )
+        tg.start_soon(
+            _watch_process_with_lifecycle,
+            _ExitedProcess(),  # type: ignore[arg-type]
+            acc,
+            make_tracker(),
+            ingress.process_exit,
+            semaphore,
+            stdout_path,
+            anyio.Event(),
+            True,
+            producer_stop,
             trigger,
             0.01,
-            _record_decision,
+            results.append,
         )
+        await trigger.wait()
+        await actor_done.wait()
 
-    assert decisions == [LifecycleDecision.CATCH_UP_FAILED]
-    assert actor_decision_event.is_set()
-    assert trigger.is_set()
+    assert results[0].decision is LifecycleDecision.CATCH_UP_FAILED
+    assert semaphore.value == REQUEST_CAPACITY
+    await pump_receive.aclose()
+
+
+@pytest.mark.anyio
+async def test_process_exit_stop_after_enqueue_does_not_wait_for_reply(tmp_path: Path) -> None:
+    class _ExitedProcess:
+        pid = 999_997
+        returncode = 0
+
+        async def wait(self) -> int:
+            return self.returncode
+
+    stdout_path = tmp_path / "stdout.ndjson"
+    stdout_path.write_text("pending\n")
+    acc = RaceAccumulator()
+    ingress = make_actor_ingress()
+    semaphore = anyio.Semaphore(REQUEST_CAPACITY)
+    producer_stop = anyio.Event()
+    post_exit_scan = anyio.Event()
+    post_exit_scan.set()
+    actor_done = anyio.Event()
+    states: list[Any] = []
+    pump_send, pump_receive = anyio.create_memory_object_stream[Any](REQUEST_CAPACITY)
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(
+            _watch_process_with_lifecycle,
+            _ExitedProcess(),  # type: ignore[arg-type]
+            acc,
+            make_tracker(),
+            ingress.process_exit,
+            semaphore,
+            stdout_path,
+            post_exit_scan,
+            True,
+            producer_stop,
+            anyio.Event(),
+            1.0,
+            lambda _result: None,
+        )
+        with anyio.fail_after(1):
+            while semaphore.value == REQUEST_CAPACITY:
+                await anyio.sleep(0)
+        producer_stop.set()
+        await anyio.sleep(0)
+        await ingress.channel_a.aclose()
+        await ingress.channel_b.aclose()
+        tg.start_soon(run_lifecycle_actor, ingress, pump_send, states.append, actor_done)
+        await actor_done.wait()
+
+    assert semaphore.value == REQUEST_CAPACITY
+    assert states[-1].decision is LifecycleDecision.CATCH_UP_FAILED
+    await pump_receive.aclose()
 
 
 @pytest.mark.parametrize(

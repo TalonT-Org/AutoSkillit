@@ -35,6 +35,7 @@ from autoskillit.execution.session._exit_classification import is_signal_death_c
 
 if TYPE_CHECKING:
     from autoskillit.core import InspectorCallback, InspectorVerdict, StreamParser
+    from autoskillit.execution.process._process_ownership import OwnedProcessIdentityTracker
 
 logger = get_logger(__name__)
 
@@ -155,10 +156,16 @@ def _apply_session_monitor_result(
         result.decision is LifecycleDecision.ELIGIBLE
         and result.eligible_source is CompletionCandidateSource.CHANNEL_A
     )
+    incoming_actor_failure = result.decision in {
+        LifecycleDecision.CHILD_WORK_FAILED,
+        LifecycleDecision.CATCH_UP_FAILED,
+    }
     acc.channel_b_status = result.status
     acc.channel_b_session_id = result.session_id
     acc.channel_b_orphaned_tool_result = result.orphaned_tool_result
-    if not incoming_has_lifecycle_state or (channel_a_won and not incoming_reaffirms_channel_a):
+    if not incoming_has_lifecycle_state or (
+        channel_a_won and not incoming_reaffirms_channel_a and not incoming_actor_failure
+    ):
         return
     acc.snapshot = result.snapshot
     acc.decision = result.decision
@@ -171,6 +178,7 @@ async def _watch_process(
     proc: anyio.abc.Process,
     acc: RaceAccumulator,
     trigger: anyio.Event,
+    ownership_tracker: OwnedProcessIdentityTracker | None = None,
 ) -> None:
     """Wait for the subprocess to exit and deposit the process-exit signal.
 
@@ -178,7 +186,11 @@ async def _watch_process(
     so that execute_termination_action's DRAIN_THEN_KILL_IF_ALIVE path can
     await the event inside the drain window.
     """
+    if ownership_tracker is not None:
+        await anyio.to_thread.run_sync(ownership_tracker.refresh_from_process_group)
     await proc.wait()
+    if ownership_tracker is not None:
+        await anyio.to_thread.run_sync(ownership_tracker.refresh_from_process_group)
     logger.debug("process_exited", pid=proc.pid, returncode=proc.returncode)
     # Exit snapshot: best-effort capture at exact exit time.
     # waitpid() reaps the process atomically, so /proc/[pid] is already gone for

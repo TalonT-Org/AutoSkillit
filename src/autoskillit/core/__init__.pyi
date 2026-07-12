@@ -300,8 +300,6 @@ from .types import IssueLabelState as IssueLabelState
 from .types import KillReason as KillReason
 from .types import LabelDef as LabelDef
 from .types import LensEntry as LensEntry
-from .types import LifecycleActorRequest as LifecycleActorRequest
-from .types import LifecycleActorResponse as LifecycleActorResponse
 from .types import LifecycleDecision as LifecycleDecision
 from .types import LifecycleEvidenceIssue as LifecycleEvidenceIssue
 from .types import LifecycleEvidenceIssueKind as LifecycleEvidenceIssueKind

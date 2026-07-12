@@ -32,7 +32,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
+
+import anyio
+from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
 from autoskillit.core import (
     ChildLifecycleObservation,
@@ -49,6 +52,253 @@ if TYPE_CHECKING:
     from autoskillit.core import StreamParser
 
 logger = get_logger(__name__)
+
+REQUEST_CAPACITY = 64
+CONTROL_CAPACITY = 64
+WAKE_CAPACITY = 1
+ProducerName = Literal["channel_a", "channel_b", "process_exit"]
+
+
+class PermitLease:
+    """Release-once request permit whose ownership transfers on enqueue."""
+
+    __slots__ = ("_owner", "_released", "_semaphore")
+
+    def __init__(self, semaphore: anyio.Semaphore) -> None:
+        self._semaphore = semaphore
+        self._owner: Literal["producer", "actor"] = "producer"
+        self._released = False
+
+    @classmethod
+    def acquire_nowait(cls, semaphore: anyio.Semaphore) -> PermitLease | None:
+        try:
+            semaphore.acquire_nowait()
+        except anyio.WouldBlock:
+            return None
+        return cls(semaphore)
+
+    @property
+    def owner(self) -> Literal["producer", "actor"]:
+        return self._owner
+
+    @property
+    def released(self) -> bool:
+        return self._released
+
+    def transfer_to_actor(self) -> None:
+        if self._released or self._owner != "producer":
+            raise RuntimeError("request_permit_invalid_transfer")
+        self._owner = "actor"
+
+    def release_by_producer(self) -> None:
+        if self._owner != "producer":
+            raise RuntimeError("actor_owned_request_permit")
+        self._release_once()
+
+    def release_by_actor(self) -> None:
+        if self._owner != "actor":
+            raise RuntimeError("producer_owned_request_permit")
+        self._release_once()
+
+    def _release_once(self) -> None:
+        if self._released:
+            raise RuntimeError("request_permit_released_twice")
+        self._released = True
+        self._semaphore.release()
+
+
+class ActorIngressEndpoint:
+    """Producer-owned clones for ordinary, reserved-control, and wake lanes."""
+
+    __slots__ = ("_control_send", "_ordinary_send", "_wake_send", "producer")
+
+    def __init__(
+        self,
+        producer: ProducerName,
+        ordinary_send: MemoryObjectSendStream[object],
+        control_send: MemoryObjectSendStream[object],
+        wake_send: MemoryObjectSendStream[None],
+    ) -> None:
+        self.producer = producer
+        self._ordinary_send = ordinary_send
+        self._control_send = control_send
+        self._wake_send = wake_send
+
+    def _wake_nowait(self) -> None:
+        try:
+            self._wake_send.send_nowait(None)
+        except anyio.WouldBlock:
+            pass
+        except (anyio.ClosedResourceError, anyio.BrokenResourceError):
+            logger.debug("actor_wake_closed", producer=self.producer)
+
+    def send_ordinary_nowait(self, fact: object) -> None:
+        self._ordinary_send.send_nowait(fact)
+        self._wake_nowait()
+
+    async def send_ordinary(self, fact: object) -> None:
+        await self._ordinary_send.send(fact)
+        self._wake_nowait()
+
+    def send_control_nowait(self, fact: object) -> None:
+        self._control_send.send_nowait(fact)
+        self._wake_nowait()
+
+    async def send_control(self, fact: object) -> None:
+        await self._control_send.send(fact)
+        self._wake_nowait()
+
+    async def aclose(self) -> None:
+        await self._ordinary_send.aclose()
+        await self._control_send.aclose()
+        self._wake_nowait()
+        await self._wake_send.aclose()
+
+
+class ActorIngressTransport:
+    """Actor-owned receivers for one ordinary and three reserved control lanes."""
+
+    def __init__(self, request_capacity: int = REQUEST_CAPACITY) -> None:
+        self.request_capacity = request_capacity
+        ordinary_send, self._ordinary_receive = anyio.create_memory_object_stream[object](
+            request_capacity
+        )
+        wake_send, self._wake_receive = anyio.create_memory_object_stream[None](WAKE_CAPACITY)
+        controls = {
+            producer: anyio.create_memory_object_stream[object](CONTROL_CAPACITY)
+            for producer in ("channel_a", "channel_b", "process_exit")
+        }
+        self._control_receives = {name: pair[1] for name, pair in controls.items()}
+        self.channel_a = ActorIngressEndpoint(
+            "channel_a", ordinary_send.clone(), controls["channel_a"][0], wake_send.clone()
+        )
+        self.channel_b = ActorIngressEndpoint(
+            "channel_b", ordinary_send.clone(), controls["channel_b"][0], wake_send.clone()
+        )
+        self.process_exit = ActorIngressEndpoint(
+            "process_exit",
+            ordinary_send.clone(),
+            controls["process_exit"][0],
+            wake_send.clone(),
+        )
+        ordinary_send.close()
+        wake_send.close()
+        self._closed: set[str] = set()
+
+    @property
+    def capacities(self) -> tuple[int, int, int]:
+        return (self.request_capacity, self.request_capacity, self.request_capacity)
+
+    def _drain_lane(
+        self, name: str, receive: MemoryObjectReceiveStream[object]
+    ) -> tuple[bool, object | None]:
+        if name in self._closed:
+            return False, None
+        try:
+            return True, receive.receive_nowait()
+        except anyio.WouldBlock:
+            return False, None
+        except (anyio.EndOfStream, anyio.ClosedResourceError):
+            self._closed.add(name)
+            return True, None
+
+    def drain_nowait(self) -> list[tuple[str, object]]:
+        lanes = (
+            ("ordinary", self._ordinary_receive),
+            ("channel_a", self._control_receives["channel_a"]),
+            ("channel_b", self._control_receives["channel_b"]),
+            ("process_exit", self._control_receives["process_exit"]),
+        )
+        drained: list[tuple[str, object]] = []
+        while True:
+            progressed = False
+            for name, receive in lanes:
+                readable, item = self._drain_lane(name, receive)
+                progressed = progressed or readable
+                if item is not None:
+                    drained.append((name, item))
+            if not progressed:
+                return drained
+
+    @property
+    def eof(self) -> bool:
+        return self._closed == {"ordinary", "channel_a", "channel_b", "process_exit"}
+
+    async def wait(self, timeout: float | None) -> None:
+        if timeout is None:
+            try:
+                await self._wake_receive.receive()
+            except anyio.EndOfStream:
+                pass
+            return
+        with anyio.move_on_after(max(0.0, timeout)):
+            try:
+                await self._wake_receive.receive()
+            except anyio.EndOfStream:
+                pass
+
+    async def aclose_receivers(self) -> None:
+        await self._ordinary_receive.aclose()
+        for receive in self._control_receives.values():
+            await receive.aclose()
+        await self._wake_receive.aclose()
+
+
+async def receive_reply_or_stop(
+    reply_receive: MemoryObjectReceiveStream[Any], producer_stop: anyio.Event
+) -> Any | None:
+    """Race a one-shot actor reply against cooperative producer stop."""
+    try:
+        return reply_receive.receive_nowait()
+    except anyio.WouldBlock:
+        pass
+    except anyio.EndOfStream:
+        return None
+    if producer_stop.is_set():
+        return None
+    replies: list[Any] = []
+    done = anyio.Event()
+
+    async def receive_reply() -> None:
+        try:
+            replies.append(await reply_receive.receive())
+        except anyio.EndOfStream:
+            pass
+        finally:
+            done.set()
+
+    async def receive_stop() -> None:
+        await producer_stop.wait()
+        done.set()
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(receive_reply)
+        tg.start_soon(receive_stop)
+        await done.wait()
+        tg.cancel_scope.cancel()
+    return replies[0] if replies else None
+
+
+def monitor_result_from_reply(
+    reply: Any,
+    *,
+    status: Any,
+    session_id: str,
+    orphaned_tool_result: bool,
+) -> Any:
+    """Carry an actor reply's exact frozen objects into SessionMonitorResult."""
+    from autoskillit.execution.process._process_monitor import SessionMonitorResult
+
+    return SessionMonitorResult(
+        status=status,
+        session_id=session_id,
+        orphaned_tool_result=orphaned_tool_result,
+        snapshot=reply.snapshot,
+        decision=reply.decision,
+        eligible_candidate=reply.eligible_candidate,
+        eligible_source=reply.eligible_source,
+        sightings=reply.sightings,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +361,27 @@ class ChannelACatchUpCommand:
 
     request_id: str
     required_byte_offset: int
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelARemoveCommand:
+    """Actor-to-pump retirement for one correlated catch-up request."""
+
+    request_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelARemovalAck:
+    """Pump proof that a request token can no longer populate pump state."""
+
+    request_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelACommandRejected:
+    """Pump rejection of a duplicate request token."""
+
+    request_id: str
 
 
 def _split_complete_lines(
@@ -238,7 +509,6 @@ class ChannelAPumpState:
     completion_marker: str = ""
     stdout_path: Path | None = None
     on_session_id_resolved: Callable[[str], None] | None = None
-    closed: bool = False
 
 
 def bind_parser(state: ChannelAPumpState, parser: StreamParser) -> None:
@@ -250,82 +520,118 @@ def bind_parser(state: ChannelAPumpState, parser: StreamParser) -> None:
     """
     if state.parser is not None:
         raise RuntimeError("channel_a_pump_parser_already_bound")
-    if state.closed:
-        raise RuntimeError("channel_a_pump_already_closed")
     state.parser = parser
 
 
 async def run_channel_a_pump(
     state: ChannelAPumpState,
-    fact_send: Any,
     command_receive: Any,
+    producer_stop: Any,
+    ingress_endpoint: Any,
     *,
+    remove_receive: Any | None = None,
     poll_interval: float = 0.05,
 ) -> None:
-    """Async pump loop — emit batches on ``fact_send`` until closed.
+    """Drain Channel A for every admitted watermark until cooperative stop.
 
-    The loop polls ``state.stdout_path`` every ``poll_interval`` seconds,
-    reads the next batch via :func:`read_channel_a_batch`, and pushes each
-    batch onto ``fact_send``. When a catch-up command arrives, the pump
-    reads ahead until ``required_byte_offset`` is reached, then emits the
-    resulting batch and continues normal polling.
-
-    On exit the pump closes ``fact_send`` exactly once.
+    Commands are retained by ID in admission order and never overwrite one
+    another. One emitted batch can satisfy every retained watermark at or
+    below its exclusive offset; explicit removals bound the map when a request
+    retires for timeout or cancellation.
     """
     if state.stdout_path is None:
         raise RuntimeError("channel_a_pump_stdout_path_unset")
-    import anyio
+    pending: dict[str, ChannelACatchUpCommand] = {}
 
-    await fact_send.send(_PUMP_READY)
-    pending_request: ChannelACatchUpCommand | None = None
-    while not state.closed:
+    async def _send_control(control: object) -> bool:
         try:
-            cmd = command_receive.receive_nowait()
-        except (anyio.WouldBlock, AttributeError):
-            cmd = None
-        if cmd is not None:
-            pending_request = cmd
-        batch = read_channel_a_batch(
-            state.stdout_path,
-            parser=state.parser,
-            completion_marker=state.completion_marker,
-            initial_carry=state.carry,
-            initial_byte_offset=state.byte_offset,
-        )
-        # ``batch.byte_offset`` is the new exclusive end; update the cursor.
-        state.carry = batch.trailing_carry
-        state.byte_offset = batch.byte_offset
-        if state.on_session_id_resolved is not None:
-            for event in batch.records:
-                if event.session_id:
-                    state.on_session_id_resolved(event.session_id)
-        if (
-            pending_request is not None
-            and batch.byte_offset >= pending_request.required_byte_offset
-        ):
-            await fact_send.send(batch)
-            pending_request = None
-            continue
-        if batch.records or batch.observations or batch.parent_markers:
-            await fact_send.send(batch)
-        else:
-            await anyio.sleep(poll_interval)
-    # Final close — pump emits sentinel to mark end-of-stream.
-    await fact_send.send(_PUMP_CLOSED)
-    await fact_send.aclose()
+            await ingress_endpoint.send_control(control)
+        except (anyio.ClosedResourceError, anyio.BrokenResourceError):
+            return False
+        return True
 
+    try:
+        while True:
+            command_stream_closed = False
+            control_closed = False
+            while True:
+                try:
+                    command = command_receive.receive_nowait()
+                except anyio.WouldBlock:
+                    break
+                except (anyio.EndOfStream, anyio.ClosedResourceError):
+                    command_stream_closed = True
+                    break
+                if not isinstance(command, ChannelACatchUpCommand):
+                    continue
+                if command.request_id in pending:
+                    if not await _send_control(ChannelACommandRejected(command.request_id)):
+                        control_closed = True
+                        break
+                    continue
+                pending[command.request_id] = command
 
-@dataclass(frozen=True, slots=True)
-class _PumpSentinel:
-    """Internal sentinel used to coordinate actor startup/closure."""
+            if control_closed:
+                break
+            removal_processed = False
+            if remove_receive is not None:
+                try:
+                    removal = remove_receive.receive_nowait()
+                except (
+                    anyio.WouldBlock,
+                    anyio.EndOfStream,
+                    anyio.ClosedResourceError,
+                ):
+                    removal = None
+                if isinstance(removal, ChannelARemoveCommand):
+                    pending.pop(removal.request_id, None)
+                    if not await _send_control(ChannelARemovalAck(removal.request_id)):
+                        control_closed = True
+                    removal_processed = True
+            if control_closed:
+                break
+            if removal_processed:
+                continue
 
-    kind: str
+            batch = read_channel_a_batch(
+                state.stdout_path,
+                parser=state.parser,
+                completion_marker=state.completion_marker,
+                initial_carry=state.carry,
+                initial_byte_offset=state.byte_offset,
+            )
+            state.carry = batch.trailing_carry
+            state.byte_offset = batch.byte_offset
+            if state.on_session_id_resolved is not None:
+                for event in batch.records:
+                    if event.session_id:
+                        state.on_session_id_resolved(event.session_id)
 
+            satisfied = tuple(
+                request_id
+                for request_id, command in pending.items()
+                if state.byte_offset >= command.required_byte_offset
+            )
+            should_emit = bool(
+                batch.records
+                or batch.observations
+                or batch.parent_markers
+                or batch.lifecycle_issues
+                or satisfied
+            )
+            if should_emit:
+                await ingress_endpoint.send_ordinary(batch)
+                for request_id in satisfied:
+                    pending.pop(request_id, None)
 
-_PUMP_READY = _PumpSentinel(kind="ready")
-_PUMP_CLOSED = _PumpSentinel(kind="closed")
-
-
-def is_pump_sentinel(value: Any, kind: str) -> bool:
-    """Return True when ``value`` is a pump sentinel of the given kind."""
-    return isinstance(value, _PumpSentinel) and value.kind == kind
+            if (producer_stop.is_set() or command_stream_closed) and not should_emit:
+                break
+            if not should_emit:
+                with anyio.move_on_after(poll_interval):
+                    await producer_stop.wait()
+    finally:
+        pending.clear()
+        await command_receive.aclose()
+        if remove_receive is not None:
+            await remove_receive.aclose()
+        await ingress_endpoint.aclose()

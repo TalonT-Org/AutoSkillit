@@ -32,6 +32,8 @@ async def test_mappingproxy_env_through_run_managed_async(tmp_path: Any) -> None
     )
     assert result.returncode == 0
     assert "ok" in result.stdout
+    assert result.cleanup_outcome is not None
+    assert result.cleanup_outcome.succeeded
 
 
 @pytest.mark.anyio
@@ -86,7 +88,7 @@ def test_run_managed_sync_coerces_env_to_dict(
 
     monkeypatch.setattr("subprocess.Popen", SpyPopen)
     env = MappingProxyType({"PATH": os.environ["PATH"], "FOO": "bar"})
-    run_managed_sync(
+    result = run_managed_sync(
         cmd=["echo", "ok"],
         cwd=tmp_path,
         timeout=10.0,
@@ -94,6 +96,8 @@ def test_run_managed_sync_coerces_env_to_dict(
     )
     assert type(captured_env["env"]) is dict
     assert captured_env["env"]["FOO"] == "bar"
+    assert result.cleanup_outcome is not None
+    assert result.cleanup_outcome.succeeded
 
 
 def test_headless_cmd_with_mappingproxy_env() -> None:

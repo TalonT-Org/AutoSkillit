@@ -160,18 +160,20 @@ def test_completion_required_false_preserves_existing_behavior():
 
 
 @pytest.mark.parametrize(
-    ("cleanup_outcome", "lifecycle_decision"),
+    ("cleanup_outcome", "lifecycle_decision", "expected_subtype"),
     [
         (
             CleanupOutcome(succeeded=False, budget_exhausted=True),
             LifecycleDecision.CONTINUE,
+            "cleanup_failed",
         ),
-        (None, LifecycleDecision.CATCH_UP_FAILED),
+        (None, LifecycleDecision.CATCH_UP_FAILED, "child_work_failed"),
     ],
 )
 def test_optional_marker_recovery_cannot_override_lifecycle_failure(
     cleanup_outcome: CleanupOutcome | None,
     lifecycle_decision: LifecycleDecision,
+    expected_subtype: str,
 ) -> None:
     result_text = "worktree_path = /tmp/worktrees/impl-foo\nbranch_name = impl/foo"
     stdout = json.dumps(
@@ -200,4 +202,4 @@ def test_optional_marker_recovery_cannot_override_lifecycle_failure(
     assert sr.success is False
     assert sr.needs_retry is True
     assert sr.retry_reason == RetryReason.RESUME
-    assert sr.subtype == "missing_completion_marker"
+    assert sr.subtype == expected_subtype

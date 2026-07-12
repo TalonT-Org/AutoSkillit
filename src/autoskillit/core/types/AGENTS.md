@@ -15,7 +15,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_constants_registries.py` | Tool registries, pack registries, tool-to-tag mappings, visibility tags |
 | `_type_constants_features.py` | Feature gates (FeatureDef, FEATURE_REGISTRY), label lifecycle state machine |
 | `_type_session_env.py` | Typed env spec dataclasses for session launch boundaries (`FleetSessionEnv`) |
-| `_type_subprocess.py` | `SubprocessResult` dataclass, `SubprocessRunner` protocol, and canonical owner of `DEFAULT_CLEANUP_BUDGET_SECONDS` (re-exported from `_type_lifecycle` for backward compatibility) |
+| `_type_subprocess.py` | `SubprocessResult` dataclass, `SubprocessRunner` protocol, and sole owner of `DEFAULT_CLEANUP_BUDGET_SECONDS` |
 | `_type_token.py` | `CanonicalTokenUsage` frozen dataclass with factory methods and merge |
 | `_type_results_execution.py` | Execution-scoped result dataclasses: `SessionTelemetry`, `RecipeIdentity`, `CIRunScope` |
 | `_type_results.py` | Core result dataclasses: `SkillResult`, `ProviderOutcome`, `LoadResult`, `FailureRecord`, `WriteBehaviorSpec` |
@@ -33,7 +33,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_helpers.py` | Text processing and skill-name extraction utilities |
 | `_type_inspector.py` | Health Inspector types: `InspectorEvidence`, `InspectorVerdict`, `InspectorCallback` (issue #3533) |
 | `_type_invariant_registry.py` | Invariant registry: `InvariantDef` dataclass and `INVARIANT_REGISTRY` mapping prose prohibitions to runtime gates |
-| `_type_lifecycle.py` | Async-child-aware completion facts (issue #4233): `CandidateSighting`, `ChildLifecycleObservation`, `ChildLifecycleSnapshot` (with `awaiting_delivery`), `CompletionCandidate` (with `sightings`), `CompletionCandidateState/Source`, `ChildObligationState` (with `AWAITING_DELIVERY`), `LifecycleDecision`, `LifecycleEvidenceIssue`, `LifecycleEvidenceIssueKind`, `LifecycleEvidenceResolution`, deprecated actor request/response facts, `ParentAssistantMarker`, `ProcessIdentity`, `CleanupOutcome` (with `unknown_identities`), deprecated `DEFAULT_CLEANUP_BUDGET_SECONDS` re-export, and `build_lifecycle_snapshot_from_attempts` |
+| `_type_lifecycle.py` | Async-child-aware completion facts (issue #4233): `CandidateSighting`, `ChildLifecycleObservation`, `ChildLifecycleSnapshot` (with `awaiting_delivery`), `CompletionCandidate` (with `sightings`), `CompletionCandidateState/Source`, `ChildObligationState` (with `AWAITING_DELIVERY`), `LifecycleDecision`, `LifecycleEvidenceIssue`, `LifecycleEvidenceIssueKind`, `LifecycleEvidenceResolution`, `ParentAssistantMarker`, `ProcessIdentity`, `CleanupOutcome` (with `unknown_identities`), and `build_lifecycle_snapshot_from_attempts` |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |
 | `_type_plugin_source.py` | `PluginSource` discriminated union: `DirectInstall | MarketplaceInstall` |

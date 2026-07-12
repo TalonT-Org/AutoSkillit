@@ -1,77 +1,94 @@
-"""Lifecycle actor — sole mutable reducer and completion authority (issue #4233).
-
-The actor is one per ``run_managed_async`` invocation. Three persistent
-producers (Channel A pump, Channel B monitor, process-exit watcher) emit
-immutable facts onto a single bounded AnyIO stream. The actor consumes
-the stream, applies the deterministic reducer, and emits one of:
-
-- ``LifecycleDecision.CONTINUE`` — keep tailing; no candidate eligible
-- ``LifecycleDecision.ELIGIBLE`` — a fresh parent candidate has cleared
-  every obligation; authorize completion
-- ``LifecycleDecision.CHILD_WORK_FAILED`` — a fresh post-quiescence
-  candidate arrived while a prior turn's obligations remain unresolved
-- ``LifecycleDecision.CATCH_UP_FAILED`` — Channel B or process exit
-  requested catch-up but the required Channel A offset was never reached
-
-Watermark catch-up commands travel on a dedicated bounded AnyIO stream
-(``ChannelACatchUpCommand``) so the pump can drain ahead without
-blocking the main fact reduction. The actor replies on a per-request
-one-shot reply stream; producers wait only until the deadline captured
-at request time and emit a cancellation fact under a shield on shutdown.
-
-The actor never compares Channel B log offsets with Channel A stdout
-offsets; each channel keeps its own offset universe.
-"""
+"""Invocation-local lifecycle actor and its private bounded transport."""
 
 from __future__ import annotations
 
+import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any
+from enum import StrEnum
+from pathlib import Path
+from typing import Any
 
 import anyio
-from anyio.streams.memory import MemoryObjectSendStream
+import anyio.abc
+from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
 from autoskillit.core import (
     CandidateSighting,
+    ChannelBStatus,
     ChildLifecycleSnapshot,
     CompletionCandidate,
     CompletionCandidateSource,
     CompletionCandidateState,
     LifecycleDecision,
+    LifecycleEvidenceIssue,
     ParentAssistantMarker,
     get_logger,
 )
 from autoskillit.execution.process._channel_a_pump import (
+    CONTROL_CAPACITY as CONTROL_CAPACITY,
+)
+from autoskillit.execution.process._channel_a_pump import (
+    REQUEST_CAPACITY,
+    ActorIngressEndpoint,
+    ActorIngressTransport,
     ChannelABatch,
     ChannelACatchUpCommand,
-    is_pump_sentinel,
+    ChannelACommandRejected,
+    ChannelARemovalAck,
+    ChannelARemoveCommand,
+    PermitLease,
+    ProducerName,
+)
+from autoskillit.execution.process._channel_a_pump import (
+    WAKE_CAPACITY as WAKE_CAPACITY,
+)
+from autoskillit.execution.process._channel_a_pump import (
+    monitor_result_from_reply as _monitor_result_from_reply,
+)
+from autoskillit.execution.process._channel_a_pump import (
+    receive_reply_or_stop as _receive_reply_or_stop,
 )
 from autoskillit.execution.process._child_lifecycle import (
     ChildLifecycleCoordinatorHandle,
     make_coordinator_handle,
 )
-
-if TYPE_CHECKING:
-    import anyio.abc
+from autoskillit.execution.process._process_monitor import (
+    ProcessActivityTracker,
+    SessionMonitorResult,
+    _discover_session_log_file,
+    _has_active_api_connection,
+    _has_active_execution_marker,
+    _initialize_session_log_tail,
+    _ParsedSessionLogRecord,
+    _SessionLogScanComplete,
+    _tail_session_log_events,
+)
+from autoskillit.execution.process._process_ownership import OwnedProcessIdentityTracker
+from autoskillit.execution.process._process_race import RaceAccumulator, _watch_process
 
 logger = get_logger(__name__)
 
 
+class LifecycleReplyDisposition(StrEnum):
+    ACKNOWLEDGED = "acknowledged"
+    DEFERRED = "deferred"
+    ELIGIBLE = "eligible"
+    CHILD_WORK_FAILED = "child_work_failed"
+    CATCH_UP_FAILED = "catch_up_failed"
+    ADMISSION_FAILED = "admission_failed"
+    COMMAND_FAILED = "command_failed"
+    CANCELLED = "cancelled"
+    DUPLICATE_ID = "duplicate_id"
+    INCOMPLETE_EOF = "incomplete_eof"
+    BROKEN_REPLY = "broken_reply"
+
+
 @dataclass(frozen=True, slots=True)
 class ChannelBProposal:
-    """Immutable Channel B proposal reduced from the session JSONL log.
-
-    Distinct from a LifecycleDecision: a proposal is a *fact*, never a
-    decision. The actor alone decides whether the proposal authorises
-    completion. ``byte_offset`` is the Channel B log offset where the
-    marker was reduced — never compared with Channel A offsets.
-    ``required_byte_offset`` is the Channel A stdout size captured at
-    proposal emission time, used for the watermark catch-up command.
-    """
-
     request_id: str
-    status: str  # 'completion' | 'stale' | 'dir_missing'
+    status: str
     session_id: str
     byte_offset: int
     required_byte_offset: int
@@ -81,44 +98,64 @@ class ChannelBProposal:
 
 @dataclass(frozen=True, slots=True)
 class ProcessExitFact:
-    """Immutable process-exit producer fact.
-
-    Process exit requests catch-up but never synthesizes a candidate.
-    The actor captures ``required_channel_a_byte_offset`` at the moment
-    of exit and routes the request to the pump.
-    """
-
     request_id: str
     returncode: int | None
     required_channel_a_byte_offset: int
 
 
 @dataclass(frozen=True, slots=True)
-class CatchUpTimeoutFact:
-    """Immutable timer-producer fact emitted when a catch-up deadline lapses."""
-
+class ProducerStopFact:
     request_id: str
+    producer: ProducerName
+    required_channel_a_byte_offset: int
+
+
+LifecycleProposal = ChannelBProposal | ProcessExitFact | ProducerStopFact
+
+
+_PermitLease = PermitLease
 
 
 @dataclass(frozen=True, slots=True)
-class CatchUpCancellationFact:
-    """Immutable producer-side cancellation fact emitted on shutdown/shield."""
-
-    request_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class CatchUpAck:
-    """Pump-side fact emitted when the required offset has been reduced."""
-
+class LifecycleActorReply:
     request_id: str
     processed_channel_a_byte_offset: int
+    snapshot: ChildLifecycleSnapshot | None
+    issues: tuple[LifecycleEvidenceIssue, ...]
+    decision: LifecycleDecision
+    eligible_candidate: CompletionCandidate | None
+    eligible_source: CompletionCandidateSource | None
+    sightings: tuple[CandidateSighting, ...]
+    disposition: LifecycleReplyDisposition
+
+
+@dataclass(frozen=True, slots=True)
+class LifecycleActorRequest:
+    proposal: LifecycleProposal
+    reply_send: MemoryObjectSendStream[LifecycleActorReply]
+    deadline: float
+    lease: PermitLease | None
+    request_token: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    @property
+    def request_id(self) -> str:
+        return self.proposal.request_id
+
+    @property
+    def required_byte_offset(self) -> int:
+        if isinstance(self.proposal, ChannelBProposal):
+            return self.proposal.required_byte_offset
+        return self.proposal.required_channel_a_byte_offset
+
+
+@dataclass(frozen=True, slots=True)
+class LifecycleActorControl:
+    request: LifecycleActorRequest
+    disposition: LifecycleReplyDisposition
 
 
 @dataclass(frozen=True, slots=True)
 class _LifecycleActorState:
-    """Atomic callback value published by the sole lifecycle authority."""
-
     snapshot: ChildLifecycleSnapshot | None
     decision: LifecycleDecision = LifecycleDecision.CONTINUE
     eligible_candidate: CompletionCandidate | None = None
@@ -126,21 +163,27 @@ class _LifecycleActorState:
     sightings: tuple[CandidateSighting, ...] = ()
 
 
+@dataclass(slots=True)
+class _PendingRequest:
+    request: LifecycleActorRequest
+    command: ChannelACatchUpCommand | None
+    deadline: float
+
+
+@dataclass(slots=True)
+class _RetiringRequest:
+    pending: _PendingRequest
+    state: _LifecycleActorState
+    disposition: LifecycleReplyDisposition
+    removal_sent: bool = False
+
+
 @dataclass
 class LifecycleActorEnvelope:
-    """Wrapper exposing the actor's mutable reducer to its private transport.
-
-    The envelope owns the AnyIO reply endpoints so the actor module can
-    import anyio freely while exported core facts stay transport-free.
-    Public callers see only the frozen handle. The envelope is mutable
-    because the actor is the sole mutable owner of reducer state per
-    invocation.
-    """
-
     handle: ChildLifecycleCoordinatorHandle
-    pending_requests: dict[str, ChannelACatchUpCommand] = field(default_factory=dict)
-    pending_channel_b_sightings: dict[str, CandidateSighting] = field(default_factory=dict)
-    pending_deadlines: dict[str, float] = field(default_factory=dict)
+    pending_requests: dict[str, _PendingRequest] = field(default_factory=dict)
+    pending_controls: dict[str, LifecycleActorControl] = field(default_factory=dict)
+    retiring_requests: dict[str, _RetiringRequest] = field(default_factory=dict)
     last_decision: LifecycleDecision = LifecycleDecision.CONTINUE
     last_snapshot: ChildLifecycleSnapshot | None = None
     last_eligible_candidate: CompletionCandidate | None = None
@@ -148,22 +191,353 @@ class LifecycleActorEnvelope:
     last_processed_offset: int = 0
 
 
+class ActorIngress:
+    def __init__(self, request_capacity: int = REQUEST_CAPACITY) -> None:
+        self._transport = ActorIngressTransport(request_capacity)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._transport, name)
+
+
 def make_actor_envelope() -> LifecycleActorEnvelope:
-    """Build a fresh actor envelope for one invocation."""
     return LifecycleActorEnvelope(handle=make_coordinator_handle())
 
 
-def _register_observations(
-    envelope: LifecycleActorEnvelope,
-    batch: ChannelABatch,
-) -> None:
-    """Apply one Channel A batch's typed observations to the reducer.
+def make_actor_ingress(request_capacity: int = REQUEST_CAPACITY) -> ActorIngress:
+    return ActorIngress(request_capacity)
 
-    Observations are ordered within a batch and reduced in order so
-    source-relative provenance is preserved. ``lifecycle_issues`` are
-    registered against the coordinator's pending blocking-evidence store
-    so unresolved issues propagate into the snapshot and fail closed.
-    """
+
+def submit_actor_request_nowait(
+    endpoint: ActorIngressEndpoint,
+    semaphore: anyio.Semaphore,
+    proposal: LifecycleProposal,
+    reply_send: MemoryObjectSendStream[LifecycleActorReply],
+    deadline: float,
+) -> LifecycleActorRequest:
+    lease = _PermitLease.acquire_nowait(semaphore)
+    request = LifecycleActorRequest(proposal, reply_send, deadline, lease)
+    if lease is None:
+        try:
+            endpoint.send_control_nowait(
+                LifecycleActorControl(request, LifecycleReplyDisposition.ADMISSION_FAILED)
+            )
+        except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
+            reply_send.close()
+        return request
+    try:
+        endpoint.send_ordinary_nowait(request)
+    except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
+        try:
+            endpoint.send_control_nowait(
+                LifecycleActorControl(request, LifecycleReplyDisposition.ADMISSION_FAILED)
+            )
+        except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
+            lease.release_by_producer()
+            reply_send.close()
+            return request
+    lease.transfer_to_actor()
+    return request
+
+
+def send_request_cancellation_nowait(
+    endpoint: ActorIngressEndpoint,
+    request: LifecycleActorRequest,
+) -> bool:
+    try:
+        endpoint.send_control_nowait(
+            LifecycleActorControl(request, LifecycleReplyDisposition.CANCELLED)
+        )
+    except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
+        return False
+    return True
+
+
+class _SuppressionState(StrEnum):
+    INACTIVE = "inactive"
+    ACTIVE = "active"
+    EXPIRED = "expired"
+
+
+def _stale_suppression_state(
+    state: Any,
+    *,
+    pid: int,
+    activity_tracker: ProcessActivityTracker,
+    marker_dir: Path | None,
+    marker_scope_session_id: str | None,
+    max_suppression_seconds: float,
+) -> _SuppressionState:
+    active = _has_active_api_connection(pid) or activity_tracker.has_active_children(pid)
+    if marker_dir is not None:
+        active = active or _has_active_execution_marker(
+            marker_dir, session_id=marker_scope_session_id
+        )
+    if not active:
+        return _SuppressionState.INACTIVE
+    now = time.monotonic()
+    if state.suppression_start is None:
+        state.suppression_start = now
+    if now - state.suppression_start >= max_suppression_seconds:
+        return _SuppressionState.EXPIRED
+    state.last_change = now
+    return _SuppressionState.ACTIVE
+
+
+async def watch_process_with_lifecycle(
+    proc: anyio.abc.Process,
+    acc: RaceAccumulator,
+    ownership_tracker: OwnedProcessIdentityTracker,
+    endpoint: ActorIngressEndpoint,
+    request_semaphore: anyio.Semaphore,
+    stdout_path: Path,
+    post_exit_scan: anyio.Event,
+    channel_b_enabled: bool,
+    producer_stop: anyio.Event,
+    trigger: anyio.Event,
+    completion_drain_timeout: float,
+    on_result: Callable[[SessionMonitorResult], None],
+) -> None:
+    """Submit process exit only after a mandatory post-exit Channel B scan."""
+    request: LifecycleActorRequest | None = None
+    reply_receive: MemoryObjectReceiveStream[LifecycleActorReply] | None = None
+    cancellation_sent = False
+    try:
+        await _watch_process(proc, acc, anyio.Event(), ownership_tracker)
+        try:
+            required_offset = stdout_path.stat().st_size
+        except OSError:
+            required_offset = 0
+        post_exit_scan_observed = True
+        if channel_b_enabled:
+            with anyio.move_on_after(completion_drain_timeout):
+                await post_exit_scan.wait()
+            post_exit_scan_observed = post_exit_scan.is_set()
+        reply_send, reply_receive = anyio.create_memory_object_stream[LifecycleActorReply](1)
+        proposal: LifecycleProposal = (
+            ProcessExitFact(
+                request_id=f"process-exit-{uuid.uuid4().hex}",
+                returncode=proc.returncode,
+                required_channel_a_byte_offset=required_offset,
+            )
+            if post_exit_scan_observed
+            else ProducerStopFact(
+                request_id=f"process-exit-scan-timeout-{uuid.uuid4().hex}",
+                producer="process_exit",
+                required_channel_a_byte_offset=required_offset,
+            )
+        )
+        request = submit_actor_request_nowait(
+            endpoint,
+            request_semaphore,
+            proposal,
+            reply_send,
+            anyio.current_time() + completion_drain_timeout,
+        )
+        reply = await _receive_reply_or_stop(reply_receive, producer_stop)
+        if reply is None:
+            send_request_cancellation_nowait(endpoint, request)
+            cancellation_sent = True
+            return
+        on_result(
+            _monitor_result_from_reply(
+                reply,
+                status=acc.channel_b_status,
+                session_id=acc.channel_b_session_id,
+                orphaned_tool_result=acc.channel_b_orphaned_tool_result,
+            )
+        )
+        trigger.set()
+    finally:
+        if request is not None and not cancellation_sent and producer_stop.is_set():
+            send_request_cancellation_nowait(endpoint, request)
+        if reply_receive is not None:
+            reply_receive.close()
+        await endpoint.aclose()
+
+
+async def watch_session_log_with_lifecycle(
+    *,
+    session_log_dir: Path,
+    completion_marker: str,
+    stale_threshold: float,
+    spawn_time: float,
+    session_record_types: frozenset[str],
+    pid: int,
+    activity_tracker: ProcessActivityTracker,
+    completion_drain_timeout: float,
+    channel_b_ready: anyio.Event,
+    post_exit_scan: anyio.Event,
+    process_exited: anyio.Event,
+    phase1_poll: float,
+    phase2_poll: float,
+    phase1_timeout: float,
+    session_id_timeout: float,
+    stdout_session_id_ready: anyio.Event,
+    expected_session_id: Callable[[], str | None],
+    max_suppression_seconds: float,
+    marker_dir: Path | None,
+    marker_scope_session_id: str | None,
+    stdout_size: Callable[[], int],
+    endpoint: ActorIngressEndpoint,
+    semaphore: anyio.Semaphore,
+    producer_stop: anyio.Event,
+    parent_candidate_normalizer: Callable[[dict[str, Any], int], Any],
+    on_result: Callable[[SessionMonitorResult], None],
+    trigger: anyio.Event,
+) -> None:
+    """Persistently tail Channel B and submit every valid parent proposal."""
+    active_submissions: list[tuple[LifecycleProposal, LifecycleActorRequest, Any]] = []
+    cancellation_sent = False
+    scan_proposals: list[ChannelBProposal] = []
+
+    def submit_proposal(proposal: LifecycleProposal) -> None:
+        reply_send, reply_receive = anyio.create_memory_object_stream[LifecycleActorReply](1)
+        request = submit_actor_request_nowait(
+            endpoint,
+            semaphore,
+            proposal,
+            reply_send,
+            anyio.current_time() + completion_drain_timeout,
+        )
+        active_submissions.append((proposal, request, reply_receive))
+
+    async def process_submissions() -> bool:
+        nonlocal cancellation_sent
+        while active_submissions:
+            proposal, request, reply_receive = active_submissions[0]
+            reply = await _receive_reply_or_stop(reply_receive, producer_stop)
+            if reply is None:
+                send_request_cancellation_nowait(endpoint, request)
+                cancellation_sent = True
+                return False
+            reply_receive.close()
+            active_submissions.pop(0)
+            if isinstance(proposal, ChannelBProposal):
+                on_result(
+                    _monitor_result_from_reply(
+                        reply,
+                        status=ChannelBStatus.COMPLETION,
+                        session_id=proposal.session_id,
+                        orphaned_tool_result=proposal.orphan_diagnostic,
+                    )
+                )
+                if reply.decision is not LifecycleDecision.CONTINUE:
+                    trigger.set()
+        return True
+
+    try:
+        with anyio.move_on_after(session_id_timeout):
+            await stdout_session_id_ready.wait()
+        session_file, discovery_status = await _discover_session_log_file(
+            session_log_dir,
+            spawn_time,
+            expected_session_id=expected_session_id(),
+            poll_interval=phase1_poll,
+            timeout=phase1_timeout,
+        )
+        if session_file is None:
+            assert discovery_status is not None
+            channel_b_ready.set()
+            on_result(SessionMonitorResult(discovery_status, ""))
+            trigger.set()
+            return
+
+        state = _initialize_session_log_tail(session_file)
+        async for event in _tail_session_log_events(
+            state,
+            poll_interval=phase2_poll,
+            producer_stop=producer_stop,
+        ):
+            if isinstance(event, _ParsedSessionLogRecord):
+                normalized = parent_candidate_normalizer(event.value, event.exclusive_byte_offset)
+                marker = getattr(normalized, "marker", None)
+                record_type = event.value.get("type")
+                if (
+                    not isinstance(marker, ParentAssistantMarker)
+                    or record_type not in session_record_types
+                ):
+                    continue
+                sighting = CandidateSighting(
+                    source=CompletionCandidateSource.CHANNEL_B,
+                    native_uuid=marker.native_uuid,
+                    native_message_id=marker.message_id,
+                    channel_relative_byte_offset=event.exclusive_byte_offset,
+                    backend_session_id=marker.backend_session_id,
+                    record_provenance="session_log_parent_assistant_record",
+                )
+                scan_proposals.append(
+                    ChannelBProposal(
+                        request_id=f"channel-b-{uuid.uuid4().hex}",
+                        status="completion",
+                        session_id=event.session_id,
+                        byte_offset=event.exclusive_byte_offset,
+                        required_byte_offset=stdout_size(),
+                        orphan_diagnostic=state.last_record_type == "user",
+                        candidate_sighting=sighting,
+                    )
+                )
+                continue
+
+            assert isinstance(event, _SessionLogScanComplete)
+            if not channel_b_ready.is_set():
+                channel_b_ready.set()
+            proposals = tuple(scan_proposals)
+            scan_proposals.clear()
+            failed_stop = event.producer_stopped and not event.scan_succeeded
+            failed_stop |= event.producer_stopped and event.incomplete_carry
+            if failed_stop:
+                submit_proposal(
+                    ProducerStopFact(
+                        request_id=f"channel-b-stop-{uuid.uuid4().hex}",
+                        producer="channel_b",
+                        required_channel_a_byte_offset=stdout_size(),
+                    )
+                )
+            for proposal in proposals:
+                submit_proposal(proposal)
+            if process_exited.is_set() and not post_exit_scan.is_set():
+                post_exit_scan.set()
+            if not await process_submissions():
+                return
+            if event.producer_stopped:
+                return
+            if event.changed:
+                continue
+            elapsed = time.monotonic() - state.last_change
+            if elapsed < stale_threshold:
+                continue
+            suppression = _stale_suppression_state(
+                state,
+                pid=pid,
+                activity_tracker=activity_tracker,
+                marker_dir=marker_dir,
+                marker_scope_session_id=marker_scope_session_id,
+                max_suppression_seconds=max_suppression_seconds,
+            )
+            if suppression is _SuppressionState.ACTIVE:
+                continue
+            on_result(
+                SessionMonitorResult(
+                    ChannelBStatus.STALE,
+                    state.session_id,
+                    orphaned_tool_result=(
+                        state.last_record_type == "user"
+                        if suppression is _SuppressionState.INACTIVE
+                        else False
+                    ),
+                )
+            )
+            trigger.set()
+            return
+    finally:
+        if active_submissions and not cancellation_sent:
+            send_request_cancellation_nowait(endpoint, active_submissions[0][1])
+        for _proposal, _request, reply_receive in active_submissions:
+            reply_receive.close()
+        await endpoint.aclose()
+
+
+def _register_observations(envelope: LifecycleActorEnvelope, batch: ChannelABatch) -> None:
     for observation in batch.observations:
         envelope.handle.observe(observation)
     for issue in batch.lifecycle_issues:
@@ -179,205 +553,10 @@ def _register_parent_markers(
         envelope.handle.register_parent_marker(marker)
 
 
-async def _dispatch_catch_up(
-    envelope: LifecycleActorEnvelope,
-    command: ChannelACatchUpCommand,
-    pump_send: MemoryObjectSendStream[ChannelACatchUpCommand],
-) -> bool:
-    """Best-effort dispatch; never block the main fact reduction.
-
-    The pump command stream has bounded capacity. A saturated stream is a
-    typed fail-closed actor decision (``CATCH_UP_FAILED``) rather than a
-    blocking producer. Tests assert this in
-    ``test_saturated_command_stream_yields_catch_up_failed``.
-
-    Uses ``send_nowait`` so a violated capacity becomes a typed
-    fail-closed decision instead of blocking main fact reduction.
-    """
-    try:
-        pump_send.send_nowait(command)
-    except (anyio.WouldBlock, anyio.ClosedResourceError):
-        logger.warning(
-            "catch_up_command_stream_saturated",
-            request_id=command.request_id,
-        )
-        return False
-    envelope.pending_requests[command.request_id] = command
-    return True
-
-
-async def run_lifecycle_actor(
-    fact_receive: anyio.abc.ObjectReceiveStream[Any],
-    pump_command_send: MemoryObjectSendStream[ChannelACatchUpCommand],
-    reply_send_by_request: Callable[[str], MemoryObjectSendStream[Any] | None],
-    on_state: Callable[[_LifecycleActorState], None],
-    *,
-    completion_drain_timeout: float = 5.0,
-) -> None:
-    """Consume the bounded fact stream and drive lifecycle adjudication.
-
-    Each fact reduces through ``envelope.handle``. When a candidate
-    ``on_state`` publishes one atomic frozen view of the snapshot, decision,
-    eligible candidate/source, and deterministic sightings. It is the single
-    race-wakeup vs completion-authority boundary: only the
-    actor classifies a wakeup as ``COMPLETED``; race wakes from other
-    conditions do not originate eligible state here.
-    """
-    envelope = make_actor_envelope()
-    deadline_to_request: dict[float, str] = {}
-    pending_replies: dict[str, anyio.Event] = {}
-
-    async def _timer() -> None:
-        while True:
-            now = anyio.current_time()
-            expired = [(dl, req) for dl, req in deadline_to_request.items() if dl <= now]
-            for dl, req in expired:
-                await _dispatch_catch_up_timeout(
-                    envelope,
-                    req,
-                    reply_send_by_request,
-                    on_state,
-                )
-                pending_replies.pop(req, None)
-                deadline_to_request.pop(dl, None)
-            await anyio.sleep(0.01)
-
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(_timer)
-        async for fact in fact_receive:
-            if is_pump_sentinel(fact, "closed"):
-                break
-            if is_pump_sentinel(fact, "ready"):
-                continue
-            if isinstance(fact, ChannelABatch):
-                _register_observations(envelope, fact)
-                _register_parent_markers(envelope, fact.parent_markers)
-                # Drain pending catch-up requests satisfied by this batch.
-                completed = [
-                    req_id
-                    for req_id, cmd in envelope.pending_requests.items()
-                    if fact.byte_offset >= cmd.required_byte_offset
-                ]
-                for req_id in completed:
-                    envelope.pending_requests.pop(req_id, None)
-                    sighting = envelope.pending_channel_b_sightings.pop(req_id, None)
-                    if sighting is not None:
-                        envelope.handle.register_candidate_sighting(sighting)
-                    expired_dl = [dl for dl, rid in deadline_to_request.items() if rid == req_id]
-                    for dl in expired_dl:
-                        deadline_to_request.pop(dl, None)
-                _evaluate_candidates(envelope, on_state)
-                for req_id in completed:
-                    await _reply(
-                        reply_send_by_request,
-                        req_id,
-                        CatchUpAck(
-                            request_id=req_id,
-                            processed_channel_a_byte_offset=fact.byte_offset,
-                        ),
-                    )
-                continue
-            if isinstance(fact, ChannelBProposal):
-                cmd = ChannelACatchUpCommand(
-                    request_id=fact.request_id,
-                    required_byte_offset=fact.required_byte_offset,
-                )
-                # Channel B proposals carry their own required offset (captured at send time).
-                if await _dispatch_catch_up(envelope, cmd, pump_command_send):
-                    if fact.candidate_sighting is not None:
-                        envelope.pending_channel_b_sightings[fact.request_id] = (
-                            fact.candidate_sighting
-                        )
-                    deadline = anyio.current_time() + completion_drain_timeout
-                    deadline_to_request[deadline] = cmd.request_id
-                else:
-                    _publish_actor_state(
-                        envelope,
-                        on_state,
-                        LifecycleDecision.CATCH_UP_FAILED,
-                    )
-                    await _reply(
-                        reply_send_by_request,
-                        fact.request_id,
-                        CatchUpTimeoutFact(request_id=fact.request_id),
-                    )
-                continue
-            if isinstance(fact, ProcessExitFact):
-                cmd = ChannelACatchUpCommand(
-                    request_id=fact.request_id,
-                    required_byte_offset=fact.required_channel_a_byte_offset,
-                )
-                if await _dispatch_catch_up(envelope, cmd, pump_command_send):
-                    deadline = anyio.current_time() + completion_drain_timeout
-                    deadline_to_request[deadline] = cmd.request_id
-                else:
-                    _publish_actor_state(
-                        envelope,
-                        on_state,
-                        LifecycleDecision.CATCH_UP_FAILED,
-                    )
-                    await _reply(
-                        reply_send_by_request,
-                        fact.request_id,
-                        CatchUpTimeoutFact(request_id=fact.request_id),
-                    )
-                # Once the exit is consumed, snapshot obligations.
-                _evaluate_candidates(envelope, on_state)
-                continue
-            if isinstance(fact, CatchUpTimeoutFact):
-                envelope.pending_requests.pop(fact.request_id, None)
-                envelope.pending_channel_b_sightings.pop(fact.request_id, None)
-                _publish_actor_state(
-                    envelope,
-                    on_state,
-                    LifecycleDecision.CATCH_UP_FAILED,
-                )
-                continue
-            if isinstance(fact, CatchUpCancellationFact):
-                envelope.pending_requests.pop(fact.request_id, None)
-                envelope.pending_channel_b_sightings.pop(fact.request_id, None)
-                continue
-            if isinstance(fact, CatchUpAck):
-                envelope.pending_requests.pop(fact.request_id, None)
-                envelope.pending_channel_b_sightings.pop(fact.request_id, None)
-                continue
-        # Drain: evaluate any remaining candidate after end-of-stream.
-        _evaluate_candidates(envelope, on_state)
-        tg.cancel_scope.cancel()
-
-
-async def _reply(
-    reply_send_by_request: Callable[[str], MemoryObjectSendStream[Any] | None],
-    request_id: str,
-    payload: Any,
-) -> None:
-    """Send a typed payload on the per-request reply stream (or drop if closed)."""
-    stream = reply_send_by_request(request_id)
-    if stream is None:
-        return
-    try:
-        stream.send_nowait(payload)
-    except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
-        logger.debug("lifecycle_reply_dropped", request_id=request_id)
-        return
-
-
-async def _dispatch_catch_up_timeout(
-    envelope: LifecycleActorEnvelope,
-    request_id: str,
-    reply_send_by_request: Callable[[str], MemoryObjectSendStream[Any] | None],
-    on_state: Callable[[_LifecycleActorState], None],
-) -> None:
-    """Emit a typed catch-up timeout decision and reply to the producer."""
-    _publish_actor_state(envelope, on_state, LifecycleDecision.CATCH_UP_FAILED)
-    await _reply(reply_send_by_request, request_id, CatchUpTimeoutFact(request_id=request_id))
-
-
 def _all_candidate_sightings(
     envelope: LifecycleActorEnvelope,
     snapshot: ChildLifecycleSnapshot,
 ) -> tuple[CandidateSighting, ...]:
-    """Return sightings in deterministic candidate/state order."""
     candidates = tuple(
         candidate
         for candidate_id, _state in snapshot.candidate_states
@@ -388,13 +567,11 @@ def _all_candidate_sightings(
     return tuple(sighting for candidate in candidates for sighting in candidate.sightings)
 
 
-def _publish_actor_state(
+def _freeze_state(
     envelope: LifecycleActorEnvelope,
-    on_state: Callable[[_LifecycleActorState], None],
     decision: LifecycleDecision,
     eligible_candidate: CompletionCandidate | None = None,
-) -> None:
-    """Freeze and publish every lifecycle field as one callback value."""
+) -> _LifecycleActorState:
     snapshot = envelope.handle.snapshot()
     if eligible_candidate is not None:
         snapshot = replace(snapshot, eligible_candidate=eligible_candidate)
@@ -409,57 +586,27 @@ def _publish_actor_state(
             )
             else CompletionCandidateSource.CHANNEL_B
         )
-    state = _LifecycleActorState(
+    return _LifecycleActorState(
         snapshot=snapshot,
         decision=decision,
         eligible_candidate=eligible_candidate,
         eligible_source=eligible_source,
         sightings=sightings,
     )
-    envelope.last_snapshot = state.snapshot
-    envelope.last_decision = state.decision
-    envelope.last_eligible_candidate = state.eligible_candidate
-    envelope.last_sightings = state.sightings
-    on_state(state)
 
 
-def _evaluate_candidates(
-    envelope: LifecycleActorEnvelope,
-    on_state: Callable[[_LifecycleActorState], None],
-) -> None:
-    """Walk every candidate state and emit a typed decision when warranted.
-
-    A fresh post-quiescence candidate encountering unresolved-terminal
-    work emits ``CHILD_WORK_FAILED``. A candidate whose obligations have
-    cleared and whose parent-turn generation exceeds the deferred
-    generation emits ``ELIGIBLE``. All other states keep ``CONTINUE``.
-    """
+def _evaluate_state(envelope: LifecycleActorEnvelope) -> _LifecycleActorState:
     if envelope.last_decision is not LifecycleDecision.CONTINUE:
-        published_eligible = envelope.last_eligible_candidate
-        if published_eligible is not None:
-            published_eligible = (
-                envelope.handle.get_candidate(published_eligible.candidate_id)
-                or published_eligible
+        terminal_eligible = envelope.last_eligible_candidate
+        if terminal_eligible is not None:
+            terminal_eligible = (
+                envelope.handle.get_candidate(terminal_eligible.candidate_id) or terminal_eligible
             )
-        snapshot = envelope.handle.snapshot()
-        if published_eligible is not None:
-            snapshot = replace(snapshot, eligible_candidate=published_eligible)
-        sightings = _all_candidate_sightings(envelope, snapshot)
-        if snapshot == envelope.last_snapshot and sightings == envelope.last_sightings:
-            return
-        _publish_actor_state(
-            envelope,
-            on_state,
-            envelope.last_decision,
-            published_eligible,
-        )
-        return
+        return _freeze_state(envelope, envelope.last_decision, terminal_eligible)
     snapshot = envelope.handle.snapshot()
-    decision: LifecycleDecision = LifecycleDecision.CONTINUE
-    eligible: CompletionCandidate | None = None
     if envelope.handle.has_pending_issues():
-        _publish_actor_state(envelope, on_state, LifecycleDecision.CONTINUE)
-        return
+        return _freeze_state(envelope, LifecycleDecision.CONTINUE)
+    eligible: CompletionCandidate | None = None
     for candidate_id, state in snapshot.candidate_states:
         if state is not CompletionCandidateState.DEFERRED:
             continue
@@ -468,11 +615,386 @@ def _evaluate_candidates(
             continue
         if snapshot.has_unresolved_terminal:
             envelope.handle.note_child_work_failed(candidate_id)
-            decision = LifecycleDecision.CHILD_WORK_FAILED
-            _publish_actor_state(envelope, on_state, decision)
-            return
+            return _freeze_state(envelope, LifecycleDecision.CHILD_WORK_FAILED)
         promoted = envelope.handle.evaluate_candidate(candidate_id)
         if promoted is not None:
             eligible = promoted
-            decision = LifecycleDecision.ELIGIBLE
-    _publish_actor_state(envelope, on_state, decision, eligible)
+    if eligible is not None:
+        return _freeze_state(envelope, LifecycleDecision.ELIGIBLE, eligible)
+    return _freeze_state(envelope, LifecycleDecision.CONTINUE)
+
+
+def _publish_state(
+    envelope: LifecycleActorEnvelope,
+    on_state: Callable[[_LifecycleActorState], None],
+    state: _LifecycleActorState,
+) -> None:
+    if (
+        state.snapshot == envelope.last_snapshot
+        and state.decision is envelope.last_decision
+        and state.sightings == envelope.last_sightings
+    ):
+        return
+    envelope.last_snapshot = state.snapshot
+    envelope.last_decision = state.decision
+    envelope.last_eligible_candidate = state.eligible_candidate
+    envelope.last_sightings = state.sightings
+    on_state(state)
+
+
+def _publish_actor_state(
+    envelope: LifecycleActorEnvelope,
+    on_state: Callable[[_LifecycleActorState], None],
+    decision: LifecycleDecision,
+    eligible_candidate: CompletionCandidate | None = None,
+) -> None:
+    _publish_state(envelope, on_state, _freeze_state(envelope, decision, eligible_candidate))
+
+
+def _evaluate_candidates(
+    envelope: LifecycleActorEnvelope,
+    on_state: Callable[[_LifecycleActorState], None],
+) -> None:
+    _publish_state(envelope, on_state, _evaluate_state(envelope))
+
+
+def _disposition_for_state(state: _LifecycleActorState) -> LifecycleReplyDisposition:
+    if state.decision is LifecycleDecision.ELIGIBLE:
+        return LifecycleReplyDisposition.ELIGIBLE
+    if state.decision is LifecycleDecision.CHILD_WORK_FAILED:
+        return LifecycleReplyDisposition.CHILD_WORK_FAILED
+    if state.snapshot is not None and state.snapshot.candidate_states:
+        return LifecycleReplyDisposition.DEFERRED
+    return LifecycleReplyDisposition.ACKNOWLEDGED
+
+
+def _failure_state(envelope: LifecycleActorEnvelope) -> _LifecycleActorState:
+    if envelope.last_decision is not LifecycleDecision.CONTINUE:
+        return _evaluate_state(envelope)
+    return _freeze_state(envelope, LifecycleDecision.CATCH_UP_FAILED)
+
+
+def _evaluate_exit_state(envelope: LifecycleActorEnvelope) -> _LifecycleActorState:
+    if envelope.last_decision is not LifecycleDecision.CONTINUE:
+        return _evaluate_state(envelope)
+    snapshot = envelope.handle.snapshot()
+    blocked_candidate = any(
+        state in {CompletionCandidateState.DEFERRED, CompletionCandidateState.SUPERSEDED}
+        for _candidate_id, state in snapshot.candidate_states
+    )
+    if (
+        snapshot.has_active_children
+        or snapshot.awaiting_delivery
+        or snapshot.has_unresolved_terminal
+        or envelope.handle.has_pending_issues()
+        or blocked_candidate
+    ):
+        return _freeze_state(envelope, LifecycleDecision.CHILD_WORK_FAILED)
+    eligible_id = next(
+        (
+            candidate_id
+            for candidate_id, state in snapshot.candidate_states
+            if state is CompletionCandidateState.ELIGIBLE
+        ),
+        None,
+    )
+    if eligible_id is not None:
+        eligible = envelope.handle.get_candidate(eligible_id)
+        if eligible is not None:
+            return _freeze_state(envelope, LifecycleDecision.ELIGIBLE, eligible)
+    return _freeze_state(envelope, LifecycleDecision.CONTINUE)
+
+
+async def run_lifecycle_actor(
+    ingress: ActorIngress,
+    pump_command_send: MemoryObjectSendStream[ChannelACatchUpCommand | ChannelARemoveCommand],
+    on_state: Callable[[_LifecycleActorState], None],
+    actor_done: anyio.Event,
+    pump_remove_send: MemoryObjectSendStream[ChannelARemoveCommand] | None = None,
+) -> None:
+    """Drain ingress to EOF while serializing all reducer and request mutation."""
+    envelope = make_actor_envelope()
+    unprocessed_facts: list[object] = []
+
+    def _retire(
+        pending: _PendingRequest,
+        state: _LifecycleActorState,
+        disposition: LifecycleReplyDisposition,
+        *,
+        publish: bool = True,
+    ) -> None:
+        request = pending.request
+        reply = LifecycleActorReply(
+            request_id=request.request_id,
+            processed_channel_a_byte_offset=envelope.last_processed_offset,
+            snapshot=state.snapshot,
+            issues=state.snapshot.lifecycle_issues if state.snapshot is not None else (),
+            decision=state.decision,
+            eligible_candidate=state.eligible_candidate,
+            eligible_source=state.eligible_source,
+            sightings=state.sightings,
+            disposition=disposition,
+        )
+        delivered = True
+        try:
+            request.reply_send.send_nowait(reply)
+        except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
+            delivered = False
+            logger.debug("lifecycle_reply_broken", request_id=request.request_id)
+        finally:
+            request.reply_send.close()
+            if request.lease is not None and not request.lease.released:
+                if request.lease.owner == "producer":
+                    request.lease.transfer_to_actor()
+                request.lease.release_by_actor()
+            token = request.request_token
+            if envelope.pending_requests.get(token) is pending:
+                envelope.pending_requests.pop(token, None)
+            envelope.pending_controls.pop(token, None)
+            envelope.retiring_requests.pop(token, None)
+        if not delivered:
+            state = _failure_state(envelope)
+            if disposition is LifecycleReplyDisposition.INCOMPLETE_EOF:
+                state = _freeze_state(envelope, LifecycleDecision.CATCH_UP_FAILED)
+        if publish:
+            _publish_state(envelope, on_state, state)
+
+    def _send_removal(retiring: _RetiringRequest) -> None:
+        if pump_remove_send is None:
+            _retire(retiring.pending, retiring.state, retiring.disposition)
+            return
+        try:
+            pump_remove_send.send_nowait(
+                ChannelARemoveCommand(retiring.pending.request.request_token)
+            )
+        except anyio.WouldBlock:
+            return
+        except (anyio.ClosedResourceError, anyio.BrokenResourceError):
+            _retire(retiring.pending, retiring.state, retiring.disposition)
+            return
+        retiring.removal_sent = True
+
+    def _begin_retirement(
+        pending: _PendingRequest,
+        state: _LifecycleActorState,
+        disposition: LifecycleReplyDisposition,
+    ) -> None:
+        if pending.command is None:
+            _retire(pending, state, disposition)
+            return
+        token = pending.request.request_token
+        envelope.pending_requests.pop(token, None)
+        retiring = _RetiringRequest(pending, state, disposition)
+        envelope.retiring_requests[token] = retiring
+        _send_removal(retiring)
+
+    def _fail_request(
+        pending: _PendingRequest,
+        disposition: LifecycleReplyDisposition,
+    ) -> None:
+        _begin_retirement(pending, _failure_state(envelope), disposition)
+
+    def _complete_request(pending: _PendingRequest) -> None:
+        proposal = pending.request.proposal
+        if isinstance(proposal, ChannelBProposal) and proposal.candidate_sighting is not None:
+            envelope.handle.register_candidate_sighting(proposal.candidate_sighting)
+        state = (
+            _evaluate_exit_state(envelope)
+            if isinstance(proposal, ProcessExitFact)
+            else _evaluate_state(envelope)
+        )
+        disposition = _disposition_for_state(state)
+        _retire(pending, state, disposition)
+
+    def _accept_request(request: LifecycleActorRequest) -> None:
+        token = request.request_token
+        if token in envelope.pending_requests or token in envelope.retiring_requests:
+            return
+        if any(
+            pending.request.request_id == request.request_id
+            for pending in (
+                *envelope.pending_requests.values(),
+                *(retiring.pending for retiring in envelope.retiring_requests.values()),
+            )
+        ):
+            envelope.pending_controls.pop(token, None)
+            duplicate = _PendingRequest(request, None, request.deadline)
+            _fail_request(duplicate, LifecycleReplyDisposition.DUPLICATE_ID)
+            return
+        pending = _PendingRequest(request, None, request.deadline)
+        envelope.pending_requests[token] = pending
+        control = envelope.pending_controls.pop(token, None)
+        if control is not None:
+            _fail_request(pending, control.disposition)
+            return
+        if isinstance(request.proposal, ProducerStopFact):
+            state = _freeze_state(envelope, LifecycleDecision.CATCH_UP_FAILED)
+            _begin_retirement(pending, state, LifecycleReplyDisposition.INCOMPLETE_EOF)
+            return
+        if envelope.last_processed_offset >= request.required_byte_offset:
+            _complete_request(pending)
+            return
+        command = ChannelACatchUpCommand(token, request.required_byte_offset)
+        try:
+            pump_command_send.send_nowait(command)
+        except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
+            _fail_request(pending, LifecycleReplyDisposition.COMMAND_FAILED)
+            return
+        pending.command = command
+
+    def _accept_control(control: LifecycleActorControl) -> None:
+        token = control.request.request_token
+        pending = envelope.pending_requests.get(token)
+        if pending is not None:
+            _fail_request(pending, control.disposition)
+            return
+        if token in envelope.retiring_requests or (
+            control.request.lease is not None and control.request.lease.released
+        ):
+            control.request.reply_send.close()
+            return
+        if control.disposition is LifecycleReplyDisposition.ADMISSION_FAILED:
+            pending = _PendingRequest(control.request, None, control.request.deadline)
+            envelope.pending_requests[token] = pending
+            if control.request.lease is not None and control.request.lease.owner == "producer":
+                control.request.lease.transfer_to_actor()
+            _fail_request(pending, control.disposition)
+            return
+        envelope.pending_controls[token] = control
+
+    def _accept_channel_a_control(
+        control: ChannelACommandRejected | ChannelARemovalAck,
+    ) -> None:
+        if isinstance(control, ChannelARemovalAck):
+            retiring = envelope.retiring_requests.get(control.request_id)
+            if retiring is not None:
+                _retire(retiring.pending, retiring.state, retiring.disposition)
+            return
+        pending = envelope.pending_requests.get(control.request_id)
+        if pending is not None:
+            _fail_request(pending, LifecycleReplyDisposition.COMMAND_FAILED)
+
+    def _accept_batch(batch: ChannelABatch) -> None:
+        _register_observations(envelope, batch)
+        _register_parent_markers(envelope, batch.parent_markers)
+        completed = [
+            pending
+            for pending in tuple(envelope.pending_requests.values())
+            if pending.command is not None
+            and batch.byte_offset >= pending.request.required_byte_offset
+        ]
+        retired_by_batch = [
+            retiring
+            for retiring in tuple(envelope.retiring_requests.values())
+            if batch.byte_offset >= retiring.pending.request.required_byte_offset
+        ]
+        if completed:
+            for pending in completed:
+                _complete_request(pending)
+        for retiring in retired_by_batch:
+            _retire(retiring.pending, retiring.state, retiring.disposition)
+        if not completed and not retired_by_batch:
+            _evaluate_candidates(envelope, on_state)
+
+    def _retry_removals() -> None:
+        for retiring in tuple(envelope.retiring_requests.values()):
+            if not retiring.removal_sent:
+                _send_removal(retiring)
+
+    def _expire_prearrival_control(control: LifecycleActorControl) -> None:
+        request = control.request
+        pending = _PendingRequest(request, None, request.deadline)
+        envelope.pending_requests[request.request_token] = pending
+        if request.lease is not None and request.lease.owner == "producer":
+            request.lease.transfer_to_actor()
+        _fail_request(pending, control.disposition)
+
+    try:
+        while True:
+            next_deadline = min(
+                (
+                    *(pending.deadline for pending in envelope.pending_requests.values()),
+                    *(control.request.deadline for control in envelope.pending_controls.values()),
+                ),
+                default=None,
+            )
+            timeout = (
+                None if next_deadline is None else max(0.0, next_deadline - anyio.current_time())
+            )
+            await ingress.wait(timeout)
+            unprocessed_facts.extend(fact for _lane, fact in ingress.drain_nowait())
+            while unprocessed_facts:
+                fact = unprocessed_facts.pop(0)
+                if isinstance(fact, ChannelABatch):
+                    _accept_batch(fact)
+                elif isinstance(fact, LifecycleActorRequest):
+                    _accept_request(fact)
+                elif isinstance(fact, LifecycleActorControl):
+                    _accept_control(fact)
+                elif isinstance(fact, (ChannelACommandRejected, ChannelARemovalAck)):
+                    _accept_channel_a_control(fact)
+            _retry_removals()
+            now = anyio.current_time()
+            expired = [
+                pending
+                for pending in tuple(envelope.pending_requests.values())
+                if pending.deadline <= now
+            ]
+            for pending in expired:
+                _fail_request(pending, LifecycleReplyDisposition.CATCH_UP_FAILED)
+            expired_controls = [
+                control
+                for control in tuple(envelope.pending_controls.values())
+                if control.request.deadline <= now
+            ]
+            for control in expired_controls:
+                _expire_prearrival_control(control)
+            if ingress.eof:
+                for control in tuple(envelope.pending_controls.values()):
+                    _expire_prearrival_control(control)
+                for pending in tuple(envelope.pending_requests.values()):
+                    _retire(
+                        pending,
+                        _failure_state(envelope),
+                        LifecycleReplyDisposition.INCOMPLETE_EOF,
+                    )
+                for retiring in tuple(envelope.retiring_requests.values()):
+                    _retire(
+                        retiring.pending,
+                        retiring.state,
+                        retiring.disposition,
+                    )
+                break
+    finally:
+        with anyio.CancelScope(shield=True):
+            pump_command_send.close()
+            if pump_remove_send is not None:
+                pump_remove_send.close()
+            unprocessed_facts.extend(fact for _lane, fact in ingress.drain_nowait())
+            for fact in unprocessed_facts:
+                if isinstance(fact, LifecycleActorRequest):
+                    pending = _PendingRequest(fact, None, fact.deadline)
+                    envelope.pending_requests.setdefault(fact.request_token, pending)
+                elif isinstance(fact, LifecycleActorControl):
+                    envelope.pending_controls.setdefault(fact.request.request_token, fact)
+            for control in tuple(envelope.pending_controls.values()):
+                request = control.request
+                pending = _PendingRequest(request, None, request.deadline)
+                envelope.pending_requests[request.request_token] = pending
+            cleanup_state = _failure_state(envelope)
+            cleanup_pending = tuple(envelope.pending_requests.values()) + tuple(
+                retiring.pending for retiring in envelope.retiring_requests.values()
+            )
+            seen_tokens: set[str] = set()
+            for pending in cleanup_pending:
+                if pending.request.request_token in seen_tokens:
+                    continue
+                seen_tokens.add(pending.request.request_token)
+                _retire(
+                    pending,
+                    cleanup_state,
+                    LifecycleReplyDisposition.INCOMPLETE_EOF,
+                    publish=False,
+                )
+            await ingress.aclose_receivers()
+            actor_done.set()

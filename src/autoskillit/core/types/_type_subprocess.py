@@ -33,10 +33,7 @@ __all__ = [
 #: Invocation-level cleanup budget shared by graceful drain, TERM wait, and KILL wait.
 #:
 #: Canonical owner of this constant is ``_type_subprocess`` so it lives next to
-#: ``SubprocessRunner`` rather than in the lifecycle submodule. The lifecycle
-#: submodule re-exports it as a deprecated alias for backward compatibility with
-#: ``autoskillit.core.types`` consumers; new code should import from
-#: ``autoskillit.core.types`` (which re-exports from here).
+#: ``SubprocessRunner``. Public imports flow through ``autoskillit.core.types``.
 DEFAULT_CLEANUP_BUDGET_SECONDS: float = 15.0
 
 #: Semantic contract for SubprocessResult fields per TerminationReason.
@@ -154,9 +151,8 @@ class SubprocessResult:
 
     Records ``succeeded``, ``budget_exhausted``, and any retained identities
     that could not be removed inside the configured cleanup budget. Consuming
-    layers map a failed cleanup to ``RetryReason.RESUME``. Async managed
-    invocations populate this for every termination path; it remains ``None``
-    only for runners that do not use the async invocation finalizer.
+    layers map a failed cleanup to ``RetryReason.RESUME``. Managed, recording,
+    replay, and fake runners populate this for every termination path.
     """
     lifecycle_snapshot: ChildLifecycleSnapshot | None = None
     lifecycle_decision: LifecycleDecision = LifecycleDecision.CONTINUE

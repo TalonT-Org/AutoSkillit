@@ -2,23 +2,31 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+import signal
+import sys
 from collections import deque
-from dataclasses import dataclass
+from contextlib import suppress
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
-from autoskillit.core import CLAUDE_CODE_CAPABILITIES, BackendCapabilities
+from autoskillit.core import CLAUDE_CODE_CAPABILITIES, BackendCapabilities, fast_loads
 from autoskillit.core.types import (
+    CleanupOutcome,
     DirectInstall,
+    KillReason,
     OutputFormat,
-    SubprocessResult,
+    ProcessIdentity,
     SubprocessRunner,
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.recording import (
+    _RECORDING_SUPERVISOR_BOOTSTRAP,
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
     ScenarioReplayError,
@@ -28,7 +36,7 @@ from autoskillit.execution.recording import (
 from tests.conftest import _make_result
 from tests.fakes import MockSubprocessRunner
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _api_sim_claude = pytest.importorskip("api_simulator.claude")
 
@@ -52,6 +60,12 @@ class FakeStepResult:
     cassette_exit_code: int
     cassette_path: str
     cassette_duration_ms: int
+    pid: int = 0
+    termination: TerminationReason = TerminationReason.NATURAL_EXIT
+    kill_reason: KillReason = KillReason.NATURAL_EXIT
+    cleanup_outcome: CleanupOutcome = field(
+        default_factory=lambda: CleanupOutcome(succeeded=True, budget_exhausted=False)
+    )
 
 
 @dataclass
@@ -121,18 +135,174 @@ async def test_session_call_routes_to_record_step(tmp_path):
         "SCENARIO_STEP_NAME": "investigate",
     }
 
-    result = await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=True)
+    result = await runner(cmd, cwd=tmp_path, timeout=300, env=env, pty_mode=True)
 
-    mock_recorder.record_step.assert_called_once_with(
-        step_name="investigate",
-        tool="run_skill",
-        args=["claude", "--model", "sonnet", "--print", "do stuff"],
-        model="sonnet",
-        session_log_dir=None,
-    )
+    mock_recorder.record_step.assert_called_once()
+    call = mock_recorder.record_step.call_args.kwargs
+    assert call["step_name"] == "investigate"
+    assert call["tool"] == "run_skill"
+    assert call["model"] == "sonnet"
+    assert call["session_log_dir"] is None
+    assert call["args"][:3] == [sys.executable, "-c", _RECORDING_SUPERVISOR_BOOTSTRAP]
     assert inner.call_args_list == []  # inner NOT called
     assert result.returncode == 0
     assert result.termination == TerminationReason.NATURAL_EXIT
+    assert result.cleanup_outcome is not None
+    assert result.cleanup_outcome.succeeded
+    assert result.cleanup_outcome.retained_identities == ()
+
+
+@pytest.mark.anyio
+async def test_pty_recording_supervisor_finalizes_real_descendant(tmp_path):
+    from api_simulator.claude import make_scenario_recorder
+
+    from autoskillit.execution.process._process_ownership import (
+        _IdentityStatus,
+        inspect_pid_identity,
+        signal_process_identity,
+    )
+
+    scenario_dir = tmp_path / "scenario"
+    scenario_dir.mkdir()
+    child_identity_path = tmp_path / "child-identity.json"
+    recorder = make_scenario_recorder(
+        output_dir=str(scenario_dir),
+        recipe_name="recording-cleanup",
+    )
+    runner = RecordingSubprocessRunner(
+        recorder=recorder,
+        inner=MockSubprocessRunner(),
+        scenario_dir=scenario_dir,
+    )
+    child_identity = None
+    target_script = "\n".join(
+        [
+            "import json, subprocess, sys",
+            "from pathlib import Path",
+            "from autoskillit.core import read_starttime_ticks",
+            "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])",
+            (
+                f"Path({str(child_identity_path)!r}).write_text("
+                "json.dumps(dict(pid=child.pid, ticks=read_starttime_ticks(child.pid) or 0)), "
+                "encoding='utf-8')"
+            ),
+            (
+                "print(json.dumps({'type': 'result', 'subtype': 'success', "
+                "'result': 'done'}), flush=True)"
+            ),
+        ]
+    )
+
+    try:
+        result = await runner(
+            [sys.executable, "-c", target_script],
+            cwd=tmp_path,
+            timeout=5.0,
+            env={**os.environ, "SCENARIO_STEP_NAME": "managed-recording"},
+            pty_mode=True,
+            cleanup_budget_seconds=2.0,
+        )
+        identity_payload = fast_loads(child_identity_path.read_bytes())
+        child_identity = ProcessIdentity(
+            root_pid=int(identity_payload["pid"]),
+            starttime_ticks=int(identity_payload["ticks"]),
+        )
+
+        assert result.pid > 0
+        assert result.cleanup_outcome is not None
+        assert result.cleanup_outcome.succeeded
+        assert result.cleanup_outcome.retained_identities == ()
+        assert result.cleanup_outcome.unknown_identities == ()
+        assert result.kill_reason is KillReason.INFRA_KILL
+        for _ in range(100):
+            if inspect_pid_identity(child_identity) is _IdentityStatus.ABSENT:
+                break
+            await asyncio.sleep(0.01)
+        assert inspect_pid_identity(child_identity) is _IdentityStatus.ABSENT
+    finally:
+        if child_identity is not None:
+            signal_process_identity(child_identity, signal.SIGKILL)
+        with suppress(Exception):
+            recorder.finalize()
+
+
+@pytest.mark.anyio
+async def test_pty_recording_cancellation_finalizes_supervised_process(tmp_path):
+    from api_simulator.claude import make_scenario_recorder
+
+    from autoskillit.execution.process._process_ownership import (
+        _IdentityStatus,
+        inspect_pid_identity,
+        signal_process_identity,
+    )
+
+    scenario_dir = tmp_path / "scenario"
+    scenario_dir.mkdir()
+    identity_path = tmp_path / "target-identity.json"
+    recorder = make_scenario_recorder(
+        output_dir=str(scenario_dir),
+        recipe_name="recording-cancellation",
+    )
+    runner = RecordingSubprocessRunner(
+        recorder=recorder,
+        inner=MockSubprocessRunner(),
+        scenario_dir=scenario_dir,
+    )
+    target_identity = None
+    target_script = "\n".join(
+        [
+            "import json, os, time",
+            "from pathlib import Path",
+            "from autoskillit.core import read_starttime_ticks",
+            (
+                f"Path({str(identity_path)!r}).write_text("
+                "json.dumps(dict(pid=os.getpid(), ticks=read_starttime_ticks(os.getpid()) or 0)), "
+                "encoding='utf-8')"
+            ),
+            "time.sleep(60)",
+        ]
+    )
+    task = asyncio.create_task(
+        runner(
+            [sys.executable, "-c", target_script],
+            cwd=tmp_path,
+            timeout=120.0,
+            env={**os.environ, "SCENARIO_STEP_NAME": "cancelled-recording"},
+            pty_mode=True,
+            cleanup_budget_seconds=2.0,
+        )
+    )
+
+    try:
+        for _ in range(200):
+            if identity_path.exists():
+                break
+            await asyncio.sleep(0.01)
+        identity_payload = fast_loads(identity_path.read_bytes())
+        target_identity = ProcessIdentity(
+            root_pid=int(identity_payload["pid"]),
+            starttime_ticks=int(identity_payload["ticks"]),
+        )
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        for _ in range(100):
+            if inspect_pid_identity(target_identity) is _IdentityStatus.ABSENT:
+                break
+            await asyncio.sleep(0.01)
+        assert inspect_pid_identity(target_identity) is _IdentityStatus.ABSENT
+        assert list((scenario_dir / ".recording-supervisor").glob("*")) == []
+    finally:
+        if not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        if target_identity is not None:
+            signal_process_identity(target_identity, signal.SIGKILL)
+        with suppress(Exception):
+            recorder.finalize()
 
 
 # --- T3: Non-session call delegates to inner runner + records summary ---
@@ -278,6 +448,8 @@ async def test_sequencing_session_step_dispatch(tmp_path):
     assert result.stdout == "session output"
     assert result.termination == TerminationReason.NATURAL_EXIT
     assert result.elapsed_seconds == meta.duration_ms / 1000.0
+    assert result.cleanup_outcome is not None
+    assert result.cleanup_outcome.succeeded
 
 
 # --- T14: Non-session step dispatch via result stub ---
@@ -302,6 +474,8 @@ async def test_sequencing_non_session_step_dispatch(tmp_path):
     assert result.returncode == 1
     assert result.stdout == "FAILED"
     assert result.stderr == "error output"
+    assert result.cleanup_outcome is not None
+    assert result.cleanup_outcome.succeeded
     assert result.termination == TerminationReason.NATURAL_EXIT
 
 
@@ -836,12 +1010,8 @@ async def test_nonpty_cassettes_written(tmp_path):
 
     scenario_dir = tmp_path / "scenario"
     mock_recorder = Mock()
-    expected = SubprocessResult(
-        returncode=0,
-        stdout="line1\nline2\n",
-        stderr="",
-        termination=TerminationReason.NATURAL_EXIT,
-        pid=12345,
+    expected = replace(
+        _make_result(returncode=0, stdout="line1\nline2\n"),
         elapsed_seconds=2.5,
     )
     inner = MockSubprocessRunner()
@@ -922,7 +1092,7 @@ async def test_pty_unaffected_by_nonpty_branch(tmp_path):
     cmd = ["claude", "--model", "sonnet", "--print", "do stuff"]
     env = {"SCENARIO_STEP_NAME": "investigate", "AUTOSKILLIT_HEADLESS": "1"}
 
-    result = await runner(cmd, cwd=Path("/tmp"), timeout=300, env=env, pty_mode=True)
+    result = await runner(cmd, cwd=tmp_path, timeout=300, env=env, pty_mode=True)
 
     mock_recorder.record_step.assert_called_once()
     assert inner.call_args_list == []

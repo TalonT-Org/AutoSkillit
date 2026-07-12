@@ -13,10 +13,13 @@ if TYPE_CHECKING:
 from autoskillit.core import InspectorCallback, InspectorEvidence, InspectorVerdict
 from autoskillit.core.types import (
     ChannelConfirmation,
+    CleanupOutcome,
     SubprocessResult,
     TerminationReason,
 )
 from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_caches
+
+_NO_OWNED_PROCESS_CLEANUP = CleanupOutcome(succeeded=True, budget_exhausted=False)
 
 _LAYER_DIRS: frozenset[str] = frozenset(
     {
@@ -160,29 +163,32 @@ def _make_result(
     channel_confirmation: ChannelConfirmation = ChannelConfirmation.UNMONITORED,
     session_id: str = "",
     channel_b_session_id: str = "",
+    cleanup_outcome: CleanupOutcome = _NO_OWNED_PROCESS_CLEANUP,
 ) -> SubprocessResult:
-    """Create a SubprocessResult for mocking run_managed_async."""
+    """Create a PID-zero result for a mock that owns no real process."""
     return SubprocessResult(
         returncode=returncode,
         stdout=stdout,
         stderr=stderr,
         termination=termination_reason,
-        pid=12345,
+        pid=0,
         channel_confirmation=channel_confirmation,
         session_id=session_id,
         channel_b_session_id=channel_b_session_id,
+        cleanup_outcome=cleanup_outcome,
     )
 
 
 def _make_timeout_result(stdout: str = "", stderr: str = "") -> SubprocessResult:
-    """Create a timed-out SubprocessResult."""
+    """Create a timed-out PID-zero result for a mock with no owned process."""
     return SubprocessResult(
         returncode=-1,
         stdout=stdout,
         stderr=stderr,
         termination=TerminationReason.TIMED_OUT,
-        pid=12345,
+        pid=0,
         channel_confirmation=ChannelConfirmation.UNMONITORED,
+        cleanup_outcome=_NO_OWNED_PROCESS_CLEANUP,
     )
 
 

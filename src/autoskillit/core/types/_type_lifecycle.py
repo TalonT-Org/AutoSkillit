@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any
 
 __all__ = [
     "ATTEMPT_ACTIVE_STATES",
@@ -32,8 +31,6 @@ __all__ = [
     "CompletionCandidate",
     "CompletionCandidateSource",
     "CompletionCandidateState",
-    "LifecycleActorRequest",
-    "LifecycleActorResponse",
     "LifecycleDecision",
     "LifecycleEvidenceIssue",
     "LifecycleEvidenceIssueKind",
@@ -42,16 +39,6 @@ __all__ = [
     "ProcessIdentity",
     "build_lifecycle_snapshot_from_attempts",
 ]
-
-
-DEFAULT_CLEANUP_BUDGET_SECONDS: float = 15.0
-"""Deprecated re-export of ``_type_subprocess.DEFAULT_CLEANUP_BUDGET_SECONDS``.
-
-Canonical owner is ``_type_subprocess``; this symbol remains here for backward
-compatibility with consumers that import from ``autoskillit.core.types``.
-New code should import from ``autoskillit.core.types.DEFAULT_CLEANUP_BUDGET_SECONDS``
-or directly from ``autoskillit.core.DEFAULT_CLEANUP_BUDGET_SECONDS``.
-"""
 
 
 @unique
@@ -331,39 +318,6 @@ class ChildLifecycleSnapshot:
     """
     awaiting_delivery: tuple[ChildLifecycleObservation, ...] = ()
     """Children with terminal process evidence but no user tool_result delivery yet."""
-
-
-@dataclass(frozen=True, slots=True)
-class LifecycleActorRequest:
-    """Deprecated public type — actor transports are private.
-
-    The actor's producer/reply message types live inside
-    ``execution/process/_lifecycle_actor.py``. This class remains for
-    backward-compatible imports but is no longer constructed or consumed
-    by any production code path.
-    """
-
-    request_id: str
-    kind: str = ""
-    payload: Any = None
-
-
-@dataclass(frozen=True, slots=True)
-class LifecycleActorResponse:
-    """Deprecated public type — actor transports are private.
-
-    The actor's reply type lives inside ``execution/process/_lifecycle_actor.py``.
-    This class remains for backward-compatible imports but is no longer
-    constructed or consumed by any production code path. Use
-    ``LifecycleDecision`` (the frozen IL-0 decision value type) for carrier
-    propagation through ``SubprocessResult`` and other core carriers.
-    """
-
-    request_id: str
-    snapshot: ChildLifecycleSnapshot | None = None
-    decision: LifecycleDecision = LifecycleDecision.CONTINUE
-    eligible_candidate: CompletionCandidate | None = None
-    processed_channel_a_byte_offset: int = 0
 
 
 @dataclass(frozen=True, slots=True)

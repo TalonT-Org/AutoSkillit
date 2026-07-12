@@ -11,7 +11,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `conftest.py` | Shared fixtures and helpers for tests/execution/ |
 | `test_anomaly_detection.py` | Tests for post-hoc anomaly detection over ProcSnapshot data |
 | `test_child_lifecycle_coordinator.py` | Reducer tests: correlation, delivery gating, terminal irreversibility, replacement generations, candidate provenance, ELIGIBLE gating, and CHILD_WORK_FAILED (issue #4233) |
-| `test_lifecycle_actor.py` | Channel A pump and actor tests: live split-UTF-8 carry, session-ID callbacks, watermarks, typed decisions, catch-up, saturation, and endpoint closure (issue #4233) |
+| `test_lifecycle_actor.py` | Persistent Channel A pump and actor tests: live split-UTF-8 carry, ID-keyed catch-up commands, 64-slot request/ordinary/command parity, `ActorIngress` EOF, full replies, typed decisions, saturation, and endpoint closure (issue #4233) |
 | `test_process_child_lifecycle_integration.py` | Real-process lifecycle proofs: five-child replay, no-child fast path, child-failure cleanup, fixture structure, and parent-marker provenance (issue #4233) |
 | `test_model_alias_registry.py` | Shared alias registry consistency tests — key parity between anomaly_detection and backend alias maps |
 | `test_boundary_pty_dispatch.py` | Layer-boundary integration tests for DefaultSubprocessRunner + PTY wrapping + Python shims |
@@ -86,8 +86,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_kill.py` | Integration tests for process tree kill and async cancellation |
 | `test_process_pty.py` | Tests for PTY wrapping and pipeline adjudication boundary tests |
 | `test_process_race.py` | Unit tests for _process_race.py: resolve_termination and ChannelBStatus |
-| `test_process_run.py` | Integration tests for normal subprocess run, stdin, timeout, temp I/O, and logging |
-| `test_process_session_log_monitor.py` | Unit tests for _session_log_monitor — core detection + session ID + wiring |
+| `test_process_run.py` | Integration tests for normal subprocess run, stdin, timeout, temp I/O, logging, and cooperative producer shutdown before `actor_done` |
+| `test_process_session_log_monitor.py` | Unit tests for legacy `_session_log_monitor` and the persistent binary Channel B tail, including final producer-stop barriers, full actor replies, session ID, and wiring |
 | `test_process_session_log_monitor_dispatch_marker.py` | Dispatch marker suppression gate tests for _session_log_monitor |
 | `test_process_session_log_monitor_stale_suppression.py` | TCP/CPU stale suppression gate and bounded suppression tests |
 | `test_process_session_id_callback.py` | Tests for the on_session_id_resolved callback fired from inside the task group |
@@ -99,7 +99,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_quota_io.py` | Tests for execution/quota.py — credential reading, cache I/O, dataclass validation |
 | `test_quota_sleep.py` | Tests for execution/quota.py — check_and_sleep_if_needed, resets_at-None blocking |
 | `test_readiness_helper_contract.py` | AST lint guard: no inline stderr/stdout readline loops used as subprocess readiness polls |
-| `test_recording.py` | Tests for RecordingSubprocessRunner and related helpers |
+| `test_recording.py` | Recording/replay tests, including real PTY supervisor descendant cleanup |
 | `test_resume_concurrency.py` | Tests for file lock preventing concurrent resume of same session |
 | `test_resume_prompt.py` | Tests for _build_resume_context and ClaudeCodeBackend.build_skill_session_cmd resume integration |
 | `test_recording_sigterm.py` | Integration test: autoskillit serve subprocess receives SIGTERM and writes scenario.json |
@@ -136,6 +136,8 @@ Subprocess integration, headless session, process lifecycle, and session result 
 ## Architecture Notes
 
 `conftest.py` provides shared fixtures for the execution test suite. The headless tests are split across multiple files by concern (dispatch, synthesis, path validation, env injection, ordering) following the P1-F01 audit fix.
+
+Parser-enabled process tests treat the lifecycle actor as the sole completion authority. Producers submit ordinary requests and reserved controls through `ActorIngress`; Channel B remains open as a persistent binary tail and consumes a full reply for each proposal. Shutdown sets the cooperative producer-stop event, lets producer endpoints close to create natural ingress EOF, and waits for `actor_done`; producer-group cancellation is only the bounded fallback.
 
 ### `backends/`
 

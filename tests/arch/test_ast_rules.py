@@ -629,9 +629,7 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
 
     Allowed call sites:
     - execution/process/_process_kill.py: async_kill_process_tree and
-      _OwnedProcessFinalizer.run
-    - execution/process/__init__.py: execute_termination_action,
-      run_managed_async, run_managed_sync
+      the identity-validating async/sync finalizers
     - fleet/_dispatch_reaper.py: reap_stale_dispatches
     - fleet/_api.py: _write_pid
     """
@@ -639,11 +637,7 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
         SRC_ROOT / "execution" / "process" / "_process_kill.py": {
             "async_kill_process_tree",
             "_OwnedProcessFinalizer.run",
-        },
-        SRC_ROOT / "execution" / "process" / "__init__.py": {
-            "execute_termination_action",
-            "run_managed_async",
-            "run_managed_sync",
+            "_finalize_owned_process_sync",
         },
         SRC_ROOT / "fleet" / "_dispatch_reaper.py": {"reap_stale_dispatches"},
         SRC_ROOT / "fleet" / "_api.py": {"_write_pid"},

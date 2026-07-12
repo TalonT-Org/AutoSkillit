@@ -1,16 +1,21 @@
 """RecordingSubprocessRunner and ReplayingSubprocessRunner — scenario I/O for headless sessions.
 
-See docs/design/recording-replay-accepted-degradations.md for accepted
-degradations: Claude PTY cassette format incompatibility with Codex replay,
-and the unchanged Claude session recording path.
+See docs/design/recording-replay-accepted-degradations.md for the preserved
+backend-specific cassette formats and the managed Claude PTY recording boundary.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
+import sys
 import tempfile
+import time
+import uuid
 from collections import deque
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -18,14 +23,19 @@ from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     DEFAULT_CLEANUP_BUDGET_SECONDS,
     BackendCapabilities,
+    CleanupOutcome,
     InspectorCallback,
+    KillReason,
+    ProcessIdentity,
     SubprocessResult,
     SubprocessRunner,
     TerminationReason,
     ValidatedAddDir,
     atomic_write,
     fast_dumps,
+    fast_loads,
     get_logger,
+    read_starttime_ticks,
 )
 from autoskillit.execution._recording_skills import (
     _extract_ephemeral_add_dir,
@@ -43,6 +53,102 @@ if TYPE_CHECKING:
     from autoskillit.core import StreamParserFactory
 
 logger = get_logger(__name__)
+
+_RECORDING_SUPERVISOR_BOOTSTRAP = (
+    "from autoskillit.execution.recording import _recording_supervisor_entrypoint; "
+    "raise SystemExit(_recording_supervisor_entrypoint())"
+)
+
+
+def _no_owned_process_cleanup() -> CleanupOutcome:
+    return CleanupOutcome(succeeded=True, budget_exhausted=False)
+
+
+def _int_value(value: object, default: int = 0) -> int:
+    if isinstance(value, (bool, int, float, str)):
+        with suppress(ValueError, TypeError, OverflowError):
+            return int(value)
+    return default
+
+
+def _float_value(value: object, default: float = 0.0) -> float:
+    if isinstance(value, (bool, int, float, str)):
+        with suppress(ValueError, TypeError, OverflowError):
+            return float(value)
+    return default
+
+
+def _identity_payload(identity: ProcessIdentity) -> dict[str, object]:
+    return {
+        "root_pid": identity.root_pid,
+        "starttime_ticks": identity.starttime_ticks,
+        "fallback_create_time": identity.fallback_create_time,
+        "process_group_id": identity.process_group_id,
+        "session_id": identity.session_id,
+        "descendants": [list(item) for item in identity.descendants],
+    }
+
+
+def _identity_from_payload(payload: Mapping[str, object]) -> ProcessIdentity:
+    raw_descendants = payload.get("descendants", ())
+    if not isinstance(raw_descendants, (list, tuple)):
+        raw_descendants = ()
+    descendants = tuple(
+        (_int_value(item[0]), _int_value(item[1]))
+        for item in raw_descendants
+        if isinstance(item, (list, tuple)) and len(item) == 2
+    )
+    return ProcessIdentity(
+        root_pid=_int_value(payload.get("root_pid", 0)),
+        starttime_ticks=_int_value(payload.get("starttime_ticks", 0)),
+        fallback_create_time=_float_value(payload.get("fallback_create_time", 0.0)),
+        process_group_id=_int_value(payload.get("process_group_id", 0)),
+        session_id=_int_value(payload.get("session_id", 0)),
+        descendants=descendants,
+    )
+
+
+def _cleanup_payload(outcome: CleanupOutcome) -> dict[str, object]:
+    return {
+        "succeeded": outcome.succeeded,
+        "budget_exhausted": outcome.budget_exhausted,
+        "retained_identities": [
+            _identity_payload(identity) for identity in outcome.retained_identities
+        ],
+        "unknown_identities": [
+            _identity_payload(identity) for identity in outcome.unknown_identities
+        ],
+    }
+
+
+def _cleanup_from_payload(payload: Mapping[str, object]) -> CleanupOutcome:
+    def _identities(name: str) -> tuple[ProcessIdentity, ...]:
+        raw = payload.get(name, ())
+        if not isinstance(raw, (list, tuple)):
+            return ()
+        return tuple(_identity_from_payload(item) for item in raw if isinstance(item, Mapping))
+
+    return CleanupOutcome(
+        succeeded=bool(payload.get("succeeded", False)),
+        budget_exhausted=bool(payload.get("budget_exhausted", False)),
+        retained_identities=_identities("retained_identities"),
+        unknown_identities=_identities("unknown_identities"),
+    )
+
+
+def _write_recording_receipt(path: Path, payload: Mapping[str, object]) -> None:
+    atomic_write(path, fast_dumps(dict(payload), indent=True))
+
+
+def _read_recording_receipt(path: Path) -> dict[str, object] | None:
+    try:
+        payload = fast_loads(path.read_bytes())
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
 
 # Environment variable names for scenario recording activation.
 RECORD_SCENARIO_ENV = "RECORD_SCENARIO"
@@ -72,6 +178,188 @@ def _extract_model(args: list[str]) -> str:
         return args[idx + 1]
     except (ValueError, IndexError):
         return ""
+
+
+def _current_process_identity() -> ProcessIdentity:
+    pid = os.getpid()
+    return ProcessIdentity(
+        root_pid=pid,
+        starttime_ticks=read_starttime_ticks(pid) or 0,
+        process_group_id=os.getpgid(pid),
+        session_id=os.getsid(pid),
+    )
+
+
+def _supervisor_exit_code(returncode: int) -> int:
+    if returncode < 0:
+        return min(255, 128 + abs(returncode))
+    return min(255, returncode)
+
+
+def _recording_supervisor_entrypoint() -> int:
+    """Run one recorded command with inherited PTY I/O and verified cleanup."""
+    if len(sys.argv) != 3:
+        return 2
+    payload_path = Path(sys.argv[1])
+    receipt_path = Path(sys.argv[2])
+    cancel_path = receipt_path.with_suffix(".cancel")
+    raw_payload = fast_loads(payload_path.read_bytes())
+    if not isinstance(raw_payload, dict):
+        return 2
+
+    cmd = raw_payload.get("cmd")
+    if not isinstance(cmd, list) or not cmd or not all(isinstance(arg, str) for arg in cmd):
+        return 2
+    cwd = Path(str(raw_payload.get("cwd", ".")))
+    timeout = _float_value(raw_payload.get("timeout", 0.0))
+    cleanup_budget_seconds = _float_value(
+        raw_payload.get("cleanup_budget_seconds", DEFAULT_CLEANUP_BUDGET_SECONDS),
+        DEFAULT_CLEANUP_BUDGET_SECONDS,
+    )
+    raw_env = raw_payload.get("env")
+    child_env = (
+        {str(key): str(value) for key, value in raw_env.items()}
+        if isinstance(raw_env, dict)
+        else None
+    )
+
+    supervisor_identity = _current_process_identity()
+    _write_recording_receipt(
+        receipt_path,
+        {
+            "state": "starting",
+            "supervisor_identity": _identity_payload(supervisor_identity),
+        },
+    )
+
+    from autoskillit.execution.process import (  # noqa: PLC0415
+        _finalize_owned_process_sync,
+        _TerminationSignalState,
+        make_tracker,
+    )
+
+    process: subprocess.Popen[bytes] | None = None
+    tracker = make_tracker()
+    signal_state = _TerminationSignalState()
+    cleanup_outcome = _no_owned_process_cleanup()
+    termination = TerminationReason.NATURAL_EXIT
+    error = ""
+    started_at = time.monotonic()
+    try:
+        process = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            env=child_env,
+            start_new_session=True,
+        )
+        tracker.seed_root(
+            process.pid,
+            process_group_id=process.pid,
+            session_id=process.pid,
+        )
+        tracker.enrich_root_identity()
+        _write_recording_receipt(
+            receipt_path,
+            {
+                "state": "running",
+                "supervisor_identity": _identity_payload(supervisor_identity),
+                "pid": process.pid,
+            },
+        )
+        process_deadline = time.monotonic() + max(0.0, timeout)
+        while process.poll() is None:
+            if cancel_path.exists():
+                termination = TerminationReason.SIGNAL_DEATH
+                error = "supervisor_cancelled"
+                break
+            remaining = process_deadline - time.monotonic()
+            if remaining <= 0:
+                termination = TerminationReason.TIMED_OUT
+                break
+            time.sleep(min(0.05, remaining))
+    except BaseException as exc:
+        with suppress(BaseException):
+            logger.error("recording_supervisor_failed", error=exc, exc_info=True)
+        termination = TerminationReason.SIGNAL_DEATH
+        error = f"{type(exc).__name__}:{exc}"
+    finally:
+        if process is not None:
+            cleanup_outcome = _finalize_owned_process_sync(
+                process=process,
+                tracker=tracker,
+                budget_seconds=cleanup_budget_seconds,
+                signal_state=signal_state,
+            )
+
+    returncode = (
+        process.returncode if process is not None and process.returncode is not None else 1
+    )
+    if termination is TerminationReason.TIMED_OUT:
+        kill_reason = KillReason.INFRA_KILL
+    elif signal_state.signaled or not cleanup_outcome.succeeded:
+        kill_reason = KillReason.INFRA_KILL
+    else:
+        kill_reason = KillReason.NATURAL_EXIT
+    _write_recording_receipt(
+        receipt_path,
+        {
+            "state": "complete",
+            "supervisor_identity": _identity_payload(supervisor_identity),
+            "pid": process.pid if process is not None else 0,
+            "returncode": returncode,
+            "termination": termination.value,
+            "kill_reason": kill_reason.value,
+            "elapsed_seconds": time.monotonic() - started_at,
+            "cleanup_outcome": _cleanup_payload(cleanup_outcome),
+            "error": error,
+        },
+    )
+    return _supervisor_exit_code(returncode)
+
+
+async def _interrupt_recording_supervisor(
+    receipt_path: Path,
+    record_task: asyncio.Task[Any],
+    cleanup_budget_seconds: float,
+) -> None:
+    """Request cooperative stop and let the recorder reap the supervisor."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.1, cleanup_budget_seconds)
+    cancel_path = receipt_path.with_suffix(".cancel")
+    receipt: dict[str, object] | None = None
+    while loop.time() < deadline:
+        receipt = _read_recording_receipt(receipt_path)
+        if receipt is not None and isinstance(receipt.get("supervisor_identity"), Mapping):
+            break
+        if record_task.done():
+            return
+        await asyncio.sleep(0.01)
+
+    if receipt is not None and isinstance(receipt.get("supervisor_identity"), Mapping):
+        raw_identity = receipt.get("supervisor_identity")
+        assert isinstance(raw_identity, Mapping)
+        identity = _identity_from_payload(raw_identity)
+        atomic_write(cancel_path, "cancel\n")
+        if record_task.done():
+            while loop.time() < deadline:
+                try:
+                    reaped_pid, _status = await asyncio.to_thread(
+                        os.waitpid,
+                        identity.root_pid,
+                        os.WNOHANG,
+                    )
+                except ChildProcessError:
+                    break
+                if reaped_pid == identity.root_pid:
+                    break
+                await asyncio.sleep(0.01)
+
+    remaining = max(0.0, deadline - loop.time())
+    if remaining > 0 and not record_task.done():
+        with suppress(BaseException):
+            await asyncio.wait_for(asyncio.shield(record_task), timeout=remaining)
+    with suppress(OSError):
+        cancel_path.unlink()
 
 
 class RecordingSubprocessRunner(SubprocessRunner):
@@ -152,9 +440,13 @@ class RecordingSubprocessRunner(SubprocessRunner):
             if pty_mode:
                 return await self._record_session(
                     cmd=cmd,
+                    cwd=cwd,
+                    timeout=timeout,
+                    env=env,
                     step_name=step_name,
                     model=_extract_model(cmd),
                     session_log_dir=session_log_dir,
+                    cleanup_budget_seconds=cleanup_budget_seconds,
                 )
 
             if not self._capabilities.pty_required:
@@ -261,29 +553,86 @@ class RecordingSubprocessRunner(SubprocessRunner):
         self,
         *,
         cmd: list[str],
+        cwd: Path,
+        timeout: float,
+        env: Mapping[str, str] | None,
         step_name: str,
         model: str,
         session_log_dir: Path | None,
+        cleanup_budget_seconds: float,
     ) -> SubprocessResult:
-        """Record a session call via ScenarioRecorder.record_step()."""
-        try:
-            step_result = await asyncio.to_thread(
+        """Record through a PTY while a child supervisor owns finalization."""
+        supervisor_dir = (
+            self._scenario_dir / ".recording-supervisor"
+            if self._scenario_dir is not None
+            else cwd / ".autoskillit" / "temp" / "recording-supervisor"
+        )
+        supervisor_dir.mkdir(parents=True, exist_ok=True)
+        token = uuid.uuid4().hex
+        payload_path = supervisor_dir / f"{token}.input.json"
+        receipt_path = supervisor_dir / f"{token}.receipt.json"
+        atomic_write(
+            payload_path,
+            fast_dumps(
+                {
+                    "cmd": cmd,
+                    "cwd": str(cwd),
+                    "timeout": timeout,
+                    "env": dict(env) if env is not None else None,
+                    "cleanup_budget_seconds": cleanup_budget_seconds,
+                },
+                indent=True,
+            ),
+        )
+        payload_path.chmod(0o600)
+        supervisor_cmd = [
+            sys.executable,
+            "-c",
+            _RECORDING_SUPERVISOR_BOOTSTRAP,
+            str(payload_path),
+            str(receipt_path),
+        ]
+        record_task = asyncio.create_task(
+            asyncio.to_thread(
                 self.recorder.record_step,
                 step_name=step_name,
                 tool="run_skill",
-                args=cmd,
+                args=supervisor_cmd,
                 model=model,
                 session_log_dir=str(session_log_dir) if session_log_dir else None,
             )
-        except Exception:
-            logger.exception("record_step failed for step=%r", step_name)
+        )
+        try:
+            step_result = await asyncio.shield(record_task)
+        except BaseException:
+            cleanup_task = asyncio.create_task(
+                _interrupt_recording_supervisor(
+                    receipt_path,
+                    record_task,
+                    cleanup_budget_seconds,
+                )
+            )
+            with suppress(BaseException):
+                await asyncio.shield(cleanup_task)
+            with suppress(BaseException):
+                logger.exception("record_step failed for step=%r", step_name)
+            with suppress(OSError):
+                receipt_path.unlink()
             raise
+        finally:
+            with suppress(OSError):
+                payload_path.unlink()
 
         stdout = ""
         if step_result.cassette_path:
-            cassette_stdout = Path(step_result.cassette_path) / "stdout.jsonl"
+            cassette_path = Path(step_result.cassette_path)
+            cassette_stdout = cassette_path / "stdout.jsonl"
             if cassette_stdout.exists():
                 stdout = cassette_stdout.read_text(encoding="utf-8")
+            atomic_write(
+                cassette_path / "input.json",
+                fast_dumps({"args": cmd}, indent=True),
+            )
 
         ephemeral_dir = _extract_ephemeral_add_dir(cmd)
         if ephemeral_dir is not None and step_result.cassette_path:
@@ -296,13 +645,63 @@ class RecordingSubprocessRunner(SubprocessRunner):
             if _snap:
                 logger.debug("skill_dir_snapshot_written", step=step_name, path=str(_snap))
 
+        receipt = _read_recording_receipt(receipt_path)
+        with suppress(OSError):
+            receipt_path.unlink()
+        fake_cleanup = getattr(step_result, "cleanup_outcome", None)
+        if receipt is not None and receipt.get("state") == "complete":
+            raw_cleanup = receipt.get("cleanup_outcome")
+            cleanup_outcome = (
+                _cleanup_from_payload(raw_cleanup)
+                if isinstance(raw_cleanup, Mapping)
+                else CleanupOutcome(succeeded=False, budget_exhausted=False)
+            )
+            returncode = _int_value(
+                receipt.get("returncode", step_result.cassette_exit_code),
+                step_result.cassette_exit_code,
+            )
+            termination = TerminationReason(
+                str(receipt.get("termination", TerminationReason.NATURAL_EXIT.value))
+            )
+            kill_reason = KillReason(
+                str(receipt.get("kill_reason", KillReason.NATURAL_EXIT.value))
+            )
+            pid = _int_value(receipt.get("pid", 0))
+            elapsed_seconds = _float_value(
+                receipt.get(
+                    "elapsed_seconds",
+                    (step_result.cassette_duration_ms or 0) / 1000.0,
+                ),
+                (step_result.cassette_duration_ms or 0) / 1000.0,
+            )
+        elif isinstance(fake_cleanup, CleanupOutcome):
+            cleanup_outcome = fake_cleanup
+            returncode = step_result.cassette_exit_code
+            termination = getattr(
+                step_result,
+                "termination",
+                TerminationReason.NATURAL_EXIT,
+            )
+            kill_reason = getattr(step_result, "kill_reason", KillReason.NATURAL_EXIT)
+            pid = int(getattr(step_result, "pid", 0))
+            elapsed_seconds = (step_result.cassette_duration_ms or 0) / 1000.0
+        else:
+            cleanup_outcome = CleanupOutcome(succeeded=False, budget_exhausted=False)
+            returncode = step_result.cassette_exit_code
+            termination = TerminationReason.SIGNAL_DEATH
+            kill_reason = KillReason.INFRA_KILL
+            pid = 0
+            elapsed_seconds = (step_result.cassette_duration_ms or 0) / 1000.0
+
         return SubprocessResult(
-            returncode=step_result.cassette_exit_code,
+            returncode=returncode,
             stdout=stdout,
             stderr="",
-            termination=TerminationReason.NATURAL_EXIT,
-            pid=0,
-            elapsed_seconds=(step_result.cassette_duration_ms or 0) / 1000.0,
+            termination=termination,
+            pid=pid,
+            elapsed_seconds=elapsed_seconds,
+            kill_reason=kill_reason,
+            cleanup_outcome=cleanup_outcome,
         )
 
     async def _record_non_pty_session(
@@ -481,6 +880,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
                 termination=TerminationReason.NATURAL_EXIT,
                 pid=0,
                 elapsed_seconds=meta.duration_ms / 1000.0,
+                cleanup_outcome=_no_owned_process_cleanup(),
             )
 
         if step_name in self._non_session:
@@ -491,6 +891,7 @@ class ReplayingSubprocessRunner(SubprocessRunner):
                 stderr=summary.get("stderr", ""),
                 termination=TerminationReason.NATURAL_EXIT,
                 pid=0,
+                cleanup_outcome=_no_owned_process_cleanup(),
             )
 
         raise ScenarioReplayError(

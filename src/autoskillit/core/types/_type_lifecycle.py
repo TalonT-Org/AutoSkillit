@@ -31,10 +31,12 @@ __all__ = [
     "CompletionCandidate",
     "CompletionCandidateSource",
     "CompletionCandidateState",
-    "DEFAULT_CLEANUP_BUDGET_SECONDS",
     "LifecycleActorRequest",
     "LifecycleActorResponse",
     "LifecycleDecision",
+    "LifecycleEvidenceIssue",
+    "LifecycleEvidenceIssueKind",
+    "LifecycleEvidenceResolution",
     "ParentAssistantMarker",
     "ProcessIdentity",
     "build_lifecycle_snapshot_from_attempts",
@@ -42,11 +44,67 @@ __all__ = [
 
 
 DEFAULT_CLEANUP_BUDGET_SECONDS: float = 15.0
-"""Invocation-level cleanup budget shared by graceful drain, TERM wait, and KILL wait.
+"""Deprecated re-export of ``_type_subprocess.DEFAULT_CLEANUP_BUDGET_SECONDS``.
 
-Threaded through SubprocessRunner and recording/fake implementations; consumed
-by shielded exception/cancellation cleanup so all cleanup paths share one deadline.
+Canonical owner is ``_type_subprocess``; this symbol remains here for backward
+compatibility with consumers that import from ``autoskillit.core.types``.
+New code should import from ``autoskillit.core.types.DEFAULT_CLEANUP_BUDGET_SECONDS``
+or directly from ``autoskillit.core.DEFAULT_CLEANUP_BUDGET_SECONDS``.
 """
+
+
+@unique
+class LifecycleEvidenceIssueKind(Enum):
+    """Kind of blocking evidence captured by ``LifecycleEvidenceIssue``.
+
+    Each kind corresponds to one fail-closed path through the Channel A
+    normalizer. Unknown / malformed statuses, identity conflicts, and alias
+    conflicts all surface as blocking issues that the coordinator must hold
+    until matching canonical evidence arrives; the actor surfaces them
+    through every carrier so headless retry adjudication can see them.
+    """
+
+    UNKNOWN_STATUS = "unknown_status"
+    MALFORMED_IDENTITY = "malformed_identity"
+    ALIAS_CONFLICT = "alias_conflict"
+    MIXED_LAUNCH_AND_TERMINAL = "mixed_launch_and_terminal"
+
+
+@unique
+class LifecycleEvidenceResolution(Enum):
+    """Resolution state for one ``LifecycleEvidenceIssue``.
+
+    ``PENDING`` issues remain blocking; ``RESOLVED`` issues have been matched
+    against valid canonical evidence carrying the same fingerprint.
+    """
+
+    PENDING = "pending"
+    RESOLVED = "resolved"
+
+
+@dataclass(frozen=True, slots=True)
+class LifecycleEvidenceIssue:
+    """Typed blocking-evidence record captured by the Channel A normalizer.
+
+    Resolution is gated by exact canonical fingerprint match: an issue is
+    cleared only when later valid evidence arrives carrying the same
+    ``canonical_fingerprint``. Unrelated evidence never clears an issue,
+    and unresolved issues fail closed through the actor's race/result
+    carriers into headless retry adjudication.
+    """
+
+    issue_kind: LifecycleEvidenceIssueKind
+    task_kind: str
+    native_aliases: tuple[str, ...]
+    source_event_uuid: str
+    canonical_fingerprint: str
+    """Stable identifier derived from (task_kind, native_aliases, source_event_uuid).
+
+    Resolution requires an exact match from later valid evidence.
+    """
+    channel_relative_byte_offset: int
+    resolution: LifecycleEvidenceResolution = LifecycleEvidenceResolution.PENDING
+    detail: str = ""
 
 
 @unique
@@ -233,34 +291,44 @@ class ChildLifecycleSnapshot:
     last_deferred_parent_generation: int = 0
     """Highest parent-turn generation that produced a DEFERRED candidate;
     a candidate must exceed this value to become ELIGIBLE."""
+    lifecycle_issues: tuple[LifecycleEvidenceIssue, ...] = ()
+    """Frozen tuple of unresolved blocking-evidence issues.
+
+    ``PENDING`` issues are fail-closed: they block ``LifecycleDecision.ELIGIBLE``
+    until matched against valid canonical evidence carrying the same fingerprint.
+    Cleared issues remain in the tuple with ``LifecycleEvidenceResolution.RESOLVED``
+    so downstream consumers can audit what blocked and what cleared.
+    """
 
 
 @dataclass(frozen=True, slots=True)
 class LifecycleActorRequest:
-    """Immutable message produced by Channel B / Channel A / process-exit.
+    """Deprecated public type — actor transports are private.
 
-    Each request carries a unique ``request_id`` so the actor can reply on
-    the originating stream without leaking producer state. Watermark
-    requests additionally carry ``required_channel_a_byte_offset`` so the
-    actor can synchronize exactly the lines a producer needs.
+    The actor's producer/reply message types live inside
+    ``execution/process/_lifecycle_actor.py``. This class remains for
+    backward-compatible imports but is no longer constructed or consumed
+    by any production code path.
     """
 
     request_id: str
-    kind: str  # 'channel_a_observation' | 'channel_b_proposal' | 'process_exit' | 'watermark_ack'
+    kind: str = ""
     payload: Any = None
 
 
 @dataclass(frozen=True, slots=True)
 class LifecycleActorResponse:
-    """Immutable reply the actor sends back to a single request.
+    """Deprecated public type — actor transports are private.
 
-    Watermark replies carry the ``processed_channel_a_byte_offset`` so the
-    requesting producer knows exactly when its requested offset was
-    reduced end-to-end.
+    The actor's reply type lives inside ``execution/process/_lifecycle_actor.py``.
+    This class remains for backward-compatible imports but is no longer
+    constructed or consumed by any production code path. Use
+    ``LifecycleDecision`` (the frozen IL-0 decision value type) for carrier
+    propagation through ``SubprocessResult`` and other core carriers.
     """
 
     request_id: str
-    snapshot: ChildLifecycleSnapshot
+    snapshot: ChildLifecycleSnapshot | None = None
     decision: LifecycleDecision = LifecycleDecision.CONTINUE
     eligible_candidate: CompletionCandidate | None = None
     processed_channel_a_byte_offset: int = 0
@@ -305,6 +373,7 @@ def build_lifecycle_snapshot_from_attempts(
     candidate_states: tuple[tuple[str, CompletionCandidateState], ...],
     eligible_candidate: CompletionCandidate | None = None,
     last_deferred_parent_generation: int = 0,
+    lifecycle_issues: tuple[LifecycleEvidenceIssue, ...] = (),
 ) -> ChildLifecycleSnapshot:
     """Build a frozen lifecycle snapshot from reducer-private buckets.
 
@@ -321,4 +390,5 @@ def build_lifecycle_snapshot_from_attempts(
         candidate_states=tuple(candidate_states),
         eligible_candidate=eligible_candidate,
         last_deferred_parent_generation=last_deferred_parent_generation,
+        lifecycle_issues=tuple(lifecycle_issues),
     )

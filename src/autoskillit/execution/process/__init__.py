@@ -64,6 +64,7 @@ from autoskillit.execution.process._process_kill import (
     kill_process_tree,
 )
 from autoskillit.execution.process._process_monitor import (
+    ProcessActivityTracker,
     _has_active_api_connection,
     _has_active_child_processes,
     _has_active_execution_marker,
@@ -100,6 +101,7 @@ logger = get_logger(__name__)
 # internal sub-module paths.
 __all__ = [
     "DefaultSubprocessRunner",
+    "ProcessActivityTracker",
     "_extract_stdout_session_id",
     "_resolve_session_id",
     "RaceAccumulator",

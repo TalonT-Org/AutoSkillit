@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -60,6 +60,7 @@ from autoskillit.execution.backends._backend_cmd_builder_base import (
     FlagVocabulary,
 )
 from autoskillit.execution.backends._claude_lifecycle import (
+    extract_lifecycle_issues,
     extract_lifecycle_observations,
     extract_parent_assistant_marker,
 )
@@ -158,6 +159,7 @@ class ClaudeStreamParser:
 
         record_type = obj.get("type", "")
         observations = extract_lifecycle_observations(obj, record_type)
+        lifecycle_issues = extract_lifecycle_issues(obj, record_type)
         parent_marker = extract_parent_assistant_marker(
             obj,
             completion_marker=self.completion_marker,
@@ -179,6 +181,7 @@ class ClaudeStreamParser:
                     ),
                     observations=observations,
                     parent_marker=parent_marker,
+                    lifecycle_issues=lifecycle_issues,
                 )
             return SessionEvent(
                 kind=BackendEventKind.SESSION_META,
@@ -187,6 +190,7 @@ class ClaudeStreamParser:
                 session_id=session_id if subtype == "init" else None,
                 observations=observations,
                 parent_marker=parent_marker,
+                lifecycle_issues=lifecycle_issues,
             )
 
         if record_type == "result":
@@ -198,6 +202,7 @@ class ClaudeStreamParser:
                     has_marker=False,
                     observations=observations,
                     parent_marker=parent_marker,
+                    lifecycle_issues=lifecycle_issues,
                 )
             has_marker = bool(
                 self.completion_marker
@@ -215,6 +220,7 @@ class ClaudeStreamParser:
                 ),
                 observations=observations,
                 parent_marker=parent_marker,
+                lifecycle_issues=lifecycle_issues,
             )
 
         if record_type == "assistant":
@@ -251,6 +257,7 @@ class ClaudeStreamParser:
                 ),
                 observations=observations,
                 parent_marker=parent_marker,
+                lifecycle_issues=lifecycle_issues,
             )
 
         return SessionEvent(
@@ -259,6 +266,7 @@ class ClaudeStreamParser:
             has_marker=False,
             observations=observations,
             parent_marker=parent_marker,
+            lifecycle_issues=lifecycle_issues,
         )
 
 
@@ -375,6 +383,25 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         state.
         """
         return _ClaudeStreamParserFactory(completion_marker=completion_marker)
+
+    def parent_candidate_normalizer(
+        self,
+        completion_marker: str = "",
+    ) -> Callable[[dict[str, Any], int], Any]:
+        """Return a pure Channel B parent-candidate normalizer.
+
+        Threads ``completion_marker`` through to ``extract_parent_assistant_marker``
+        so the process-level Channel B tailer can normalize a parsed JSONL
+        record without importing Claude-specific code at module scope.
+        """
+        marker = completion_marker
+
+        def _normalize(obj: dict[str, Any], byte_offset: int) -> Any:
+            return extract_parent_assistant_marker(
+                obj, byte_offset=byte_offset, completion_marker=marker
+            )
+
+        return _normalize
 
     def result_parser(self) -> ClaudeResultParser:
         return ClaudeResultParser()

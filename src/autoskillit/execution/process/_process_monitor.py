@@ -107,53 +107,81 @@ def _has_active_api_connection(pid: int) -> bool:
 
 _CPU_ACTIVE_THRESHOLD: float = 10.0  # percent; evidence of actual computational work
 
-# Cached Process objects keyed by PID so cpu_percent(interval=0) returns
-# delta since the previous call on the *same* object rather than always 0.0
-# on a freshly constructed psutil.Process.
-_child_process_cache: dict[int, psutil.Process] = {}
+
+class ProcessActivityTracker:
+    """Per-invocation cache of ``psutil.Process`` handles keyed by PID.
+
+    Sole purpose: own the per-process CPU baselines that
+    ``cpu_percent(interval=0)`` requires for meaningful deltas. The first
+    call on a given handle returns ``0.0``; subsequent calls return usage
+    since the previous call. Owning the cache here (rather than as a
+    module-level dict) keeps the activity tracker invocation-scoped so
+    two concurrent runs cannot leak CPU baselines across each other.
+
+    Distinct from ``OwnedProcessIdentityTracker``: the identity tracker
+    captures root/descendant PID/start-time identities for cleanup
+    finalization; this tracker only owns CPU baselines. The two
+    invariants must never be conflated — process identity is durable,
+    CPU baselines are ephemeral.
+    """
+
+    __slots__ = ("_handles",)
+
+    def __init__(self) -> None:
+        self._handles: dict[int, psutil.Process] = {}
+
+    def has_active_children(self, pid: int) -> bool:
+        """Return True if any descendant of ``pid`` exceeds the CPU activity threshold.
+
+        Used by ``_session_log_monitor`` to suppress stale-kill when background
+        Bash tasks are actively running despite LLM/API being idle. The first
+        sighting of a PID primes its CPU baseline (returns 0.0); subsequent
+        sightings return the delta since the previous call.
+        """
+        try:
+            parent = psutil.Process(pid)
+            current_children = parent.children(recursive=True)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            return False
+
+        live_pids: set[int] = set()
+        active = False
+        for child in current_children:
+            live_pids.add(child.pid)
+            cached = self._handles.get(child.pid)
+            if cached is None:
+                self._handles[child.pid] = child
+                try:
+                    child.cpu_percent(interval=0)
+                except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                    pass
+                continue
+            try:
+                if cached.cpu_percent(interval=0) > _CPU_ACTIVE_THRESHOLD:
+                    active = True
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                continue
+
+        for stale_pid in list(self._handles.keys() - live_pids):
+            self._handles.pop(stale_pid, None)
+
+        return active
+
+
+# Module-level convenience accessor retained for legacy callers; new code
+# must inject a fresh ``ProcessActivityTracker`` per invocation so concurrent
+# runs cannot share CPU baselines.
+_default_activity_tracker = ProcessActivityTracker()
 
 
 def _has_active_child_processes(pid: int) -> bool:
-    """Return True if any child process in the tree exceeds the CPU activity threshold.
+    """Convenience wrapper for legacy callers.
 
-    Used by _session_log_monitor to suppress stale-kill when background Bash tasks
-    (launched via run_in_background: true) are actively running despite LLM/API being idle.
-
-    cpu_percent(interval=0) returns usage since the last call per-process.  We
-    cache psutil.Process objects across invocations so the second and subsequent
-    calls on a given child produce meaningful CPU deltas (the first call on any
-    new Process object always returns 0.0).
+    New code should inject a fresh ``ProcessActivityTracker`` so concurrent
+    invocations do not share CPU baselines; this default is only retained
+    for tests and one-off diagnostic paths.
     """
-    try:
-        parent = psutil.Process(pid)
-        current_children = parent.children(recursive=True)
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        return False
-
-    live_pids: set[int] = set()
-    active = False
-    for child in current_children:
-        live_pids.add(child.pid)
-        cached = _child_process_cache.get(child.pid)
-        if cached is None:
-            # First sighting: prime cpu_percent baseline (returns 0.0).
-            _child_process_cache[child.pid] = child
-            try:
-                child.cpu_percent(interval=0)
-            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
-                pass
-            continue
-        try:
-            if cached.cpu_percent(interval=0) > _CPU_ACTIVE_THRESHOLD:
-                active = True
-        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
-            continue
-
-    # Evict stale entries for children that no longer exist.
-    for stale_pid in list(_child_process_cache.keys() - live_pids):
-        _child_process_cache.pop(stale_pid, None)
-
-    return active
+    return _default_activity_tracker.has_active_children(pid)
 
 
 def _has_active_execution_marker(

@@ -14,7 +14,6 @@ from typing import Any, Protocol, runtime_checkable
 from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 from ._type_inspector import InspectorCallback, InspectorVerdict
 from ._type_lifecycle import (
-    DEFAULT_CLEANUP_BUDGET_SECONDS,
     ChildLifecycleSnapshot,
     CleanupOutcome,
     CompletionCandidate,
@@ -23,9 +22,20 @@ from ._type_lifecycle import (
 from ._type_protocols_backend import StreamParserFactory
 
 __all__ = [
+    "DEFAULT_CLEANUP_BUDGET_SECONDS",
     "SubprocessResult",
     "SubprocessRunner",
 ]
+
+
+#: Invocation-level cleanup budget shared by graceful drain, TERM wait, and KILL wait.
+#:
+#: Canonical owner of this constant is ``_type_subprocess`` so it lives next to
+#: ``SubprocessRunner`` rather than in the lifecycle submodule. The lifecycle
+#: submodule re-exports it as a deprecated alias for backward compatibility with
+#: ``autoskillit.core.types`` consumers; new code should import from
+#: ``autoskillit.core.types`` (which re-exports from here).
+DEFAULT_CLEANUP_BUDGET_SECONDS: float = 15.0
 
 #: Semantic contract for SubprocessResult fields per TerminationReason.
 #: These invariants are enforced by tests/test_process_lifecycle.py

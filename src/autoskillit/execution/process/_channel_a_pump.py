@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     ChildLifecycleObservation,
+    LifecycleEvidenceIssue,
     ParentAssistantMarker,
     SessionEvent,
     get_logger,
@@ -61,11 +62,13 @@ class ChannelABatch:
     carries every typed child-lifecycle contribution the parser yielded
     on this batch. ``parent_markers`` carries the parent-assistant
     markers that arrived on this batch so the actor can register them
-    without re-scanning.
+    without re-scanning. ``lifecycle_issues`` carries the typed blocking
+    evidence emitted by the normalizer for malformed/alias-conflict
+    records; the coordinator replays them into its pending blocking
+    store and surfaces them through the snapshot.
 
     ``processed_channel_a_byte_offset`` is the same value as ``byte_offset``
-    so that the watermark-ack payload can use a single field name in
-    ``LifecycleActorResponse``.
+    so the actor's per-request reply payload can use a single field name.
     """
 
     records: tuple[SessionEvent, ...]
@@ -73,6 +76,15 @@ class ChannelABatch:
     parent_markers: tuple[ParentAssistantMarker, ...]
     byte_offset: int
     trailing_carry: bytes = b""
+    lifecycle_issues: tuple[LifecycleEvidenceIssue, ...] = ()
+    """Typed blocking-evidence issues emitted by the parser/normalizer on this batch.
+
+    Each issue carries the canonical fingerprint required for later resolution.
+    The actor relays unresolved issues into the coordinator's pending
+    blocking-evidence store; resolved issues (matched against later valid
+    evidence) are carried through the snapshot so downstream consumers can
+    audit what blocked and what cleared.
+    """
     processed_channel_a_byte_offset: int = field(init=False)
 
     def __post_init__(self) -> None:
@@ -180,6 +192,7 @@ def read_channel_a_batch(
     records: list[SessionEvent] = []
     observations: list[ChildLifecycleObservation] = []
     parent_markers: list[ParentAssistantMarker] = []
+    lifecycle_issues: list[LifecycleEvidenceIssue] = []
     line_byte_cursor = initial_byte_offset
     for line in lines:
         line_byte_cursor += len(line.encode("utf-8", errors="replace")) + 1
@@ -191,9 +204,14 @@ def read_channel_a_batch(
                 logger.warning("parser_parse_line_failed", exc_info=True)
                 event = None
         if event is not None:
-            observations.extend(event.observations)
+            for obs in event.observations:
+                observations.append(replace(obs, byte_offset=line_byte_cursor))
             if event.parent_marker is not None:
                 parent_markers.append(replace(event.parent_marker, byte_offset=line_byte_cursor))
+            for issue in event.lifecycle_issues:
+                lifecycle_issues.append(
+                    replace(issue, channel_relative_byte_offset=line_byte_cursor)
+                )
             records.append(event)
     return ChannelABatch(
         records=tuple(records),
@@ -201,6 +219,7 @@ def read_channel_a_batch(
         parent_markers=tuple(parent_markers),
         byte_offset=line_byte_cursor,
         trailing_carry=new_carry,
+        lifecycle_issues=tuple(lifecycle_issues),
     )
 
 

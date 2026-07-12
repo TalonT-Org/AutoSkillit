@@ -302,6 +302,9 @@ from .types import LensEntry as LensEntry
 from .types import LifecycleActorRequest as LifecycleActorRequest
 from .types import LifecycleActorResponse as LifecycleActorResponse
 from .types import LifecycleDecision as LifecycleDecision
+from .types import LifecycleEvidenceIssue as LifecycleEvidenceIssue
+from .types import LifecycleEvidenceIssueKind as LifecycleEvidenceIssueKind
+from .types import LifecycleEvidenceResolution as LifecycleEvidenceResolution
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import MarketplaceInstall as MarketplaceInstall

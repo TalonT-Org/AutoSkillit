@@ -11,7 +11,11 @@ from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import BackendEventKind, OutputFormat
-from ._type_lifecycle import ChildLifecycleObservation, ParentAssistantMarker
+from ._type_lifecycle import (
+    ChildLifecycleObservation,
+    LifecycleEvidenceIssue,
+    ParentAssistantMarker,
+)
 from ._type_plugin_source import PluginSource
 from ._type_results import ValidatedAddDir
 
@@ -399,6 +403,14 @@ class SessionEvent:
     backend_data: ClaudeEventData | CodexEventData | None = None
     observations: tuple[ChildLifecycleObservation, ...] = ()
     parent_marker: ParentAssistantMarker | None = None
+    lifecycle_issues: tuple[LifecycleEvidenceIssue, ...] = ()
+    """Typed blocking-evidence tuple emitted by the Channel A normalizer.
+
+    Carries unknown/malformed statuses and identity/alias conflicts upstream
+    through the event so the actor can route them into the coordinator's
+    pending blocking-evidence store and propagate them into headless retry
+    adjudication.
+    """
 
 
 @dataclass(frozen=True, slots=True)

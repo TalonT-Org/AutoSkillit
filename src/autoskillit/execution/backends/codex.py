@@ -6,7 +6,7 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from pathlib import Path
@@ -626,6 +626,23 @@ class CodexBackend(BackendCmdBuilderBase):
                 return factory_self.stream_parser(completion_marker=completion_marker)
 
         return _Factory()
+
+    def parent_candidate_normalizer(
+        self,
+        completion_marker: str = "",
+    ) -> Callable[[dict[str, Any], int], Any]:
+        """Return a no-op parent-candidate normalizer for the Codex backend.
+
+        Codex does not emit Claude-style parent-assistant markers, so the
+        normalizer returns ``None`` for every record. The process-level
+        Channel B tailer calls this through the protocol and routes
+        ``None`` as no-candidate.
+        """
+
+        def _normalize(obj: dict[str, Any], byte_offset: int) -> Any:
+            return None
+
+        return _normalize
 
     def result_parser(self) -> CodexResultParser:
         return CodexResultParser()

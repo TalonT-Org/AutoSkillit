@@ -37,14 +37,18 @@ from typing import Any
 from autoskillit.core import (
     ChildAttemptState,
     ChildLifecycleObservation,
+    LifecycleEvidenceIssue,
+    LifecycleEvidenceIssueKind,
     ParentAssistantMarker,
 )
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
 __all__ = [
+    "LifecycleEvidenceIssue",
     "ParentAssistantCandidate",
     "extract_lifecycle_observations",
     "extract_parent_assistant_marker",
+    "extract_lifecycle_issues",
 ]
 
 
@@ -255,7 +259,13 @@ def extract_parent_assistant_marker(
 
 
 def _record_carries_marker_text(obj: dict[str, Any], completion_marker: str) -> bool:
-    """Return True when one assistant record's text content carries the marker."""
+    """Return True when one assistant record's text content carries the marker.
+
+    Marker matching accepts only standalone unquoted marker text: the marker
+    must appear as its own line in the text block, not embedded inside
+    another word or quoted inside a string. Embedded/quoted markers
+    return False so they cannot accidentally authorize completion.
+    """
     if not completion_marker:
         return False
     message = obj.get("message")
@@ -268,6 +278,145 @@ def _record_carries_marker_text(obj: dict[str, Any], completion_marker: str) -> 
         if block.get("type") != "text":
             continue
         text = block.get("text", "")
-        if isinstance(text, str) and completion_marker in text:
-            return True
+        if not isinstance(text, str) or not text:
+            continue
+        for line in text.splitlines():
+            stripped = line.strip().strip("\"'`")
+            if stripped == completion_marker:
+                return True
     return False
+
+
+def _canonical_fingerprint(task_kind: str, aliases: tuple[str, ...], source_uuid: str) -> str:
+    """Derive the canonical fingerprint used for issue resolution.
+
+    Two lifecycle observations referring to the same canonical child/event
+    pair produce the same fingerprint; the coordinator uses exact-match
+    against later valid evidence to clear blocking issues.
+    """
+    return f"{task_kind}|{'|'.join(aliases)}|{source_uuid}"
+
+
+def extract_lifecycle_issues(
+    obj: dict[str, Any],
+    record_type: str,
+    *,
+    byte_offset: int = 0,
+) -> tuple[LifecycleEvidenceIssue, ...]:
+    """Emit typed blocking-evidence issues for malformed/unknown records.
+
+    Fail-closed paths surface here instead of being silently swallowed:
+
+    - Unknown ``status`` on a ``task_notification`` record -> ``UNKNOWN_STATUS``.
+    - Records carrying ``tool_result`` blocks with both ``async_launched``
+      and a terminal ``status`` (mixed launch + delivery on one record) ->
+      ``MIXED_LAUNCH_AND_TERMINAL``.
+    - Records whose status is recognised but whose identity fields are
+      missing or malformed (e.g., terminal status without an agentId or
+      backgroundTaskId) -> ``MALFORMED_IDENTITY``.
+
+    Each issue carries a canonical fingerprint so the coordinator can match
+    later valid evidence against it; unrelated evidence never clears an
+    issue, and unresolved issues fail closed through the actor.
+    """
+    if record_type == "system":
+        subtype = obj.get("subtype", "")
+        if subtype != "task_notification":
+            return ()
+        status = obj.get("status")
+        if status in {"completed", "failed", "cancelled", "timed_out"}:
+            return ()
+        source_uuid = _coerce_str(obj.get("uuid"))
+        if not source_uuid:
+            return ()
+        task_kind = _task_kind_from_system(obj)
+        aliases = (
+            _coerce_str(obj.get("task_id")),
+            _coerce_str(obj.get("tool_use_id")),
+            _coerce_str(obj.get("agent_id")),
+            _coerce_str(obj.get("background_task_id")),
+        )
+        return (
+            LifecycleEvidenceIssue(
+                issue_kind=LifecycleEvidenceIssueKind.UNKNOWN_STATUS,
+                task_kind=task_kind or "unknown",
+                native_aliases=aliases,
+                source_event_uuid=source_uuid,
+                canonical_fingerprint=_canonical_fingerprint(
+                    task_kind or "unknown", aliases, source_uuid
+                ),
+                channel_relative_byte_offset=byte_offset,
+                detail=f"unknown task_notification status: {status!r}",
+            ),
+        )
+
+    if record_type == "user":
+        message = obj.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            return ()
+        issues: list[LifecycleEvidenceIssue] = []
+        source_uuid = _coerce_str(obj.get("uuid"))
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") != "tool_result":
+                continue
+            tool_use_result = block.get("content")
+            if not isinstance(tool_use_result, dict):
+                continue
+            is_async = bool(
+                tool_use_result.get("async_launched") is True
+                or tool_use_result.get("isAsync") is True
+            )
+            status = tool_use_result.get("status")
+            if is_async and status in {"completed", "failed", "cancelled"}:
+                tool_use_id = _coerce_str(block.get("tool_use_id"))
+                agent_id = _coerce_str(tool_use_result.get("agentId"))
+                background_task_id = _coerce_str(tool_use_result.get("backgroundTaskId"))
+                if agent_id:
+                    task_kind = "Agent"
+                elif background_task_id:
+                    task_kind = "Bash"
+                else:
+                    task_kind = "unknown"
+                aliases_mixed: tuple[str, ...] = (tool_use_id, agent_id, background_task_id)
+                fingerprint = _canonical_fingerprint(
+                    task_kind, aliases_mixed, source_uuid or "anonymous"
+                )
+                issues.append(
+                    LifecycleEvidenceIssue(
+                        issue_kind=LifecycleEvidenceIssueKind.MIXED_LAUNCH_AND_TERMINAL,
+                        task_kind=task_kind,
+                        native_aliases=aliases_mixed,
+                        source_event_uuid=source_uuid,
+                        canonical_fingerprint=fingerprint,
+                        channel_relative_byte_offset=byte_offset,
+                        detail="async_launched=true delivered with terminal status",
+                    )
+                )
+                continue
+            if status in {"completed", "failed", "cancelled"}:
+                tool_use_id = _coerce_str(block.get("tool_use_id"))
+                agent_id = _coerce_str(tool_use_result.get("agentId"))
+                background_task_id = _coerce_str(tool_use_result.get("backgroundTaskId"))
+                if not (agent_id or background_task_id):
+                    aliases_inner: tuple[str, ...] = (tool_use_id,)
+                    task_kind = "unknown"
+                    fingerprint = _canonical_fingerprint(
+                        task_kind, aliases_inner, source_uuid or "anonymous"
+                    )
+                    issues.append(
+                        LifecycleEvidenceIssue(
+                            issue_kind=LifecycleEvidenceIssueKind.MALFORMED_IDENTITY,
+                            task_kind=task_kind,
+                            native_aliases=aliases_inner,
+                            source_event_uuid=source_uuid,
+                            canonical_fingerprint=fingerprint,
+                            channel_relative_byte_offset=byte_offset,
+                            detail="terminal tool_result missing native identity",
+                        )
+                    )
+        return tuple(issues)
+
+    return ()

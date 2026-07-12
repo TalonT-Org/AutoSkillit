@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -121,6 +121,22 @@ class CodingAgentBackend(Protocol):
         Each call to the factory (``factory()``) yields a distinct parser
         instance so concurrent watchers/calls cannot share lifecycle
         reducer state.
+        """
+        ...
+
+    def parent_candidate_normalizer(
+        self,
+        completion_marker: str = "",
+    ) -> Callable[[dict[str, Any], int], Any]:
+        """Return a pure Channel B parent-candidate normalizer.
+
+        Implementations supply a callable that, given one parsed JSONL
+        record ``obj`` and ``byte_offset`` of its origin, returns the
+        parent-candidate extraction result (or ``None`` when the record
+        is not a parent-assistant marker). This decouples Channel B logic
+        from process code so the watcher can normalize without importing
+        Claude-specific helpers, and so that alternate backends can supply
+        their own parent-candidate filter.
         """
         ...
 

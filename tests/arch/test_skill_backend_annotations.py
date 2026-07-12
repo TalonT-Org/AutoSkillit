@@ -41,6 +41,84 @@ _CAPABILITY_PATTERNS: dict[str, list[re.Pattern[str]]] = {
 }
 
 
+_EXCLUDED_SECTION_HEADINGS = (
+    "Related Skills",
+    "See also",
+    "See Also",
+)
+
+_EXCLUDED_PROSE_PHRASES = (
+    "consider running",
+    "you may want to",
+    "you could run",
+    "produced by",
+    "consumed by",
+    "called by",
+    "written by",
+)
+
+
+def _is_genuine_cross_skill_ref_line(line: str, skill_name: str) -> bool:
+    """Return True if a line contains a genuine Skill-tool invocation of a sibling skill.
+
+    Excludes self-references, advisory prose, pipeline lineage, See-Also footers,
+    and Agent() subagent dispatch (which is covered by agent_subagent).
+    """
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return False
+    if "autoskillit:" not in stripped:
+        return False
+    if f"autoskillit:{skill_name}" in stripped:
+        return False
+    if "Agent(subagent_type=" in stripped:
+        return False
+    lower = stripped.lower()
+    for phrase in _EXCLUDED_PROSE_PHRASES:
+        if phrase in lower:
+            return False
+    if "load" in lower and "skill tool" in lower:
+        return True
+    if "invoke" in lower and "skill tool" in lower:
+        return True
+    if 'run_skill("/autoskillit:' in stripped or "run_skill('/autoskillit:" in stripped:
+        return True
+    if 'Skill("/autoskillit:' in stripped or "Skill('/autoskillit:" in stripped:
+        return True
+    return False
+
+
+def _detect_cross_skill_ref(filtered: str, skill_name: str) -> bool:
+    """Detect genuine cross_skill_ref by scanning lines with heading context.
+
+    Returns True if at least one line under a non-excluded heading contains a
+    genuine Skill-tool invocation pattern AND the line is not under a heading
+    that is a See-Also / Related-Skills footer.
+    """
+    current_section_is_excluded = False
+    in_skill_table_header = False
+    for raw_line in filtered.splitlines():
+        stripped = raw_line.strip()
+        if stripped.startswith("#"):
+            heading_text = stripped.lstrip("#").strip()
+            current_section_is_excluded = any(
+                h.lower() == heading_text.lower() for h in _EXCLUDED_SECTION_HEADINGS
+            )
+            in_skill_table_header = False
+            continue
+        if stripped.startswith("|"):
+            if "skill" in stripped.lower():
+                in_skill_table_header = True
+            continue
+        if current_section_is_excluded:
+            continue
+        if stripped.startswith("|") and not in_skill_table_header:
+            continue
+        if _is_genuine_cross_skill_ref_line(raw_line, skill_name):
+            return True
+    return False
+
+
 def _detect_capabilities(body: str, skill_name: str) -> set[str]:
     filtered = _strip_doc_fenced_blocks(body)
     # Collapse shell line continuations so multi-line gh api calls are detected
@@ -51,14 +129,8 @@ def _detect_capabilities(body: str, skill_name: str) -> set[str]:
             if pat.search(filtered):
                 detected.add(cap_name)
                 break
-    for line in filtered.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if "autoskillit:" in stripped:
-            if f"autoskillit:{skill_name}" not in stripped:
-                detected.add("cross_skill_ref")
-                break
+    if _detect_cross_skill_ref(filtered, skill_name):
+        detected.add("cross_skill_ref")
     return detected
 
 
@@ -202,3 +274,32 @@ def test_capability_routing_uses_registry_not_hardcoded_name() -> None:
                 f"tools_execution.py line {lineno} still references literal 'git_metadata_write' "
                 f"in routing logic — must use registry-driven check: {context!r}"
             )
+
+
+_CROSS_SKILL_REF_ALLOWLIST: dict[str, str] = {
+    # Skills where the heuristic cannot reliably classify — override with justification.
+}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="Step 2 will fix ~24 over-declared cross_skill_ref entries",
+)
+def test_cross_skill_ref_declarations_are_genuine():
+    """Skills declaring cross_skill_ref must have a genuine Skill-tool invocation."""
+    violations: list[str] = []
+    for name, skill_md in _iter_skill_dirs():
+        fm = _read_skill_frontmatter(skill_md)
+        declared = set(fm.get("uses_capabilities", []))
+        if "cross_skill_ref" not in declared:
+            continue
+        if name in _CROSS_SKILL_REF_ALLOWLIST:
+            continue
+        content = skill_md.read_text(encoding="utf-8")
+        body = _strip_frontmatter(content)
+        if not _detect_cross_skill_ref(_strip_doc_fenced_blocks(body), name):
+            violations.append(name)
+    assert not violations, (
+        f"{len(violations)} skill(s) declare cross_skill_ref without genuine "
+        f"Skill-tool invocation:\n" + "\n".join(f"  {v}" for v in violations)
+    )

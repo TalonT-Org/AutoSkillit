@@ -118,15 +118,21 @@ async def test_fail_fast_when_scope_excludes_cwd(
     from tests.fakes import InMemoryHeadlessExecutor
 
     clone_root, worktree = _make_worktree_layout(tmp_path)
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# plan")
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     # Scope is the temp-only fallback, NOT the tracked tree:
+    # Use an unrelated dir as cwd (not a worktree, not under temp) so the scope
+    # genuinely doesn't cover cwd and the preflight fires.
+    unrelated_cwd = tmp_path / "unrelated_dir"
+    unrelated_cwd.mkdir()
     temp_dir = tmp_path / ".autoskillit" / "temp" / "implement-worktree-no-merge"
     result = await run_skill(
-        "/autoskillit:implement-worktree-no-merge /some/path.md",
-        cwd=str(worktree),
+        f"/autoskillit:implement-worktree-no-merge {plan_path}",
+        cwd=str(unrelated_cwd),
         output_dir=str(temp_dir),
     )
     import json as _json
@@ -144,13 +150,15 @@ async def test_pass_when_scope_covers_cwd(tool_ctx_kitchen_open, monkeypatch, tm
     from tests.fakes import InMemoryHeadlessExecutor
 
     clone_root, worktree = _make_worktree_layout(tmp_path)
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# plan")
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     output_dir = str(worktree)
     await run_skill(
-        "/autoskillit:implement-worktree-no-merge /some/path.md",
+        f"/autoskillit:implement-worktree-no-merge {plan_path}",
         cwd=str(worktree),
         output_dir=output_dir,
     )

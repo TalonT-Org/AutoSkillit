@@ -633,6 +633,7 @@ async def run_skill(
 
     Never raises.
     """
+    print()
     if (tier_gate := _require_orchestrator_or_higher("run_skill")) is not None:
         return tier_gate
     if (gate := _require_enabled()) is not None:
@@ -675,6 +676,7 @@ async def run_skill(
 
         _cleanup_session_id: str | None = None
         tool_ctx = _get_ctx()
+        print()
 
         if not step_name and not resume_session_id and tool_ctx.active_recipe_steps:
             _resolved, _ambiguous = _resolve_step_name_from_recipe(
@@ -1131,7 +1133,14 @@ async def run_skill(
             # Preflight: for WORKTREE_SKILLS dispatches, the computed scope must cover cwd
             # so the session can write to its own tracked tree. Fail-fast BEFORE spawning
             # a session — otherwise the session locks itself out and burns N turns.
-            if allowed_write_prefixes and target_name and target_name in WORKTREE_SKILLS and cwd:
+            print()
+            _extracted_skill = extract_skill_name(skill_command)
+            if (
+                allowed_write_prefixes
+                and _extracted_skill
+                and _extracted_skill in WORKTREE_SKILLS
+                and cwd
+            ):
                 if not _scope_covers_cwd(allowed_write_prefixes, cwd):
                     return gate_error_result(
                         f"Write scope does not cover target worktree: "
@@ -1153,6 +1162,7 @@ async def run_skill(
             _start = time.monotonic()
             try:
                 try:
+                    print()
                     with anyio.fail_after(_cfg.run_skill.mcp_tool_timeout_sec):
                         async with execution_marker(
                             _marker_dir,

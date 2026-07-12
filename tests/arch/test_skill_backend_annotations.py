@@ -58,6 +58,10 @@ _EXCLUDED_PROSE_PHRASES = (
 )
 
 
+_NAMING_EXCLUSION_WORDS: frozenset[str] = frozenset(
+    {"prefix", "convention", "when", "format", "syntax", "naming"}
+)
+
 _IMPERATIVE_VERBS = (
     "use",
     "run",
@@ -124,14 +128,7 @@ def _has_imperative_cross_skill_invocation(stripped: str) -> bool:
                         first_word = (
                             rest.lstrip("` ").split()[0].rstrip(",.;:`'\"") if rest.split() else ""
                         )
-                        if first_word in {
-                            "prefix",
-                            "convention",
-                            "when",
-                            "format",
-                            "syntax",
-                            "naming",
-                        }:
+                        if first_word in _NAMING_EXCLUSION_WORDS:
                             return False
                 return True
             if "/autoskillit:" in lower and verb in {
@@ -158,14 +155,7 @@ def _has_imperative_cross_skill_invocation(stripped: str) -> bool:
                     first_word = (
                         rest.lstrip("` ").split()[0].rstrip(",.;:`'\"") if rest.split() else ""
                     )
-                    if first_word in {
-                        "prefix",
-                        "convention",
-                        "when",
-                        "format",
-                        "syntax",
-                        "naming",
-                    }:
+                    if first_word in _NAMING_EXCLUSION_WORDS:
                         return False
                     return True
     return False

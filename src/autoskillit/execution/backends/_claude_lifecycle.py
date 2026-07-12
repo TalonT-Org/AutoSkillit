@@ -292,14 +292,20 @@ def _record_carries_marker_text(obj: dict[str, Any], completion_marker: str) -> 
     return False
 
 
-def _canonical_fingerprint(task_kind: str, aliases: tuple[str, ...], source_uuid: str) -> str:
+def _canonical_fingerprint(
+    task_kind: str,
+    aliases: tuple[tuple[str, str], ...],
+) -> str:
     """Derive the canonical fingerprint used for issue resolution.
 
-    Two lifecycle observations referring to the same canonical child/event
-    pair produce the same fingerprint; the coordinator uses exact-match
-    against later valid evidence to clear blocking issues.
+    Event UUID is provenance, not child identity. Two records for the same
+    task-kind and complete nonblank alias set therefore produce the same
+    fingerprint even when the later valid record has a different event UUID.
     """
-    return f"{task_kind}|{'|'.join(aliases)}|{source_uuid}"
+    typed_aliases = (
+        f"{alias_kind}={alias_value}" for alias_kind, alias_value in aliases if alias_value
+    )
+    return f"{task_kind}|{'|'.join(typed_aliases)}"
 
 
 def extract_lifecycle_issues(
@@ -326,18 +332,35 @@ def extract_lifecycle_issues(
         if subtype != "task_notification":
             return ()
         status = obj.get("status")
-        if status in {"completed", "failed", "cancelled", "timed_out"}:
-            return ()
         source_uuid = _coerce_str(obj.get("uuid"))
+        task_kind = _task_kind_from_system(obj)
+        typed_aliases = (
+            ("task_id", _coerce_str(obj.get("task_id"))),
+            ("tool_use_id", _coerce_str(obj.get("tool_use_id"))),
+            ("agent_id", _coerce_str(obj.get("agent_id"))),
+            ("background_task_id", _coerce_str(obj.get("background_task_id"))),
+        )
+        aliases = tuple(value for _, value in typed_aliases)
+        if status in {"completed", "failed", "cancelled", "timed_out"}:
+            if task_kind:
+                return ()
+            return (
+                LifecycleEvidenceIssue(
+                    issue_kind=LifecycleEvidenceIssueKind.MALFORMED_IDENTITY,
+                    task_kind="unknown",
+                    native_aliases=aliases,
+                    source_event_uuid=source_uuid,
+                    canonical_fingerprint=_canonical_fingerprint(
+                        "unknown",
+                        typed_aliases,
+                    ),
+                    channel_relative_byte_offset=byte_offset,
+                    native_alias_kinds=tuple(kind for kind, _ in typed_aliases),
+                    detail="terminal task_notification missing native task identity",
+                ),
+            )
         if not source_uuid:
             return ()
-        task_kind = _task_kind_from_system(obj)
-        aliases = (
-            _coerce_str(obj.get("task_id")),
-            _coerce_str(obj.get("tool_use_id")),
-            _coerce_str(obj.get("agent_id")),
-            _coerce_str(obj.get("background_task_id")),
-        )
         return (
             LifecycleEvidenceIssue(
                 issue_kind=LifecycleEvidenceIssueKind.UNKNOWN_STATUS,
@@ -345,9 +368,11 @@ def extract_lifecycle_issues(
                 native_aliases=aliases,
                 source_event_uuid=source_uuid,
                 canonical_fingerprint=_canonical_fingerprint(
-                    task_kind or "unknown", aliases, source_uuid
+                    task_kind or "unknown",
+                    typed_aliases,
                 ),
                 channel_relative_byte_offset=byte_offset,
+                native_alias_kinds=tuple(kind for kind, _ in typed_aliases),
                 detail=f"unknown task_notification status: {status!r}",
             ),
         )
@@ -373,11 +398,10 @@ def extract_lifecycle_issues(
                 agent_id = _coerce_str(tool_use_result.get("agentId"))
                 background_task_id = _coerce_str(tool_use_result.get("backgroundTaskId"))
                 if not (agent_id or background_task_id):
+                    typed_aliases_inner = (("tool_use_id", tool_use_id),)
                     aliases_inner: tuple[str, ...] = (tool_use_id,)
                     task_kind = "unknown"
-                    fingerprint = _canonical_fingerprint(
-                        task_kind, aliases_inner, source_uuid or "anonymous"
-                    )
+                    fingerprint = _canonical_fingerprint(task_kind, typed_aliases_inner)
                     issues.append(
                         LifecycleEvidenceIssue(
                             issue_kind=LifecycleEvidenceIssueKind.MALFORMED_IDENTITY,
@@ -386,6 +410,7 @@ def extract_lifecycle_issues(
                             source_event_uuid=source_uuid,
                             canonical_fingerprint=fingerprint,
                             channel_relative_byte_offset=byte_offset,
+                            native_alias_kinds=("tool_use_id",),
                             detail="terminal tool_result missing native identity",
                         )
                     )

@@ -27,10 +27,11 @@ Two distinct monotonic counters are tracked:
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from autoskillit.core import (
     ATTEMPT_TERMINAL_STATES,
+    CandidateSighting,
     ChildAttemptState,
     ChildLifecycleObservation,
     ChildLifecycleSnapshot,
@@ -38,6 +39,7 @@ from autoskillit.core import (
     CompletionCandidateSource,
     CompletionCandidateState,
     LifecycleEvidenceIssue,
+    LifecycleEvidenceIssueKind,
     LifecycleEvidenceResolution,
     ParentAssistantMarker,
     build_lifecycle_snapshot_from_attempts,
@@ -51,7 +53,45 @@ __all__ = [
 ]
 
 
-def _alias_keys(obs: ChildLifecycleObservation) -> tuple[tuple[str, ...], ...]:
+_AliasKey = tuple[str, str, str]
+_NativeEventKey = tuple[str, str]
+_ObservationProjection = tuple[
+    str,
+    str,
+    str,
+    str,
+    str,
+    ChildAttemptState,
+    str,
+    bool,
+    bool,
+    str,
+    str,
+    int,
+]
+_ProjectionKey = tuple[str, str, _ObservationProjection]
+_IssueKey = tuple[str, str, int, LifecycleEvidenceIssueKind]
+
+
+def _observation_projection(obs: ChildLifecycleObservation) -> _ObservationProjection:
+    """Return the offset-independent payload projected from one native event."""
+    return (
+        obs.task_kind,
+        obs.task_id,
+        obs.tool_use_id,
+        obs.agent_id,
+        obs.background_task_id,
+        obs.attempt_state,
+        obs.parent_turn_id,
+        obs.is_parent_declaration,
+        obs.is_user_result,
+        obs.replaces_native_uuid,
+        obs.replaced_by_native_uuid,
+        obs.attempt_generation,
+    )
+
+
+def _alias_keys(obs: ChildLifecycleObservation) -> tuple[_AliasKey, ...]:
     """Return the canonical alias key set used to correlate an observation.
 
     Each candidate key is a triple ``(task_kind, alias_kind, alias_value)``.
@@ -60,74 +100,47 @@ def _alias_keys(obs: ChildLifecycleObservation) -> tuple[tuple[str, ...], ...]:
     dropped so they cannot bridge two unrelated attempts.
     """
     if obs.task_kind == "Agent":
-        candidates: list[tuple[str, ...]] = []
+        agent_candidates: list[_AliasKey] = []
         for alias_kind, value in (
             ("tool_use_id", obs.tool_use_id),
             ("task_id", obs.task_id),
             ("agent_id", obs.agent_id),
         ):
             if value:
-                candidates.append((obs.task_kind, alias_kind, value))
-        if not candidates and obs.source_event_id:
-            candidates.append((obs.task_kind, "source", obs.source_event_id))
-        return tuple(candidates)
+                agent_candidates.append((obs.task_kind, alias_kind, value))
+        return tuple(agent_candidates)
     if obs.task_kind == "Bash":
-        candidates = []
+        bash_candidates: list[_AliasKey] = []
         for alias_kind, value in (
             ("tool_use_id", obs.tool_use_id),
             ("task_id", obs.task_id),
             ("background_task_id", obs.background_task_id),
         ):
             if value:
-                candidates.append((obs.task_kind, alias_kind, value))
-        if not candidates and obs.source_event_id:
-            candidates.append((obs.task_kind, "source", obs.source_event_id))
-        return tuple(candidates)
-    if obs.source_event_id:
-        return ((obs.task_kind, "source", obs.source_event_id),)
+                bash_candidates.append((obs.task_kind, alias_kind, value))
+        return tuple(bash_candidates)
     return ()
 
 
-def _persistent_identity_keys(obs: ChildLifecycleObservation) -> tuple[str, ...]:
-    """Return the persistent-identity key set used to correlate observations.
-
-    Persistent identities survive tool_use_id reuse / loss on the same
-    long-lived attempt: ``agent_id`` for Agent, ``background_task_id`` for
-    Bash, and ``task_id`` for either when the kind-specific identity is
-    blank. They are returned as bare strings (not tuples) so the
-    coordinator can index by them independently of alias keys.
-    """
-    if obs.task_kind == "Agent":
-        keys = []
-        if obs.agent_id:
-            keys.append(f"agent:{obs.agent_id}")
-        if obs.task_id:
-            keys.append(f"task:{obs.task_id}")
-        return tuple(keys)
-    if obs.task_kind == "Bash":
-        keys = []
-        if obs.background_task_id:
-            keys.append(f"bg:{obs.background_task_id}")
-        if obs.task_id:
-            keys.append(f"task:{obs.task_id}")
-        return tuple(keys)
-    return ()
+def _native_event_key(obs: ChildLifecycleObservation) -> _NativeEventKey | None:
+    if not obs.source_event_id:
+        return None
+    return (obs.task_kind, obs.source_event_id)
 
 
-def _is_stale_for_existing(
-    existing: _AttemptRecord, observation: ChildLifecycleObservation
-) -> bool:
-    """Return True when ``observation`` refers to a superseded generation of ``existing``.
+def _projection_key(obs: ChildLifecycleObservation) -> _ProjectionKey:
+    event_key = _native_event_key(obs)
+    if event_key is None:
+        return ("anonymous", "", _observation_projection(obs))
+    task_kind, source_event_id = event_key
+    return (task_kind, source_event_id, _observation_projection(obs))
 
-    Staleness requires a native replacement edge. Alias inequality alone
-    cannot prove that an observation belongs to an older generation.
-    """
-    replacement_edge = existing.observation.replaces_native_uuid
-    return bool(
-        existing.replaced
-        and replacement_edge
-        and observation.replaced_by_native_uuid == replacement_edge
-    )
+
+@dataclass(frozen=True, slots=True)
+class _AttemptId:
+    """Opaque invocation-local identity for one attempt generation."""
+
+    serial: int
 
 
 @dataclass
@@ -136,7 +149,12 @@ class _AttemptRecord:
 
     observation: ChildLifecycleObservation
     attempt_generation: int = 0
-    replaced: bool = False
+    declared: bool = False
+    aliases: set[_AliasKey] = field(default_factory=set)
+    pending_evidence: list[ChildLifecycleObservation] = field(default_factory=list)
+    predecessor_id: _AttemptId | None = None
+    successor_id: _AttemptId | None = None
+    satisfied: bool = False
 
 
 @dataclass
@@ -151,31 +169,33 @@ class ChildLifecycleCoordinator:
     process-exit signals may request catch-up but never synthesize one.
     """
 
-    _attempts: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
-    _awaiting_delivery: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
-    _completed: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
-    _unresolved_terminal: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
+    _attempts: dict[_AttemptId, _AttemptRecord] = field(default_factory=dict)
+    _awaiting_delivery: dict[_AttemptId, _AttemptRecord] = field(default_factory=dict)
+    _completed: dict[_AttemptId, _AttemptRecord] = field(default_factory=dict)
+    _unresolved_terminal: dict[_AttemptId, _AttemptRecord] = field(default_factory=dict)
+    _history: dict[_AttemptId, _AttemptRecord] = field(default_factory=dict)
+    _records: dict[_AttemptId, _AttemptRecord] = field(default_factory=dict)
+    _alias_index: dict[_AliasKey, set[_AttemptId]] = field(default_factory=dict)
+    _native_event_projections: dict[_NativeEventKey, set[_ObservationProjection]] = field(
+        default_factory=dict
+    )
+    _anonymous_projections: set[_ObservationProjection] = field(default_factory=set)
+    _replacement_index: dict[str, set[_AttemptId]] = field(default_factory=dict)
     _candidates: dict[str, CompletionCandidate] = field(default_factory=dict)
     _candidate_states: dict[str, CompletionCandidateState] = field(default_factory=dict)
     _parent_turn_counter: int = 0
     _parent_turn_generations: dict[str, int] = field(default_factory=dict)
     _last_deferred_parent_generation: dict[str, int] = field(default_factory=dict)
+    _next_attempt_id: int = 0
     _global_next_attempt_generation: int = 0
-    _identity_index: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    """Maps each persistent identity (``agent:<id>``, ``bg:<id>``,
-    ``task:<id>``) to the alias key currently bound to the active record
-    observation, so subsequent observations that lose their explicit alias
-    can still correlate via a shared persistent identity."""
-    _lifecycle_issues: dict[str, LifecycleEvidenceIssue] = field(default_factory=dict)
-    """Pending blocking-evidence issues keyed by canonical fingerprint.
+    _lifecycle_issues: dict[_IssueKey, LifecycleEvidenceIssue] = field(default_factory=dict)
+    """Blocking issues keyed by child identity and event provenance.
 
     An issue is cleared only when later valid evidence arrives carrying
     the same fingerprint; unrelated evidence never clears an issue, and
     unresolved issues fail closed through the actor's snapshot.
     """
-    _unmatched_evidence: list[ChildLifecycleObservation | ParentAssistantMarker] = field(
-        default_factory=list,
-    )
+    _unmatched_evidence: list[ChildLifecycleObservation] = field(default_factory=list)
     """Observations / markers retained when correlation cannot be established yet.
 
     Replayed whenever a new exact native alias makes correlation possible.
@@ -183,52 +203,246 @@ class ChildLifecycleCoordinator:
     link to a natively-linked replacement generation rather than being
     treated as an irreversible anonymous obligation.
     """
+    _retained_projection_keys: set[_ProjectionKey] = field(default_factory=set)
+    _replaying_unmatched: bool = False
 
-    def _find_existing(
-        self, observation: ChildLifecycleObservation
-    ) -> tuple[str, tuple[str, ...]] | None:
-        """Return ``(bucket_name, aliases)`` matching this observation, if any.
-
-        Scans every bucket (active/completed/unresolved) for an attempt
-        that shares at least one alias key OR is the target of the
-        observation's native ``replaces`` edge. Returns a tuple identifying
-        which bucket to mutate plus the canonical alias tuple to use as
-        the lookup key on the destination bucket.
-        """
-        for key in _alias_keys(observation):
-            if key in self._attempts:
-                return ("active", key)
-            if key in self._awaiting_delivery:
-                return ("awaiting_delivery", key)
-            if key in self._completed:
-                return ("completed", key)
-            if key in self._unresolved_terminal:
-                return ("unresolved_terminal", key)
-        for identity in _persistent_identity_keys(observation):
-            candidate_key = self._identity_index.get(identity)
-            if candidate_key is not None:
-                if candidate_key in self._attempts:
-                    return ("active", candidate_key)
-                if candidate_key in self._awaiting_delivery:
-                    return ("awaiting_delivery", candidate_key)
-                if candidate_key in self._completed:
-                    return ("completed", candidate_key)
-                if candidate_key in self._unresolved_terminal:
-                    return ("unresolved_terminal", candidate_key)
-        if observation.replaces_native_uuid:
-            for bucket_name, bucket in (
-                ("active", self._attempts),
-                ("awaiting_delivery", self._awaiting_delivery),
-                ("completed", self._completed),
-                ("unresolved_terminal", self._unresolved_terminal),
+    def _resolve_matching_issues(self, observation: ChildLifecycleObservation) -> None:
+        aliases = frozenset((kind, value) for _, kind, value in _alias_keys(observation))
+        if not aliases:
+            return
+        for issue_key, issue in tuple(self._lifecycle_issues.items()):
+            if issue.resolution is not LifecycleEvidenceResolution.PENDING:
+                continue
+            if issue.task_kind not in {observation.task_kind, "unknown"}:
+                continue
+            if not issue.native_alias_kinds or len(issue.native_alias_kinds) != len(
+                issue.native_aliases
             ):
-                for key, record in bucket.items():
-                    if (
-                        record.observation.replaced_by_native_uuid
-                        == observation.replaces_native_uuid
-                    ):
-                        return (bucket_name, key)
-        return None
+                continue
+            required_aliases = frozenset(
+                (kind, value)
+                for kind, value in zip(
+                    issue.native_alias_kinds,
+                    issue.native_aliases,
+                    strict=True,
+                )
+                if kind and value
+            )
+            if required_aliases and required_aliases.issubset(aliases):
+                self._resolve_issue_key(issue_key)
+
+    def _was_consumed(self, observation: ChildLifecycleObservation) -> bool:
+        projection = _observation_projection(observation)
+        event_key = _native_event_key(observation)
+        if event_key is None:
+            return projection in self._anonymous_projections
+        event_projections = self._native_event_projections.get(event_key)
+        return event_projections is not None and projection in event_projections
+
+    def _mark_consumed(self, observation: ChildLifecycleObservation) -> None:
+        projection = _observation_projection(observation)
+        event_key = _native_event_key(observation)
+        if event_key is None:
+            self._anonymous_projections.add(projection)
+        else:
+            self._native_event_projections.setdefault(event_key, set()).add(projection)
+        self._retained_projection_keys.discard(_projection_key(observation))
+
+    def _alias_matches(self, observation: ChildLifecycleObservation) -> set[_AttemptId]:
+        matches: set[_AttemptId] = set()
+        for alias in _alias_keys(observation):
+            matches.update(self._alias_index.get(alias, ()))
+        return matches
+
+    def _record_alias_conflict(
+        self,
+        observation: ChildLifecycleObservation,
+        attempt_ids: set[_AttemptId],
+    ) -> None:
+        aliases = _alias_keys(observation)
+        fingerprint_parts = [
+            observation.task_kind,
+            *(f"{kind}={value}" for _, kind, value in aliases),
+        ]
+        fingerprint = "alias-conflict:" + "|".join(fingerprint_parts)
+        ordered_ids = sorted(attempt_ids, key=lambda item: item.serial)
+        self.register_issue(
+            LifecycleEvidenceIssue(
+                issue_kind=LifecycleEvidenceIssueKind.ALIAS_CONFLICT,
+                task_kind=observation.task_kind,
+                native_aliases=tuple(value for _, _, value in aliases),
+                source_event_uuid=observation.source_event_id,
+                canonical_fingerprint=fingerprint,
+                channel_relative_byte_offset=observation.byte_offset,
+                native_alias_kinds=tuple(kind for _, kind, _ in aliases),
+                detail="aliases resolve to attempts "
+                + ",".join(str(item.serial) for item in ordered_ids),
+            )
+        )
+
+    def _new_attempt(
+        self,
+        observation: ChildLifecycleObservation,
+        *,
+        declared: bool,
+    ) -> tuple[_AttemptId, _AttemptRecord]:
+        self._next_attempt_id += 1
+        self._global_next_attempt_generation += 1
+        attempt_id = _AttemptId(self._next_attempt_id)
+        record = _AttemptRecord(
+            observation=observation,
+            attempt_generation=(
+                observation.attempt_generation or self._global_next_attempt_generation
+            ),
+            declared=declared,
+        )
+        self._records[attempt_id] = record
+        self._index_observation(attempt_id, record, observation)
+        return attempt_id, record
+
+    def _index_observation(
+        self,
+        attempt_id: _AttemptId,
+        record: _AttemptRecord,
+        observation: ChildLifecycleObservation,
+    ) -> None:
+        for alias in _alias_keys(observation):
+            record.aliases.add(alias)
+            self._alias_index.setdefault(alias, set()).add(attempt_id)
+        if observation.replaced_by_native_uuid:
+            self._replacement_index.setdefault(observation.replaced_by_native_uuid, set()).add(
+                attempt_id
+            )
+
+    def _remove_from_buckets(self, attempt_id: _AttemptId) -> None:
+        self._attempts.pop(attempt_id, None)
+        self._awaiting_delivery.pop(attempt_id, None)
+        self._completed.pop(attempt_id, None)
+        self._unresolved_terminal.pop(attempt_id, None)
+        self._history.pop(attempt_id, None)
+
+    def _place_record(
+        self,
+        attempt_id: _AttemptId,
+        record: _AttemptRecord,
+        bucket: dict[_AttemptId, _AttemptRecord],
+    ) -> None:
+        self._remove_from_buckets(attempt_id)
+        bucket[attempt_id] = record
+
+    @staticmethod
+    def _merged_observation(
+        current: ChildLifecycleObservation,
+        incoming: ChildLifecycleObservation,
+    ) -> ChildLifecycleObservation:
+        return ChildLifecycleObservation(
+            task_kind=incoming.task_kind,
+            task_id=incoming.task_id or current.task_id,
+            tool_use_id=incoming.tool_use_id or current.tool_use_id,
+            agent_id=incoming.agent_id or current.agent_id,
+            background_task_id=(incoming.background_task_id or current.background_task_id),
+            attempt_state=incoming.attempt_state,
+            source_event_id=incoming.source_event_id or current.source_event_id,
+            parent_turn_id=incoming.parent_turn_id or current.parent_turn_id,
+            byte_offset=incoming.byte_offset,
+            is_parent_declaration=(
+                incoming.is_parent_declaration or current.is_parent_declaration
+            ),
+            is_user_result=incoming.is_user_result,
+            replaces_native_uuid=(incoming.replaces_native_uuid or current.replaces_native_uuid),
+            replaced_by_native_uuid=(
+                incoming.replaced_by_native_uuid or current.replaced_by_native_uuid
+            ),
+            attempt_generation=(incoming.attempt_generation or current.attempt_generation),
+        )
+
+    def _apply_observation(
+        self,
+        attempt_id: _AttemptId,
+        record: _AttemptRecord,
+        observation: ChildLifecycleObservation,
+    ) -> None:
+        current_state = record.observation.attempt_state
+        merged = self._merged_observation(record.observation, observation)
+        if record.satisfied:
+            record.observation = replace(
+                merged,
+                attempt_state=current_state,
+                is_user_result=record.observation.is_user_result,
+            )
+            self._index_observation(attempt_id, record, observation)
+            self._place_record(attempt_id, record, self._history)
+            return
+        if current_state in {
+            ChildAttemptState.FAILED,
+            ChildAttemptState.CANCELLED,
+            ChildAttemptState.TIMED_OUT,
+        }:
+            record.observation = replace(
+                merged,
+                attempt_state=current_state,
+                is_user_result=(record.observation.is_user_result or observation.is_user_result),
+            )
+            self._index_observation(attempt_id, record, observation)
+            self._place_record(attempt_id, record, self._unresolved_terminal)
+            return
+
+        record.observation = merged
+        self._index_observation(attempt_id, record, observation)
+
+        if observation.attempt_state == ChildAttemptState.COMPLETED:
+            if observation.is_user_result:
+                self._place_record(attempt_id, record, self._completed)
+                self._satisfy_predecessor_chain(attempt_id)
+            else:
+                self._place_record(attempt_id, record, self._awaiting_delivery)
+        elif observation.attempt_state in ATTEMPT_TERMINAL_STATES:
+            self._place_record(attempt_id, record, self._unresolved_terminal)
+        else:
+            self._place_record(attempt_id, record, self._attempts)
+
+    def _link_replacement(
+        self,
+        predecessor_id: _AttemptId,
+        observation: ChildLifecycleObservation,
+        alias_match: _AttemptId | None,
+    ) -> tuple[_AttemptId, _AttemptRecord] | None:
+        predecessor = self._records[predecessor_id]
+        successor_ids = {
+            item
+            for item in (alias_match, predecessor.successor_id)
+            if item is not None and item != predecessor_id
+        }
+        if len(successor_ids) > 1:
+            self._record_alias_conflict(observation, successor_ids | {predecessor_id})
+            return None
+        if successor_ids:
+            successor_id = next(iter(successor_ids))
+            successor = self._records[successor_id]
+        else:
+            successor_id, successor = self._new_attempt(observation, declared=True)
+        successor.attempt_generation = max(
+            successor.attempt_generation,
+            predecessor.attempt_generation + 1,
+            observation.attempt_generation,
+        )
+
+        predecessor.successor_id = successor_id
+        successor.predecessor_id = predecessor_id
+        if predecessor_id not in self._unresolved_terminal:
+            self._place_record(predecessor_id, predecessor, self._history)
+        self._apply_observation(successor_id, successor, observation)
+        return successor_id, successor
+
+    def _satisfy_predecessor_chain(self, replacement_id: _AttemptId) -> None:
+        current = self._records[replacement_id].predecessor_id
+        while current is not None:
+            record = self._records[current]
+            predecessor = record.predecessor_id
+            record.satisfied = True
+            self._remove_from_buckets(current)
+            self._history[current] = record
+            current = predecessor
 
     def observe(self, observation: ChildLifecycleObservation) -> None:
         """Record one immutable observation in the appropriate bucket.
@@ -239,118 +453,142 @@ class ChildLifecycleCoordinator:
         advance attempt generation when they carry a native replacement
         edge, otherwise they remain awaiting delivery.
         """
-        keys = _alias_keys(observation)
-        primary = keys[0] if keys else None
-        if primary is None:
+        if self._was_consumed(observation):
             return
 
-        existing_match = self._find_existing(observation)
-        existing_key = existing_match[1] if existing_match else primary
-        _bucket_map = {
-            "active": self._attempts,
-            "awaiting_delivery": self._awaiting_delivery,
-            "completed": self._completed,
-            "unresolved_terminal": self._unresolved_terminal,
-        }
-        source_bucket = _bucket_map.get(
-            existing_match[0] if existing_match else "active", self._attempts
-        )
-        existing_record = source_bucket.pop(existing_key, None)
+        if not self._reduce_observation(observation):
+            self._retain_unmatched_evidence(observation)
+            return
+
+        self._mark_consumed(observation)
+        self._resolve_matching_issues(observation)
+        self._replay_unmatched_evidence()
+
+    def _reduce_observation(self, observation: ChildLifecycleObservation) -> bool:
+        """Reduce one projection, returning whether it was consumed successfully."""
+
+        alias_matches = self._alias_matches(observation)
+        if len(alias_matches) > 1:
+            self._record_alias_conflict(observation, alias_matches)
+            return False
+
+        alias_match = next(iter(alias_matches), None)
+        event_key = _native_event_key(observation)
 
         if (
-            existing_record is not None
-            and existing_match is not None
-            and existing_match[0] in {"completed", "unresolved_terminal"}
-            and observation.attempt_state not in ATTEMPT_TERMINAL_STATES
-            and not observation.is_user_result
+            alias_match is not None
+            and observation.is_user_result
+            and observation.attempt_state in ATTEMPT_TERMINAL_STATES
+            and observation.tool_use_id
+            and not self._alias_index.get(
+                (observation.task_kind, "tool_use_id", observation.tool_use_id)
+            )
         ):
-            # Terminal facts are irreversible. A late declaration or replay
-            # cannot resurrect a completed/failed attempt.
-            source_bucket[existing_key] = existing_record
-            return
+            return False
 
-        if observation.is_user_result:
-            if existing_record is not None and _is_stale_for_existing(
-                existing_record, observation
-            ):
-                # Late evidence for a superseded generation must not
-                # resurrect / collapse the live replacement record.
-                source_bucket[existing_key] = existing_record
-                return
-            if existing_record is None:
-                # Late user_result arrives before any declaration. There
-                # is no declared attempt to deliver against — record
-                # the evidence as an unresolved obligation so the audit
-                # trail surfaces why completion cannot be authorised.
-                self._global_next_attempt_generation += 1
-                attempt_generation = (
-                    observation.attempt_generation or self._global_next_attempt_generation
-                )
-                late_record = _AttemptRecord(
-                    observation=observation,
-                    attempt_generation=attempt_generation,
-                    replaced=bool(observation.replaced_by_native_uuid),
-                )
-                self._unresolved_terminal[existing_key] = late_record
-                return
-            existing_record.observation = observation
-            existing_record.replaced = bool(observation.replaced_by_native_uuid)
-            if observation.attempt_state == ChildAttemptState.COMPLETED:
-                self._completed[existing_key] = existing_record
-            elif observation.attempt_state in ATTEMPT_TERMINAL_STATES:
-                self._unresolved_terminal[existing_key] = existing_record
-            return
+        if observation.replaces_native_uuid:
+            predecessor_matches = self._replacement_index.get(
+                observation.replaces_native_uuid, set()
+            )
+            if len(predecessor_matches) > 1:
+                self._record_alias_conflict(observation, set(predecessor_matches))
+                return False
+            if not predecessor_matches:
+                return False
+            predecessor_id = next(iter(predecessor_matches))
+            if self._records[predecessor_id].satisfied:
+                return True
+            linked = self._link_replacement(
+                predecessor_id,
+                observation,
+                alias_match,
+            )
+            if linked is None:
+                return False
+            return True
 
-        if observation.attempt_state in ATTEMPT_TERMINAL_STATES:
-            if existing_record is not None and _is_stale_for_existing(
-                existing_record, observation
-            ):
-                source_bucket[existing_key] = existing_record
-                return
-            if existing_record is None:
-                # Late terminal evidence without an open attempt: still
-                # recorded as an outstanding obligation rather than
-                # silently dropped, since the audit trail must show why
-                # an obligation surfaced post-quiescence.
-                self._global_next_attempt_generation += 1
-                attempt_generation = (
-                    observation.attempt_generation or self._global_next_attempt_generation
-                )
-                late_record = _AttemptRecord(
-                    observation=observation,
-                    attempt_generation=attempt_generation,
-                    replaced=bool(observation.replaced_by_native_uuid),
-                )
-                self._unresolved_terminal[existing_key] = late_record
-                return
-            existing_record.observation = observation
-            existing_record.replaced = bool(observation.replaced_by_native_uuid)
-            if observation.attempt_state == ChildAttemptState.COMPLETED:
-                self._awaiting_delivery[existing_key] = existing_record
+        attempt_id = alias_match
+        if attempt_id is None:
+            aliases = _alias_keys(observation)
+            if not aliases and (event_key is None or observation.task_kind in {"Agent", "Bash"}):
+                return False
+            declared = observation.attempt_state not in ATTEMPT_TERMINAL_STATES
+            attempt_id, record = self._new_attempt(
+                observation,
+                declared=declared,
+            )
+            if declared:
+                self._place_record(attempt_id, record, self._attempts)
             else:
-                self._unresolved_terminal[existing_key] = existing_record
-            return
-
-        if existing_record is None:
-            self._global_next_attempt_generation += 1
-            attempt_generation = (
-                observation.attempt_generation or self._global_next_attempt_generation
-            )
-            existing_record = _AttemptRecord(
-                observation=observation,
-                attempt_generation=attempt_generation,
-                replaced=bool(observation.replaced_by_native_uuid),
-            )
+                record.pending_evidence.append(observation)
+                self._place_record(attempt_id, record, self._unresolved_terminal)
         else:
-            if observation.replaces_native_uuid:
-                existing_record.attempt_generation += 1
-            existing_record.observation = observation
-            existing_record.replaced = existing_record.replaced or bool(
-                observation.replaced_by_native_uuid
-            )
-        self._attempts[existing_key] = existing_record
-        for identity in _persistent_identity_keys(observation):
-            self._identity_index[identity] = existing_key
+            record = self._records[attempt_id]
+            if record.successor_id is not None:
+                if record.observation.attempt_state in {
+                    ChildAttemptState.FAILED,
+                    ChildAttemptState.CANCELLED,
+                    ChildAttemptState.TIMED_OUT,
+                } or observation.attempt_state in {
+                    ChildAttemptState.FAILED,
+                    ChildAttemptState.CANCELLED,
+                    ChildAttemptState.TIMED_OUT,
+                }:
+                    self._apply_observation(attempt_id, record, observation)
+                return True
+            if (
+                not record.declared
+                and observation.attempt_state not in ATTEMPT_TERMINAL_STATES
+                and not observation.is_user_result
+            ):
+                pending = tuple(record.pending_evidence)
+                record.pending_evidence.clear()
+                record.declared = True
+                record.observation = self._merged_observation(record.observation, observation)
+                self._index_observation(attempt_id, record, observation)
+                self._place_record(attempt_id, record, self._attempts)
+                for pending_observation in pending:
+                    self._apply_observation(attempt_id, record, pending_observation)
+            elif (
+                record.observation.attempt_state in ATTEMPT_TERMINAL_STATES
+                and observation.attempt_state not in ATTEMPT_TERMINAL_STATES
+            ):
+                self._apply_observation(attempt_id, record, observation)
+            else:
+                self._apply_observation(attempt_id, record, observation)
+
+        return True
+
+    def _replay_unmatched_evidence(self) -> None:
+        if self._replaying_unmatched or not self._unmatched_evidence:
+            return
+        self._replaying_unmatched = True
+        try:
+            while self._unmatched_evidence:
+                pending = tuple(self._unmatched_evidence)
+                self._unmatched_evidence.clear()
+                self._retained_projection_keys.clear()
+                made_progress = False
+                for evidence in pending:
+                    if self._was_consumed(evidence):
+                        continue
+                    if self._reduce_observation(evidence):
+                        self._mark_consumed(evidence)
+                        self._resolve_matching_issues(evidence)
+                        made_progress = True
+                    else:
+                        self._retain_unmatched_evidence(evidence)
+                if not made_progress:
+                    break
+        finally:
+            self._replaying_unmatched = False
+
+    def _retain_unmatched_evidence(self, evidence: ChildLifecycleObservation) -> None:
+        projection_key = _projection_key(evidence)
+        if projection_key in self._retained_projection_keys:
+            return
+        self._retained_projection_keys.add(projection_key)
+        self._unmatched_evidence.append(evidence)
 
     def register_parent_marker(self, marker: ParentAssistantMarker) -> CompletionCandidate:
         """Record one parent-assistant marker and synthesize its candidate.
@@ -360,7 +598,19 @@ class ChildLifecycleCoordinator:
         fingerprint, or the literal string ``"unknown"`` cannot bridge
         to a candidate.
         """
-        uuid = marker.native_uuid.strip()
+        sighting = CandidateSighting(
+            source=CompletionCandidateSource.CHANNEL_A,
+            native_uuid=marker.native_uuid,
+            native_message_id=marker.message_id,
+            channel_relative_byte_offset=marker.byte_offset,
+            backend_session_id=marker.backend_session_id,
+            record_provenance="parent_assistant_marker",
+        )
+        return self.register_candidate_sighting(sighting)
+
+    def register_candidate_sighting(self, sighting: CandidateSighting) -> CompletionCandidate:
+        """Register one channel-specific sighting without collapsing provenance."""
+        uuid = sighting.native_uuid.strip()
         if not uuid:
             raise ValueError("parent_marker_native_uuid_blank")
         if uuid.lower() == "unknown":
@@ -368,34 +618,42 @@ class ChildLifecycleCoordinator:
 
         generation = self._parent_turn_generations.get(uuid)
         if generation is None:
+            for candidate_id, state in tuple(self._candidate_states.items()):
+                if state is CompletionCandidateState.DEFERRED:
+                    self._candidate_states[candidate_id] = CompletionCandidateState.SUPERSEDED
             self._parent_turn_counter += 1
             generation = self._parent_turn_counter
             self._parent_turn_generations[uuid] = generation
         candidate = CompletionCandidate(
             candidate_id=uuid,
             parent_turn_generation=generation,
-            sources=(CompletionCandidateSource.CHANNEL_A,),
-            native_message_id=marker.message_id,
-            byte_offset=marker.byte_offset,
-            backend_session_id=marker.backend_session_id,
+            sources=(sighting.source,),
+            native_message_id=sighting.native_message_id,
+            byte_offset=sighting.channel_relative_byte_offset,
+            backend_session_id=sighting.backend_session_id,
+            sightings=(sighting,),
         )
         existing = self._candidates.get(uuid)
         if existing is None:
             self._candidates[uuid] = candidate
         else:
-            merged_sources = tuple({*existing.sources, *candidate.sources})
+            sightings = existing.sightings
+            if sighting not in sightings:
+                sightings = (*sightings, sighting)
+            merged_sources = tuple(dict.fromkeys(item.source for item in sightings))
             self._candidates[uuid] = CompletionCandidate(
                 candidate_id=existing.candidate_id,
                 parent_turn_generation=generation,
                 sources=merged_sources,
-                native_message_id=existing.native_message_id or candidate.native_message_id,
-                byte_offset=existing.byte_offset or candidate.byte_offset,
-                backend_session_id=existing.backend_session_id or candidate.backend_session_id,
+                native_message_id=existing.native_message_id,
+                byte_offset=existing.byte_offset,
+                backend_session_id=existing.backend_session_id,
+                sightings=sightings,
             )
         self._candidate_states.setdefault(uuid, CompletionCandidateState.DEFERRED)
         return self._candidates[uuid]
 
-    def supersede_candidate(self, candidate_id: str) -> None:
+    def _supersede_candidate(self, candidate_id: str) -> None:
         """Move one captured candidate to ``SUPERSEDED``.
 
         Deferred candidates become superseded after their obligations
@@ -431,7 +689,12 @@ class ChildLifecycleCoordinator:
         if candidate.parent_turn_generation <= last_deferred:
             return None
 
-        if self._attempts or self._awaiting_delivery or self._unresolved_terminal:
+        if (
+            self._attempts
+            or self._awaiting_delivery
+            or self._unresolved_terminal
+            or self._unmatched_evidence
+        ):
             # Record the deferred generation so a later parent-turn
             # generation can become ELIGIBLE.
             self._last_deferred_parent_generation[candidate_id] = candidate.parent_turn_generation
@@ -451,7 +714,7 @@ class ChildLifecycleCoordinator:
         if candidate is None:
             return
         self._last_deferred_parent_generation[candidate_id] = candidate.parent_turn_generation
-        self.supersede_candidate(candidate_id)
+        self._supersede_candidate(candidate_id)
 
     def snapshot(self) -> ChildLifecycleSnapshot:
         """Return the frozen snapshot for race resolution / diagnostics.
@@ -483,32 +746,41 @@ class ChildLifecycleCoordinator:
     def register_issue(self, issue: LifecycleEvidenceIssue) -> None:
         """Record a pending blocking-evidence issue.
 
-        Idempotent on canonical fingerprint: later observations with the
-        same fingerprint overwrite the existing entry but never merge
-        distinct issues into one record.
+        Exact duplicate event provenance is idempotent. Distinct source events,
+        offsets, or issue kinds for the same child fingerprint remain separate.
         """
-        self._lifecycle_issues[issue.canonical_fingerprint] = issue
+        issue_key = (
+            issue.canonical_fingerprint,
+            issue.source_event_uuid,
+            issue.channel_relative_byte_offset,
+            issue.issue_kind,
+        )
+        self._lifecycle_issues[issue_key] = issue
+
+    def _resolve_issue_key(self, issue_key: _IssueKey) -> bool:
+        issue = self._lifecycle_issues.get(issue_key)
+        if issue is None:
+            return False
+        self._lifecycle_issues[issue_key] = replace(
+            issue,
+            resolution=LifecycleEvidenceResolution.RESOLVED,
+        )
+        return True
 
     def resolve_issue(self, canonical_fingerprint: str) -> bool:
         """Mark one issue as resolved by canonical fingerprint.
 
-        Returns True when an issue was found and cleared; False when no
-        issue with that fingerprint was registered.
+        All independently retained events for that child fingerprint are
+        resolved. Returns False when no matching issue was registered.
         """
-        issue = self._lifecycle_issues.get(canonical_fingerprint)
-        if issue is None:
-            return False
-        self._lifecycle_issues[canonical_fingerprint] = LifecycleEvidenceIssue(
-            issue_kind=issue.issue_kind,
-            task_kind=issue.task_kind,
-            native_aliases=issue.native_aliases,
-            source_event_uuid=issue.source_event_uuid,
-            canonical_fingerprint=issue.canonical_fingerprint,
-            channel_relative_byte_offset=issue.channel_relative_byte_offset,
-            resolution=LifecycleEvidenceResolution.RESOLVED,
-            detail=issue.detail,
+        issue_keys = tuple(
+            issue_key
+            for issue_key in self._lifecycle_issues
+            if issue_key[0] == canonical_fingerprint
         )
-        return True
+        for issue_key in issue_keys:
+            self._resolve_issue_key(issue_key)
+        return bool(issue_keys)
 
     def has_pending_issues(self) -> bool:
         """Return True when any blocking issue is still ``PENDING``."""
@@ -517,33 +789,8 @@ class ChildLifecycleCoordinator:
             for issue in self._lifecycle_issues.values()
         )
 
-    def retain_unmatched_evidence(
-        self,
-        evidence: ChildLifecycleObservation | ParentAssistantMarker,
-    ) -> None:
-        """Retain one observation / marker for later correlation.
 
-        Terminal-before-declaration evidence is retained here so a
-        later natively-linked replacement can satisfy it; raw declaration
-        evidence whose aliases cannot yet be resolved is also retained.
-        """
-        self._unmatched_evidence.append(evidence)
-
-    def drain_unmatched_evidence(
-        self,
-    ) -> tuple[ChildLifecycleObservation | ParentAssistantMarker, ...]:
-        """Return and clear the retained unmatched evidence list.
-
-        Callers re-ingest every returned item through ``observe`` /
-        ``register_parent_marker``; items that still cannot be correlated
-        will be retained again on the next call.
-        """
-        items = tuple(self._unmatched_evidence)
-        self._unmatched_evidence.clear()
-        return items
-
-
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ChildLifecycleCoordinatorHandle:
     """Thin handle exposing only the methods the actor needs.
 
@@ -552,53 +799,39 @@ class ChildLifecycleCoordinatorHandle:
     the producer side free of any reducer mutation rights.
     """
 
-    coordinator: ChildLifecycleCoordinator
+    _coordinator: ChildLifecycleCoordinator
 
     def observe(self, observation: ChildLifecycleObservation) -> None:
-        self.coordinator.observe(observation)
+        self._coordinator.observe(observation)
 
     def register_parent_marker(self, marker: ParentAssistantMarker) -> CompletionCandidate:
-        return self.coordinator.register_parent_marker(marker)
+        return self._coordinator.register_parent_marker(marker)
 
-    def supersede_candidate(self, candidate_id: str) -> None:
-        self.coordinator.supersede_candidate(candidate_id)
+    def register_candidate_sighting(self, sighting: CandidateSighting) -> CompletionCandidate:
+        return self._coordinator.register_candidate_sighting(sighting)
 
     def evaluate_candidate(self, candidate_id: str) -> CompletionCandidate | None:
-        return self.coordinator.evaluate_candidate(candidate_id)
+        return self._coordinator.evaluate_candidate(candidate_id)
 
     def get_candidate(self, candidate_id: str) -> CompletionCandidate | None:
-        return self.coordinator.get_candidate(candidate_id)
+        return self._coordinator.get_candidate(candidate_id)
 
     def note_child_work_failed(self, candidate_id: str) -> None:
-        self.coordinator.note_child_work_failed(candidate_id)
+        self._coordinator.note_child_work_failed(candidate_id)
 
     def register_issue(self, issue: LifecycleEvidenceIssue) -> None:
-        self.coordinator.register_issue(issue)
-
-    def resolve_issue(self, canonical_fingerprint: str) -> bool:
-        return self.coordinator.resolve_issue(canonical_fingerprint)
+        self._coordinator.register_issue(issue)
 
     def has_pending_issues(self) -> bool:
-        return self.coordinator.has_pending_issues()
-
-    def retain_unmatched_evidence(
-        self,
-        evidence: ChildLifecycleObservation | ParentAssistantMarker,
-    ) -> None:
-        self.coordinator.retain_unmatched_evidence(evidence)
-
-    def drain_unmatched_evidence(
-        self,
-    ) -> tuple[ChildLifecycleObservation | ParentAssistantMarker, ...]:
-        return self.coordinator.drain_unmatched_evidence()
+        return self._coordinator.has_pending_issues()
 
     def snapshot(self) -> ChildLifecycleSnapshot:
-        return self.coordinator.snapshot()
+        return self._coordinator.snapshot()
 
 
 def make_coordinator_handle() -> ChildLifecycleCoordinatorHandle:
     """Build a fresh handle for one invocation."""
-    return ChildLifecycleCoordinatorHandle(coordinator=ChildLifecycleCoordinator())
+    return ChildLifecycleCoordinatorHandle(_coordinator=ChildLifecycleCoordinator())
 
 
 def tick(

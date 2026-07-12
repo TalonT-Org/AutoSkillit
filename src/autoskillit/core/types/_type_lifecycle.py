@@ -87,11 +87,12 @@ class LifecycleEvidenceResolution(Enum):
 class LifecycleEvidenceIssue:
     """Typed blocking-evidence record captured by the Channel A normalizer.
 
-    Resolution is gated by exact canonical fingerprint match: an issue is
-    cleared only when later valid evidence arrives carrying the same
-    ``canonical_fingerprint``. Unrelated evidence never clears an issue,
-    and unresolved issues fail closed through the actor's race/result
-    carriers into headless retry adjudication.
+    Resolution is gated by the canonical child fingerprint: later evidence
+    must carry every nonblank native alias in the same task-kind scope.
+    Per-event UUID is retained as provenance but excluded from child identity,
+    so a corrected later record can resolve malformed evidence. Unrelated or
+    partial evidence never clears an issue, and unresolved issues fail closed
+    through the actor's race/result carriers into headless retry adjudication.
     """
 
     issue_kind: LifecycleEvidenceIssueKind
@@ -99,11 +100,18 @@ class LifecycleEvidenceIssue:
     native_aliases: tuple[str, ...]
     source_event_uuid: str
     canonical_fingerprint: str
-    """Stable identifier derived from (task_kind, native_aliases, source_event_uuid).
+    """Stable identifier derived from ``(task_kind, nonblank native_aliases)``.
 
-    Resolution requires an exact match from later valid evidence.
+    ``source_event_uuid`` is deliberately excluded because a corrected record
+    is a distinct event for the same canonical child.
     """
     channel_relative_byte_offset: int
+    native_alias_kinds: tuple[str, ...] = ()
+    """Alias-kind names parallel to ``native_aliases``.
+
+    Resolution compares exact ``(kind, value)`` pairs. An empty or
+    length-mismatched tuple is invalid evidence and remains pending fail-closed.
+    """
     resolution: LifecycleEvidenceResolution = LifecycleEvidenceResolution.PENDING
     detail: str = ""
 

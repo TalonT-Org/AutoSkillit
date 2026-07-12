@@ -19,7 +19,16 @@ from typing import Any
 import anyio
 import pytest
 
-from autoskillit.core import BackendEventKind, LifecycleDecision
+from autoskillit.core import (
+    BackendEventKind,
+    ChildAttemptState,
+    ChildLifecycleObservation,
+    CompletionCandidateState,
+    LifecycleDecision,
+    LifecycleEvidenceIssue,
+    LifecycleEvidenceIssueKind,
+    ParentAssistantMarker,
+)
 from autoskillit.execution.process._channel_a_pump import (
     ChannelABatch,
     ChannelACatchUpCommand,
@@ -260,6 +269,182 @@ class TestActorDecisions:
 
         # No candidate exists, so no decision was emitted
         assert all(d[0] is not LifecycleDecision.ELIGIBLE for d in decisions)
+
+    def test_superseded_candidate_cannot_steal_child_work_failed(self) -> None:
+        from autoskillit.execution.process._lifecycle_actor import (
+            _evaluate_candidates,
+            _register_observations,
+            _register_parent_markers,
+        )
+
+        envelope = make_actor_envelope()
+        decisions: list[LifecycleDecision] = []
+        _register_observations(
+            envelope,
+            ChannelABatch(
+                records=(),
+                observations=(
+                    ChildLifecycleObservation(
+                        task_kind="Agent",
+                        tool_use_id="toolu_failed",
+                        agent_id="agent_failed",
+                    ),
+                    ChildLifecycleObservation(
+                        task_kind="Agent",
+                        tool_use_id="toolu_failed",
+                        agent_id="agent_failed",
+                        attempt_state=ChildAttemptState.FAILED,
+                        is_user_result=True,
+                    ),
+                ),
+                parent_markers=(),
+                byte_offset=10,
+            ),
+        )
+        _register_parent_markers(
+            envelope,
+            (
+                ParentAssistantMarker("a-old", "msg-old", 11),
+                ParentAssistantMarker("z-new", "msg-new", 12),
+            ),
+        )
+
+        _evaluate_candidates(
+            envelope,
+            lambda decision, _candidate: decisions.append(decision),
+        )
+
+        assert decisions == [LifecycleDecision.CHILD_WORK_FAILED]
+        assert envelope.last_snapshot is not None
+        assert envelope.handle.snapshot().candidate_states == (
+            ("a-old", CompletionCandidateState.SUPERSEDED),
+            ("z-new", CompletionCandidateState.SUPERSEDED),
+        )
+
+    def test_pending_issue_blocks_until_exact_child_identity_resolves(self) -> None:
+        from autoskillit.execution.process._lifecycle_actor import (
+            _evaluate_candidates,
+            _register_observations,
+            _register_parent_markers,
+        )
+
+        envelope = make_actor_envelope()
+        decisions: list[tuple[LifecycleDecision, str | None]] = []
+        _register_observations(
+            envelope,
+            ChannelABatch(
+                records=(),
+                observations=(),
+                parent_markers=(),
+                byte_offset=1,
+                lifecycle_issues=(
+                    LifecycleEvidenceIssue(
+                        issue_kind=LifecycleEvidenceIssueKind.UNKNOWN_STATUS,
+                        task_kind="Agent",
+                        native_aliases=("toolu_issue", "agent_issue"),
+                        source_event_uuid="event-bad",
+                        canonical_fingerprint="Agent|toolu_issue|agent_issue",
+                        channel_relative_byte_offset=1,
+                        native_alias_kinds=("tool_use_id", "agent_id"),
+                    ),
+                ),
+            ),
+        )
+        _register_parent_markers(
+            envelope,
+            (ParentAssistantMarker("uuid-old", "msg-old", 2),),
+        )
+        _evaluate_candidates(
+            envelope,
+            lambda decision, candidate: decisions.append(
+                (decision, candidate.candidate_id if candidate else None)
+            ),
+        )
+        assert decisions == []
+
+        _register_observations(
+            envelope,
+            ChannelABatch(
+                records=(),
+                observations=(
+                    ChildLifecycleObservation(
+                        task_kind="Agent",
+                        tool_use_id="toolu_issue",
+                        agent_id="agent_issue",
+                        source_event_id="event-valid-launch",
+                    ),
+                    ChildLifecycleObservation(
+                        task_kind="Agent",
+                        tool_use_id="toolu_issue",
+                        agent_id="agent_issue",
+                        attempt_state=ChildAttemptState.COMPLETED,
+                        source_event_id="event-valid-delivery",
+                        is_user_result=True,
+                    ),
+                ),
+                parent_markers=(),
+                byte_offset=3,
+            ),
+        )
+        _register_parent_markers(
+            envelope,
+            (ParentAssistantMarker("uuid-new", "msg-new", 4),),
+        )
+        _evaluate_candidates(
+            envelope,
+            lambda decision, candidate: decisions.append(
+                (decision, candidate.candidate_id if candidate else None)
+            ),
+        )
+
+        assert decisions == [(LifecycleDecision.ELIGIBLE, "uuid-new")]
+
+    def test_malformed_system_terminal_blocks_parent_candidate(self) -> None:
+        from autoskillit.execution.backends._claude_lifecycle import (
+            extract_lifecycle_issues,
+        )
+        from autoskillit.execution.process._lifecycle_actor import (
+            _evaluate_candidates,
+            _register_observations,
+            _register_parent_markers,
+        )
+
+        (issue,) = extract_lifecycle_issues(
+            {
+                "type": "system",
+                "subtype": "task_notification",
+                "status": "completed",
+                "uuid": "event-malformed",
+                "task_id": "task-X",
+                "tool_use_id": "toolu-X",
+            },
+            "system",
+            byte_offset=10,
+        )
+        envelope = make_actor_envelope()
+        decisions: list[LifecycleDecision] = []
+        _register_observations(
+            envelope,
+            ChannelABatch(
+                records=(),
+                observations=(),
+                parent_markers=(),
+                lifecycle_issues=(issue,),
+                byte_offset=10,
+            ),
+        )
+        _register_parent_markers(
+            envelope,
+            (ParentAssistantMarker("uuid-marker", "msg-marker", 11),),
+        )
+
+        _evaluate_candidates(
+            envelope,
+            lambda decision, _candidate: decisions.append(decision),
+        )
+
+        assert decisions == []
+        assert envelope.handle.has_pending_issues()
 
 
 class TestCatchUpTimeout:

@@ -35,6 +35,7 @@ from anyio.streams.memory import MemoryObjectSendStream
 from autoskillit.core import (
     ChildLifecycleSnapshot,
     CompletionCandidate,
+    CompletionCandidateState,
     LifecycleDecision,
     ParentAssistantMarker,
     get_logger,
@@ -381,6 +382,8 @@ def _evaluate_candidates(
         envelope.last_eligible_candidate = None
         return
     for candidate_id, state in snapshot.candidate_states:
+        if state is not CompletionCandidateState.DEFERRED:
+            continue
         candidate = envelope.handle.get_candidate(candidate_id)
         if candidate is None:
             continue
@@ -391,11 +394,10 @@ def _evaluate_candidates(
             envelope.last_eligible_candidate = None
             on_decision(decision, None)
             return
-        if state.value == "deferred":
-            promoted = envelope.handle.evaluate_candidate(candidate_id)
-            if promoted is not None:
-                eligible = promoted
-                decision = LifecycleDecision.ELIGIBLE
+        promoted = envelope.handle.evaluate_candidate(candidate_id)
+        if promoted is not None:
+            eligible = promoted
+            decision = LifecycleDecision.ELIGIBLE
     envelope.last_decision = decision
     envelope.last_eligible_candidate = eligible
     if decision is LifecycleDecision.ELIGIBLE:

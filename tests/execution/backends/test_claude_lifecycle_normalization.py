@@ -428,6 +428,75 @@ class TestProvenanceRules:
         assert result.marker.backend_session_id == "channel-b-session"
 
 
+class TestLifecycleIssueFingerprint:
+    @staticmethod
+    def _unknown_status(*, uuid: str, agent_id: str = "agent_X") -> dict[str, Any]:
+        return {
+            "type": "system",
+            "subtype": "task_notification",
+            "status": "mystery",
+            "uuid": uuid,
+            "task_id": "task_X",
+            "tool_use_id": "toolu_X",
+            "agent_id": agent_id,
+        }
+
+    def test_event_uuid_is_provenance_not_child_fingerprint(self) -> None:
+        (first,) = extract_lifecycle_issues(
+            self._unknown_status(uuid="event-1"),
+            "system",
+        )
+        (second,) = extract_lifecycle_issues(
+            self._unknown_status(uuid="event-2"),
+            "system",
+        )
+
+        assert first.source_event_uuid == "event-1"
+        assert second.source_event_uuid == "event-2"
+        assert first.canonical_fingerprint == second.canonical_fingerprint
+        assert first.native_alias_kinds == (
+            "task_id",
+            "tool_use_id",
+            "agent_id",
+            "background_task_id",
+        )
+        assert len(first.native_alias_kinds) == len(first.native_aliases)
+
+    def test_distinct_alias_set_changes_child_fingerprint(self) -> None:
+        (first,) = extract_lifecycle_issues(
+            self._unknown_status(uuid="event-1", agent_id="agent-A"),
+            "system",
+        )
+        (second,) = extract_lifecycle_issues(
+            self._unknown_status(uuid="event-1", agent_id="agent-B"),
+            "system",
+        )
+
+        assert first.canonical_fingerprint != second.canonical_fingerprint
+
+    def test_recognized_terminal_without_native_kind_is_malformed(self) -> None:
+        record = {
+            "type": "system",
+            "subtype": "task_notification",
+            "status": "completed",
+            "uuid": "event-malformed",
+            "task_id": "task-X",
+            "tool_use_id": "toolu-X",
+        }
+
+        assert extract_lifecycle_observations(record, "system") == ()
+        (issue,) = extract_lifecycle_issues(record, "system", byte_offset=99)
+        assert issue.issue_kind.value == "malformed_identity"
+        assert issue.source_event_uuid == "event-malformed"
+        assert issue.channel_relative_byte_offset == 99
+        assert issue.native_alias_kinds == (
+            "task_id",
+            "tool_use_id",
+            "agent_id",
+            "background_task_id",
+        )
+
+
 class TestSourceOnlyCandidates:
     def test_sources_remain_separate(self) -> None:
         # Source attribution is coordinator-side; the helper never

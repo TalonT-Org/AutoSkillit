@@ -37,6 +37,8 @@ from autoskillit.core import (
     CompletionCandidate,
     CompletionCandidateSource,
     CompletionCandidateState,
+    LifecycleEvidenceIssue,
+    LifecycleEvidenceResolution,
     ParentAssistantMarker,
     build_lifecycle_snapshot_from_attempts,
 )
@@ -163,6 +165,23 @@ class ChildLifecycleCoordinator:
     ``task:<id>``) to the alias key currently bound to the active record
     observation, so subsequent observations that lose their explicit alias
     can still correlate via a shared persistent identity."""
+    _lifecycle_issues: dict[str, LifecycleEvidenceIssue] = field(default_factory=dict)
+    """Pending blocking-evidence issues keyed by canonical fingerprint.
+
+    An issue is cleared only when later valid evidence arrives carrying
+    the same fingerprint; unrelated evidence never clears an issue, and
+    unresolved issues fail closed through the actor's snapshot.
+    """
+    _unmatched_evidence: list[ChildLifecycleObservation | ParentAssistantMarker] = field(
+        default_factory=list,
+    )
+    """Observations / markers retained when correlation cannot be established yet.
+
+    Replayed whenever a new exact native alias makes correlation possible.
+    Terminal-before-declaration evidence is retained here so it can later
+    link to a natively-linked replacement generation rather than being
+    treated as an irreversible anonymous obligation.
+    """
 
     def _find_existing(
         self, observation: ChildLifecycleObservation
@@ -446,6 +465,7 @@ class ChildLifecycleCoordinator:
         completed = tuple(record.observation for record in self._completed.values())
         unresolved = tuple(record.observation for record in self._unresolved_terminal.values())
         last_deferred = max(self._last_deferred_parent_generation.values(), default=0)
+        lifecycle_issues = tuple(self._lifecycle_issues.values())
         return build_lifecycle_snapshot_from_attempts(
             active=active,
             completed=completed,
@@ -453,7 +473,70 @@ class ChildLifecycleCoordinator:
             candidate_states=candidate_states,
             eligible_candidate=None,
             last_deferred_parent_generation=last_deferred,
+            lifecycle_issues=lifecycle_issues,
         )
+
+    def register_issue(self, issue: LifecycleEvidenceIssue) -> None:
+        """Record a pending blocking-evidence issue.
+
+        Idempotent on canonical fingerprint: later observations with the
+        same fingerprint overwrite the existing entry but never merge
+        distinct issues into one record.
+        """
+        self._lifecycle_issues[issue.canonical_fingerprint] = issue
+
+    def resolve_issue(self, canonical_fingerprint: str) -> bool:
+        """Mark one issue as resolved by canonical fingerprint.
+
+        Returns True when an issue was found and cleared; False when no
+        issue with that fingerprint was registered.
+        """
+        issue = self._lifecycle_issues.get(canonical_fingerprint)
+        if issue is None:
+            return False
+        self._lifecycle_issues[canonical_fingerprint] = LifecycleEvidenceIssue(
+            issue_kind=issue.issue_kind,
+            task_kind=issue.task_kind,
+            native_aliases=issue.native_aliases,
+            source_event_uuid=issue.source_event_uuid,
+            canonical_fingerprint=issue.canonical_fingerprint,
+            channel_relative_byte_offset=issue.channel_relative_byte_offset,
+            resolution=LifecycleEvidenceResolution.RESOLVED,
+            detail=issue.detail,
+        )
+        return True
+
+    def has_pending_issues(self) -> bool:
+        """Return True when any blocking issue is still ``PENDING``."""
+        return any(
+            issue.resolution == LifecycleEvidenceResolution.PENDING
+            for issue in self._lifecycle_issues.values()
+        )
+
+    def retain_unmatched_evidence(
+        self,
+        evidence: ChildLifecycleObservation | ParentAssistantMarker,
+    ) -> None:
+        """Retain one observation / marker for later correlation.
+
+        Terminal-before-declaration evidence is retained here so a
+        later natively-linked replacement can satisfy it; raw declaration
+        evidence whose aliases cannot yet be resolved is also retained.
+        """
+        self._unmatched_evidence.append(evidence)
+
+    def drain_unmatched_evidence(
+        self,
+    ) -> tuple[ChildLifecycleObservation | ParentAssistantMarker, ...]:
+        """Return and clear the retained unmatched evidence list.
+
+        Callers re-ingest every returned item through ``observe`` /
+        ``register_parent_marker``; items that still cannot be correlated
+        will be retained again on the next call.
+        """
+        items = tuple(self._unmatched_evidence)
+        self._unmatched_evidence.clear()
+        return items
 
 
 @dataclass
@@ -484,6 +567,26 @@ class ChildLifecycleCoordinatorHandle:
 
     def note_child_work_failed(self, candidate_id: str) -> None:
         self.coordinator.note_child_work_failed(candidate_id)
+
+    def register_issue(self, issue: LifecycleEvidenceIssue) -> None:
+        self.coordinator.register_issue(issue)
+
+    def resolve_issue(self, canonical_fingerprint: str) -> bool:
+        return self.coordinator.resolve_issue(canonical_fingerprint)
+
+    def has_pending_issues(self) -> bool:
+        return self.coordinator.has_pending_issues()
+
+    def retain_unmatched_evidence(
+        self,
+        evidence: ChildLifecycleObservation | ParentAssistantMarker,
+    ) -> None:
+        self.coordinator.retain_unmatched_evidence(evidence)
+
+    def drain_unmatched_evidence(
+        self,
+    ) -> tuple[ChildLifecycleObservation | ParentAssistantMarker, ...]:
+        return self.coordinator.drain_unmatched_evidence()
 
     def snapshot(self) -> ChildLifecycleSnapshot:
         return self.coordinator.snapshot()

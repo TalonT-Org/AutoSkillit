@@ -21,7 +21,6 @@ from autoskillit.core import fast_loads as _fast_loads
 from autoskillit.execution.process._process_monitor import (
     ProcessActivityTracker,
     _has_active_api_connection,
-    _has_active_child_processes,
     _has_active_execution_marker,
     _heartbeat,
     _session_log_monitor,
@@ -318,11 +317,6 @@ async def _watch_child_activity(
     returns True, pushes ``timeout_scope.deadline`` forward (up to
     ``max_extension_seconds`` beyond the original deadline).
 
-    The ``activity_tracker`` parameter allows the caller to inject a fresh
-    invocation-local tracker. When omitted (legacy path), the module-level
-    default tracker is used; new code paths MUST inject a per-invocation tracker
-    so concurrent runs cannot share CPU baselines.
-
     Terminates when trigger fires (session completed normally). Crash is
     fail-closed — anyio propagates exceptions in the task group, cancelling
     siblings.
@@ -342,11 +336,7 @@ async def _watch_child_activity(
             _first_observed_deadline = scope.deadline
 
         active = (
-            (
-                activity_tracker.has_active_children(pid)
-                if activity_tracker is not None
-                else _has_active_child_processes(pid)
-            )
+            (activity_tracker.has_active_children(pid) if activity_tracker is not None else False)
             or _has_active_api_connection(pid)
             or (
                 marker_dir is not None
@@ -454,6 +444,7 @@ async def _watch_session_log(
     max_suppression_seconds: float | None = None,
     marker_dir: Path | None = None,
     marker_scope_session_id: str | None = None,
+    activity_tracker: ProcessActivityTracker | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -481,6 +472,8 @@ async def _watch_session_log(
         _monitor_kwargs["marker_dir"] = marker_dir
     if marker_scope_session_id is not None:
         _monitor_kwargs["caller_session_id"] = marker_scope_session_id
+    if activity_tracker is not None:
+        _monitor_kwargs["activity_tracker"] = activity_tracker
     monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,

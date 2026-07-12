@@ -135,14 +135,21 @@ class _OwnedProcessFinalizer:
                             identity.root_pid,
                             min(0.25, remaining_budget),
                         )
-            retained = tuple(
-                identity
-                for identity in self.tracker.snapshot_identities()
-                if is_pid_present(identity.root_pid)
-            )
+            retained = []
+            unknown = []
+            for identity in self.tracker.snapshot_identities():
+                if is_pid_alive(
+                    identity.root_pid,
+                    identity.starttime_ticks,
+                    identity.fallback_create_time,
+                ):
+                    retained.append(identity)
+                elif is_pid_present(identity.root_pid):
+                    unknown.append(identity)
             self.outcome = CleanupOutcome(
-                succeeded=not retained and not scope.cancel_called,
+                succeeded=not retained and not unknown and not scope.cancel_called,
                 budget_exhausted=scope.cancel_called,
-                retained_identities=retained,
+                retained_identities=tuple(retained),
+                unknown_identities=tuple(unknown),
             )
             return self.outcome

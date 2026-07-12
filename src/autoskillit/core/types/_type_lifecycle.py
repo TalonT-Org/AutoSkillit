@@ -23,6 +23,7 @@ from typing import Any
 __all__ = [
     "ATTEMPT_ACTIVE_STATES",
     "ATTEMPT_TERMINAL_STATES",
+    "CandidateSighting",
     "ChildAttemptState",
     "ChildLifecycleObservation",
     "ChildLifecycleSnapshot",
@@ -141,9 +142,10 @@ class CompletionCandidateSource(Enum):
 
 @unique
 class ChildObligationState(Enum):
-    """Derived state of one child-obligation tuple (active/satisfied/unresolved)."""
+    """Derived state of one child-obligation tuple (active/satisfied/unresolved/awaiting)."""
 
     ACTIVE = "active"
+    AWAITING_DELIVERY = "awaiting_delivery"
     SATISFIED = "satisfied"
     UNRESOLVED_TERMINAL = "unresolved_terminal"
 
@@ -246,13 +248,32 @@ class ParentAssistantMarker:
 
 
 @dataclass(frozen=True, slots=True)
+class CandidateSighting:
+    """Primitive-only frozen per-channel sighting value for a completion candidate.
+
+    Each channel (A or B) that observes a parent-assistant marker record
+    contributes one sighting with its own offset, session identity, and
+    provenance. A/B offsets are non-interchangeable: ``channel_relative_byte_offset``
+    is relative to the channel's own byte universe.
+    """
+
+    source: CompletionCandidateSource
+    native_uuid: str
+    native_message_id: str = ""
+    channel_relative_byte_offset: int = 0
+    backend_session_id: str = ""
+    record_provenance: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class CompletionCandidate:
     """Provenance-rich completion candidate used to authorize completion.
 
     ``candidate_id`` is the native string UUID of the parent-assistant marker.
     ``parent_turn_generation`` is monotonic per distinct UUID; eligibility
     requires it to exceed the last deferred parent-turn generation observed
-    for that UUID.
+    for that UUID. ``sightings`` carries a per-channel provenance tuple so
+    A-relative and B-relative offsets remain distinct.
     """
 
     candidate_id: str
@@ -261,6 +282,7 @@ class CompletionCandidate:
     native_message_id: str
     byte_offset: int
     backend_session_id: str = ""
+    sightings: tuple[CandidateSighting, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +321,8 @@ class ChildLifecycleSnapshot:
     Cleared issues remain in the tuple with ``LifecycleEvidenceResolution.RESOLVED``
     so downstream consumers can audit what blocked and what cleared.
     """
+    awaiting_delivery: tuple[ChildLifecycleObservation, ...] = ()
+    """Children with terminal process evidence but no user tool_result delivery yet."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -364,6 +388,12 @@ class CleanupOutcome:
     budget_exhausted: bool
     retained_identities: tuple[ProcessIdentity, ...] = ()
     """Any owned process identity whose removal was deferred past the budget."""
+    unknown_identities: tuple[ProcessIdentity, ...] = ()
+    """Identities that could not be classified during verification.
+
+    Distinct from retained (verified alive); these survived enumeration
+    but identity verification failed (PID reuse, access denied, etc.).
+    """
 
 
 def build_lifecycle_snapshot_from_attempts(
@@ -374,6 +404,7 @@ def build_lifecycle_snapshot_from_attempts(
     eligible_candidate: CompletionCandidate | None = None,
     last_deferred_parent_generation: int = 0,
     lifecycle_issues: tuple[LifecycleEvidenceIssue, ...] = (),
+    awaiting_delivery: tuple[ChildLifecycleObservation, ...] = (),
 ) -> ChildLifecycleSnapshot:
     """Build a frozen lifecycle snapshot from reducer-private buckets.
 
@@ -391,4 +422,5 @@ def build_lifecycle_snapshot_from_attempts(
         eligible_candidate=eligible_candidate,
         last_deferred_parent_generation=last_deferred_parent_generation,
         lifecycle_issues=tuple(lifecycle_issues),
+        awaiting_delivery=tuple(awaiting_delivery),
     )

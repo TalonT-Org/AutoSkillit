@@ -168,22 +168,6 @@ class ProcessActivityTracker:
         return active
 
 
-# Module-level convenience accessor retained for legacy callers; new code
-# must inject a fresh ``ProcessActivityTracker`` per invocation so concurrent
-# runs cannot share CPU baselines.
-_default_activity_tracker = ProcessActivityTracker()
-
-
-def _has_active_child_processes(pid: int) -> bool:
-    """Convenience wrapper for legacy callers.
-
-    New code should inject a fresh ``ProcessActivityTracker`` so concurrent
-    invocations do not share CPU baselines; this default is only retained
-    for tests and one-off diagnostic paths.
-    """
-    return _default_activity_tracker.has_active_children(pid)
-
-
 def _has_active_execution_marker(
     marker_dir: Path,
     session_id: str | None = None,
@@ -224,6 +208,7 @@ async def _session_log_monitor(
     max_suppression_seconds: float = 1800.0,
     marker_dir: Path | None = None,
     caller_session_id: str | None = None,
+    activity_tracker: ProcessActivityTracker | None = None,
 ) -> SessionMonitorResult:
     """Watch Claude Code session log for completion or staleness.
 
@@ -399,7 +384,11 @@ async def _session_log_monitor(
                         elapsed,
                         pid,
                     )
-                elif pid is not None and _has_active_child_processes(pid):
+                elif (
+                    pid is not None
+                    and activity_tracker is not None
+                    and activity_tracker.has_active_children(pid)
+                ):
                     if suppression_start is None:
                         suppression_start = _time.monotonic()
                     if _time.monotonic() - suppression_start >= max_suppression_seconds:

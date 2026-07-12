@@ -66,7 +66,6 @@ from autoskillit.execution.process._process_kill import (
 from autoskillit.execution.process._process_monitor import (
     ProcessActivityTracker,
     _has_active_api_connection,
-    _has_active_child_processes,
     _has_active_execution_marker,
     _heartbeat,
     _session_log_monitor,
@@ -107,7 +106,6 @@ __all__ = [
     "RaceAccumulator",
     "RaceSignals",
     "_has_active_api_connection",
-    "_has_active_child_processes",
     "_has_active_execution_marker",
     "_heartbeat",
     "_jsonl_contains_marker",
@@ -697,6 +695,7 @@ async def run_managed_async(
                             trigger,
                             marker_dir=marker_dir,
                             marker_scope_session_id=marker_scope_session_id,
+                            activity_tracker=ProcessActivityTracker(),
                         ),
                     )
                 timeout_scope: anyio.CancelScope | None

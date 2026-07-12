@@ -152,6 +152,7 @@ class ChildLifecycleCoordinator:
     """
 
     _attempts: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
+    _awaiting_delivery: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
     _completed: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
     _unresolved_terminal: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
     _candidates: dict[str, CompletionCandidate] = field(default_factory=dict)
@@ -197,6 +198,8 @@ class ChildLifecycleCoordinator:
         for key in _alias_keys(observation):
             if key in self._attempts:
                 return ("active", key)
+            if key in self._awaiting_delivery:
+                return ("awaiting_delivery", key)
             if key in self._completed:
                 return ("completed", key)
             if key in self._unresolved_terminal:
@@ -206,25 +209,25 @@ class ChildLifecycleCoordinator:
             if candidate_key is not None:
                 if candidate_key in self._attempts:
                     return ("active", candidate_key)
+                if candidate_key in self._awaiting_delivery:
+                    return ("awaiting_delivery", candidate_key)
                 if candidate_key in self._completed:
                     return ("completed", candidate_key)
                 if candidate_key in self._unresolved_terminal:
                     return ("unresolved_terminal", candidate_key)
         if observation.replaces_native_uuid:
-            for bucket in (self._attempts, self._completed, self._unresolved_terminal):
+            for bucket_name, bucket in (
+                ("active", self._attempts),
+                ("awaiting_delivery", self._awaiting_delivery),
+                ("completed", self._completed),
+                ("unresolved_terminal", self._unresolved_terminal),
+            ):
                 for key, record in bucket.items():
                     if (
                         record.observation.replaced_by_native_uuid
                         == observation.replaces_native_uuid
                     ):
-                        name = (
-                            "active"
-                            if bucket is self._attempts
-                            else (
-                                "completed" if bucket is self._completed else "unresolved_terminal"
-                            )
-                        )
-                        return (name, key)
+                        return (bucket_name, key)
         return None
 
     def observe(self, observation: ChildLifecycleObservation) -> None:
@@ -243,12 +246,14 @@ class ChildLifecycleCoordinator:
 
         existing_match = self._find_existing(observation)
         existing_key = existing_match[1] if existing_match else primary
-        source_bucket = (
-            self._attempts
-            if existing_match is None or existing_match[0] == "active"
-            else (
-                self._completed if existing_match[0] == "completed" else self._unresolved_terminal
-            )
+        _bucket_map = {
+            "active": self._attempts,
+            "awaiting_delivery": self._awaiting_delivery,
+            "completed": self._completed,
+            "unresolved_terminal": self._unresolved_terminal,
+        }
+        source_bucket = _bucket_map.get(
+            existing_match[0] if existing_match else "active", self._attempts
         )
         existing_record = source_bucket.pop(existing_key, None)
 
@@ -321,10 +326,7 @@ class ChildLifecycleCoordinator:
             existing_record.observation = observation
             existing_record.replaced = bool(observation.replaced_by_native_uuid)
             if observation.attempt_state == ChildAttemptState.COMPLETED:
-                # A task_notification is terminal process evidence, but the
-                # obligation remains active until the corresponding user
-                # tool_result is delivered to the parent.
-                self._attempts[existing_key] = existing_record
+                self._awaiting_delivery[existing_key] = existing_record
             else:
                 self._unresolved_terminal[existing_key] = existing_record
             return
@@ -429,7 +431,7 @@ class ChildLifecycleCoordinator:
         if candidate.parent_turn_generation <= last_deferred:
             return None
 
-        if self._attempts or self._unresolved_terminal:
+        if self._attempts or self._awaiting_delivery or self._unresolved_terminal:
             # Record the deferred generation so a later parent-turn
             # generation can become ELIGIBLE.
             self._last_deferred_parent_generation[candidate_id] = candidate.parent_turn_generation
@@ -462,6 +464,7 @@ class ChildLifecycleCoordinator:
             sorted(self._candidate_states.items())
         )
         active = tuple(record.observation for record in self._attempts.values())
+        awaiting = tuple(record.observation for record in self._awaiting_delivery.values())
         completed = tuple(record.observation for record in self._completed.values())
         unresolved = tuple(record.observation for record in self._unresolved_terminal.values())
         last_deferred = max(self._last_deferred_parent_generation.values(), default=0)
@@ -474,6 +477,7 @@ class ChildLifecycleCoordinator:
             eligible_candidate=None,
             last_deferred_parent_generation=last_deferred,
             lifecycle_issues=lifecycle_issues,
+            awaiting_delivery=awaiting,
         )
 
     def register_issue(self, issue: LifecycleEvidenceIssue) -> None:

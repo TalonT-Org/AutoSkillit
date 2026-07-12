@@ -188,14 +188,19 @@ def read_channel_a_batch(
             byte_offset=initial_byte_offset,
             trailing_carry=new_carry,
         )
-    lines = _decode_lines(complete)
+    raw_lines = complete.split(b"\n")
     records: list[SessionEvent] = []
     observations: list[ChildLifecycleObservation] = []
     parent_markers: list[ParentAssistantMarker] = []
     lifecycle_issues: list[LifecycleEvidenceIssue] = []
     line_byte_cursor = initial_byte_offset
-    for line in lines:
-        line_byte_cursor += len(line.encode("utf-8", errors="replace")) + 1
+    for raw_line in raw_lines:
+        if raw_line == b"" and line_byte_cursor > initial_byte_offset:
+            continue
+        line_byte_cursor += len(raw_line) + 1
+        line = raw_line.decode("utf-8", errors="replace")
+        if not line:
+            continue
         event: SessionEvent | None = None
         if parser is not None:
             try:

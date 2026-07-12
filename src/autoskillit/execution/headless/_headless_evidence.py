@@ -13,19 +13,22 @@ from autoskillit.core import (
     AgentSessionResult,
     CliSubtype,
     FailureRecord,
+    LifecycleDecision,
     RetryReason,
+    SessionOutcome,
     SessionTelemetry,
     SkillResult,
     WriteEvidence,
     get_logger,
 )
+from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
     _is_parent_assistant_record,
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import AuditLog, CodingAgentBackend, GitHubApiLog
+    from autoskillit.core import AuditLog, CodingAgentBackend, GitHubApiLog, SubprocessResult
 
 logger = get_logger(__name__)
 
@@ -79,6 +82,59 @@ def _apply_budget_guard(
             retry_reason=RetryReason.BUDGET_EXHAUSTED,
         )
     return sr
+
+
+def _retry_precedence(
+    result: SubprocessResult,
+    outcome: SessionOutcome,
+    retry_reason: RetryReason,
+) -> tuple[SessionOutcome, RetryReason]:
+    cleanup_failed = result.cleanup_outcome is not None and not result.cleanup_outcome.succeeded
+    lifecycle_failed = result.lifecycle_decision in {
+        LifecycleDecision.CHILD_WORK_FAILED,
+        LifecycleDecision.CATCH_UP_FAILED,
+    }
+    if cleanup_failed or lifecycle_failed:
+        return SessionOutcome.RETRIABLE, RetryReason.RESUME
+    return outcome, retry_reason
+
+
+def _adjudicate_optional_completion(
+    result: SubprocessResult,
+    session: ClaudeSessionResult,
+    outcome: SessionOutcome,
+    retry_reason: RetryReason,
+    needs_retry: bool,
+    completion_marker: str,
+    prior_completion_markers: Sequence[str] | None,
+    completion_required: bool,
+    expected_output_patterns: Sequence[str],
+    infra_completed: bool,
+) -> tuple[SessionOutcome, RetryReason, bool, bool, str]:
+    """Apply optional marker recovery before terminal retry precedence."""
+    normalized_subtype = session.normalize_subtype(
+        outcome, completion_marker, prior_completion_markers
+    )
+    if (
+        normalized_subtype == "missing_completion_marker"
+        and not completion_required
+        and expected_output_patterns
+        and infra_completed
+        and _check_expected_patterns(session.result.strip(), expected_output_patterns)
+    ):
+        outcome = SessionOutcome.SUCCEEDED
+        retry_reason = RetryReason.NONE
+        needs_retry = False
+
+    precedence = _retry_precedence(result, outcome, retry_reason)
+    if precedence != (outcome, retry_reason):
+        outcome, retry_reason = precedence
+        needs_retry = outcome == SessionOutcome.RETRIABLE
+    success = outcome == SessionOutcome.SUCCEEDED
+    normalized_subtype = session.normalize_subtype(
+        outcome, completion_marker, prior_completion_markers
+    )
+    return outcome, retry_reason, success, needs_retry, normalized_subtype
 
 
 _CODEX_ERROR_CODE_API_STATUS: dict[str, int] = {

@@ -232,8 +232,8 @@ class TestStepBackendOverride:
                 completion_marker="%%DONE%%",
                 step_backend=step_backend_mock,
             )
-        step_backend_mock.stream_parser.assert_called_once()
-        ctx_backend.stream_parser.assert_not_called()
+        step_backend_mock.stream_parser_factory.assert_called_once()
+        ctx_backend.stream_parser_factory.assert_not_called()
         assert mock_build.call_args.kwargs["backend"] is step_backend_mock
 
     @pytest.mark.anyio

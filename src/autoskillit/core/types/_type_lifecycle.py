@@ -16,10 +16,9 @@ Vocabulary (canonical, shared by parser, coordinator, tests):
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 __all__ = [
     "ATTEMPT_ACTIVE_STATES",
@@ -38,7 +37,6 @@ __all__ = [
     "LifecycleDecision",
     "ParentAssistantMarker",
     "ProcessIdentity",
-    "StreamParserFactory",
     "build_lifecycle_snapshot_from_attempts",
 ]
 
@@ -272,17 +270,18 @@ class LifecycleActorResponse:
 class ProcessIdentity:
     """Owned process identity rooted at one spawned ``proc.pid``.
 
-    Captures the root PID, start time, and process group/session, plus a
-    refreshed snapshot of descendant identities for descendant-safe cleanup.
-    Distinct from the observed workload identity used for tracing/callbacks.
+    Linux identity uses raw ``/proc`` start-time ticks so WSL clock adjustments
+    cannot perturb PID-reuse checks. ``fallback_create_time`` is used only when
+    start-time ticks are unavailable on another platform.
     """
 
     root_pid: int
-    start_time: float
+    starttime_ticks: int
+    fallback_create_time: float = 0.0
     process_group_id: int = 0
     session_id: int = 0
-    descendants: tuple[tuple[int, float], ...] = ()
-    """Refreshed descendant (pid, start_time) pairs while the root is alive."""
+    descendants: tuple[tuple[int, int], ...] = ()
+    """Refreshed descendant ``(pid, starttime_ticks)`` pairs."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,26 +296,6 @@ class CleanupOutcome:
     budget_exhausted: bool
     retained_identities: tuple[ProcessIdentity, ...] = ()
     """Any owned process identity whose removal was deferred past the budget."""
-
-
-@runtime_checkable
-class StreamParserFactory(Protocol):
-    """Zero-argument factory returning a fresh parser per call.
-
-    Replaces the previous ``StreamParser | None`` parameter on the runner.
-    Each attempt must invoke the factory exactly once so concurrent
-    watchers/calls cannot share lifecycle/correlation state by accident.
-    """
-
-    def __call__(self) -> Any:
-        """Build a fresh parser instance.
-
-        Returns an object conforming to the ``StreamParser`` protocol
-        (kept as ``Any`` here to avoid the IL-0 dependency cycle on
-        ``_type_protocols_backend``). Concrete implementations return
-        their own backend-specific ``ClaudeStreamParser``/``CodexStreamParser``.
-        """
-        ...
 
 
 def build_lifecycle_snapshot_from_attempts(
@@ -343,11 +322,3 @@ def build_lifecycle_snapshot_from_attempts(
         eligible_candidate=eligible_candidate,
         last_deferred_parent_generation=last_deferred_parent_generation,
     )
-
-
-ChildLifecycleCoordinatorFactory = Callable[..., Any]
-"""Public alias for the coordinator-actor factory consumed by the runner.
-
-The factory accepts the immutable observations producer and yields a
-frozen snapshot every time it is awaited. Tests instantiate directly.
-"""

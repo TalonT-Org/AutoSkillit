@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import pytest
 
 from autoskillit.core.types import (
+    CleanupOutcome,
     CliSubtype,
+    LifecycleDecision,
     RetryReason,
     SessionOutcome,
     TerminationReason,
@@ -154,3 +157,47 @@ def test_completion_required_false_preserves_existing_behavior():
         backend=ClaudeCodeBackend(),
     )
     assert sr.success is True
+
+
+@pytest.mark.parametrize(
+    ("cleanup_outcome", "lifecycle_decision"),
+    [
+        (
+            CleanupOutcome(succeeded=False, budget_exhausted=True),
+            LifecycleDecision.CONTINUE,
+        ),
+        (None, LifecycleDecision.CATCH_UP_FAILED),
+    ],
+)
+def test_optional_marker_recovery_cannot_override_lifecycle_failure(
+    cleanup_outcome: CleanupOutcome | None,
+    lifecycle_decision: LifecycleDecision,
+) -> None:
+    result_text = "worktree_path = /tmp/worktrees/impl-foo\nbranch_name = impl/foo"
+    stdout = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": result_text,
+            "session_id": "s1",
+        }
+    )
+    proc_result = dataclasses.replace(
+        _sr(0, stdout, "", TerminationReason.NATURAL_EXIT),
+        cleanup_outcome=cleanup_outcome,
+        lifecycle_decision=lifecycle_decision,
+    )
+
+    sr = _build_skill_result(
+        proc_result,
+        completion_marker="%%ORDER_UP::abc123%%",
+        expected_output_patterns=[r"worktree_path[ \t]*=[ \t]*/.+"],
+        completion_required=False,
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert sr.success is False
+    assert sr.needs_retry is True
+    assert sr.retry_reason == RetryReason.RESUME
+    assert sr.subtype == "missing_completion_marker"

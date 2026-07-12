@@ -304,8 +304,12 @@ def test_headless_executor_protocol_dispatch_has_marker_params():
         params = sig.parameters
         assert "marker_dir" in params, f"{cls.__name__} missing marker_dir"
         assert params["marker_dir"].default is None, f"{cls.__name__}.marker_dir default != None"
-        assert "session_id" in params, f"{cls.__name__} missing session_id"
-        assert params["session_id"].default is None, f"{cls.__name__}.session_id default != None"
+        assert "marker_scope_session_id" in params, (
+            f"{cls.__name__} missing marker_scope_session_id"
+        )
+        assert params["marker_scope_session_id"].default is None, (
+            f"{cls.__name__}.marker_scope_session_id default != None"
+        )
 
 
 # ── GateState mutation (REQ-PROTO-009) ────────────────────────────────────────
@@ -406,8 +410,9 @@ class TestGroupDApiContractPreservation:
             "enable_deadline_extension",
             "max_extension_seconds",
             "marker_dir",
-            "session_id",
+            "marker_scope_session_id",
             "stream_parser",
+            "stream_parser_factory",
             "inspector_callback",
             "workload_basenames",
             "on_session_id_resolved",
@@ -477,8 +482,9 @@ class TestGroupDApiContractPreservation:
             "enable_deadline_extension",
             "max_extension_seconds",
             "marker_dir",
-            "session_id",
+            "marker_scope_session_id",
             "stream_parser",
+            "stream_parser_factory",
             "completion_record_types",
             "session_record_types",
             "inspector_callback",
@@ -492,38 +498,38 @@ class TestGroupDApiContractPreservation:
             f"  Extra:   {actual - expected}"
         )
 
-    def test_run_managed_async_marker_dir_session_id_defaults(self):
-        """run_managed_async marker_dir and session_id default to None."""
+    def test_run_managed_async_marker_scope_defaults(self):
+        """run_managed_async marker scope parameters default to None."""
         sig = inspect.signature(run_managed_async)
         assert sig.parameters["marker_dir"].default is None
-        assert sig.parameters["session_id"].default is None
+        assert sig.parameters["marker_scope_session_id"].default is None
 
     def test_run_managed_async_marker_params_after_session_id_timeout(self):
-        """marker_dir and session_id appear after _session_id_timeout in run_managed_async."""
+        """Marker scope parameters follow _session_id_timeout in run_managed_async."""
         sig = inspect.signature(run_managed_async)
         session_id_timeout_idx = list(sig.parameters).index("_session_id_timeout")
         marker_dir_idx = list(sig.parameters).index("marker_dir")
-        session_id_idx = list(sig.parameters).index("session_id")
+        session_id_idx = list(sig.parameters).index("marker_scope_session_id")
         assert marker_dir_idx == session_id_timeout_idx + 1
         assert session_id_idx == marker_dir_idx + 1
 
-    def test_default_subprocess_runner_marker_dir_session_id_defaults(self):
-        """DefaultSubprocessRunner.__call__ marker_dir and session_id default to None."""
+    def test_default_subprocess_runner_marker_scope_defaults(self):
+        """DefaultSubprocessRunner marker scope parameters default to None."""
         sig = inspect.signature(DefaultSubprocessRunner.__call__)
         assert sig.parameters["marker_dir"].default is None
-        assert sig.parameters["session_id"].default is None
+        assert sig.parameters["marker_scope_session_id"].default is None
 
     def test_default_subprocess_runner_marker_params_after_max_extension(self):
-        """marker_dir/session_id appear after max_extension_seconds in DefaultSubprocessRunner."""
+        """Marker scope parameters follow max_extension_seconds."""
         sig = inspect.signature(DefaultSubprocessRunner.__call__)
         max_extension_idx = list(sig.parameters).index("max_extension_seconds")
         marker_dir_idx = list(sig.parameters).index("marker_dir")
-        session_id_idx = list(sig.parameters).index("session_id")
+        session_id_idx = list(sig.parameters).index("marker_scope_session_id")
         assert marker_dir_idx == max_extension_idx + 1
         assert session_id_idx == marker_dir_idx + 1
 
     def test_default_subprocess_runner_satisfies_protocol_with_marker_params(self):
-        """DefaultSubprocessRunner() satisfies SubprocessRunner with marker_dir/session_id."""
+        """DefaultSubprocessRunner satisfies the marker-scope protocol contract."""
         from autoskillit.core.types import SubprocessRunner
 
         runner = DefaultSubprocessRunner()
@@ -643,6 +649,9 @@ class TestGroupDApiContractPreservation:
             "orphaned_tool_result",
             "inspector_verdict",
             "cleanup_outcome",
+            "lifecycle_snapshot",
+            "lifecycle_decision",
+            "lifecycle_candidate",
         }
         assert fields == expected, (
             f"SubprocessResult fields changed.\n"

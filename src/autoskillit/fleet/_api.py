@@ -855,7 +855,7 @@ async def _run_dispatch(
                     caller_session_id=caller_session_id,
                     project_dir=str(tool_ctx.project_dir),
                     marker_dir=marker_dir,
-                    session_id=caller_session_id,
+                    marker_scope_session_id=caller_session_id,
                     on_session_id_resolved=_on_session_id,
                     timeout=resolved_timeout,
                     idle_output_timeout=float(idle_output_timeout)

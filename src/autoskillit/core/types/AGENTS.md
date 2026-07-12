@@ -25,7 +25,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_protocols_workspace.py` | Protocols: `WorkspaceManager`, `CloneManager`, `SessionSkillManager`, `SkillLister`, `SkillResolver` |
 | `_type_protocols_recipe.py` | Protocols: `RecipeRepository`, `MigrationService`, `DatabaseReader`, `ReadOnlyResolver` |
 | `_type_protocols_infra.py` | Protocols: `GateState`, `BackgroundSupervisor`, `FleetLock`, `QuotaRefreshTask`, `TokenFactory`, `CampaignProtector` |
-| `_type_protocols_backend.py` | Protocols: `StreamParser`, `ResultParser`, `EnvPolicy`, `SessionLocator`, `CodingAgentBackend` |
+| `_type_protocols_backend.py` | Protocols: `StreamParser`, `StreamParserFactory`, `ResultParser`, `EnvPolicy`, `SessionLocator`, `CodingAgentBackend` |
 | `_type_checkpoint.py` | `SessionCheckpoint` frozen dataclass and `compute_remaining()` helper for session resume |
 | `_type_backend.py` | `BackendCapabilities` frozen dataclass, `CLAUDE_CODE_CAPABILITIES` constant, `CmdSpec`, `SkillSessionConfig`, `ClaudeEventData`, `CodexEventData`, `SessionEvent`, `AgentSessionResult` |
 | `_type_capture.py` | `CaptureEntrySpec` and `CaptureValueTypeError` for typed capture contract enforcement |
@@ -33,7 +33,7 @@ Type re-export hub and all typed building blocks for the autoskillit package (IL
 | `_type_helpers.py` | Text processing and skill-name extraction utilities |
 | `_type_inspector.py` | Health Inspector types: `InspectorEvidence`, `InspectorVerdict`, `InspectorCallback` (issue #3533) |
 | `_type_invariant_registry.py` | Invariant registry: `InvariantDef` dataclass and `INVARIANT_REGISTRY` mapping prose prohibitions to runtime gates |
-| `_type_lifecycle.py` | Async-child-aware completion lifecycle types (issue #4233): `ChildLifecycleObservation`, `ChildLifecycleSnapshot`, `CompletionCandidate`, `CompletionCandidateState/Source`, `LifecycleDecision` (CONTINUE/ELIGIBLE/CHILD_WORK_FAILED/CATCH_UP_FAILED), `LifecycleActorRequest`, `LifecycleActorResponse`, `ParentAssistantMarker`, `ProcessIdentity`, `CleanupOutcome`, `StreamParserFactory` (protocol moved here from `_type_protocols_backend.py`), `build_lifecycle_snapshot_from_attempts` — IL-0 producer-fact contracts only; `DEFAULT_CLEANUP_BUDGET_SECONDS` was moved to `_type_subprocess.py` |
+| `_type_lifecycle.py` | Async-child-aware completion facts (issue #4233): `ChildLifecycleObservation`, `ChildLifecycleSnapshot`, `CompletionCandidate`, `CompletionCandidateState/Source`, `LifecycleDecision`, actor request/response facts, `ParentAssistantMarker`, `ProcessIdentity`, `CleanupOutcome`, `DEFAULT_CLEANUP_BUDGET_SECONDS`, and `build_lifecycle_snapshot_from_attempts` |
 | `_type_phoropter.py` | Phoropter family/phase types: `PhoropterPrescription`, `ReadingToken`, `READING_TOKEN_PATTERN`, `PhoropterPhaseSkip`, `CrossDomainPrescription`, `CrossDomainAssessment` |
 | `_type_resume.py` | `ResumeSpec` discriminated union: `NoResume | BareResume | NamedResume` |
 | `_type_plugin_source.py` | `PluginSource` discriminated union: `DirectInstall | MarketplaceInstall` |

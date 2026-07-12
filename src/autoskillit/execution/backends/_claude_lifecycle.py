@@ -39,6 +39,7 @@ from autoskillit.core import (
     ChildLifecycleObservation,
     ParentAssistantMarker,
 )
+from autoskillit.execution.session._session_model import _is_parent_assistant_record
 
 __all__ = [
     "ParentAssistantCandidate",
@@ -84,19 +85,6 @@ def _task_kind_from_system(obj: dict[str, Any]) -> str:
         return "Agent"
     if obj.get("background_task_id"):
         return "Bash"
-    return ""
-
-
-def _task_kind_from_tool_use_id(tool_use_id: str) -> str:
-    """Return the canonical task kind for a Claude tool_use_id.
-
-    Accepts only the native ``toolu_`` prefix for Agent; unknown
-    prefixes map to ``""`` so the coordinator rejects cross-kind
-    correlation. ``Bash`` tool_use_ids are correlated by backgroundTaskId
-    rather than by tool_use_id prefix.
-    """
-    if tool_use_id.startswith("toolu_"):
-        return "Agent"
     return ""
 
 
@@ -193,14 +181,13 @@ def extract_lifecycle_observations(
                 state = ChildAttemptState.CANCELLED
             else:
                 continue
-            task_kind = _task_kind_from_tool_use_id(tool_use_id)
-            if not task_kind:
-                # Correlate by backgroundTaskId even when tool_use_id
-                # lacks the Agent prefix.
-                if content_obj.get("backgroundTaskId"):
-                    task_kind = "Bash"
-                else:
-                    continue
+            if content_obj.get("agentId"):
+                task_kind = "Agent"
+            elif content_obj.get("backgroundTaskId"):
+                task_kind = "Bash"
+            else:
+                # A tool_use_id prefix is not native task-kind evidence.
+                continue
             observations.append(
                 ChildLifecycleObservation(
                     task_kind=task_kind,
@@ -241,7 +228,7 @@ def extract_parent_assistant_marker(
     No fallback synthesis: blank UUIDs, marker text, channel, session
     ID, fingerprint, or ``"unknown"`` cannot bridge to a candidate.
     """
-    if obj.get("type") != "assistant":
+    if not _is_parent_assistant_record(obj):
         return ParentAssistantCandidate(marker=None)
     raw_uuid = obj.get("uuid")
     if not isinstance(raw_uuid, str) or not raw_uuid:

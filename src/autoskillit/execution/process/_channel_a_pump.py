@@ -30,20 +30,15 @@ the reader has drained.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
-    BackendEventKind,
     ChildLifecycleObservation,
     ParentAssistantMarker,
     SessionEvent,
     get_logger,
-)
-from autoskillit.execution.backends._claude_lifecycle import (
-    extract_lifecycle_observations,
-    extract_parent_assistant_marker,
 )
 
 if TYPE_CHECKING:
@@ -77,6 +72,7 @@ class ChannelABatch:
     observations: tuple[ChildLifecycleObservation, ...]
     parent_markers: tuple[ParentAssistantMarker, ...]
     byte_offset: int
+    trailing_carry: bytes = b""
     processed_channel_a_byte_offset: int = field(init=False)
 
     def __post_init__(self) -> None:
@@ -160,28 +156,31 @@ def read_channel_a_batch(
             observations=(),
             parent_markers=(),
             byte_offset=initial_byte_offset,
+            trailing_carry=initial_carry,
         )
-    new_raw = raw[initial_byte_offset:]
+    new_raw = raw[initial_byte_offset + len(initial_carry) :]
     if not new_raw and not initial_carry:
         return ChannelABatch(
             records=(),
             observations=(),
             parent_markers=(),
             byte_offset=initial_byte_offset,
+            trailing_carry=initial_carry,
         )
-    complete, _ = _split_complete_lines(initial_carry, new_raw)
+    complete, new_carry = _split_complete_lines(initial_carry, new_raw)
     if not complete:
         return ChannelABatch(
             records=(),
             observations=(),
             parent_markers=(),
             byte_offset=initial_byte_offset,
+            trailing_carry=new_carry,
         )
     lines = _decode_lines(complete)
     records: list[SessionEvent] = []
     observations: list[ChildLifecycleObservation] = []
     parent_markers: list[ParentAssistantMarker] = []
-    line_byte_cursor = initial_byte_offset - len(initial_carry)
+    line_byte_cursor = initial_byte_offset
     for line in lines:
         line_byte_cursor += len(line.encode("utf-8", errors="replace")) + 1
         event: SessionEvent | None = None
@@ -191,57 +190,17 @@ def read_channel_a_batch(
             except Exception:  # noqa: BLE001
                 logger.warning("parser_parse_line_failed", exc_info=True)
                 event = None
-        # Always run lifecycle normalization — the parser may yield events
-        # without observations when lifecycle kinds are absent. Carry the
-        # observations and parent markers separately so the actor can ingest
-        # them without re-parsing the JSONL.
-        try:
-            import orjson as _orjson  # type: ignore[import-not-found]
-
-            obj = _orjson.loads(line) if line else {}
-        except Exception:  # noqa: BLE001
-            logger.warning("channel_a_pump_orjson_load_failed", exc_info=True)
-            try:
-                from autoskillit.core import fast_loads as _fast_loads
-
-                obj = _fast_loads(line) if line else {}
-            except Exception:  # noqa: BLE001
-                logger.warning("channel_a_pump_fast_loads_failed", exc_info=True)
-                obj = {}
-        record_type = obj.get("type", "") if isinstance(obj, dict) else ""
-        if isinstance(obj, dict):
-            for obs in extract_lifecycle_observations(obj, record_type):
-                observations.append(obs)
-            cand = extract_parent_assistant_marker(
-                obj, byte_offset=line_byte_cursor, completion_marker=completion_marker
-            )
-            if cand.marker is not None:
-                parent_markers.append(cand.marker)
-        if event is None and record_type:
-            # Synthesize a minimal IGNORED event so the actor sees a record.
-            from autoskillit.core import ClaudeEventData
-
-            event = SessionEvent(
-                kind=BackendEventKind.IGNORED,
-                is_terminal=False,
-                has_marker=False,
-                session_id="",
-                exit_code=None,
-                backend_data=ClaudeEventData(
-                    record_type=record_type,
-                    subtype="",
-                    session_id="",
-                    raw=obj if isinstance(obj, dict) else {},
-                ),
-                observations=tuple(observations),
-            )
         if event is not None:
+            observations.extend(event.observations)
+            if event.parent_marker is not None:
+                parent_markers.append(replace(event.parent_marker, byte_offset=line_byte_cursor))
             records.append(event)
     return ChannelABatch(
         records=tuple(records),
         observations=tuple(observations),
         parent_markers=tuple(parent_markers),
         byte_offset=line_byte_cursor,
+        trailing_carry=new_carry,
     )
 
 
@@ -260,6 +219,7 @@ class ChannelAPumpState:
     parser: StreamParser | None = None
     completion_marker: str = ""
     stdout_path: Path | None = None
+    on_session_id_resolved: Callable[[str], None] | None = None
     closed: bool = False
 
 
@@ -315,11 +275,12 @@ async def run_channel_a_pump(
             initial_byte_offset=state.byte_offset,
         )
         # ``batch.byte_offset`` is the new exclusive end; update the cursor.
-        if batch.byte_offset > state.byte_offset:
-            advance = batch.byte_offset - state.byte_offset
-            state.carry = b""  # carry consumed by split_complete_lines
-            state.byte_offset = batch.byte_offset
-            del advance
+        state.carry = batch.trailing_carry
+        state.byte_offset = batch.byte_offset
+        if state.on_session_id_resolved is not None:
+            for event in batch.records:
+                if event.session_id:
+                    state.on_session_id_resolved(event.session_id)
         if (
             pending_request is not None
             and batch.byte_offset >= pending_request.required_byte_offset

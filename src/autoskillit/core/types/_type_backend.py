@@ -11,7 +11,7 @@ from typing import Any
 
 from ._type_checkpoint import SessionCheckpoint
 from ._type_enums import BackendEventKind, OutputFormat
-from ._type_lifecycle import ChildLifecycleObservation
+from ._type_lifecycle import ChildLifecycleObservation, ParentAssistantMarker
 from ._type_plugin_source import PluginSource
 from ._type_results import ValidatedAddDir
 
@@ -398,6 +398,7 @@ class SessionEvent:
     exit_code: int | None = None
     backend_data: ClaudeEventData | CodexEventData | None = None
     observations: tuple[ChildLifecycleObservation, ...] = ()
+    parent_marker: ParentAssistantMarker | None = None
 
 
 @dataclass(frozen=True, slots=True)

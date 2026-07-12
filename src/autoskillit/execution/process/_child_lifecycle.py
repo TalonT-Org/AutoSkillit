@@ -59,17 +59,25 @@ def _alias_keys(obs: ChildLifecycleObservation) -> tuple[tuple[str, ...], ...]:
     """
     if obs.task_kind == "Agent":
         candidates: list[tuple[str, ...]] = []
-        for value in (obs.tool_use_id, obs.task_id, obs.agent_id):
+        for alias_kind, value in (
+            ("tool_use_id", obs.tool_use_id),
+            ("task_id", obs.task_id),
+            ("agent_id", obs.agent_id),
+        ):
             if value:
-                candidates.append((obs.task_kind, "alias", value))
+                candidates.append((obs.task_kind, alias_kind, value))
         if not candidates and obs.source_event_id:
             candidates.append((obs.task_kind, "source", obs.source_event_id))
         return tuple(candidates)
     if obs.task_kind == "Bash":
         candidates = []
-        for value in (obs.tool_use_id, obs.task_id, obs.background_task_id):
+        for alias_kind, value in (
+            ("tool_use_id", obs.tool_use_id),
+            ("task_id", obs.task_id),
+            ("background_task_id", obs.background_task_id),
+        ):
             if value:
-                candidates.append((obs.task_kind, "alias", value))
+                candidates.append((obs.task_kind, alias_kind, value))
         if not candidates and obs.source_event_id:
             candidates.append((obs.task_kind, "source", obs.source_event_id))
         return tuple(candidates)
@@ -109,20 +117,15 @@ def _is_stale_for_existing(
 ) -> bool:
     """Return True when ``observation`` refers to a superseded generation of ``existing``.
 
-    Detection is heuristic-only: when the live record has been replaced
-    (``record.replaced`` set, typically via a prior ``replaces`` edge) AND
-    both the live record and the incoming observation carry a non-blank
-    ``tool_use_id`` AND those tool_use_ids differ, the new evidence is for
-    the prior attempt generation. Routing it through normal collapse would
-    collapse the live replacement; discarding it preserves the live state.
+    Staleness requires a native replacement edge. Alias inequality alone
+    cannot prove that an observation belongs to an older generation.
     """
-    if not existing.replaced:
-        return False
-    live_id = existing.observation.tool_use_id
-    incoming_id = observation.tool_use_id
-    if not live_id or not incoming_id:
-        return False
-    return live_id != incoming_id
+    replacement_edge = existing.observation.replaces_native_uuid
+    return bool(
+        existing.replaced
+        and replacement_edge
+        and observation.replaced_by_native_uuid == replacement_edge
+    )
 
 
 @dataclass
@@ -151,7 +154,8 @@ class ChildLifecycleCoordinator:
     _unresolved_terminal: dict[tuple[str, ...], _AttemptRecord] = field(default_factory=dict)
     _candidates: dict[str, CompletionCandidate] = field(default_factory=dict)
     _candidate_states: dict[str, CompletionCandidateState] = field(default_factory=dict)
-    _parent_turn_counter: dict[str, int] = field(default_factory=dict)
+    _parent_turn_counter: int = 0
+    _parent_turn_generations: dict[str, int] = field(default_factory=dict)
     _last_deferred_parent_generation: dict[str, int] = field(default_factory=dict)
     _global_next_attempt_generation: int = 0
     _identity_index: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -229,6 +233,18 @@ class ChildLifecycleCoordinator:
         )
         existing_record = source_bucket.pop(existing_key, None)
 
+        if (
+            existing_record is not None
+            and existing_match is not None
+            and existing_match[0] in {"completed", "unresolved_terminal"}
+            and observation.attempt_state not in ATTEMPT_TERMINAL_STATES
+            and not observation.is_user_result
+        ):
+            # Terminal facts are irreversible. A late declaration or replay
+            # cannot resurrect a completed/failed attempt.
+            source_bucket[existing_key] = existing_record
+            return
+
         if observation.is_user_result:
             if existing_record is not None and _is_stale_for_existing(
                 existing_record, observation
@@ -286,7 +302,10 @@ class ChildLifecycleCoordinator:
             existing_record.observation = observation
             existing_record.replaced = bool(observation.replaced_by_native_uuid)
             if observation.attempt_state == ChildAttemptState.COMPLETED:
-                self._completed[existing_key] = existing_record
+                # A task_notification is terminal process evidence, but the
+                # obligation remains active until the corresponding user
+                # tool_result is delivered to the parent.
+                self._attempts[existing_key] = existing_record
             else:
                 self._unresolved_terminal[existing_key] = existing_record
             return
@@ -302,6 +321,8 @@ class ChildLifecycleCoordinator:
                 replaced=bool(observation.replaced_by_native_uuid),
             )
         else:
+            if observation.replaces_native_uuid:
+                existing_record.attempt_generation += 1
             existing_record.observation = observation
             existing_record.replaced = existing_record.replaced or bool(
                 observation.replaced_by_native_uuid
@@ -324,8 +345,11 @@ class ChildLifecycleCoordinator:
         if uuid.lower() == "unknown":
             raise ValueError("parent_marker_native_uuid_unknown")
 
-        generation = self._parent_turn_counter.get(uuid, 0) + 1
-        self._parent_turn_counter[uuid] = generation
+        generation = self._parent_turn_generations.get(uuid)
+        if generation is None:
+            self._parent_turn_counter += 1
+            generation = self._parent_turn_counter
+            self._parent_turn_generations[uuid] = generation
         candidate = CompletionCandidate(
             candidate_id=uuid,
             parent_turn_generation=generation,
@@ -360,6 +384,10 @@ class ChildLifecycleCoordinator:
             return
         if candidate_id in self._candidate_states:
             self._candidate_states[candidate_id] = CompletionCandidateState.SUPERSEDED
+
+    def get_candidate(self, candidate_id: str) -> CompletionCandidate | None:
+        """Return one immutable candidate without exposing reducer internals."""
+        return self._candidates.get(candidate_id)
 
     def evaluate_candidate(self, candidate_id: str) -> CompletionCandidate | None:
         """Promote a candidate to ``ELIGIBLE`` when all obligations are clear.
@@ -402,6 +430,7 @@ class ChildLifecycleCoordinator:
         if candidate is None:
             return
         self._last_deferred_parent_generation[candidate_id] = candidate.parent_turn_generation
+        self.supersede_candidate(candidate_id)
 
     def snapshot(self) -> ChildLifecycleSnapshot:
         """Return the frozen snapshot for race resolution / diagnostics.
@@ -449,6 +478,9 @@ class ChildLifecycleCoordinatorHandle:
 
     def evaluate_candidate(self, candidate_id: str) -> CompletionCandidate | None:
         return self.coordinator.evaluate_candidate(candidate_id)
+
+    def get_candidate(self, candidate_id: str) -> CompletionCandidate | None:
+        return self.coordinator.get_candidate(candidate_id)
 
     def note_child_work_failed(self, candidate_id: str) -> None:
         self.coordinator.note_child_work_failed(candidate_id)

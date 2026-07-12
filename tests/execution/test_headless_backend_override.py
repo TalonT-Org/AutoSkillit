@@ -287,5 +287,5 @@ class TestBackendOverrideParserSelection:
                 backend_override="claude-code",
             )
 
-            step_backend.stream_parser.assert_called_once()
-            ctx_backend.stream_parser.assert_not_called()
+            step_backend.stream_parser_factory.assert_called_once()
+            ctx_backend.stream_parser_factory.assert_not_called()

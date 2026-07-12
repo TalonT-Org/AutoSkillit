@@ -393,10 +393,10 @@ def test_build_skill_result_provider_used_survives_budget_guard() -> None:
     assert sr.provider.provider_used == "bedrock"
 
 
-# ── marker_dir / session_id forwarding tests ───────────────────────────────────
+# ── marker_dir / marker_scope_session_id forwarding tests ──────────────────────
 
 
-def test_execute_claude_headless_accepts_marker_dir_and_session_id() -> None:
+def test_execute_claude_headless_accepts_marker_scope_session_id() -> None:
     import inspect
 
     from autoskillit.execution.headless import _execute_claude_headless
@@ -406,12 +406,12 @@ def test_execute_claude_headless_accepts_marker_dir_and_session_id() -> None:
     assert "marker_dir" in params
     assert params["marker_dir"].default is None
     assert params["marker_dir"].kind == inspect.Parameter.KEYWORD_ONLY
-    assert "session_id" in params
-    assert params["session_id"].default is None
-    assert params["session_id"].kind == inspect.Parameter.KEYWORD_ONLY
+    assert "marker_scope_session_id" in params
+    assert params["marker_scope_session_id"].default is None
+    assert params["marker_scope_session_id"].kind == inspect.Parameter.KEYWORD_ONLY
 
 
-def test_dispatch_food_truck_accepts_marker_dir_and_session_id() -> None:
+def test_dispatch_food_truck_accepts_marker_scope_session_id() -> None:
     import inspect
 
     from autoskillit.execution.headless import DefaultHeadlessExecutor
@@ -421,13 +421,13 @@ def test_dispatch_food_truck_accepts_marker_dir_and_session_id() -> None:
     assert "marker_dir" in params
     assert params["marker_dir"].default is None
     assert params["marker_dir"].kind == inspect.Parameter.KEYWORD_ONLY
-    assert "session_id" in params
-    assert params["session_id"].default is None
-    assert params["session_id"].kind == inspect.Parameter.KEYWORD_ONLY
+    assert "marker_scope_session_id" in params
+    assert params["marker_scope_session_id"].default is None
+    assert params["marker_scope_session_id"].kind == inspect.Parameter.KEYWORD_ONLY
 
 
 @pytest.mark.anyio
-async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
+async def test_dispatch_food_truck_forwards_marker_scope_session_id(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
 
@@ -468,11 +468,11 @@ async def test_dispatch_food_truck_forwards_marker_dir_and_session_id(
         str(tmp_path),
         completion_marker="%%DONE%%",
         marker_dir=marker,
-        session_id="dispatch-uuid-123",
+        marker_scope_session_id="dispatch-uuid-123",
     )
 
     assert execute_kwargs["marker_dir"] == marker
-    assert execute_kwargs["session_id"] == "dispatch-uuid-123"
+    assert execute_kwargs["marker_scope_session_id"] == "dispatch-uuid-123"
 
 
 # ── readonly_skill forwarding tests ───────────────────────────────────────────
@@ -691,11 +691,13 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
         timeout=60,
         stale_threshold=30,
         marker_dir=Path("/custom/markers"),
-        session_id="sess-abc",
+        marker_scope_session_id="sess-abc",
+        cleanup_budget_seconds=7.5,
     )
 
     assert runner_kwargs["marker_dir"] == Path("/custom/markers")
-    assert runner_kwargs["session_id"] == "sess-abc"
+    assert runner_kwargs["marker_scope_session_id"] == "sess-abc"
+    assert runner_kwargs["cleanup_budget_seconds"] == 7.5
 
 
 # ── pty_mode / session_log_dir capability forwarding tests ───────────────────────
@@ -850,7 +852,7 @@ async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
 
 
 @pytest.mark.anyio
-async def test_execute_claude_headless_passes_stream_parser_to_runner(
+async def test_execute_claude_headless_passes_stream_parser_factory_to_runner(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     from autoskillit.execution.commands import ClaudeHeadlessCmd
@@ -868,7 +870,7 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
 
     sentinel = object()
     backend = _mock_backend(pty_required=True, channel_b_capable=True)
-    backend.stream_parser.return_value = sentinel
+    backend.stream_parser_factory.return_value = sentinel
     minimal_ctx.backend = backend
 
     monkeypatch.setattr(
@@ -888,12 +890,12 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
         spec, str(tmp_path), minimal_ctx, timeout=60, stale_threshold=30
     )
 
-    assert runner_kwargs["stream_parser"] is sentinel
-    backend.stream_parser.assert_called()
+    assert runner_kwargs["stream_parser_factory"] is sentinel
+    backend.stream_parser_factory.assert_called()
 
 
 @pytest.mark.anyio
-async def test_execute_claude_headless_stream_parser_receives_completion_marker(
+async def test_execute_claude_headless_stream_parser_factory_receives_completion_marker(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     from autoskillit.execution.commands import ClaudeHeadlessCmd
@@ -934,7 +936,7 @@ async def test_execute_claude_headless_stream_parser_receives_completion_marker(
         completion_marker="%%TEST_MARKER%%",
     )
 
-    backend.stream_parser.assert_called_once_with(completion_marker="%%TEST_MARKER%%")
+    backend.stream_parser_factory.assert_called_once_with(completion_marker="%%TEST_MARKER%%")
 
 
 @pytest.mark.anyio
@@ -970,7 +972,7 @@ async def test_run_headless_core_forwards_marker_dir_and_caller_session_id(
     )
 
     assert execute_kwargs.get("marker_dir") == marker_dir
-    assert execute_kwargs.get("session_id") == "orchestrator-session-abc"
+    assert execute_kwargs.get("marker_scope_session_id") == "orchestrator-session-abc"
 
 
 @pytest.mark.anyio

@@ -29,6 +29,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
+    _adjudicate_optional_completion,
     _apply_budget_guard,
     _capture_failure,
     _compute_write_evidence,
@@ -614,22 +615,20 @@ def _build_skill_result(
         needs_retry = True
         outcome = SessionOutcome.RETRIABLE
 
-    normalized_subtype = session.normalize_subtype(
-        outcome, completion_marker, prior_completion_markers
+    outcome, retry_reason, success, needs_retry, normalized_subtype = (
+        _adjudicate_optional_completion(
+            result,
+            session,
+            outcome,
+            retry_reason,
+            needs_retry,
+            completion_marker,
+            prior_completion_markers,
+            completion_required,
+            expected_output_patterns,
+            infra_category == InfraExitCategory.COMPLETED,
+        )
     )
-
-    if (
-        normalized_subtype == "missing_completion_marker"
-        and not completion_required
-        and expected_output_patterns
-        and infra_category == InfraExitCategory.COMPLETED
-        and _check_expected_patterns(session.result.strip(), expected_output_patterns)
-    ):
-        normalized_subtype = CliSubtype.SUCCESS.value
-        outcome = SessionOutcome.SUCCEEDED
-        success = True
-        needs_retry = False
-        retry_reason = RetryReason.NONE
 
     if (
         success

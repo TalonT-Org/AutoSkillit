@@ -15,6 +15,7 @@ _GUARDED_FILES = [
     SRC / "execution" / "session" / "_session_model.py",
     SRC / "execution" / "headless" / "_headless_scan.py",
     SRC / "execution" / "headless" / "_headless_evidence.py",
+    SRC / "execution" / "backends" / "_claude_lifecycle.py",
     SRC / "core" / "tool_sequence_analysis.py",
     SRC / "fleet" / "result_parser.py",
 ]

@@ -141,6 +141,20 @@ class TestCorrelation:
 
 
 class TestDelivery:
+    def test_notification_only_completion_remains_awaiting_delivery(self) -> None:
+        coord = ChildLifecycleCoordinator()
+        coord.observe(_agent_observation(tool_use_id="toolu_notification"))
+        coord.observe(
+            _agent_observation(
+                tool_use_id="toolu_notification",
+                state=ChildAttemptState.COMPLETED,
+                is_user_result=False,
+            )
+        )
+        snap = coord.snapshot()
+        assert snap.has_active_children
+        assert not snap.completed_children
+
     def test_successful_delivery_collapses(self) -> None:
         coord = ChildLifecycleCoordinator()
         coord.observe(_agent_observation(tool_use_id="toolu_Y"))
@@ -195,6 +209,27 @@ class TestDelivery:
         snap = coord.snapshot()
         assert snap.has_unresolved_terminal
 
+    def test_late_active_observation_cannot_resurrect_failed_attempt(self) -> None:
+        coord = ChildLifecycleCoordinator()
+        coord.observe(_agent_observation(tool_use_id="toolu_failed"))
+        coord.observe(
+            _agent_observation(
+                tool_use_id="toolu_failed",
+                state=ChildAttemptState.FAILED,
+                is_user_result=False,
+            )
+        )
+        coord.observe(
+            _agent_observation(
+                tool_use_id="toolu_failed",
+                state=ChildAttemptState.ACTIVE,
+                source_event_id="evt_late_active",
+            )
+        )
+        snap = coord.snapshot()
+        assert snap.has_unresolved_terminal
+        assert not snap.has_active_children
+
 
 class TestKindCollision:
     def test_bash_does_not_close_agent_obligation(self) -> None:
@@ -237,6 +272,7 @@ class TestReplacementGenerations:
                 tool_use_id="toolu_R1",
                 state=ChildAttemptState.COMPLETED,
                 is_user_result=True,
+                replaced_by="evt_new",
             )
         )
         snap = coord.snapshot()
@@ -296,7 +332,7 @@ class TestCandidateIdentity:
                 )
             )
 
-    def test_repeated_marker_increments_generation(self) -> None:
+    def test_repeated_marker_merges_same_native_generation(self) -> None:
         h = make_coordinator_handle()
         c1 = h.register_parent_marker(
             ParentAssistantMarker(
@@ -313,7 +349,7 @@ class TestCandidateIdentity:
             )
         )
         assert c1.parent_turn_generation == 1
-        assert c2.parent_turn_generation == 2
+        assert c2.parent_turn_generation == 1
 
     def test_process_exit_does_not_synthesize_candidate(self) -> None:
         h = make_coordinator_handle()
@@ -415,12 +451,12 @@ class TestCandidateEvaluation:
         # New parent marker arrives in a later turn.
         h.register_parent_marker(
             ParentAssistantMarker(
-                native_uuid="uuid-A",
+                native_uuid="uuid-B",
                 message_id="msg-2",
                 byte_offset=512,
             )
         )
-        candidate = h.evaluate_candidate("uuid-A")
+        candidate = h.evaluate_candidate("uuid-B")
         assert candidate is not None
         assert candidate.parent_turn_generation == 2
 
@@ -452,7 +488,7 @@ class TestChildWorkFailed:
         h.note_child_work_failed("uuid-FRESH")
         # The decision semantics is CHILD_WORK_FAILED — never ELIGIBLE.
         snap = h.snapshot()
-        assert snap.candidate_states == (("uuid-FRESH", CompletionCandidateState.DEFERRED),)
+        assert snap.candidate_states == (("uuid-FRESH", CompletionCandidateState.SUPERSEDED),)
         # Decision is exposed through LifecycleDecision.CLEANUP_FAILED
         # vs CHILD_WORK_FAILED — the contract here is that the
         # coordinator never promotes the candidate.

@@ -47,6 +47,7 @@ from autoskillit.core import (
     SessionCheckpoint,
     SessionLocator,
     SkillSessionConfig,
+    StreamParserFactory,
     ValidatedAddDir,
     atomic_write,
     default_log_dir,
@@ -612,7 +613,7 @@ class CodexBackend(BackendCmdBuilderBase):
     def stream_parser(self, completion_marker: str = "") -> CodexStreamParser:
         return CodexStreamParser(completion_marker=completion_marker)
 
-    def stream_parser_factory(self, completion_marker: str = "") -> Any:
+    def stream_parser_factory(self, completion_marker: str = "") -> StreamParserFactory:
         """Return a fresh-parser factory — codex path is single-shot (issue #4233).
 
         Each ``factory()`` call yields a distinct ``CodexStreamParser`` instance

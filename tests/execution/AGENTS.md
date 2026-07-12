@@ -10,9 +10,9 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `_merge_queue_helpers.py` | Merge-queue test helper factories — _make_watcher, _queue_state |
 | `conftest.py` | Shared fixtures and helpers for tests/execution/ |
 | `test_anomaly_detection.py` | Tests for post-hoc anomaly detection over ProcSnapshot data |
-| `test_child_lifecycle_coordinator.py` | Tests for `ChildLifecycleCoordinator` reducer: same-kind aliases, blank-ID isolation, UUID deduplication, terminal-before-declaration, successful delivery, unresolved failure/cancellation/timeout, Agent/Bash collision negatives, replacement generations, candidate identity/provenance, DEFERRED->SUPERSEDED, ELIGIBLE gating, CHILD_WORK_FAILED (issue #4233) |
-| `test_lifecycle_actor.py` | Tests for the Channel A pump and lifecycle actor: binary split / multibyte carry handling, exclusive-end watermarks, exactly-once parsing, ordered whole-read reduction, typed decisions (CONTINUE/ELIGIBLE/CHILD_WORK_FAILED/CATCH_UP_FAILED), saturated command stream typed fail-closed (issue #4233) |
-| `test_process_child_lifecycle_integration.py` | Five-child real-process replay: fixture structure, parent markers (early + later), terminal/delivery evidence, NDJSON parse gate (issue #4233) |
+| `test_child_lifecycle_coordinator.py` | Reducer tests: correlation, delivery gating, terminal irreversibility, replacement generations, candidate provenance, ELIGIBLE gating, and CHILD_WORK_FAILED (issue #4233) |
+| `test_lifecycle_actor.py` | Channel A pump and actor tests: live split-UTF-8 carry, session-ID callbacks, watermarks, typed decisions, catch-up, saturation, and endpoint closure (issue #4233) |
+| `test_process_child_lifecycle_integration.py` | Real-process lifecycle proofs: five-child replay, no-child fast path, child-failure cleanup, fixture structure, and parent-marker provenance (issue #4233) |
 | `test_model_alias_registry.py` | Shared alias registry consistency tests — key parity between anomaly_detection and backend alias maps |
 | `test_boundary_pty_dispatch.py` | Layer-boundary integration tests for DefaultSubprocessRunner + PTY wrapping + Python shims |
 | `test_check_repo_merge_state.py` | Round-trip budget tests for fetch_repo_merge_state |
@@ -80,7 +80,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_process_env_boundary.py` | Boundary contract tests: MappingProxyType env coercion through subprocess execution |
 | `test_process_deadline_extension.py` | Tests for _watch_child_activity coroutine and deadline extension behavior |
 | `test_process_heartbeat.py` | Unit tests for _heartbeat, _has_active_api_connection, _has_active_child_processes, orphaned tool result detection |
-| `test_process_identity.py` | Tests for starttime_ticks=0 identity degradation warning in run_managed_async |
+| `test_process_identity.py` | Process identity tests: tracker group refresh, PID-reuse checks, cleanup deadline math, and starttime_ticks degradation warning |
 | `test_process_idle_watchdog.py` | Tests for the stdout idle watchdog coroutine (_watch_stdout_idle) |
 | `test_process_jsonl.py` | Tests for JSONL marker detection utilities |
 | `test_process_kill.py` | Integration tests for process tree kill and async cancellation |
@@ -123,7 +123,7 @@ Subprocess integration, headless session, process lifecycle, and session result 
 | `test_session_result.py` | L1 unit tests for ClaudeSessionResult and parse_session_result — result types and policies |
 | `test_smoke_codex.py` | Codex CLI smoke test: gated E2E validation of codex exec NDJSON output (CODEX_SMOKE_TEST=1 + CODEX_API_KEY/OPENAI_API_KEY/auth.json) |
 | `test_termination_action.py` | Unit tests for decide_termination_action — pure decision function |
-| `test_termination_executor.py` | Integration tests for execute_termination_action |
+| `test_termination_executor.py` | Termination/finalizer tests: drain behavior, direct actions, single-flight cleanup, and budget exhaustion |
 | `test_testing.py` | L1 unit tests for execution/testing.py — pytest output parsing |
 | `test_trace_target_resolver.py` | Tests for resolve_trace_target — descendant-walk and basename-match contract |
 | `test_write_evidence.py` | Write evidence: multi-directory fs snapshot and write_watch_dirs plumbing |

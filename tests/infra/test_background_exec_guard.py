@@ -146,6 +146,55 @@ def test_fail_open_missing_tool_input():
     assert not out.strip()
 
 
+@pytest.mark.parametrize("raw_stdin", ["[]", '"value"', "null", "42"])
+def test_fail_open_valid_json_non_dict_root(raw_stdin: str):
+    out = _run_guard({}, headless=True, session_type="skill", raw_stdin=raw_stdin)
+    assert not out.strip()
+
+
+@pytest.mark.parametrize("tool_input", [None, [], "invalid", 42])
+def test_schedule_wakeup_fails_open_without_structured_tool_input(tool_input):
+    out = _run_guard(
+        {"tool_name": "ScheduleWakeup", "tool_input": tool_input},
+        headless=True,
+        session_type="skill",
+    )
+    assert not out.strip()
+
+
+@pytest.mark.parametrize("tool_name", [None, [], 42])
+def test_schedule_wakeup_fails_open_without_string_tool_name(tool_name):
+    event: dict[str, object] = {"tool_input": {"delay": 30}}
+    if tool_name is not None:
+        event["tool_name"] = tool_name
+    out = _run_guard(
+        event,
+        headless=True,
+        session_type="skill",
+    )
+    assert not out.strip()
+
+
+@pytest.mark.parametrize("session_type", ["skill", "", "unknown"])
+def test_schedule_wakeup_denied_in_headless_skill_tiers(session_type: str):
+    response = _run_guard_headless(
+        {"tool_name": "ScheduleWakeup", "tool_input": {"delay": 30}},
+        session_type=session_type,
+    )
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "ADR-0001" in response["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("session_type", ["orchestrator", "fleet"])
+def test_schedule_wakeup_allowed_in_control_tiers(session_type: str):
+    out = _run_guard(
+        {"tool_name": "ScheduleWakeup", "tool_input": {"delay": 30}},
+        headless=True,
+        session_type=session_type,
+    )
+    assert not out.strip()
+
+
 def test_denies_unset_session_type():
     """Fail-closed: headless with no SESSION_TYPE is treated as skill session → deny."""
     from autoskillit.hooks.guards.background_exec_guard import main

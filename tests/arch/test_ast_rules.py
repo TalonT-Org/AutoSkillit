@@ -628,52 +628,72 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     outside the designated kill helper functions.
 
     Allowed call sites:
-    - src/autoskillit/execution/_process_kill.py (defines the helpers)
-    - execute_termination_action in src/autoskillit/execution/process.py
-    - BaseException handler in run_managed_async in process.py (cleanup path)
-    - run_managed_sync in process.py (sync cleanup path)
+    - execution/process/_process_kill.py: async_kill_process_tree and
+      _OwnedProcessFinalizer.run
+    - execution/process/__init__.py: execute_termination_action,
+      run_managed_async, run_managed_sync
+    - fleet/_dispatch_reaper.py: reap_stale_dispatches
+    - fleet/_api.py: _write_pid
     """
-    allowed_files = {
-        SRC_ROOT / "execution" / "process" / "_process_kill.py",
-        SRC_ROOT / "execution" / "process" / "__init__.py",
-        SRC_ROOT / "fleet" / "_dispatch_reaper.py",
-        # _api.py's _write_pid callback (fail-closed layer IL-2) kills the spawned
-        # child via the canonical sync primitive when mark_dispatch_running
-        # raises (see plan rectify_fleet-resume-precondition-chokepoint_*).
-        SRC_ROOT / "fleet" / "_api.py",
+    allowed_functions = {
+        SRC_ROOT / "execution" / "process" / "_process_kill.py": {
+            "async_kill_process_tree",
+            "_OwnedProcessFinalizer.run",
+        },
+        SRC_ROOT / "execution" / "process" / "__init__.py": {
+            "execute_termination_action",
+            "run_managed_async",
+            "run_managed_sync",
+        },
+        SRC_ROOT / "fleet" / "_dispatch_reaper.py": {"reap_stale_dispatches"},
+        SRC_ROOT / "fleet" / "_api.py": {"_write_pid"},
     }
     violations: list[str] = []
 
+    class KillCallVisitor(ast.NodeVisitor):
+        def __init__(self, path: Path) -> None:
+            self.path = path
+            self.scope: list[str] = []
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            self.scope.append(node.name)
+            self.generic_visit(node)
+            self.scope.pop()
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            self.scope.append(node.name)
+            self.generic_visit(node)
+            self.scope.pop()
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            self.scope.append(node.name)
+            self.generic_visit(node)
+            self.scope.pop()
+
+        def visit_Call(self, node: ast.Call) -> None:
+            called_name = ""
+            if isinstance(node.func, ast.Name):
+                called_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                called_name = node.func.attr
+            if called_name in {"async_kill_process_tree", "kill_process_tree"}:
+                qualified_scope = ".".join(self.scope) or "<module>"
+                if qualified_scope not in allowed_functions.get(self.path, set()):
+                    violations.append(
+                        f"  {self.path.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
+                        f"{qualified_scope} calls {called_name}() without authorization"
+                    )
+            self.generic_visit(node)
+
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
-        if py_file in allowed_files:
-            continue
         try:
             tree = ast.parse(py_file.read_text())
         except SyntaxError:
             continue
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id in {"async_kill_process_tree", "kill_process_tree"}
-            ):
-                violations.append(
-                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
-                    f"direct call to {node.func.id}() outside allowed files"
-                )
-            elif (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr in {"async_kill_process_tree", "kill_process_tree"}
-            ):
-                violations.append(
-                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
-                    f"direct call to .{node.func.attr}() outside allowed files"
-                )
+        KillCallVisitor(py_file).visit(tree)
 
     assert not violations, (
-        "Direct async_kill_process_tree/kill_process_tree calls found outside allowed files.\n"
-        "All kill calls must go through execute_termination_action in process.py:\n"
+        "Direct process-tree kill calls found outside function-level authorization.\n"
         + "\n".join(violations)
     )
 

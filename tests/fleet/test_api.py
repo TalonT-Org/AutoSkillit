@@ -503,10 +503,10 @@ class TestDispatchMarkerLifecycle:
     """Tests for marker lifecycle integration in _run_dispatch."""
 
     @pytest.mark.anyio
-    async def test_run_dispatch_forwards_marker_dir_and_session_id_to_executor(
+    async def test_run_dispatch_forwards_marker_scope_identity_to_executor(
         self, tool_ctx, monkeypatch, tmp_path: Path
     ) -> None:
-        """dispatch_food_truck is called with marker_dir and session_id kwargs."""
+        """dispatch_food_truck receives marker directory and scope identity."""
         _setup_dispatch(tool_ctx, monkeypatch)
         marker_dir = tmp_path / "markers"
         marker_dir.mkdir()
@@ -517,7 +517,7 @@ class TestDispatchMarkerLifecycle:
         assert len(tool_ctx.executor.dispatch_calls) == 1
         call = tool_ctx.executor.dispatch_calls[0]
         assert call.marker_dir == marker_dir
-        assert call.session_id is not None
+        assert call.marker_scope_session_id is not None
 
     @pytest.mark.anyio
     async def test_run_dispatch_continues_when_marker_dir_unavailable(

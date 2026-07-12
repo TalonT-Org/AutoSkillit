@@ -22,6 +22,7 @@ from ._type_resume import NoResume, ResumeSpec
 
 __all__ = [
     "StreamParser",
+    "StreamParserFactory",
     "ResultParser",
     "EnvPolicy",
     "SessionLocator",
@@ -34,6 +35,13 @@ class StreamParser(Protocol):
     """Protocol for parsing raw backend stdout/JSONL into SessionEvent objects."""
 
     def parse_line(self, line: str) -> SessionEvent | None: ...
+
+
+@runtime_checkable
+class StreamParserFactory(Protocol):
+    """Zero-argument factory returning a fresh parser for one attempt."""
+
+    def __call__(self) -> StreamParser: ...
 
 
 @runtime_checkable
@@ -107,13 +115,12 @@ class CodingAgentBackend(Protocol):
 
     def stream_parser(self, completion_marker: str = "") -> StreamParser: ...
 
-    def stream_parser_factory(self, completion_marker: str = "") -> Any:
+    def stream_parser_factory(self, completion_marker: str = "") -> StreamParserFactory:
         """Return a fresh-parser factory (issue #4233).
 
         Each call to the factory (``factory()``) yields a distinct parser
         instance so concurrent watchers/calls cannot share lifecycle
-        reducer state. Backends that do not participate in async-child
-        lifecycle tracking may return ``Any()``.
+        reducer state.
         """
         ...
 

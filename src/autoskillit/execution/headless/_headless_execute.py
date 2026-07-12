@@ -15,6 +15,7 @@ import anyio
 
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
+    DEFAULT_CLEANUP_BUDGET_SECONDS,
     DISPATCH_ID_ENV_VAR,
     CmdSpec,
     CodingAgentBackend,
@@ -106,12 +107,13 @@ async def _execute_claude_headless(
     enable_deadline_extension: bool = False,
     max_extension_seconds: float = 7200,
     marker_dir: Path | None = None,
-    session_id: str | None = None,
+    marker_scope_session_id: str | None = None,
     step_backend: CodingAgentBackend | None = None,
     model_identity: ModelIdentity = ModelIdentity.unknown(),
     inspector_eligible: bool = False,
     inspector_model: str = "",
     on_session_id_resolved: Callable[[str], None] | None = None,
+    cleanup_budget_seconds: float = DEFAULT_CLEANUP_BUDGET_SECONDS,
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -240,9 +242,11 @@ async def _execute_claude_headless(
     _result: SubprocessResult | None = None
     result: SubprocessResult
     skill_result: SkillResult
-    _stream_parser = _step_backend.stream_parser(completion_marker=completion_marker)
     while True:
         try:
+            _stream_parser_factory = _step_backend.stream_parser_factory(
+                completion_marker=completion_marker
+            )
             _result = await runner(
                 list(spec.cmd),
                 cwd=Path(cwd),
@@ -262,9 +266,10 @@ async def _execute_claude_headless(
                 enable_deadline_extension=enable_deadline_extension,
                 max_extension_seconds=max_extension_seconds,
                 marker_dir=marker_dir,
-                session_id=session_id,
+                marker_scope_session_id=marker_scope_session_id,
                 on_session_id_resolved=on_session_id_resolved,
-                stream_parser=_stream_parser,
+                stream_parser_factory=_stream_parser_factory,
+                cleanup_budget_seconds=cleanup_budget_seconds,
                 completion_record_types=_step_backend.capabilities.completion_record_types,
                 session_record_types=_step_backend.capabilities.session_record_types,
                 inspector_callback=None,

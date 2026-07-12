@@ -205,23 +205,25 @@ class TestUserObservations:
         }
 
     def test_async_launched_yields_active(self) -> None:
-        obj = self._user_tool_result(tool_use_id="toolu_A", async_launched=True)
+        obj = self._user_tool_result(
+            tool_use_id="toolu_A", async_launched=True, agent_id="agent_A"
+        )
         obs = extract_lifecycle_observations(obj, "user", byte_offset=10)
         assert obs[0].attempt_state == ChildAttemptState.ACTIVE
         assert obs[0].is_user_result
 
     def test_completed_status_yields_completed(self) -> None:
-        obj = self._user_tool_result(tool_use_id="toolu_A", status="completed")
+        obj = self._user_tool_result(tool_use_id="toolu_A", status="completed", agent_id="agent_A")
         obs = extract_lifecycle_observations(obj, "user")
         assert obs[0].attempt_state == ChildAttemptState.COMPLETED
 
     def test_failed_status_yields_failed(self) -> None:
-        obj = self._user_tool_result(tool_use_id="toolu_A", status="failed")
+        obj = self._user_tool_result(tool_use_id="toolu_A", status="failed", agent_id="agent_A")
         obs = extract_lifecycle_observations(obj, "user")
         assert obs[0].attempt_state == ChildAttemptState.FAILED
 
     def test_cancelled_status_yields_cancelled(self) -> None:
-        obj = self._user_tool_result(tool_use_id="toolu_A", status="cancelled")
+        obj = self._user_tool_result(tool_use_id="toolu_A", status="cancelled", agent_id="agent_A")
         obs = extract_lifecycle_observations(obj, "user")
         assert obs[0].attempt_state == ChildAttemptState.CANCELLED
 
@@ -255,12 +257,12 @@ class TestUserObservations:
                     {
                         "type": "tool_result",
                         "tool_use_id": "toolu_A",
-                        "content": {"async_launched": True},
+                        "content": {"async_launched": True, "agentId": "agent_A"},
                     },
                     {
                         "type": "tool_result",
                         "tool_use_id": "toolu_B",
-                        "content": {"status": "completed"},
+                        "content": {"status": "completed", "agentId": "agent_B"},
                     },
                 ],
             },
@@ -329,6 +331,16 @@ class TestParentAssistantMarker:
             {"type": "system", "uuid": "u", "message": {"id": "m", "content": []}},
             byte_offset=10,
             completion_marker="X",
+        )
+        assert result.marker is None
+
+    def test_subagent_assistant_record_yields_no_parent_marker(self) -> None:
+        record = _assistant(marker_text="AUTOSKILLIT_COMPLETION")
+        record["subagent_type"] = "Explore"
+        result = extract_parent_assistant_marker(
+            record,
+            byte_offset=10,
+            completion_marker="AUTOSKILLIT_COMPLETION",
         )
         assert result.marker is None
 

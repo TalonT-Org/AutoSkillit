@@ -11,8 +11,14 @@ import pytest
 from autoskillit.core.types import (
     ChannelBStatus,
     ChannelConfirmation,
+    CompletionCandidate,
     InspectorVerdict,
+    LifecycleDecision,
     TerminationReason,
+)
+from autoskillit.execution.process import (
+    _apply_lifecycle_completion_authority,
+    _watch_process_with_lifecycle,
 )
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
@@ -22,6 +28,73 @@ from autoskillit.execution.process._process_race import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+@pytest.mark.anyio
+async def test_process_exit_drain_expiry_fails_closed(tmp_path: Path) -> None:
+    class _ExitedProcess:
+        pid = 999_999
+        returncode = 0
+
+        async def wait(self) -> int:
+            return self.returncode
+
+    stdout_path = tmp_path / "stdout.ndjson"
+    stdout_path.write_text("")
+    acc = RaceAccumulator(channel_b_status=ChannelBStatus.COMPLETION)
+    actor_decision_event = anyio.Event()
+    trigger = anyio.Event()
+    decisions: list[LifecycleDecision] = []
+
+    def _record_decision(
+        decision: LifecycleDecision,
+        candidate: CompletionCandidate | None,  # noqa: ARG001
+    ) -> None:
+        decisions.append(decision)
+        actor_decision_event.set()
+
+    fact_send, fact_receive = anyio.create_memory_object_stream[object](1)
+    async with fact_send, fact_receive:
+        await _watch_process_with_lifecycle(
+            _ExitedProcess(),  # type: ignore[arg-type]
+            acc,
+            fact_send,
+            stdout_path,
+            actor_decision_event,
+            trigger,
+            0.01,
+            _record_decision,
+        )
+
+    assert decisions == [LifecycleDecision.CATCH_UP_FAILED]
+    assert actor_decision_event.is_set()
+    assert trigger.is_set()
+
+
+@pytest.mark.parametrize(
+    "channel_confirmation",
+    [ChannelConfirmation.CHANNEL_A, ChannelConfirmation.CHANNEL_B],
+)
+def test_raw_channel_completion_requires_lifecycle_authorization(
+    channel_confirmation: ChannelConfirmation,
+) -> None:
+    termination, confirmation = _apply_lifecycle_completion_authority(
+        TerminationReason.COMPLETED,
+        channel_confirmation,
+        LifecycleDecision.CONTINUE,
+    )
+    assert termination is TerminationReason.HEALTH_INSPECTOR
+    assert confirmation is ChannelConfirmation.UNMONITORED
+
+
+def test_eligible_lifecycle_decision_authorizes_completion() -> None:
+    termination, confirmation = _apply_lifecycle_completion_authority(
+        TerminationReason.NATURAL_EXIT,
+        ChannelConfirmation.UNMONITORED,
+        LifecycleDecision.ELIGIBLE,
+    )
+    assert termination is TerminationReason.COMPLETED
+    assert confirmation is ChannelConfirmation.CHANNEL_A
 
 
 class TestChannelBStatusExhaustiveCoverage:

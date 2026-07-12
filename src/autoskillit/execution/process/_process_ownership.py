@@ -5,7 +5,7 @@ observed workload identity used by tracing/callbacks; this tracker
 captures and retains canonical root + descendant identities so cleanup
 can finalize them after root-first exit.
 
-The tracker retains canonical PID/create-time pairs monotonically even
+The tracker retains canonical PID/start-time identities monotonically even
 after the root has been reaped. Descendants forked after the last
 identity refresh are still discovered because the tracker enumerates
 the captured process group/session before finalize.
@@ -17,12 +17,16 @@ walks only at finalize time, never for cache priming.
 from __future__ import annotations
 
 import os
-import time
 from dataclasses import dataclass, field
 
 import psutil
 
-from autoskillit.core import CleanupOutcome, ProcessIdentity, get_logger
+from autoskillit.core import (
+    CleanupOutcome,
+    ProcessIdentity,
+    get_logger,
+    read_starttime_ticks,
+)
 
 logger = get_logger(__name__)
 
@@ -32,21 +36,23 @@ class OwnedProcessIdentityTracker:
     """Per-invocation tracker for owned root + descendant process identities."""
 
     root_pid: int = 0
-    root_start_time: float = 0.0
+    root_starttime_ticks: int = 0
+    root_fallback_create_time: float = 0.0
     process_group_id: int = 0
     session_id: int = 0
-    captured: dict[int, float] = field(default_factory=dict)
-    """Map of canonical PID -> create-time (seconds since epoch, POSIX)."""
+    captured: dict[int, tuple[int, float]] = field(default_factory=dict)
+    """Map of PID to ``(starttime_ticks, fallback_create_time)``."""
 
     def register_root(
         self,
         pid: int,
-        start_time: float,
+        starttime_ticks: int,
+        fallback_create_time: float,
         *,
         process_group_id: int | None = None,
         session_id: int | None = None,
     ) -> None:
-        """Register the owned root PID/create-time immediately after spawn.
+        """Register the owned root identity immediately after spawn.
 
         Identity capture MUST happen before ``Process.wait()`` reaps the
         root, otherwise the post-reap enumeration cannot match it. PTY
@@ -55,8 +61,9 @@ class OwnedProcessIdentityTracker:
         if pid <= 0:
             raise ValueError("root_pid_must_be_positive")
         self.root_pid = pid
-        self.root_start_time = start_time
-        self.captured[pid] = start_time
+        self.root_starttime_ticks = starttime_ticks
+        self.root_fallback_create_time = fallback_create_time
+        self.captured[pid] = (starttime_ticks, fallback_create_time)
         if process_group_id is not None:
             self.process_group_id = process_group_id
         if session_id is not None:
@@ -75,12 +82,17 @@ class OwnedProcessIdentityTracker:
         except (OSError, ProcessLookupError):
             pass
 
-    def add_descendant(self, pid: int, start_time: float) -> None:
-        """Retain a descendant PID/create-time identity monotonically."""
+    def add_descendant(
+        self,
+        pid: int,
+        starttime_ticks: int,
+        fallback_create_time: float,
+    ) -> None:
+        """Retain a descendant process identity monotonically."""
         if pid <= 0 or pid == self.root_pid:
             return
         if pid not in self.captured:
-            self.captured[pid] = start_time
+            self.captured[pid] = (starttime_ticks, fallback_create_time)
 
     def snapshot_identities(self) -> tuple[ProcessIdentity, ...]:
         """Return a frozen tuple of every retained identity.
@@ -90,15 +102,16 @@ class OwnedProcessIdentityTracker:
         """
         ordered = sorted(self.captured.items(), key=lambda kv: kv[0])
         out: list[ProcessIdentity] = []
-        for pid, create_time in ordered:
+        for pid, (starttime_ticks, fallback_create_time) in ordered:
             out.append(
                 ProcessIdentity(
                     root_pid=pid,
-                    start_time=create_time,
+                    starttime_ticks=starttime_ticks,
+                    fallback_create_time=fallback_create_time,
                     process_group_id=self.process_group_id,
                     session_id=self.session_id,
                     descendants=tuple(
-                        (d_pid, d_time) for d_pid, d_time in ordered if d_pid != pid
+                        (d_pid, d_identity[0]) for d_pid, d_identity in ordered if d_pid != pid
                     ),
                 )
             )
@@ -107,31 +120,29 @@ class OwnedProcessIdentityTracker:
     def refresh_from_process_group(self) -> int:
         """Enumerate the captured process group/session and retain new identities.
 
-        Returns the count of new identities added. PID-reused processes
-        are skipped when their create-time does not match a captured
-        entry; this protects against misidentifying an unrelated process
-        that inherited the PID.
+        Returns the count of new identities added. Existing PID keys remain
+        bound to their original start-time identity; ``is_pid_alive`` performs the
+        final PID-reuse check immediately before signal delivery.
         """
         if self.process_group_id <= 0 and self.session_id <= 0:
             return 0
         added = 0
-        try:
-            current_pids = sorted(os.listdir(f"/proc/{self.root_pid}/task"))
-        except (OSError, FileNotFoundError, ProcessLookupError):
-            return 0
-        for pid_str in current_pids:
+        for process in psutil.process_iter(attrs=("pid", "create_time")):
             try:
-                pid = int(pid_str)
-            except ValueError:
+                pid = int(process.info["pid"])
+                pgid = os.getpgid(pid)
+                sid = os.getsid(pid)
+            except (OSError, ProcessLookupError, psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
-            try:
-                _stat = os.stat(f"/proc/{pid}")
-                create_time = _stat.st_ctime
-            except (OSError, FileNotFoundError, ProcessLookupError):
+            if pgid != self.process_group_id and sid != self.session_id:
+                continue
+            create_time = float(process.info["create_time"] or 0.0)
+            starttime_ticks = read_starttime_ticks(pid) or 0
+            if starttime_ticks <= 0 and create_time <= 0:
                 continue
             existing = self.captured.get(pid)
-            if existing is None or abs(existing - create_time) > 0.01:
-                self.captured[pid] = create_time
+            if existing is None:
+                self.captured[pid] = (starttime_ticks, create_time)
                 added += 1
         return added
 
@@ -159,29 +170,38 @@ def make_tracker() -> OwnedProcessIdentityTracker:
     return OwnedProcessIdentityTracker()
 
 
-def is_pid_alive(pid: int, expected_create_time: float | None = None) -> bool:
-    """Return True when ``pid`` is alive and (when provided) matches the create-time.
+def is_pid_present(pid: int) -> bool:
+    """Return whether a PID still has a process-table entry, including zombies."""
+    return pid > 0 and psutil.pid_exists(pid)
 
-    Used by the shielded finalizer to verify identity before sending
-    SIGTERM/SIGKILL. ``expected_create_time`` is the POSIX ctime from
-    /proc/[pid]; PID reuse protection rejects processes whose create-time
-    differs.
+
+def is_pid_alive(
+    pid: int,
+    expected_starttime_ticks: int = 0,
+    expected_fallback_create_time: float = 0.0,
+) -> bool:
+    """Return whether ``pid`` exists and matches its captured identity.
+
+    Linux compares raw start-time ticks exactly. This deliberately avoids
+    ``psutil.Process.create_time()``, whose wall-clock value includes an
+    uncached boot time that can shift under WSL clock synchronization.
+    Other platforms use psutil create time as a fallback.
     """
-    if pid <= 0:
+    if not is_pid_present(pid):
+        return False
+    if expected_starttime_ticks > 0:
+        return read_starttime_ticks(pid) == expected_starttime_ticks
+    if expected_fallback_create_time <= 0:
         return False
     try:
         proc = psutil.Process(pid)
-        if not psutil.pid_exists(pid):
-            return False
         with proc.oneshot():
             create_time = proc.create_time()
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         return False
-    if expected_create_time is None:
-        return True
-    return abs(create_time - expected_create_time) < 0.5
+    return create_time == expected_fallback_create_time
 
 
-def time_remaining(deadline: float) -> float:
+def time_remaining(deadline: float, *, now: float) -> float:
     """Return remaining time until ``deadline`` (monotonic clock)."""
-    return max(0.0, deadline - time.monotonic())
+    return max(0.0, deadline - now)

@@ -207,11 +207,12 @@ class TestClaudeStreamParserBackendData:
         assert result is not None
         assert result.backend_data is None
 
-    def test_ignored_line_has_no_backend_data(self) -> None:
+    def test_ignored_assistant_retains_single_decode_payload(self) -> None:
         parser = ClaudeStreamParser()
         result = parser.parse_line(_assistant_line())
         assert result is not None
-        assert result.backend_data is None
+        assert isinstance(result.backend_data, ClaudeEventData)
+        assert result.backend_data.record_type == "assistant"
 
 
 class TestClaudeResultParserSessionId:

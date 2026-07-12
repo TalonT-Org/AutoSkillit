@@ -152,6 +152,32 @@ class TestTaskfile:
         assert "status" in task, "compile-recipes must have a status: block"
         assert task["status"], "compile-recipes status: block must not be empty"
 
+    def test_update_codex_fixtures_contract(self) -> None:
+        data = self._load()
+        task = data["tasks"]["update-codex-fixtures"]
+        commands = "\n".join(str(command) for command in task["cmds"])
+        assert "_tmpdir-setup" in task.get("deps", [])
+        assert "tests/execution/backends/test_codex_deterministic_conformance.py" in commands
+        assert "--update-fixtures" in commands
+        assert "-n0" in commands
+        assert ".autoskillit/temp/update-codex-fixtures-" in commands
+        assert "PYTEST_EXIT=$?" in commands
+        assert "exit $PYTEST_EXIT" in commands
+
+    def test_claude_smoke_contract(self) -> None:
+        data = self._load()
+        task = data["tasks"]["test-smoke-claude"]
+        commands = "\n".join(str(command) for command in task["cmds"])
+        preconditions = "\n".join(str(item) for item in task.get("preconditions", []))
+        assert "_tmpdir-setup" in task.get("deps", [])
+        assert task["env"]["CLAUDE_CODE_SMOKE_TEST"] == "1"
+        assert "command -v claude" in preconditions
+        assert "tests/execution/backends/test_cli_conformance_probes.py" in commands
+        assert "-m canary" in commands
+        assert ".autoskillit/temp/smoke-claude-" in commands
+        assert "PYTEST_EXIT=$?" in commands
+        assert "exit $PYTEST_EXIT" in commands
+
 
 def test_taskfile_pytest_paths_exist() -> None:
     """All pytest file paths in Taskfile.yml must exist."""

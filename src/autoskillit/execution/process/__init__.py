@@ -14,6 +14,7 @@ from __future__ import annotations
 import functools
 import subprocess
 import time
+import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
@@ -21,16 +22,34 @@ from typing import TYPE_CHECKING, assert_never
 
 import anyio
 import anyio.abc
+import psutil
+from anyio.streams.memory import MemoryObjectSendStream
 
 from autoskillit.core import (
     DEFAULT_CLEANUP_BUDGET_SECONDS,
+    ChannelBStatus,
     ChannelConfirmation,
+    ChildLifecycleSnapshot,
+    CompletionCandidate,
     KillReason,
+    LifecycleDecision,
+    StreamParserFactory,
     SubprocessResult,
     TerminationAction,
     TerminationReason,
     get_logger,
     read_starttime_ticks,
+)
+from autoskillit.execution.process._channel_a_pump import (
+    ChannelAPumpState,
+    bind_parser,
+    run_channel_a_pump,
+)
+from autoskillit.execution.process._lifecycle_actor import (
+    CatchUpCancellationFact,
+    ChannelBProposal,
+    ProcessExitFact,
+    run_lifecycle_actor,
 )
 from autoskillit.execution.process._process_io import create_temp_io, read_temp_output
 from autoskillit.execution.process._process_jsonl import (
@@ -40,7 +59,7 @@ from autoskillit.execution.process._process_jsonl import (
     _marker_is_standalone,
 )
 from autoskillit.execution.process._process_kill import (
-    _wait_process_dead,
+    _OwnedProcessFinalizer,
     async_kill_process_tree,
     kill_process_tree,
 )
@@ -51,6 +70,7 @@ from autoskillit.execution.process._process_monitor import (
     _heartbeat,
     _session_log_monitor,
 )
+from autoskillit.execution.process._process_ownership import make_tracker
 from autoskillit.execution.process._process_pty import pty_wrap_command
 from autoskillit.execution.process._process_race import (
     RaceAccumulator,
@@ -73,6 +93,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+
 # Aggregate __all__ collects all public symbols from the execution sub-modules
 # (_process_io, _process_jsonl, etc.) into a single facade. This keeps the
 # internal sub-module split private — callers import from the facade, not from
@@ -92,7 +113,6 @@ __all__ = [
     "_jsonl_last_record_type",
     "_marker_is_standalone",
     "_session_log_monitor",
-    "_wait_process_dead",
     "_watch_heartbeat",
     "_watch_process",
     "_watch_session_log",
@@ -163,6 +183,7 @@ async def execute_termination_action(
     process_exited_event: anyio.Event,
     grace_seconds: float,
     proc_log: structlog.BoundLogger,
+    finalizer: _OwnedProcessFinalizer | None = None,
 ) -> KillReason:
     """Single authorized executor for all kill decisions in run_managed_async.
 
@@ -173,6 +194,8 @@ async def execute_termination_action(
     """
     match action:
         case TerminationAction.NO_KILL:
+            if finalizer is not None:
+                await finalizer.run()
             return KillReason.NATURAL_EXIT
         case TerminationAction.DRAIN_THEN_KILL_IF_ALIVE:
             with anyio.move_on_after(grace_seconds):
@@ -181,13 +204,148 @@ async def execute_termination_action(
                 proc_log.debug("natural_exit_after_drain", returncode=proc.returncode)
                 return KillReason.NATURAL_EXIT
             proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
-            await async_kill_process_tree(proc.pid)
+            if finalizer is not None:
+                await finalizer.run()
+            else:
+                await async_kill_process_tree(proc.pid)
             return KillReason.KILL_AFTER_COMPLETION
         case TerminationAction.IMMEDIATE_KILL:
-            await async_kill_process_tree(proc.pid)
+            if finalizer is not None:
+                await finalizer.run()
+            else:
+                await async_kill_process_tree(proc.pid)
             return KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
+
+
+def _stdout_size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
+def _apply_lifecycle_completion_authority(
+    termination: TerminationReason,
+    channel_confirmation: ChannelConfirmation,
+    lifecycle_decision: LifecycleDecision,
+) -> tuple[TerminationReason, ChannelConfirmation]:
+    """Require actor authorization before raw channel evidence can complete."""
+    if lifecycle_decision is LifecycleDecision.ELIGIBLE:
+        return TerminationReason.COMPLETED, ChannelConfirmation.CHANNEL_A
+    if lifecycle_decision in {
+        LifecycleDecision.CHILD_WORK_FAILED,
+        LifecycleDecision.CATCH_UP_FAILED,
+    }:
+        return TerminationReason.HEALTH_INSPECTOR, ChannelConfirmation.UNMONITORED
+    if channel_confirmation in {
+        ChannelConfirmation.CHANNEL_A,
+        ChannelConfirmation.CHANNEL_B,
+    }:
+        return TerminationReason.HEALTH_INSPECTOR, ChannelConfirmation.UNMONITORED
+    return termination, channel_confirmation
+
+
+async def _watch_process_with_lifecycle(
+    proc: anyio.abc.Process,
+    acc: RaceAccumulator,
+    fact_send: anyio.abc.ObjectSendStream[object],
+    stdout_path: Path,
+    actor_decision_event: anyio.Event,
+    trigger: anyio.Event,
+    completion_drain_timeout: float,
+    on_decision: Callable[[LifecycleDecision, CompletionCandidate | None], None],
+) -> None:
+    local_trigger = anyio.Event()
+    await _watch_process(proc, acc, local_trigger)
+    request_id = f"process-exit-{uuid.uuid4()}"
+    await fact_send.send(
+        ProcessExitFact(
+            request_id=request_id,
+            returncode=proc.returncode,
+            required_channel_a_byte_offset=_stdout_size(stdout_path),
+        )
+    )
+    with anyio.move_on_after(completion_drain_timeout) as drain_scope:
+        await actor_decision_event.wait()
+    if drain_scope.cancel_called and not actor_decision_event.is_set():
+        on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
+    trigger.set()
+
+
+async def _watch_session_log_with_lifecycle(
+    *,
+    session_log_dir: Path,
+    completion_marker: str,
+    stale_threshold: float,
+    spawn_time: float,
+    session_record_types: frozenset[str],
+    pid: int,
+    completion_drain_timeout: float,
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+    channel_b_ready: anyio.Event,
+    phase1_poll: float,
+    phase2_poll: float,
+    phase1_timeout: float,
+    session_id_timeout: float,
+    stdout_session_id_ready: anyio.Event,
+    max_suppression_seconds: float | None,
+    marker_dir: Path | None,
+    marker_scope_session_id: str | None,
+    stdout_path: Path,
+    fact_send: anyio.abc.ObjectSendStream[object],
+    reply_sends: dict[str, MemoryObjectSendStream[object]],
+) -> None:
+    local_trigger = anyio.Event()
+    await _watch_session_log(
+        session_log_dir,
+        completion_marker,
+        stale_threshold,
+        spawn_time,
+        session_record_types,
+        pid,
+        completion_drain_timeout,
+        acc,
+        local_trigger,
+        channel_b_ready,
+        phase1_poll,
+        phase2_poll,
+        phase1_timeout,
+        session_id_timeout,
+        stdout_session_id_ready,
+        max_suppression_seconds,
+        marker_dir,
+        marker_scope_session_id,
+    )
+    if acc.channel_b_status is not ChannelBStatus.COMPLETION:
+        trigger.set()
+        return
+
+    request_id = f"channel-b-{uuid.uuid4()}"
+    reply_send, reply_receive = anyio.create_memory_object_stream[object](1)
+    reply_sends[request_id] = reply_send
+    try:
+        await fact_send.send(
+            ChannelBProposal(
+                request_id=request_id,
+                status="completion",
+                session_id=acc.channel_b_session_id,
+                byte_offset=0,
+                required_byte_offset=_stdout_size(stdout_path),
+                orphan_diagnostic=acc.channel_b_orphaned_tool_result,
+            )
+        )
+        with anyio.move_on_after(completion_drain_timeout) as scope:
+            await reply_receive.receive()
+        if scope.cancel_called:
+            with anyio.CancelScope(shield=True):
+                await fact_send.send(CatchUpCancellationFact(request_id=request_id))
+    finally:
+        reply_sends.pop(request_id, None)
+        await reply_send.aclose()
+        await reply_receive.aclose()
 
 
 async def run_managed_async(
@@ -217,8 +375,9 @@ async def run_managed_async(
     _phase1_timeout: float = 30.0,
     _session_id_timeout: float = 1.0,
     marker_dir: Path | None = None,
-    session_id: str | None = None,
+    marker_scope_session_id: str | None = None,
     stream_parser: StreamParser | None = None,
+    stream_parser_factory: StreamParserFactory | None = None,
     inspector_callback: InspectorCallback | None = None,
     workload_basenames: frozenset[str] | None = None,
     on_session_id_resolved: Callable[[str], None] | None = None,
@@ -270,6 +429,16 @@ async def run_managed_async(
                 cwd=cwd,
                 env=_env,
                 start_new_session=True,
+            )
+            _ownership_tracker = make_tracker()
+            _ownership_tracker.register_root(
+                proc.pid,
+                read_starttime_ticks(proc.pid) or 0,
+                psutil.Process(proc.pid).create_time(),
+            )
+            _finalizer = _OwnedProcessFinalizer(
+                tracker=_ownership_tracker,
+                budget_seconds=cleanup_budget_seconds,
             )
 
             # Resolve the workload TraceTarget — the PID that should be observed.
@@ -335,53 +504,163 @@ async def run_managed_async(
             channel_b_ready = anyio.Event()
             stdout_session_id_ready = anyio.Event()
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
+            actor_decision_event = anyio.Event()
+            lifecycle_decision = LifecycleDecision.CONTINUE
+            lifecycle_candidate: CompletionCandidate | None = None
+            lifecycle_snapshot: ChildLifecycleSnapshot | None = None
+            reply_sends: dict[str, MemoryObjectSendStream[object]] = {}
+            fact_send, fact_receive = anyio.create_memory_object_stream[object](64)
+            pump_command_send, pump_command_receive = anyio.create_memory_object_stream(8)
+
+            lifecycle_enabled = stream_parser_factory is not None or stream_parser is not None
+            if stream_parser_factory is not None:
+                lifecycle_parser = stream_parser_factory()
+            elif stream_parser is not None:
+                lifecycle_parser = stream_parser
+            else:
+                lifecycle_parser = None
+
+            def _record_stdout_session_id(resolved_session_id: str) -> None:
+                if acc.stdout_session_id:
+                    return
+                acc.stdout_session_id = resolved_session_id
+                stdout_session_id_ready.set()
+                if on_session_id_resolved is not None:
+                    on_session_id_resolved(resolved_session_id)
+
+            def _record_lifecycle_snapshot(snapshot: ChildLifecycleSnapshot) -> None:
+                nonlocal lifecycle_snapshot
+                lifecycle_snapshot = snapshot
+
+            def _record_lifecycle_decision(
+                decision: LifecycleDecision,
+                candidate: CompletionCandidate | None,
+            ) -> None:
+                nonlocal lifecycle_decision, lifecycle_candidate
+                lifecycle_decision = decision
+                lifecycle_candidate = candidate
+                if decision is LifecycleDecision.ELIGIBLE:
+                    acc.channel_a_confirmed = True
+                actor_decision_event.set()
+                trigger.set()
+
+            def _reply_send_for_request(
+                request_id: str,
+            ) -> MemoryObjectSendStream[object] | None:
+                return reply_sends.get(request_id)
+
+            pump_state: ChannelAPumpState | None = None
+            if lifecycle_parser is not None:
+                pump_state = ChannelAPumpState(
+                    completion_marker=completion_marker,
+                    stdout_path=stdout_path,
+                    on_session_id_resolved=_record_stdout_session_id,
+                )
+                bind_parser(pump_state, lifecycle_parser)
 
             async with anyio.create_task_group() as tg:
-                tg.start_soon(_watch_process, proc, acc, trigger)
-                tg.start_soon(
-                    functools.partial(
-                        _watch_heartbeat,
-                        stream_parser=stream_parser,
-                        _poll_interval=_heartbeat_poll,
-                    ),
-                    stdout_path,
-                    completion_record_types,
-                    completion_marker,
-                    acc,
-                    trigger,
-                )
-                if session_log_dir is not None:
+                if lifecycle_enabled and pump_state is not None:
                     tg.start_soon(
                         functools.partial(
-                            _extract_stdout_session_id,
-                            stream_parser=stream_parser,
-                            on_session_id_resolved=on_session_id_resolved,
+                            run_lifecycle_actor,
+                            completion_drain_timeout=completion_drain_timeout,
+                            on_snapshot=_record_lifecycle_snapshot,
                         ),
-                        stdout_path,
-                        acc,
-                        stdout_session_id_ready,
+                        fact_receive,
+                        pump_command_send,
+                        _reply_send_for_request,
+                        _record_lifecycle_decision,
                     )
                     tg.start_soon(
-                        _watch_session_log,
-                        session_log_dir,
-                        completion_marker,
-                        stale_threshold,
-                        _spawn_time,
-                        session_record_types,
-                        _observed_pid,
+                        functools.partial(run_channel_a_pump, poll_interval=_heartbeat_poll),
+                        pump_state,
+                        fact_send,
+                        pump_command_receive,
+                    )
+                    tg.start_soon(
+                        _watch_process_with_lifecycle,
+                        proc,
+                        acc,
+                        fact_send,
+                        stdout_path,
+                        actor_decision_event,
+                        trigger,
                         completion_drain_timeout,
+                        _record_lifecycle_decision,
+                    )
+                    if session_log_dir is not None:
+                        tg.start_soon(
+                            functools.partial(
+                                _watch_session_log_with_lifecycle,
+                                session_log_dir=session_log_dir,
+                                completion_marker=completion_marker,
+                                stale_threshold=stale_threshold,
+                                spawn_time=_spawn_time,
+                                session_record_types=session_record_types,
+                                pid=_observed_pid,
+                                completion_drain_timeout=completion_drain_timeout,
+                                acc=acc,
+                                trigger=trigger,
+                                channel_b_ready=channel_b_ready,
+                                phase1_poll=_phase1_poll,
+                                phase2_poll=_phase2_poll,
+                                phase1_timeout=_phase1_timeout,
+                                session_id_timeout=_session_id_timeout,
+                                stdout_session_id_ready=stdout_session_id_ready,
+                                max_suppression_seconds=max_suppression_seconds,
+                                marker_dir=marker_dir,
+                                marker_scope_session_id=marker_scope_session_id,
+                                stdout_path=stdout_path,
+                                fact_send=fact_send,
+                                reply_sends=reply_sends,
+                            )
+                        )
+                else:
+                    tg.start_soon(_watch_process, proc, acc, trigger)
+                    tg.start_soon(
+                        functools.partial(
+                            _watch_heartbeat,
+                            stream_parser=stream_parser,
+                            _poll_interval=_heartbeat_poll,
+                        ),
+                        stdout_path,
+                        completion_record_types,
+                        completion_marker,
                         acc,
                         trigger,
-                        channel_b_ready,
-                        _phase1_poll,
-                        _phase2_poll,
-                        _phase1_timeout,
-                        _session_id_timeout,
-                        stdout_session_id_ready,
-                        max_suppression_seconds,
-                        marker_dir,
-                        session_id,
                     )
+                    if session_log_dir is not None:
+                        tg.start_soon(
+                            functools.partial(
+                                _extract_stdout_session_id,
+                                stream_parser=stream_parser,
+                                on_session_id_resolved=on_session_id_resolved,
+                            ),
+                            stdout_path,
+                            acc,
+                            stdout_session_id_ready,
+                        )
+                        tg.start_soon(
+                            _watch_session_log,
+                            session_log_dir,
+                            completion_marker,
+                            stale_threshold,
+                            _spawn_time,
+                            session_record_types,
+                            _observed_pid,
+                            completion_drain_timeout,
+                            acc,
+                            trigger,
+                            channel_b_ready,
+                            _phase1_poll,
+                            _phase2_poll,
+                            _phase1_timeout,
+                            _session_id_timeout,
+                            stdout_session_id_ready,
+                            max_suppression_seconds,
+                            marker_dir,
+                            marker_scope_session_id,
+                        )
                 if idle_output_timeout is not None and idle_output_timeout > 0:
                     tg.start_soon(
                         functools.partial(
@@ -391,7 +670,7 @@ async def run_managed_async(
                             acc,
                             trigger,
                             marker_dir=marker_dir,
-                            session_id=session_id,
+                            marker_scope_session_id=marker_scope_session_id,
                             max_suppression_seconds=max_suppression_seconds or 1800.0,
                             inspector_callback=inspector_callback,
                             timeout_scope_ref=timeout_scope_ref,
@@ -415,7 +694,7 @@ async def run_managed_async(
                             max_extension_seconds,
                             trigger,
                             marker_dir=marker_dir,
-                            session_id=session_id,
+                            marker_scope_session_id=marker_scope_session_id,
                         ),
                     )
                 timeout_scope: anyio.CancelScope | None
@@ -423,30 +702,33 @@ async def run_managed_async(
                     timeout_scope_ref[0] = _ts
                     await trigger.wait()
                 timeout_scope = timeout_scope_ref[0]
-                # Symmetric drain: if the process exited before Channel B deposited,
-                # give the session monitor a bounded window to complete its current
-                # poll cycle and deposit its signal.
                 if (
-                    acc.process_exited
+                    not lifecycle_enabled
+                    and acc.process_exited
                     and acc.channel_b_status is None
                     and session_log_dir is not None
                 ):
-                    proc_log.debug(
-                        "symmetric_drain_started",
-                        reason="process_exited_before_channel_b",
-                        drain_timeout=completion_drain_timeout,
-                    )
                     with anyio.move_on_after(completion_drain_timeout):
                         await channel_b_ready.wait()
-                    proc_log.debug(
-                        "symmetric_drain_complete",
-                        channel_b_status=acc.channel_b_status,
-                        channel_b_deposited=acc.channel_b_status is not None,
-                    )
+                if (
+                    lifecycle_enabled
+                    and timeout_scope is not None
+                    and timeout_scope.cancelled_caught
+                ):
+                    lifecycle_decision = LifecycleDecision.CATCH_UP_FAILED
+                    actor_decision_event.set()
+                if pump_state is not None:
+                    pump_state.closed = True
                 tg.cancel_scope.cancel()
 
             signals = acc.to_race_signals()
             termination, _channel_confirmation = resolve_termination(signals)
+            if lifecycle_enabled:
+                termination, _channel_confirmation = _apply_lifecycle_completion_authority(
+                    termination,
+                    _channel_confirmation,
+                    lifecycle_decision,
+                )
 
             snapshots_data: list[dict[str, object]] | None = None
             if tracing_handle is not None:
@@ -479,6 +761,7 @@ async def run_managed_async(
                 process_exited_event=signals.process_exited_event,
                 grace_seconds=natural_exit_grace_seconds,
                 proc_log=proc_log,
+                finalizer=_finalizer,
             )
 
             # Flush and close before reading
@@ -503,6 +786,10 @@ async def run_managed_async(
                 tracked_comm=_tracked_comm,
                 orphaned_tool_result=signals.channel_b_orphaned_tool_result,
                 inspector_verdict=signals.inspector_verdict,
+                cleanup_outcome=_finalizer.outcome,
+                lifecycle_snapshot=lifecycle_snapshot,
+                lifecycle_decision=lifecycle_decision,
+                lifecycle_candidate=lifecycle_candidate,
             )
             proc_log.debug(
                 "run_managed_async_result",
@@ -522,7 +809,9 @@ async def run_managed_async(
             with anyio.CancelScope(shield=True):
                 if "tracing_handle" in locals() and tracing_handle is not None:
                     tracing_handle.stop()
-                if "proc" in locals() and proc.returncode is None:
+                if "_finalizer" in locals():
+                    await _finalizer.run()
+                elif "proc" in locals() and proc.returncode is None:
                     await async_kill_process_tree(proc.pid)
             raise
         finally:
@@ -630,8 +919,9 @@ class DefaultSubprocessRunner:
         enable_deadline_extension: bool = False,
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
-        session_id: str | None = None,
+        marker_scope_session_id: str | None = None,
         stream_parser: StreamParser | None = None,
+        stream_parser_factory: StreamParserFactory | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,
@@ -657,11 +947,13 @@ class DefaultSubprocessRunner:
             enable_deadline_extension=enable_deadline_extension,
             max_extension_seconds=max_extension_seconds,
             marker_dir=marker_dir,
-            session_id=session_id,
+            marker_scope_session_id=marker_scope_session_id,
             stream_parser=stream_parser,
+            stream_parser_factory=stream_parser_factory,
             completion_record_types=completion_record_types,
             session_record_types=session_record_types,
             inspector_callback=inspector_callback,
             workload_basenames=workload_basenames,
             on_session_id_resolved=on_session_id_resolved,
+            cleanup_budget_seconds=cleanup_budget_seconds,
         )

@@ -877,7 +877,7 @@ async def test_stale_fired_when_execution_marker_expired(tmp_path):
 async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
     tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """marker_dir and session_id are injected into _monitor_kwargs."""
+    """Marker directory and scope identity are injected into _monitor_kwargs."""
     captured_kwargs: dict[str, object] = {}
 
     async def fake_session_log_monitor(*args, **kwargs) -> SessionMonitorResult:
@@ -913,7 +913,7 @@ async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
             _phase1_timeout=0.1,
             max_suppression_seconds=1800.0,
             marker_dir=tmp_path,
-            session_id="parent-session",
+            marker_scope_session_id="parent-session",
         )
 
     assert captured_kwargs["marker_dir"] == tmp_path
@@ -924,7 +924,7 @@ async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
 async def test_watch_session_log_omits_marker_kwargs_when_none(
     tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """marker_dir=None and session_id=None — keys absent from _monitor_kwargs."""
+    """Unset marker scope values are absent from _monitor_kwargs."""
     captured_kwargs: dict[str, object] = {}
 
     async def fake_session_log_monitor(*args, **kwargs) -> SessionMonitorResult:

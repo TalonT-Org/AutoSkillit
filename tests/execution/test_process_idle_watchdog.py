@@ -146,7 +146,7 @@ async def test_watch_stdout_idle_suppression_evaluated_fires_once_during_suppres
                         trigger,
                         0.02,
                         marker_dir=tmp_path,
-                        session_id="test-sess",
+                        marker_scope_session_id="test-sess",
                         max_suppression_seconds=10.0,
                     )
                 )
@@ -314,7 +314,7 @@ async def test_watch_stdout_idle_suppressed_by_dispatch_marker(
                         trigger,
                         0.05,  # _poll_interval
                         marker_dir=tmp_path,
-                        session_id="test-sess",
+                        marker_scope_session_id="test-sess",
                         max_suppression_seconds=10.0,
                     )
                 )
@@ -350,7 +350,7 @@ async def test_watch_stdout_idle_fires_when_suppression_cap_exceeded(
                     trigger,
                     0.02,
                     marker_dir=tmp_path,
-                    session_id=None,
+                    marker_scope_session_id=None,
                     max_suppression_seconds=0.1,
                 )
             )
@@ -416,7 +416,7 @@ async def test_watch_stdout_idle_suppression_timer_resets_on_growth(
                     trigger,
                     0.02,
                     marker_dir=tmp_path,
-                    session_id=None,
+                    marker_scope_session_id=None,
                     max_suppression_seconds=0.2,
                 )
             )
@@ -461,7 +461,7 @@ async def test_watch_stdout_idle_emits_suppression_warning(
                         trigger,
                         0.02,
                         marker_dir=tmp_path,
-                        session_id="my-session",
+                        marker_scope_session_id="my-session",
                         max_suppression_seconds=10.0,
                     )
                 )
@@ -503,7 +503,7 @@ async def test_watch_stdout_idle_marker_false_fires_immediately(
                     trigger,
                     0.02,
                     marker_dir=tmp_path,
-                    session_id="test",
+                    marker_scope_session_id="test",
                 )
             )
             await trigger.wait()
@@ -594,7 +594,7 @@ async def test_watch_stdout_idle_fires_when_marker_stale(tmp_path: anyio.Path) -
                     trigger,
                     0.2,
                     marker_dir=tmp_path,
-                    session_id=None,
+                    marker_scope_session_id=None,
                 )
             )
             await trigger.wait()
@@ -681,7 +681,7 @@ async def test_stdout_idle_NOT_fired_when_execution_marker_active(
                     trigger,
                     0.02,  # _poll_interval
                     marker_dir=marker_dir,
-                    session_id="caller-session",
+                    marker_scope_session_id="caller-session",
                     max_suppression_seconds=10.0,
                 )
             )

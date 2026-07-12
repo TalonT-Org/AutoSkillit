@@ -9,13 +9,13 @@ from __future__ import annotations
 import sys
 import textwrap
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import anyio
 import pytest
 
-from autoskillit.core.types import KillReason, TerminationAction
-from autoskillit.execution.process import execute_termination_action
+from autoskillit.core.types import CleanupOutcome, KillReason, ProcessIdentity, TerminationAction
+from autoskillit.execution.process import _OwnedProcessFinalizer, execute_termination_action
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -32,6 +32,25 @@ _EXIT_AFTER_SLEEP = textwrap.dedent("""\
 """)
 
 
+class _Tracker:
+    root_pid = 123
+
+    def __init__(self) -> None:
+        self.identity = ProcessIdentity(
+            root_pid=123,
+            starttime_ticks=1000,
+            fallback_create_time=10.0,
+        )
+        self.refresh_count = 0
+
+    def refresh_from_process_group(self) -> int:
+        self.refresh_count += 1
+        return 0
+
+    def snapshot_identities(self) -> tuple[ProcessIdentity, ...]:
+        return (self.identity,)
+
+
 async def _spawn_script(script_text: str, args: list[str], tmp_path) -> anyio.abc.Process:
     """Spawn a Python subprocess running script_text with args."""
     script = tmp_path / "helper.py"
@@ -40,6 +59,136 @@ async def _spawn_script(script_text: str, args: list[str], tmp_path) -> anyio.ab
         [sys.executable, str(script), *args],
         start_new_session=True,
     )
+
+
+@pytest.mark.anyio
+async def test_owned_finalizer_is_single_flight(monkeypatch: pytest.MonkeyPatch) -> None:
+    tracker = _Tracker()
+    alive_checks = 0
+    kill_calls: list[tuple[int, float]] = []
+
+    def _is_alive(pid: int, ticks: int, create_time: float) -> bool:  # noqa: ARG001
+        nonlocal alive_checks
+        alive_checks += 1
+        return alive_checks == 1
+
+    async def _kill(pid: int, timeout: float) -> None:
+        kill_calls.append((pid, timeout))
+        await anyio.sleep(0)
+
+    monkeypatch.setattr("autoskillit.execution.process._process_kill.is_pid_alive", _is_alive)
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_kill.async_kill_process_tree", _kill
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_kill.is_pid_present", lambda _pid: False
+    )
+    finalizer = _OwnedProcessFinalizer(
+        tracker=tracker,  # type: ignore[arg-type]
+        budget_seconds=1.0,
+    )
+    outcomes: list[CleanupOutcome] = []
+
+    async def _run() -> None:
+        outcomes.append(await finalizer.run())
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_run)
+        tg.start_soon(_run)
+
+    assert len(kill_calls) == 1
+    assert len(outcomes) == 2
+    assert outcomes[0] is outcomes[1]
+    assert outcomes[0].succeeded
+
+
+@pytest.mark.anyio
+async def test_owned_finalizer_reports_budget_exhaustion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tracker = _Tracker()
+
+    async def _slow_kill(pid: int, timeout: float) -> None:  # noqa: ARG001
+        await anyio.sleep(1)
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_kill.is_pid_alive",
+        lambda _pid, _ticks, _create_time: True,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_kill.is_pid_present",
+        lambda _pid: True,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_kill.async_kill_process_tree",
+        _slow_kill,
+    )
+    finalizer = _OwnedProcessFinalizer(
+        tracker=tracker,  # type: ignore[arg-type]
+        budget_seconds=0.01,
+    )
+
+    outcome = await finalizer.run()
+
+    assert not outcome.succeeded
+    assert outcome.budget_exhausted
+    assert outcome.retained_identities == (tracker.identity,)
+
+
+@pytest.mark.anyio
+async def test_owned_finalizer_fails_closed_on_live_identity_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tracker = _Tracker()
+    kill_calls: list[int] = []
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_kill.is_pid_alive",
+        lambda _pid, _ticks, _create_time: False,
+    )
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_kill.is_pid_present",
+        lambda _pid: True,
+    )
+
+    async def _kill(pid: int, timeout: float) -> None:  # noqa: ARG001
+        kill_calls.append(pid)
+
+    monkeypatch.setattr(
+        "autoskillit.execution.process._process_kill.async_kill_process_tree", _kill
+    )
+
+    outcome = await _OwnedProcessFinalizer(
+        tracker=tracker,  # type: ignore[arg-type]
+        budget_seconds=1.0,
+    ).run()
+
+    assert kill_calls == []
+    assert not outcome.succeeded
+    assert outcome.retained_identities == (tracker.identity,)
+
+
+@pytest.mark.anyio
+async def test_termination_action_delegates_to_finalizer() -> None:
+    class _Finalizer:
+        calls = 0
+
+        async def run(self) -> None:
+            self.calls += 1
+
+    proc = MagicMock(pid=123, returncode=None)
+    finalizer = _Finalizer()
+    kill_reason = await execute_termination_action(
+        TerminationAction.IMMEDIATE_KILL,
+        proc=proc,
+        process_exited_event=anyio.Event(),
+        grace_seconds=1.0,
+        proc_log=MagicMock(),
+        finalizer=finalizer,  # type: ignore[arg-type]
+    )
+
+    assert kill_reason is KillReason.INFRA_KILL
+    assert finalizer.calls == 1
 
 
 class TestDrainWindowPermitsNaturalExit:

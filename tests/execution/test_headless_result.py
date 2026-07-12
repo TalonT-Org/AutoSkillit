@@ -12,9 +12,12 @@ import structlog.testing
 from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, BackendCapabilities
 from autoskillit.core.types import (
     AgentSessionResult,
+    CleanupOutcome,
     CliSubtype,
     KillReason,
+    LifecycleDecision,
     RetryReason,
+    SessionOutcome,
     SkillResult,
     SubprocessResult,
     TerminationReason,
@@ -31,6 +34,7 @@ from autoskillit.execution.headless import (
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _compute_write_evidence,
+    _retry_precedence,
     _stdout_mentions_write_tools,
 )
 from autoskillit.execution.session import ClaudeSessionResult
@@ -44,6 +48,37 @@ from tests.fixtures.codex import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small, pytest.mark.feature("fleet")]
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            cleanup_outcome=CleanupOutcome(succeeded=False, budget_exhausted=True),
+        ),
+        SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            lifecycle_decision=LifecycleDecision.CHILD_WORK_FAILED,
+        ),
+    ],
+)
+def test_retry_precedence_overrides_success(result: SubprocessResult) -> None:
+    outcome, retry_reason = _retry_precedence(
+        result,
+        SessionOutcome.SUCCEEDED,
+        RetryReason.NONE,
+    )
+    assert outcome is SessionOutcome.RETRIABLE
+    assert retry_reason is RetryReason.RESUME
 
 
 def _idle_stall_result(stdout: str) -> SubprocessResult:

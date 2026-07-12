@@ -25,12 +25,12 @@ offsets; each channel keeps its own offset universe.
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import anyio
+from anyio.streams.memory import MemoryObjectSendStream
 
 from autoskillit.core import (
     ChildLifecycleSnapshot,
@@ -161,7 +161,7 @@ def _register_parent_markers(
 async def _dispatch_catch_up(
     envelope: LifecycleActorEnvelope,
     command: ChannelACatchUpCommand,
-    pump_send: anyio.abc.ObjectSendStream[ChannelACatchUpCommand],
+    pump_send: MemoryObjectSendStream[ChannelACatchUpCommand],
 ) -> bool:
     """Best-effort dispatch; never block the main fact reduction.
 
@@ -174,7 +174,7 @@ async def _dispatch_catch_up(
     fail-closed decision instead of blocking main fact reduction.
     """
     try:
-        pump_send.send_nowait(command)  # type: ignore[attr-defined]
+        pump_send.send_nowait(command)
     except (anyio.WouldBlock, anyio.ClosedResourceError):
         logger.warning(
             "catch_up_command_stream_saturated",
@@ -187,11 +187,12 @@ async def _dispatch_catch_up(
 
 async def run_lifecycle_actor(
     fact_receive: anyio.abc.ObjectReceiveStream[Any],
-    pump_command_send: anyio.abc.ObjectSendStream[ChannelACatchUpCommand],
-    reply_send_by_request: Callable[[str], anyio.abc.ObjectSendStream[Any] | None],
+    pump_command_send: MemoryObjectSendStream[ChannelACatchUpCommand],
+    reply_send_by_request: Callable[[str], MemoryObjectSendStream[Any] | None],
     on_decision: Callable[[LifecycleDecision, CompletionCandidate | None], None],
     *,
     completion_drain_timeout: float = 5.0,
+    on_snapshot: Callable[[ChildLifecycleSnapshot], None] | None = None,
 ) -> None:
     """Consume the bounded fact stream and drive lifecycle adjudication.
 
@@ -208,10 +209,16 @@ async def run_lifecycle_actor(
 
     async def _timer() -> None:
         while True:
-            now = time.monotonic()
+            now = anyio.current_time()
             expired = [(dl, req) for dl, req in deadline_to_request.items() if dl <= now]
             for dl, req in expired:
-                await _dispatch_catch_up_timeout(envelope, req, reply_send_by_request)
+                await _dispatch_catch_up_timeout(
+                    envelope,
+                    req,
+                    reply_send_by_request,
+                    on_decision,
+                    on_snapshot=on_snapshot,
+                )
                 pending_replies.pop(req, None)
                 deadline_to_request.pop(dl, None)
             await anyio.sleep(0.01)
@@ -245,6 +252,7 @@ async def run_lifecycle_actor(
                             processed_channel_a_byte_offset=fact.byte_offset,
                         ),
                     )
+                _evaluate_candidates(envelope, on_decision, on_snapshot=on_snapshot)
                 continue
             if isinstance(fact, ChannelBProposal):
                 cmd = ChannelACatchUpCommand(
@@ -253,8 +261,19 @@ async def run_lifecycle_actor(
                 )
                 # Channel B proposals carry their own required offset (captured at send time).
                 if await _dispatch_catch_up(envelope, cmd, pump_command_send):
-                    deadline = time.monotonic() + completion_drain_timeout
+                    deadline = anyio.current_time() + completion_drain_timeout
                     deadline_to_request[deadline] = cmd.request_id
+                else:
+                    envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
+                    envelope.last_snapshot = envelope.handle.snapshot()
+                    if on_snapshot is not None:
+                        on_snapshot(envelope.last_snapshot)
+                    on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
+                    await _reply(
+                        reply_send_by_request,
+                        fact.request_id,
+                        CatchUpTimeoutFact(request_id=fact.request_id),
+                    )
                 continue
             if isinstance(fact, ProcessExitFact):
                 cmd = ChannelACatchUpCommand(
@@ -262,15 +281,28 @@ async def run_lifecycle_actor(
                     required_byte_offset=fact.required_channel_a_byte_offset,
                 )
                 if await _dispatch_catch_up(envelope, cmd, pump_command_send):
-                    deadline = time.monotonic() + completion_drain_timeout
+                    deadline = anyio.current_time() + completion_drain_timeout
                     deadline_to_request[deadline] = cmd.request_id
+                else:
+                    envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
+                    envelope.last_snapshot = envelope.handle.snapshot()
+                    if on_snapshot is not None:
+                        on_snapshot(envelope.last_snapshot)
+                    on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
+                    await _reply(
+                        reply_send_by_request,
+                        fact.request_id,
+                        CatchUpTimeoutFact(request_id=fact.request_id),
+                    )
                 # Once the exit is consumed, snapshot obligations.
-                _evaluate_candidates(envelope, on_decision)
+                _evaluate_candidates(envelope, on_decision, on_snapshot=on_snapshot)
                 continue
             if isinstance(fact, CatchUpTimeoutFact):
                 envelope.pending_requests.pop(fact.request_id, None)
                 envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
                 envelope.last_snapshot = envelope.handle.snapshot()
+                if on_snapshot is not None:
+                    on_snapshot(envelope.last_snapshot)
                 on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
                 continue
             if isinstance(fact, CatchUpCancellationFact):
@@ -280,12 +312,12 @@ async def run_lifecycle_actor(
                 envelope.pending_requests.pop(fact.request_id, None)
                 continue
         # Drain: evaluate any remaining candidate after end-of-stream.
-        _evaluate_candidates(envelope, on_decision)
+        _evaluate_candidates(envelope, on_decision, on_snapshot=on_snapshot)
         tg.cancel_scope.cancel()
 
 
 async def _reply(
-    reply_send_by_request: Callable[[str], anyio.abc.ObjectSendStream[Any] | None],
+    reply_send_by_request: Callable[[str], MemoryObjectSendStream[Any] | None],
     request_id: str,
     payload: Any,
 ) -> None:
@@ -294,25 +326,34 @@ async def _reply(
     if stream is None:
         return
     try:
-        await stream.send(payload)
-    except anyio.WouldBlock:
+        stream.send_nowait(payload)
+    except (anyio.WouldBlock, anyio.ClosedResourceError, anyio.BrokenResourceError):
+        logger.debug("lifecycle_reply_dropped", request_id=request_id)
         return
 
 
 async def _dispatch_catch_up_timeout(
     envelope: LifecycleActorEnvelope,
     request_id: str,
-    reply_send_by_request: Callable[[str], anyio.abc.ObjectSendStream[Any] | None],
+    reply_send_by_request: Callable[[str], MemoryObjectSendStream[Any] | None],
+    on_decision: Callable[[LifecycleDecision, CompletionCandidate | None], None],
+    *,
+    on_snapshot: Callable[[ChildLifecycleSnapshot], None] | None = None,
 ) -> None:
     """Emit a typed catch-up timeout decision and reply to the producer."""
     envelope.last_decision = LifecycleDecision.CATCH_UP_FAILED
     envelope.last_snapshot = envelope.handle.snapshot()
+    if on_snapshot is not None:
+        on_snapshot(envelope.last_snapshot)
+    on_decision(LifecycleDecision.CATCH_UP_FAILED, None)
     await _reply(reply_send_by_request, request_id, CatchUpTimeoutFact(request_id=request_id))
 
 
 def _evaluate_candidates(
     envelope: LifecycleActorEnvelope,
     on_decision: Callable[[LifecycleDecision, CompletionCandidate | None], None],
+    *,
+    on_snapshot: Callable[[ChildLifecycleSnapshot], None] | None = None,
 ) -> None:
     """Walk every candidate state and emit a typed decision when warranted.
 
@@ -323,12 +364,12 @@ def _evaluate_candidates(
     """
     snapshot = envelope.handle.snapshot()
     envelope.last_snapshot = snapshot
+    if on_snapshot is not None:
+        on_snapshot(snapshot)
     decision: LifecycleDecision = LifecycleDecision.CONTINUE
     eligible: CompletionCandidate | None = None
     for candidate_id, state in snapshot.candidate_states:
-        candidate: CompletionCandidate | None = envelope.handle.coordinator._candidates.get(  # type: ignore[attr-defined]
-            candidate_id
-        )
+        candidate = envelope.handle.get_candidate(candidate_id)
         if candidate is None:
             continue
         if snapshot.has_unresolved_terminal:
@@ -346,4 +387,7 @@ def _evaluate_candidates(
     envelope.last_decision = decision
     envelope.last_eligible_candidate = eligible
     if decision is LifecycleDecision.ELIGIBLE:
+        envelope.last_snapshot = envelope.handle.snapshot()
+        if on_snapshot is not None:
+            on_snapshot(envelope.last_snapshot)
         on_decision(decision, eligible)

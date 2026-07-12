@@ -617,12 +617,12 @@ def test_replaying_runner_restore_missing_step_returns_none(tmp_path):
     assert result is None
 
 
-# --- T-MARKER-FWD: RecordingSubprocessRunner forwards marker_dir and session_id to inner ---
+# --- T-MARKER-FWD: runner forwards marker scope identity to inner ---
 
 
 @pytest.mark.anyio
-async def test_recording_runner_forwards_marker_dir_and_session_id(tmp_path):
-    """Non-session branch passes marker_dir and session_id to self._inner()."""
+async def test_recording_runner_forwards_marker_scope_session_id(tmp_path):
+    """Non-session branch passes marker scope identity to self._inner()."""
     mock_recorder = Mock()
     inner = MockSubprocessRunner()
     inner.set_default(_make_result(returncode=0))
@@ -639,21 +639,23 @@ async def test_recording_runner_forwards_marker_dir_and_session_id(tmp_path):
         env=env,
         pty_mode=False,
         marker_dir=marker,
-        session_id="sess-abc",
+        marker_scope_session_id="sess-abc",
+        cleanup_budget_seconds=7.5,
     )
 
     assert len(inner.call_args_list) == 1
     kwargs = inner.call_args_list[0][3]
     assert kwargs["marker_dir"] == marker
-    assert kwargs["session_id"] == "sess-abc"
+    assert kwargs["marker_scope_session_id"] == "sess-abc"
+    assert kwargs["cleanup_budget_seconds"] == 7.5
 
 
-# --- T-MARKER-SESSION-BRANCH: session branch does not forward marker_dir/session_id ---
+# --- T-MARKER-SESSION-BRANCH: session branch ignores marker scope identity ---
 
 
 @pytest.mark.anyio
 async def test_recording_runner_session_branch_ignores_marker_params(tmp_path):
-    """pty_mode=True + step_name → _record_session; marker_dir/session_id not forwarded."""
+    """pty_mode=True + step_name routes to _record_session without marker scope data."""
     mock_recorder = Mock()
     mock_recorder.record_step.return_value = FakeStepResult(
         cassette_exit_code=0,
@@ -673,7 +675,7 @@ async def test_recording_runner_session_branch_ignores_marker_params(tmp_path):
         env=env,
         pty_mode=True,
         marker_dir=tmp_path / "markers",
-        session_id="sess-xyz",
+        marker_scope_session_id="sess-xyz",
     )
 
     assert inner.call_args_list == []  # inner NOT called
@@ -685,7 +687,7 @@ async def test_recording_runner_session_branch_ignores_marker_params(tmp_path):
 
 @pytest.mark.anyio
 async def test_replaying_runner_accepts_marker_params(tmp_path):
-    """ReplayingSubprocessRunner.__call__ accepts marker_dir and session_id without error."""
+    """ReplayingSubprocessRunner accepts marker scope identity without error."""
     non_session = {"check": {"exit_code": 0, "stdout_head": "ok", "stderr": ""}}
     runner = ReplayingSubprocessRunner({}, non_session)
 
@@ -697,7 +699,7 @@ async def test_replaying_runner_accepts_marker_params(tmp_path):
         timeout=60,
         env=env,
         marker_dir=tmp_path / "markers",
-        session_id="sess-123",
+        marker_scope_session_id="sess-123",
     )
 
     assert result.returncode == 0

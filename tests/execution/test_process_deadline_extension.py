@@ -202,7 +202,7 @@ async def test_extends_deadline_when_dispatch_marker_active(monkeypatch, tmp_pat
                 trigger,
                 0.05,
                 marker_dir=tmp_path,
-                session_id="test-sid",
+                marker_scope_session_id="test-sid",
             )
         )
         with anyio.move_on_after(0.1) as scope:
@@ -245,7 +245,7 @@ async def test_no_extension_when_marker_inactive(monkeypatch, tmp_path) -> None:
                 trigger,
                 0.05,
                 marker_dir=tmp_path,
-                session_id="test-sid",
+                marker_scope_session_id="test-sid",
             )
         )
         with anyio.move_on_after(2.0) as scope:
@@ -260,7 +260,7 @@ async def test_no_extension_when_marker_inactive(monkeypatch, tmp_path) -> None:
 
 
 def test_marker_dir_threaded_from_run_managed_async() -> None:
-    """run_managed_async threads marker_dir and session_id to _watch_child_activity."""
+    """run_managed_async threads marker scope identity to _watch_child_activity."""
     import re
     from pathlib import Path
 
@@ -268,10 +268,10 @@ def test_marker_dir_threaded_from_run_managed_async() -> None:
 
     pattern = (
         r"functools\.partial\(\s*_watch_child_activity,"
-        r".*?marker_dir=marker_dir.*?session_id=session_id"
+        r".*?marker_dir=marker_dir.*?marker_scope_session_id=marker_scope_session_id"
     )
     match = re.search(pattern, init_source, re.DOTALL)
     assert match is not None, (
-        "run_managed_async does not thread marker_dir and session_id "
+        "run_managed_async does not thread marker_dir and marker_scope_session_id "
         "to _watch_child_activity via functools.partial"
     )

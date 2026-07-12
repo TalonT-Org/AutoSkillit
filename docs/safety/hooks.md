@@ -59,6 +59,15 @@ Blocks orchestration tools from skill-tier sessions. Enforces the tier
 invariant: orchestrator and fleet sessions may call orchestration tools;
 skill workers use native Claude Code tools only.
 
+### `background_exec_guard.py`
+**Guarded tools:** `Bash`, `Agent`, `ScheduleWakeup`
+Denies explicit `run_in_background: true` Bash and Agent calls in headless
+skill or unknown tiers. It also denies `ScheduleWakeup` in those tiers because
+deferred wakeups can let a parent emit its completion marker while asynchronous
+child work remains active. Interactive, orchestrator, and fleet sessions are
+allowed. Malformed JSON roots, missing or non-string tool names, and missing or
+non-object `tool_input` values fail open before tier policy is evaluated.
+
 ### `unsafe_install_guard.py`
 **Guarded tool:** `run_cmd`
 Denies `run_cmd` calls that perform editable installs without `--python
@@ -190,7 +199,7 @@ All guard scripts fail-**open** for malformed or unparseable input: a JSON decod
 failure produces exit 0 (approve). This prevents a broken hook from blocking the
 entire tool chain.
 
-Three guards additionally fail-**closed** for valid input with unrecognized values,
+Four guards additionally fail-**closed** for valid input with unrecognized values,
 as a defense-in-depth measure against privilege escalation:
 
 | Guard | Fail-closed condition | Rationale |
@@ -198,6 +207,7 @@ as a defense-in-depth measure against privilege escalation:
 | `skill_command_guard.py` | Unexpected runtime error (not JSON parse) | Unknown failure mode = deny rather than risk executing an unvalidated command |
 | `open_kitchen_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not gain kitchen access |
 | `skill_orchestration_guard.py` | Unrecognized `AUTOSKILLIT_SESSION_TYPE` | Unknown session type should not call orchestration tools (`run_skill`, `run_cmd`, `run_python`) |
+| `background_exec_guard.py` | Headless skill, unset, or unrecognized tier requests background execution or `ScheduleWakeup` | Unknown headless tiers must not evade foreground-only lifecycle enforcement |
 
 **Design principle:** Garbage-in (malformed hook input) = fail-open. Unknown-tier
 (valid input, unrecognized value) = fail-closed.

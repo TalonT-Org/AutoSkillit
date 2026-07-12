@@ -13,7 +13,14 @@ from typing import Any, Protocol, runtime_checkable
 
 from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 from ._type_inspector import InspectorCallback, InspectorVerdict
-from ._type_lifecycle import DEFAULT_CLEANUP_BUDGET_SECONDS, CleanupOutcome
+from ._type_lifecycle import (
+    DEFAULT_CLEANUP_BUDGET_SECONDS,
+    ChildLifecycleSnapshot,
+    CleanupOutcome,
+    CompletionCandidate,
+    LifecycleDecision,
+)
+from ._type_protocols_backend import StreamParserFactory
 
 __all__ = [
     "SubprocessResult",
@@ -135,9 +142,13 @@ class SubprocessResult:
 
     Records ``succeeded``, ``budget_exhausted``, and any retained identities
     that could not be removed inside the configured cleanup budget. Consuming
-    layers map ``cleanup_exhausted=True`` to ``RetryReason.RESUME``. The
-    record is ``None`` when cleanup never ran (e.g. NATURAL_EXIT fast path).
+    layers map a failed cleanup to ``RetryReason.RESUME``. Async managed
+    invocations populate this for every termination path; it remains ``None``
+    only for runners that do not use the async invocation finalizer.
     """
+    lifecycle_snapshot: ChildLifecycleSnapshot | None = None
+    lifecycle_decision: LifecycleDecision = LifecycleDecision.CONTINUE
+    lifecycle_candidate: CompletionCandidate | None = None
 
 
 @runtime_checkable
@@ -151,7 +162,7 @@ class SubprocessRunner(Protocol):
         When non-None, the session log monitor checks for active execution markers
         before issuing stale-kill signals, suppressing kills while a fleet dispatch
         or run_skill call is in progress. Default ``None`` (no suppression).
-    session_id : str | None
+    marker_scope_session_id : str | None
         Caller's session identity, used to scope execution-marker glob patterns to
         the originating session. Threaded from fleet dispatch / run_skill through
         headless execution to ``_session_log_monitor``'s ``caller_session_id`` parameter.
@@ -178,8 +189,9 @@ class SubprocessRunner(Protocol):
         enable_deadline_extension: bool = False,
         max_extension_seconds: float = 7200,
         marker_dir: Path | None = None,
-        session_id: str | None = None,
+        marker_scope_session_id: str | None = None,
         stream_parser: Any | None = None,
+        stream_parser_factory: StreamParserFactory | None = None,
         completion_record_types: frozenset[str] = frozenset({"result"}),
         session_record_types: frozenset[str] = frozenset({"assistant"}),
         inspector_callback: InspectorCallback | None = None,

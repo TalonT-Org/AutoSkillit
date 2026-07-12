@@ -25,9 +25,12 @@ from autoskillit.execution.process._channel_a_pump import (
     ChannelACatchUpCommand,
     ChannelAPumpState,
     bind_parser,
+    is_pump_sentinel,
     read_channel_a_batch,
+    run_channel_a_pump,
 )
 from autoskillit.execution.process._lifecycle_actor import (
+    ChannelBProposal,
     make_actor_envelope,
     run_lifecycle_actor,
 )
@@ -80,7 +83,7 @@ class TestReadChannelABatch:
     def test_empty_file_returns_empty_batch(self, tmp_path: Path) -> None:
         stdout = tmp_path / "stdout.jsonl"
         stdout.write_bytes(b"")
-        batch = read_channel_a_batch(stdout)
+        batch = read_channel_a_batch(stdout, parser=_StubParser())
         assert batch.records == ()
         assert batch.byte_offset == 0
 
@@ -89,7 +92,7 @@ class TestReadChannelABatch:
         stdout.write_text(
             '{"type":"system","subtype":"init"}\n{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"hello"}]}}\n'
         )
-        batch = read_channel_a_batch(stdout)
+        batch = read_channel_a_batch(stdout, parser=_StubParser())
         assert batch.byte_offset > 0
         assert len(batch.records) >= 1
         assert batch.processed_channel_a_byte_offset == batch.byte_offset
@@ -100,11 +103,13 @@ class TestReadChannelABatch:
         stdout.write_bytes(b'{"a":1}\n\xe2\x98')
         batch1 = read_channel_a_batch(stdout, initial_carry=b"")
         assert batch1.byte_offset > 0
+        assert batch1.trailing_carry == b"\xe2\x98"
         # Second write: complete the multibyte + another line
-        stdout.write_bytes(b'\x83\n{"b":2}\n')
+        with stdout.open("ab") as stream:
+            stream.write(b'\x83\n{"b":2}\n')
         batch2 = read_channel_a_batch(
             stdout,
-            initial_carry=b"\xe2\x98",
+            initial_carry=batch1.trailing_carry,
             initial_byte_offset=batch1.byte_offset,
         )
         assert batch2.byte_offset > batch1.byte_offset
@@ -122,6 +127,79 @@ class TestReadChannelABatch:
         parser = _StubParser()
         read_channel_a_batch(stdout, parser=parser)
         assert parser.calls == ["a", "b", "c"]
+
+
+class TestLiveChannelAPump:
+    @pytest.mark.anyio
+    async def test_split_utf8_carry_survives_live_poll_loop(self, tmp_path: Path) -> None:
+        stdout = tmp_path / "stdout.jsonl"
+        stdout.write_bytes(b'{"text":"\xe2\x98')
+        parser = _StubParser(marker="☃")
+        resolved_session_ids: list[str] = []
+        state = ChannelAPumpState(
+            stdout_path=stdout,
+            on_session_id_resolved=resolved_session_ids.append,
+        )
+        bind_parser(state, parser)
+        fact_send, fact_receive = anyio.create_memory_object_stream[Any](4)
+        command_send, command_receive = anyio.create_memory_object_stream[Any](1)
+
+        async def _run() -> None:
+            await run_channel_a_pump(
+                state,
+                fact_send,
+                command_receive,
+                poll_interval=0.001,
+            )
+
+        async with fact_receive, command_send, command_receive:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_run)
+                assert is_pump_sentinel(await fact_receive.receive(), "ready")
+                with stdout.open("ab") as stream:
+                    stream.write(b'\x83"}\n')
+                with anyio.fail_after(1):
+                    batch = await fact_receive.receive()
+                assert isinstance(batch, ChannelABatch)
+                assert batch.trailing_carry == b""
+                assert parser.calls == ['{"text":"☃"}']
+                assert resolved_session_ids == ["sid"]
+                state.closed = True
+                with anyio.fail_after(1):
+                    assert is_pump_sentinel(await fact_receive.receive(), "closed")
+
+    @pytest.mark.anyio
+    async def test_session_id_callback_ignores_empty_ids(self, tmp_path: Path) -> None:
+        stdout = tmp_path / "stdout.jsonl"
+        stdout.write_text("ignored\n")
+        resolved_session_ids: list[str] = []
+        state = ChannelAPumpState(
+            stdout_path=stdout,
+            on_session_id_resolved=resolved_session_ids.append,
+        )
+        bind_parser(state, _StubParser())
+        fact_send, fact_receive = anyio.create_memory_object_stream[Any](4)
+        command_send, command_receive = anyio.create_memory_object_stream[Any](1)
+
+        async def _run() -> None:
+            await run_channel_a_pump(
+                state,
+                fact_send,
+                command_receive,
+                poll_interval=0.001,
+            )
+
+        async with fact_receive, command_send, command_receive:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(_run)
+                assert is_pump_sentinel(await fact_receive.receive(), "ready")
+                with anyio.fail_after(1):
+                    assert isinstance(await fact_receive.receive(), ChannelABatch)
+                state.closed = True
+                with anyio.fail_after(1):
+                    assert is_pump_sentinel(await fact_receive.receive(), "closed")
+
+        assert resolved_session_ids == []
 
 
 class TestBindParser:
@@ -196,12 +274,14 @@ class TestCatchUpTimeout:
         )
 
         async def _call() -> None:
-            await _dispatch_catch_up_timeout(envelope, "req-1", lambda _req_id: None)
+            await _dispatch_catch_up_timeout(
+                envelope,
+                "req-1",
+                lambda _req_id: None,
+                lambda _decision, _candidate: None,
+            )
 
         await _call()
-        # The timeout handler does not call on_decision — it just emits the reply
-        # and updates envelope state. The actor run-loop calls on_decision when
-        # the typed timeout fact arrives in the fact stream.
         assert envelope.last_decision == LifecycleDecision.CATCH_UP_FAILED
 
 
@@ -222,6 +302,41 @@ class TestSaturatedCommandStream:
         cmd = ChannelACatchUpCommand(request_id="r1", required_byte_offset=100)
         result = await _dispatch_catch_up(envelope, cmd, pump_send2)
         assert result is False  # saturated -> typed fail-closed decision
+
+    @pytest.mark.anyio
+    async def test_actor_maps_saturated_catch_up_to_failure_decision(self) -> None:
+        fact_send, fact_receive = anyio.create_memory_object_stream[Any](2)
+        pump_send, pump_receive = anyio.create_memory_object_stream[Any](1)
+        pump_send.send_nowait(
+            ChannelACatchUpCommand(request_id="occupied", required_byte_offset=1)
+        )
+        decisions: list[LifecycleDecision] = []
+
+        async def _produce() -> None:
+            await fact_send.send(
+                ChannelBProposal(
+                    request_id="proposal",
+                    status="completion",
+                    session_id="sid",
+                    byte_offset=0,
+                    required_byte_offset=10,
+                )
+            )
+            await fact_send.aclose()
+
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_produce)
+            tg.start_soon(
+                run_lifecycle_actor,
+                fact_receive,
+                pump_send,
+                lambda _request_id: None,
+                lambda decision, _candidate: decisions.append(decision),
+            )
+
+        await pump_send.aclose()
+        await pump_receive.aclose()
+        assert decisions == [LifecycleDecision.CATCH_UP_FAILED]
 
 
 class TestActorEnvelope:

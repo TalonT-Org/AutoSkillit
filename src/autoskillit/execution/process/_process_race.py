@@ -184,7 +184,7 @@ async def _watch_stdout_idle(
     _poll_interval: float = 5.0,
     *,
     marker_dir: Path | None = None,
-    session_id: str | None = None,
+    marker_scope_session_id: str | None = None,
     max_suppression_seconds: float = 1800.0,
     inspector_callback: InspectorCallback | None = None,
     timeout_scope_ref: list[anyio.CancelScope | None] | None = None,
@@ -218,7 +218,7 @@ async def _watch_stdout_idle(
             suppression_start_marker = None
         elif _time.monotonic() - last_growth_time >= idle_output_timeout:
             if marker_dir is not None and _has_active_execution_marker(
-                marker_dir, session_id=session_id
+                marker_dir, session_id=marker_scope_session_id
             ):
                 now = _time.monotonic()
                 if suppression_start_marker is None:
@@ -226,14 +226,14 @@ async def _watch_stdout_idle(
                     logger.debug(
                         "stdout_idle_stall_suppression_evaluated",
                         marker_dir_present=True,
-                        session_id=session_id,
+                        session_id=marker_scope_session_id,
                     )
                 elapsed = now - suppression_start_marker
                 if elapsed < max_suppression_seconds:
                     logger.warning(
                         "stdout_idle_stall_suppressed",
                         marker_dir=str(marker_dir),
-                        session_id=session_id,
+                        session_id=marker_scope_session_id,
                         suppression_elapsed=elapsed,
                         max_suppression_seconds=max_suppression_seconds,
                     )
@@ -241,7 +241,7 @@ async def _watch_stdout_idle(
             logger.debug(
                 "stdout_idle_stall_suppression_evaluated",
                 marker_dir_present=marker_dir is not None,
-                session_id=session_id,
+                session_id=marker_scope_session_id,
                 **(
                     {"suppression_skipped_reason": "marker_dir_none"} if marker_dir is None else {}
                 ),
@@ -267,7 +267,7 @@ async def _watch_stdout_idle(
 
                 if _invoke:
                     _marker_present = marker_dir is not None and _has_active_execution_marker(
-                        marker_dir, session_id=session_id
+                        marker_dir, session_id=marker_scope_session_id
                     )
                     _evidence = _package_evidence(
                         stdout_path,
@@ -307,7 +307,7 @@ async def _watch_child_activity(
     _poll_interval: float = 30.0,
     *,
     marker_dir: Path | None = None,
-    session_id: str | None = None,
+    marker_scope_session_id: str | None = None,
 ) -> None:
     """Extend the wall-clock CancelScope.deadline when child processes are active.
 
@@ -339,7 +339,7 @@ async def _watch_child_activity(
             or _has_active_api_connection(pid)
             or (
                 marker_dir is not None
-                and _has_active_execution_marker(marker_dir, session_id=session_id)
+                and _has_active_execution_marker(marker_dir, session_id=marker_scope_session_id)
             )
         )
         if not active:
@@ -442,7 +442,7 @@ async def _watch_session_log(
     stdout_session_id_ready: anyio.Event | None = None,
     max_suppression_seconds: float | None = None,
     marker_dir: Path | None = None,
-    session_id: str | None = None,
+    marker_scope_session_id: str | None = None,
 ) -> None:
     """Monitor the session JSONL log and deposit the Channel B signal.
 
@@ -468,8 +468,8 @@ async def _watch_session_log(
         _monitor_kwargs["max_suppression_seconds"] = max_suppression_seconds
     if marker_dir is not None:
         _monitor_kwargs["marker_dir"] = marker_dir
-    if session_id is not None:
-        _monitor_kwargs["caller_session_id"] = session_id
+    if marker_scope_session_id is not None:
+        _monitor_kwargs["caller_session_id"] = marker_scope_session_id
     monitor_result = await _session_log_monitor(
         session_log_dir,
         completion_marker,

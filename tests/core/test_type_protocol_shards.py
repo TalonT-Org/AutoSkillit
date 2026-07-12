@@ -79,6 +79,7 @@ def test_backend_shard_all():
 
     assert set(__all__) == {
         "StreamParser",
+        "StreamParserFactory",
         "ResultParser",
         "EnvPolicy",
         "SessionLocator",

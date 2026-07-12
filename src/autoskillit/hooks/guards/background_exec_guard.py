@@ -26,6 +26,8 @@ def main() -> None:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input
+    if not isinstance(data, dict):
+        sys.exit(0)  # fail-open on valid JSON with an unexpected root shape
 
     # Interactive sessions always pass
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
@@ -44,7 +46,7 @@ def main() -> None:
 
     tool_input = data.get("tool_input")
     if not isinstance(tool_input, dict):
-        tool_input = {}
+        sys.exit(0)  # fail-open before applying any tool policy
 
     denial_reason: str | None = None
 

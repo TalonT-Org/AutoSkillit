@@ -26,6 +26,7 @@ def test_required_fields_present() -> None:
         "exit_code",
         "backend_data",
         "observations",
+        "parent_marker",
     }
 
 

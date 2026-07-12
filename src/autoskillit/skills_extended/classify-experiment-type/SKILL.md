@@ -1,7 +1,7 @@
 ---
 name: classify-experiment-type
 categories: [research]
-uses_capabilities: [agent_model, cross_skill_ref]
+uses_capabilities: [agent_model]
 description: Classify an experiment plan into a type, build the dimension weight matrix, and emit dialing interface tokens for the apply-review-dimensions step.
 hooks:
   PreToolUse:

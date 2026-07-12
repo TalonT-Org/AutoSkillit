@@ -1,7 +1,7 @@
 ---
 name: audit-impl
 categories: [audit]
-uses_capabilities: [agent_model, agent_subagent, cross_skill_ref]
+uses_capabilities: [agent_model, agent_subagent]
 description: Audit a completed implementation against its originating plan(s). Returns GO (merge approved) or NO GO (generates remediation file for retry). Final gate before merge in any implementation pipeline.
 hooks:
   PreToolUse:

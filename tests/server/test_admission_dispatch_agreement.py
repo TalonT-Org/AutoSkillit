@@ -432,8 +432,8 @@ def test_make_plan_reroutes_on_codex() -> None:
 
 
 def test_investigate_reroutes_on_codex() -> None:
-    """investigate declares [agent_model, claude_dir, cross_skill_ref] —
-    agent_model and cross_skill_ref are worker_routable, so it must reroute."""
+    """investigate declares [agent_model, claude_dir] —
+    agent_model is worker_routable, so it must reroute via that path."""
     from unittest.mock import MagicMock
 
     from autoskillit.config._config_dataclasses import ProvidersConfig
@@ -444,7 +444,10 @@ def test_investigate_reroutes_on_codex() -> None:
     skill_info = resolver.resolve("investigate")
     assert skill_info is not None, "investigate must be resolvable from bundled SKILL.md"
     assert _has_routing_capability(skill_info.uses_capabilities) is True, (
-        "investigate declares agent_model and cross_skill_ref — both worker_routable"
+        "investigate declares agent_model — worker_routable"
+    )
+    assert "cross_skill_ref" not in skill_info.uses_capabilities, (
+        "investigate must NOT declare cross_skill_ref (only documentary /autoskillit: mentions)"
     )
 
     step = MagicMock()

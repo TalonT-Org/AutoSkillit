@@ -14,15 +14,15 @@ tests. Live Claude smoke never substitutes for deterministic evidence.
 | AC5 | Five-child survival/progress — five descendants prove observable progress after an early marker, terminal plus parent delivery for all obligations, a distinct later parent marker for completion, and death of every captured identity. | `tests/execution/test_process_child_lifecycle_integration.py::test_production_runner_defers_early_marker_until_five_children_finish` covers the real-process replay; `ProcessActivityTracker` is invocation-scoped with no module-global singleton. | `tests/execution/test_process_child_lifecycle_integration.py::test_production_runner_defers_early_marker_until_five_children_finish`. | wired |
 | AC6 | Fast empty-marker / no-child completion — bounded natural completion when `completion_marker == ""`. | `_headless_execute.py` preserves the deliberate non-lifecycle path: no marker-aware factory, no actor/producers, prior bounded natural/no-child behavior. | `tests/execution/test_process_child_lifecycle_integration.py::TestNoChildFastPath`, `tests/execution/test_process_run.py`. | wired |
 | AC7 | Real tracked implementation-worktree write/parity — `run_skill` writes a tracked source file in a linked worktree and pre/post SHA, branch, marker, and write evidence are all asserted. | `tests/server/test_run_skill_async_child_lifecycle.py::test_run_skill_waits_for_child_then_records_tracked_write` exercises the full `run_skill -> DefaultHeadlessExecutor -> ClaudeCodeBackend -> DefaultSubprocessRunner` path. | `tests/server/test_run_skill_async_child_lifecycle.py`. | wired |
-| AC8 | Passing `task test-check` and `task test-all` from the anchored repository root, plus pre-commit clean. | `task test-check` and `task test-all` are the deterministic repository gate; `pre-commit run --all-files` runs ruff + mypy + uv-lock + secrets + AGENTS.md / `__init__.pyi` integrity checks. | `task test-check`, `task test-all`, `pre-commit run --all-files`. | pending |
+| AC8 | Passing `task test-check` and `task test-all` from the anchored repository root, plus pre-commit clean. | `task test-check` and `task test-all` are the deterministic repository gate; `pre-commit run --all-files` runs ruff + mypy + uv-lock + secrets + AGENTS.md / `__init__.pyi` integrity checks. | `task test-check`, `task test-all`, `pre-commit run --all-files`. | PASS |
 
 ## Repository-gate evidence
 
 | Gate | Command | Result |
 |------|---------|--------|
-| Repository gate (deterministic) | `task test-check` | pending |
-| Repository gate (full lint + tests) | `task test-all` | pending |
-| Pre-commit (ruff format / ruff check / mypy / uv-lock / secrets) | `pre-commit run --all-files` | pending |
+| Repository gate (deterministic) | `task test-check` | PASS — 29995 passed, 606 skipped, 44 xfailed |
+| Repository gate (full lint + tests) | `task test-all` | PASS — 29995 passed, 606 skipped, 44 xfailed |
+| Pre-commit (ruff format / ruff check / mypy / uv-lock / secrets) | `pre-commit run --all-files` | PASS — all hooks passed |
 
 Live Claude smoke (`test-smoke-claude`) is credential-gated and
 supplementary; it never substitutes for deterministic evidence. Its

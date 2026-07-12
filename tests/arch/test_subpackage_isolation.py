@@ -100,6 +100,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
         "_channel_a_pump",  # _PUMP_READY/_PUMP_CLOSED sentinels (issue #4233)
+        "_process_monitor",  # _default_activity_tracker = ProcessActivityTracker() (issue #4233)
     }
 )
 _SINGLETON_SAFE_CALL_NAMES: frozenset[str] = frozenset(

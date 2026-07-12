@@ -27,6 +27,7 @@ def test_required_fields_present() -> None:
         "backend_data",
         "observations",
         "parent_marker",
+        "lifecycle_issues",
     }
 
 

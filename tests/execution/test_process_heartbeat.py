@@ -17,12 +17,12 @@ import pytest
 from autoskillit.core.types import ChannelBStatus, TerminationReason
 from autoskillit.execution.process import (
     _has_active_api_connection,
-    _has_active_child_processes,
     _has_active_execution_marker,
     _heartbeat,
     _session_log_monitor,
     run_managed_async,
 )
+from autoskillit.execution.process._process_monitor import ProcessActivityTracker
 from tests.execution.conftest import WRITE_RESULT_THEN_HANG_SCRIPT
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -299,20 +299,17 @@ class TestHasActiveApiConnection:
 
 
 class TestHasActiveChildProcesses:
-    """Unit tests for _has_active_child_processes.
+    """Unit tests for ProcessActivityTracker.
 
-    The function caches psutil.Process objects so cpu_percent(interval=0)
-    returns meaningful deltas on the second call.  First call primes the
-    baseline (always returns False); second call with the same child PIDs
-    uses the cached objects.
+    Each test constructs a fresh ProcessActivityTracker and patches the
+    psutil.Process factory so the tracker observes a controlled set of
+    child processes. The tracker owns its own per-PID handle cache so
+    concurrent invocations cannot leak CPU baselines.
     """
 
-    @pytest.fixture(autouse=True)
-    def _clear_cache(self, monkeypatch):
-        """Reset the module-level Process cache between tests."""
-        from autoskillit.execution.process import _process_monitor
-
-        monkeypatch.setattr(_process_monitor, "_child_process_cache", {})
+    @pytest.fixture
+    def tracker(self) -> ProcessActivityTracker:
+        return ProcessActivityTracker()
 
     def _make_child(self, cpu: float | type[Exception], *, pid: int = 999) -> MagicMock:
         """Build a mock psutil child process."""
@@ -338,18 +335,16 @@ class TestHasActiveChildProcesses:
             MagicMock(return_value=mock_proc),
         )
 
-    def test_returns_true_when_child_exceeds_threshold(self, monkeypatch):
+    def test_returns_true_when_child_exceeds_threshold(self, monkeypatch, tracker):
         child = self._make_child(15.0, pid=100)
         self._patch_children([child], monkeypatch)
         # First call primes baseline; second call returns meaningful delta.
-        _has_active_child_processes(1234)
+        tracker.has_active_children(1234)
         # Cache now holds the child object; second call uses cached.cpu_percent.
-        from autoskillit.execution.process._process_monitor import _child_process_cache
+        tracker._handles[100] = child
+        assert tracker.has_active_children(1234) is True
 
-        _child_process_cache[100] = child
-        assert _has_active_child_processes(1234) is True
-
-    def test_returns_false_when_all_children_below_threshold(self, monkeypatch):
+    def test_returns_false_when_all_children_below_threshold(self, monkeypatch, tracker):
         children = [
             self._make_child(0.0, pid=100),
             self._make_child(5.0, pid=101),
@@ -357,58 +352,50 @@ class TestHasActiveChildProcesses:
         ]
         self._patch_children(children, monkeypatch)
         # Prime baseline
-        _has_active_child_processes(1234)
-        from autoskillit.execution.process._process_monitor import _child_process_cache
-
+        tracker.has_active_children(1234)
         for c in children:
-            _child_process_cache[c.pid] = c
-        assert _has_active_child_processes(1234) is False
+            tracker._handles[c.pid] = c
+        assert tracker.has_active_children(1234) is False
 
-    def test_returns_false_when_no_children(self, monkeypatch):
+    def test_returns_false_when_no_children(self, monkeypatch, tracker):
         self._patch_children([], monkeypatch)
-        assert _has_active_child_processes(1234) is False
+        assert tracker.has_active_children(1234) is False
 
-    def test_returns_false_on_parent_nosuchprocess(self, monkeypatch):
+    def test_returns_false_on_parent_nosuchprocess(self, monkeypatch, tracker):
         self._patch_children([], monkeypatch, parent_raises=psutil.NoSuchProcess)
-        assert _has_active_child_processes(1234) is False
+        assert tracker.has_active_children(1234) is False
 
-    def test_skips_dead_child_gracefully(self, monkeypatch):
+    def test_skips_dead_child_gracefully(self, monkeypatch, tracker):
         children = [
             self._make_child(psutil.NoSuchProcess, pid=100),
             self._make_child(5.0, pid=101),
         ]
         self._patch_children(children, monkeypatch)
-        _has_active_child_processes(1234)
-        from autoskillit.execution.process._process_monitor import _child_process_cache
-
+        tracker.has_active_children(1234)
         for c in children:
-            _child_process_cache[c.pid] = c
-        assert _has_active_child_processes(1234) is False
+            tracker._handles[c.pid] = c
+        assert tracker.has_active_children(1234) is False
 
-    def test_skips_zombie_child_then_finds_active(self, monkeypatch):
+    def test_skips_zombie_child_then_finds_active(self, monkeypatch, tracker):
         children = [
             self._make_child(psutil.ZombieProcess, pid=100),
             self._make_child(20.0, pid=101),
         ]
         self._patch_children(children, monkeypatch)
         # Prime baseline
-        _has_active_child_processes(1234)
-        from autoskillit.execution.process._process_monitor import _child_process_cache
-
+        tracker.has_active_children(1234)
         for c in children:
-            _child_process_cache[c.pid] = c
-        assert _has_active_child_processes(1234) is True
+            tracker._handles[c.pid] = c
+        assert tracker.has_active_children(1234) is True
 
-    def test_skips_access_denied_gracefully(self, monkeypatch):
+    def test_skips_access_denied_gracefully(self, monkeypatch, tracker):
         self._patch_children(
             [self._make_child(psutil.AccessDenied, pid=100)],
             monkeypatch,
         )
-        _has_active_child_processes(1234)
-        from autoskillit.execution.process._process_monitor import _child_process_cache
-
-        _child_process_cache[100] = self._make_child(psutil.AccessDenied, pid=100)
-        assert _has_active_child_processes(1234) is False
+        tracker.has_active_children(1234)
+        tracker._handles[100] = self._make_child(psutil.AccessDenied, pid=100)
+        assert tracker.has_active_children(1234) is False
 
 
 class TestHeartbeatMarkerAwareness:

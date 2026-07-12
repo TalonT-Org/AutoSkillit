@@ -17,6 +17,7 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "DefaultSubprocessRunner",
         "_extract_stdout_session_id",
         "_resolve_session_id",
+        "ProcessActivityTracker",
         "RaceAccumulator",
         "RaceSignals",
         "_has_active_api_connection",

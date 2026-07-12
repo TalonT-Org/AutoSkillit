@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 import pytest
 
@@ -123,6 +123,10 @@ def test_stub_class_satisfies_coding_agent_backend():
         def stream_parser(self, completion_marker: str = "") -> StreamParser: ...
 
         def stream_parser_factory(self, completion_marker: str = "") -> Any: ...
+
+        def parent_candidate_normalizer(
+            self, completion_marker: str = ""
+        ) -> Callable[..., Any]: ...
 
         def result_parser(self) -> ResultParser: ...
 

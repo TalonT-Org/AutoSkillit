@@ -18,6 +18,7 @@ from autoskillit.core import (
     ParentAssistantMarker,
 )
 from autoskillit.execution.backends._claude_lifecycle import (
+    extract_lifecycle_issues,
     extract_lifecycle_observations,
     extract_parent_assistant_marker,
 )
@@ -227,6 +228,31 @@ class TestUserObservations:
         obs = extract_lifecycle_observations(obj, "user")
         assert obs[0].attempt_state == ChildAttemptState.CANCELLED
 
+    @pytest.mark.parametrize(
+        ("status", "expected"),
+        [
+            ("completed", ChildAttemptState.COMPLETED),
+            ("failed", ChildAttemptState.FAILED),
+            ("cancelled", ChildAttemptState.CANCELLED),
+        ],
+    )
+    def test_terminal_status_outranks_async_launch_flag(
+        self,
+        status: str,
+        expected: ChildAttemptState,
+    ) -> None:
+        obj = self._user_tool_result(
+            tool_use_id="toolu_A",
+            status=status,
+            async_launched=True,
+            agent_id="agent_A",
+        )
+
+        observations = extract_lifecycle_observations(obj, "user")
+
+        assert observations[0].attempt_state is expected
+        assert extract_lifecycle_issues(obj, "user") == ()
+
     def test_no_status_no_async_is_skipped(self) -> None:
         obj = self._user_tool_result(tool_use_id="toolu_A")
         assert extract_lifecycle_observations(obj, "user") == ()
@@ -350,6 +376,24 @@ class TestParentAssistantMarker:
             byte_offset=10,
             completion_marker="",
         )
+        assert result.marker is None
+
+    @pytest.mark.parametrize(
+        "marker_text",
+        [
+            '"AUTOSKILLIT_COMPLETION"',
+            "'AUTOSKILLIT_COMPLETION'",
+            "`AUTOSKILLIT_COMPLETION`",
+            "prefix AUTOSKILLIT_COMPLETION suffix",
+        ],
+    )
+    def test_quoted_or_embedded_marker_yields_no_marker(self, marker_text: str) -> None:
+        result = extract_parent_assistant_marker(
+            _assistant(marker_text=marker_text),
+            byte_offset=10,
+            completion_marker="AUTOSKILLIT_COMPLETION",
+        )
+
         assert result.marker is None
 
 

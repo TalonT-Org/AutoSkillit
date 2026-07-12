@@ -77,6 +77,13 @@ def _coerce_str(value: Any) -> str:
     return ""
 
 
+def _marker_is_standalone(text: str, marker: str) -> bool:
+    """Return whether *marker* is an exact, unquoted line in *text*."""
+    if not marker:
+        return False
+    return any(line.strip() == marker for line in text.splitlines())
+
+
 def _task_kind_from_system(obj: dict[str, Any]) -> str:
     """Map a Claude ``system`` task record to its task_kind.
 
@@ -175,14 +182,14 @@ def extract_lifecycle_observations(
             status = content_obj.get("status")
             if not is_async and status not in {"completed", "failed", "cancelled"}:
                 continue
-            if is_async:
-                state = ChildAttemptState.ACTIVE
-            elif status == "completed":
+            if status == "completed":
                 state = ChildAttemptState.COMPLETED
             elif status == "failed":
                 state = ChildAttemptState.FAILED
             elif status == "cancelled":
                 state = ChildAttemptState.CANCELLED
+            elif is_async:
+                state = ChildAttemptState.ACTIVE
             else:
                 continue
             if content_obj.get("agentId"):
@@ -280,10 +287,8 @@ def _record_carries_marker_text(obj: dict[str, Any], completion_marker: str) -> 
         text = block.get("text", "")
         if not isinstance(text, str) or not text:
             continue
-        for line in text.splitlines():
-            stripped = line.strip().strip("\"'`")
-            if stripped == completion_marker:
-                return True
+        if _marker_is_standalone(text, completion_marker):
+            return True
     return False
 
 
@@ -308,9 +313,6 @@ def extract_lifecycle_issues(
     Fail-closed paths surface here instead of being silently swallowed:
 
     - Unknown ``status`` on a ``task_notification`` record -> ``UNKNOWN_STATUS``.
-    - Records carrying ``tool_result`` blocks with both ``async_launched``
-      and a terminal ``status`` (mixed launch + delivery on one record) ->
-      ``MIXED_LAUNCH_AND_TERMINAL``.
     - Records whose status is recognised but whose identity fields are
       missing or malformed (e.g., terminal status without an agentId or
       backgroundTaskId) -> ``MALFORMED_IDENTITY``.
@@ -365,37 +367,7 @@ def extract_lifecycle_issues(
             tool_use_result = block.get("content")
             if not isinstance(tool_use_result, dict):
                 continue
-            is_async = bool(
-                tool_use_result.get("async_launched") is True
-                or tool_use_result.get("isAsync") is True
-            )
             status = tool_use_result.get("status")
-            if is_async and status in {"completed", "failed", "cancelled"}:
-                tool_use_id = _coerce_str(block.get("tool_use_id"))
-                agent_id = _coerce_str(tool_use_result.get("agentId"))
-                background_task_id = _coerce_str(tool_use_result.get("backgroundTaskId"))
-                if agent_id:
-                    task_kind = "Agent"
-                elif background_task_id:
-                    task_kind = "Bash"
-                else:
-                    task_kind = "unknown"
-                aliases_mixed: tuple[str, ...] = (tool_use_id, agent_id, background_task_id)
-                fingerprint = _canonical_fingerprint(
-                    task_kind, aliases_mixed, source_uuid or "anonymous"
-                )
-                issues.append(
-                    LifecycleEvidenceIssue(
-                        issue_kind=LifecycleEvidenceIssueKind.MIXED_LAUNCH_AND_TERMINAL,
-                        task_kind=task_kind,
-                        native_aliases=aliases_mixed,
-                        source_event_uuid=source_uuid,
-                        canonical_fingerprint=fingerprint,
-                        channel_relative_byte_offset=byte_offset,
-                        detail="async_launched=true delivered with terminal status",
-                    )
-                )
-                continue
             if status in {"completed", "failed", "cancelled"}:
                 tool_use_id = _coerce_str(block.get("tool_use_id"))
                 agent_id = _coerce_str(tool_use_result.get("agentId"))

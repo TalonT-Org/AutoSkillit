@@ -152,8 +152,10 @@ class TestDelivery:
             )
         )
         snap = coord.snapshot()
-        assert snap.has_active_children
+        assert not snap.has_active_children
         assert not snap.completed_children
+        assert len(snap.awaiting_delivery) == 1
+        assert snap.awaiting_delivery[0].tool_use_id == "toolu_notification"
 
     def test_successful_delivery_collapses(self) -> None:
         coord = ChildLifecycleCoordinator()

@@ -21,7 +21,6 @@ _EXPECTED_PROCESS_SYMBOLS: frozenset[str] = frozenset(
         "RaceAccumulator",
         "RaceSignals",
         "_has_active_api_connection",
-        "_has_active_child_processes",
         "_has_active_execution_marker",
         "_heartbeat",
         "_jsonl_contains_marker",

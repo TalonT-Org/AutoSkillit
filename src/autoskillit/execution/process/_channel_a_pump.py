@@ -136,12 +136,6 @@ def _split_complete_lines(
     return complete, new_carry
 
 
-def _decode_lines(payload: bytes) -> list[str]:
-    """Decode one binary payload into a list of newline-stripped strings."""
-    text = payload.decode("utf-8", errors="replace")
-    return [line for line in text.splitlines() if line]
-
-
 def read_channel_a_batch(
     stdout_path: Path,
     *,

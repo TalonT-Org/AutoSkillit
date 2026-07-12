@@ -10,7 +10,7 @@ Subprocess lifecycle management — spawn, monitor, race, kill.
 | `_process_io.py` | `create_temp_io()` context manager for temp file stdin/stdout/stderr |
 | `_process_jsonl.py` | JSONL parsing: `_jsonl_contains_marker`, `_jsonl_has_record_type` |
 | `_process_kill.py` | Process-tree kill primitives plus `_OwnedProcessFinalizer`, the single-flight, deadline-bounded async cleanup authority |
-| `_process_monitor.py` | Async monitor coroutines: `_heartbeat()` (Channel A), `_session_log_monitor()` (Channel B), and `ProcessActivityTracker` (per-invocation cache of `psutil.Process` handles for CPU baselines; replaces the module-level `_child_process_cache`) |
+| `_process_monitor.py` | Async monitor coroutines: `_heartbeat()` (Channel A), `_session_log_monitor()` (Channel B with `activity_tracker` parameter), and `ProcessActivityTracker` (per-invocation cache of `psutil.Process` handles for CPU baselines; no module-global singleton) |
 | `_process_pty.py` | `pty_wrap_command()` — wraps command with `script(1)` for PTY allocation |
 | `_process_race.py` | `RaceAccumulator`, `RaceSignals`, watcher coroutines, `resolve_termination()` |
 | `_child_lifecycle.py` | `ChildLifecycleCoordinator`, `ChildLifecycleCoordinatorHandle`, `make_coordinator_handle` — single-owner reducer of immutable child-lifecycle observations; tracks `attempt_generation` (replaces/replaced_by) and `parent_turn_generation` (marker-bearing parent-assistant UUIDs) consumed by the completion gate; pending blocking-evidence store keyed by canonical fingerprint; unmatched evidence retention for later correlation (issue #4233) |

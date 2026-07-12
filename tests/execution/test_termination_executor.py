@@ -165,7 +165,8 @@ async def test_owned_finalizer_fails_closed_on_live_identity_mismatch(
 
     assert kill_calls == []
     assert not outcome.succeeded
-    assert outcome.retained_identities == (tracker.identity,)
+    assert outcome.retained_identities == ()
+    assert outcome.unknown_identities == (tracker.identity,)
 
 
 @pytest.mark.anyio

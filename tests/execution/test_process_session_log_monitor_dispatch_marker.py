@@ -10,6 +10,7 @@ import pytest
 
 from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import _session_log_monitor
+from autoskillit.execution.process._process_monitor import ProcessActivityTracker
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -193,13 +194,15 @@ class TestDispatchMarkerSuppression:
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
-            fake_child_proc,
+            ProcessActivityTracker,
+            "has_active_children",
+            lambda self, pid: fake_child_proc(pid),
         )
         monkeypatch.setattr(
             "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             fake_dispatch_marker,
         )
+        tracker = ProcessActivityTracker()
         with anyio.fail_after(5.0):
             result = await _session_log_monitor(
                 tmp_path,
@@ -211,6 +214,7 @@ class TestDispatchMarkerSuppression:
                 _phase2_poll=0.05,
                 marker_dir=tmp_path,
                 caller_session_id="sess-abc",
+                activity_tracker=tracker,
             )
         assert result.status == ChannelBStatus.STALE
         assert call_count["n"] >= 2
@@ -229,13 +233,15 @@ class TestDispatchMarkerSuppression:
             lambda pid: False,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
-            lambda pid: False,
+            ProcessActivityTracker,
+            "has_active_children",
+            lambda self, pid: False,
         )
         monkeypatch.setattr(
             "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             lambda marker_dir, session_id=None: True,
         )
+        tracker = ProcessActivityTracker()
         with structlog.testing.capture_logs() as logs:
             with anyio.fail_after(8.0):
                 result = await _session_log_monitor(
@@ -249,6 +255,7 @@ class TestDispatchMarkerSuppression:
                     marker_dir=tmp_path,
                     caller_session_id="sess-abc",
                     max_suppression_seconds=1.0,
+                    activity_tracker=tracker,
                 )
         assert result.status == ChannelBStatus.STALE
         bounded_logs = [log for log in logs if "Suppression bounded" in str(log.get("event", ""))]
@@ -281,13 +288,15 @@ class TestDispatchMarkerSuppression:
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
-            fake_child_proc,
+            ProcessActivityTracker,
+            "has_active_children",
+            lambda self, pid: fake_child_proc(pid),
         )
         monkeypatch.setattr(
             "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             fake_dispatch_marker,
         )
+        tracker = ProcessActivityTracker()
         with structlog.testing.capture_logs() as logs:
             with anyio.fail_after(5.0):
                 await _session_log_monitor(
@@ -300,6 +309,7 @@ class TestDispatchMarkerSuppression:
                     _phase2_poll=0.05,
                     marker_dir=tmp_path,
                     caller_session_id="sess-abc",
+                    activity_tracker=tracker,
                 )
         warning_logs = [log for log in logs if "dispatch" in str(log.get("event", ""))]
         assert len(warning_logs) == 1
@@ -323,13 +333,15 @@ class TestDispatchMarkerSuppression:
             lambda pid: False,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
-            lambda pid: False,
+            ProcessActivityTracker,
+            "has_active_children",
+            lambda self, pid: False,
         )
         monkeypatch.setattr(
             "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             lambda marker_dir, session_id=None: True,
         )
+        tracker = ProcessActivityTracker()
         with structlog.testing.capture_logs() as logs:
             with anyio.fail_after(8.0):
                 await _session_log_monitor(
@@ -343,6 +355,7 @@ class TestDispatchMarkerSuppression:
                     marker_dir=tmp_path,
                     caller_session_id="sess-abc",
                     max_suppression_seconds=1.0,
+                    activity_tracker=tracker,
                 )
         bounded_logs = [log for log in logs if "Suppression bounded" in str(log.get("event", ""))]
         assert len(bounded_logs) == 1
@@ -373,13 +386,15 @@ class TestDispatchMarkerSuppression:
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
-            fake_child_proc,
+            ProcessActivityTracker,
+            "has_active_children",
+            lambda self, pid: fake_child_proc(pid),
         )
         monkeypatch.setattr(
             "autoskillit.execution.process._process_monitor._has_active_execution_marker",
             track_dispatch_marker,
         )
+        tracker = ProcessActivityTracker()
         with anyio.fail_after(5.0):
             result = await _session_log_monitor(
                 tmp_path,
@@ -389,6 +404,7 @@ class TestDispatchMarkerSuppression:
                 pid=9999,
                 _phase1_poll=0.01,
                 _phase2_poll=0.05,
+                activity_tracker=tracker,
             )
         assert result.status == ChannelBStatus.STALE
         assert not called["n"]

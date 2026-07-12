@@ -11,6 +11,7 @@ import pytest
 
 from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import _session_log_monitor
+from autoskillit.execution.process._process_monitor import ProcessActivityTracker
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -154,9 +155,11 @@ class TestSessionLogMonitorStaleSuppressionGate:
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
-            fake_child_cpu,
+            ProcessActivityTracker,
+            "has_active_children",
+            lambda self, pid: fake_child_cpu(pid),
         )
+        tracker = ProcessActivityTracker()
         with anyio.fail_after(5.0):
             result = await _session_log_monitor(
                 tmp_path,
@@ -166,6 +169,7 @@ class TestSessionLogMonitorStaleSuppressionGate:
                 pid=9999,
                 _phase1_poll=0.01,
                 _phase2_poll=0.05,
+                activity_tracker=tracker,
             )
         assert result.status == ChannelBStatus.STALE
         assert call_count["cpu"] == 2  # suppressed once, then fired
@@ -290,9 +294,11 @@ class TestStaleSuppressionBounded:
             _api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
-            lambda pid: False,
+            ProcessActivityTracker,
+            "has_active_children",
+            lambda self, pid: False,
         )
+        tracker = ProcessActivityTracker()
 
         (tmp_path / "dispatch-in-progress-some-uuid.marker").write_text("{}")
 
@@ -309,6 +315,7 @@ class TestStaleSuppressionBounded:
                 max_suppression_seconds=0.3,
                 marker_dir=tmp_path,
                 caller_session_id=None,
+                activity_tracker=tracker,
             )
         elapsed = time.monotonic() - suppression_start
 

@@ -505,13 +505,33 @@ def _compute_write_prefixes(
             worktree_write_prefixes.append(str(resolved_cwd) + "/")
             worktree_write_prefixes.append(str(resolved_cwd.parent) + "/")
         else:
-            # cwd is clone root — include the sibling worktrees/ directory
-            worktree_parent = resolved_cwd.parent / "worktrees"
-            worktree_write_prefixes.append(str(worktree_parent) + "/")
+            # cwd is clone root — look for worktrees/ under cwd first, then as sibling.
+            # git worktree add can place worktrees either as a sibling of the main repo
+            # (e.g., /parent/repo + /parent/worktrees/<name>) or nested inside it
+            # (e.g., /parent/repo/worktrees/<name>) depending on the dispatch topology.
+            nested_wt = resolved_cwd / "worktrees"
+            sibling_wt = resolved_cwd.parent / "worktrees"
+            if nested_wt.is_dir():
+                worktree_write_prefixes.append(str(nested_wt) + "/")
+            if sibling_wt.is_dir():
+                worktree_write_prefixes.append(str(sibling_wt) + "/")
+            if not nested_wt.is_dir() and not sibling_wt.is_dir():
+                worktree_write_prefixes.append(str(sibling_wt) + "/")
 
     base_prefixes = [str(d.resolve()) + "/" for d in write_watch_dirs]
     all_prefixes = base_prefixes + worktree_write_prefixes
     return base_prefixes[0] if base_prefixes else "", tuple(all_prefixes)
+
+
+def _scope_covers_cwd(allowed_write_prefixes: tuple[str, ...], cwd: str) -> bool:
+    """Return True if any allowed_write_prefix covers cwd (lexical prefix match)."""
+    if not allowed_write_prefixes or not cwd:
+        return False
+    resolved_cwd_str = str(Path(cwd).resolve()).rstrip("/") + "/"
+    for pfx in allowed_write_prefixes:
+        if resolved_cwd_str.startswith(pfx):
+            return True
+    return False
 
 
 def _aggregate_sandbox_overrides(skill_caps: frozenset[str]) -> frozenset[str]:
@@ -1112,8 +1132,7 @@ async def run_skill(
             # so the session can write to its own tracked tree. Fail-fast BEFORE spawning
             # a session — otherwise the session locks itself out and burns N turns.
             if allowed_write_prefixes and target_name and target_name in WORKTREE_SKILLS and cwd:
-                resolved_cwd_str = str(Path(cwd).resolve()).rstrip("/") + "/"
-                if not any(resolved_cwd_str.startswith(pfx) for pfx in allowed_write_prefixes):
+                if not _scope_covers_cwd(allowed_write_prefixes, cwd):
                     return gate_error_result(
                         f"Write scope does not cover target worktree: "
                         f"cwd={cwd!r} not under any allowed prefix "

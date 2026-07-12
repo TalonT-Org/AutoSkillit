@@ -168,7 +168,9 @@ def _compute_write_evidence(
     # was constructed (output_dir="." or default temp fallback).
     # For ~40 non-worktree skills, all writes count (temp IS their target).
     extracted = extract_skill_name(skill_command) if skill_command else None
-    is_worktree_dispatch = bool(extracted and extracted in WORKTREE_SKILLS and cwd)
+    is_worktree_dispatch = bool(
+        extracted and extracted in WORKTREE_SKILLS and cwd and write_watch_dirs
+    )
 
     if is_worktree_dispatch:
         temp_prefix = str(Path(cwd) / ".autoskillit" / "temp") + "/"

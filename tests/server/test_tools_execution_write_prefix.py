@@ -30,7 +30,7 @@ def _make_worktree_layout(tmp_path: Path) -> tuple[Path, Path]:
     worktrees_dir.mkdir()
     worktree = worktrees_dir / "impl-fix-123"
     worktree.mkdir()
-    (worktree / ".git").write_text("gitdir: ../../../.git/worktrees/impl-fix-123\n")
+    (worktree / ".git").write_text("gitdir: ../../.git/worktrees/impl-fix-123\n")
     return clone_root, worktree
 
 

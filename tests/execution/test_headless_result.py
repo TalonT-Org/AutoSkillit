@@ -1837,7 +1837,7 @@ class TestCodexPathContaminationParity:
         )
         sr = _build_skill_result(
             _codex_subprocess_result(stdout),
-            skill_command="/autoskillit:no-such-skill-anywhere x",
+            skill_command="/autoskillit:implement-worktree-no-merge /some/path.md",
             cwd=worktree_cwd,
             write_watch_dirs=[Path(worktree_cwd)],
             write_behavior=WriteBehaviorSpec(mode="always"),

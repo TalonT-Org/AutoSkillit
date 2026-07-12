@@ -143,10 +143,14 @@ def _register_observations(
     """Apply one Channel A batch's typed observations to the reducer.
 
     Observations are ordered within a batch and reduced in order so
-    source-relative provenance is preserved.
+    source-relative provenance is preserved. ``lifecycle_issues`` are
+    registered against the coordinator's pending blocking-evidence store
+    so unresolved issues propagate into the snapshot and fail closed.
     """
     for observation in batch.observations:
         envelope.handle.observe(observation)
+    for issue in batch.lifecycle_issues:
+        envelope.handle.register_issue(issue)
     envelope.last_processed_offset = max(envelope.last_processed_offset, batch.byte_offset)
 
 
@@ -368,6 +372,14 @@ def _evaluate_candidates(
         on_snapshot(snapshot)
     decision: LifecycleDecision = LifecycleDecision.CONTINUE
     eligible: CompletionCandidate | None = None
+    if envelope.handle.has_pending_issues():
+        snapshot = envelope.handle.snapshot()
+        envelope.last_snapshot = snapshot
+        if on_snapshot is not None:
+            on_snapshot(snapshot)
+        envelope.last_decision = LifecycleDecision.CONTINUE
+        envelope.last_eligible_candidate = None
+        return
     for candidate_id, state in snapshot.candidate_states:
         candidate = envelope.handle.get_candidate(candidate_id)
         if candidate is None:
